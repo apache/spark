@@ -233,6 +233,27 @@ class GroupedData(object):
         |  2| 1.1094003924504583|
         +---+-------------------+
 
+        Notes on grouping column:
+
+        Depending on whether the UDF returns grouping columns as part of its return type, this
+        function may or may not prepend grouping columns to the result. This is explained as
+        following:
+
+        1. UDF returns all grouping columns:
+
+           This function will not prepend any grouping columns to the result.
+
+        2. UDF returns some grouping columns:
+
+           This function will prepend grouping columns that are not returned by the UDF.
+
+        3. UDF returns no grouping columns:
+
+           This function will prepend all grouping columns.
+
+        In all cases, if the grouping column and the UDF output conflict, the value in the UDF
+        output will override the origin value of the grouping column.
+
         .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
         """

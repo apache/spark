@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.util.Locale
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.InterfaceStability
@@ -457,13 +458,26 @@ class RelationalGroupedDataset protected[sql](
 
     val groupingNamedExpressions = groupingExprs.map {
       case ne: NamedExpression => ne
-      case other => Alias(other, other.toString)()
+      case other => Alias(other, toPrettySQL(other))()
     }
     val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
     val child = df.logicalPlan
     val project = Project(groupingNamedExpressions ++ child.output, child)
-    val output = expr.dataType.asInstanceOf[StructType].toAttributes
-    val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project)
+    val udfOutput: Seq[Attribute] = expr.dataType.asInstanceOf[StructType].toAttributes
+    val additionalGroupingAttributes = mutable.ArrayBuffer[Attribute]()
+
+    for (attribute <- groupingAttributes) {
+      if (!udfOutput.map(_.name).contains(attribute.name)) {
+        additionalGroupingAttributes += attribute
+      }
+    }
+
+    val output = additionalGroupingAttributes ++ udfOutput
+
+    val plan = FlatMapGroupsInPandas(
+      groupingAttributes,
+      additionalGroupingAttributes,
+      expr, output, project)
 
     Dataset.ofRows(df.sparkSession, plan)
   }

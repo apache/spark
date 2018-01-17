@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.io.File
+
 import scala.collection.JavaConverters._
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -27,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsInPandas]]
@@ -47,6 +50,7 @@ import org.apache.spark.sql.types.StructType
  */
 case class FlatMapGroupsInPandasExec(
     groupingAttributes: Seq[Attribute],
+    additionalGroupingAttributes: Seq[Attribute],
     func: Expression,
     output: Seq[Attribute],
     child: SparkPlan)
@@ -80,27 +84,77 @@ case class FlatMapGroupsInPandasExec(
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
 
-    inputRDD.mapPartitionsInternal { iter =>
-      val grouped = if (groupingAttributes.isEmpty) {
-        Iterator(iter)
-      } else {
-        val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
-        val dropGrouping =
-          UnsafeProjection.create(child.output.drop(groupingAttributes.length), child.output)
-        groupedIter.map {
-          case (_, groupedRowIter) => groupedRowIter.map(dropGrouping)
+    if (additionalGroupingAttributes.isEmpty) {
+      // Fast path if additional grouping attributes is empty
+
+      inputRDD.mapPartitionsInternal { iter =>
+        val grouped = if (groupingAttributes.isEmpty) {
+          Iterator(iter)
+        } else {
+          val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
+          val dropGrouping =
+            UnsafeProjection.create(child.output.drop(groupingAttributes.length), child.output)
+          groupedIter.map {
+            case (_, groupedRowIter) => groupedRowIter.map(dropGrouping)
+          }
         }
-      }
 
-      val context = TaskContext.get()
+        val context = TaskContext.get()
 
-      val columnarBatchIter = new ArrowPythonRunner(
-        chainedFunc, bufferSize, reuseWorker,
-        PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF, argOffsets, schema,
-        sessionLocalTimeZone, pandasRespectSessionTimeZone)
+        val columnarBatchIter = new ArrowPythonRunner(
+          chainedFunc, bufferSize, reuseWorker,
+          PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF, argOffsets, schema,
+          sessionLocalTimeZone, pandasRespectSessionTimeZone)
           .compute(grouped, context.partitionId(), context)
 
-      columnarBatchIter.flatMap(_.rowIterator.asScala).map(UnsafeProjection.create(output, output))
+        columnarBatchIter
+          .flatMap(_.rowIterator.asScala)
+          .map(UnsafeProjection.create(output, output))
+      }
+    } else {
+      // If additionGroupingAttributes is not empty, join the grouping attributes with
+      // the udf output to get the final result
+
+      inputRDD.mapPartitionsInternal { iter =>
+        assert(groupingAttributes.nonEmpty)
+
+        val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
+
+        val context = TaskContext.get()
+
+        val queue = HybridRowQueue(context.taskMemoryManager(),
+          new File(Utils.getLocalDir(SparkEnv.get.conf)), additionalGroupingAttributes.length)
+        context.addTaskCompletionListener { _ =>
+          queue.close()
+        }
+        val additionalGroupingProj = UnsafeProjection.create(
+          additionalGroupingAttributes, groupingAttributes)
+        val dropGrouping =
+          UnsafeProjection.create(child.output.drop(groupingAttributes.length), child.output)
+        val grouped = groupedIter.map {
+          case (k, groupedRowIter) =>
+            val additionalGrouping = additionalGroupingProj(k)
+            queue.add(additionalGrouping)
+            (additionalGrouping, groupedRowIter.map(dropGrouping))
+        }
+
+        val columnarBatchIter = new ArrowPythonRunner(
+          chainedFunc, bufferSize, reuseWorker,
+          PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF, argOffsets, schema,
+          sessionLocalTimeZone, pandasRespectSessionTimeZone)
+          .compute(grouped.map(_._2), context.partitionId(), context)
+
+        val joinedRow = new JoinedRow
+        val outputProj = UnsafeProjection.create(output, output)
+
+        columnarBatchIter
+          .flatMap{ batchIter =>
+            val additionalGrouping = queue.remove()
+            batchIter.rowIterator().asScala.map { row =>
+              outputProj(joinedRow(additionalGrouping, row))
+            }
+          }
+      }
     }
   }
 }
