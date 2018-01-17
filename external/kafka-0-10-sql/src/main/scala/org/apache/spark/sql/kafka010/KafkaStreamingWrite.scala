@@ -115,6 +115,7 @@ class KafkaStreamDataWriter(
     checkForErrors()
     if (producer != null) {
       producer.flush()
+      producer.inUseCount.decrementAndGet()
       checkForErrors()
       CachedKafkaProducer.close(producerParams)
     }

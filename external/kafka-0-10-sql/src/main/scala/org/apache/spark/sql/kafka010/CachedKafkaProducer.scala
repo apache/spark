@@ -40,9 +40,11 @@ private[kafka010] case class CachedKafkaProducer(id: String, inUseCount: AtomicI
       logInfo(s"Closed kafka producer: $kafkaProducer")
     }
   }
+
   private[kafka010] def flush(): Unit = {
     kafkaProducer.flush()
   }
+
   private[kafka010] def isClosed: Boolean = closed
 }
 

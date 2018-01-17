@@ -49,7 +49,7 @@ private[kafka010] class KafkaWriteTask(
 
   def close(): Unit = {
     producer.inUseCount.decrementAndGet()
-    producer.kafkaProducer.flush()
+    producer.flush()
     checkForErrors()
   }
 }
