@@ -74,23 +74,12 @@ abstract class FileStreamSourceTest
     protected def addData(source: FileStreamSource): Unit
   }
 
-  case class AddTextFileData(content: String, src: File, tmp: File)
+  // use `tmpFileNamePrefix` to test spaces in file name
+  case class AddTextFileData(content: String, src: File, tmp: File, tmpFileNamePrefix:String = "")
     extends AddFileData {
 
     override def addData(source: FileStreamSource): Unit = {
-      val tempFile = Utils.tempFileWith(new File(tmp, "text"))
-      val finalFile = new File(src, tempFile.getName)
-      src.mkdirs()
-      require(stringToFile(tempFile, content).renameTo(finalFile))
-      logInfo(s"Written text '$content' to file $finalFile")
-    }
-  }
-
-  case class AddTextFileDataWithSpaceInFileName(content: String, src: File, tmp: File)
-    extends AddFileData {
-
-    override def addData(source: FileStreamSource): Unit = {
-      val tempFile = Utils.tempFileWith(new File(tmp, "text text"))
+      val tempFile = Utils.tempFileWith(new File(tmp, s"${tmpFileNamePrefix}text"))
       val finalFile = new File(src, tempFile.getName)
       src.mkdirs()
       require(stringToFile(tempFile, content).renameTo(finalFile))
@@ -426,7 +415,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       val filtered = textStream.filter($"value" contains "keep")
 
       testStream(filtered)(
-        AddTextFileDataWithSpaceInFileName("drop1\nkeep2\nkeep3", src, tmp),
+        AddTextFileData("drop1\nkeep2\nkeep3", src, tmp, "text "),
         CheckAnswer("keep2", "keep3")
       )
     }
