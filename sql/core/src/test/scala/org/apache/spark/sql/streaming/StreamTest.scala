@@ -263,7 +263,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     def apply(): AssertOnQuery =
       Execute {
         case s: ContinuousExecution =>
-          val newEpoch = EpochCoordinatorRef.get(s.runId.toString, SparkEnv.get)
+          val newEpoch = EpochCoordinatorRef.get(s.currentEpochCoordinatorId, SparkEnv.get)
             .askSync[Long](IncrementAndGetEpoch)
           s.awaitEpoch(newEpoch - 1)
         case _ => throw new IllegalStateException("microbatch cannot increment epoch")
@@ -472,8 +472,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
               currentStream.awaitInitialization(streamingTimeout.toMillis)
               currentStream match {
                 case s: ContinuousExecution => eventually("IncrementalExecution was not created") {
-                    s.lastExecution.executedPlan // will fail if lastExecution is null
-                  }
+                  s.lastExecution.executedPlan // will fail if lastExecution is null
+                }
                 case _ =>
               }
             } catch {
@@ -645,7 +645,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             }
 
           case CheckAnswerRowsContains(expectedAnswer, lastOnly) =>
-            val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
+            val sparkAnswer = currentStream match {
+              case null => fetchStreamAnswer(lastStream, lastOnly)
+              case s => fetchStreamAnswer(s, lastOnly)
+            }
             QueryTest.includesRows(expectedAnswer, sparkAnswer).foreach {
               error => failTest(error)
             }
