@@ -47,8 +47,6 @@ class SQLContext(object):
     :param sparkSession: The :class:`SparkSession` around which this SQLContext wraps.
     :param jsqlContext: An optional JVM Scala SQLContext. If set, we do not instantiate a new
         SQLContext in the JVM, instead we make all calls to this object.
-
-    .. note:: Deprecated in 2.3.0. Use SparkSession.builder.getOrCreate().
     """
 
     _instantiatedContext = None
@@ -71,10 +69,6 @@ class SQLContext(object):
         >>> df.rdd.map(lambda x: (x.i, x.s, x.d, x.l, x.b, x.time, x.row.a, x.list)).collect()
         [(1, u'string', 1.0, 1, True, datetime.datetime(2014, 8, 1, 14, 1, 5), 1, [1, 2, 3])]
         """
-        warnings.warn(
-            "Deprecated in 2.0.0. Use SparkSession.builder.getOrCreate() instead.",
-            DeprecationWarning)
-
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
