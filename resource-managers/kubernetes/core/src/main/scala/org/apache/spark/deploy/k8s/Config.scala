@@ -29,17 +29,23 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault("default")
 
+  val CONTAINER_IMAGE =
+    ConfigBuilder("spark.kubernetes.container.image")
+      .doc("Container image to use for Spark containers. Individual container types " +
+        "(e.g. driver or executor) can also be configured to use different images if desired, " +
+        "by setting the container type-specific image name.")
+      .stringConf
+      .createOptional
+
   val DRIVER_CONTAINER_IMAGE =
     ConfigBuilder("spark.kubernetes.driver.container.image")
       .doc("Container image to use for the driver.")
-      .stringConf
-      .createOptional
+      .fallbackConf(CONTAINER_IMAGE)
 
   val EXECUTOR_CONTAINER_IMAGE =
     ConfigBuilder("spark.kubernetes.executor.container.image")
       .doc("Container image to use for the executors.")
-      .stringConf
-      .createOptional
+      .fallbackConf(CONTAINER_IMAGE)
 
   val CONTAINER_IMAGE_PULL_POLICY =
     ConfigBuilder("spark.kubernetes.container.image.pullPolicy")
@@ -148,8 +154,7 @@ private[spark] object Config extends Logging {
   val INIT_CONTAINER_IMAGE =
     ConfigBuilder("spark.kubernetes.initContainer.image")
       .doc("Image for the driver and executor's init-container for downloading dependencies.")
-      .stringConf
-      .createOptional
+      .fallbackConf(CONTAINER_IMAGE)
 
   val INIT_CONTAINER_MOUNT_TIMEOUT =
     ConfigBuilder("spark.kubernetes.mountDependencies.timeout")

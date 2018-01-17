@@ -65,12 +65,10 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }.map { job =>
       val jobId = job.jobId
       val status = job.status
-      val displayJobDescription =
-        if (job.description.isEmpty) {
-          job.name
-        } else {
-          UIUtils.makeDescription(job.description.get, "", plainText = true).text
-        }
+      val jobDescription = store.lastStageAttempt(job.stageIds.max).description
+      val displayJobDescription = jobDescription
+        .map(UIUtils.makeDescription(_, "", plainText = true).text)
+        .getOrElse("")
       val submissionTime = job.submissionTime.get.getTime()
       val completionTime = job.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
       val classNameByStatus = status match {
@@ -429,20 +427,23 @@ private[ui] class JobDataSource(
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
     val submissionTime = jobData.submissionTime
     val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
-    val jobDescription = UIUtils.makeDescription(jobData.description.getOrElse(""),
-      basePath, plainText = false)
+    val lastStageAttempt = store.lastStageAttempt(jobData.stageIds.max)
+    val lastStageDescription = lastStageAttempt.description.getOrElse("")
+
+    val formattedJobDescription =
+      UIUtils.makeDescription(lastStageDescription, basePath, plainText = false)
 
     val detailUrl = "%s/jobs/job?id=%s".format(basePath, jobData.jobId)
 
     new JobTableRowData(
       jobData,
-      jobData.name,
-      jobData.description.getOrElse(jobData.name),
+      lastStageAttempt.name,
+      lastStageDescription,
       duration.getOrElse(-1),
       formattedDuration,
       submissionTime.map(_.getTime()).getOrElse(-1L),
       formattedSubmissionTime,
-      jobDescription,
+      formattedJobDescription,
       detailUrl
     )
   }

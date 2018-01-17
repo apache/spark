@@ -380,11 +380,24 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(4, res[0])
 
     def test_udf3(self):
-        twoargs = self.spark.catalog.registerFunction(
-            "twoArgs", UserDefinedFunction(lambda x, y: len(x) + y), IntegerType())
-        self.assertEqual(twoargs.deterministic, True)
+        two_args = self.spark.catalog.registerFunction(
+            "twoArgs", UserDefinedFunction(lambda x, y: len(x) + y))
+        self.assertEqual(two_args.deterministic, True)
+        [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
+        self.assertEqual(row[0], u'5')
+
+    def test_udf_registration_return_type_none(self):
+        two_args = self.spark.catalog.registerFunction(
+            "twoArgs", UserDefinedFunction(lambda x, y: len(x) + y, "integer"), None)
+        self.assertEqual(two_args.deterministic, True)
         [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
         self.assertEqual(row[0], 5)
+
+    def test_udf_registration_return_type_not_none(self):
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(TypeError, "Invalid returnType"):
+                self.spark.catalog.registerFunction(
+                    "f", UserDefinedFunction(lambda x, y: len(x) + y, StringType()), StringType())
 
     def test_nondeterministic_udf(self):
         # Test that nondeterministic UDFs are evaluated only once in chained UDF evaluations
@@ -402,12 +415,12 @@ class SQLTests(ReusedSQLTestCase):
         from pyspark.sql.functions import udf
         random_udf = udf(lambda: random.randint(6, 6), IntegerType()).asNondeterministic()
         self.assertEqual(random_udf.deterministic, False)
-        random_udf1 = self.spark.catalog.registerFunction("randInt", random_udf, StringType())
+        random_udf1 = self.spark.catalog.registerFunction("randInt", random_udf)
         self.assertEqual(random_udf1.deterministic, False)
         [row] = self.spark.sql("SELECT randInt()").collect()
-        self.assertEqual(row[0], "6")
+        self.assertEqual(row[0], 6)
         [row] = self.spark.range(1).select(random_udf1()).collect()
-        self.assertEqual(row[0], "6")
+        self.assertEqual(row[0], 6)
         [row] = self.spark.range(1).select(random_udf()).collect()
         self.assertEqual(row[0], 6)
         # render_doc() reproduces the help() exception without printing output
@@ -3691,7 +3704,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         ReusedSQLTestCase.tearDownClass()
 
     @property
-    def random_udf(self):
+    def nondeterministic_vectorized_udf(self):
         from pyspark.sql.functions import pandas_udf
 
         @pandas_udf('double')
@@ -3725,6 +3738,21 @@ class VectorizedUDFTests(ReusedSQLTestCase):
                         double_f(col('double')), decimal_f('decimal'),
                         bool_f(col('bool')))
         self.assertEquals(df.collect(), res.collect())
+
+    def test_register_nondeterministic_vectorized_udf_basic(self):
+        from pyspark.sql.functions import pandas_udf
+        from pyspark.rdd import PythonEvalType
+        import random
+        random_pandas_udf = pandas_udf(
+            lambda x: random.randint(6, 6) + x, IntegerType()).asNondeterministic()
+        self.assertEqual(random_pandas_udf.deterministic, False)
+        self.assertEqual(random_pandas_udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        nondeterministic_pandas_udf = self.spark.catalog.registerFunction(
+            "randomPandasUDF", random_pandas_udf)
+        self.assertEqual(nondeterministic_pandas_udf.deterministic, False)
+        self.assertEqual(nondeterministic_pandas_udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        [row] = self.spark.sql("SELECT randomPandasUDF(1)").collect()
+        self.assertEqual(row[0], 7)
 
     def test_vectorized_udf_null_boolean(self):
         from pyspark.sql.functions import pandas_udf, col
@@ -4085,14 +4113,14 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         finally:
             self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
 
-    def test_nondeterministic_udf(self):
+    def test_nondeterministic_vectorized_udf(self):
         # Test that nondeterministic UDFs are evaluated only once in chained UDF evaluations
         from pyspark.sql.functions import udf, pandas_udf, col
 
         @pandas_udf('double')
         def plus_ten(v):
             return v + 10
-        random_udf = self.random_udf
+        random_udf = self.nondeterministic_vectorized_udf
 
         df = self.spark.range(10).withColumn('rand', random_udf(col('id')))
         result1 = df.withColumn('plus_ten(rand)', plus_ten(df['rand'])).toPandas()
@@ -4100,17 +4128,34 @@ class VectorizedUDFTests(ReusedSQLTestCase):
         self.assertEqual(random_udf.deterministic, False)
         self.assertTrue(result1['plus_ten(rand)'].equals(result1['rand'] + 10))
 
-    def test_nondeterministic_udf_in_aggregate(self):
+    def test_nondeterministic_vectorized_udf_in_aggregate(self):
         from pyspark.sql.functions import pandas_udf, sum
 
         df = self.spark.range(10)
-        random_udf = self.random_udf
+        random_udf = self.nondeterministic_vectorized_udf
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(AnalysisException, 'nondeterministic'):
                 df.groupby(df.id).agg(sum(random_udf(df.id))).collect()
             with self.assertRaisesRegexp(AnalysisException, 'nondeterministic'):
                 df.agg(sum(random_udf(df.id))).collect()
+
+    def test_register_vectorized_udf_basic(self):
+        from pyspark.rdd import PythonEvalType
+        from pyspark.sql.functions import pandas_udf, col, expr
+        df = self.spark.range(10).select(
+            col('id').cast('int').alias('a'),
+            col('id').cast('int').alias('b'))
+        original_add = pandas_udf(lambda x, y: x + y, IntegerType())
+        self.assertEqual(original_add.deterministic, True)
+        self.assertEqual(original_add.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        new_add = self.spark.catalog.registerFunction("add1", original_add)
+        res1 = df.select(new_add(col('a'), col('b')))
+        res2 = self.spark.sql(
+            "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t")
+        expected = df.select(expr('a + b'))
+        self.assertEquals(expected.collect(), res1.collect())
+        self.assertEquals(expected.collect(), res2.collect())
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
@@ -4146,6 +4191,15 @@ class GroupbyApplyTests(ReusedSQLTestCase):
         result = df.groupby('id').apply(foo_udf).sort('id').toPandas()
         expected = df.toPandas().groupby('id').apply(foo_udf.func).reset_index(drop=True)
         self.assertFramesEqual(expected, result)
+
+    def test_register_group_map_udf(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUP_MAP)
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(ValueError, 'f must be either SQL_BATCHED_UDF or '
+                                                     'SQL_PANDAS_SCALAR_UDF'):
+                self.spark.catalog.registerFunction("foo_udf", foo_udf)
 
     def test_decorator(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
