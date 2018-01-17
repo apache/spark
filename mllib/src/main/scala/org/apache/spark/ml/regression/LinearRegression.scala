@@ -723,11 +723,11 @@ class LinearRegressionModel private[ml] (
 }
 
 /** A writer for LinearRegression that handles the "internal" (or default) format */
-private class InternalLinearRegressionModelWriter()
+private class InternalLinearRegressionModelWriter
   extends MLWriterFormat with MLFormatRegister {
 
-  override def shortName(): String =
-    "internal+org.apache.spark.ml.regression.LinearRegressionModel"
+  override def format(): String = "internal"
+  override def stageName(): String = "org.apache.spark.ml.regression.LinearRegressionModel"
 
   private case class Data(intercept: Double, coefficients: Vector, scale: Double)
 
@@ -745,11 +745,12 @@ private class InternalLinearRegressionModelWriter()
 }
 
 /** A writer for LinearRegression that handles the "pmml" format */
-private class PMMLLinearRegressionModelWriter()
-  extends MLWriterFormat with MLFormatRegister {
+private class PMMLLinearRegressionModelWriter
+    extends MLWriterFormat with MLFormatRegister {
 
-  override def shortName(): String =
-    "pmml+org.apache.spark.ml.regression.LinearRegressionModel"
+  override def format(): String = "pmml"
+
+  override def stageName(): String = "org.apache.spark.ml.regression.LinearRegressionModel"
 
   private case class Data(intercept: Double, coefficients: Vector)
 

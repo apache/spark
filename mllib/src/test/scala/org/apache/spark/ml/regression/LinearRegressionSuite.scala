@@ -23,8 +23,6 @@ import scala.util.Random
 
 import org.dmg.pmml.{OpType, PMML, RegressionModel => PMMLRegressionModel}
 
-import org.apache.spark.SparkException
-import org.apache.spark.ml.PipelineStage
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
@@ -33,14 +31,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
-class DummyLinearRegressionWriter extends MLWriterFormat {
-  override def write(path: String, sparkSession: SparkSession,
-    optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
-    throw new Exception(s"Dummy writer doesn't write")
-  }
-}
 
 class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTest {
 
@@ -1075,32 +1066,6 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
       assert(pmmlWeights(1) ~== model.coefficients(1) relTol 1E-3)
     }
     testPMMLWrite(sc, model, checkModel)
-  }
-
-  test("unsupported export format") {
-    val lr = new LinearRegression()
-    val model = lr.fit(datasetWithWeight)
-    intercept[SparkException] {
-      model.write.format("boop").save("boop")
-    }
-    intercept[SparkException] {
-      model.write.format("com.holdenkarau.boop").save("boop")
-    }
-    withClue("ML source org.apache.spark.SparkContext is not a valid MLWriterFormat") {
-      intercept[SparkException] {
-        model.write.format("org.apache.spark.SparkContext").save("boop2")
-      }
-    }
-  }
-
-  test("dummy export format is called") {
-    val lr = new LinearRegression()
-    val model = lr.fit(datasetWithWeight)
-    withClue("Dummy writer doesn't write") {
-      intercept[Exception] {
-        model.write.format("org.apache.spark.ml.regression.DummyLinearRegressionWriter").save("")
-      }
-    }
   }
 
   test("should support all NumericType labels and weights, and not support other types") {
