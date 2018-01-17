@@ -186,7 +186,7 @@ class SQLContext(object):
             :func:`spark.udf.register`.
         .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.register` instead.
         .. versionadded:: 1.2
-    """ % _register_doc[:_register_doc.rfind('versionadded::')]
+    """ % _register_doc[:_register_doc.rfind('.. versionadded::')]
 
     def registerJavaFunction(self, name, javaClassName, returnType=None):
         warnings.warn(
@@ -200,7 +200,7 @@ class SQLContext(object):
             :func:`spark.udf.registerJavaFunction`
         .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.registerJavaFunction` instead.
         .. versionadded:: 2.1
-    """ % _registerJavaFunction_doc[:_registerJavaFunction_doc.rfind('versionadded::')]
+    """ % _registerJavaFunction_doc[:_registerJavaFunction_doc.rfind('.. versionadded::')]
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):

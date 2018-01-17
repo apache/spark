@@ -187,7 +187,8 @@ class UserDefinedFunction(object):
 
 class UDFRegistration(object):
     """
-    Wrapper for user-defined function registration.
+    Wrapper for user-defined function registration. This instance can be accessed by
+    `spark.udf` or `sqlContext.udf`.
 
     .. versionadded:: 1.3.1
     """
@@ -300,17 +301,17 @@ class UDFRegistration(object):
         In addition to a name and the function itself, the return type can be optionally specified.
         When the return type is not specified we would infer it via reflection.
 
-        :param name:  name of the user-defined function
+        :param name: name of the user-defined function
         :param javaClassName: fully qualified name of java class
         :param returnType: a :class:`pyspark.sql.types.DataType` object
 
         >>> from pyspark.sql.types import IntegerType
-        >>> spark.udf.registerJavaFunction("javaStringLength",
-        ...   "test.org.apache.spark.sql.JavaStringLength", IntegerType())
+        >>> spark.udf.registerJavaFunction(
+        ...     "javaStringLength", "test.org.apache.spark.sql.JavaStringLength", IntegerType())
         >>> spark.sql("SELECT javaStringLength('test')").collect()
         [Row(UDF:javaStringLength(test)=4)]
-        >>> spark.udf.registerJavaFunction("javaStringLength2",
-        ...   "test.org.apache.spark.sql.JavaStringLength")
+        >>> spark.udf.registerJavaFunction(
+        ...    "javaStringLength2", "test.org.apache.spark.sql.JavaStringLength")
         >>> spark.sql("SELECT javaStringLength2('test')").collect()
         [Row(UDF:javaStringLength2(test)=4)]
         """
@@ -328,8 +329,7 @@ class UDFRegistration(object):
         :param name: name of the user-defined aggregate function
         :param javaClassName: fully qualified name of java class
 
-        >>> spark.udf.registerJavaUDAF("javaUDAF",
-        ...   "test.org.apache.spark.sql.MyDoubleAvg")
+        >>> spark.udf.registerJavaUDAF("javaUDAF", "test.org.apache.spark.sql.MyDoubleAvg")
         >>> df = spark.createDataFrame([(1, "a"),(2, "b"), (3, "a")],["id", "name"])
         >>> df.registerTempTable("df")
         >>> spark.sql("SELECT name, javaUDAF(id) as avg from df group by name").collect()
