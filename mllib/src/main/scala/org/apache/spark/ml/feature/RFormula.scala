@@ -25,7 +25,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasHandleInvalid, HasLabelCol}
 import org.apache.spark.ml.util._
@@ -199,6 +199,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     val parsedFormula = RFormulaParser.parse($(formula))
     val resolvedFormula = parsedFormula.resolve(dataset.schema)
     val encoderStages = ArrayBuffer[PipelineStage]()
+    val oneHotEncodeColumns = ArrayBuffer[(String, String)]()
 
     val prefixesToRewrite = mutable.Map[String, String]()
     val tempColumns = ArrayBuffer[String]()
@@ -210,8 +211,8 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
 
     // First we index each string column referenced by the input terms.
     val indexed: Map[String, String] = resolvedFormula.terms.flatten.distinct.map { term =>
-      dataset.schema(term) match {
-        case column if column.dataType == StringType =>
+      dataset.schema(term).dataType match {
+        case _: StringType =>
           val indexCol = tmpColumn("stridx")
           encoderStages += new StringIndexer()
             .setInputCol(term)
@@ -220,6 +221,18 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
             .setHandleInvalid($(handleInvalid))
           prefixesToRewrite(indexCol + "_") = term + "_"
           (term, indexCol)
+        case _: VectorUDT =>
+          val group = AttributeGroup.fromStructField(dataset.schema(term))
+          val size = if (group.size < 0) {
+            dataset.select(term).first().getAs[Vector](0).size
+          } else {
+            group.size
+          }
+          encoderStages += new VectorSizeHint(uid)
+            .setHandleInvalid("optimistic")
+            .setInputCol(term)
+            .setSize(size)
+          (term, term)
         case _ =>
           (term, term)
       }
@@ -230,16 +243,17 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     val encodedTerms = resolvedFormula.terms.map {
       case Seq(term) if dataset.schema(term).dataType == StringType =>
         val encodedCol = tmpColumn("onehot")
-        var encoder = new OneHotEncoder()
-          .setInputCol(indexed(term))
-          .setOutputCol(encodedCol)
         // Formula w/o intercept, one of the categories in the first category feature is
         // being used as reference category, we will not drop any category for that feature.
         if (!hasIntercept && !keepReferenceCategory) {
-          encoder = encoder.setDropLast(false)
+          encoderStages += new OneHotEncoderEstimator(uid)
+            .setInputCols(Array(indexed(term)))
+            .setOutputCols(Array(encodedCol))
+            .setDropLast(false)
           keepReferenceCategory = true
+        } else {
+          oneHotEncodeColumns += indexed(term) -> encodedCol
         }
-        encoderStages += encoder
         prefixesToRewrite(encodedCol + "_") = term + "_"
         encodedCol
       case Seq(term) =>
@@ -251,6 +265,14 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
           .setOutputCol(interactionCol)
         prefixesToRewrite(interactionCol + "_") = ""
         interactionCol
+    }
+
+    if (oneHotEncodeColumns.nonEmpty) {
+      val (inputCols, outputCols) = oneHotEncodeColumns.toArray.unzip
+      encoderStages += new OneHotEncoderEstimator(uid)
+        .setInputCols(inputCols)
+        .setOutputCols(outputCols)
+        .setDropLast(true)
     }
 
     encoderStages += new VectorAssembler(uid)

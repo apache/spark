@@ -24,10 +24,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.streaming.StreamExecution
-import org.apache.spark.sql.execution.streaming.continuous.{ContinuousDataSourceRDD, ContinuousExecution, EpochCoordinatorRef, SetReaderPartitions}
+import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.streaming.reader.ContinuousReader
 import org.apache.spark.sql.types.StructType
@@ -37,40 +35,56 @@ import org.apache.spark.sql.types.StructType
  */
 case class DataSourceV2ScanExec(
     fullOutput: Seq[AttributeReference],
-    @transient reader: DataSourceV2Reader) extends LeafExecNode with DataSourceReaderHolder {
+    @transient reader: DataSourceV2Reader)
+  extends LeafExecNode with DataSourceReaderHolder with ColumnarBatchScan {
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2ScanExec]
 
-  override def references: AttributeSet = AttributeSet.empty
+  override def producedAttributes: AttributeSet = AttributeSet(fullOutput)
 
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+  private lazy val readTasks: java.util.List[ReadTask[UnsafeRow]] = reader match {
+    case r: SupportsScanUnsafeRow => r.createUnsafeRowReadTasks()
+    case _ =>
+      reader.createReadTasks().asScala.map {
+        new RowToUnsafeRowReadTask(_, reader.readSchema()): ReadTask[UnsafeRow]
+      }.asJava
+  }
+
+  private lazy val inputRDD: RDD[InternalRow] = reader match {
+    case r: SupportsScanColumnarBatch if r.enableBatchRead() =>
+      assert(!reader.isInstanceOf[ContinuousReader],
+        "continuous stream reader does not support columnar read yet.")
+      new DataSourceRDD(sparkContext, r.createBatchReadTasks()).asInstanceOf[RDD[InternalRow]]
+
+    case _: ContinuousReader =>
+      EpochCoordinatorRef.get(
+        sparkContext.getLocalProperty(ContinuousExecution.RUN_ID_KEY), sparkContext.env)
+        .askSync[Unit](SetReaderPartitions(readTasks.size()))
+      new ContinuousDataSourceRDD(sparkContext, sqlContext, readTasks)
+        .asInstanceOf[RDD[InternalRow]]
+
+    case _ =>
+      new DataSourceRDD(sparkContext, readTasks).asInstanceOf[RDD[InternalRow]]
+  }
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
+
+  override val supportsBatch: Boolean = reader match {
+    case r: SupportsScanColumnarBatch if r.enableBatchRead() => true
+    case _ => false
+  }
+
+  override protected def needsUnsafeRowConversion: Boolean = false
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val readTasks: java.util.List[ReadTask[UnsafeRow]] = reader match {
-      case r: SupportsScanUnsafeRow => r.createUnsafeRowReadTasks()
-      case _ =>
-        reader.createReadTasks().asScala.map {
-          new RowToUnsafeRowReadTask(_, reader.readSchema()): ReadTask[UnsafeRow]
-        }.asJava
-    }
-
-    val inputRDD = reader match {
-      case _: ContinuousReader =>
-        EpochCoordinatorRef.get(
-          sparkContext.getLocalProperty(ContinuousExecution.RUN_ID_KEY), sparkContext.env)
-          .askSync[Unit](SetReaderPartitions(readTasks.size()))
-
-        new ContinuousDataSourceRDD(sparkContext, sqlContext, readTasks)
-
-      case _ =>
-        new DataSourceRDD(sparkContext, readTasks)
-    }
-
-    val numOutputRows = longMetric("numOutputRows")
-    inputRDD.asInstanceOf[RDD[InternalRow]].map { r =>
-      numOutputRows += 1
-      r
+    if (supportsBatch) {
+      WholeStageCodegenExec(this).execute()
+    } else {
+      val numOutputRows = longMetric("numOutputRows")
+      inputRDD.map { r =>
+        numOutputRows += 1
+        r
+      }
     }
   }
 }

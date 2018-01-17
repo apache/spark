@@ -18,19 +18,19 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.sources.v2.reader.ReadTask
 
-class DataSourceRDDPartition(val index: Int, val readTask: ReadTask[UnsafeRow])
+class DataSourceRDDPartition[T : ClassTag](val index: Int, val readTask: ReadTask[T])
   extends Partition with Serializable
 
-class DataSourceRDD(
+class DataSourceRDD[T: ClassTag](
     sc: SparkContext,
-    @transient private val readTasks: java.util.List[ReadTask[UnsafeRow]])
-  extends RDD[UnsafeRow](sc, Nil) {
+    @transient private val readTasks: java.util.List[ReadTask[T]])
+  extends RDD[T](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
     readTasks.asScala.zipWithIndex.map {
@@ -38,10 +38,10 @@ class DataSourceRDD(
     }.toArray
   }
 
-  override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
-    val reader = split.asInstanceOf[DataSourceRDDPartition].readTask.createDataReader()
+  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
+    val reader = split.asInstanceOf[DataSourceRDDPartition[T]].readTask.createDataReader()
     context.addTaskCompletionListener(_ => reader.close())
-    val iter = new Iterator[UnsafeRow] {
+    val iter = new Iterator[T] {
       private[this] var valuePrepared = false
 
       override def hasNext: Boolean = {
@@ -51,7 +51,7 @@ class DataSourceRDD(
         valuePrepared
       }
 
-      override def next(): UnsafeRow = {
+      override def next(): T = {
         if (!hasNext) {
           throw new java.util.NoSuchElementException("End of stream")
         }
@@ -63,6 +63,6 @@ class DataSourceRDD(
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    split.asInstanceOf[DataSourceRDDPartition].readTask.preferredLocations()
+    split.asInstanceOf[DataSourceRDDPartition[T]].readTask.preferredLocations()
   }
 }

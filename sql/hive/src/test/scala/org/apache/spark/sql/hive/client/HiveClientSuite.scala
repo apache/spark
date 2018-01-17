@@ -67,6 +67,7 @@ class HiveClientSuite(version: String)
   }
 
   override def beforeAll() {
+    super.beforeAll()
     client = init(true)
   }
 

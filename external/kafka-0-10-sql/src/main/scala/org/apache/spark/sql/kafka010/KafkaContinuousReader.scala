@@ -18,10 +18,12 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
+import java.util.concurrent.TimeoutException
 
-import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.clients.consumer.{ConsumerRecord, OffsetOutOfRangeException}
 import org.apache.kafka.common.TopicPartition
 
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -58,6 +60,8 @@ class KafkaContinuousReader(
 
   private lazy val session = SparkSession.getActiveSession.get
   private lazy val sc = session.sparkContext
+
+  private val pollTimeoutMs = sourceOptions.getOrElse("kafkaConsumer.pollTimeoutMs", "512").toLong
 
   // Initialized when creating read tasks. If this diverges from the partitions at the latest
   // offsets, we need to reconfigure.
@@ -106,7 +110,7 @@ class KafkaContinuousReader(
     startOffsets.toSeq.map {
       case (topicPartition, start) =>
         KafkaContinuousReadTask(
-          topicPartition, start, kafkaParams, failOnDataLoss)
+          topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss)
           .asInstanceOf[ReadTask[UnsafeRow]]
     }.asJava
   }
@@ -151,6 +155,7 @@ class KafkaContinuousReader(
  * @param topicPartition The (topic, partition) pair this task is responsible for.
  * @param startOffset The offset to start reading from within the partition.
  * @param kafkaParams Kafka consumer params to use.
+ * @param pollTimeoutMs The timeout for Kafka consumer polling.
  * @param failOnDataLoss Flag indicating whether data reader should fail if some offsets
  *                       are skipped.
  */
@@ -158,9 +163,11 @@ case class KafkaContinuousReadTask(
     topicPartition: TopicPartition,
     startOffset: Long,
     kafkaParams: ju.Map[String, Object],
+    pollTimeoutMs: Long,
     failOnDataLoss: Boolean) extends ReadTask[UnsafeRow] {
   override def createDataReader(): KafkaContinuousDataReader = {
-    new KafkaContinuousDataReader(topicPartition, startOffset, kafkaParams, failOnDataLoss)
+    new KafkaContinuousDataReader(
+      topicPartition, startOffset, kafkaParams, pollTimeoutMs, failOnDataLoss)
   }
 }
 
@@ -170,6 +177,7 @@ case class KafkaContinuousReadTask(
  * @param topicPartition The (topic, partition) pair this data reader is responsible for.
  * @param startOffset The offset to start reading from within the partition.
  * @param kafkaParams Kafka consumer params to use.
+ * @param pollTimeoutMs The timeout for Kafka consumer polling.
  * @param failOnDataLoss Flag indicating whether data reader should fail if some offsets
  *                       are skipped.
  */
@@ -177,6 +185,7 @@ class KafkaContinuousDataReader(
     topicPartition: TopicPartition,
     startOffset: Long,
     kafkaParams: ju.Map[String, Object],
+    pollTimeoutMs: Long,
     failOnDataLoss: Boolean) extends ContinuousDataReader[UnsafeRow] {
   private val topic = topicPartition.topic
   private val kafkaPartition = topicPartition.partition
@@ -192,11 +201,30 @@ class KafkaContinuousDataReader(
   override def next(): Boolean = {
     var r: ConsumerRecord[Array[Byte], Array[Byte]] = null
     while (r == null) {
-      r = consumer.get(
-        nextKafkaOffset,
-        untilOffset = Long.MaxValue,
-        pollTimeoutMs = Long.MaxValue,
-        failOnDataLoss)
+      if (TaskContext.get().isInterrupted() || TaskContext.get().isCompleted()) return false
+      // Our consumer.get is not interruptible, so we have to set a low poll timeout, leaving
+      // interrupt points to end the query rather than waiting for new data that might never come.
+      try {
+        r = consumer.get(
+          nextKafkaOffset,
+          untilOffset = Long.MaxValue,
+          pollTimeoutMs,
+          failOnDataLoss)
+      } catch {
+        // We didn't read within the timeout. We're supposed to block indefinitely for new data, so
+        // swallow and ignore this.
+        case _: TimeoutException =>
+
+        // This is a failOnDataLoss exception. Retry if nextKafkaOffset is within the data range,
+        // or if it's the endpoint of the data range (i.e. the "true" next offset).
+        case e: IllegalStateException  if e.getCause.isInstanceOf[OffsetOutOfRangeException] =>
+          val range = consumer.getAvailableOffsetRange()
+          if (range.latest >= nextKafkaOffset && range.earliest <= nextKafkaOffset) {
+            // retry
+          } else {
+            throw e
+          }
+      }
     }
     nextKafkaOffset = r.offset + 1
     currentRecord = r
