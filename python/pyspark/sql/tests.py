@@ -583,6 +583,15 @@ class SQLTests(ReusedSQLTestCase):
             df.select(add_three("id").alias("plus_three")).collect()
         )
 
+        # This is to check if a 'SQLContext.udf' can call its alias.
+        sqlContext = self.spark._wrapped
+        add_four = sqlContext.udf.register("add_four", lambda x: x + 4, IntegerType())
+
+        self.assertListEqual(
+            df.selectExpr("add_four(id) AS plus_four").collect(),
+            df.select(add_four("id").alias("plus_four")).collect()
+        )
+
     def test_non_existed_udf(self):
         spark = self.spark
         self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udf",
@@ -597,11 +606,6 @@ class SQLTests(ReusedSQLTestCase):
         spark = self.spark
         self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udaf",
                                 lambda: spark.udf.registerJavaUDAF("udaf1", "non_existed_udaf"))
-
-        # This is to check if a deprecated 'SQLContext.registerJavaUDAF' can call its alias.
-        sqlContext = spark._wrapped
-        self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udaf",
-                                lambda: sqlContext.registerJavaUDAF("udaf1", "non_existed_udaf"))
 
     def test_multiLine_json(self):
         people1 = self.spark.read.json("python/test_support/sql/people.json")

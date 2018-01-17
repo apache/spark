@@ -147,8 +147,7 @@ class SQLContext(object):
 
         :return: :class:`UDFRegistration`
         """
-        from pyspark.sql.session import UDFRegistration
-        return UDFRegistration(self.sparkSession)
+        return self.sparkSession.udf
 
     @since(1.4)
     def range(self, start, end=None, step=1, numPartitions=None):
@@ -179,36 +178,28 @@ class SQLContext(object):
             DeprecationWarning)
         return self.sparkSession.udf.register(name, f, returnType)
     # Reuse the docstring from UDFRegistration but with few notes.
+    _register_doc = UDFRegistration.register.__doc__.strip()
     registerFunction.__doc__ = """%s
+
         .. note:: :func:`sqlContext.registerFunction` is an alias for
             :func:`spark.udf.register`.
         .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.register` instead.
         .. versionadded:: 1.2
-    """ % UDFRegistration.register.__doc__
+    """ % _register_doc[:_register_doc.rfind('versionadded::')]
 
     def registerJavaFunction(self, name, javaClassName, returnType=None):
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.registerJavaFunction instead.",
             DeprecationWarning)
         return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
+    _registerJavaFunction_doc = UDFRegistration.registerJavaFunction.__doc__.strip()
     registerJavaFunction.__doc__ = """%s
+
         .. note:: :func:`sqlContext.registerJavaFunction` is an alias for
             :func:`spark.udf.registerJavaFunction`
         .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.registerJavaFunction` instead.
         .. versionadded:: 2.1
-    """ % UDFRegistration.registerJavaFunction.__doc__
-
-    def registerJavaUDAF(self, name, javaClassName):
-        warnings.warn(
-            "Deprecated in 2.3.0. Use spark.udf.registerJavaUDAF instead.",
-            DeprecationWarning)
-        return self.sparkSession.udf.registerJavaUDAF(name, javaClassName)
-    registerJavaUDAF.__doc__ = """%s
-        .. note:: :func:`sqlContext.registerJavaUDAF` is an alias for
-            :func:`spark.udf.registerJavaUDAF`.
-        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.registerJavaUDAF` instead.
-        .. versionadded:: 2.3
-    """ % UDFRegistration.registerJavaUDAF.__doc__
+    """ % _registerJavaFunction_doc[:_registerJavaFunction_doc.rfind('versionadded::')]
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):
@@ -536,9 +527,9 @@ def _test():
     globs['os'] = os
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
-    # 'spark' alias is a small hack for reusing doctests. Please see the reassignment
+    # 'spark' is used for reusing doctests. Please see the reassignment
     # of docstrings above.
-    globs['spark'] = globs['sqlContext']
+    globs['spark'] = globs['sqlContext'].sparkSession
     globs['rdd'] = rdd = sc.parallelize(
         [Row(field1=1, field2="row1"),
          Row(field1=2, field2="row2"),

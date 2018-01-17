@@ -231,12 +231,14 @@ class Catalog(object):
             DeprecationWarning)
         return self._sparkSession.udf.register(name, f, returnType)
     # Reuse the docstring from UDFRegistration but with few notes.
+    _register_doc = UDFRegistration.register.__doc__.strip()
     registerFunction.__doc__ = """%s
+
         .. note:: :func:`spark.catalog.registerFunction` is an alias
             for :func:`spark.udf.register`.
         .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.register` instead.
         .. versionadded:: 2.0
-    """ % UDFRegistration.register.__doc__
+    """ % _register_doc[:_register_doc.rfind('versionadded::')]
 
     @since(2.0)
     def isCached(self, tableName):
