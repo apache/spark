@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Proj
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 
+
 /**
  * Extracts all the Python UDFs in logical aggregate, which depends on aggregate expression or
  * grouping key, evaluate them after aggregate.
@@ -51,7 +52,6 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
   private def extract(agg: Aggregate): LogicalPlan = {
     val projList = new ArrayBuffer[NamedExpression]()
     val aggExpr = new ArrayBuffer[NamedExpression]()
-
     agg.aggregateExpressions.foreach { expr =>
       if (hasPythonUdfOverAggregate(expr, agg)) {
         // Python UDF can only be evaluated after aggregate

@@ -351,7 +351,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           // This is a sanity check. We should not reach here when we have multiple distinct
           // column sets. Our MultipleDistinctRewriter should take care this case.
           sys.error("You hit a query analyzer bug. Please report your query to " +
-            "Spark user mailing list.")
+              "Spark user mailing list.")
         }
 
         val aggregateOperator =
@@ -369,6 +369,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               resultExpressions,
               planLater(child))
           }
+
         aggregateOperator
 
       case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)

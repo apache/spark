@@ -4380,7 +4380,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         return plus_two
 
     @property
-    def mean_udf(self):
+    def pandas_agg_mean_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
         @pandas_udf('double', PandasUDFType.GROUP_AGG)
@@ -4389,7 +4389,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         return avg
 
     @property
-    def sum_udf(self):
+    def pandas_agg_sum_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
         @pandas_udf('double', PandasUDFType.GROUP_AGG)
@@ -4398,7 +4398,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         return sum
 
     @property
-    def weighted_mean_udf(self):
+    def pandas_agg_weighted_mean_udf(self):
         import numpy as np
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
@@ -4411,7 +4411,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import col, lit, sum, mean
 
         df = self.data
-        weighted_mean_udf = self.weighted_mean_udf
+        weighted_mean_udf = self.pandas_agg_weighted_mean_udf
 
         # Groupby one column and aggregate one UDF with literal
         result1 = df.groupby('id').agg(weighted_mean_udf(df.v, lit(1.0))).sort('id')
@@ -4465,7 +4465,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import mean
 
         df = self.data
-        mean_udf = self.mean_udf
+        mean_udf = self.pandas_agg_mean_udf
 
         result1 = df.groupby('id').agg(mean_udf(df.v).alias('mean_alias'))
         expected1 = df.groupby('id').agg(mean(df.v).alias('mean_alias'))
@@ -4479,7 +4479,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import sum, mean
 
         df = self.data
-        sum_udf = self.sum_udf
+        sum_udf = self.pandas_agg_sum_udf
 
         # Mix group aggregate pandas UDF with sql expression
         result1 = (df.groupby('id')
@@ -4519,7 +4519,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         df = self.data
         plus_one = self.python_plus_one
         plus_two = self.pandas_scalar_plus_two
-        sum_udf = self.sum_udf
+        sum_udf = self.pandas_agg_sum_udf
 
         # Mix group aggregate pandas UDF and python UDF
         result1 = (df.groupby('id')
@@ -4584,9 +4584,9 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import col, lit, sum, mean
 
         df = self.data
-        mean_udf = self.mean_udf
-        sum_udf = self.sum_udf
-        weighted_mean_udf = self.weighted_mean_udf
+        mean_udf = self.pandas_agg_mean_udf
+        sum_udf = self.pandas_agg_sum_udf
+        weighted_mean_udf = self.pandas_agg_weighted_mean_udf
 
         result1 = (df.groupBy('id')
                    .agg(mean_udf(df.v),
@@ -4607,7 +4607,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import lit, sum
 
         df = self.data
-        sum_udf = self.sum_udf
+        sum_udf = self.pandas_agg_sum_udf
         plus_one = self.python_plus_one
         plus_two = self.pandas_scalar_plus_two
 
@@ -4653,7 +4653,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         df = self.data
         plus_one = self.python_plus_one
         plus_two = self.pandas_scalar_plus_two
-        sum_udf = self.sum_udf
+        sum_udf = self.pandas_agg_sum_udf
 
         # Test complex expressions with sql expression, python UDF and
         # group aggregate pandas UDF
@@ -4728,7 +4728,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         self.spark.conf.set("spark.sql.retainGroupColumns", False)
         try:
             df = self.data
-            sum_udf = self.sum_udf
+            sum_udf = self.pandas_agg_sum_udf
 
             result1 = df.groupby(df.id).agg(sum_udf(df.v))
             expected1 = df.groupby(df.id).agg(sum(df.v))
@@ -4745,7 +4745,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
 
         df = self.data
         plus_one = self.python_plus_one
-        mean_udf = self.mean_udf
+        mean_udf = self.pandas_agg_mean_udf
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
