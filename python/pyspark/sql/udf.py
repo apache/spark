@@ -209,7 +209,7 @@ class UDFRegistration(object):
         :return: a user-defined function.
 
         `returnType` can be optionally specified when `f` is a Python function but not
-        when `f` is a user-defined function. See below:
+        when `f` is a user-defined function. Please see below.
 
         1. When `f` is a Python function:
 
@@ -233,7 +233,6 @@ class UDFRegistration(object):
             >>> _ = spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
             >>> spark.sql("SELECT stringLengthInt('test')").collect()
             [Row(stringLengthInt(test)=4)]
-
 
         2. When `f` is a user-defined function:
 
