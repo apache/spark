@@ -115,9 +115,9 @@ for python in "${PYTHON_EXECS[@]}"; do
     cd /
 
     echo "Run basic sanity check on pip installed version with spark-submit"
-    spark-submit "$FWDIR"/dev/pip-sanity-check.py
+    spark-submit "$FWDIR"/python/pyspark/standalone_tests.py
     echo "Run basic sanity check with import based"
-    python "$FWDIR"/dev/pip-sanity-check.py
+    python "$FWDIR"/python/pyspark/standalone_tests.py
     echo "Run the tests for context.py"
     python "$FWDIR"/python/pyspark/context.py
 

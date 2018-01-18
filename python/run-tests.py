@@ -65,7 +65,11 @@ else:
     raise Exception("Cannot find assembly build directory, please build Spark first.")
 
 
-def run_individual_python_test(test_name, pyspark_python):
+def run_generic_test(test_name, pyspark_python, launch_cmd):
+    """
+    Run a generic python test. launch_cmd should be set to pyspark for normal tests or the same as
+    pyspark_python for standalone tests.
+    """
     env = dict(os.environ)
     env.update({
         'SPARK_DIST_CLASSPATH': SPARK_DIST_CLASSPATH,
@@ -79,7 +83,7 @@ def run_individual_python_test(test_name, pyspark_python):
     try:
         per_test_output = tempfile.TemporaryFile()
         retcode = subprocess.Popen(
-            [os.path.join(SPARK_HOME, "bin/pyspark"), test_name],
+            [launch_cmd, test_name],
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
     except:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
@@ -110,6 +114,20 @@ def run_individual_python_test(test_name, pyspark_python):
     else:
         per_test_output.close()
         LOGGER.info("Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
+
+
+def run_standalone_python_test(test_name, pyspark_python):
+    """
+    Runs a standalone python test. This verifies PySpark launch behaviour when starting the JVM from
+    Python side instead of JVM starting Python.
+    """
+    run_generic_test(test_name, pyspark_python, launch_cmd=pyspark_python)
+
+
+def run_individual_python_test(test_name, pyspark_python):
+    """Run a Python test launching the JVM first."""
+    launch_cmd = os.path.join(SPARK_HOME, "bin/pyspark")
+    run_generic_test(test_name, pyspark_python, launch_cmd)
 
 
 def get_default_python_executables():
@@ -198,7 +216,10 @@ def main():
             except Queue.Empty:
                 break
             try:
-                run_individual_python_test(test_goal, python_exec)
+                if test_goal == 'pyspark.standalone':
+                    run_standalone_python_test(test_goal, python_exec)
+                else:
+                    run_individual_python_test(test_goal, python_exec)
             finally:
                 task_queue.task_done()
 

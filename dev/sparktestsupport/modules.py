@@ -381,6 +381,12 @@ pyspark_core = Module(
     ]
 )
 
+pyspark_standalone = Module(
+    name="pyspark-standalone",
+    dependencies=[pyspark_core],
+    source_file_regexes=["python/pyspark/(java_gateway.py|context.py)"],
+    python_test_goals=["pyspark.standalone_tests"]
+)
 
 pyspark_sql = Module(
     name="pyspark-sql",
