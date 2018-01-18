@@ -23,7 +23,7 @@ import org.apache.spark.mllib.util.TestingUtils._
 
 class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  test("Ranking metrics: MAP, NDCG") {
+  test("Ranking metrics: MAP, NDCG, MRR, PRECK") {
     val predictionAndLabels = sc.parallelize(
       Seq(
         (Array(1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Array(1, 2, 3, 4, 5)),
@@ -34,6 +34,7 @@ class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val metrics = new RankingMetrics(predictionAndLabels)
     val map = metrics.meanAveragePrecision
+    val mrr = metrics.meanReciprocalRank
 
     assert(metrics.precisionAt(1) ~== 1.0/3 absTol eps)
     assert(metrics.precisionAt(2) ~== 1.0/3 absTol eps)
@@ -49,6 +50,8 @@ class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(metrics.ndcgAt(5) ~== 0.328788 absTol eps)
     assert(metrics.ndcgAt(10) ~== 0.487913 absTol eps)
     assert(metrics.ndcgAt(15) ~== metrics.ndcgAt(10) absTol eps)
+
+    assert(mrr ~== 0.5 absTol eps)
   }
 
   test("MAP, NDCG with few predictions (SPARK-14886)") {
