@@ -17,7 +17,6 @@
 
 package org.apache.spark.launcher;
 
-import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;

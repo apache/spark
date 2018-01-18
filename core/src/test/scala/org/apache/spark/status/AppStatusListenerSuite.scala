@@ -195,7 +195,9 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     val s1Tasks = createTasks(4, execIds)
     s1Tasks.foreach { task =>
-      listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptId, task))
+      listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId,
+        stages.head.attemptNumber,
+        task))
     }
 
     assert(store.count(classOf[TaskDataWrapper]) === s1Tasks.size)
@@ -211,55 +213,53 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     s1Tasks.foreach { task =>
       check[TaskDataWrapper](task.taskId) { wrapper =>
-        assert(wrapper.info.taskId === task.taskId)
+        assert(wrapper.taskId === task.taskId)
         assert(wrapper.stageId === stages.head.stageId)
         assert(wrapper.stageAttemptId === stages.head.attemptId)
-        assert(Arrays.equals(wrapper.stage, Array(stages.head.stageId, stages.head.attemptId)))
-
-        val runtime = Array[AnyRef](stages.head.stageId: JInteger, stages.head.attemptId: JInteger,
-          -1L: JLong)
-        assert(Arrays.equals(wrapper.runtime, runtime))
-
-        assert(wrapper.info.index === task.index)
-        assert(wrapper.info.attempt === task.attemptNumber)
-        assert(wrapper.info.launchTime === new Date(task.launchTime))
-        assert(wrapper.info.executorId === task.executorId)
-        assert(wrapper.info.host === task.host)
-        assert(wrapper.info.status === task.status)
-        assert(wrapper.info.taskLocality === task.taskLocality.toString())
-        assert(wrapper.info.speculative === task.speculative)
+        assert(wrapper.index === task.index)
+        assert(wrapper.attempt === task.attemptNumber)
+        assert(wrapper.launchTime === task.launchTime)
+        assert(wrapper.executorId === task.executorId)
+        assert(wrapper.host === task.host)
+        assert(wrapper.status === task.status)
+        assert(wrapper.taskLocality === task.taskLocality.toString())
+        assert(wrapper.speculative === task.speculative)
       }
     }
 
-    // Send executor metrics update. Only update one metric to avoid a lot of boilerplate code.
-    s1Tasks.foreach { task =>
-      val accum = new AccumulableInfo(1L, Some(InternalAccumulator.MEMORY_BYTES_SPILLED),
-        Some(1L), None, true, false, None)
-      listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(
-        task.executorId,
-        Seq((task.taskId, stages.head.stageId, stages.head.attemptId, Seq(accum)))))
-    }
+    // Send two executor metrics update. Only update one metric to avoid a lot of boilerplate code.
+    // The tasks are distributed among the two executors, so the executor-level metrics should
+    // hold half of the cummulative value of the metric being updated.
+    Seq(1L, 2L).foreach { value =>
+      s1Tasks.foreach { task =>
+        val accum = new AccumulableInfo(1L, Some(InternalAccumulator.MEMORY_BYTES_SPILLED),
+          Some(value), None, true, false, None)
+        listener.onExecutorMetricsUpdate(SparkListenerExecutorMetricsUpdate(
+          task.executorId,
+          Seq((task.taskId, stages.head.stageId, stages.head.attemptNumber, Seq(accum)))))
+      }
 
-    check[StageDataWrapper](key(stages.head)) { stage =>
-      assert(stage.info.memoryBytesSpilled === s1Tasks.size)
-    }
+      check[StageDataWrapper](key(stages.head)) { stage =>
+        assert(stage.info.memoryBytesSpilled === s1Tasks.size * value)
+      }
 
-    val execs = store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
-      .first(key(stages.head)).last(key(stages.head)).asScala.toSeq
-    assert(execs.size > 0)
-    execs.foreach { exec =>
-      assert(exec.info.memoryBytesSpilled === s1Tasks.size / 2)
+      val execs = store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
+        .first(key(stages.head)).last(key(stages.head)).asScala.toSeq
+      assert(execs.size > 0)
+      execs.foreach { exec =>
+        assert(exec.info.memoryBytesSpilled === s1Tasks.size * value / 2)
+      }
     }
 
     // Fail one of the tasks, re-start it.
     time += 1
     s1Tasks.head.markFinished(TaskState.FAILED, time)
-    listener.onTaskEnd(SparkListenerTaskEnd(stages.head.stageId, stages.head.attemptId,
+    listener.onTaskEnd(SparkListenerTaskEnd(stages.head.stageId, stages.head.attemptNumber,
       "taskType", TaskResultLost, s1Tasks.head, null))
 
     time += 1
     val reattempt = newAttempt(s1Tasks.head, nextTaskId())
-    listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptId,
+    listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptNumber,
       reattempt))
 
     assert(store.count(classOf[TaskDataWrapper]) === s1Tasks.size + 1)
@@ -275,13 +275,13 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
 
     check[TaskDataWrapper](s1Tasks.head.taskId) { task =>
-      assert(task.info.status === s1Tasks.head.status)
-      assert(task.info.errorMessage == Some(TaskResultLost.toErrorString))
+      assert(task.status === s1Tasks.head.status)
+      assert(task.errorMessage == Some(TaskResultLost.toErrorString))
     }
 
     check[TaskDataWrapper](reattempt.taskId) { task =>
-      assert(task.info.index === s1Tasks.head.index)
-      assert(task.info.attempt === reattempt.attemptNumber)
+      assert(task.index === s1Tasks.head.index)
+      assert(task.attempt === reattempt.attemptNumber)
     }
 
     // Kill one task, restart it.
@@ -289,7 +289,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val killed = s1Tasks.drop(1).head
     killed.finishTime = time
     killed.failed = true
-    listener.onTaskEnd(SparkListenerTaskEnd(stages.head.stageId, stages.head.attemptId,
+    listener.onTaskEnd(SparkListenerTaskEnd(stages.head.stageId, stages.head.attemptNumber,
       "taskType", TaskKilled("killed"), killed, null))
 
     check[JobDataWrapper](1) { job =>
@@ -303,21 +303,21 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
 
     check[TaskDataWrapper](killed.taskId) { task =>
-      assert(task.info.index === killed.index)
-      assert(task.info.errorMessage === Some("killed"))
+      assert(task.index === killed.index)
+      assert(task.errorMessage === Some("killed"))
     }
 
     // Start a new attempt and finish it with TaskCommitDenied, make sure it's handled like a kill.
     time += 1
     val denied = newAttempt(killed, nextTaskId())
     val denyReason = TaskCommitDenied(1, 1, 1)
-    listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptId,
+    listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptNumber,
       denied))
 
     time += 1
     denied.finishTime = time
     denied.failed = true
-    listener.onTaskEnd(SparkListenerTaskEnd(stages.head.stageId, stages.head.attemptId,
+    listener.onTaskEnd(SparkListenerTaskEnd(stages.head.stageId, stages.head.attemptNumber,
       "taskType", denyReason, denied, null))
 
     check[JobDataWrapper](1) { job =>
@@ -331,13 +331,13 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
 
     check[TaskDataWrapper](denied.taskId) { task =>
-      assert(task.info.index === killed.index)
-      assert(task.info.errorMessage === Some(denyReason.toErrorString))
+      assert(task.index === killed.index)
+      assert(task.errorMessage === Some(denyReason.toErrorString))
     }
 
     // Start a new attempt.
     val reattempt2 = newAttempt(denied, nextTaskId())
-    listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptId,
+    listener.onTaskStart(SparkListenerTaskStart(stages.head.stageId, stages.head.attemptNumber,
       reattempt2))
 
     // Succeed all tasks in stage 1.
@@ -350,7 +350,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     time += 1
     pending.foreach { task =>
       task.markFinished(TaskState.FINISHED, time)
-      listener.onTaskEnd(SparkListenerTaskEnd(stages.head.stageId, stages.head.attemptId,
+      listener.onTaskEnd(SparkListenerTaskEnd(stages.head.stageId, stages.head.attemptNumber,
         "taskType", Success, task, s1Metrics))
     }
 
@@ -370,10 +370,10 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     pending.foreach { task =>
       check[TaskDataWrapper](task.taskId) { wrapper =>
-        assert(wrapper.info.errorMessage === None)
-        assert(wrapper.info.taskMetrics.get.executorCpuTime === 2L)
-        assert(wrapper.info.taskMetrics.get.executorRunTime === 4L)
-        assert(wrapper.info.duration === Some(task.duration))
+        assert(wrapper.errorMessage === None)
+        assert(wrapper.executorCpuTime === 2L)
+        assert(wrapper.executorRunTime === 4L)
+        assert(wrapper.duration === task.duration)
       }
     }
 
@@ -414,13 +414,15 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     time += 1
     val s2Tasks = createTasks(4, execIds)
     s2Tasks.foreach { task =>
-      listener.onTaskStart(SparkListenerTaskStart(stages.last.stageId, stages.last.attemptId, task))
+      listener.onTaskStart(SparkListenerTaskStart(stages.last.stageId,
+        stages.last.attemptNumber,
+        task))
     }
 
     time += 1
     s2Tasks.foreach { task =>
       task.markFinished(TaskState.FAILED, time)
-      listener.onTaskEnd(SparkListenerTaskEnd(stages.last.stageId, stages.last.attemptId,
+      listener.onTaskEnd(SparkListenerTaskEnd(stages.last.stageId, stages.last.attemptNumber,
         "taskType", TaskResultLost, task, null))
     }
 
@@ -455,7 +457,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     // - Re-submit stage 2, all tasks, and succeed them and the stage.
     val oldS2 = stages.last
-    val newS2 = new StageInfo(oldS2.stageId, oldS2.attemptId + 1, oldS2.name, oldS2.numTasks,
+    val newS2 = new StageInfo(oldS2.stageId, oldS2.attemptNumber + 1, oldS2.name, oldS2.numTasks,
       oldS2.rddInfos, oldS2.parentIds, oldS2.details, oldS2.taskMetrics)
 
     time += 1
@@ -466,14 +468,14 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val newS2Tasks = createTasks(4, execIds)
 
     newS2Tasks.foreach { task =>
-      listener.onTaskStart(SparkListenerTaskStart(newS2.stageId, newS2.attemptId, task))
+      listener.onTaskStart(SparkListenerTaskStart(newS2.stageId, newS2.attemptNumber, task))
     }
 
     time += 1
     newS2Tasks.foreach { task =>
       task.markFinished(TaskState.FINISHED, time)
-      listener.onTaskEnd(SparkListenerTaskEnd(newS2.stageId, newS2.attemptId, "taskType", Success,
-        task, null))
+      listener.onTaskEnd(SparkListenerTaskEnd(newS2.stageId, newS2.attemptNumber, "taskType",
+        Success, task, null))
     }
 
     time += 1
@@ -522,14 +524,15 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val j2s2Tasks = createTasks(4, execIds)
 
     j2s2Tasks.foreach { task =>
-      listener.onTaskStart(SparkListenerTaskStart(j2Stages.last.stageId, j2Stages.last.attemptId,
+      listener.onTaskStart(SparkListenerTaskStart(j2Stages.last.stageId,
+        j2Stages.last.attemptNumber,
         task))
     }
 
     time += 1
     j2s2Tasks.foreach { task =>
       task.markFinished(TaskState.FINISHED, time)
-      listener.onTaskEnd(SparkListenerTaskEnd(j2Stages.last.stageId, j2Stages.last.attemptId,
+      listener.onTaskEnd(SparkListenerTaskEnd(j2Stages.last.stageId, j2Stages.last.attemptNumber,
         "taskType", Success, task, null))
     }
 
@@ -888,6 +891,23 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     assert(store.count(classOf[StageDataWrapper]) === 3)
     assert(store.count(classOf[RDDOperationGraphWrapper]) === 3)
 
+    val dropped = stages.drop(1).head
+
+    // Cache some quantiles by calling AppStatusStore.taskSummary(). For quantiles to be
+    // calculcated, we need at least one finished task.
+    time += 1
+    val task = createTasks(1, Array("1")).head
+    listener.onTaskStart(SparkListenerTaskStart(dropped.stageId, dropped.attemptId, task))
+
+    time += 1
+    task.markFinished(TaskState.FINISHED, time)
+    listener.onTaskEnd(SparkListenerTaskEnd(dropped.stageId, dropped.attemptId,
+      "taskType", Success, task, null))
+
+    new AppStatusStore(store)
+      .taskSummary(dropped.stageId, dropped.attemptId, Array(0.25d, 0.50d, 0.75d))
+    assert(store.count(classOf[CachedQuantile], "stage", key(dropped)) === 3)
+
     stages.drop(1).foreach { s =>
       time += 1
       s.completionTime = Some(time)
@@ -899,6 +919,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     intercept[NoSuchElementException] {
       store.read(classOf[StageDataWrapper], Array(2, 0))
     }
+    assert(store.count(classOf[CachedQuantile], "stage", key(dropped)) === 0)
 
     val attempt2 = new StageInfo(3, 1, "stage3", 4, Nil, Nil, "details3")
     time += 1
@@ -919,13 +940,13 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     time += 1
     val tasks = createTasks(2, Array("1"))
     tasks.foreach { task =>
-      listener.onTaskStart(SparkListenerTaskStart(attempt2.stageId, attempt2.attemptId, task))
+      listener.onTaskStart(SparkListenerTaskStart(attempt2.stageId, attempt2.attemptNumber, task))
     }
     assert(store.count(classOf[TaskDataWrapper]) === 2)
 
     // Start a 3rd task. The finished tasks should be deleted.
     createTasks(1, Array("1")).foreach { task =>
-      listener.onTaskStart(SparkListenerTaskStart(attempt2.stageId, attempt2.attemptId, task))
+      listener.onTaskStart(SparkListenerTaskStart(attempt2.stageId, attempt2.attemptNumber, task))
     }
     assert(store.count(classOf[TaskDataWrapper]) === 2)
     intercept[NoSuchElementException] {
@@ -934,7 +955,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     // Start a 4th task. The first task should be deleted, even if it's still running.
     createTasks(1, Array("1")).foreach { task =>
-      listener.onTaskStart(SparkListenerTaskStart(attempt2.stageId, attempt2.attemptId, task))
+      listener.onTaskStart(SparkListenerTaskStart(attempt2.stageId, attempt2.attemptNumber, task))
     }
     assert(store.count(classOf[TaskDataWrapper]) === 2)
     intercept[NoSuchElementException] {
@@ -960,7 +981,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
-  private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptId)
+  private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptNumber)
 
   private def check[T: ClassTag](key: Any)(fn: T => Unit): Unit = {
     val value = store.read(classTag[T].runtimeClass, key).asInstanceOf[T]

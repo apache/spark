@@ -94,6 +94,8 @@ private[spark] class ExecutorPodFactory(
   private val executorCores = sparkConf.getDouble("spark.executor.cores", 1)
   private val executorLimitCores = sparkConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
+  private val executorJarsDownloadDir = sparkConf.get(JARS_DOWNLOAD_LOCATION)
+
   /**
    * Configure and construct an executor pod with the given parameters.
    */
@@ -126,7 +128,7 @@ private[spark] class ExecutorPodFactory(
       .build()
     val executorExtraClasspathEnv = executorExtraClasspath.map { cp =>
       new EnvVarBuilder()
-        .withName(ENV_EXECUTOR_EXTRA_CLASSPATH)
+        .withName(ENV_CLASSPATH)
         .withValue(cp)
         .build()
     }
@@ -145,7 +147,8 @@ private[spark] class ExecutorPodFactory(
       (ENV_EXECUTOR_CORES, math.ceil(executorCores).toInt.toString),
       (ENV_EXECUTOR_MEMORY, executorMemoryString),
       (ENV_APPLICATION_ID, applicationId),
-      (ENV_EXECUTOR_ID, executorId)) ++ executorEnvs)
+      (ENV_EXECUTOR_ID, executorId),
+      (ENV_MOUNTED_CLASSPATH, s"$executorJarsDownloadDir/*")) ++ executorEnvs)
       .map(env => new EnvVarBuilder()
         .withName(env._1)
         .withValue(env._2)
@@ -178,6 +181,7 @@ private[spark] class ExecutorPodFactory(
         .endResources()
       .addAllToEnv(executorEnv.asJava)
       .withPorts(requiredPorts.asJava)
+      .addToArgs("executor")
       .build()
 
     val executorPod = new PodBuilder()
@@ -214,7 +218,7 @@ private[spark] class ExecutorPodFactory(
 
     val (maybeSecretsMountedPod, maybeSecretsMountedContainer) =
       mountSecretsBootstrap.map { bootstrap =>
-        bootstrap.mountSecrets(executorPod, containerWithLimitCores)
+        (bootstrap.addSecretVolumes(executorPod), bootstrap.mountSecrets(containerWithLimitCores))
       }.getOrElse((executorPod, containerWithLimitCores))
 
     val (bootstrappedPod, bootstrappedContainer) =
@@ -227,7 +231,9 @@ private[spark] class ExecutorPodFactory(
 
         val (pod, mayBeSecretsMountedInitContainer) =
           initContainerMountSecretsBootstrap.map { bootstrap =>
-            bootstrap.mountSecrets(podWithInitContainer.pod, podWithInitContainer.initContainer)
+            // Mount the secret volumes given that the volumes have already been added to the
+            // executor pod when mounting the secrets into the main executor container.
+            (podWithInitContainer.pod, bootstrap.mountSecrets(podWithInitContainer.initContainer))
           }.getOrElse((podWithInitContainer.pod, podWithInitContainer.initContainer))
 
         val bootstrappedPod = KubernetesUtils.appendInitContainer(

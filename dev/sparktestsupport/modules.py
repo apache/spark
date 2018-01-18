@@ -400,6 +400,7 @@ pyspark_sql = Module(
         "pyspark.sql.functions",
         "pyspark.sql.readwriter",
         "pyspark.sql.streaming",
+        "pyspark.sql.udf",
         "pyspark.sql.window",
         "pyspark.sql.tests",
     ]
@@ -539,7 +540,7 @@ mesos = Module(
 kubernetes = Module(
     name="kubernetes",
     dependencies=[],
-    source_file_regexes=["resource-managers/kubernetes/core"],
+    source_file_regexes=["resource-managers/kubernetes"],
     build_profile_flags=["-Pkubernetes"],
     sbt_test_goals=["kubernetes/test"]
 )

@@ -39,6 +39,7 @@ class SessionStateSuite extends SparkFunSuite
   protected var activeSession: SparkSession = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     activeSession = SparkSession.builder().master("local").getOrCreate()
   }
 

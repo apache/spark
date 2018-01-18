@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.vectorized;
+package org.apache.spark.sql.vectorized;
 
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
@@ -34,11 +34,7 @@ public final class ArrowColumnVector extends ColumnVector {
   private ArrowColumnVector[] childColumns;
 
   private void ensureAccessible(int index) {
-    int valueCount = accessor.getValueCount();
-    if (index < 0 || index >= valueCount) {
-      throw new IndexOutOfBoundsException(
-        String.format("index: %d, valueCount: %d", index, valueCount));
-    }
+    ensureAccessible(index, 1);
   }
 
   private void ensureAccessible(int index, int count) {
@@ -64,19 +60,11 @@ public final class ArrowColumnVector extends ColumnVector {
     accessor.close();
   }
 
-  //
-  // APIs dealing with nulls
-  //
-
   @Override
   public boolean isNullAt(int rowId) {
     ensureAccessible(rowId);
     return accessor.isNullAt(rowId);
   }
-
-  //
-  // APIs dealing with Booleans
-  //
 
   @Override
   public boolean getBoolean(int rowId) {
@@ -94,10 +82,6 @@ public final class ArrowColumnVector extends ColumnVector {
     return array;
   }
 
-  //
-  // APIs dealing with Bytes
-  //
-
   @Override
   public byte getByte(int rowId) {
     ensureAccessible(rowId);
@@ -113,10 +97,6 @@ public final class ArrowColumnVector extends ColumnVector {
     }
     return array;
   }
-
-  //
-  // APIs dealing with Shorts
-  //
 
   @Override
   public short getShort(int rowId) {
@@ -134,10 +114,6 @@ public final class ArrowColumnVector extends ColumnVector {
     return array;
   }
 
-  //
-  // APIs dealing with Ints
-  //
-
   @Override
   public int getInt(int rowId) {
     ensureAccessible(rowId);
@@ -153,10 +129,6 @@ public final class ArrowColumnVector extends ColumnVector {
     }
     return array;
   }
-
-  //
-  // APIs dealing with Longs
-  //
 
   @Override
   public long getLong(int rowId) {
@@ -174,10 +146,6 @@ public final class ArrowColumnVector extends ColumnVector {
     return array;
   }
 
-  //
-  // APIs dealing with floats
-  //
-
   @Override
   public float getFloat(int rowId) {
     ensureAccessible(rowId);
@@ -193,10 +161,6 @@ public final class ArrowColumnVector extends ColumnVector {
     }
     return array;
   }
-
-  //
-  // APIs dealing with doubles
-  //
 
   @Override
   public double getDouble(int rowId) {
@@ -214,10 +178,6 @@ public final class ArrowColumnVector extends ColumnVector {
     return array;
   }
 
-  //
-  // APIs dealing with Arrays
-  //
-
   @Override
   public int getArrayLength(int rowId) {
     ensureAccessible(rowId);
@@ -230,19 +190,11 @@ public final class ArrowColumnVector extends ColumnVector {
     return accessor.getArrayOffset(rowId);
   }
 
-  //
-  // APIs dealing with Decimals
-  //
-
   @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
     ensureAccessible(rowId);
     return accessor.getDecimal(rowId, precision, scale);
   }
-
-  //
-  // APIs dealing with UTF8Strings
-  //
 
   @Override
   public UTF8String getUTF8String(int rowId) {
@@ -250,25 +202,15 @@ public final class ArrowColumnVector extends ColumnVector {
     return accessor.getUTF8String(rowId);
   }
 
-  //
-  // APIs dealing with Binaries
-  //
-
   @Override
   public byte[] getBinary(int rowId) {
     ensureAccessible(rowId);
     return accessor.getBinary(rowId);
   }
 
-  /**
-   * Returns the data for the underlying array.
-   */
   @Override
   public ArrowColumnVector arrayData() { return childColumns[0]; }
 
-  /**
-   * Returns the ordinal's child data column.
-   */
   @Override
   public ArrowColumnVector getChildColumn(int ordinal) { return childColumns[ordinal]; }
 
@@ -305,8 +247,8 @@ public final class ArrowColumnVector extends ColumnVector {
 
       childColumns = new ArrowColumnVector[1];
       childColumns[0] = new ArrowColumnVector(listVector.getDataVector());
-    } else if (vector instanceof MapVector) {
-      MapVector mapVector = (MapVector) vector;
+    } else if (vector instanceof NullableMapVector) {
+      NullableMapVector mapVector = (NullableMapVector) vector;
       accessor = new StructAccessor(mapVector);
 
       childColumns = new ArrowColumnVector[mapVector.size()];
@@ -611,9 +553,16 @@ public final class ArrowColumnVector extends ColumnVector {
     }
   }
 
+  /**
+   * Any call to "get" method will throw UnsupportedOperationException.
+   *
+   * Access struct values in a ArrowColumnVector doesn't use this accessor. Instead, it uses getStruct() method defined
+   * in the parent class. Any call to "get" method in this class is a bug in the code.
+   *
+   */
   private static class StructAccessor extends ArrowVectorAccessor {
 
-    StructAccessor(MapVector vector) {
+    StructAccessor(NullableMapVector vector) {
       super(vector);
     }
   }

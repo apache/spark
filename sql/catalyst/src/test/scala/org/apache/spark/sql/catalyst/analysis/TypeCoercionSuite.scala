@@ -923,6 +923,60 @@ class TypeCoercionSuite extends AnalysisTest {
     }
   }
 
+  test("type coercion for Elt") {
+    val rule = TypeCoercion.EltCoercion(conf)
+
+    ruleTest(rule,
+      Elt(Seq(Literal(1), Literal("ab"), Literal("cde"))),
+      Elt(Seq(Literal(1), Literal("ab"), Literal("cde"))))
+    ruleTest(rule,
+      Elt(Seq(Literal(1.toShort), Literal("ab"), Literal("cde"))),
+      Elt(Seq(Cast(Literal(1.toShort), IntegerType), Literal("ab"), Literal("cde"))))
+    ruleTest(rule,
+      Elt(Seq(Literal(2), Literal(null), Literal("abc"))),
+      Elt(Seq(Literal(2), Cast(Literal(null), StringType), Literal("abc"))))
+    ruleTest(rule,
+      Elt(Seq(Literal(2), Literal(1), Literal("234"))),
+      Elt(Seq(Literal(2), Cast(Literal(1), StringType), Literal("234"))))
+    ruleTest(rule,
+      Elt(Seq(Literal(3), Literal(1L), Literal(2.toByte), Literal(0.1))),
+      Elt(Seq(Literal(3), Cast(Literal(1L), StringType), Cast(Literal(2.toByte), StringType),
+        Cast(Literal(0.1), StringType))))
+    ruleTest(rule,
+      Elt(Seq(Literal(2), Literal(true), Literal(0.1f), Literal(3.toShort))),
+      Elt(Seq(Literal(2), Cast(Literal(true), StringType), Cast(Literal(0.1f), StringType),
+        Cast(Literal(3.toShort), StringType))))
+    ruleTest(rule,
+      Elt(Seq(Literal(1), Literal(1L), Literal(0.1))),
+      Elt(Seq(Literal(1), Cast(Literal(1L), StringType), Cast(Literal(0.1), StringType))))
+    ruleTest(rule,
+      Elt(Seq(Literal(1), Literal(Decimal(10)))),
+      Elt(Seq(Literal(1), Cast(Literal(Decimal(10)), StringType))))
+    ruleTest(rule,
+      Elt(Seq(Literal(1), Literal(BigDecimal.valueOf(10)))),
+      Elt(Seq(Literal(1), Cast(Literal(BigDecimal.valueOf(10)), StringType))))
+    ruleTest(rule,
+      Elt(Seq(Literal(1), Literal(java.math.BigDecimal.valueOf(10)))),
+      Elt(Seq(Literal(1), Cast(Literal(java.math.BigDecimal.valueOf(10)), StringType))))
+    ruleTest(rule,
+      Elt(Seq(Literal(2), Literal(new java.sql.Date(0)), Literal(new Timestamp(0)))),
+      Elt(Seq(Literal(2), Cast(Literal(new java.sql.Date(0)), StringType),
+        Cast(Literal(new Timestamp(0)), StringType))))
+
+    withSQLConf("spark.sql.function.eltOutputAsString" -> "true") {
+      ruleTest(rule,
+        Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
+        Elt(Seq(Literal(1), Cast(Literal("123".getBytes), StringType),
+          Cast(Literal("456".getBytes), StringType))))
+    }
+
+    withSQLConf("spark.sql.function.eltOutputAsString" -> "false") {
+      ruleTest(rule,
+        Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))),
+        Elt(Seq(Literal(1), Literal("123".getBytes), Literal("456".getBytes))))
+    }
+  }
+
   test("BooleanEquality type cast") {
     val be = TypeCoercion.BooleanEquality
     // Use something more than a literal to avoid triggering the simplification rules.

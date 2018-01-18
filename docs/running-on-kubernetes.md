@@ -16,6 +16,9 @@ Kubernetes scheduler that has been added to Spark.
 you may setup a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
   * We recommend using the latest release of minikube with the DNS addon enabled.
+  * Be aware that the default minikube configuration is not enough for running Spark applications.
+  We recommend 3 CPUs and 4g of memory to be able to start a simple Spark application with a single
+  executor.
 * You must have appropriate permissions to list, create, edit and delete
 [pods](https://kubernetes.io/docs/user-guide/pods/) in your cluster. You can verify that you can list these resources
 by running `kubectl auth can-i <list|create|edit|delete> pods`.
@@ -50,20 +53,17 @@ in a future release.
 
 Kubernetes requires users to supply images that can be deployed into containers within pods. The images are built to
 be run in a container runtime environment that Kubernetes supports. Docker is a container runtime environment that is
-frequently used with Kubernetes. With Spark 2.3, there are Dockerfiles provided in the runnable distribution that can be customized
-and built for your usage.
+frequently used with Kubernetes. Spark (starting with version 2.3) ships with a Dockerfile that can be used for this
+purpose, or customized to match an individual application's needs. It can be found in the `kubernetes/dockerfiles/`
+directory.
 
-You may build these docker images from sources.
-There is a script, `sbin/build-push-docker-images.sh` that you can use to build and push
-customized Spark distribution images consisting of all the above components.
+Spark also ships with a `bin/docker-image-tool.sh` script that can be used to build and publish the Docker images to
+use with the Kubernetes backend.
 
 Example usage is:
 
-    ./sbin/build-push-docker-images.sh -r <repo> -t my-tag build
-    ./sbin/build-push-docker-images.sh -r <repo> -t my-tag push
-
-Docker files are under the `kubernetes/dockerfiles/` directory and can be customized further before
-building using the supplied script, or manually.
+    ./bin/docker-image-tool.sh -r <repo> -t my-tag build
+    ./bin/docker-image-tool.sh -r <repo> -t my-tag push
 
 ## Cluster Mode
 
@@ -76,8 +76,7 @@ $ bin/spark-submit \
     --name spark-pi \
     --class org.apache.spark.examples.SparkPi \
     --conf spark.executor.instances=5 \
-    --conf spark.kubernetes.driver.container.image=<driver-image> \
-    --conf spark.kubernetes.executor.container.image=<executor-image> \
+    --conf spark.kubernetes.container.image=<spark-image> \
     local:///path/to/examples.jar
 ```
 
@@ -123,13 +122,7 @@ Those dependencies can be added to the classpath by referencing them with `local
 ### Using Remote Dependencies
 When there are application dependencies hosted in remote locations like HDFS or HTTP servers, the driver and executor pods
 need a Kubernetes [init-container](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) for downloading
-the dependencies so the driver and executor containers can use them locally. This requires users to specify the container
-image for the init-container using the configuration property `spark.kubernetes.initContainer.image`. For example, users
-simply add the following option to the `spark-submit` command to specify the init-container image:
-
-```
---conf spark.kubernetes.initContainer.image=<init-container image>
-```
+the dependencies so the driver and executor containers can use them locally.
 
 The init-container handles remote dependencies specified in `spark.jars` (or the `--jars` option of `spark-submit`) and
 `spark.files` (or the `--files` option of `spark-submit`). It also handles remotely hosted main application resources, e.g.,
@@ -144,9 +137,7 @@ $ bin/spark-submit \
     --jars https://path/to/dependency1.jar,https://path/to/dependency2.jar
     --files hdfs://host:port/path/to/file1,hdfs://host:port/path/to/file2
     --conf spark.executor.instances=5 \
-    --conf spark.kubernetes.driver.container.image=<driver-image> \
-    --conf spark.kubernetes.executor.container.image=<executor-image> \
-    --conf spark.kubernetes.initContainer.image=<init-container image>
+    --conf spark.kubernetes.container.image=<spark-image> \
     https://path/to/examples.jar
 ```
 
@@ -197,7 +188,7 @@ kubectl port-forward <driver-pod-name> 4040:4040
 
 Then, the Spark driver UI can be accessed on `http://localhost:4040`.
 
-### Debugging 
+### Debugging
 
 There may be several kinds of failures. If the Kubernetes API server rejects the request made from spark-submit, or the
 connection is refused for a different reason, the submission logic should indicate the error encountered. However, if there
@@ -215,8 +206,8 @@ If the pod has encountered a runtime error, the status can be probed further usi
 kubectl logs <spark-driver-pod>
 ```
 
-Status and logs of failed executor pods can be checked in similar ways. Finally, deleting the driver pod will clean up the entire spark 
-application, includling all executors, associated service, etc. The driver pod can be thought of as the Kubernetes representation of 
+Status and logs of failed executor pods can be checked in similar ways. Finally, deleting the driver pod will clean up the entire spark
+application, including all executors, associated service, etc. The driver pod can be thought of as the Kubernetes representation of
 the Spark application.
 
 ## Kubernetes Features
@@ -319,21 +310,27 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.driver.container.image</code></td>
+  <td><code>spark.kubernetes.container.image</code></td>
   <td><code>(none)</code></td>
   <td>
-    Container image to use for the driver.
-    This is usually of the form <code>example.com/repo/spark-driver:v1.0.0</code>.
-    This configuration is required and must be provided by the user.
+    Container image to use for the Spark application.
+    This is usually of the form <code>example.com/repo/spark:v1.0.0</code>.
+    This configuration is required and must be provided by the user, unless explicit
+    images are provided for each different container type.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.container.image</code></td>
+  <td><code>(value of spark.kubernetes.container.image)</code></td>
+  <td>
+    Custom container image to use for the driver.
   </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.container.image</code></td>
-  <td><code>(none)</code></td>
+  <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-    Container image to use for the executors.
-    This is usually of the form <code>example.com/repo/spark-executor:v1.0.0</code>.
-    This configuration is required and must be provided by the user.
+    Custom container image to use for executors.
   </td>
 </tr>
 <tr>
@@ -640,9 +637,9 @@ specific to Spark on Kubernetes.
 </tr>
 <tr>
   <td><code>spark.kubernetes.initContainer.image</code></td>
-  <td>(none)</td>
+  <td><code>(value of spark.kubernetes.container.image)</code></td>
   <td>
-   Container image for the <a href="https://kubernetes.io/docs/concepts/workloads/pods/init-containers/">init-container</a> of the driver and executors for downloading dependencies. This is usually of the form <code>example.com/repo/spark-init:v1.0.0</code>. This configuration is optional and must be provided by the user if any non-container local dependency is used and must be downloaded remotely.
+   Custom container image for the init container of both driver and executors.
   </td>
 </tr>
 <tr>

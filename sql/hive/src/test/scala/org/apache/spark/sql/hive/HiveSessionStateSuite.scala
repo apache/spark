@@ -30,6 +30,7 @@ class HiveSessionStateSuite extends SessionStateSuite
 
   override def beforeAll(): Unit = {
     // Reuse the singleton session
+    super.beforeAll()
     activeSession = spark
   }
 

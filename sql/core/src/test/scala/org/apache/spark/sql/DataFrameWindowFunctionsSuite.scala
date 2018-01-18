@@ -62,56 +62,6 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
   }
 
-  test("Window.rowsBetween") {
-    val df = Seq(("one", 1), ("two", 2)).toDF("key", "value")
-    // Running (cumulative) sum
-    checkAnswer(
-      df.select('key, sum("value").over(
-        Window.rowsBetween(Window.unboundedPreceding, Window.currentRow))),
-      Row("one", 1) :: Row("two", 3) :: Nil
-    )
-  }
-
-  test("lead") {
-    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-
-    checkAnswer(
-      df.select(
-        lead("value", 1).over(Window.partitionBy($"key").orderBy($"value"))),
-      Row("1") :: Row(null) :: Row("2") :: Row(null) :: Nil)
-  }
-
-  test("lag") {
-    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-
-    checkAnswer(
-      df.select(
-        lag("value", 1).over(Window.partitionBy($"key").orderBy($"value"))),
-      Row(null) :: Row("1") :: Row(null) :: Row("2") :: Nil)
-  }
-
-  test("lead with default value") {
-    val df = Seq((1, "1"), (1, "1"), (2, "2"), (1, "1"),
-                 (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        lead("value", 2, "n/a").over(Window.partitionBy("key").orderBy("value"))),
-      Seq(Row("1"), Row("1"), Row("n/a"), Row("n/a"), Row("2"), Row("n/a"), Row("n/a")))
-  }
-
-  test("lag with default value") {
-    val df = Seq((1, "1"), (1, "1"), (2, "2"), (1, "1"),
-                 (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        lag("value", 2, "n/a").over(Window.partitionBy($"key").orderBy($"value"))),
-      Seq(Row("n/a"), Row("n/a"), Row("1"), Row("1"), Row("n/a"), Row("n/a"), Row("2")))
-  }
-
   test("rank functions in unspecific window") {
     val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
     df.createOrReplaceTempView("window_table")
