@@ -96,9 +96,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
       override val sparkSession: SparkSession = session
 
       override def extraPlanningStrategies: Seq[Strategy] =
-        super.extraPlanningStrategies ++ customPlanningStrategies
-
-      override def strategies: Seq[Strategy] = Seq(HiveTableScans, Scripts) ++ super.strategies
+        super.extraPlanningStrategies ++ customPlanningStrategies ++ Seq(HiveTableScans, Scripts)
     }
   }
 
