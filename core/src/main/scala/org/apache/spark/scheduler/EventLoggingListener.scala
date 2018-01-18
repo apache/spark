@@ -208,7 +208,11 @@ private[spark] class EventLoggingListener(
   }
 
   override def onExecutorBlacklistedForStage(
-    event: SparkListenerExecutorBlacklistedForStage): Unit = {
+      event: SparkListenerExecutorBlacklistedForStage): Unit = {
+    logEvent(event, flushLogger = true)
+  }
+
+  override def onNodeBlacklistedForStage(event: SparkListenerNodeBlacklistedForStage): Unit = {
     logEvent(event, flushLogger = true)
   }
 

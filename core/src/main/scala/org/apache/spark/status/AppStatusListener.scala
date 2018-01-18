@@ -216,6 +216,10 @@ private[spark] class AppStatusListener(
     updateBlackListStatusForStage(event.executorId, event.stageId, event.stageAttemptId)
   }
 
+  override def onNodeBlacklistedForStage(event: SparkListenerNodeBlacklistedForStage): Unit = {
+    updateNodeBlackListForStage(event.hostId, event.stageId, event.stageAttemptId)
+  }
+
   override def onExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Unit = {
     updateBlackListStatus(event.executorId, false)
   }
@@ -252,6 +256,21 @@ private[spark] class AppStatusListener(
       if (exec.hostname == host) {
         exec.isBlacklisted = blacklisted
         liveUpdate(exec, now)
+      }
+    }
+  }
+
+  private def updateNodeBlackListForStage(host: String, stageId: Int, stageAttemptId: Int): Unit = {
+    val now = System.nanoTime()
+
+    // Implicitly blacklist every available executor for the stage associated with this node
+    Option(liveStages.get((stageId, stageAttemptId))).foreach { stage =>
+      liveExecutors.values.foreach { exec =>
+        if (exec.hostname == host) {
+          val esummary = stage.executorSummary(exec.executorId)
+          esummary.isBlacklisted = true
+          maybeUpdate(esummary, now)
+        }
       }
     }
   }

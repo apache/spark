@@ -119,8 +119,15 @@ public class SparkFirehoseListener implements SparkListenerInterface {
   }
 
   @Override
-  public void onExecutorBlacklistedForStage(SparkListenerExecutorBlacklistedForStage executorBlacklistedForStage) {
+  public void onExecutorBlacklistedForStage(
+      SparkListenerExecutorBlacklistedForStage executorBlacklistedForStage) {
     onEvent(executorBlacklistedForStage);
+  }
+
+  @Override
+  public void onNodeBlacklistedForStage(
+      SparkListenerNodeBlacklistedForStage nodeBlacklistedForStage) {
+    onEvent(nodeBlacklistedForStage);
   }
 
   @Override

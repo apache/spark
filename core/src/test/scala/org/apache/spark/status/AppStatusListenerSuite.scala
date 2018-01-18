@@ -251,24 +251,46 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(exec.info.memoryBytesSpilled === s1Tasks.size / 2)
     }
 
-    // Blacklisting for stage
-    execIds.foreach { execId =>
-      time += 1
-      listener.onExecutorBlacklistedForStage(SparkListenerExecutorBlacklistedForStage(
-        time = time,
-        executorId = execId,
-        taskFailures = 2,
-        stageId = stages.head.stageId,
-        stageAttemptId = stages.head.attemptId))
-    }
+    // Blacklisting executor for stage
+    time += 1
+    listener.onExecutorBlacklistedForStage(SparkListenerExecutorBlacklistedForStage(
+      time = time,
+      executorId = execIds.head,
+      taskFailures = 2,
+      stageId = stages.head.stageId,
+      stageAttemptId = stages.head.attemptId))
 
     val executorStageSummaryWrappers =
       store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
         .first(key(stages.head))
-        .last(key(stages.head)).asScala.toSeq
+        .last(key(stages.head))
+        .asScala.toSeq
 
-    assert(executorStageSummaryWrappers.size > 0)
+    assert(executorStageSummaryWrappers.nonEmpty)
     executorStageSummaryWrappers.foreach { exec =>
+      // only the first executor is expected to be blacklisted
+      val expectedBlacklistedFlag = exec.executorId == execIds.head
+      assert(exec.info.isBlacklistedForStage === expectedBlacklistedFlag)
+    }
+
+    // Blacklisting node for stage
+    time += 1
+    listener.onNodeBlacklistedForStage(SparkListenerNodeBlacklistedForStage(
+      time = time,
+      hostId = "2.example.com", // this is where the second executor is hosted
+      executorFailures = 1,
+      stageId = stages.head.stageId,
+      stageAttemptId = stages.head.attemptId))
+
+    val executorStageSummaryWrappersForNode =
+      store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
+        .first(key(stages.head))
+        .last(key(stages.head))
+        .asScala.toSeq
+
+    assert(executorStageSummaryWrappersForNode.nonEmpty)
+    executorStageSummaryWrappersForNode.foreach { exec =>
+      // both executor is expected to be blacklisted
       assert(exec.info.isBlacklistedForStage === true)
     }
 

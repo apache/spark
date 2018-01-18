@@ -16,13 +16,14 @@
  */
 package org.apache.spark.scheduler
 
-import org.mockito.Mockito.verify
+import org.mockito.Matchers.isA
+import org.mockito.Mockito.{never, verify}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
-import org.apache.spark.util.{ManualClock, SystemClock}
+import org.apache.spark.util.ManualClock
 
 class TaskSetBlacklistSuite extends SparkFunSuite with BeforeAndAfterEach with MockitoSugar {
 
@@ -59,31 +60,55 @@ class TaskSetBlacklistSuite extends SparkFunSuite with BeforeAndAfterEach with M
       val shouldBeBlacklisted = (executor == "exec1" && index == 0)
       assert(taskSetBlacklist.isExecutorBlacklistedForTask(executor, index) === shouldBeBlacklisted)
     }
+
     assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
+    verify(listenerBusMock, never())
+      .post(isA(classOf[SparkListenerExecutorBlacklistedForStage]))
+
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    verify(listenerBusMock, never())
+      .post(isA(classOf[SparkListenerNodeBlacklistedForStage]))
 
     // Mark task 1 failed on exec1 -- this pushes the executor into the blacklist
     taskSetBlacklist.updateBlacklistForFailedTask(
       "hostA", exec = "exec1", index = 1, failureReason = "testing")
+
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
-    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
     verify(listenerBusMock).post(
       SparkListenerExecutorBlacklistedForStage(0, "exec1", 2, 0, attemptId))
+
+    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    verify(listenerBusMock, never())
+      .post(isA(classOf[SparkListenerNodeBlacklistedForStage]))
+
     // Mark one task as failed on exec2 -- not enough for any further blacklisting yet.
     taskSetBlacklist.updateBlacklistForFailedTask(
       "hostA", exec = "exec2", index = 0, failureReason = "testing")
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
+
     assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec2"))
+    verify(listenerBusMock, never()).post(
+      SparkListenerNodeBlacklistedForStage(0, "hostA", 2, 0, attemptId))
+
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    verify(listenerBusMock, never())
+      .post(isA(classOf[SparkListenerNodeBlacklistedForStage]))
+
     // Mark another task as failed on exec2 -- now we blacklist exec2, which also leads to
     // blacklisting the entire node.
     taskSetBlacklist.updateBlacklistForFailedTask(
       "hostA", exec = "exec2", index = 1, failureReason = "testing")
+
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
+
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec2"))
-    assert(taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
     verify(listenerBusMock).post(
       SparkListenerExecutorBlacklistedForStage(0, "exec2", 2, 0, attemptId))
+
+    assert(taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    verify(listenerBusMock).post(
+      SparkListenerNodeBlacklistedForStage(0, "hostA", 2, 0, attemptId))
+
     // Make sure the blacklist has the correct per-task && per-executor responses, over a wider
     // range of inputs.
     for {
@@ -146,8 +171,14 @@ class TaskSetBlacklistSuite extends SparkFunSuite with BeforeAndAfterEach with M
       "hostA", exec = "1", index = 0, failureReason = "testing")
     assert(taskSetBlacklist.isExecutorBlacklistedForTask("1", 0))
     assert(!taskSetBlacklist.isNodeBlacklistedForTask("hostA", 0))
+
     assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
+    verify(listenerBusMock, never()).post(
+      SparkListenerExecutorBlacklistedForStage(time, "1", 2, 0, attemptId))
+
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    verify(listenerBusMock, never()).post(
+      SparkListenerNodeBlacklistedForStage(time, "hostA", 2, 0, attemptId))
 
     // Fail the same task once more on hostA, exec:2
     time += 1
@@ -155,8 +186,14 @@ class TaskSetBlacklistSuite extends SparkFunSuite with BeforeAndAfterEach with M
     taskSetBlacklist.updateBlacklistForFailedTask(
       "hostA", exec = "2", index = 0, failureReason = "testing")
     assert(taskSetBlacklist.isNodeBlacklistedForTask("hostA", 0))
+
     assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("2"))
+    verify(listenerBusMock, never()).post(
+      SparkListenerExecutorBlacklistedForStage(time, "2", 2, 0, attemptId))
+
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    verify(listenerBusMock, never()).post(
+      SparkListenerNodeBlacklistedForStage(time, "hostA", 2, 0, attemptId))
 
     // Fail another task on hostA, exec:1.  Now that executor has failures on two different tasks,
     // so its blacklisted
@@ -164,20 +201,28 @@ class TaskSetBlacklistSuite extends SparkFunSuite with BeforeAndAfterEach with M
     clock.setTime(time)
     taskSetBlacklist.updateBlacklistForFailedTask(
       "hostA", exec = "1", index = 1, failureReason = "testing")
+
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
-    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
     verify(listenerBusMock)
       .post(SparkListenerExecutorBlacklistedForStage(time, "1", 2, 0, attemptId))
+
+    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    verify(listenerBusMock, never())
+      .post(isA(classOf[SparkListenerNodeBlacklistedForStage]))
 
     // Fail a third task on hostA, exec:2, so that exec is blacklisted for the whole task set
     time += 1
     clock.setTime(time)
     taskSetBlacklist.updateBlacklistForFailedTask(
       "hostA", exec = "2", index = 2, failureReason = "testing")
+
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("2"))
-    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
     verify(listenerBusMock)
       .post(SparkListenerExecutorBlacklistedForStage(time, "2", 2, 0, attemptId))
+
+    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    verify(listenerBusMock, never())
+      .post(isA(classOf[SparkListenerNodeBlacklistedForStage]))
 
     // Fail a fourth & fifth task on hostA, exec:3.  Now we've got three executors that are
     // blacklisted for the taskset, so blacklist the whole node.
@@ -187,10 +232,14 @@ class TaskSetBlacklistSuite extends SparkFunSuite with BeforeAndAfterEach with M
       "hostA", exec = "3", index = 3, failureReason = "testing")
     taskSetBlacklist.updateBlacklistForFailedTask(
       "hostA", exec = "3", index = 4, failureReason = "testing")
+
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("3"))
-    assert(taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
     verify(listenerBusMock)
       .post(SparkListenerExecutorBlacklistedForStage(time, "3", 2, 0, attemptId))
+
+    assert(taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    verify(listenerBusMock).post(
+      SparkListenerNodeBlacklistedForStage(time, "hostA", 3, 0, attemptId))
   }
 
   test("only blacklist nodes for the task set when all the blacklisted executors are all on " +
@@ -210,10 +259,14 @@ class TaskSetBlacklistSuite extends SparkFunSuite with BeforeAndAfterEach with M
       "hostA", exec = "1", index = 0, failureReason = "testing")
     taskSetBlacklist.updateBlacklistForFailedTask(
       "hostA", exec = "1", index = 1, failureReason = "testing")
+
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
-    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
     verify(listenerBusMock)
       .post(SparkListenerExecutorBlacklistedForStage(time, "1", 2, 0, attemptId))
+
+    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    verify(listenerBusMock, never()).post(
+      SparkListenerNodeBlacklistedForStage(time, "hostA", 2, 0, attemptId))
 
     time += 1
     clock.setTime(time)
@@ -222,11 +275,15 @@ class TaskSetBlacklistSuite extends SparkFunSuite with BeforeAndAfterEach with M
     taskSetBlacklist.updateBlacklistForFailedTask(
       "hostB", exec = "2", index = 1, failureReason = "testing")
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("1"))
+
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("2"))
-    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
-    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostB"))
     verify(listenerBusMock)
       .post(SparkListenerExecutorBlacklistedForStage(time, "2", 2, 0, attemptId))
+
+    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
+    assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostB"))
+    verify(listenerBusMock, never())
+      .post(isA(classOf[SparkListenerNodeBlacklistedForStage]))
   }
 
 }
