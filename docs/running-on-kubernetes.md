@@ -117,7 +117,10 @@ This URI is the location of the example jar that is already in the Docker image.
 If your application's dependencies are all hosted in remote locations like HDFS or HTTP servers, they may be referred to
 by their appropriate remote URIs. Also, application dependencies can be pre-mounted into custom-built Docker images.
 Those dependencies can be added to the classpath by referencing them with `local://` URIs and/or setting the
-`SPARK_EXTRA_CLASSPATH` environment variable in your Dockerfiles.
+`SPARK_EXTRA_CLASSPATH` environment variable in your Dockerfiles. The `local://` scheme is also required when referring to
+dependencies in custom-built Docker images in `spark-submit`. Note that using application dependencies local to the submission
+client is currently not yet supported.
+
 
 ### Using Remote Dependencies
 When there are application dependencies hosted in remote locations like HDFS or HTTP servers, the driver and executor pods
