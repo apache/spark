@@ -807,9 +807,9 @@ class DataStreamWriter(object):
         """
         params = [processingTime, once, continuous]
 
-        if params.count(None) == 0:
+        if params.count(None) == 3:
             raise ValueError('No trigger provided')
-        elif params.count(None) > 1:
+        elif params.count(None) < 2:
             raise ValueError('Multiple triggers not allowed.')
 
         jTrigger = None
