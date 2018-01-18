@@ -463,7 +463,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
-    private var deserializeStream = null.asInstanceOf[Option[DeserializationStream]]
+    private var deserializeStream: Option[DeserializationStream] = None
     private var nextItem: (K, C) = null
     private var objectsRead = 0
 
@@ -473,8 +473,8 @@ class ExternalAppendOnlyMap[K, V, C](
     private def nextBatchStream(): Option[DeserializationStream] = {
       // Note that batchOffsets.length = numBatches + 1 since we did a scan above; check whether
       // we're still in a valid batch.
-      if (batchIndex < batchOffsets.length - 1 && deserializeStream.isDefined) {
-        if (deserializeStream != null) {
+      if (batchIndex < batchOffsets.length - 1) {
+        if (deserializeStream.isDefined) {
           deserializeStream.get.close()
           fileStream.close()
           deserializeStream = None
@@ -527,7 +527,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
     override def hasNext: Boolean = {
       if (nextItem == null) {
-        if (deserializeStream == null) {
+        if (deserializeStream.isEmpty) {
           deserializeStream = nextBatchStream()
         }
         if (deserializeStream.isEmpty) {
@@ -550,7 +550,7 @@ class ExternalAppendOnlyMap[K, V, C](
     private def cleanup() {
       batchIndex = batchOffsets.length  // Prevent reading any other batch
       val ds = deserializeStream
-      if (ds != null && ds.isEmpty) {
+      if (ds.isDefined) {
         ds.get.close()
         deserializeStream = None
       }
