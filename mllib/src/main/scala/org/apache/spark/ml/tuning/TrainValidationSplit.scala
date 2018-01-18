@@ -93,7 +93,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
-   * Set the mamixum level of parallelism to evaluate models in parallel.
+   * Set the maximum level of parallelism to evaluate models in parallel.
    * Default is 1 for serial evaluation
    *
    * @group expertSetParam
@@ -112,7 +112,8 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
    * for more information.
    *
    * @group expertSetParam
-   */@Since("2.3.0")
+   */
+  @Since("2.3.0")
   def setCollectSubModels(value: Boolean): this.type = set(collectSubModels, value)
 
   @Since("2.0.0")

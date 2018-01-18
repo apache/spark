@@ -2853,7 +2853,7 @@ setMethod("intersect",
 #' except
 #'
 #' Return a new SparkDataFrame containing rows in this SparkDataFrame
-#' but not in another SparkDataFrame. This is equivalent to \code{EXCEPT} in SQL.
+#' but not in another SparkDataFrame. This is equivalent to \code{EXCEPT DISTINCT} in SQL.
 #'
 #' @param x a SparkDataFrame.
 #' @param y a SparkDataFrame.
@@ -3054,10 +3054,10 @@ setMethod("describe",
 #' \item stddev
 #' \item min
 #' \item max
-#' \item arbitrary approximate percentiles specified as a percentage (eg, "75%")
+#' \item arbitrary approximate percentiles specified as a percentage (eg, "75\%")
 #' }
 #' If no statistics are given, this function computes count, mean, stddev, min,
-#' approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
+#' approximate quartiles (percentiles at 25\%, 50\%, and 75\%), and max.
 #' This function is meant for exploratory data analysis, as we make no guarantee about the
 #' backward compatibility of the schema of the resulting Dataset. If you want to
 #' programmatically compute summary statistics, use the \code{agg} function instead.
@@ -4019,9 +4019,9 @@ setMethod("broadcast",
 #'
 #' Spark will use this watermark for several purposes:
 #' \itemize{
-#'  \item{-} To know when a given time window aggregation can be finalized and thus can be emitted
+#'  \item To know when a given time window aggregation can be finalized and thus can be emitted
 #' when using output modes that do not allow updates.
-#'  \item{-} To minimize the amount of state that we need to keep for on-going aggregations.
+#'  \item To minimize the amount of state that we need to keep for on-going aggregations.
 #' }
 #' The current watermark is computed by looking at the \code{MAX(eventTime)} seen across
 #' all of the partitions in the query minus a user specified \code{delayThreshold}. Due to the cost

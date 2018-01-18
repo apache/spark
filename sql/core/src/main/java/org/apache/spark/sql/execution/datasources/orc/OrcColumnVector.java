@@ -38,7 +38,7 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   private BytesColumnVector bytesData;
   private DecimalColumnVector decimalData;
   private TimestampColumnVector timestampData;
-  final private boolean isTimestamp;
+  private final boolean isTimestamp;
 
   private int batchSize;
 

@@ -121,31 +121,23 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
   test("cache for primitive type should be in WholeStageCodegen with InMemoryTableScanExec") {
     import testImplicits._
 
-    val dsInt = spark.range(3).cache
-    dsInt.count
+    val dsInt = spark.range(3).cache()
+    dsInt.count()
     val dsIntFilter = dsInt.filter(_ > 0)
     val planInt = dsIntFilter.queryExecution.executedPlan
-    assert(planInt.find(p =>
-      p.isInstanceOf[WholeStageCodegenExec] &&
-      p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[FilterExec] &&
-      p.asInstanceOf[WholeStageCodegenExec].child.asInstanceOf[FilterExec].child
-        .isInstanceOf[InMemoryTableScanExec] &&
-      p.asInstanceOf[WholeStageCodegenExec].child.asInstanceOf[FilterExec].child
-        .asInstanceOf[InMemoryTableScanExec].supportCodegen).isDefined
-    )
+    assert(planInt.collect {
+      case WholeStageCodegenExec(FilterExec(_, i: InMemoryTableScanExec)) if i.supportsBatch => ()
+    }.length == 1)
     assert(dsIntFilter.collect() === Array(1, 2))
 
     // cache for string type is not supported for InMemoryTableScanExec
-    val dsString = spark.range(3).map(_.toString).cache
-    dsString.count
+    val dsString = spark.range(3).map(_.toString).cache()
+    dsString.count()
     val dsStringFilter = dsString.filter(_ == "1")
     val planString = dsStringFilter.queryExecution.executedPlan
-    assert(planString.find(p =>
-      p.isInstanceOf[WholeStageCodegenExec] &&
-      p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[FilterExec] &&
-      !p.asInstanceOf[WholeStageCodegenExec].child.asInstanceOf[FilterExec].child
-        .isInstanceOf[InMemoryTableScanExec]).isDefined
-    )
+    assert(planString.collect {
+      case WholeStageCodegenExec(FilterExec(_, i: InMemoryTableScanExec)) if !i.supportsBatch => ()
+    }.length == 1)
     assert(dsStringFilter.collect() === Array("1"))
   }
 
