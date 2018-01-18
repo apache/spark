@@ -196,13 +196,13 @@ class KMeans private (
   /**
    * The distance suite used by the algorithm.
    */
-  @Since("2.3.0")
+  @Since("2.4.0")
   def getDistanceMeasure: String = distanceMeasure
 
   /**
    * Set the distance suite used by the algorithm.
    */
-  @Since("2.3.0")
+  @Since("2.4.0")
   def setDistanceMeasure(distanceMeasure: String): this.type = {
     KMeans.validateDistanceMeasure(distanceMeasure)
     this.distanceMeasure = distanceMeasure
@@ -660,12 +660,12 @@ private[spark] abstract class DistanceMeasure extends Serializable {
 
 }
 
-@Since("2.3.0")
+@Since("2.4.0")
 object DistanceMeasure {
 
-  @Since("2.3.0")
+  @Since("2.4.0")
   val EUCLIDEAN = "euclidean"
-  @Since("2.3.0")
+  @Since("2.4.0")
   val COSINE = "cosine"
 
   private[spark] def decodeFromString(distanceMeasure: String): DistanceMeasure =

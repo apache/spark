@@ -71,13 +71,13 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   @Since("1.5.0")
   def getInitMode: String = $(initMode)
 
-  @Since("2.3.0")
+  @Since("2.4.0")
   final val distanceMeasure = new Param[String](this, "distanceMeasure", "The distance measure. " +
     "Supported options: 'euclidean' and 'cosine'.",
     (value: String) => MLlibKMeans.validateDistanceMeasure(value))
 
   /** @group expertGetParam */
-  @Since("2.3.0")
+  @Since("2.4.0")
   def getDistanceMeasure: String = $(distanceMeasure)
 
   /**
@@ -295,7 +295,7 @@ class KMeans @Since("1.5.0") (
   def setInitMode(value: String): this.type = set(initMode, value)
 
   /** @group expertSetParam */
-  @Since("2.3.0")
+  @Since("2.4.0")
   def setDistanceMeasure(value: String): this.type = set(distanceMeasure, value)
 
   /** @group expertSetParam */
