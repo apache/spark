@@ -173,34 +173,29 @@ class SQLContext(object):
         """
         return self.sparkSession.range(start, end, step, numPartitions)
 
+    @since(1.2)
     def registerFunction(self, name, f, returnType=None):
+        """An alias for :func:`spark.udf.register`.
+        See :meth:`pyspark.sql.UDFRegistration.register`.
+
+        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.register` instead.
+        """
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.register instead.",
             DeprecationWarning)
         return self.sparkSession.udf.register(name, f, returnType)
-    # Reuse the docstring from UDFRegistration but with few notes.
-    _register_doc = UDFRegistration.register.__doc__.strip()
-    registerFunction.__doc__ = """%s
 
-        .. note:: :func:`sqlContext.registerFunction` is an alias for
-            :func:`spark.udf.register`.
-        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.register` instead.
-        .. versionadded:: 1.2
-    """ % _register_doc[:_register_doc.rfind('.. versionadded::')]
-
+    @since(2.1)
     def registerJavaFunction(self, name, javaClassName, returnType=None):
+        """An alias for :func:`spark.udf.registerJavaFunction`.
+        See :meth:`pyspark.sql.UDFRegistration.registerJavaFunction`.
+
+        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.registerJavaFunction` instead.
+        """
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.registerJavaFunction instead.",
             DeprecationWarning)
         return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
-    _registerJavaFunction_doc = UDFRegistration.registerJavaFunction.__doc__.strip()
-    registerJavaFunction.__doc__ = """%s
-
-        .. note:: :func:`sqlContext.registerJavaFunction` is an alias for
-            :func:`spark.udf.registerJavaFunction`
-        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.registerJavaFunction` instead.
-        .. versionadded:: 2.1
-    """ % _registerJavaFunction_doc[:_registerJavaFunction_doc.rfind('.. versionadded::')]
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):
@@ -528,9 +523,6 @@ def _test():
     globs['os'] = os
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
-    # 'spark' is used for reusing doctests. Please see the reassignment
-    # of docstrings above.
-    globs['spark'] = globs['sqlContext'].sparkSession
     globs['rdd'] = rdd = sc.parallelize(
         [Row(field1=1, field2="row1"),
          Row(field1=2, field2="row2"),

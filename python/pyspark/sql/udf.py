@@ -188,7 +188,7 @@ class UserDefinedFunction(object):
 class UDFRegistration(object):
     """
     Wrapper for user-defined function registration. This instance can be accessed by
-    `spark.udf` or `sqlContext.udf`.
+    :attr:`spark.udf` or :attr:`sqlContext.udf`.
 
     .. versionadded:: 1.3.1
     """
@@ -197,7 +197,7 @@ class UDFRegistration(object):
         self.sparkSession = sparkSession
 
     @ignore_unicode_prefix
-    @since(1.3)
+    @since("1.3.1")
     def register(self, name, f, returnType=None):
         """Registers a Python function (including lambda function) or a user-defined function
         in SQL statements.

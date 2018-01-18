@@ -21,7 +21,7 @@ from collections import namedtuple
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.udf import UserDefinedFunction, UDFRegistration
+from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import IntegerType, StringType, StructType
 
 
@@ -224,20 +224,17 @@ class Catalog(object):
         """
         self._jcatalog.dropGlobalTempView(viewName)
 
+    @since(2.0)
     def registerFunction(self, name, f, returnType=None):
+        """An alias for :func:`spark.udf.register`.
+        See :meth:`pyspark.sql.UDFRegistration.register`.
+
+        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.register` instead.
+        """
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.register instead.",
             DeprecationWarning)
         return self._sparkSession.udf.register(name, f, returnType)
-    # Reuse the docstring from UDFRegistration but with few notes.
-    _register_doc = UDFRegistration.register.__doc__.strip()
-    registerFunction.__doc__ = """%s
-
-        .. note:: :func:`spark.catalog.registerFunction` is an alias
-            for :func:`spark.udf.register`.
-        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.register` instead.
-        .. versionadded:: 2.0
-    """ % _register_doc[:_register_doc.rfind('.. versionadded::')]
 
     @since(2.0)
     def isCached(self, tableName):
