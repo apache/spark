@@ -676,7 +676,7 @@ private[ui] class TaskDataSource(
 
   private var _tasksToShow: Seq[TaskData] = null
 
-  override def dataSize: Int = stage.numCompleteTasks + stage.numFailedTasks + stage.numKilledTasks
+  override def dataSize: Int = stage.numTasks
 
   override def sliceData(from: Int, to: Int): Seq[TaskData] = {
     if (_tasksToShow == null) {
