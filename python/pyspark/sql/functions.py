@@ -2108,8 +2108,8 @@ def udf(f=None, returnType=StringType()):
         can fail on special rows, the workaround is to incorporate the condition into the functions.
 
     :param f: python function if used as a standalone function
-    :param returnType: the return type of the registered user-defined function. The value can be
-        either a :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+    :param returnType: the return type of the user-defined function. The value can be either a
+        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
@@ -2149,8 +2149,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     Creates a vectorized user defined function (UDF).
 
     :param f: user-defined function. A python function if used as a standalone function
-    :param returnType: the return type of the registered user-defined function. The value can be
-        either a :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
+    :param returnType: the return type of the user-defined function. The value can be either a
+        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
                          Default: SCALAR.
 
