@@ -17,7 +17,7 @@ If you want KAP to package your new kyspark by default, you should contact hongb
 steps:
 
 1. publish the new kyspark to kyligence.io server
-2. change md5 in kap's download-spark.sh
+2. change md5 in kap's download-spark.sh, **Don't change kylin's download-spark.sh**
 3. change CI's using spark, including kap-release,kap-release-test and master-full-regression-test
 4. create a tag for the commit on which the new kyspark is built from. Don't forget to push tags to server
 
