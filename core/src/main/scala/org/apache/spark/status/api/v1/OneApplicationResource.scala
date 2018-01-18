@@ -17,6 +17,7 @@
 package org.apache.spark.status.api.v1
 
 import java.io.OutputStream
+import java.net.URI
 import java.util.{List => JList}
 import java.util.zip.ZipOutputStream
 import javax.ws.rs.{GET, Path, PathParam, Produces, QueryParam}
@@ -25,7 +26,6 @@ import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 import scala.util.control.NonFatal
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.ui.SparkUI
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AbstractApplicationResource extends BaseAppResource {
@@ -49,11 +49,11 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
 
   @GET
   @Path("executors")
-  def executorList(): Seq[ExecutorSummary] = withUI(_.store.executorList(true))
+  def executorList(): Seq[ExecutorSummary] = fetchExecutors(true)
 
   @GET
   @Path("allexecutors")
-  def allExecutorList(): Seq[ExecutorSummary] = withUI(_.store.executorList(false))
+  def allExecutorList(): Seq[ExecutorSummary] = fetchExecutors(false)
 
   @Path("stages")
   def stages(): Class[StagesResource] = classOf[StagesResource]
@@ -137,6 +137,62 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
     classOf[OneApplicationAttemptResource]
   }
 
+  private def fetchExecutors(activeOnly: Boolean): Seq[ExecutorSummary] = {
+    withUI(ui => {
+      val tmpExecutorList = ui.store.executorList(activeOnly)
+      ui.yarnLogServerUrl.map(lurl =>
+        tmpExecutorList.map(withYarnLogServerLogs(toYarnLogServerUrl(lurl, ui.nmRpcPort)))
+      ).getOrElse(tmpExecutorList)
+    })
+  }
+
+  private def toYarnLogServerUrl(logServerUrl: String, nmPort: Int)(nmLogUrl: String): String = {
+    val containerSuffixPos = nmLogUrl.indexOf("container_")
+    if (containerSuffixPos >= 0) {
+      val nodeId = URI.create(nmLogUrl).getHost + ":" + nmPort
+      val containerSuffix = nmLogUrl.substring(containerSuffixPos)
+      val containerEndPos = containerSuffix.indexOf("/")
+      if (containerEndPos >= 0) {
+        val container = containerSuffix.substring(0, containerEndPos)
+        s"$logServerUrl/$nodeId/$container/$containerSuffix"
+      } else {
+        nmLogUrl
+      }
+    } else {
+      nmLogUrl
+    }
+  }
+
+  private def withYarnLogServerLogs(
+    logRewrite: String => String)(
+    info: ExecutorSummary): ExecutorSummary = {
+      new ExecutorSummary(
+        id = info.id,
+        hostPort = info.hostPort,
+        isActive = info.isActive,
+        rddBlocks = info.rddBlocks,
+        memoryUsed = info.memoryUsed,
+        diskUsed = info.diskUsed,
+        totalCores = info.totalCores,
+        maxTasks = info.maxTasks,
+        activeTasks = info.activeTasks,
+        failedTasks = info.failedTasks,
+        completedTasks = info.completedTasks,
+        totalTasks = info.totalTasks,
+        totalDuration = info.totalDuration,
+        totalGCTime = info.totalGCTime,
+        totalInputBytes = info.totalInputBytes,
+        totalShuffleRead = info.totalShuffleRead,
+        totalShuffleWrite = info.totalShuffleWrite,
+        isBlacklisted = info.isBlacklisted,
+        maxMemory = info.maxMemory,
+        addTime = info.addTime,
+        removeTime = info.removeTime,
+        removeReason = info.removeReason,
+        executorLogs = info.executorLogs.mapValues(logRewrite),
+        memoryMetrics = info.memoryMetrics
+      )
+  }
 }
 
 private[v1] class OneApplicationResource extends AbstractApplicationResource {

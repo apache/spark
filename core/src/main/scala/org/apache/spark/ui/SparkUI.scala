@@ -17,11 +17,12 @@
 
 package org.apache.spark.ui
 
-import java.util.{Date, List => JList, ServiceLoader}
+import java.util.Date
 
-import scala.collection.JavaConverters._
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 
-import org.apache.spark.{JobExecutionStatus, SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
@@ -31,7 +32,6 @@ import org.apache.spark.ui.env.EnvironmentTab
 import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.ui.jobs.{JobsTab, StagesTab}
 import org.apache.spark.ui.storage.StorageTab
-import org.apache.spark.util.Utils
 
 /**
  * Top level user interface for a Spark application.
@@ -51,6 +51,22 @@ private[spark] class SparkUI private (
   with UIRoot {
 
   val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
+
+  private val yarnConf = SparkHadoopUtil.get.newConfiguration(conf)
+  private val portReg = "^.*:([0-9]+)$".r
+  private[spark] val nmRpcPort = Option(yarnConf.get(YarnConfiguration.NM_ADDRESS))
+    .map { case portReg(port) => port.toInt }
+    .getOrElse(0)
+
+  private val isHistoryUI = sc.isEmpty
+  private val useAggregatedLogs = isHistoryUI && nmRpcPort > 0 &&
+    yarnConf.getBoolean(YarnConfiguration.LOG_AGGREGATION_ENABLED, false)
+
+  private[spark] val yarnLogServerUrl = if (useAggregatedLogs) {
+      Option(yarnConf.get(YarnConfiguration.YARN_LOG_SERVER_URL))
+    } else {
+      None
+    }
 
   var appId: String = _
 
