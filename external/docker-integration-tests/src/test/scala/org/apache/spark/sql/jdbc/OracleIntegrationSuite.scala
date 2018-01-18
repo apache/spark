@@ -26,7 +26,6 @@ import org.apache.spark.sql.execution.{RowDataSourceScanExec, WholeStageCodegenE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.DockerTest
 
 /**
  * This patch was tested using the Oracle docker. Created this integration suite for the same.
@@ -48,7 +47,6 @@ import org.apache.spark.tags.DockerTest
  * All tests in this suite are ignored because of the dependency with the oracle jar from maven
  * repository.
  */
-@DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLContext {
   import testImplicits._
 

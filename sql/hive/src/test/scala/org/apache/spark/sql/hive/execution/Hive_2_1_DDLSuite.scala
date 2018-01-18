@@ -30,14 +30,12 @@ import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types._
-import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.Utils
 
 /**
  * A separate set of DDL tests that uses Hive 2.1 libraries, which behave a little differently
  * from the built-in ones.
  */
-@ExtendedHiveTest
 class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with BeforeAndAfterEach
   with BeforeAndAfterAll {
 

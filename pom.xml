@@ -188,7 +188,6 @@
     <arrow.version>0.8.0</arrow.version>
 
     <test.java.home>${java.home}</test.java.home>
-    <test.exclude.tags></test.exclude.tags>
 
     <!-- Package to use when relocating shaded classes. -->
     <spark.shade.packageName>org.spark_project</spark.shade.packageName>
@@ -2144,7 +2143,6 @@
               <test.src.tables>src</test.src.tables>
             </systemProperties>
             <failIfNoTests>false</failIfNoTests>
-            <excludedGroups>${test.exclude.tags}</excludedGroups>
           </configuration>
           <executions>
             <execution>
@@ -2191,7 +2189,6 @@
               <!-- Needed by sql/hive tests. -->
               <test.src.tables>__not_used__</test.src.tables>
             </systemProperties>
-            <tagsToExclude>${test.exclude.tags}</tagsToExclude>
           </configuration>
           <executions>
             <execution>

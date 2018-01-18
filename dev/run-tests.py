@@ -124,14 +124,6 @@ def determine_modules_to_test(changed_modules):
         {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True)
 
 
-def determine_tags_to_exclude(changed_modules):
-    tags = []
-    for m in modules.all_modules:
-        if m not in changed_modules:
-            tags += m.test_tags
-    return tags
-
-
 # -------------------------------------------------------------------------------------------------
 # Functions for working with subprocesses and shell tools
 # -------------------------------------------------------------------------------------------------
@@ -423,7 +415,7 @@ def run_scala_tests_sbt(test_modules, test_profiles):
     exec_sbt(profiles_and_goals)
 
 
-def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
+def run_scala_tests(build_tool, hadoop_version, test_modules):
     """Function to properly execute all tests passed in as a set from the
     `determine_test_suites` function"""
     set_title_and_block("Running Spark unit tests", "BLOCK_SPARK_UNIT_TESTS")
@@ -432,9 +424,6 @@ def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
 
     test_profiles = get_hadoop_profiles(hadoop_version) + \
         list(set(itertools.chain.from_iterable(m.build_profile_flags for m in test_modules)))
-
-    if excluded_tags:
-        test_profiles += ['-Dtest.exclude.tags=' + ",".join(excluded_tags)]
 
     if build_tool == "maven":
         run_scala_tests_maven(test_profiles)
@@ -544,10 +533,8 @@ def main():
         target_branch = os.environ["ghprbTargetBranch"]
         changed_files = identify_changed_files_from_git_commits("HEAD", target_branch=target_branch)
         changed_modules = determine_modules_for_files(changed_files)
-        excluded_tags = determine_tags_to_exclude(changed_modules)
     if not changed_modules:
         changed_modules = [modules.root]
-        excluded_tags = []
     print("[info] Found the following changed modules:",
           ", ".join(x.name for x in changed_modules))
 
@@ -601,7 +588,7 @@ def main():
         build_spark_assembly_sbt(hadoop_version)
 
     # run the test suites
-    run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags)
+    run_scala_tests(build_tool, hadoop_version, test_modules)
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:

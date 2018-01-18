@@ -807,15 +807,6 @@ object TestSettings {
     javaOptions in Test ++= "-Xmx3g -Xss4m"
       .split(" ").toSeq,
     javaOptions += "-Xmx3g",
-    // Exclude tags defined in a system property
-    testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
-      sys.props.get("test.exclude.tags").map { tags =>
-        tags.split(",").flatMap { tag => Seq("-l", tag) }.toSeq
-      }.getOrElse(Nil): _*),
-    testOptions in Test += Tests.Argument(TestFrameworks.JUnit,
-      sys.props.get("test.exclude.tags").map { tags =>
-        Seq("--exclude-categories=" + tags)
-      }.getOrElse(Nil): _*),
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
     testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),

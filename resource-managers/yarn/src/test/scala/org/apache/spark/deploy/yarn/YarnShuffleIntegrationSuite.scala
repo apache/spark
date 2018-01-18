@@ -31,12 +31,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.yarn.{YarnShuffleService, YarnTestAccessor}
-import org.apache.spark.tags.ExtendedYarnTest
 
 /**
  * Integration test for the external shuffle service with a yarn mini-cluster
  */
-@ExtendedYarnTest
 class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 
   override def newYarnConfig(): YarnConfiguration = {
@@ -88,7 +86,6 @@ class YarnShuffleIntegrationSuite extends BaseYarnClusterSuite {
 /**
  * Integration test for the external shuffle service with auth on.
  */
-@ExtendedYarnTest
 class YarnShuffleAuthSuite extends YarnShuffleIntegrationSuite {
 
   override def newYarnConfig(): YarnConfiguration = {
