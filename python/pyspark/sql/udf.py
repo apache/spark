@@ -310,14 +310,22 @@ class UDFRegistration(object):
         ...     "javaStringLength", "test.org.apache.spark.sql.JavaStringLength", IntegerType())
         >>> spark.sql("SELECT javaStringLength('test')").collect()
         [Row(UDF:javaStringLength(test)=4)]
+
         >>> spark.udf.registerJavaFunction(
         ...     "javaStringLength2", "test.org.apache.spark.sql.JavaStringLength")
         >>> spark.sql("SELECT javaStringLength2('test')").collect()
         [Row(UDF:javaStringLength2(test)=4)]
+
+        >>> spark.udf.registerJavaFunction(
+        ...     "javaStringLength3", "test.org.apache.spark.sql.JavaStringLength", "integer")
+        >>> spark.sql("SELECT javaStringLength3('test')").collect()
+        [Row(UDF:javaStringLength3(test)=4)]
         """
 
         jdt = None
         if returnType is not None:
+            if not isinstance(returnType, DataType):
+                returnType = _parse_datatype_string(returnType)
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
         self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
