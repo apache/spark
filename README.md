@@ -4,13 +4,13 @@ KySpark is a customized spark for better KAP use.
 
 Naming convension of different branch is kyspark-{SPARK_VERSION}.x, e.g. kyspark-2.1.1.x
 
-Naming convension of different releases, if necessary, is kyspark-{SPARK_VERSION}-r{RELEASE_NUMBER}, e.g. kyspark-2.1.1-r1
+Naming convension of different releases (the name could be used for creating git tag, for example), is kyspark-{SPARK_VERSION}-r{RELEASE_NUMBER}, e.g. kyspark-2.1.1-r1
 
 You can run:
     
-    ./dev/make-distribution.sh --name kyspark --tgz -Phadoop-2.6 -Phive -Phive-thriftserver -Pyarn
+    ./dev/make-distribution.sh --name kyspark-r1 --tgz -Phadoop-2.6 -Phive -Phive-thriftserver -Pyarn
 
-to build a new spark binary package.
+to build a new spark binary package named **spark-2.1.1-bin-kyspark-r1.tgz**
 
 If you want KAP to package your new kyspark by default, you should contact hongbin.ma@kyligence.io.
 
@@ -18,7 +18,8 @@ steps:
 
 1. publish the new kyspark to kyligence.io server
 2. change md5 in kap's download-spark.sh
-3. change CI's using spark, including kap-release,kap-release-test and master-full-regression-test 
+3. change CI's using spark, including kap-release,kap-release-test and master-full-regression-test
+4. create a tag for the commit on which the new kyspark is built from
 
 # Apache Spark
 
