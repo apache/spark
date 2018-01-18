@@ -584,6 +584,7 @@ object KMeans {
       case _ => false
     }
   }
+
   private[spark] def validateDistanceMeasure(distanceMeasure: String): Boolean = {
     distanceMeasure match {
       case DistanceMeasure.EUCLIDEAN => true
@@ -598,8 +599,8 @@ object KMeans {
  *
  * @see [[org.apache.spark.mllib.clustering.KMeans#fastSquaredDistance]]
  */
-private[clustering]
-class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable {
+private[clustering] class VectorWithNorm(val vector: Vector, val norm: Double)
+    extends Serializable {
 
   def this(vector: Vector) = this(vector, Vectors.norm(vector, 2.0))
 
@@ -616,8 +617,8 @@ private[spark] abstract class DistanceMeasure extends Serializable {
    * @return the index of the closest center to the given point, as well as the cost.
    */
   def findClosest(
-     centers: TraversableOnce[VectorWithNorm],
-     point: VectorWithNorm): (Int, Double) = {
+      centers: TraversableOnce[VectorWithNorm],
+      point: VectorWithNorm): (Int, Double) = {
     var bestDistance = Double.PositiveInfinity
     var bestIndex = 0
     var i = 0

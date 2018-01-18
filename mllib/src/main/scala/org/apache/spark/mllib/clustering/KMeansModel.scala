@@ -176,8 +176,7 @@ object KMeansModel extends Loader[KMeansModel] {
 
     private val thisFormatVersion = "2.0"
 
-    private[clustering]
-    val thisClassName = "org.apache.spark.mllib.clustering.KMeansModel"
+    private[clustering] val thisClassName = "org.apache.spark.mllib.clustering.KMeansModel"
 
     def save(sc: SparkContext, model: KMeansModel, path: String): Unit = {
       val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
