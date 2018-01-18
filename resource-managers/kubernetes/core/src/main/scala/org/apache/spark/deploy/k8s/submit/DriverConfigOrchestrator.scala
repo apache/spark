@@ -117,11 +117,10 @@ private[spark] class DriverConfigOrchestrator(
       .map(_.split(","))
       .getOrElse(Array.empty[String])
 
-    // TODO(SPARK-23153): remote once submission client local dependencies are supported.
+    // TODO(SPARK-23153): remove once submission client local dependencies are supported.
     if (existSubmissionLocalFiles(sparkJars) || existSubmissionLocalFiles(sparkFiles)) {
-      throw new SparkException("The Kubernetes mode does not yet support application " +
-        "dependencies from the submission client's local file system. It currently only allows " +
-        "application dependencies locally in the container or that can be downloaded remotely.")
+      throw new SparkException("The Kubernetes mode does not yet support referencing application " +
+        "dependencies in the local file system.")
     }
 
     val dependencyResolutionStep = if (sparkJars.nonEmpty || sparkFiles.nonEmpty) {
