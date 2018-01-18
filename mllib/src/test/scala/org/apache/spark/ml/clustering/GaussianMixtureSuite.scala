@@ -26,8 +26,7 @@ import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{Dataset, Row}
 
 
-class GaussianMixtureSuite extends MLTest
-  with DefaultReadWriteTest {
+class GaussianMixtureSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
   import Encoders._

@@ -22,8 +22,7 @@ import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.sql.Dataset
 
-class BisectingKMeansSuite
-  extends MLTest with DefaultReadWriteTest {
+class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
 
   import Encoders._
 
@@ -106,6 +105,7 @@ class BisectingKMeansSuite
     testTransformerByGlobalCheckFunc[Vector](dataset.toDF(), model,
       "features", predictionColName) { rows =>
       val clusters = rows.map(_.getAs[Int](predictionColName)).toSet
+      assert(clusters.size === k)
       assert(clusters === Set(0, 1, 2, 3, 4))
       assert(model.computeCost(dataset) < 0.1)
       assert(model.hasParent)
