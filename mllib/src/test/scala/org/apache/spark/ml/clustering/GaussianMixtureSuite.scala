@@ -21,16 +21,16 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
 
 
-class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
+class GaussianMixtureSuite extends MLTest
   with DefaultReadWriteTest {
 
   import testImplicits._
+  import Encoders._
   import GaussianMixtureSuite._
 
   final val k = 5
@@ -118,15 +118,10 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(model.weights.length === k)
     assert(model.gaussians.length === k)
 
-    val transformed = model.transform(dataset)
-    val expectedColumns = Array("features", predictionColName, probabilityColName)
-    expectedColumns.foreach { column =>
-      assert(transformed.columns.contains(column))
-    }
-
     // Check prediction matches the highest probability, and probabilities sum to one.
-    transformed.select(predictionColName, probabilityColName).collect().foreach {
-      case Row(pred: Int, prob: Vector) =>
+    testTransformer[Vector](dataset.toDF(), model,
+      "features", predictionColName, probabilityColName) {
+      case Row(_, pred: Int, prob: Vector) =>
         val probArray = prob.toArray
         val predFromProb = probArray.zipWithIndex.maxBy(_._1)._2
         assert(pred === predFromProb)

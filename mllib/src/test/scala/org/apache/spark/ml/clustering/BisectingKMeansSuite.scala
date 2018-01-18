@@ -17,14 +17,15 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.sql.Dataset
 
 class BisectingKMeansSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+  extends MLTest with DefaultReadWriteTest {
+
+  import Encoders._
 
   final val k = 5
   @transient var dataset: Dataset[_] = _
@@ -63,10 +64,12 @@ class BisectingKMeansSuite
 
     // Verify fit does not fail on very sparse data
     val model = bkm.fit(sparseDataset)
-    val result = model.transform(sparseDataset)
-    val numClusters = result.select("prediction").distinct().collect().length
-    // Verify we hit the edge case
-    assert(numClusters < k && numClusters > 1)
+
+    testTransformerByGlobalCheckFunc[Vector](sparseDataset.toDF(), model, "prediction") { rows =>
+      val numClusters = rows.distinct.length
+      // Verify we hit the edge case
+      assert(numClusters < k && numClusters > 1)
+    }
   }
 
   test("setter/getter") {
@@ -100,17 +103,13 @@ class BisectingKMeansSuite
     val model = bkm.fit(dataset)
     assert(model.clusterCenters.length === k)
 
-    val transformed = model.transform(dataset)
-    val expectedColumns = Array("features", predictionColName)
-    expectedColumns.foreach { column =>
-      assert(transformed.columns.contains(column))
+    testTransformerByGlobalCheckFunc[Vector](dataset.toDF(), model,
+      "features", predictionColName) { rows =>
+      val clusters = rows.map(_.getAs[Int](predictionColName)).toSet
+      assert(clusters === Set(0, 1, 2, 3, 4))
+      assert(model.computeCost(dataset) < 0.1)
+      assert(model.hasParent)
     }
-    val clusters =
-      transformed.select(predictionColName).rdd.map(_.getInt(0)).distinct().collect().toSet
-    assert(clusters.size === k)
-    assert(clusters === Set(0, 1, 2, 3, 4))
-    assert(model.computeCost(dataset) < 0.1)
-    assert(model.hasParent)
 
     // Check validity of model summary
     val numRows = dataset.count()

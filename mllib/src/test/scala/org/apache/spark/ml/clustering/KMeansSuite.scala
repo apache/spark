@@ -19,17 +19,17 @@ package org.apache.spark.ml.clustering
 
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
 private[clustering] case class TestRow(features: Vector)
 
-class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class KMeansSuite extends MLTest with DefaultReadWriteTest {
+
+  import Encoders._
 
   final val k = 5
   @transient var dataset: Dataset[_] = _
@@ -97,15 +97,13 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     val model = kmeans.fit(dataset)
     assert(model.clusterCenters.length === k)
 
-    val transformed = model.transform(dataset)
-    val expectedColumns = Array("features", predictionColName)
-    expectedColumns.foreach { column =>
-      assert(transformed.columns.contains(column))
+    testTransformerByGlobalCheckFunc[Vector](dataset.toDF(), model,
+      "features", predictionColName) { rows =>
+      val clusters = rows.map(_.getAs[Int](predictionColName)).toSet
+      assert(clusters.size === k)
+      assert(clusters === Set(0, 1, 2, 3, 4))
     }
-    val clusters =
-      transformed.select(predictionColName).rdd.map(_.getInt(0)).distinct().collect().toSet
-    assert(clusters.size === k)
-    assert(clusters === Set(0, 1, 2, 3, 4))
+
     assert(model.computeCost(dataset) < 0.1)
     assert(model.hasParent)
 
@@ -137,9 +135,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     model.setFeaturesCol(featuresColName).setPredictionCol(predictionColName)
 
     val transformed = model.transform(dataset.withColumnRenamed("features", featuresColName))
-    Seq(featuresColName, predictionColName).foreach { column =>
-      assert(transformed.columns.contains(column))
-    }
+    assert(transformed.schema.fieldNames.toSet === Set(featuresColName, predictionColName))
     assert(model.getFeaturesCol == featuresColName)
     assert(model.getPredictionCol == predictionColName)
   }
