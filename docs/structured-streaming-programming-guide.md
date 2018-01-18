@@ -2444,6 +2444,13 @@ To run a supported query in continuous processing mode, all you need to do is sp
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
+import org.apache.spark.sql.streaming.Trigger
+
+spark
+  .readStream
+  .format("rate")
+  .option("rowsPerSecond", "10")
+  .option("")
 
 spark
   .readStream
@@ -2462,6 +2469,8 @@ spark
 </div>
 <div data-lang="java"  markdown="1">  
 {% highlight java %}
+import org.apache.spark.sql.streaming.Trigger;
+
 spark
   .readStream
   .format("kafka")
@@ -2502,17 +2511,19 @@ A checkpoint interval of 1 second means that the continuous processing engine wi
 ## Supported Queries
 As of Spark 2.3, only the following type of queries are supported in the continuous processing mode.
 
-- *Operations*: Only map-like Dataset/DataFrame operations are supported, that is, only projections (`select`, `map`, `flatMap`, `mapPartitions`, etc.) and selections (`where`, `filter`, etc.).
-  + All SQL functions are supported except `current_timestamp()` and `current_date()`.
+- *Operations*: Only map-like Dataset/DataFrame operations are supported in continuous mode, that is, only projections (`select`, `map`, `flatMap`, `mapPartitions`, etc.) and selections (`where`, `filter`, etc.).
+  + All SQL functions are supported except aggregation functions (since aggregations are not yet supported), `current_timestamp()` and `current_date()` (deterministic computations using time is challenging).
 
 - *Sources*:
   + Kafka source: All options are supported.
-  + Rate source: Only options that are supported in the continuous mode are `numPartitions` and `rowsPerSecond`.
+  + Rate source: Good for testing. Only options that are supported in the continuous mode are `numPartitions` and `rowsPerSecond`.
 
 - *Sinks*: 
   + Kafka sink: All options are supported.
+  + Memory sink: Good for debugging.
+  + Console sink: Good for debugging. All options are supported. Note that the console will print every checkpoint interval that you have specified in the continuous trigger. 
 
-  See [Input Sources](#input-sources) and [Output Sinks](#output-sinks) sections for more details on them.
+See [Input Sources](#input-sources) and [Output Sinks](#output-sinks) sections for more details on them. While the console sink is good for testing, the end-to-end low-latency processing can be best observed with Kafka as the source and sink, as this allows the engine to process the data and make the results available in the output topic within milliseconds of the input data being available in the input topic.
 
 ## Caveats
 - Continuous processing engine launches multiple long-running tasks that continuously read data from sources, process it and continuously write to sinks. The number of tasks required by the query depends on how many partitions the query can read from the sources in parallel. Therefore, before starting a continuous processing query, you must ensure there are enough cores in the cluster to all the tasks in parallel. For example, if you are reading from a Kafka topic that has 10 partitions, then the cluster must have at least 10 cores for the query to make progress.
