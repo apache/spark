@@ -381,7 +381,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           resultExpressions,
           planLater(child)))
 
-      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child) =>
+      case PhysicalAggregation(_) =>
         // If cannot match the two cases above, then it's an error
         throw new AnalysisException(
           "Cannot use a mixture of aggregate function and group aggregate pandas UDF")

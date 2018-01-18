@@ -69,17 +69,22 @@ class GroupedData(object):
 
         1. built-in aggregation functions, such as `avg`, `max`, `min`, `sum`, `count`
 
-        2. group aggregate pandas UDFs
+        2. group aggregate pandas UDFs, created with :func:`pyspark.sql.functions.pandas_udf`
 
            .. note:: There is no partial aggregation with group aggregate UDFs, i.e.,
-               a full shuffle is required.
+               a full shuffle is required. Also, all the data of a group will be loaded into
+               memory, so the user should be aware of the potential OOM risk if data is skewed
+               and certain groups are too large to fit in memory.
 
-           .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
+           .. seealso:: :func:`pyspark.sql.functions.pandas_udf`
 
         If ``exprs`` is a single :class:`dict` mapping from string to string, then the key
         is the column to perform aggregation on, and the value is the aggregate function.
 
         Alternatively, ``exprs`` can also be a list of aggregate :class:`Column` expressions.
+
+        .. note:: Built-in aggregation functions and group aggregate pandas UDFs cannot be mixed
+            in a single call to this function.
 
         :param exprs: a dict mapping from column name (string) to aggregate functions (string),
             or a list of :class:`Column`.
@@ -220,16 +225,18 @@ class GroupedData(object):
 
         The user-defined function should take a `pandas.DataFrame` and return another
         `pandas.DataFrame`. For each group, all columns are passed together as a `pandas.DataFrame`
-        to the user-function and the returned `pandas.DataFrame`s are combined as a
+        to the user-function and the returned `pandas.DataFrame` are combined as a
         :class:`DataFrame`.
+
         The returned `pandas.DataFrame` can be of arbitrary length and its schema must match the
         returnType of the pandas udf.
 
-        This function does not support partial aggregation, and requires shuffling all the data in
-        the :class:`DataFrame`.
+        .. note:: This function requires a full shuffle. all the data of a group will be loaded
+            into memory, so the user should be aware of the potential OOM risk if data is skewed
+            and certain groups are too large to fit in memory.
 
         :param udf: a group map user-defined function returned by
-            :meth:`pyspark.sql.functions.pandas_udf`.
+            :func:`pyspark.sql.functions.pandas_udf`.
 
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
         >>> df = spark.createDataFrame(

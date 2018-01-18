@@ -2161,7 +2161,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     1. SCALAR
 
        A scalar UDF defines a transformation: One or more `pandas.Series` -> A `pandas.Series`.
-       The returnType should be a primitive data type, e.g., `DoubleType()`.
+       The returnType should be a primitive data type, e.g., :class:`DoubleType`.
        The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
 
        Scalar UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
@@ -2226,11 +2226,12 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     3. GROUP_AGG
 
        A group aggregate UDF defines a transformation: One or more `pandas.Series` -> A scalar
-       The returnType should be a primitive data type, e.g, `DoubleType()`.
+       The `returnType` should be a primitive data type, e.g, :class:`DoubleType`.
        The returned scalar can be either a python primitive type, e.g., `int` or `float`
        or a numpy data type, e.g., `numpy.int64` or `numpy.float64`.
 
-       StructType and ArrayType are currently not supported.
+       :class:`ArrayType`, :class:`MapType` and :class:`StructType` are currently not supported as
+       output types.
 
        Group aggregate UDFs are used with :meth:`pyspark.sql.GroupedData.agg`
 
@@ -2248,9 +2249,6 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        |  1|        1.5|
        |  2|        6.0|
        +---+-----------+
-
-       .. note:: There is no partial aggregation with group aggregate UDFs, i.e.,
-           a full shuffle is required.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.agg`
 
