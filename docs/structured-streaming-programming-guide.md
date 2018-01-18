@@ -2479,6 +2479,20 @@ spark
 </div>
 <div data-lang="python"  markdown="1">  
 {% highlight python %}
+spark \
+  .readStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("subscribe", "topic1") \
+  .load() \
+  .selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)") \
+  .writeStream \
+  .format("kafka") \
+  .option("kafka.bootstrap.servers", "host1:port1,host2:port2") \
+  .option("topic", "topic1") \
+  .trigger(continuous="1 second") \     # only change in query
+  .start()
+
 {% endhighlight %}
 </div>
 </div>
