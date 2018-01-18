@@ -805,7 +805,7 @@ class DataStreamWriter(object):
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(continuous='5 seconds')
         """
-        params = [ processingTime, once, continuous ]
+        params = [processingTime, once, continuous]
 
         if params.count(None) == 0:
             raise ValueError('No trigger provided')
