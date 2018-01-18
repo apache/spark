@@ -15,22 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.streaming.reader;
+package org.apache.spark.sql.execution.streaming.continuous
 
-import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.DataReader;
+import org.apache.spark.SparkException
 
 /**
- * A variation on {@link DataReader} for use with streaming in continuous processing mode.
+ * An exception thrown when a continuous processing task runs with a nonzero attempt ID.
  */
-@InterfaceStability.Evolving
-public interface ContinuousDataReader<T> extends DataReader<T> {
-    /**
-     * Get the offset of the current record, or the start offset if no records have been read.
-     *
-     * The execution engine will call this method along with get() to keep track of the current
-     * offset. When an epoch ends, the offset of the previous record in each partition will be saved
-     * as a restart checkpoint.
-     */
-    PartitionOffset getOffset();
-}
+class ContinuousTaskRetryException
+  extends SparkException("Continuous execution does not support task retry", null)

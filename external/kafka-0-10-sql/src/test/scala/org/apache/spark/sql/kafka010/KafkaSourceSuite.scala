@@ -808,16 +808,14 @@ class KafkaSourceSuiteBase extends KafkaSourceTest {
     val query = kafka
       .writeStream
       .format("memory")
-      .outputMode("append")
       .queryName("kafkaColumnTypes")
       .trigger(defaultTrigger)
       .start()
-    var rows: Array[Row] = Array()
     eventually(timeout(streamingTimeout)) {
-      rows = spark.table("kafkaColumnTypes").collect()
-      assert(rows.length === 1, s"Unexpected results: ${rows.toList}")
+      assert(spark.table("kafkaColumnTypes").count == 1,
+        s"Unexpected results: ${spark.table("kafkaColumnTypes").collectAsList()}")
     }
-    val row = rows(0)
+    val row = spark.table("kafkaColumnTypes").head()
     assert(row.getAs[Array[Byte]]("key") === null, s"Unexpected results: $row")
     assert(row.getAs[Array[Byte]]("value") === "1".getBytes(UTF_8), s"Unexpected results: $row")
     assert(row.getAs[String]("topic") === topic, s"Unexpected results: $row")
