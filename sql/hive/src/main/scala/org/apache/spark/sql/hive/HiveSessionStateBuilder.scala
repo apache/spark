@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{BaseSessionStateBuilder, SessionResourceLoader, SessionState}
 
@@ -99,21 +98,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
       override def extraPlanningStrategies: Seq[Strategy] =
         super.extraPlanningStrategies ++ customPlanningStrategies
 
-      override def strategies: Seq[Strategy] = {
-        experimentalMethods.extraStrategies ++
-          extraPlanningStrategies ++ Seq(
-          DataSourceV2Strategy,
-          FileSourceStrategy,
-          DataSourceStrategy(conf),
-          SpecialLimits,
-          InMemoryScans,
-          HiveTableScans,
-          Scripts,
-          Aggregation,
-          JoinSelection,
-          BasicOperators
-        )
-      }
+      override def strategies: Seq[Strategy] = Seq(HiveTableScans, Scripts) ++ super.strategies
     }
   }
 
