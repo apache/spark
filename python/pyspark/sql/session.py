@@ -28,7 +28,7 @@ else:
     from itertools import izip as zip, imap as map
 
 from pyspark import since
-from pyspark.rdd import RDD, ignore_unicode_prefix, PythonEvalType
+from pyspark.rdd import RDD, ignore_unicode_prefix
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
