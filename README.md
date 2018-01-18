@@ -10,7 +10,9 @@ You can run:
     
     ./dev/make-distribution.sh --name kyspark --tgz -Phadoop-2.6 -Phive -Phive-thriftserver -Pyarn
 
-to build a new spark binary package
+to build a new spark binary package.
+
+If you want KAP to package your new kyspark by default, you should contact hongbin.ma@kyligence.io.
 
 # Apache Spark
 
