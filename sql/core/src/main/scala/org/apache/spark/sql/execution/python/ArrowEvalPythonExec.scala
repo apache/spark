@@ -90,8 +90,9 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
       private var currentIter = if (columnarBatchIter.hasNext) {
         val batch = columnarBatchIter.next()
-        assert(schemaOut.equals(batch.schema),
-          s"Invalid schema from pandas_udf: expected $schemaOut, got ${batch.schema}")
+        val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
+        assert(schemaOut.map(_.dataType) == actualDataTypes, "Invalid schema from pandas_udf: " +
+          s"expected $schemaOut, got ${actualDataTypes.mkString(", ")}")
         batch.rowIterator.asScala
       } else {
         Iterator.empty
