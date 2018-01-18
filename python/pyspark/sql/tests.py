@@ -4408,6 +4408,27 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
             return np.average(v, weights=w)
         return weighted_mean
 
+    def test_manual(self):
+        df = self.data
+        sum_udf = self.pandas_agg_sum_udf
+        mean_udf = self.pandas_agg_mean_udf
+
+        result1 = df.groupby('id').agg(sum_udf(df.v), mean_udf(df.v)).sort('id')
+        expected1 = self.spark.createDataFrame(
+            [[0, 245.0, 24.5],
+             [1, 255.0, 25.5],
+             [2, 265.0, 26.5],
+             [3, 275.0, 27.5],
+             [4, 285.0, 28.5],
+             [5, 295.0, 29.5],
+             [6, 305.0, 30.5],
+             [7, 315.0, 31.5],
+             [8, 325.0, 32.5],
+             [9, 335.0, 33.5]],
+            ['id', 'sum(v)', 'avg(v)'])
+
+        self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+
     def test_basic(self):
         from pyspark.sql.functions import col, lit, sum, mean
 
