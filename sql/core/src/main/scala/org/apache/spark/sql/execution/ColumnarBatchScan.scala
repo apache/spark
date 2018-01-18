@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 
@@ -50,7 +50,14 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
       dataType: DataType,
       nullable: Boolean): ExprCode = {
     val javaType = ctx.javaType(dataType)
-    val value = ctx.getValue(columnVar, dataType, ordinal)
+    val value = if (dataType.isInstanceOf[StructType]) {
+      // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
+      // `ordinal` parameter.
+      s"$columnVar.getStruct($ordinal)"
+    } else {
+      ctx.getValue(columnVar, dataType, ordinal)
+    }
+
     val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
     val valueVar = ctx.freshName("value")
     val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"

@@ -199,14 +199,6 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * A special version of {@link #getStruct(int)}, which is only used as an adapter for Spark
-   * codegen framework, the second parameter is totally ignored.
-   */
-  public final ColumnarRow getStruct(int rowId, int size) {
-    return getStruct(rowId);
-  }
-
-  /**
    * Returns the array for rowId.
    */
   public final ColumnarArray getArray(int rowId) {

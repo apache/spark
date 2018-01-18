@@ -362,21 +362,21 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     assert(columnVector.dataType === schema)
     assert(columnVector.numNulls === 1)
 
-    val row0 = columnVector.getStruct(0, 2)
+    val row0 = columnVector.getStruct(0)
     assert(row0.getInt(0) === 1)
     assert(row0.getLong(1) === 1L)
 
-    val row1 = columnVector.getStruct(1, 2)
+    val row1 = columnVector.getStruct(1)
     assert(row1.getInt(0) === 2)
     assert(row1.isNullAt(1))
 
-    val row2 = columnVector.getStruct(2, 2)
+    val row2 = columnVector.getStruct(2)
     assert(row2.isNullAt(0))
     assert(row2.getLong(1) === 3L)
 
     assert(columnVector.isNullAt(3))
 
-    val row4 = columnVector.getStruct(4, 2)
+    val row4 = columnVector.getStruct(4)
     assert(row4.getInt(0) === 5)
     assert(row4.getLong(1) === 5L)
 

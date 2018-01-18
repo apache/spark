@@ -127,8 +127,14 @@ class VectorizedHashMapGenerator(
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        s"""(${ctx.genEqual(key.dataType, ctx.getValue(s"vectors[$ordinal]", "buckets[idx]",
-          key.dataType), key.name)})"""
+        // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
+        // `ordinal` parameter.
+        val value = if (key.dataType.isInstanceOf[StructType]) {
+          s"vectors[$ordinal].getStruct(buckets[idx])"
+        } else {
+          ctx.getValue(s"vectors[$ordinal]", "buckets[idx]", key.dataType)
+        }
+        s"(${ctx.genEqual(key.dataType, value, key.name)})"
       }.mkString(" && ")
     }
 
