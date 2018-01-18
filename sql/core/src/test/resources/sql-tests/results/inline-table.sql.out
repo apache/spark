@@ -178,6 +178,6 @@ Join Cross
 
 == Physical Plan ==
 BroadcastNestedLoopJoin BuildRight, Cross
-:- LocalTableScan [col1#x, col2#x]
+:- Scan LocalTable [col1,col2] [col1#x, col2#x]
 +- BroadcastExchange IdentityBroadcastMode
-   +- LocalTableScan [col1#x, col2#x]
+   +- Scan LocalTable [col1,col2] [col1#x, col2#x]

@@ -476,7 +476,7 @@ class StreamSuite extends StreamTest {
         .mkString("\n")
     assert(explainString.contains("StateStoreRestore"))
     assert(explainString.contains("StreamingRelation"))
-    assert(!explainString.contains("LocalTableScan"))
+    assert(!explainString.contains("Scan LocalTable"))
 
     // Test StreamingQuery.display
     val q = df.writeStream.queryName("memory_explain").outputMode("complete").format("memory")
@@ -493,7 +493,7 @@ class StreamSuite extends StreamTest {
       val explainWithoutExtended = q.explainInternal(false)
       // `extended = false` only displays the physical plan.
       assert("LocalRelation".r.findAllMatchIn(explainWithoutExtended).size === 0)
-      assert("LocalTableScan".r.findAllMatchIn(explainWithoutExtended).size === 1)
+      assert("Scan LocalTable".r.findAllMatchIn(explainWithoutExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithoutExtended.contains("StateStoreRestore"))
 
@@ -501,7 +501,7 @@ class StreamSuite extends StreamTest {
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
       assert("LocalRelation".r.findAllMatchIn(explainWithExtended).size === 3)
-      assert("LocalTableScan".r.findAllMatchIn(explainWithExtended).size === 1)
+      assert("Scan LocalTable".r.findAllMatchIn(explainWithExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithExtended.contains("StateStoreRestore"))
     } finally {

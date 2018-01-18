@@ -233,7 +233,7 @@ struct<plan:string>
 -- !query 28 output
 == Physical Plan ==
 *Project [null AS (CAST(concat(a, CAST(1 AS STRING)) AS DOUBLE) + CAST(2 AS DOUBLE))#x]
-+- Scan OneRowRelation[]
++- Scan Scan RDD OneRowRelation [][]
 
 
 -- !query 29
@@ -243,7 +243,7 @@ struct<plan:string>
 -- !query 29 output
 == Physical Plan ==
 *Project [-1b AS concat(CAST((1 - 2) AS STRING), b)#x]
-+- Scan OneRowRelation[]
++- Scan Scan RDD OneRowRelation [][]
 
 
 -- !query 30
@@ -253,7 +253,7 @@ struct<plan:string>
 -- !query 30 output
 == Physical Plan ==
 *Project [11b AS concat(CAST(((2 * 4) + 3) AS STRING), b)#x]
-+- Scan OneRowRelation[]
++- Scan Scan RDD OneRowRelation [][]
 
 
 -- !query 31
@@ -263,7 +263,7 @@ struct<plan:string>
 -- !query 31 output
 == Physical Plan ==
 *Project [4a2.0 AS concat(concat(CAST((3 + 1) AS STRING), a), CAST((CAST(4 AS DOUBLE) / CAST(2 AS DOUBLE)) AS STRING))#x]
-+- Scan OneRowRelation[]
++- Scan Scan RDD OneRowRelation [][]
 
 
 -- !query 32
@@ -273,7 +273,7 @@ struct<plan:string>
 -- !query 32 output
 == Physical Plan ==
 *Project [true AS ((1 = 1) OR (concat(a, b) = ab))#x]
-+- Scan OneRowRelation[]
++- Scan Scan RDD OneRowRelation [][]
 
 
 -- !query 33
@@ -283,7 +283,7 @@ struct<plan:string>
 -- !query 33 output
 == Physical Plan ==
 *Project [false AS ((concat(a, c) = ac) AND (2 = 3))#x]
-+- Scan OneRowRelation[]
++- Scan Scan RDD OneRowRelation [][]
 
 
 -- !query 34
