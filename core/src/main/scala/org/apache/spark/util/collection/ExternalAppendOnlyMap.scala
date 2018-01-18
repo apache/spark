@@ -528,10 +528,11 @@ class ExternalAppendOnlyMap[K, V, C](
     override def hasNext: Boolean = {
       if (nextItem == null) {
         if (deserializeStream.isEmpty) {
+          // In case that deserializeStream has not been initialized
           deserializeStream = nextBatchStream()
-        }
-        if (deserializeStream.isEmpty) {
-          return false
+          if (deserializeStream.isEmpty) {
+            return false
+          }
         }
         nextItem = readNextItem()
       }
@@ -539,6 +540,10 @@ class ExternalAppendOnlyMap[K, V, C](
     }
 
     override def next(): (K, C) = {
+      if (deserializeStream.isEmpty) {
+        // In case that deserializeStream has not been initialized when call next() directly
+        deserializeStream = nextBatchStream()
+      }
       val item = if (nextItem == null) readNextItem() else nextItem
       if (item == null) {
         throw new NoSuchElementException
