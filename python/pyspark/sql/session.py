@@ -36,7 +36,7 @@ from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import Row, DataType, StringType, StructType, TimestampType, \
     _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
     _parse_datatype_string
-from pyspark.sql.udf import UserDefinedFunction, UDFRegistration
+from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.utils import install_exception_handler
 
 __all__ = ["SparkSession"]
@@ -292,6 +292,7 @@ class SparkSession(object):
 
         :return: :class:`UDFRegistration`
         """
+        from pyspark.sql.udf import UDFRegistration
         return UDFRegistration(self)
 
     @since(2.0)
