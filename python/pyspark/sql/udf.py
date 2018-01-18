@@ -206,7 +206,8 @@ class UDFRegistration(object):
         :param f: a Python function, or a user-defined function. The user-defined function can
             be either row-at-a-time or vectorized. See :meth:`pyspark.sql.functions.udf` and
             :meth:`pyspark.sql.functions.pandas_udf`.
-        :param returnType: the return type of the registered user-defined function.
+        :param returnType: the return type of the registered user-defined function. The value can
+            be either a :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
         :return: a user-defined function.
 
         `returnType` can be optionally specified when `f` is a Python function but not
@@ -303,21 +304,30 @@ class UDFRegistration(object):
 
         :param name: name of the user-defined function
         :param javaClassName: fully qualified name of java class
-        :param returnType: a :class:`pyspark.sql.types.DataType` object
+        :param returnType: the return type of the registered Java function. The value can be either
+            a :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
         >>> from pyspark.sql.types import IntegerType
         >>> spark.udf.registerJavaFunction(
         ...     "javaStringLength", "test.org.apache.spark.sql.JavaStringLength", IntegerType())
         >>> spark.sql("SELECT javaStringLength('test')").collect()
         [Row(UDF:javaStringLength(test)=4)]
+
         >>> spark.udf.registerJavaFunction(
         ...     "javaStringLength2", "test.org.apache.spark.sql.JavaStringLength")
         >>> spark.sql("SELECT javaStringLength2('test')").collect()
         [Row(UDF:javaStringLength2(test)=4)]
+
+        >>> spark.udf.registerJavaFunction(
+        ...     "javaStringLength3", "test.org.apache.spark.sql.JavaStringLength", "integer")
+        >>> spark.sql("SELECT javaStringLength3('test')").collect()
+        [Row(UDF:javaStringLength3(test)=4)]
         """
 
         jdt = None
         if returnType is not None:
+            if not isinstance(returnType, DataType):
+                returnType = _parse_datatype_string(returnType)
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
         self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
