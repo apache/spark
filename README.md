@@ -14,6 +14,12 @@ to build a new spark binary package.
 
 If you want KAP to package your new kyspark by default, you should contact hongbin.ma@kyligence.io.
 
+steps:
+
+1. publish the new kyspark to kyligence.io server
+2. change md5 in kap's download-spark.sh
+3. change CI's using spark, including kap-release,kap-release-test and master-full-regression-test 
+
 # Apache Spark
 
 Spark is a fast and general cluster computing system for Big Data. It provides
