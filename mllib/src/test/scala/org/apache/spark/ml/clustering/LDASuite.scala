@@ -25,7 +25,7 @@ import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+
 
 object LDASuite {
   def generateLDAData(
@@ -63,8 +63,7 @@ object LDASuite {
 class LDASuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
-
-  implicit val vectorEncoder = ExpressionEncoder[Vector]()
+  import Encoders._
 
   val k: Int = 5
   val vocabSize: Int = 30

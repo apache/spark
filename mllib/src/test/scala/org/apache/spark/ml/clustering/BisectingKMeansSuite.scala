@@ -111,6 +111,7 @@ class BisectingKMeansSuite extends MLTest with DefaultReadWriteTest {
     testTransformerByGlobalCheckFunc[Vector](dataset.toDF(), model,
       "features", predictionColName) { rows =>
       val clusters = rows.map(_.getAs[Int](predictionColName)).toSet
+      assert(clusters.size === k)
       assert(clusters === Set(0, 1, 2, 3, 4))
       assert(model.computeCost(dataset) < 0.1)
       assert(model.hasParent)
