@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.sources.v2.streaming.reader;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.v2.reader.DataReader;
 
 /**
  * A variation on {@link DataReader} for use with streaming in continuous processing mode.
  */
+@InterfaceStability.Evolving
 public interface ContinuousDataReader<T> extends DataReader<T> {
     /**
      * Get the offset of the current record, or the start offset if no records have been read.
