@@ -20,7 +20,7 @@ import java.util.UUID
 
 import com.google.common.primitives.Longs
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -117,6 +117,12 @@ private[spark] class DriverConfigOrchestrator(
       .map(_.split(","))
       .getOrElse(Array.empty[String])
 
+    // TODO(SPARK-23153): remove once submission client local dependencies are supported.
+    if (existSubmissionLocalFiles(sparkJars) || existSubmissionLocalFiles(sparkFiles)) {
+      throw new SparkException("The Kubernetes mode does not yet support referencing application " +
+        "dependencies in the local file system.")
+    }
+
     val dependencyResolutionStep = if (sparkJars.nonEmpty || sparkFiles.nonEmpty) {
       Seq(new DependencyResolutionStep(
         sparkJars,
@@ -160,6 +166,12 @@ private[spark] class DriverConfigOrchestrator(
       dependencyResolutionStep ++
       mountSecretsStep ++
       initContainerBootstrapStep
+  }
+
+  private def existSubmissionLocalFiles(files: Seq[String]): Boolean = {
+    files.exists { uri =>
+      Utils.resolveURI(uri).getScheme == "file"
+    }
   }
 
   private def existNonContainerLocalFiles(files: Seq[String]): Boolean = {
