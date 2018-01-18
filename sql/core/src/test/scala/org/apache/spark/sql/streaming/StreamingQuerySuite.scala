@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
+import java.{util => ju}
 import java.util.concurrent.CountDownLatch
 
 import org.apache.commons.lang3.RandomStringUtils
@@ -29,10 +30,12 @@ import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.reader.ReadTask
+import org.apache.spark.sql.sources.v2.streaming.reader.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ManualClock
@@ -207,18 +210,18 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     /** Custom MemoryStream that waits for manual clock to reach a time */
     val inputData = new MemoryStream[Int](0, sqlContext) {
       // getOffset should take 50 ms the first time it is called
-      override def getOffset: Option[Offset] = {
-        val offset = super.getOffset
-        if (offset.nonEmpty) {
+      override def getEndOffset: OffsetV2 = {
+        val offset = super.getEndOffset
+        if (offset != null) {
           clock.waitTillTime(1050)
         }
         offset
       }
 
       // getBatch should take 100 ms the first time it is called
-      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        if (start.isEmpty) clock.waitTillTime(1150)
-        super.getBatch(start, end)
+      override def createReadTasks(): ju.List[ReadTask[Row]] = {
+        if (getStartOffset.asInstanceOf[LongOffset].offset == -1L) clock.waitTillTime(1150)
+        super.createReadTasks()
       }
     }
 

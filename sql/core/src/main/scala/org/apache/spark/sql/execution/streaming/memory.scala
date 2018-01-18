@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.{util => ju}
+import java.util.Optional
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.util.control.NonFatal
 
@@ -31,7 +32,8 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, Statistics}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.SQLExecution
+import org.apache.spark.sql.sources.v2.reader.{DataReader, ReadTask}
+import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -51,9 +53,10 @@ object MemoryStream {
  * available.
  */
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
-    extends Source with Logging {
+    extends MicroBatchReader with Logging {
   protected val encoder = encoderFor[A]
-  protected val logicalPlan = StreamingExecutionRelation(this, sqlContext.sparkSession)
+  private val attributes = encoder.schema.toAttributes
+  protected val logicalPlan = StreamingExecutionRelation(this, attributes)(sqlContext.sparkSession)
   protected val output = logicalPlan.output
 
   /**
@@ -66,14 +69,15 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   @GuardedBy("this")
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
+  private var startOffset = new LongOffset(-1)
+  private var endOffset = new LongOffset(-1)
+
   /**
    * Last offset that was discarded, or -1 if no commits have occurred. Note that the value
    * -1 is used in calculations below and isn't just an arbitrary constant.
    */
   @GuardedBy("this")
   protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
-
-  def schema: StructType = encoder.schema
 
   def toDS(): Dataset[A] = {
     Dataset(sqlContext.sparkSession, logicalPlan)
@@ -89,7 +93,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   def addData(data: TraversableOnce[A]): Offset = {
     val encoded = data.toVector.map(d => encoder.toRow(d).copy())
-    val plan = new LocalRelation(schema.toAttributes, encoded, isStreaming = true)
+    val plan = new LocalRelation(attributes, encoded, isStreaming = false)
     val ds = Dataset[A](sqlContext.sparkSession, plan)
     logDebug(s"Adding ds: $ds")
     this.synchronized {
@@ -101,19 +105,25 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   override def toString: String = s"MemoryStream[${Utils.truncatedString(output, ",")}]"
 
-  override def getOffset: Option[Offset] = synchronized {
-    if (currentOffset.offset == -1) {
-      None
-    } else {
-      Some(currentOffset)
+  override def setOffsetRange(start: Optional[OffsetV2], end: Optional[OffsetV2]): Unit = {
+    if (start.isPresent) {
+      startOffset = start.get().asInstanceOf[LongOffset]
     }
+    endOffset = end.orElse(currentOffset).asInstanceOf[LongOffset]
   }
 
-  override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+  override def readSchema(): StructType = encoder.schema
+
+  override def deserializeOffset(json: String): OffsetV2 = LongOffset(json.toLong)
+
+  override def getStartOffset: OffsetV2 = if (startOffset.offset == -1) null else startOffset
+
+  override def getEndOffset: OffsetV2 = if (endOffset.offset == -1) null else endOffset
+
+  override def createReadTasks(): ju.List[ReadTask[Row]] = {
     // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
-    val startOrdinal =
-      start.flatMap(LongOffset.convert).getOrElse(LongOffset(-1)).offset.toInt + 1
-    val endOrdinal = LongOffset.convert(end).getOrElse(LongOffset(-1)).offset.toInt + 1
+    val startOrdinal = startOffset.offset.toInt + 1
+    val endOrdinal = endOffset.offset.toInt + 1
 
     // Internal buffer only holds the batches after lastCommittedOffset.
     val newBlocks = synchronized {
@@ -123,19 +133,12 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       batches.slice(sliceStart, sliceEnd)
     }
 
-    if (newBlocks.isEmpty) {
-      return sqlContext.internalCreateDataFrame(
-        sqlContext.sparkContext.emptyRDD, schema, isStreaming = true)
-    }
-
     logDebug(generateDebugString(newBlocks, startOrdinal, endOrdinal))
 
-    newBlocks
-      .map(_.toDF())
-      .reduceOption(_ union _)
-      .getOrElse {
-        sys.error("No data selected!")
-      }
+    newBlocks.map { ds =>
+      val items = ds.toDF().collect()
+      new MemoryStreamReadTask(items).asInstanceOf[ReadTask[Row]]
+    }.asJava
   }
 
   private def generateDebugString(
@@ -153,7 +156,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     }
   }
 
-  override def commit(end: Offset): Unit = synchronized {
+  override def commit(end: OffsetV2): Unit = synchronized {
     def check(newOffset: LongOffset): Unit = {
       val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 
@@ -179,6 +182,24 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     currentOffset = new LongOffset(-1)
     lastOffsetCommitted = new LongOffset(-1)
   }
+}
+
+class MemoryStreamReadTask(records: Array[Row]) extends ReadTask[Row] {
+  override def createDataReader(): DataReader[Row] = new MemoryStreamDataReader(records)
+}
+
+class MemoryStreamDataReader(records: Array[Row]) extends DataReader[Row] {
+  private var currentIndex = -1
+
+  override def next(): Boolean = {
+    // Return true as long as the new index is in the array.
+    currentIndex += 1
+    currentIndex < records.length
+  }
+
+  override def get(): Row = records(currentIndex)
+
+  override def close(): Unit = {}
 }
 
 /**

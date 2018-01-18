@@ -120,7 +120,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   case class AddDataMemory[A](source: MemoryStream[A], data: Seq[A]) extends AddData {
     override def toString: String = s"AddData to $source: ${data.mkString(",")}"
 
-    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+    override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {
       (source, source.addData(data))
     }
   }
