@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
 import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
@@ -264,7 +265,9 @@ class CountVectorizerModel(
 
       Vectors.sparse(dictBr.value.size, effectiveCounts)
     }
-    dataset.withColumn($(outputCol), vectorizer(col($(inputCol))))
+    val attrs = vocabulary.map(_ => new NumericAttribute).asInstanceOf[Array[Attribute]]
+    val metadata = new AttributeGroup($(outputCol), attrs).toMetadata()
+    dataset.withColumn($(outputCol), vectorizer(col($(inputCol))), metadata)
   }
 
   @Since("1.5.0")

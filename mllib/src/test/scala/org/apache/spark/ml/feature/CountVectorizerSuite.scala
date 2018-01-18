@@ -220,4 +220,20 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
     val newInstance = testDefaultReadWrite(instance)
     assert(newInstance.vocabulary === instance.vocabulary)
   }
+
+  test("SPARK-22974: CountVectorModel should attach proper attribute to output column") {
+    val df = spark.createDataFrame(Seq(
+      (0, 1.0, Array("a", "b", "c")),
+      (1, 2.0, Array("a", "b", "b", "c", "a", "d"))
+    )).toDF("id", "features1", "words")
+
+    val cvm = new CountVectorizerModel(Array("a", "b", "c"))
+      .setInputCol("words")
+      .setOutputCol("features2")
+
+    val df1 = cvm.transform(df)
+    val interaction = new Interaction().setInputCols(Array("features1", "features2"))
+      .setOutputCol("features")
+    interaction.transform(df1)
+  }
 }
