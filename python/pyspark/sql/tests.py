@@ -372,6 +372,12 @@ class SQLTests(ReusedSQLTestCase):
         [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
         self.assertEqual(row[0], 5)
 
+        # This is to check if a deprecated 'SQLContext.registerFunction' can call its alias.
+        sqlContext = self.spark._wrapped
+        sqlContext.registerFunction("oneArg", lambda x: len(x), IntegerType())
+        [row] = sqlContext.sql("SELECT oneArg('test')").collect()
+        self.assertEqual(row[0], 4)
+
     def test_udf2(self):
         self.spark.catalog.registerFunction("strlen", lambda string: len(string), IntegerType())
         self.spark.createDataFrame(self.sc.parallelize([Row(a="test")]))\
@@ -575,6 +581,15 @@ class SQLTests(ReusedSQLTestCase):
         self.assertListEqual(
             df.selectExpr("add_three(id) AS plus_three").collect(),
             df.select(add_three("id").alias("plus_three")).collect()
+        )
+
+        # This is to check if a 'SQLContext.udf' can call its alias.
+        sqlContext = self.spark._wrapped
+        add_four = sqlContext.udf.register("add_four", lambda x: x + 4, IntegerType())
+
+        self.assertListEqual(
+            df.selectExpr("add_four(id) AS plus_four").collect(),
+            df.select(add_four("id").alias("plus_four")).collect()
         )
 
     def test_non_existed_udf(self):
