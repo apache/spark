@@ -744,15 +744,16 @@ class Analyzer(
           } transformUp {
             case other => other transformExpressions {
               case a: AttributeReference =>
-                // Only replace `AttributeReference` when the de-duplicated relation is not a
-                // `AnalysisBarrier`, or this `AttributeReference` is not associated with any
-                // `AnalysisBarrier`, or this `AttributeReference` refers to the de-duplicated
-                // `AnalysisBarrier`, i.e. barrierId matches.
-                if (barrierId.isEmpty || !a.metadata.contains(AnalysisBarrier.metadataKey) ||
-                  barrierId.get == a.metadata.getLong(AnalysisBarrier.metadataKey)) {
-                  dedupAttr(a, attributeRewrites)
-                } else {
+                // When we de-duplicated an `AnalysisBarrier` and this `AttributeReference` is
+                // associated with another `AnalysisBarrier`, don't replace it.
+                val shouldNotReplace = barrierId.exists { id =>
+                  a.metadata.contains(AnalysisBarrier.metadataKey) &&
+                    id != a.metadata.getLong(AnalysisBarrier.metadataKey)
+                }
+                if (shouldNotReplace) {
                   a
+                } else {
+                  dedupAttr(a, attributeRewrites)
                 }
 
               case s: SubqueryExpression =>
