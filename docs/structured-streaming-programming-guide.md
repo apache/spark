@@ -1352,7 +1352,7 @@ there were no matches and there will be no more matches in future.
     <td style="vertical-align: middle;">Inner</td>
     <td style="vertical-align: middle;">
       Supported, optionally specify watermark on both sides +
-      time constraints for state cleanup<
+      time constraints for state cleanup
     </td>
   </tr>
   <tr>
@@ -1392,7 +1392,7 @@ Additional details on supported joins:
 
   - Cannot use streaming aggregations before joins.
 
-  - Cannot use mapGroupsWithState and flatMapGroupsWithState in Update mode cannot before joins.
+  - Cannot use mapGroupsWithState and flatMapGroupsWithState in Update mode before joins.
 
 
 ### Streaming Deduplication
