@@ -18,39 +18,31 @@
 package org.apache.spark.launcher;
 
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.TimeUnit;
 
-import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.slf4j.bridge.SLF4JBridgeHandler;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
+import static org.mockito.Mockito.*;
 
+import org.apache.spark.SparkContext;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.util.Utils;
 
 /**
  * These tests require the Spark assembly to be built before they can be run.
  */
-public class SparkLauncherSuite {
+public class SparkLauncherSuite extends BaseSuite {
 
-  static {
-    SLF4JBridgeHandler.removeHandlersForRootLogger();
-    SLF4JBridgeHandler.install();
-  }
-
-  private static final Logger LOG = LoggerFactory.getLogger(SparkLauncherSuite.class);
   private static final NamedThreadFactory TF = new NamedThreadFactory("SparkLauncherSuite-%d");
 
-  private SparkLauncher launcher;
-
-  @Before
-  public void configureLauncher() {
-    launcher = new SparkLauncher().setSparkHome(System.getProperty("spark.test.home"));
-  }
+  private final SparkLauncher launcher = new SparkLauncher();
 
   @Test
   public void testSparkArgumentHandling() throws Exception {
@@ -101,60 +93,6 @@ public class SparkLauncherSuite {
     assertEquals("python3.5", launcher.builder.conf.get(package$.MODULE$.PYSPARK_PYTHON().key()));
   }
 
-  @Test(expected=IllegalStateException.class)
-  public void testRedirectTwiceFails() throws Exception {
-    launcher.setAppResource("fake-resource.jar")
-      .setMainClass("my.fake.class.Fake")
-      .redirectError()
-      .redirectError(ProcessBuilder.Redirect.PIPE)
-      .launch();
-  }
-
-  @Test(expected=IllegalStateException.class)
-  public void testRedirectToLogWithOthersFails() throws Exception {
-    launcher.setAppResource("fake-resource.jar")
-      .setMainClass("my.fake.class.Fake")
-      .redirectToLog("fakeLog")
-      .redirectError(ProcessBuilder.Redirect.PIPE)
-      .launch();
-  }
-
-  @Test
-  public void testRedirectErrorToOutput() throws Exception {
-    launcher.redirectError();
-    assertTrue(launcher.redirectErrorStream);
-  }
-
-  @Test
-  public void testRedirectsSimple() throws Exception {
-    launcher.redirectError(ProcessBuilder.Redirect.PIPE);
-    assertNotNull(launcher.errorStream);
-    assertEquals(launcher.errorStream.type(), ProcessBuilder.Redirect.Type.PIPE);
-
-    launcher.redirectOutput(ProcessBuilder.Redirect.PIPE);
-    assertNotNull(launcher.outputStream);
-    assertEquals(launcher.outputStream.type(), ProcessBuilder.Redirect.Type.PIPE);
-  }
-
-  @Test
-  public void testRedirectLastWins() throws Exception {
-    launcher.redirectError(ProcessBuilder.Redirect.PIPE)
-      .redirectError(ProcessBuilder.Redirect.INHERIT);
-    assertEquals(launcher.errorStream.type(), ProcessBuilder.Redirect.Type.INHERIT);
-
-    launcher.redirectOutput(ProcessBuilder.Redirect.PIPE)
-      .redirectOutput(ProcessBuilder.Redirect.INHERIT);
-    assertEquals(launcher.outputStream.type(), ProcessBuilder.Redirect.Type.INHERIT);
-  }
-
-  @Test
-  public void testRedirectToLog() throws Exception {
-    launcher.redirectToLog("fakeLogger");
-    assertTrue(launcher.redirectToLog);
-    assertTrue(launcher.builder.getEffectiveConfig()
-      .containsKey(SparkLauncher.CHILD_PROCESS_LOGGER_NAME));
-  }
-
   @Test
   public void testChildProcLauncher() throws Exception {
     // This test is failed on Windows due to the failure of initiating executors
@@ -175,12 +113,61 @@ public class SparkLauncherSuite {
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .addSparkArg(opts.CLASS, "ShouldBeOverriddenBelow")
       .setMainClass(SparkLauncherTestApp.class.getName())
+      .redirectError()
       .addAppArgs("proc");
     final Process app = launcher.launch();
 
-    new OutputRedirector(app.getInputStream(), TF);
-    new OutputRedirector(app.getErrorStream(), TF);
+    new OutputRedirector(app.getInputStream(), getClass().getName() + ".child", TF);
     assertEquals(0, app.waitFor());
+  }
+
+  // TODO: [SPARK-23020] Re-enable this
+  @Ignore
+  public void testInProcessLauncher() throws Exception {
+    // Because this test runs SparkLauncher in process and in client mode, it pollutes the system
+    // properties, and that can cause test failures down the test pipeline. So restore the original
+    // system properties after this test runs.
+    Map<Object, Object> properties = new HashMap<>(System.getProperties());
+    try {
+      inProcessLauncherTestImpl();
+    } finally {
+      Properties p = new Properties();
+      for (Map.Entry<Object, Object> e : properties.entrySet()) {
+        p.put(e.getKey(), e.getValue());
+      }
+      System.setProperties(p);
+      // Here DAGScheduler is stopped, while SparkContext.clearActiveContext may not be called yet.
+      // Wait for a reasonable amount of time to avoid creating two active SparkContext in JVM.
+      // See SPARK-23019 and SparkContext.stop() for details.
+      TimeUnit.MILLISECONDS.sleep(500);
+    }
+  }
+
+  private void inProcessLauncherTestImpl() throws Exception {
+    final List<SparkAppHandle.State> transitions = new ArrayList<>();
+    SparkAppHandle.Listener listener = mock(SparkAppHandle.Listener.class);
+    doAnswer(invocation -> {
+      SparkAppHandle h = (SparkAppHandle) invocation.getArguments()[0];
+      transitions.add(h.getState());
+      return null;
+    }).when(listener).stateChanged(any(SparkAppHandle.class));
+
+    SparkAppHandle handle = new InProcessLauncher()
+      .setMaster("local")
+      .setAppResource(SparkLauncher.NO_RESOURCE)
+      .setMainClass(InProcessTestApp.class.getName())
+      .addAppArgs("hello")
+      .startApplication(listener);
+
+    waitFor(handle);
+    assertEquals(SparkAppHandle.State.FINISHED, handle.getState());
+
+    // Matches the behavior of LocalSchedulerBackend.
+    List<SparkAppHandle.State> expected = Arrays.asList(
+      SparkAppHandle.State.CONNECTED,
+      SparkAppHandle.State.RUNNING,
+      SparkAppHandle.State.FINISHED);
+    assertEquals(expected, transitions);
   }
 
   public static class SparkLauncherTestApp {
@@ -190,6 +177,16 @@ public class SparkLauncherSuite {
       assertEquals("proc", args[0]);
       assertEquals("bar", System.getProperty("foo"));
       assertEquals("local", System.getProperty(SparkLauncher.SPARK_MASTER));
+    }
+
+  }
+
+  public static class InProcessTestApp {
+
+    public static void main(String[] args) throws Exception {
+      assertNotEquals(0, args.length);
+      assertEquals(args[0], "hello");
+      new SparkContext().stop();
     }
 
   }

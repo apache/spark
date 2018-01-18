@@ -38,11 +38,20 @@ NULL
 #'
 #' Date time functions defined for \code{Column}.
 #'
-#' @param x Column to compute on. In \code{window}, it must be a time Column of \code{TimestampType}.
-#' @param format For \code{to_date} and \code{to_timestamp}, it is the string to use to parse
-#'               Column \code{x} to DateType or TimestampType. For \code{trunc}, it is the string
-#'               to use to specify the truncation method. For example, "year", "yyyy", "yy" for
-#'               truncate by year, or "month", "mon", "mm" for truncate by month.
+#' @param x Column to compute on. In \code{window}, it must be a time Column of
+#'          \code{TimestampType}. This is not used with \code{current_date} and
+#'          \code{current_timestamp}
+#' @param format The format for the given dates or timestamps in Column \code{x}. See the
+#'               format used in the following methods:
+#'               \itemize{
+#'               \item \code{to_date} and \code{to_timestamp}: it is the string to use to parse
+#'                    Column \code{x} to DateType or TimestampType.
+#'               \item \code{trunc}: it is the string to use to specify the truncation method.
+#'                    For example, "year", "yyyy", "yy" for truncate by year, or "month", "mon",
+#'                    "mm" for truncate by month.
+#'               \item \code{date_trunc}: it is similar with \code{trunc}'s but additionally
+#'                    supports "day", "dd", "second", "minute", "hour", "week" and "quarter".
+#'               }
 #' @param ... additional argument(s).
 #' @name column_datetime_functions
 #' @rdname column_datetime_functions
@@ -90,8 +99,8 @@ NULL
 #'
 #' Math functions defined for \code{Column}.
 #'
-#' @param x Column to compute on. In \code{shiftLeft}, \code{shiftRight} and \code{shiftRightUnsigned},
-#'          this is the number of bits to shift.
+#' @param x Column to compute on. In \code{shiftLeft}, \code{shiftRight} and
+#'          \code{shiftRightUnsigned}, this is the number of bits to shift.
 #' @param y Column to compute on.
 #' @param ... additional argument(s).
 #' @name column_math_functions
@@ -176,7 +185,8 @@ NULL
 #'
 #' @param x Column to compute on. Note the difference in the following methods:
 #'          \itemize{
-#'          \item \code{to_json}: it is the column containing the struct or array of the structs.
+#'          \item \code{to_json}: it is the column containing the struct, array of the structs,
+#'              the map or array of maps.
 #'          \item \code{from_json}: it is the column containing the JSON string.
 #'          }
 #' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
@@ -195,7 +205,10 @@ NULL
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
 #' head(select(tmp, sort_array(tmp$v1)))
-#' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))}
+#' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))
+#' tmp3 <- mutate(df, v3 = create_map(df$model, df$cyl))
+#' head(select(tmp3, map_keys(tmp3$v3)))
+#' head(select(tmp3, map_values(tmp3$v3)))}
 NULL
 
 #' Window functions for Column operations
@@ -476,7 +489,7 @@ setMethod("ceiling",
 setMethod("coalesce",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -672,7 +685,7 @@ setMethod("crc32",
 setMethod("hash",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -691,7 +704,7 @@ setMethod("hash",
 #'
 #' \dontrun{
 #' head(select(df, df$time, year(df$time), quarter(df$time), month(df$time),
-#'            dayofmonth(df$time), dayofyear(df$time), weekofyear(df$time)))
+#'             dayofmonth(df$time), dayofweek(df$time), dayofyear(df$time), weekofyear(df$time)))
 #' head(agg(groupBy(df, year(df$time)), count(df$y), avg(df$y)))
 #' head(agg(groupBy(df, month(df$time)), avg(df$y)))}
 #' @note dayofmonth since 1.5.0
@@ -699,6 +712,21 @@ setMethod("dayofmonth",
           signature(x = "Column"),
           function(x) {
             jc <- callJStatic("org.apache.spark.sql.functions", "dayofmonth", x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{dayofweek}: Extracts the day of the week as an integer from a
+#' given date/timestamp/string.
+#'
+#' @rdname column_datetime_functions
+#' @aliases dayofweek dayofweek,Column-method
+#' @export
+#' @note dayofweek since 2.3.0
+setMethod("dayofweek",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "dayofweek", x@jc)
             column(jc)
           })
 
@@ -1082,10 +1110,11 @@ setMethod("lower",
           })
 
 #' @details
-#' \code{ltrim}: Trims the spaces from left end for the specified string value.
+#' \code{ltrim}: Trims the spaces from left end for the specified string value. Optionally a
+#' \code{trimString} can be specified.
 #'
 #' @rdname column_string_functions
-#' @aliases ltrim ltrim,Column-method
+#' @aliases ltrim ltrim,Column,missing-method
 #' @export
 #' @examples
 #'
@@ -1101,9 +1130,21 @@ setMethod("lower",
 #' head(tmp)}
 #' @note ltrim since 1.5.0
 setMethod("ltrim",
-          signature(x = "Column"),
-          function(x) {
+          signature(x = "Column", trimString = "missing"),
+          function(x, trimString) {
             jc <- callJStatic("org.apache.spark.sql.functions", "ltrim", x@jc)
+            column(jc)
+          })
+
+#' @param trimString a character string to trim with
+#' @rdname column_string_functions
+#' @aliases ltrim,Column,character-method
+#' @export
+#' @note ltrim(Column, character) since 2.3.0
+setMethod("ltrim",
+          signature(x = "Column", trimString = "character"),
+          function(x, trimString) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "ltrim", x@jc, trimString)
             column(jc)
           })
 
@@ -1306,9 +1347,9 @@ setMethod("round",
 #' Also known as Gaussian rounding or bankers' rounding that rounds to the nearest even number.
 #' bround(2.5, 0) = 2, bround(3.5, 0) = 4.
 #'
-#' @param scale round to \code{scale} digits to the right of the decimal point when \code{scale} > 0,
-#'        the nearest even number when \code{scale} = 0, and \code{scale} digits to the left
-#'        of the decimal point when \code{scale} < 0.
+#' @param scale round to \code{scale} digits to the right of the decimal point when
+#'        \code{scale} > 0, the nearest even number when \code{scale} = 0, and \code{scale} digits
+#'        to the left of the decimal point when \code{scale} < 0.
 #' @rdname column_math_functions
 #' @aliases bround bround,Column-method
 #' @export
@@ -1321,16 +1362,28 @@ setMethod("bround",
           })
 
 #' @details
-#' \code{rtrim}: Trims the spaces from right end for the specified string value.
+#' \code{rtrim}: Trims the spaces from right end for the specified string value. Optionally a
+#' \code{trimString} can be specified.
 #'
 #' @rdname column_string_functions
-#' @aliases rtrim rtrim,Column-method
+#' @aliases rtrim rtrim,Column,missing-method
 #' @export
 #' @note rtrim since 1.5.0
 setMethod("rtrim",
-          signature(x = "Column"),
-          function(x) {
+          signature(x = "Column", trimString = "missing"),
+          function(x, trimString) {
             jc <- callJStatic("org.apache.spark.sql.functions", "rtrim", x@jc)
+            column(jc)
+          })
+
+#' @rdname column_string_functions
+#' @aliases rtrim,Column,character-method
+#' @export
+#' @note rtrim(Column, character) since 2.3.0
+setMethod("rtrim",
+          signature(x = "Column", trimString = "character"),
+          function(x, trimString) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "rtrim", x@jc, trimString)
             column(jc)
           })
 
@@ -1697,8 +1750,9 @@ setMethod("to_date",
           })
 
 #' @details
-#' \code{to_json}: Converts a column containing a \code{structType} or array of \code{structType}
-#' into a Column of JSON string. Resolving the Column can fail if an unsupported type is encountered.
+#' \code{to_json}: Converts a column containing a \code{structType}, array of \code{structType},
+#' a \code{mapType} or array of \code{mapType} into a Column of JSON string.
+#' Resolving the Column can fail if an unsupported type is encountered.
 #'
 #' @rdname column_collection_functions
 #' @aliases to_json to_json,Column-method
@@ -1712,6 +1766,14 @@ setMethod("to_date",
 #'
 #' # Converts an array of structs into a JSON array
 #' df2 <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
+#' df2 <- mutate(df2, people_json = to_json(df2$people))
+#'
+#' # Converts a map into a JSON object
+#' df2 <- sql("SELECT map('name', 'Bob')) as people")
+#' df2 <- mutate(df2, people_json = to_json(df2$people))
+#'
+#' # Converts an array of maps into a JSON array
+#' df2 <- sql("SELECT array(map('name', 'Bob'), map('name', 'Alice')) as people")
 #' df2 <- mutate(df2, people_json = to_json(df2$people))}
 #' @note to_json since 2.2.0
 setMethod("to_json", signature(x = "Column"),
@@ -1753,16 +1815,28 @@ setMethod("to_timestamp",
           })
 
 #' @details
-#' \code{trim}: Trims the spaces from both ends for the specified string column.
+#' \code{trim}: Trims the spaces from both ends for the specified string column. Optionally a
+#' \code{trimString} can be specified.
 #'
 #' @rdname column_string_functions
-#' @aliases trim trim,Column-method
+#' @aliases trim trim,Column,missing-method
 #' @export
 #' @note trim since 1.5.0
 setMethod("trim",
-          signature(x = "Column"),
-          function(x) {
+          signature(x = "Column", trimString = "missing"),
+          function(x, trimString) {
             jc <- callJStatic("org.apache.spark.sql.functions", "trim", x@jc)
+            column(jc)
+          })
+
+#' @rdname column_string_functions
+#' @aliases trim,Column,character-method
+#' @export
+#' @note trim(Column, character) since 2.3.0
+setMethod("trim",
+          signature(x = "Column", trimString = "character"),
+          function(x, trimString) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "trim", x@jc, trimString)
             column(jc)
           })
 
@@ -1992,8 +2066,9 @@ setMethod("months_between", signature(y = "Column"),
           })
 
 #' @details
-#' \code{nanvl}: Returns the first column (\code{y}) if it is not NaN, or the second column (\code{x}) if
-#' the first column is NaN. Both inputs should be floating point columns (DoubleType or FloatType).
+#' \code{nanvl}: Returns the first column (\code{y}) if it is not NaN, or the second column
+#' (\code{x}) if the first column is NaN. Both inputs should be floating point columns
+#' (DoubleType or FloatType).
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases nanvl nanvl,Column-method
@@ -2048,7 +2123,7 @@ setMethod("approxCountDistinct",
 setMethod("countDistinct",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(...), function (x) {
+            jcols <- lapply(list(...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -2058,7 +2133,8 @@ setMethod("countDistinct",
           })
 
 #' @details
-#' \code{concat}: Concatenates multiple input string columns together into a single string column.
+#' \code{concat}: Concatenates multiple input columns together into a single column.
+#' If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
 #'
 #' @rdname column_string_functions
 #' @aliases concat concat,Column-method
@@ -2077,7 +2153,7 @@ setMethod("countDistinct",
 setMethod("concat",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -2097,7 +2173,7 @@ setMethod("greatest",
           signature(x = "Column"),
           function(x, ...) {
             stopifnot(length(list(...)) > 0)
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -2117,7 +2193,7 @@ setMethod("least",
           signature(x = "Column"),
           function(x, ...) {
             stopifnot(length(list(...)) > 0)
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -2213,8 +2289,9 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
           })
 
 #' @details
-#' \code{from_utc_timestamp}: Given a timestamp, which corresponds to a certain time of day in UTC,
-#' returns another timestamp that corresponds to the same time of day in the given timezone.
+#' \code{from_utc_timestamp}: Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a
+#' time in UTC, and renders that time as a timestamp in the given time zone. For example, 'GMT+1'
+#' would yield '2017-07-14 03:40:00.0'.
 #'
 #' @rdname column_datetime_diff_functions
 #'
@@ -2273,8 +2350,9 @@ setMethod("next_day", signature(y = "Column", x = "character"),
           })
 
 #' @details
-#' \code{to_utc_timestamp}: Given a timestamp, which corresponds to a certain time of day
-#' in the given timezone, returns another timestamp that corresponds to the same time of day in UTC.
+#' \code{to_utc_timestamp}: Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a
+#' time in the given time zone, and renders that time as a timestamp in UTC. For example, 'GMT+1'
+#' would yield '2017-07-14 01:40:00.0'.
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases to_utc_timestamp to_utc_timestamp,Column,character-method
@@ -2391,8 +2469,8 @@ setMethod("shiftLeft", signature(y = "Column", x = "numeric"),
           })
 
 #' @details
-#' \code{shiftRight}: (Signed) shifts the given value numBits right. If the given value is a long value,
-#' it will return a long value else it will return an integer value.
+#' \code{shiftRight}: (Signed) shifts the given value numBits right. If the given value is a long
+#' value, it will return a long value else it will return an integer value.
 #'
 #' @rdname column_math_functions
 #' @aliases shiftRight shiftRight,Column,numeric-method
@@ -2490,9 +2568,10 @@ setMethod("format_string", signature(format = "character", x = "Column"),
           })
 
 #' @details
-#' \code{from_unixtime}: Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a
-#' string representing the timestamp of that moment in the current system time zone in the JVM in the
-#' given format. See \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
+#' \code{from_unixtime}: Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC)
+#' to a string representing the timestamp of that moment in the current system time zone in the JVM
+#' in the given format.
+#' See \href{http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html}{
 #' Customizing Formats} for available options.
 #'
 #' @rdname column_datetime_functions
@@ -2619,8 +2698,8 @@ setMethod("lpad", signature(x = "Column", len = "numeric", pad = "character"),
           })
 
 #' @details
-#' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.) samples
-#' from U[0.0, 1.0].
+#' \code{rand}: Generates a random column with independent and identically distributed (i.i.d.)
+#' samples from U[0.0, 1.0].
 #'
 #' @rdname column_nonaggregate_functions
 #' @param seed a random seed. Can be missing.
@@ -2649,8 +2728,8 @@ setMethod("rand", signature(seed = "numeric"),
           })
 
 #' @details
-#' \code{randn}: Generates a column with independent and identically distributed (i.i.d.) samples from
-#' the standard normal distribution.
+#' \code{randn}: Generates a column with independent and identically distributed (i.i.d.) samples
+#' from the standard normal distribution.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases randn randn,missing-method
@@ -2737,11 +2816,11 @@ setMethod("rpad", signature(x = "Column", len = "numeric", pad = "character"),
           })
 
 #' @details
-#' \code{substring_index}: Returns the substring from string str before count occurrences of
-#' the delimiter delim. If count is positive, everything the left of the final delimiter
-#' (counting from left) is returned. If count is negative, every to the right of the final
-#' delimiter (counting from the right) is returned. substring_index performs a case-sensitive
-#' match when searching for delim.
+#' \code{substring_index}: Returns the substring from string (\code{x}) before \code{count}
+#' occurrences of the delimiter (\code{delim}). If \code{count} is positive, everything the left of
+#' the final delimiter (counting from left) is returned. If \code{count} is negative, every to the
+#' right of the final delimiter (counting from the right) is returned. \code{substring_index}
+#' performs a case-sensitive match when searching for the delimiter.
 #'
 #' @param delim a delimiter string.
 #' @param count number of occurrences of \code{delim} before the substring is returned.
@@ -2816,8 +2895,8 @@ setMethod("unix_timestamp", signature(x = "Column", format = "character"),
           })
 
 #' @details
-#' \code{when}: Evaluates a list of conditions and returns one of multiple possible result expressions.
-#' For unmatched expressions null is returned.
+#' \code{when}: Evaluates a list of conditions and returns one of multiple possible result
+#' expressions. For unmatched expressions null is returned.
 #'
 #' @rdname column_nonaggregate_functions
 #' @param condition the condition to test on. Must be a Column expression.
@@ -2844,8 +2923,8 @@ setMethod("when", signature(condition = "Column", value = "ANY"),
           })
 
 #' @details
-#' \code{ifelse}: Evaluates a list of conditions and returns \code{yes} if the conditions are satisfied.
-#' Otherwise \code{no} is returned for unmatched conditions.
+#' \code{ifelse}: Evaluates a list of conditions and returns \code{yes} if the conditions are
+#' satisfied. Otherwise \code{no} is returned for unmatched conditions.
 #'
 #' @rdname column_nonaggregate_functions
 #' @param test a Column expression that describes the condition.
@@ -2975,7 +3054,8 @@ setMethod("ntile",
           })
 
 #' @details
-#' \code{percent_rank}: Returns the relative rank (i.e. percentile) of rows within a window partition.
+#' \code{percent_rank}: Returns the relative rank (i.e. percentile) of rows within a window
+#' partition.
 #' This is computed by: (rank of row in its partition - 1) / (number of rows in the partition - 1).
 #' This is equivalent to the \code{PERCENT_RANK} function in SQL.
 #' The method should be used with no argument.
@@ -3056,6 +3136,34 @@ setMethod("array_contains",
           })
 
 #' @details
+#' \code{map_keys}: Returns an unordered array containing the keys of the map.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_keys map_keys,Column-method
+#' @export
+#' @note map_keys since 2.3.0
+setMethod("map_keys",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_keys", x@jc)
+            column(jc)
+         })
+
+#' @details
+#' \code{map_values}: Returns an unordered array containing the values of the map.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_values map_values,Column-method
+#' @export
+#' @note map_values since 2.3.0
+setMethod("map_values",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_values", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{explode}: Creates a new row for each element in the given array or map column.
 #'
 #' @rdname column_collection_functions
@@ -3117,7 +3225,8 @@ setMethod("posexplode",
           })
 
 #' @details
-#' \code{create_array}: Creates a new array column. The input columns must all have the same data type.
+#' \code{create_array}: Creates a new array column. The input columns must all have the same data
+#' type.
 #'
 #' @rdname column_nonaggregate_functions
 #' @aliases create_array create_array,Column-method
@@ -3126,7 +3235,7 @@ setMethod("posexplode",
 setMethod("create_array",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -3135,8 +3244,8 @@ setMethod("create_array",
           })
 
 #' @details
-#' \code{create_map}: Creates a new map column. The input columns must be grouped as key-value pairs,
-#' e.g. (key1, value1, key2, value2, ...).
+#' \code{create_map}: Creates a new map column. The input columns must be grouped as key-value
+#' pairs, e.g. (key1, value1, key2, value2, ...).
 #' The key columns must all have the same data type, and can't be null.
 #' The value columns must all have the same data type.
 #'
@@ -3147,7 +3256,7 @@ setMethod("create_array",
 setMethod("create_map",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -3309,9 +3418,9 @@ setMethod("not",
           })
 
 #' @details
-#' \code{grouping_bit}: Indicates whether a specified column in a GROUP BY list is aggregated or not,
-#' returns 1 for aggregated or 0 for not aggregated in the result set. Same as \code{GROUPING} in SQL
-#' and \code{grouping} function in Scala.
+#' \code{grouping_bit}: Indicates whether a specified column in a GROUP BY list is aggregated or
+#' not, returns 1 for aggregated or 0 for not aggregated in the result set. Same as \code{GROUPING}
+#' in SQL and \code{grouping} function in Scala.
 #'
 #' @rdname column_aggregate_functions
 #' @aliases grouping_bit grouping_bit,Column-method
@@ -3369,7 +3478,7 @@ setMethod("grouping_bit",
 setMethod("grouping_id",
           signature(x = "Column"),
           function(x, ...) {
-            jcols <- lapply(list(x, ...), function (x) {
+            jcols <- lapply(list(x, ...), function(x) {
               stopifnot(class(x) == "Column")
               x@jc
             })
@@ -3413,5 +3522,55 @@ setMethod("trunc",
           function(x, format) {
             jc <- callJStatic("org.apache.spark.sql.functions", "trunc",
                               x@jc, as.character(format))
+            column(jc)
+          })
+
+#' @details
+#' \code{date_trunc}: Returns timestamp truncated to the unit specified by the format.
+#'
+#' @rdname column_datetime_functions
+#' @aliases date_trunc date_trunc,character,Column-method
+#' @export
+#' @examples
+#'
+#' \dontrun{
+#' head(select(df, df$time, date_trunc("hour", df$time), date_trunc("minute", df$time),
+#'             date_trunc("week", df$time), date_trunc("quarter", df$time)))}
+#' @note date_trunc since 2.3.0
+setMethod("date_trunc",
+          signature(format = "character", x = "Column"),
+          function(format, x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "date_trunc", format, x@jc)
+            column(jc)
+          })
+
+#' @details
+#' \code{current_date}: Returns the current date as a date column.
+#'
+#' @rdname column_datetime_functions
+#' @aliases current_date current_date,missing-method
+#' @export
+#' @examples
+#' \dontrun{
+#' head(select(df, current_date(), current_timestamp()))}
+#' @note current_date since 2.3.0
+setMethod("current_date",
+          signature("missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "current_date")
+            column(jc)
+          })
+
+#' @details
+#' \code{current_timestamp}: Returns the current timestamp as a timestamp column.
+#'
+#' @rdname column_datetime_functions
+#' @aliases current_timestamp current_timestamp,missing-method
+#' @export
+#' @note current_timestamp since 2.3.0
+setMethod("current_timestamp",
+          signature("missing"),
+          function() {
+            jc <- callJStatic("org.apache.spark.sql.functions", "current_timestamp")
             column(jc)
           })

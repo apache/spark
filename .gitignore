@@ -47,6 +47,8 @@ dev/pr-deps/
 dist/
 docs/_site
 docs/api
+sql/docs
+sql/site
 lib_managed/
 lint-r-report.log
 log/

@@ -644,6 +644,18 @@ class RDDTests(ReusedPySparkTestCase):
             set([(x, (y, y)) for x in range(10) for y in range(10)])
         )
 
+    def test_zip_chaining(self):
+        # Tests for SPARK-21985
+        rdd = self.sc.parallelize('abc', 2)
+        self.assertSetEqual(
+            set(rdd.zip(rdd).zip(rdd).collect()),
+            set([((x, x), x) for x in 'abc'])
+        )
+        self.assertSetEqual(
+            set(rdd.zip(rdd.zip(rdd)).collect()),
+            set([(x, (x, x)) for x in 'abc'])
+        )
+
     def test_deleting_input_files(self):
         # Regression test for SPARK-1025
         tempFile = tempfile.NamedTemporaryFile(delete=False)
@@ -857,6 +869,50 @@ class RDDTests(ReusedPySparkTestCase):
         size, csum = r[0]
         self.assertEqual(N, size)
         self.assertEqual(checksum, csum)
+
+    def test_multithread_broadcast_pickle(self):
+        import threading
+
+        b1 = self.sc.broadcast(list(range(3)))
+        b2 = self.sc.broadcast(list(range(3)))
+
+        def f1():
+            return b1.value
+
+        def f2():
+            return b2.value
+
+        funcs_num_pickled = {f1: None, f2: None}
+
+        def do_pickle(f, sc):
+            command = (f, None, sc.serializer, sc.serializer)
+            ser = CloudPickleSerializer()
+            ser.dumps(command)
+
+        def process_vars(sc):
+            broadcast_vars = list(sc._pickled_broadcast_vars)
+            num_pickled = len(broadcast_vars)
+            sc._pickled_broadcast_vars.clear()
+            return num_pickled
+
+        def run(f, sc):
+            do_pickle(f, sc)
+            funcs_num_pickled[f] = process_vars(sc)
+
+        # pickle f1, adds b1 to sc._pickled_broadcast_vars in main thread local storage
+        do_pickle(f1, self.sc)
+
+        # run all for f2, should only add/count/clear b2 from worker thread local storage
+        t = threading.Thread(target=run, args=(f2, self.sc))
+        t.start()
+        t.join()
+
+        # count number of vars pickled in main thread, only b1 should be counted and cleared
+        funcs_num_pickled[f1] = process_vars(self.sc)
+
+        self.assertEqual(funcs_num_pickled[f1], 1)
+        self.assertEqual(funcs_num_pickled[f2], 1)
+        self.assertEqual(len(list(self.sc._pickled_broadcast_vars)), 0)
 
     def test_large_closure(self):
         N = 200000
@@ -1238,6 +1294,22 @@ class ProfilerTests(PySparkTestCase):
 
         rdd = self.sc.parallelize(range(100))
         rdd.foreach(heavy_foo)
+
+
+class ProfilerTests2(unittest.TestCase):
+    def test_profiler_disabled(self):
+        sc = SparkContext(conf=SparkConf().set("spark.python.profile", "false"))
+        try:
+            self.assertRaisesRegexp(
+                RuntimeError,
+                "'spark.python.profile' configuration must be set",
+                lambda: sc.show_profiles())
+            self.assertRaisesRegexp(
+                RuntimeError,
+                "'spark.python.profile' configuration must be set",
+                lambda: sc.dump_profiles("/tmp/abc"))
+        finally:
+            sc.stop()
 
 
 class InputFormatTests(ReusedPySparkTestCase):

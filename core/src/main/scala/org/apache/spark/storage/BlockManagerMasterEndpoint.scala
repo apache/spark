@@ -17,10 +17,11 @@
 
 package org.apache.spark.storage
 
+import java.io.IOException
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
@@ -81,6 +82,9 @@ class BlockManagerMasterEndpoint(
 
     case GetLocations(blockId) =>
       context.reply(getLocations(blockId))
+
+    case GetLocationsAndStatus(blockId) =>
+      context.reply(getLocationsAndStatus(blockId))
 
     case GetLocationsMultipleBlockIds(blockIds) =>
       context.reply(getLocationsMultipleBlockIds(blockIds))
@@ -156,11 +160,16 @@ class BlockManagerMasterEndpoint(
     // Ask the slaves to remove the RDD, and put the result in a sequence of Futures.
     // The dispatcher is used as an implicit argument into the Future sequence construction.
     val removeMsg = RemoveRdd(rddId)
-    Future.sequence(
-      blockManagerInfo.values.map { bm =>
-        bm.slaveEndpoint.ask[Int](removeMsg)
-      }.toSeq
-    )
+
+    val futures = blockManagerInfo.values.map { bm =>
+      bm.slaveEndpoint.ask[Int](removeMsg).recover {
+        case e: IOException =>
+          logWarning(s"Error trying to remove RDD $rddId", e)
+          0 // zero blocks were removed
+      }
+    }.toSeq
+
+    Future.sequence(futures)
   }
 
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
@@ -420,6 +429,17 @@ class BlockManagerMasterEndpoint(
 
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
     if (blockLocations.containsKey(blockId)) blockLocations.get(blockId).toSeq else Seq.empty
+  }
+
+  private def getLocationsAndStatus(blockId: BlockId): Option[BlockLocationsAndStatus] = {
+    val locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
+    val status = locations.headOption.flatMap { bmId => blockManagerInfo(bmId).getStatus(blockId) }
+
+    if (locations.nonEmpty && status.isDefined) {
+      Some(BlockLocationsAndStatus(locations, status.get))
+    } else {
+      None
+    }
   }
 
   private def getLocationsMultipleBlockIds(

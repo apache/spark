@@ -363,7 +363,7 @@ class KMeans private (
     // to their squared distance from the centers. Note that only distances between points
     // and new centers are computed in each iteration.
     var step = 0
-    var bcNewCentersList = ArrayBuffer[Broadcast[_]]()
+    val bcNewCentersList = ArrayBuffer[Broadcast[_]]()
     while (step < initializationSteps) {
       val bcNewCenters = data.context.broadcast(newCenters)
       bcNewCentersList += bcNewCenters

@@ -200,36 +200,34 @@ class UISuite extends SparkFunSuite {
   }
 
   test("verify proxy rewrittenURI") {
-    val prefix = "/proxy/worker-id"
+    val prefix = "/worker-id"
     val target = "http://localhost:8081"
-    val path = "/proxy/worker-id/json"
+    val path = "/worker-id/json"
     var rewrittenURI = JettyUtils.createProxyURI(prefix, target, path, null)
     assert(rewrittenURI.toString() === "http://localhost:8081/json")
     rewrittenURI = JettyUtils.createProxyURI(prefix, target, path, "test=done")
     assert(rewrittenURI.toString() === "http://localhost:8081/json?test=done")
-    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-id", null)
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/worker-id", null)
     assert(rewrittenURI.toString() === "http://localhost:8081")
-    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-id/test%2F", null)
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/worker-id/test%2F", null)
     assert(rewrittenURI.toString() === "http://localhost:8081/test%2F")
-    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-id/%F0%9F%98%84", null)
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/worker-id/%F0%9F%98%84", null)
     assert(rewrittenURI.toString() === "http://localhost:8081/%F0%9F%98%84")
-    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/proxy/worker-noid/json", null)
+    rewrittenURI = JettyUtils.createProxyURI(prefix, target, "/worker-noid/json", null)
     assert(rewrittenURI === null)
   }
 
   test("verify rewriting location header for reverse proxy") {
     val clientRequest = mock(classOf[HttpServletRequest])
     var headerValue = "http://localhost:4040/jobs"
-    val prefix = "/proxy/worker-id"
     val targetUri = URI.create("http://localhost:4040")
     when(clientRequest.getScheme()).thenReturn("http")
     when(clientRequest.getHeader("host")).thenReturn("localhost:8080")
-    var newHeader = JettyUtils.createProxyLocationHeader(
-      prefix, headerValue, clientRequest, targetUri)
+    when(clientRequest.getPathInfo()).thenReturn("/proxy/worker-id/jobs")
+    var newHeader = JettyUtils.createProxyLocationHeader(headerValue, clientRequest, targetUri)
     assert(newHeader.toString() === "http://localhost:8080/proxy/worker-id/jobs")
     headerValue = "http://localhost:4041/jobs"
-    newHeader = JettyUtils.createProxyLocationHeader(
-      prefix, headerValue, clientRequest, targetUri)
+    newHeader = JettyUtils.createProxyLocationHeader(headerValue, clientRequest, targetUri)
     assert(newHeader === null)
   }
 

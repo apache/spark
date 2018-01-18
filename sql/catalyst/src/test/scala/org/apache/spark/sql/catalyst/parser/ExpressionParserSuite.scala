@@ -249,8 +249,8 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("foo(*) over (partition by a, b)", windowed(Seq('a, 'b)))
     assertEqual("foo(*) over (distribute by a, b)", windowed(Seq('a, 'b)))
     assertEqual("foo(*) over (cluster by a, b)", windowed(Seq('a, 'b)))
-    assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc )))
-    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc )))
+    assertEqual("foo(*) over (order by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
+    assertEqual("foo(*) over (sort by a desc, b asc)", windowed(Seq.empty, Seq('a.desc, 'b.asc)))
     assertEqual("foo(*) over (partition by a, b order by c)", windowed(Seq('a, 'b), Seq('c.asc)))
     assertEqual("foo(*) over (distribute by a, b sort by c)", windowed(Seq('a, 'b), Seq('c.asc)))
 
@@ -263,20 +263,62 @@ class ExpressionParserSuite extends PlanTest {
       "sum(product + 1) over (partition by ((product / 2) + 1) order by 2)",
       WindowExpression('sum.function('product + 1),
         WindowSpecDefinition(Seq('product / 2 + 1), Seq(Literal(2).asc), UnspecifiedFrame)))
+  }
 
-    // Range/Row
+  test("range/rows window function expressions") {
+    val func = 'foo.function(star())
+    def windowed(
+        partitioning: Seq[Expression] = Seq.empty,
+        ordering: Seq[SortOrder] = Seq.empty,
+        frame: WindowFrame = UnspecifiedFrame): Expression = {
+      WindowExpression(func, WindowSpecDefinition(partitioning, ordering, frame))
+    }
+
     val frameTypes = Seq(("rows", RowFrame), ("range", RangeFrame))
     val boundaries = Seq(
-      ("10 preceding", ValuePreceding(10), CurrentRow),
-      ("3 + 1 following", ValueFollowing(4), CurrentRow), // Will fail during analysis
+      // No between combinations
       ("unbounded preceding", UnboundedPreceding, CurrentRow),
+      ("2147483648 preceding", -Literal(2147483648L), CurrentRow),
+      ("10 preceding", -Literal(10), CurrentRow),
+      ("3 + 1 preceding", -Add(Literal(3), Literal(1)), CurrentRow),
+      ("0 preceding", -Literal(0), CurrentRow),
+      ("current row", CurrentRow, CurrentRow),
+      ("0 following", Literal(0), CurrentRow),
+      ("3 + 1 following", Add(Literal(3), Literal(1)), CurrentRow),
+      ("10 following", Literal(10), CurrentRow),
+      ("2147483649 following", Literal(2147483649L), CurrentRow),
       ("unbounded following", UnboundedFollowing, CurrentRow), // Will fail during analysis
+
+      // Between combinations
+      ("between unbounded preceding and 5 following",
+        UnboundedPreceding, Literal(5)),
+      ("between unbounded preceding and 3 + 1 following",
+        UnboundedPreceding, Add(Literal(3), Literal(1))),
+      ("between unbounded preceding and 2147483649 following",
+        UnboundedPreceding, Literal(2147483649L)),
       ("between unbounded preceding and current row", UnboundedPreceding, CurrentRow),
+      ("between 2147483648 preceding and current row", -Literal(2147483648L), CurrentRow),
+      ("between 10 preceding and current row", -Literal(10), CurrentRow),
+      ("between 3 + 1 preceding and current row", -Add(Literal(3), Literal(1)), CurrentRow),
+      ("between 0 preceding and current row", -Literal(0), CurrentRow),
+      ("between current row and current row", CurrentRow, CurrentRow),
+      ("between current row and 0 following", CurrentRow, Literal(0)),
+      ("between current row and 5 following", CurrentRow, Literal(5)),
+      ("between current row and 3 + 1 following", CurrentRow, Add(Literal(3), Literal(1))),
+      ("between current row and 2147483649 following", CurrentRow, Literal(2147483649L)),
+      ("between current row and unbounded following", CurrentRow, UnboundedFollowing),
+      ("between 2147483648 preceding and unbounded following",
+        -Literal(2147483648L), UnboundedFollowing),
+      ("between 10 preceding and unbounded following",
+        -Literal(10), UnboundedFollowing),
+      ("between 3 + 1 preceding and unbounded following",
+        -Add(Literal(3), Literal(1)), UnboundedFollowing),
+      ("between 0 preceding and unbounded following", -Literal(0), UnboundedFollowing),
+
+      // Between partial and full range
+      ("between 10 preceding and 5 following", -Literal(10), Literal(5)),
       ("between unbounded preceding and unbounded following",
-        UnboundedPreceding, UnboundedFollowing),
-      ("between 10 preceding and current row", ValuePreceding(10), CurrentRow),
-      ("between current row and 5 following", CurrentRow, ValueFollowing(5)),
-      ("between 10 preceding and 5 following", ValuePreceding(10), ValueFollowing(5))
+        UnboundedPreceding, UnboundedFollowing)
     )
     frameTypes.foreach {
       case (frameTypeSql, frameType) =>
@@ -288,13 +330,9 @@ class ExpressionParserSuite extends PlanTest {
         }
     }
 
-    // We cannot use non integer constants.
-    intercept("foo(*) over (partition by a order by b rows 10.0 preceding)",
-      "Frame bound value must be a constant integer.")
-
     // We cannot use an arbitrary expression.
     intercept("foo(*) over (partition by a order by b rows exp(b) preceding)",
-      "Frame bound value must be a constant integer.")
+      "Frame bound value must be a literal.")
   }
 
   test("row constructor") {
@@ -593,11 +631,6 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("1 + r.r As q", (Literal(1) + UnresolvedAttribute("r.r")).as("q"))
     assertEqual("1 - f('o', o(bar))", Literal(1) - 'f.function("o", 'o.function('bar)))
     intercept("1 - f('o', o(bar)) hello * world", "mismatched input '*'")
-  }
-
-  test("current date/timestamp braceless expressions") {
-    assertEqual("current_date", CurrentDate())
-    assertEqual("current_timestamp", CurrentTimestamp())
   }
 
   test("SPARK-17364, fully qualified column name which starts with number") {

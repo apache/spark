@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
-import org.apache.spark.sql.types.{DecimalType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 
 class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
   import spark.implicits._
@@ -67,6 +67,73 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
       assert(aliases.size == 1)
     }
   }
+
+  test("Validate catalog metadata for supported data types")  {
+    withTable("t") {
+      sql(
+        """
+          |CREATE TABLE t (
+          |c1 boolean,
+          |c2 tinyint,
+          |c3 smallint,
+          |c4 short,
+          |c5 bigint,
+          |c6 long,
+          |c7 float,
+          |c8 double,
+          |c9 date,
+          |c10 timestamp,
+          |c11 string,
+          |c12 char(10),
+          |c13 varchar(10),
+          |c14 binary,
+          |c15 decimal,
+          |c16 decimal(10),
+          |c17 decimal(10,2),
+          |c18 array<string>,
+          |c19 array<int>,
+          |c20 array<char(10)>,
+          |c21 map<int,int>,
+          |c22 map<int,char(10)>,
+          |c23 struct<a:int,b:int>,
+          |c24 struct<c:varchar(10),d:int>
+          |)
+        """.stripMargin)
+
+      val schema = hiveClient.getTable("default", "t").schema
+      val expectedSchema = new StructType()
+        .add("c1", "boolean")
+        .add("c2", "tinyint")
+        .add("c3", "smallint")
+        .add("c4", "short")
+        .add("c5", "bigint")
+        .add("c6", "long")
+        .add("c7", "float")
+        .add("c8", "double")
+        .add("c9", "date")
+        .add("c10", "timestamp")
+        .add("c11", "string")
+        .add("c12", "string", true,
+          new MetadataBuilder().putString(HIVE_TYPE_STRING, "char(10)").build())
+        .add("c13", "string", true,
+          new MetadataBuilder().putString(HIVE_TYPE_STRING, "varchar(10)").build())
+        .add("c14", "binary")
+        .add("c15", "decimal")
+        .add("c16", "decimal(10)")
+        .add("c17", "decimal(10,2)")
+        .add("c18", "array<string>")
+        .add("c19", "array<int>")
+        .add("c20", "array<string>", true,
+          new MetadataBuilder().putString(HIVE_TYPE_STRING, "array<char(10)>").build())
+        .add("c21", "map<int,int>")
+        .add("c22", "map<int,string>", true,
+          new MetadataBuilder().putString(HIVE_TYPE_STRING, "map<int,char(10)>").build())
+        .add("c23", "struct<a:int,b:int>")
+        .add("c24", "struct<c:string,d:int>", true,
+          new MetadataBuilder().putString(HIVE_TYPE_STRING, "struct<c:varchar(10),d:int>").build())
+      assert(schema == expectedSchema)
+    }
+  }
 }
 
 class DataSourceWithHiveMetastoreCatalogSuite
@@ -78,6 +145,12 @@ class DataSourceWithHiveMetastoreCatalogSuite
     ('id + 0.1) cast DecimalType(10, 3) as 'd1,
     'id cast StringType as 'd2
   ).coalesce(1)
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sparkSession.sessionState.catalog.reset()
+    sparkSession.metadataHive.reset()
+  }
 
   Seq(
     "parquet" -> ((
@@ -93,13 +166,13 @@ class DataSourceWithHiveMetastoreCatalogSuite
     ))
   ).foreach { case (provider, (inputFormat, outputFormat, serde)) =>
     test(s"Persist non-partitioned $provider relation into metastore as managed table") {
-      withTable("t") {
+      withTable("default.t") {
         withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true") {
           testDF
             .write
             .mode(SaveMode.Overwrite)
             .format(provider)
-            .saveAsTable("t")
+            .saveAsTable("default.t")
         }
 
         val hiveTable = sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
@@ -114,14 +187,15 @@ class DataSourceWithHiveMetastoreCatalogSuite
         assert(columns.map(_.name) === Seq("d1", "d2"))
         assert(columns.map(_.dataType) === Seq(DecimalType(10, 3), StringType))
 
-        checkAnswer(table("t"), testDF)
-        assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
+        checkAnswer(table("default.t"), testDF)
+        assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM default.t") ===
+          Seq("1.1\t1", "2.1\t2"))
       }
     }
 
     test(s"Persist non-partitioned $provider relation into metastore as external table") {
       withTempPath { dir =>
-        withTable("t") {
+        withTable("default.t") {
           val path = dir.getCanonicalFile
 
           withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true") {
@@ -130,7 +204,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
               .mode(SaveMode.Overwrite)
               .format(provider)
               .option("path", path.toString)
-              .saveAsTable("t")
+              .saveAsTable("default.t")
           }
 
           val hiveTable =
@@ -146,8 +220,8 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(columns.map(_.name) === Seq("d1", "d2"))
           assert(columns.map(_.dataType) === Seq(DecimalType(10, 3), StringType))
 
-          checkAnswer(table("t"), testDF)
-          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
+          checkAnswer(table("default.t"), testDF)
+          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM default.t") ===
             Seq("1.1\t1", "2.1\t2"))
         }
       }
@@ -155,9 +229,9 @@ class DataSourceWithHiveMetastoreCatalogSuite
 
     test(s"Persist non-partitioned $provider relation into metastore as managed table using CTAS") {
       withTempPath { dir =>
-        withTable("t") {
+        withTable("default.t") {
           sql(
-            s"""CREATE TABLE t USING $provider
+            s"""CREATE TABLE default.t USING $provider
                |OPTIONS (path '${dir.toURI}')
                |AS SELECT 1 AS d1, "val_1" AS d2
              """.stripMargin)
@@ -175,10 +249,12 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(columns.map(_.name) === Seq("d1", "d2"))
           assert(columns.map(_.dataType) === Seq(IntegerType, StringType))
 
-          checkAnswer(table("t"), Row(1, "val_1"))
-          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") === Seq("1\tval_1"))
+          checkAnswer(table("default.t"), Row(1, "val_1"))
+          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM default.t") ===
+            Seq("1\tval_1"))
         }
       }
     }
+
   }
 }

@@ -102,8 +102,7 @@ class FileStreamSink(
       val committer = FileCommitProtocol.instantiate(
         className = sparkSession.sessionState.conf.streamingFileCommitProtocolClass,
         jobId = batchId.toString,
-        outputPath = path,
-        isAppend = false)
+        outputPath = path)
 
       committer match {
         case manifestCommitter: ManifestFileCommitProtocol =>
@@ -119,17 +118,18 @@ class FileStreamSink(
           throw new RuntimeException(s"Partition column $col not found in schema ${data.schema}")
         }
       }
+      val qe = data.queryExecution
 
       FileFormatWriter.write(
         sparkSession = sparkSession,
-        plan = data.queryExecution.executedPlan,
+        plan = qe.executedPlan,
         fileFormat = fileFormat,
         committer = committer,
-        outputSpec = FileFormatWriter.OutputSpec(path, Map.empty),
+        outputSpec = FileFormatWriter.OutputSpec(path, Map.empty, qe.analyzed.output),
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = None,
-        refreshFunction = _ => (),
+        statsTrackers = Nil,
         options = options)
     }
   }

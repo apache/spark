@@ -17,13 +17,15 @@
 
 package org.apache.spark.deploy
 
-import java.io.IOException
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable.Map
 import scala.collection.mutable
+import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
@@ -59,54 +61,48 @@ class SparkHadoopUtil extends Logging {
    * do a FileSystem.closeAllForUGI in order to avoid leaking Filesystems
    */
   def runAsSparkUser(func: () => Unit) {
-    val user = Utils.getCurrentUserName()
-    logDebug("running as user: " + user)
-    val ugi = UserGroupInformation.createRemoteUser(user)
-    transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
-    ugi.doAs(new PrivilegedExceptionAction[Unit] {
+    createSparkUser().doAs(new PrivilegedExceptionAction[Unit] {
       def run: Unit = func()
     })
   }
 
-  def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
-    for (token <- source.getTokens.asScala) {
-      dest.addToken(token)
-    }
+  def createSparkUser(): UserGroupInformation = {
+    val user = Utils.getCurrentUserName()
+    logDebug("creating UGI for user: " + user)
+    val ugi = UserGroupInformation.createRemoteUser(user)
+    transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
+    ugi
   }
 
+  def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
+    dest.addCredentials(source.getCredentials())
+  }
 
   /**
    * Appends S3-specific, spark.hadoop.*, and spark.buffer.size configurations to a Hadoop
    * configuration.
    */
   def appendS3AndSparkHadoopConfigurations(conf: SparkConf, hadoopConf: Configuration): Unit = {
-    // Note: this null check is around more than just access to the "conf" object to maintain
-    // the behavior of the old implementation of this code, for backwards compatibility.
-    if (conf != null) {
-      // Explicitly check for S3 environment variables
-      val keyId = System.getenv("AWS_ACCESS_KEY_ID")
-      val accessKey = System.getenv("AWS_SECRET_ACCESS_KEY")
-      if (keyId != null && accessKey != null) {
-        hadoopConf.set("fs.s3.awsAccessKeyId", keyId)
-        hadoopConf.set("fs.s3n.awsAccessKeyId", keyId)
-        hadoopConf.set("fs.s3a.access.key", keyId)
-        hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey)
-        hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey)
-        hadoopConf.set("fs.s3a.secret.key", accessKey)
+    SparkHadoopUtil.appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
+  }
 
-        val sessionToken = System.getenv("AWS_SESSION_TOKEN")
-        if (sessionToken != null) {
-          hadoopConf.set("fs.s3a.session.token", sessionToken)
-        }
-      }
-      // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
-      conf.getAll.foreach { case (key, value) =>
-        if (key.startsWith("spark.hadoop.")) {
-          hadoopConf.set(key.substring("spark.hadoop.".length), value)
-        }
-      }
-      val bufferSize = conf.get("spark.buffer.size", "65536")
-      hadoopConf.set("io.file.buffer.size", bufferSize)
+  /**
+   * Appends spark.hadoop.* configurations from a [[SparkConf]] to a Hadoop
+   * configuration without the spark.hadoop. prefix.
+   */
+  def appendSparkHadoopConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
+    SparkHadoopUtil.appendSparkHadoopConfigs(conf, hadoopConf)
+  }
+
+  /**
+   * Appends spark.hadoop.* configurations from a Map to another without the spark.hadoop. prefix.
+   */
+  def appendSparkHadoopConfigs(
+      srcMap: Map[String, String],
+      destMap: HashMap[String, String]): Unit = {
+    // Copy any "spark.hadoop.foo=bar" system properties into destMap as "foo=bar"
+    for ((key, value) <- srcMap if key.startsWith("spark.hadoop.")) {
+      destMap.put(key.substring("spark.hadoop.".length), value)
     }
   }
 
@@ -115,29 +111,41 @@ class SparkHadoopUtil extends Logging {
    * subsystems.
    */
   def newConfiguration(conf: SparkConf): Configuration = {
-    val hadoopConf = new Configuration()
-    appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
-    hadoopConf
+    SparkHadoopUtil.newConfiguration(conf)
   }
 
   /**
    * Add any user credentials to the job conf which are necessary for running on a secure Hadoop
    * cluster.
    */
-  def addCredentials(conf: JobConf) {}
+  def addCredentials(conf: JobConf): Unit = {
+    val jobCreds = conf.getCredentials()
+    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
+  }
 
-  def isYarnMode(): Boolean = { false }
+  def addCurrentUserCredentials(creds: Credentials): Unit = {
+    UserGroupInformation.getCurrentUser.addCredentials(creds)
+  }
 
-  def getCurrentUserCredentials(): Credentials = { null }
+  def loginUserFromKeytab(principalName: String, keytabFilename: String): Unit = {
+    if (!new File(keytabFilename).exists()) {
+      throw new SparkException(s"Keytab file: ${keytabFilename} does not exist")
+    } else {
+      logInfo("Attempting to login to Kerberos " +
+        s"using principal: ${principalName} and keytab: ${keytabFilename}")
+      UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
+    }
+  }
 
-  def addCurrentUserCredentials(creds: Credentials) {}
-
-  def addSecretKeyToUserCredentials(key: String, secret: String) {}
-
-  def getSecretKeyFromUserCredentials(key: String): Array[Byte] = { null }
-
-  def loginUserFromKeytab(principalName: String, keytabFilename: String) {
-    UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
+  /**
+   * Add or overwrite current user's credentials with serialized delegation tokens,
+   * also confirms correct hadoop configuration is set.
+   */
+  private[spark] def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
+    UserGroupInformation.setConfiguration(newConfiguration(sparkConf))
+    val creds = deserialize(tokens)
+    logInfo(s"Adding/updating delegation tokens ${dumpTokens(creds)}")
+    addCurrentUserCredentials(creds)
   }
 
   /**
@@ -227,6 +235,10 @@ class SparkHadoopUtil extends Logging {
 
   def globPath(pattern: Path): Seq[Path] = {
     val fs = pattern.getFileSystem(conf)
+    globPath(fs, pattern)
+  }
+
+  def globPath(fs: FileSystem, pattern: Path): Seq[Path] = {
     Option(fs.globStatus(pattern)).map { statuses =>
       statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toSeq
     }.getOrElse(Seq.empty[Path])
@@ -234,6 +246,10 @@ class SparkHadoopUtil extends Logging {
 
   def globPathIfNecessary(pattern: Path): Seq[Path] = {
     if (isGlobPath(pattern)) globPath(pattern) else Seq(pattern)
+  }
+
+  def globPathIfNecessary(fs: FileSystem, pattern: Path): Seq[Path] = {
+    if (isGlobPath(pattern)) globPath(fs, pattern) else Seq(pattern)
   }
 
   /**
@@ -304,17 +320,6 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Start a thread to periodically update the current user's credentials with new credentials so
-   * that access to secured service does not fail.
-   */
-  private[spark] def startCredentialUpdater(conf: SparkConf) {}
-
-  /**
-   * Stop the thread that does the credential updates.
-   */
-  private[spark] def stopCredentialUpdater() {}
-
-  /**
    * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.
    * This is to prevent the DFSClient from using an old cached token to connect to the NameNode.
    */
@@ -337,7 +342,7 @@ class SparkHadoopUtil extends Logging {
     if (credentials != null) {
       credentials.getAllTokens.asScala.map(tokenToString)
     } else {
-      Seq()
+      Seq.empty
     }
   }
 
@@ -392,18 +397,31 @@ class SparkHadoopUtil extends Logging {
       s"${if (status.isDirectory) "d" else "-"}$perm")
     false
   }
+
+  def serialize(creds: Credentials): Array[Byte] = {
+    val byteStream = new ByteArrayOutputStream
+    val dataStream = new DataOutputStream(byteStream)
+    creds.writeTokenStorageToStream(dataStream)
+    byteStream.toByteArray
+  }
+
+  def deserialize(tokenBytes: Array[Byte]): Credentials = {
+    val tokensBuf = new ByteArrayInputStream(tokenBytes)
+
+    val creds = new Credentials()
+    creds.readTokenStorageStream(new DataInputStream(tokensBuf))
+    creds
+  }
+
+  def isProxyUser(ugi: UserGroupInformation): Boolean = {
+    ugi.getAuthenticationMethod() == UserGroupInformation.AuthenticationMethod.PROXY
+  }
+
 }
 
 object SparkHadoopUtil {
 
-  private lazy val hadoop = new SparkHadoopUtil
-  private lazy val yarn = try {
-    Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
-      .newInstance()
-      .asInstanceOf[SparkHadoopUtil]
-  } catch {
-    case e: Exception => throw new SparkException("Unable to load YARN support", e)
-  }
+  private lazy val instance = new SparkHadoopUtil
 
   val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
 
@@ -417,14 +435,64 @@ object SparkHadoopUtil {
    */
   private[spark] val UPDATE_INPUT_METRICS_INTERVAL_RECORDS = 1000
 
-  def get: SparkHadoopUtil = {
-    // Check each time to support changing to/from YARN
-    val yarnMode = java.lang.Boolean.parseBoolean(
-        System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
-    if (yarnMode) {
-      yarn
-    } else {
-      hadoop
+  def get: SparkHadoopUtil = instance
+
+  /**
+   * Given an expiration date (e.g. for Hadoop Delegation Tokens) return a the date
+   * when a given fraction of the duration until the expiration date has passed.
+   * Formula: current time + (fraction * (time until expiration))
+   * @param expirationDate Drop-dead expiration date
+   * @param fraction fraction of the time until expiration return
+   * @return Date when the fraction of the time until expiration has passed
+   */
+  private[spark] def getDateOfNextUpdate(expirationDate: Long, fraction: Double): Long = {
+    val ct = System.currentTimeMillis
+    (ct + (fraction * (expirationDate - ct))).toLong
+  }
+
+  /**
+   * Returns a Configuration object with Spark configuration applied on top. Unlike
+   * the instance method, this will always return a Configuration instance, and not a
+   * cluster manager-specific type.
+   */
+  private[spark] def newConfiguration(conf: SparkConf): Configuration = {
+    val hadoopConf = new Configuration()
+    appendS3AndSparkHadoopConfigurations(conf, hadoopConf)
+    hadoopConf
+  }
+
+  private def appendS3AndSparkHadoopConfigurations(
+      conf: SparkConf,
+      hadoopConf: Configuration): Unit = {
+    // Note: this null check is around more than just access to the "conf" object to maintain
+    // the behavior of the old implementation of this code, for backwards compatibility.
+    if (conf != null) {
+      // Explicitly check for S3 environment variables
+      val keyId = System.getenv("AWS_ACCESS_KEY_ID")
+      val accessKey = System.getenv("AWS_SECRET_ACCESS_KEY")
+      if (keyId != null && accessKey != null) {
+        hadoopConf.set("fs.s3.awsAccessKeyId", keyId)
+        hadoopConf.set("fs.s3n.awsAccessKeyId", keyId)
+        hadoopConf.set("fs.s3a.access.key", keyId)
+        hadoopConf.set("fs.s3.awsSecretAccessKey", accessKey)
+        hadoopConf.set("fs.s3n.awsSecretAccessKey", accessKey)
+        hadoopConf.set("fs.s3a.secret.key", accessKey)
+
+        val sessionToken = System.getenv("AWS_SESSION_TOKEN")
+        if (sessionToken != null) {
+          hadoopConf.set("fs.s3a.session.token", sessionToken)
+        }
+      }
+      appendSparkHadoopConfigs(conf, hadoopConf)
+      val bufferSize = conf.get("spark.buffer.size", "65536")
+      hadoopConf.set("io.file.buffer.size", bufferSize)
+    }
+  }
+
+  private def appendSparkHadoopConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
+    // Copy any "spark.hadoop.foo=bar" spark properties into conf as "foo=bar"
+    for ((key, value) <- conf.getAll if key.startsWith("spark.hadoop.")) {
+      hadoopConf.set(key.substring("spark.hadoop.".length), value)
     }
   }
 }

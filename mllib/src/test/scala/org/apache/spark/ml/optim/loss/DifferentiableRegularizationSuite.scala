@@ -17,20 +17,21 @@
 package org.apache.spark.ml.optim.loss
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{BLAS, Vectors}
 
 class DifferentiableRegularizationSuite extends SparkFunSuite {
 
   test("L2 regularization") {
     val shouldApply = (_: Int) => true
     val regParam = 0.3
-    val coefficients = Array(1.0, 3.0, -2.0)
+    val coefficients = Vectors.dense(Array(1.0, 3.0, -2.0))
     val numFeatures = coefficients.size
 
     // check without features standard
     val regFun = new L2Regularization(regParam, shouldApply, None)
     val (loss, grad) = regFun.calculate(coefficients)
-    assert(loss === 0.5 * regParam * coefficients.map(x => x * x).sum)
-    assert(grad === coefficients.map(_ * regParam))
+    assert(loss === 0.5 * regParam * BLAS.dot(coefficients, coefficients))
+    assert(grad === Vectors.dense(coefficients.toArray.map(_ * regParam)))
 
     // check with features standard
     val featuresStd = Array(0.1, 1.1, 0.5)
@@ -39,9 +40,9 @@ class DifferentiableRegularizationSuite extends SparkFunSuite {
     val expectedLossStd = 0.5 * regParam * (0 until numFeatures).map { j =>
       coefficients(j) * coefficients(j) / (featuresStd(j) * featuresStd(j))
     }.sum
-    val expectedGradientStd = (0 until numFeatures).map { j =>
+    val expectedGradientStd = Vectors.dense((0 until numFeatures).map { j =>
       regParam * coefficients(j) / (featuresStd(j) * featuresStd(j))
-    }.toArray
+    }.toArray)
     assert(lossStd === expectedLossStd)
     assert(gradStd === expectedGradientStd)
 
@@ -50,7 +51,7 @@ class DifferentiableRegularizationSuite extends SparkFunSuite {
     val regFunApply = new L2Regularization(regParam, shouldApply2, None)
     val (lossApply, gradApply) = regFunApply.calculate(coefficients)
     assert(lossApply === 0.5 * regParam * coefficients(1) * coefficients(1))
-    assert(gradApply ===  Array(0.0, coefficients(1) * regParam, 0.0))
+    assert(gradApply ===  Vectors.dense(0.0, coefficients(1) * regParam, 0.0))
 
     // check with zero features standard
     val featuresStdZero = Array(0.1, 0.0, 0.5)

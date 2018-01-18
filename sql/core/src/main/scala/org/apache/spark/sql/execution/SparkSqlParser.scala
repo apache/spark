@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable, _}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types.StructType
 
@@ -90,30 +90,40 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create an [[AnalyzeTableCommand]] command or an [[AnalyzeColumnCommand]] command.
-   * Example SQL for analyzing table :
+   * Create an [[AnalyzeTableCommand]] command, or an [[AnalyzePartitionCommand]]
+   * or an [[AnalyzeColumnCommand]] command.
+   * Example SQL for analyzing a table or a set of partitions :
    * {{{
-   *   ANALYZE TABLE table COMPUTE STATISTICS [NOSCAN];
+   *   ANALYZE TABLE [db_name.]tablename [PARTITION (partcol1[=val1], partcol2[=val2], ...)]
+   *   COMPUTE STATISTICS [NOSCAN];
    * }}}
+   *
    * Example SQL for analyzing columns :
    * {{{
-   *   ANALYZE TABLE table COMPUTE STATISTICS FOR COLUMNS column1, column2;
+   *   ANALYZE TABLE [db_name.]tablename COMPUTE STATISTICS FOR COLUMNS column1, column2;
    * }}}
    */
   override def visitAnalyze(ctx: AnalyzeContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.partitionSpec != null) {
-      logWarning(s"Partition specification is ignored: ${ctx.partitionSpec.getText}")
+    if (ctx.identifier != null &&
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
+      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
     }
-    if (ctx.identifier != null) {
-      if (ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-        throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
+
+    val table = visitTableIdentifier(ctx.tableIdentifier)
+    if (ctx.identifierSeq() == null) {
+      if (ctx.partitionSpec != null) {
+        AnalyzePartitionCommand(table, visitPartitionSpec(ctx.partitionSpec),
+          noscan = ctx.identifier != null)
+      } else {
+        AnalyzeTableCommand(table, noscan = ctx.identifier != null)
       }
-      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier))
-    } else if (ctx.identifierSeq() == null) {
-      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier), noscan = false)
     } else {
+      if (ctx.partitionSpec != null) {
+        logWarning("Partition specification is ignored when collecting column statistics: " +
+          ctx.partitionSpec.getText)
+      }
       AnalyzeColumnCommand(
-        visitTableIdentifier(ctx.tableIdentifier),
+        table,
         visitIdentifierSeq(ctx.identifierSeq()))
     }
   }
@@ -276,7 +286,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[ClearCacheCommand]] logical plan.
    */
   override def visitClearCache(ctx: ClearCacheContext): LogicalPlan = withOrigin(ctx) {
-    ClearCacheCommand
+    ClearCacheCommand()
   }
 
   /**
@@ -304,7 +314,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         codegen = ctx.CODEGEN != null,
         cost = ctx.COST != null)
     } else {
-      ExplainCommand(OneRowRelation)
+      ExplainCommand(OneRowRelation())
     }
   }
 
@@ -320,10 +330,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Create a [[DescribeTableCommand]] logical plan.
    */
   override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
-    // Describe column are not supported yet. Return null and let the parser decide
-    // what to do with this (create an exception or pass it on to a different system).
+    val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
     if (ctx.describeColName != null) {
-      null
+      if (ctx.partitionSpec != null) {
+        throw new ParseException("DESC TABLE COLUMN for a specific partition is not supported", ctx)
+      } else {
+        DescribeColumnCommand(
+          visitTableIdentifier(ctx.tableIdentifier),
+          ctx.describeColName.nameParts.asScala.map(_.getText),
+          isExtended)
+      }
     } else {
       val partitionSpec = if (ctx.partitionSpec != null) {
         // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
@@ -338,7 +354,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       DescribeTableCommand(
         visitTableIdentifier(ctx.tableIdentifier),
         partitionSpec,
-        ctx.EXTENDED != null || ctx.FORMATTED != null)
+        isExtended)
     }
   }
 
@@ -367,15 +383,19 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * {{{
    *   CREATE [TEMPORARY] TABLE [IF NOT EXISTS] [db_name.]table_name
    *   USING table_provider
-   *   [OPTIONS table_property_list]
-   *   [PARTITIONED BY (col_name, col_name, ...)]
-   *   [CLUSTERED BY (col_name, col_name, ...)
-   *    [SORTED BY (col_name [ASC|DESC], ...)]
-   *    INTO num_buckets BUCKETS
-   *   ]
-   *   [LOCATION path]
-   *   [COMMENT table_comment]
-   *   [AS select_statement];
+   *   create_table_clauses
+   *   [[AS] select_statement];
+   *
+   *   create_table_clauses (order insensitive):
+   *     [OPTIONS table_property_list]
+   *     [PARTITIONED BY (col_name, col_name, ...)]
+   *     [CLUSTERED BY (col_name, col_name, ...)
+   *       [SORTED BY (col_name [ASC|DESC], ...)]
+   *       INTO num_buckets BUCKETS
+   *     ]
+   *     [LOCATION path]
+   *     [COMMENT table_comment]
+   *     [TBLPROPERTIES (property_name=property_value, ...)]
    * }}}
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
@@ -383,6 +403,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     if (external) {
       operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
     }
+
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+    checkDuplicateClauses(ctx.OPTIONS, "OPTIONS", ctx)
+    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
+    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
+    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
+
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
     val schema = Option(ctx.colTypeList()).map(createSchema)
@@ -390,9 +418,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       Option(ctx.partitionColumnNames)
         .map(visitIdentifierList(_).toArray)
         .getOrElse(Array.empty[String])
-    val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
+    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
 
-    val location = Option(ctx.locationSpec).map(visitLocationSpec)
+    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
     val storage = DataSource.buildStorageFormatFromOptions(options)
 
     if (location.isDefined && storage.locationUri.isDefined) {
@@ -400,7 +429,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
           "you can only specify one of them.", ctx)
     }
-    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI(_)))
+    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI))
 
     val tableType = if (customLocation.isDefined) {
       CatalogTableType.EXTERNAL
@@ -416,6 +445,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       provider = Some(provider),
       partitionColumnNames = partitionColumnNames,
       bucketSpec = bucketSpec,
+      properties = properties,
       comment = Option(ctx.comment).map(string))
 
     // Determine the storage mode.
@@ -1068,13 +1098,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * {{{
    *   CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
    *   [(col1[:] data_type [COMMENT col_comment], ...)]
-   *   [COMMENT table_comment]
-   *   [PARTITIONED BY (col2[:] data_type [COMMENT col_comment], ...)]
-   *   [ROW FORMAT row_format]
-   *   [STORED AS file_format]
-   *   [LOCATION path]
-   *   [TBLPROPERTIES (property_name=property_value, ...)]
+   *   create_table_clauses
    *   [AS select_statement];
+   *
+   *   create_table_clauses (order insensitive):
+   *     [COMMENT table_comment]
+   *     [PARTITIONED BY (col2[:] data_type [COMMENT col_comment], ...)]
+   *     [ROW FORMAT row_format]
+   *     [STORED AS file_format]
+   *     [LOCATION path]
+   *     [TBLPROPERTIES (property_name=property_value, ...)]
    * }}}
    */
   override def visitCreateHiveTable(ctx: CreateHiveTableContext): LogicalPlan = withOrigin(ctx) {
@@ -1085,15 +1118,23 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         "CREATE TEMPORARY TABLE is not supported yet. " +
           "Please use CREATE TEMPORARY VIEW as an alternative.", ctx)
     }
-    if (ctx.skewSpec != null) {
+    if (ctx.skewSpec.size > 0) {
       operationNotAllowed("CREATE TABLE ... SKEWED BY", ctx)
     }
 
+    checkDuplicateClauses(ctx.TBLPROPERTIES, "TBLPROPERTIES", ctx)
+    checkDuplicateClauses(ctx.PARTITIONED, "PARTITIONED BY", ctx)
+    checkDuplicateClauses(ctx.COMMENT, "COMMENT", ctx)
+    checkDuplicateClauses(ctx.bucketSpec(), "CLUSTERED BY", ctx)
+    checkDuplicateClauses(ctx.createFileFormat, "STORED AS/BY", ctx)
+    checkDuplicateClauses(ctx.rowFormat, "ROW FORMAT", ctx)
+    checkDuplicateClauses(ctx.locationSpec, "LOCATION", ctx)
+
     val dataCols = Option(ctx.columns).map(visitColTypeList).getOrElse(Nil)
     val partitionCols = Option(ctx.partitionColumns).map(visitColTypeList).getOrElse(Nil)
-    val properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val selectQuery = Option(ctx.query).map(plan)
-    val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
+    val bucketSpec = ctx.bucketSpec().asScala.headOption.map(visitBucketSpec)
 
     // Note: Hive requires partition columns to be distinct from the schema, so we need
     // to include the partition columns here explicitly
@@ -1101,12 +1142,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     // Storage format
     val defaultStorage = HiveSerDe.getDefaultStorage(conf)
-    validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
-    val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
+    validateRowFormatFileFormat(ctx.rowFormat.asScala, ctx.createFileFormat.asScala, ctx)
+    val fileStorage = ctx.createFileFormat.asScala.headOption.map(visitCreateFileFormat)
       .getOrElse(CatalogStorageFormat.empty)
-    val rowStorage = Option(ctx.rowFormat).map(visitRowFormat)
+    val rowStorage = ctx.rowFormat.asScala.headOption.map(visitRowFormat)
       .getOrElse(CatalogStorageFormat.empty)
-    val location = Option(ctx.locationSpec).map(visitLocationSpec)
+    val location = ctx.locationSpec.asScala.headOption.map(visitLocationSpec)
     // If we are creating an EXTERNAL table, then the LOCATION field is required
     if (external && location.isEmpty) {
       operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
@@ -1161,7 +1202,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
             ctx)
         }
 
-        val hasStorageProperties = (ctx.createFileFormat != null) || (ctx.rowFormat != null)
+        val hasStorageProperties = (ctx.createFileFormat.size != 0) || (ctx.rowFormat.size != 0)
         if (conf.convertCTAS && !hasStorageProperties) {
           // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
           // are empty Maps.
@@ -1347,6 +1388,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     }
   }
 
+  private def validateRowFormatFileFormat(
+      rowFormatCtx: Seq[RowFormatContext],
+      createFileFormatCtx: Seq[CreateFileFormatContext],
+      parentCtx: ParserRuleContext): Unit = {
+    if (rowFormatCtx.size == 1 && createFileFormatCtx.size == 1) {
+      validateRowFormatFileFormat(rowFormatCtx.head, createFileFormatCtx.head, parentCtx)
+    }
+  }
+
   /**
    * Create or replace a view. This creates a [[CreateViewCommand]] command.
    *
@@ -1498,5 +1548,82 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       expressions: Seq[Expression],
       query: LogicalPlan): LogicalPlan = {
     RepartitionByExpression(expressions, query, conf.numShufflePartitions)
+  }
+
+  /**
+   * Return the parameters for [[InsertIntoDir]] logical plan.
+   *
+   * Expected format:
+   * {{{
+   *   INSERT OVERWRITE DIRECTORY
+   *   [path]
+   *   [OPTIONS table_property_list]
+   *   select_statement;
+   * }}}
+   */
+  override def visitInsertOverwriteDir(
+      ctx: InsertOverwriteDirContext): InsertDirParams = withOrigin(ctx) {
+    if (ctx.LOCAL != null) {
+      throw new ParseException(
+        "LOCAL is not supported in INSERT OVERWRITE DIRECTORY to data source", ctx)
+    }
+
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    var storage = DataSource.buildStorageFormatFromOptions(options)
+
+    val path = Option(ctx.path).map(string).getOrElse("")
+
+    if (!(path.isEmpty ^ storage.locationUri.isEmpty)) {
+      throw new ParseException(
+        "Directory path and 'path' in OPTIONS should be specified one, but not both", ctx)
+    }
+
+    if (!path.isEmpty) {
+      val customLocation = Some(CatalogUtils.stringToURI(path))
+      storage = storage.copy(locationUri = customLocation)
+    }
+
+    val provider = ctx.tableProvider.qualifiedName.getText
+
+    (false, storage, Some(provider))
+  }
+
+  /**
+   * Return the parameters for [[InsertIntoDir]] logical plan.
+   *
+   * Expected format:
+   * {{{
+   *   INSERT OVERWRITE [LOCAL] DIRECTORY
+   *   path
+   *   [ROW FORMAT row_format]
+   *   [STORED AS file_format]
+   *   select_statement;
+   * }}}
+   */
+  override def visitInsertOverwriteHiveDir(
+      ctx: InsertOverwriteHiveDirContext): InsertDirParams = withOrigin(ctx) {
+    validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
+    val rowStorage = Option(ctx.rowFormat).map(visitRowFormat)
+      .getOrElse(CatalogStorageFormat.empty)
+    val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
+      .getOrElse(CatalogStorageFormat.empty)
+
+    val path = string(ctx.path)
+    // The path field is required
+    if (path.isEmpty) {
+      operationNotAllowed("INSERT OVERWRITE DIRECTORY must be accompanied by path", ctx)
+    }
+
+    val defaultStorage = HiveSerDe.getDefaultStorage(conf)
+
+    val storage = CatalogStorageFormat(
+      locationUri = Some(CatalogUtils.stringToURI(path)),
+      inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
+      outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
+      serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
+      compressed = false,
+      properties = rowStorage.properties ++ fileStorage.properties)
+
+    (ctx.LOCAL != null, storage, Some(DDLUtils.HIVE_PROVIDER))
   }
 }

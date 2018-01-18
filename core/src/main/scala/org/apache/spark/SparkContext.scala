@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import java.io._
-import java.lang.reflect.Constructor
 import java.net.URI
 import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap}
@@ -54,10 +53,10 @@ import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, StandaloneSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
+import org.apache.spark.status.AppStatusStore
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
-import org.apache.spark.ui.jobs.JobProgressListener
 import org.apache.spark.util._
 
 /**
@@ -145,9 +144,8 @@ class SparkContext(config: SparkConf) extends Logging {
     this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
   }
 
-  // NOTE: The below constructors could be consolidated using default arguments. Due to
-  // Scala bug SI-8479, however, this causes the compile step to fail when generating docs.
-  // Until we have a good workaround for that bug the constructors remain broken out.
+  // The following constructors are required when Java code accesses SparkContext directly.
+  // Please see SI-4278
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -195,7 +193,6 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _eventLogCodec: Option[String] = None
   private var _listenerBus: LiveListenerBus = _
   private var _env: SparkEnv = _
-  private var _jobProgressListener: JobProgressListener = _
   private var _statusTracker: SparkStatusTracker = _
   private var _progressBar: Option[ConsoleProgressBar] = None
   private var _ui: Option[SparkUI] = None
@@ -214,6 +211,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
+  private var _statusStore: AppStatusStore = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -245,6 +243,8 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def isStopped: Boolean = stopped.get()
 
+  private[spark] def statusStore: AppStatusStore = _statusStore
+
   // An asynchronous listener bus for Spark events
   private[spark] def listenerBus: LiveListenerBus = _listenerBus
 
@@ -267,8 +267,6 @@ class SparkContext(config: SparkConf) extends Logging {
     val map: ConcurrentMap[Int, RDD[_]] = new MapMaker().weakValues().makeMap[Int, RDD[_]]()
     map.asScala
   }
-  private[spark] def jobProgressListener: JobProgressListener = _jobProgressListener
-
   def statusTracker: SparkStatusTracker = _statusTracker
 
   private[spark] def progressBar: Option[ConsoleProgressBar] = _progressBar
@@ -311,6 +309,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * (i.e.
    *  in case of local spark app something like 'local-1433865536131'
    *  in case of YARN something like 'application_1433865536131_34483'
+   *  in case of MESOS something like 'driver-20170926223339-0001'
    * )
    */
   def applicationId: String = _applicationId
@@ -413,14 +412,12 @@ class SparkContext(config: SparkConf) extends Logging {
       }
     }
 
-    if (master == "yarn" && deployMode == "client") System.setProperty("SPARK_YARN_MODE", "true")
-
     _listenerBus = new LiveListenerBus(_conf)
 
-    // "_jobProgressListener" should be set up before creating SparkEnv because when creating
-    // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
-    _jobProgressListener = new JobProgressListener(_conf)
-    listenerBus.addListener(jobProgressListener)
+    // Initialize the app status store and listener before SparkEnv is created so that it gets
+    // all events.
+    _statusStore = AppStatusStore.createLiveStore(conf)
+    listenerBus.addToStatusQueue(_statusStore.listener.get)
 
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
@@ -432,10 +429,10 @@ class SparkContext(config: SparkConf) extends Logging {
       _conf.set("spark.repl.class.uri", replUri)
     }
 
-    _statusTracker = new SparkStatusTracker(this)
+    _statusTracker = new SparkStatusTracker(this, _statusStore)
 
     _progressBar =
-      if (_conf.getBoolean("spark.ui.showConsoleProgress", true) && !log.isInfoEnabled) {
+      if (_conf.get(UI_SHOW_CONSOLE_PROGRESS) && !log.isInfoEnabled) {
         Some(new ConsoleProgressBar(this))
       } else {
         None
@@ -443,8 +440,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _ui =
       if (conf.getBoolean("spark.ui.enabled", true)) {
-        Some(SparkUI.createLiveUI(this, _conf, listenerBus, _jobProgressListener,
-          _env.securityManager, appName, startTime = startTime))
+        Some(SparkUI.create(Some(this), _statusStore, _conf, _env.securityManager, appName, "",
+          startTime))
       } else {
         // For tests, do not enable the UI
         None
@@ -523,7 +520,7 @@ class SparkContext(config: SparkConf) extends Logging {
           new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
             _conf, _hadoopConfiguration)
         logger.start()
-        listenerBus.addListener(logger)
+        listenerBus.addToEventLogQueue(logger)
         Some(logger)
       } else {
         None
@@ -1491,6 +1488,8 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Add a file to be downloaded with this Spark job on every node.
    *
+   * If a file is added during execution, it will not be available until the next TaskSet starts.
+   *
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
    * use `SparkFiles.get(fileName)` to find its download location.
@@ -1506,6 +1505,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Add a file to be downloaded with this Spark job on every node.
+   *
+   * If a file is added during execution, it will not be available until the next TaskSet starts.
    *
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
@@ -1560,7 +1561,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   @DeveloperApi
   def addSparkListener(listener: SparkListenerInterface) {
-    listenerBus.addListener(listener)
+    listenerBus.addToSharedQueue(listener)
   }
 
   /**
@@ -1574,10 +1575,10 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private[spark] def getExecutorIds(): Seq[String] = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend =>
+      case b: ExecutorAllocationClient =>
         b.getExecutorIds()
       case _ =>
-        logWarning("Requesting executors is only supported in coarse-grained mode")
+        logWarning("Requesting executors is not supported by current scheduler.")
         Nil
     }
   }
@@ -1603,10 +1604,10 @@ class SparkContext(config: SparkConf) extends Logging {
       hostToLocalTaskCount: scala.collection.immutable.Map[String, Int]
     ): Boolean = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend =>
+      case b: ExecutorAllocationClient =>
         b.requestTotalExecutors(numExecutors, localityAwareTasks, hostToLocalTaskCount)
       case _ =>
-        logWarning("Requesting executors is only supported in coarse-grained mode")
+        logWarning("Requesting executors is not supported by current scheduler.")
         false
     }
   }
@@ -1619,10 +1620,10 @@ class SparkContext(config: SparkConf) extends Logging {
   @DeveloperApi
   def requestExecutors(numAdditionalExecutors: Int): Boolean = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend =>
+      case b: ExecutorAllocationClient =>
         b.requestExecutors(numAdditionalExecutors)
       case _ =>
-        logWarning("Requesting executors is only supported in coarse-grained mode")
+        logWarning("Requesting executors is not supported by current scheduler.")
         false
     }
   }
@@ -1641,10 +1642,10 @@ class SparkContext(config: SparkConf) extends Logging {
   @DeveloperApi
   def killExecutors(executorIds: Seq[String]): Boolean = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend =>
+      case b: ExecutorAllocationClient =>
         b.killExecutors(executorIds, replace = false, force = true).nonEmpty
       case _ =>
-        logWarning("Killing executors is only supported in coarse-grained mode")
+        logWarning("Killing executors is not supported by current scheduler.")
         false
     }
   }
@@ -1679,10 +1680,10 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   private[spark] def killAndReplaceExecutor(executorId: String): Boolean = {
     schedulerBackend match {
-      case b: CoarseGrainedSchedulerBackend =>
+      case b: ExecutorAllocationClient =>
         b.killExecutors(Seq(executorId), replace = true, force = true).nonEmpty
       case _ =>
-        logWarning("Killing executors is only supported in coarse-grained mode")
+        logWarning("Killing executors is not supported by current scheduler.")
         false
     }
   }
@@ -1793,6 +1794,9 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Adds a JAR dependency for all tasks to be executed on this `SparkContext` in the future.
+   *
+   * If a jar is added during execution, it will not be available until the next TaskSet starts.
+   *
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported filesystems),
    * an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    */
@@ -1826,7 +1830,11 @@ class SparkContext(config: SparkConf) extends Logging {
         Utils.validateURL(uri)
         uri.getScheme match {
           // A JAR file which exists only on the driver node
-          case null | "file" => addJarFile(new File(uri.getPath))
+          case null =>
+            // SPARK-22585 path without schema is not url encoded
+            addJarFile(new File(uri.getRawPath))
+          // A JAR file which exists only on the driver node
+          case "file" => addJarFile(new File(uri.getPath))
           // A JAR file which exists locally on every worker node
           case "local" => "file:" + uri.getPath
           case _ => path
@@ -1873,8 +1881,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def stop(): Unit = {
     if (LiveListenerBus.withinListenerThread.value) {
-      throw new SparkException(
-        s"Cannot stop SparkContext within listener thread of ${LiveListenerBus.name}")
+      throw new SparkException(s"Cannot stop SparkContext within listener bus thread.")
     }
     // Use the stopping variable to ensure no contention for the stop scenario.
     // Still track the stopped variable for use elsewhere in the code.
@@ -1934,11 +1941,13 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       SparkEnv.set(null)
     }
+    if (_statusStore != null) {
+      _statusStore.close()
+    }
     // Clear this `InheritableThreadLocal`, or it will still be inherited in child threads even this
     // `SparkContext` is stopped.
     localProperties.remove()
     // Unset YARN mode system env variable, to allow switching between cluster types.
-    System.clearProperty("SPARK_YARN_MODE")
     SparkContext.clearActiveContext()
     logInfo("Successfully stopped SparkContext")
   }
@@ -2267,7 +2276,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /**
-   * Clean a closure to make it ready to serialized and send to tasks
+   * Clean a closure to make it ready to be serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
    * If <tt>checkSerializable</tt> is set, <tt>clean</tt> will also proactively
    * check to see if <tt>f</tt> is serializable and throw a <tt>SparkException</tt>
@@ -2339,41 +2348,13 @@ class SparkContext(config: SparkConf) extends Logging {
    * (e.g. after the web UI and event logging listeners have been registered).
    */
   private def setupAndStartListenerBus(): Unit = {
-    // Use reflection to instantiate listeners specified via `spark.extraListeners`
     try {
-      val listenerClassNames: Seq[String] =
-        conf.get("spark.extraListeners", "").split(',').map(_.trim).filter(_ != "")
-      for (className <- listenerClassNames) {
-        // Use reflection to find the right constructor
-        val constructors = {
-          val listenerClass = Utils.classForName(className)
-          listenerClass
-              .getConstructors
-              .asInstanceOf[Array[Constructor[_ <: SparkListenerInterface]]]
+      conf.get(EXTRA_LISTENERS).foreach { classNames =>
+        val listeners = Utils.loadExtensions(classOf[SparkListenerInterface], classNames, conf)
+        listeners.foreach { listener =>
+          listenerBus.addToSharedQueue(listener)
+          logInfo(s"Registered listener ${listener.getClass().getName()}")
         }
-        val constructorTakingSparkConf = constructors.find { c =>
-          c.getParameterTypes.sameElements(Array(classOf[SparkConf]))
-        }
-        lazy val zeroArgumentConstructor = constructors.find { c =>
-          c.getParameterTypes.isEmpty
-        }
-        val listener: SparkListenerInterface = {
-          if (constructorTakingSparkConf.isDefined) {
-            constructorTakingSparkConf.get.newInstance(conf)
-          } else if (zeroArgumentConstructor.isDefined) {
-            zeroArgumentConstructor.get.newInstance()
-          } else {
-            throw new SparkException(
-              s"$className did not have a zero-argument constructor or a" +
-                " single-argument constructor that accepts SparkConf. Note: if the class is" +
-                " defined inside of another Scala class, then its constructors may accept an" +
-                " implicit parameter that references the enclosing class; in this case, you must" +
-                " define the listener as a top-level class in order to prevent this extra" +
-                " parameter from breaking Spark's ability to find a valid constructor.")
-          }
-        }
-        listenerBus.addListener(listener)
-        logInfo(s"Registered listener $className")
       }
     } catch {
       case e: Exception =>
@@ -2820,6 +2801,42 @@ object WritableConverter {
   // `import SparkContext._` to enable them. Now we move them here to make the compiler find
   // them automatically. However, we still keep the old functions in SparkContext for backward
   // compatibility and forward to the following functions directly.
+
+  // The following implicit declarations have been added on top of the very similar ones
+  // below in order to enable compatibility with Scala 2.12. Scala 2.12 deprecates eta
+  // expansion of zero-arg methods and thus won't match a no-arg method where it expects
+  // an implicit that is a function of no args.
+
+  implicit val intWritableConverterFn: () => WritableConverter[Int] =
+    () => simpleWritableConverter[Int, IntWritable](_.get)
+
+  implicit val longWritableConverterFn: () => WritableConverter[Long] =
+    () => simpleWritableConverter[Long, LongWritable](_.get)
+
+  implicit val doubleWritableConverterFn: () => WritableConverter[Double] =
+    () => simpleWritableConverter[Double, DoubleWritable](_.get)
+
+  implicit val floatWritableConverterFn: () => WritableConverter[Float] =
+    () => simpleWritableConverter[Float, FloatWritable](_.get)
+
+  implicit val booleanWritableConverterFn: () => WritableConverter[Boolean] =
+    () => simpleWritableConverter[Boolean, BooleanWritable](_.get)
+
+  implicit val bytesWritableConverterFn: () => WritableConverter[Array[Byte]] = {
+    () => simpleWritableConverter[Array[Byte], BytesWritable] { bw =>
+      // getBytes method returns array which is longer then data to be returned
+      Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
+    }
+  }
+
+  implicit val stringWritableConverterFn: () => WritableConverter[String] =
+    () => simpleWritableConverter[String, Text](_.toString)
+
+  implicit def writableWritableConverterFn[T <: Writable : ClassTag]: () => WritableConverter[T] =
+    () => new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
+
+  // These implicits remain included for backwards-compatibility. They fulfill the
+  // same role as those above.
 
   implicit def intWritableConverter(): WritableConverter[Int] =
     simpleWritableConverter[Int, IntWritable](_.get)

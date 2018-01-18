@@ -155,6 +155,8 @@ private[deploy] class Worker(
   private val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   private val workerSource = new WorkerSource(this)
 
+  val reverseProxy = conf.getBoolean("spark.ui.reverseProxy", false)
+
   private var registerMasterFutures: Array[JFuture[_]] = null
   private var registrationRetryTimer: Option[JScheduledFuture[_]] = None
 
@@ -197,7 +199,7 @@ private[deploy] class Worker(
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
-    shuffleService.startIfEnabled()
+    startExternalShuffleService()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
 
@@ -225,7 +227,7 @@ private[deploy] class Worker(
     masterAddressToConnect = Some(masterAddress)
     master = Some(masterRef)
     connected = true
-    if (conf.getBoolean("spark.ui.reverseProxy", false)) {
+    if (reverseProxy) {
       logInfo(s"WorkerWebUI is available at $activeMasterWebUiUrl/proxy/$workerId")
     }
     // Cancel any outstanding re-registration attempts because we found a new master
@@ -365,6 +367,16 @@ private[deploy] class Worker(
     }
   }
 
+  private def startExternalShuffleService() {
+    try {
+      shuffleService.startIfEnabled()
+    } catch {
+      case e: Exception =>
+        logError("Failed to start external shuffle service", e)
+        System.exit(1)
+    }
+  }
+
   private def sendRegisterMessageToMaster(masterEndpoint: RpcEndpointRef): Unit = {
     masterEndpoint.send(RegisterWorker(
       workerId,
@@ -448,10 +460,9 @@ private[deploy] class Worker(
         }
       }(cleanupThreadExecutor)
 
-      cleanupFuture.onFailure {
-        case e: Throwable =>
-          logError("App dir cleanup failed: " + e.getMessage, e)
-      }(cleanupThreadExecutor)
+      cleanupFuture.failed.foreach(e =>
+        logError("App dir cleanup failed: " + e.getMessage, e)
+      )(cleanupThreadExecutor)
 
     case MasterChanged(masterRef, masterWebUiUrl) =>
       logInfo("Master has changed, new master is at " + masterRef.address.toSparkURL)
@@ -620,10 +631,9 @@ private[deploy] class Worker(
           dirList.foreach { dir =>
             Utils.deleteRecursively(new File(dir))
           }
-        }(cleanupThreadExecutor).onFailure {
-          case e: Throwable =>
-            logError(s"Clean up app dir $dirList failed: ${e.getMessage}", e)
-        }(cleanupThreadExecutor)
+        }(cleanupThreadExecutor).failed.foreach(e =>
+          logError(s"Clean up app dir $dirList failed: ${e.getMessage}", e)
+        )(cleanupThreadExecutor)
       }
       shuffleService.applicationRemoved(id)
     }

@@ -249,8 +249,34 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("describe table formatted t",
       DescribeTableCommand(
         TableIdentifier("t"), Map.empty, isExtended = true))
+  }
 
-    intercept("explain describe tables x", "Unsupported SQL statement")
+  test("describe table column") {
+    assertEqual("DESCRIBE t col",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("col"), isExtended = false))
+    assertEqual("DESCRIBE t `abc.xyz`",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("abc.xyz"), isExtended = false))
+    assertEqual("DESCRIBE t abc.xyz",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("abc", "xyz"), isExtended = false))
+    assertEqual("DESCRIBE t `a.b`.`x.y`",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("a.b", "x.y"), isExtended = false))
+
+    assertEqual("DESCRIBE TABLE t col",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("col"), isExtended = false))
+    assertEqual("DESCRIBE TABLE EXTENDED t col",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("col"), isExtended = true))
+    assertEqual("DESCRIBE TABLE FORMATTED t col",
+      DescribeColumnCommand(
+        TableIdentifier("t"), Seq("col"), isExtended = true))
+
+    intercept("DESCRIBE TABLE t PARTITION (ds='1970-01-01') col",
+      "DESC TABLE COLUMN for a specific partition is not supported")
   }
 
   test("analyze table statistics") {
@@ -259,17 +285,33 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual("analyze table t compute statistics noscan",
       AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
     assertEqual("analyze table t partition (a) compute statistics nOscAn",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+      AnalyzePartitionCommand(TableIdentifier("t"), Map("a" -> None), noscan = true))
 
-    // Partitions specified - we currently parse them but don't do anything with it
+    // Partitions specified
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan",
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> Some("2008-04-09"))))
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS",
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan",
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
+    assertEqual("ANALYZE TABLE t PARTITION(ds, hr=11) COMPUTE STATISTICS noscan",
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> None, "hr" -> Some("11"))))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
+        partitionSpec = Map("ds" -> None, "hr" -> None)))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> None, "hr" -> None)))
 
     intercept("analyze table t compute statistics xxxx",
       "Expected `NOSCAN` instead of `xxxx`")
@@ -281,6 +323,11 @@ class SparkSqlParserSuite extends AnalysisTest {
     intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS", "")
 
     assertEqual("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS key, value",
+      AnalyzeColumnCommand(TableIdentifier("t"), Seq("key", "value")))
+
+    // Partition specified - should be ignored
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
+      "COMPUTE STATISTICS FOR COLUMNS key, value",
       AnalyzeColumnCommand(TableIdentifier("t"), Seq("key", "value")))
   }
 

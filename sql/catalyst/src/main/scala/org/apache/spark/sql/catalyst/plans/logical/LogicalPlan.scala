@@ -33,57 +33,8 @@ abstract class LogicalPlan
   with QueryPlanConstraints
   with Logging {
 
-  private var _analyzed: Boolean = false
-
-  /**
-   * Marks this plan as already analyzed. This should only be called by [[CheckAnalysis]].
-   */
-  private[catalyst] def setAnalyzed(): Unit = { _analyzed = true }
-
-  /**
-   * Returns true if this node and its children have already been gone through analysis and
-   * verification.  Note that this is only an optimization used to avoid analyzing trees that
-   * have already been analyzed, and can be reset by transformations.
-   */
-  def analyzed: Boolean = _analyzed
-
-  /** Returns true if this subtree contains any streaming data sources. */
+  /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = children.exists(_.isStreaming == true)
-
-  /**
-   * Returns a copy of this node where `rule` has been recursively applied first to all of its
-   * children and then itself (post-order). When `rule` does not apply to a given node, it is left
-   * unchanged.  This function is similar to `transformUp`, but skips sub-trees that have already
-   * been marked as analyzed.
-   *
-   * @param rule the function use to transform this nodes children
-   */
-  def resolveOperators(rule: PartialFunction[LogicalPlan, LogicalPlan]): LogicalPlan = {
-    if (!analyzed) {
-      val afterRuleOnChildren = mapChildren(_.resolveOperators(rule))
-      if (this fastEquals afterRuleOnChildren) {
-        CurrentOrigin.withOrigin(origin) {
-          rule.applyOrElse(this, identity[LogicalPlan])
-        }
-      } else {
-        CurrentOrigin.withOrigin(origin) {
-          rule.applyOrElse(afterRuleOnChildren, identity[LogicalPlan])
-        }
-      }
-    } else {
-      this
-    }
-  }
-
-  /**
-   * Recursively transforms the expressions of a tree, skipping nodes that have already
-   * been analyzed.
-   */
-  def resolveExpressions(r: PartialFunction[Expression, Expression]): LogicalPlan = {
-    this resolveOperators  {
-      case p => p.transformExpressions(r)
-    }
-  }
 
   override def verboseStringWithSuffix: String = {
     super.verboseString + statsCache.map(", " + _.toString).getOrElse("")
@@ -96,6 +47,11 @@ abstract class LogicalPlan
    * Any operator that can push through a Limit should override this function (e.g., Project).
    */
   def maxRows: Option[Long] = None
+
+  /**
+   * Returns the maximum number of rows this plan may compute on each partition.
+   */
+  def maxRowsPerPartition: Option[Long] = maxRows
 
   /**
    * Returns true if this expression and all its children have been resolved to a specific schema
@@ -291,6 +247,8 @@ abstract class UnaryNode extends LogicalPlan {
   protected def getAliasedConstraints(projectList: Seq[NamedExpression]): Set[Expression] = {
     var allConstraints = child.constraints.asInstanceOf[Set[Expression]]
     projectList.foreach {
+      case a @ Alias(l: Literal, _) =>
+        allConstraints += EqualTo(a.toAttribute, l)
       case a @ Alias(e, _) =>
         // For every alias in `projectList`, replace the reference in constraints by its attribute.
         allConstraints ++= allConstraints.map(_ transform {

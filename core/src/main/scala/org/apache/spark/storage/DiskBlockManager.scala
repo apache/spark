@@ -100,7 +100,16 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   /** List all the blocks currently stored on disk by the disk manager. */
   def getAllBlocks(): Seq[BlockId] = {
-    getAllFiles().map(f => BlockId(f.getName))
+    getAllFiles().flatMap { f =>
+      try {
+        Some(BlockId(f.getName))
+      } catch {
+        case _: UnrecognizedBlockId =>
+          // Skip files which do not correspond to blocks, for example temporary
+          // files created by [[SortShuffleWriter]].
+          None
+      }
+    }
   }
 
   /** Produces a unique block id and File suitable for storing local intermediate results. */

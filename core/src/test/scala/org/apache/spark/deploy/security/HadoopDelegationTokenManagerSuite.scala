@@ -40,7 +40,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     delegationTokenManager = new HadoopDelegationTokenManager(
       sparkConf,
       hadoopConf,
-      hadoopFSsToAccess(hadoopConf))
+      hadoopFSsToAccess)
 
     delegationTokenManager.getServiceDelegationTokenProvider("hadoopfs") should not be (None)
     delegationTokenManager.getServiceDelegationTokenProvider("hbase") should not be (None)
@@ -53,7 +53,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     delegationTokenManager = new HadoopDelegationTokenManager(
       sparkConf,
       hadoopConf,
-      hadoopFSsToAccess(hadoopConf))
+      hadoopFSsToAccess)
 
     delegationTokenManager.getServiceDelegationTokenProvider("hadoopfs") should not be (None)
     delegationTokenManager.getServiceDelegationTokenProvider("hbase") should not be (None)
@@ -66,7 +66,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     delegationTokenManager = new HadoopDelegationTokenManager(
       sparkConf,
       hadoopConf,
-      hadoopFSsToAccess(hadoopConf))
+      hadoopFSsToAccess)
 
     delegationTokenManager.getServiceDelegationTokenProvider("hadoopfs") should be (None)
     delegationTokenManager.getServiceDelegationTokenProvider("hive") should be (None)
@@ -77,7 +77,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     delegationTokenManager = new HadoopDelegationTokenManager(
       sparkConf,
       hadoopConf,
-      hadoopFSsToAccess(hadoopConf))
+      hadoopFSsToAccess)
     val creds = new Credentials()
 
     // Tokens cannot be obtained from HDFS, Hive, HBase in unit tests.
@@ -94,7 +94,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
 
     val hiveCredentialProvider = new HiveDelegationTokenProvider()
     val credentials = new Credentials()
-    hiveCredentialProvider.obtainDelegationTokens(hadoopConf, credentials)
+    hiveCredentialProvider.obtainDelegationTokens(hadoopConf, sparkConf, credentials)
 
     credentials.getAllTokens.size() should be (0)
   }
@@ -105,7 +105,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
 
     val hbaseTokenProvider = new HBaseDelegationTokenProvider()
     val creds = new Credentials()
-    hbaseTokenProvider.obtainDelegationTokens(hadoopConf, creds)
+    hbaseTokenProvider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
 
     creds.getAllTokens.size should be (0)
   }

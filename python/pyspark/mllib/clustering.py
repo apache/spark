@@ -636,7 +636,7 @@ class PowerIterationClusteringModel(JavaModelWrapper, JavaSaveable, JavaLoader):
 class PowerIterationClustering(object):
     """
     Power Iteration Clustering (PIC), a scalable graph clustering algorithm
-    developed by [[http://www.icml2010.org/papers/387.pdf Lin and Cohen]].
+    developed by [[http://www.cs.cmu.edu/~frank/papers/icml2010-pic-final.pdf Lin and Cohen]].
     From the abstract: PIC finds a very low-dimensional embedding of a
     dataset using truncated power iteration on a normalized pair-wise
     similarity matrix of the data.

@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.Locale
 import java.util.concurrent.Callable
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -25,12 +28,12 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QualifiedTableName}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, Project}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -130,18 +133,28 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
+      DDLUtils.checkDataColNames(tableDesc)
       CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
+      DDLUtils.checkDataColNames(tableDesc.copy(schema = query.schema))
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query)
 
-    case InsertIntoTable(l @ LogicalRelation(_: InsertableRelation, _, _),
+    case InsertIntoTable(l @ LogicalRelation(_: InsertableRelation, _, _, _),
         parts, query, overwrite, false) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
+    case InsertIntoDir(_, storage, provider, query, overwrite)
+      if provider.isDefined && provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>
+
+      val outputPath = new Path(storage.locationUri.get)
+      if (overwrite) DDLUtils.verifyNotReadPath(query, outputPath)
+
+      InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
+
     case i @ InsertIntoTable(
-        l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, _) =>
+        l @ LogicalRelation(t: HadoopFsRelation, _, table, _), parts, query, overwrite, _) =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
@@ -176,15 +189,9 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
       }
 
       val outputPath = t.location.rootPaths.head
-      val inputPaths = actualQuery.collect {
-        case LogicalRelation(r: HadoopFsRelation, _, _) => r.location.rootPaths
-      }.flatten
+      if (overwrite) DDLUtils.verifyNotReadPath(actualQuery, outputPath)
 
       val mode = if (overwrite) SaveMode.Overwrite else SaveMode.Append
-      if (overwrite && inputPaths.contains(outputPath)) {
-        throw new AnalysisException(
-          "Cannot overwrite a path that is also being read from.")
-      }
 
       val partitionSchema = actualQuery.resolve(
         t.partitionSchema, t.sparkSession.sessionState.analyzer.resolver)
@@ -201,21 +208,23 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
         actualQuery,
         mode,
         table,
-        Some(t.location))
+        Some(t.location),
+        actualQuery.output)
   }
 }
 
 
 /**
- * Replaces [[CatalogRelation]] with data source table if its table provider is not hive.
+ * Replaces [[UnresolvedCatalogRelation]] with concrete relation logical plans.
+ *
+ * TODO: we should remove the special handling for hive tables after completely making hive as a
+ * data source.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private def readDataSourceTable(r: CatalogRelation): LogicalPlan = {
-    val table = r.tableMeta
+  private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
-    val catalogProxy = sparkSession.sessionState.catalog
-
-    val plan = catalogProxy.getCachedPlan(qualifiedTableName, new Callable[LogicalPlan]() {
+    val catalog = sparkSession.sessionState.catalog
+    catalog.getCachedPlan(qualifiedTableName, new Callable[LogicalPlan]() {
       override def call(): LogicalPlan = {
         val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
         val dataSource =
@@ -232,24 +241,30 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 
         LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
       }
-    }).asInstanceOf[LogicalRelation]
+    })
+  }
 
-    if (r.output.isEmpty) {
-      // It's possible that the table schema is empty and need to be inferred at runtime. For this
-      // case, we don't need to change the output of the cached plan.
-      plan
-    } else {
-      plan.copy(output = r.output)
-    }
+  private def readHiveTable(table: CatalogTable): LogicalPlan = {
+    HiveTableRelation(
+      table,
+      // Hive table columns are always nullable.
+      table.dataSchema.asNullable.toAttributes,
+      table.partitionSchema.asNullable.toAttributes)
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ InsertIntoTable(r: CatalogRelation, _, _, _, _)
-        if DDLUtils.isDatasourceTable(r.tableMeta) =>
-      i.copy(table = readDataSourceTable(r))
+    case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
+        if DDLUtils.isDatasourceTable(tableMeta) =>
+      i.copy(table = readDataSourceTable(tableMeta))
 
-    case r: CatalogRelation if DDLUtils.isDatasourceTable(r.tableMeta) =>
-      readDataSourceTable(r)
+    case i @ InsertIntoTable(UnresolvedCatalogRelation(tableMeta), _, _, _, _) =>
+      i.copy(table = readHiveTable(tableMeta))
+
+    case UnresolvedCatalogRelation(tableMeta) if DDLUtils.isDatasourceTable(tableMeta) =>
+      readDataSourceTable(tableMeta)
+
+    case UnresolvedCatalogRelation(tableMeta) =>
+      readHiveTable(tableMeta)
   }
 }
 
@@ -261,7 +276,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
   import DataSourceStrategy._
 
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _)) =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _, _)) =>
       pruneFilterProjectRaw(
         l,
         projects,
@@ -269,21 +284,22 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
         (requestedColumns, allPredicates, _) =>
           toCatalystRDD(l, requestedColumns, t.buildScan(requestedColumns, allPredicates))) :: Nil
 
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedFilteredScan, _, _)) =>
+    case PhysicalOperation(projects, filters,
+                           l @ LogicalRelation(t: PrunedFilteredScan, _, _, _)) =>
       pruneFilterProject(
         l,
         projects,
         filters,
         (a, f) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray, f))) :: Nil
 
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan, _, _)) =>
+    case PhysicalOperation(projects, filters, l @ LogicalRelation(t: PrunedScan, _, _, _)) =>
       pruneFilterProject(
         l,
         projects,
         filters,
         (a, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray))) :: Nil
 
-    case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
+    case l @ LogicalRelation(baseRelation: TableScan, _, _, _) =>
       RowDataSourceScanExec(
         l.output,
         l.output.indices,
@@ -482,7 +498,19 @@ object DataSourceStrategy {
         Some(sources.IsNotNull(a.name))
 
       case expressions.And(left, right) =>
-        (translateFilter(left) ++ translateFilter(right)).reduceOption(sources.And)
+        // See SPARK-12218 for detailed discussion
+        // It is not safe to just convert one side if we do not understand the
+        // other side. Here is an example used to explain the reason.
+        // Let's say we have (a = 2 AND trim(b) = 'blah') OR (c > 0)
+        // and we do not understand how to convert trim(b) = 'blah'.
+        // If we only convert a = 2, we will end up with
+        // (a = 2) OR (c > 0), which will generate wrong results.
+        // Pushing one leg of AND down is only safe to do at the top level.
+        // You can see ParquetFilters' createFilter for more details.
+        for {
+          leftFilter <- translateFilter(left)
+          rightFilter <- translateFilter(right)
+        } yield sources.And(leftFilter, rightFilter)
 
       case expressions.Or(left, right) =>
         for {

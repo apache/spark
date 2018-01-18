@@ -262,4 +262,47 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(out1(4) === Row("Amy", null, null))
     assert(out1(5) === Row(null, null, null))
   }
+
+  test("replace with null") {
+    val input = Seq[(String, java.lang.Double, java.lang.Boolean)](
+      ("Bob", 176.5, true),
+      ("Alice", 164.3, false),
+      ("David", null, true)
+    ).toDF("name", "height", "married")
+
+    // Replace String with String and null
+    checkAnswer(
+      input.na.replace("name", Map(
+        "Bob" -> "Bravo",
+        "Alice" -> null
+      )),
+      Row("Bravo", 176.5, true) ::
+        Row(null, 164.3, false) ::
+        Row("David", null, true) :: Nil)
+
+    // Replace Double with null
+    checkAnswer(
+      input.na.replace("height", Map[Any, Any](
+        164.3 -> null
+      )),
+      Row("Bob", 176.5, true) ::
+        Row("Alice", null, false) ::
+        Row("David", null, true) :: Nil)
+
+    // Replace Boolean with null
+    checkAnswer(
+      input.na.replace("*", Map[Any, Any](
+        false -> null
+      )),
+      Row("Bob", 176.5, true) ::
+        Row("Alice", 164.3, null) ::
+        Row("David", null, true) :: Nil)
+
+    // Replace String with null and then drop rows containing null
+    checkAnswer(
+      input.na.replace("name", Map(
+        "Bob" -> null
+      )).na.drop("name" :: Nil).select("name"),
+      Row("Alice") :: Row("David") :: Nil)
+  }
 }

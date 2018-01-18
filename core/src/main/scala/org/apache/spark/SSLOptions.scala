@@ -94,21 +94,23 @@ private[spark] case class SSLOptions(
    * are supported by the current Java security provider for this protocol.
    */
   private val supportedAlgorithms: Set[String] = if (enabledAlgorithms.isEmpty) {
-    Set()
+    Set.empty
   } else {
     var context: SSLContext = null
-    try {
-      context = SSLContext.getInstance(protocol.orNull)
-      /* The set of supported algorithms does not depend upon the keys, trust, or
+    if (protocol.isEmpty) {
+      logDebug("No SSL protocol specified")
+      context = SSLContext.getDefault
+    } else {
+      try {
+        context = SSLContext.getInstance(protocol.get)
+        /* The set of supported algorithms does not depend upon the keys, trust, or
          rng, although they will influence which algorithms are eventually used. */
-      context.init(null, null, null)
-    } catch {
-      case npe: NullPointerException =>
-        logDebug("No SSL protocol specified")
-        context = SSLContext.getDefault
-      case nsa: NoSuchAlgorithmException =>
-        logDebug(s"No support for requested SSL protocol ${protocol.get}")
-        context = SSLContext.getDefault
+        context.init(null, null, null)
+      } catch {
+        case nsa: NoSuchAlgorithmException =>
+          logDebug(s"No support for requested SSL protocol ${protocol.get}")
+          context = SSLContext.getDefault
+      }
     }
 
     val providerAlgorithms = context.getServerSocketFactory.getSupportedCipherSuites.toSet

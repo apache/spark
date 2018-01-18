@@ -17,19 +17,23 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, Properties}
+import java.text.SimpleDateFormat
+import java.util.{Date, Locale, Properties, UUID}
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, CatalogTableType}
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
+import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.plans.logical.{AnalysisBarrier, InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation, SaveIntoDataSourceCommand}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -62,7 +66,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *   - `overwrite`: overwrite the existing data.
    *   - `append`: append the data.
    *   - `ignore`: ignore the operation (i.e. no-op).
-   *   - `error`: default option, throw an exception at runtime.
+   *   - `error` or `errorifexists`: default option, throw an exception at runtime.
    *
    * @since 1.4.0
    */
@@ -71,9 +75,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case "overwrite" => SaveMode.Overwrite
       case "append" => SaveMode.Append
       case "ignore" => SaveMode.Ignore
-      case "error" | "default" => SaveMode.ErrorIfExists
+      case "error" | "errorifexists" | "default" => SaveMode.ErrorIfExists
       case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. " +
-        "Accepted save modes are 'overwrite', 'append', 'ignore', 'error'.")
+        "Accepted save modes are 'overwrite', 'append', 'ignore', 'error', 'errorifexists'.")
     }
     this
   }
@@ -231,12 +235,44 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     assertNotBucketed("save")
 
+    val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
+    if (classOf[DataSourceV2].isAssignableFrom(cls)) {
+      val ds = cls.newInstance()
+      ds match {
+        case ws: WriteSupport =>
+          val options = new DataSourceV2Options((extraOptions ++
+            DataSourceV2Utils.extractSessionConfigs(
+              ds = ds.asInstanceOf[DataSourceV2],
+              conf = df.sparkSession.sessionState.conf)).asJava)
+          // Using a timestamp and a random UUID to distinguish different writing jobs. This is good
+          // enough as there won't be tons of writing jobs created at the same second.
+          val jobId = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
+            .format(new Date()) + "-" + UUID.randomUUID()
+          val writer = ws.createWriter(jobId, df.logicalPlan.schema, mode, options)
+          if (writer.isPresent) {
+            runCommand(df.sparkSession, "save") {
+              WriteToDataSourceV2(writer.get(), df.logicalPlan)
+            }
+          }
+
+        // Streaming also uses the data source V2 API. So it may be that the data source implements
+        // v2, but has no v2 implementation for batch writes. In that case, we fall back to saving
+        // as though it's a V1 source.
+        case _ => saveToV1Source()
+      }
+    } else {
+      saveToV1Source()
+    }
+  }
+
+  private def saveToV1Source(): Unit = {
+    // Code path for data source v1.
     runCommand(df.sparkSession, "save") {
       DataSource(
         sparkSession = df.sparkSession,
         className = source,
         partitionColumns = partitioningColumns.getOrElse(Nil),
-        options = extraOptions.toMap).planForWriting(mode, df.logicalPlan)
+        options = extraOptions.toMap).planForWriting(mode, AnalysisBarrier(df.logicalPlan))
     }
   }
 
@@ -371,20 +407,19 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case (true, SaveMode.Overwrite) =>
         // Get all input data source or hive relations of the query.
         val srcRelations = df.logicalPlan.collect {
-          case LogicalRelation(src: BaseRelation, _, _) => src
-          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.tableMeta) =>
-            relation.tableMeta.identifier
+          case LogicalRelation(src: BaseRelation, _, _, _) => src
+          case relation: HiveTableRelation => relation.tableMeta.identifier
         }
 
         val tableRelation = df.sparkSession.table(tableIdentWithDB).queryExecution.analyzed
         EliminateSubqueryAliases(tableRelation) match {
           // check if the table is a data source table (the relation is a BaseRelation).
-          case LogicalRelation(dest: BaseRelation, _, _) if srcRelations.contains(dest) =>
+          case LogicalRelation(dest: BaseRelation, _, _, _) if srcRelations.contains(dest) =>
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")
           // check hive table relation when overwrite mode
-          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.tableMeta)
-            && srcRelations.contains(relation.tableMeta.identifier) =>
+          case relation: HiveTableRelation
+              if srcRelations.contains(relation.tableMeta.identifier) =>
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")
           case _ => // OK
@@ -499,7 +534,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <ul>
    * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
    * compression codec to use when saving to file. This can be one of the known case-insensitive
-   * shorten names(none, `snappy`, `gzip`, and `lzo`). This will override
+   * shorten names(`none`, `snappy`, `gzip`, and `lzo`). This will override
    * `spark.sql.parquet.compression.codec`.</li>
    * </ul>
    *
@@ -518,9 +553,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *
    * You can set the following ORC-specific option(s) for writing ORC files:
    * <ul>
-   * <li>`compression` (default `snappy`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
-   * This will override `orc.compress`.</li>
+   * <li>`compression` (default is the value specified in `spark.sql.orc.compression.codec`):
+   * compression codec to use when saving to file. This can be one of the known case-insensitive
+   * shorten names(`none`, `snappy`, `zlib`, and `lzo`). This will override
+   * `orc.compress` and `spark.sql.orc.compression.codec`. If `orc.compress` is given,
+   * it overrides `spark.sql.orc.compression.codec`.</li>
    * </ul>
    *
    * @since 1.5.0
@@ -564,12 +601,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *
    * You can set the following CSV-specific option(s) for writing CSV files:
    * <ul>
-   * <li>`sep` (default `,`): sets the single character as a separator for each
+   * <li>`sep` (default `,`): sets a single character as a separator for each
    * field and value.</li>
-   * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
-   * the separator can be part of the value.</li>
-   * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
+   * <li>`quote` (default `"`): sets a single character used for escaping quoted values where
+   * the separator can be part of the value. If an empty string is set, it uses `u0000`
+   * (null character).</li>
+   * <li>`escape` (default `\`): sets a single character used for escaping quotes inside
    * an already quoted value.</li>
+   * <li>`charToEscapeQuoteEscaping` (default `escape` or `\0`): sets a single character used for
+   * escaping the escape for the quote character. The default value is escape character when escape
+   * and quote characters are different, `\0` otherwise.</li>
    * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
    * quotes should always be enclosed in quotes. Default is to escape all values containing
    * a quote character.</li>

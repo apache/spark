@@ -22,21 +22,20 @@ import java.util.concurrent.CountDownLatch
 import org.apache.commons.lang3.RandomStringUtils
 import org.mockito.Mockito._
 import org.scalactic.TolerantNumerics
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ManualClock
-
 
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging with MockitoSugar {
 
@@ -172,12 +171,12 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       StopStream, // clears out StreamTest state
       AssertOnQuery { q =>
         // both commit log and offset log contain the same (latest) batch id
-        q.batchCommitLog.getLatest().map(_._1).getOrElse(-1L) ==
+        q.commitLog.getLatest().map(_._1).getOrElse(-1L) ==
           q.offsetLog.getLatest().map(_._1).getOrElse(-2L)
       },
       AssertOnQuery { q =>
         // blow away commit log and sink result
-        q.batchCommitLog.purge(1)
+        q.commitLog.purge(1)
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },
@@ -425,6 +424,29 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
+  test("SPARK-22975: MetricsReporter defaults when there was no progress reported") {
+    withSQLConf("spark.sql.streaming.metricsEnabled" -> "true") {
+      BlockingSource.latch = new CountDownLatch(1)
+      withTempDir { tempDir =>
+        val sq = spark.readStream
+          .format("org.apache.spark.sql.streaming.util.BlockingSource")
+          .load()
+          .writeStream
+          .format("org.apache.spark.sql.streaming.util.BlockingSource")
+          .option("checkpointLocation", tempDir.toString)
+          .start()
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
+
+        val gauges = sq.streamMetrics.metricRegistry.getGauges
+        assert(gauges.get("latency").getValue.asInstanceOf[Long] == 0)
+        assert(gauges.get("processingRate-total").getValue.asInstanceOf[Double] == 0.0)
+        assert(gauges.get("inputRate-total").getValue.asInstanceOf[Double] == 0.0)
+        sq.stop()
+      }
+    }
+  }
+
   test("input row calculation with mixed batch and streaming sources") {
     val streamingTriggerDF = spark.createDataset(1 to 10).toDF
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
@@ -640,6 +662,31 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
+  test("processAllAvailable should not block forever when a query is stopped") {
+    val input = MemoryStream[Int]
+    input.addData(1)
+    val query = input.toDF().writeStream
+      .trigger(Trigger.Once())
+      .format("console")
+      .start()
+    failAfter(streamingTimeout) {
+      query.processAllAvailable()
+    }
+  }
+
+  test("SPARK-22238: don't check for RDD partitions during streaming aggregation preparation") {
+    val stream = MemoryStream[(Int, Int)]
+    val baseDf = Seq((1, "A"), (2, "b")).toDF("num", "char").where("char = 'A'")
+    val otherDf = stream.toDF().toDF("num", "numSq")
+      .join(broadcast(baseDf), "num")
+      .groupBy('char)
+      .agg(sum('numSq))
+
+    testStream(otherDf, OutputMode.Complete())(
+      AddData(stream, (1, 1), (2, 4)),
+      CheckLastBatch(("A", 1)))
+  }
+
   /** Create a streaming DF that only execute one batch in which it returns the given static DF */
   private def createSingleTriggerStreamingDF(triggerDF: DataFrame): DataFrame = {
     require(!triggerDF.isStreaming)
@@ -647,10 +694,13 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     val source = new Source() {
       override def schema: StructType = triggerDF.schema
       override def getOffset: Option[Offset] = Some(LongOffset(0))
-      override def getBatch(start: Option[Offset], end: Offset): DataFrame = triggerDF
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        sqlContext.internalCreateDataFrame(
+          triggerDF.queryExecution.toRdd, triggerDF.schema, isStreaming = true)
+      }
       override def stop(): Unit = {}
     }
-    StreamingExecutionRelation(source)
+    StreamingExecutionRelation(source, spark)
   }
 
   /** Returns the query progress at the end of the first trigger of streaming DF */
@@ -716,7 +766,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
           assert(returnedValue === expectedReturnValue, "Returned value does not match expected")
         }
       }
-      AwaitTerminationTester.test(expectedBehavior, awaitTermFunc)
+      AwaitTerminationTester.test(expectedBehavior, () => awaitTermFunc())
       true // If the control reached here, then everything worked as expected
     }
   }

@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.UUID;
 
+import org.hamcrest.Matchers;
 import scala.Tuple2$;
 
 import org.junit.After;
@@ -35,6 +36,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.serializer.JavaSerializer;
@@ -84,6 +86,9 @@ public class UnsafeExternalSorterSuite {
   protected boolean shouldUseRadixSort() { return false; }
 
   private final long pageSizeBytes = conf.getSizeAsBytes("spark.buffer.pageSize", "4m");
+
+  private final int spillThreshold =
+    (int) conf.get(package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD());
 
   @Before
   public void setUp() {
@@ -154,11 +159,11 @@ public class UnsafeExternalSorterSuite {
       blockManager,
       serializerManager,
       taskContext,
-      recordComparator,
+      () -> recordComparator,
       prefixComparator,
       /* initialSize */ 1024,
       pageSizeBytes,
-      UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD,
+      spillThreshold,
       shouldUseRadixSort());
   }
 
@@ -382,7 +387,7 @@ public class UnsafeExternalSorterSuite {
       null,
       /* initialSize */ 1024,
       pageSizeBytes,
-      UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD,
+      spillThreshold,
       shouldUseRadixSort());
     long[] record = new long[100];
     int recordSize = record.length * 8;
@@ -440,11 +445,11 @@ public class UnsafeExternalSorterSuite {
       blockManager,
       serializerManager,
       taskContext,
-      recordComparator,
+      () -> recordComparator,
       prefixComparator,
       1024,
       pageSizeBytes,
-      UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD,
+      spillThreshold,
       shouldUseRadixSort());
 
     // Peak memory should be monotonically increasing. More specifically, every time
@@ -503,6 +508,41 @@ public class UnsafeExternalSorterSuite {
     verifyIntIterator(sorter.getIterator(279), 279, 300);
   }
 
+  @Test
+  public void testOOMDuringSpill() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    // we assume that given default configuration,
+    // the size of the data we insert to the sorter (ints)
+    // and assuming we shouldn't spill before pointers array is exhausted
+    // (memory manager is not configured to throw at this point)
+    // - so this loop runs a reasonable number of iterations (<2000).
+    // test indeed completed within <30ms (on a quad i7 laptop).
+    for (int i = 0; sorter.hasSpaceForAnotherRecord(); ++i) {
+      insertNumber(sorter, i);
+    }
+    // we expect the next insert to attempt growing the pointerssArray first
+    // allocation is expected to fail, then a spill is triggered which
+    // attempts another allocation which also fails and we expect to see this
+    // OOM here.  the original code messed with a released array within the
+    // spill code and ended up with a failed assertion.  we also expect the
+    // location of the OOM to be
+    // org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset
+    memoryManager.markconsequentOOM(2);
+    try {
+      insertNumber(sorter, 1024);
+      fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
+    }
+    // we expect an OutOfMemoryError here, anything else (i.e the original NPE is a failure)
+    catch (OutOfMemoryError oom){
+      String oomStackTrace = Utils.exceptionString(oom);
+      assertThat("expected OutOfMemoryError in " +
+        "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
+        oomStackTrace,
+        Matchers.containsString(
+          "org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"));
+    }
+  }
+
   private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
       throws IOException {
     for (int i = start; i < end; i++) {
@@ -512,4 +552,3 @@ public class UnsafeExternalSorterSuite {
     }
   }
 }
-

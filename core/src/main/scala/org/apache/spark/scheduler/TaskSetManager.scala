@@ -26,9 +26,9 @@ import scala.math.max
 import scala.util.control.NonFatal
 
 import org.apache.spark._
-import org.apache.spark.internal.Logging
-import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
 
@@ -56,6 +56,10 @@ private[spark] class TaskSetManager(
 
   private val conf = sched.sc.conf
 
+  // SPARK-21563 make a copy of the jars/files so they are consistent across the TaskSet
+  private val addedJars = HashMap[String, Long](sched.sc.addedJars.toSeq: _*)
+  private val addedFiles = HashMap[String, Long](sched.sc.addedFiles.toSeq: _*)
+
   // Quantile of tasks at which to start speculation
   val SPECULATION_QUANTILE = conf.getDouble("spark.speculation.quantile", 0.75)
   val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5)
@@ -78,6 +82,11 @@ private[spark] class TaskSetManager(
   // be re-run because the missing map data needs to be regenerated first.
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
+
+  // Set the coresponding index of Boolean var when the task killed by other attempt tasks,
+  // this happened while we set the `spark.speculation` to true. The task killed by others
+  // should not resubmit while executor lost.
+  private val killedByOtherAttempt: Array[Boolean] = new Array[Boolean](numTasks)
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   private[scheduler] var tasksSuccessful = 0
@@ -479,11 +488,11 @@ private[spark] class TaskSetManager(
             abort(s"$msg Exception during serialization: $e")
             throw new TaskNotSerializableException(e)
         }
-        if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
+        if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
           !emittedTaskSizeWarning) {
           emittedTaskSizeWarning = true
           logWarning(s"Stage ${task.stageId} contains a task of very large size " +
-            s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
+            s"(${serializedTask.limit() / 1024} KB). The maximum recommended task size is " +
             s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
         }
         addRunningTask(taskId)
@@ -493,7 +502,7 @@ private[spark] class TaskSetManager(
         // val timeTaken = clock.getTime() - startTime
         val taskName = s"task ${info.id} in stage ${taskSet.id}"
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
-          s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit} bytes)")
+          s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
         sched.dagScheduler.taskStarted(task, info)
         new TaskDescription(
@@ -502,8 +511,8 @@ private[spark] class TaskSetManager(
           execId,
           taskName,
           index,
-          sched.sc.addedFiles,
-          sched.sc.addedJars,
+          addedFiles,
+          addedJars,
           task.localProperties,
           serializedTask)
       }
@@ -666,9 +675,14 @@ private[spark] class TaskSetManager(
           }
           if (blacklistedEverywhere) {
             val partition = tasks(indexInTaskSet).partitionId
-            abort(s"Aborting $taskSet because task $indexInTaskSet (partition $partition) " +
-              s"cannot run anywhere due to node and executor blacklist.  Blacklisting behavior " +
-              s"can be configured via spark.blacklist.*.")
+            abort(s"""
+              |Aborting $taskSet because task $indexInTaskSet (partition $partition)
+              |cannot run anywhere due to node and executor blacklist.
+              |Most recent failure:
+              |${taskSetBlacklist.getLatestFailureReason}
+              |
+              |Blacklisting behavior can be configured via spark.blacklist.*.
+              |""".stripMargin)
           }
         }
       }
@@ -720,6 +734,7 @@ private[spark] class TaskSetManager(
       logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for task ${attemptInfo.id} " +
         s"in stage ${taskSet.id} (TID ${attemptInfo.taskId}) on ${attemptInfo.host} " +
         s"as the attempt ${info.attemptNumber} succeeded on ${info.host}")
+      killedByOtherAttempt(index) = true
       sched.backend.killTask(
         attemptInfo.taskId,
         attemptInfo.executorId,
@@ -833,9 +848,9 @@ private[spark] class TaskSetManager(
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
     if (!isZombie && reason.countTowardsTaskFailures) {
-      taskSetBlacklistHelperOpt.foreach(_.updateBlacklistForFailedTask(
-        info.host, info.executorId, index))
       assert (null != failureReason)
+      taskSetBlacklistHelperOpt.foreach(_.updateBlacklistForFailedTask(
+        info.host, info.executorId, index, failureReason))
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
         logError("Task %d in stage %s failed %d times; aborting job".format(
@@ -891,7 +906,7 @@ private[spark] class TaskSetManager(
   override def removeSchedulable(schedulable: Schedulable) {}
 
   override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
-    var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]()
+    val sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]()
     sortedTaskSetQueue += this
     sortedTaskSetQueue
   }
@@ -906,7 +921,7 @@ private[spark] class TaskSetManager(
         && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
-        if (successful(index)) {
+        if (successful(index) && !killedByOtherAttempt(index)) {
           successful(index) = false
           copiesRunning(index) -= 1
           tasksSuccessful -= 1
@@ -948,7 +963,7 @@ private[spark] class TaskSetManager(
 
     if (tasksSuccessful >= minFinishedForSpeculation && tasksSuccessful > 0) {
       val time = clock.getTimeMillis()
-      var medianDuration = successfulTaskDurations.median
+      val medianDuration = successfulTaskDurations.median
       val threshold = max(SPECULATION_MULTIPLIER * medianDuration, minTimeToSpeculation)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.
@@ -962,6 +977,7 @@ private[spark] class TaskSetManager(
             "Marking task %d in stage %s (on %s) as speculatable because it ran more than %.0f ms"
               .format(index, taskSet.id, info.host, threshold))
           speculatableTasks += index
+          sched.dagScheduler.speculativeTaskSubmitted(tasks(index))
           foundTasks = true
         }
       }
@@ -970,7 +986,7 @@ private[spark] class TaskSetManager(
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
-    val defaultWait = conf.get("spark.locality.wait", "3s")
+    val defaultWait = conf.get(config.LOCALITY_WAIT)
     val localityWaitKey = level match {
       case TaskLocality.PROCESS_LOCAL => "spark.locality.wait.process"
       case TaskLocality.NODE_LOCAL => "spark.locality.wait.node"
@@ -979,7 +995,7 @@ private[spark] class TaskSetManager(
     }
 
     if (localityWaitKey != null) {
-      conf.getTimeAsMs(localityWaitKey, defaultWait)
+      conf.getTimeAsMs(localityWaitKey, defaultWait.toString)
     } else {
       0L
     }

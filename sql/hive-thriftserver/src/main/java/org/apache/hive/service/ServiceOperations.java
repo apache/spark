@@ -27,7 +27,7 @@ import org.apache.hadoop.hive.conf.HiveConf;
  *
  */
 public final class ServiceOperations {
-  private static final Log LOG = LogFactory.getLog(AbstractService.class);
+  private static final Log LOG = LogFactory.getLog(ServiceOperations.class);
 
   private ServiceOperations() {
   }

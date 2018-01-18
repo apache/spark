@@ -34,6 +34,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         PushDownPredicate,
         InferFiltersFromConstraints,
         CombineFilters,
+        SimplifyBinaryComparison,
         BooleanSimplification) :: Nil
   }
 
@@ -151,44 +152,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
     val correctAnswer = t1
-      .where(IsNotNull('a) && IsNotNull('b) && 'a <=> 'a && 'b <=> 'b &&'a === 'b)
+      .where(IsNotNull('a) && IsNotNull('b) &&'a === 'b)
       .select('a, 'b.as('d)).as("t")
-      .join(t2.where(IsNotNull('a) && 'a <=> 'a), Inner,
+      .join(t2.where(IsNotNull('a)), Inner,
         Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
-      .analyze
-    val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("inner join with alias: don't generate constraints for recursive functions") {
-    val t1 = testRelation.subquery('t1)
-    val t2 = testRelation.subquery('t2)
-
-    // We should prevent `Coalese(a, b)` from recursively creating complicated constraints through
-    // the constraint inference procedure.
-    val originalQuery = t1.select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col))
-      // We hide an `Alias` inside the child's child's expressions, to cover the situation reported
-      // in [SPARK-20700].
-      .select('int_col, 'd, 'a).as("t")
-      .join(t2, Inner,
-        Some("t.a".attr === "t2.a".attr
-          && "t.d".attr === "t2.a".attr
-          && "t.int_col".attr === "t2.a".attr))
-      .analyze
-    val correctAnswer = t1
-      .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
-        && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a))
-        && Coalesce(Seq('b, 'b)) <=> 'a && 'a === 'b && IsNotNull(Coalesce(Seq('a, 'b)))
-        && 'a === Coalesce(Seq('a, 'b)) && Coalesce(Seq('a, 'b)) === 'b
-        && IsNotNull('b) && IsNotNull(Coalesce(Seq('b, 'b)))
-        && 'b === Coalesce(Seq('b, 'b)) && 'b <=> Coalesce(Seq('b, 'b)))
-      .select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col))
-      .select('int_col, 'd, 'a).as("t")
-      .join(t2
-        .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
-          && 'a <=> Coalesce(Seq('a, 'a)) && 'a === Coalesce(Seq('a, 'a)) && 'a <=> 'a), Inner,
-        Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr
-          && "t.int_col".attr === "t2.a".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
@@ -211,5 +178,18 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       val optimized = Optimize.execute(originalQuery)
       comparePlans(optimized, originalQuery)
     }
+  }
+
+  test("constraints should be inferred from aliased literals") {
+    val originalLeft = testRelation.subquery('left).as("left")
+    val optimizedLeft = testRelation.subquery('left).where(IsNotNull('a) && 'a === 2).as("left")
+
+    val right = Project(Seq(Literal(2).as("two")), testRelation.subquery('right)).as("right")
+    val condition = Some("left.a".attr === "right.two".attr)
+
+    val original = originalLeft.join(right, Inner, condition)
+    val correct = optimizedLeft.join(right, Inner, condition)
+
+    comparePlans(Optimize.execute(original.analyze), correct.analyze)
   }
 }

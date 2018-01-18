@@ -32,18 +32,13 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String, isAppend: Boolean)
-  extends SQLHadoopMapReduceCommitProtocol(jobId, path, isAppend)
+private class OnlyDetectCustomPathFileCommitProtocol(jobId: String, path: String)
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path)
     with Serializable with Logging {
 
   override def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, ext: String): String = {
-    if (isAppend) {
-      throw new Exception("append data to an existed partitioned table, " +
-        "there should be no custom partition path sent to Task")
-    }
-
-    super.newTaskTempFileAbsPath(taskContext, absoluteDir, ext)
+    throw new Exception("there should be no custom partition path")
   }
 }
 
@@ -115,7 +110,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("append data to an existed partitioned table without custom partition path") {
+  test("append data to an existing partitioned table without custom partition path") {
     withTable("t") {
       withSQLConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
         classOf[OnlyDetectCustomPathFileCommitProtocol].getName) {

@@ -43,7 +43,7 @@ class ImputerSuite extends SparkFunSuite with MLlibTestSparkContext with Default
       (0, 1.0, 1.0, 1.0),
       (1, 3.0, 3.0, 3.0),
       (2, Double.NaN, Double.NaN, Double.NaN),
-      (3, -1.0, 2.0, 3.0)
+      (3, -1.0, 2.0, 1.0)
     )).toDF("id", "value", "expected_mean_value", "expected_median_value")
     val imputer = new Imputer().setInputCols(Array("value")).setOutputCols(Array("out"))
       .setMissingValue(-1.0)

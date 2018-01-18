@@ -28,8 +28,8 @@ import scala.util.{Failure, Success, Try}
 
 import com.google.common.io.CharStreams
 import org.mockito.Mockito._
-import org.scalatest.mock.MockitoSugar
-import org.scalatest.ShouldMatchers
+import org.scalatest.Matchers
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
@@ -38,7 +38,7 @@ import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
 import org.apache.spark.util.ThreadUtils
 
-class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar with ShouldMatchers {
+class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar with Matchers {
   test("security default off") {
     val conf = new SparkConf()
       .set("spark.app.id", "app-id")

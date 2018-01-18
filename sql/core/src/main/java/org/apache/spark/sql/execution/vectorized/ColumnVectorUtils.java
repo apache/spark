@@ -28,6 +28,8 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.vectorized.ColumnarArray;
+import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -40,7 +42,7 @@ public class ColumnVectorUtils {
   /**
    * Populates the entire `col` with `row[fieldIdx]`
    */
-  public static void populate(ColumnVector col, InternalRow row, int fieldIdx) {
+  public static void populate(WritableColumnVector col, InternalRow row, int fieldIdx) {
     int capacity = col.capacity;
     DataType t = col.dataType();
 
@@ -98,24 +100,16 @@ public class ColumnVectorUtils {
    * For example, an array of IntegerType will return an int[].
    * Throws exceptions for unhandled schemas.
    */
-  public static Object toPrimitiveJavaArray(ColumnVector.Array array) {
-    DataType dt = array.data.dataType();
-    if (dt instanceof IntegerType) {
-      int[] result = new int[array.length];
-      ColumnVector data = array.data;
-      for (int i = 0; i < result.length; i++) {
-        if (data.isNullAt(array.offset + i)) {
-          throw new RuntimeException("Cannot handle NULL values.");
-        }
-        result[i] = data.getInt(array.offset + i);
+  public static int[] toJavaIntArray(ColumnarArray array) {
+    for (int i = 0; i < array.numElements(); i++) {
+      if (array.isNullAt(i)) {
+        throw new RuntimeException("Cannot handle NULL values.");
       }
-      return result;
-    } else {
-      throw new UnsupportedOperationException();
     }
+    return array.toIntArray();
   }
 
-  private static void appendValue(ColumnVector dst, DataType t, Object o) {
+  private static void appendValue(WritableColumnVector dst, DataType t, Object o) {
     if (o == null) {
       if (t instanceof CalendarIntervalType) {
         dst.appendStruct(true);
@@ -165,7 +159,7 @@ public class ColumnVectorUtils {
     }
   }
 
-  private static void appendValue(ColumnVector dst, DataType t, Row src, int fieldIdx) {
+  private static void appendValue(WritableColumnVector dst, DataType t, Row src, int fieldIdx) {
     if (t instanceof ArrayType) {
       ArrayType at = (ArrayType)t;
       if (src.isNullAt(fieldIdx)) {
@@ -198,15 +192,23 @@ public class ColumnVectorUtils {
    */
   public static ColumnarBatch toBatch(
       StructType schema, MemoryMode memMode, Iterator<Row> row) {
-    ColumnarBatch batch = ColumnarBatch.allocate(schema, memMode);
+    int capacity = ColumnarBatch.DEFAULT_BATCH_SIZE;
+    WritableColumnVector[] columnVectors;
+    if (memMode == MemoryMode.OFF_HEAP) {
+      columnVectors = OffHeapColumnVector.allocateColumns(capacity, schema);
+    } else {
+      columnVectors = OnHeapColumnVector.allocateColumns(capacity, schema);
+    }
+
     int n = 0;
     while (row.hasNext()) {
       Row r = row.next();
       for (int i = 0; i < schema.fields().length; i++) {
-        appendValue(batch.column(i), schema.fields()[i].dataType(), r, i);
+        appendValue(columnVectors[i], schema.fields()[i].dataType(), r, i);
       }
       n++;
     }
+    ColumnarBatch batch = new ColumnarBatch(schema, columnVectors, capacity);
     batch.setNumRows(n);
     return batch;
   }

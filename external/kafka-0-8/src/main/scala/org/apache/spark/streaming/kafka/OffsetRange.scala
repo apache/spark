@@ -30,6 +30,7 @@ import kafka.common.TopicAndPartition
  *   }
  * }}}
  */
+@deprecated("Update to Kafka 0.10 integration", "2.3.0")
 trait HasOffsetRanges {
   def offsetRanges: Array[OffsetRange]
 }
@@ -42,6 +43,7 @@ trait HasOffsetRanges {
  * @param fromOffset Inclusive starting offset
  * @param untilOffset Exclusive ending offset
  */
+@deprecated("Update to Kafka 0.10 integration", "2.3.0")
 final class OffsetRange private(
     val topic: String,
     val partition: Int,
@@ -80,6 +82,7 @@ final class OffsetRange private(
 /**
  * Companion object the provides methods to create instances of [[OffsetRange]].
  */
+@deprecated("Update to Kafka 0.10 integration", "2.3.0")
 object OffsetRange {
   def create(topic: String, partition: Int, fromOffset: Long, untilOffset: Long): OffsetRange =
     new OffsetRange(topic, partition, fromOffset, untilOffset)

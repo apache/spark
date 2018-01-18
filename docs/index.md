@@ -81,6 +81,7 @@ options for deployment:
 * [Standalone Deploy Mode](spark-standalone.html): simplest way to deploy Spark on a private cluster
 * [Apache Mesos](running-on-mesos.html)
 * [Hadoop YARN](running-on-yarn.html)
+* [Kubernetes](running-on-kubernetes.html)
 
 # Where to Go from Here
 
@@ -100,6 +101,7 @@ options for deployment:
 * [Spark Java API (Javadoc)](api/java/index.html)
 * [Spark Python API (Sphinx)](api/python/index.html)
 * [Spark R API (Roxygen2)](api/R/index.html)
+* [Spark SQL, Built-in Functions (MkDocs)](api/sql/index.html)
 
 **Deployment Guides:**
 
@@ -111,7 +113,7 @@ options for deployment:
   * [Mesos](running-on-mesos.html): deploy a private cluster using
       [Apache Mesos](http://mesos.apache.org)
   * [YARN](running-on-yarn.html): deploy Spark on top of Hadoop NextGen (YARN)
-  * [Kubernetes (experimental)](https://github.com/apache-spark-on-k8s/spark): deploy Spark on top of Kubernetes
+  * [Kubernetes](running-on-kubernetes.html): deploy Spark on top of Kubernetes
 
 **Other Documents:**
 

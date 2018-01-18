@@ -33,22 +33,17 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
 
 class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
-  implicit class EqualsIgnoreCRLF(source: String) {
-    def equalsIgnoreCRLF(target: String): Boolean = {
-      source.replaceAll("\r\n|\r|\n", System.lineSeparator) ===
-        target.replaceAll("\r\n|\r|\n", System.lineSeparator)
-    }
-  }
-
   test("StreamingQueryProgress - prettyJson") {
     val json1 = testProgress1.prettyJson
-    assert(json1.equalsIgnoreCRLF(
+    assertJson(
+      json1,
       s"""
         |{
         |  "id" : "${testProgress1.id.toString}",
         |  "runId" : "${testProgress1.runId.toString}",
         |  "name" : "myName",
         |  "timestamp" : "2016-12-05T20:54:20.827Z",
+        |  "batchId" : 2,
         |  "numInputRows" : 678,
         |  "inputRowsPerSecond" : 10.0,
         |  "durationMs" : {
@@ -62,7 +57,8 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         |  },
         |  "stateOperators" : [ {
         |    "numRowsTotal" : 0,
-        |    "numRowsUpdated" : 1
+        |    "numRowsUpdated" : 1,
+        |    "memoryUsedBytes" : 2
         |  } ],
         |  "sources" : [ {
         |    "description" : "source",
@@ -75,25 +71,27 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         |    "description" : "sink"
         |  }
         |}
-      """.stripMargin.trim))
+      """.stripMargin.trim)
     assert(compact(parse(json1)) === testProgress1.json)
 
     val json2 = testProgress2.prettyJson
-    assert(
-      json2.equalsIgnoreCRLF(
-        s"""
+    assertJson(
+      json2,
+      s"""
          |{
          |  "id" : "${testProgress2.id.toString}",
          |  "runId" : "${testProgress2.runId.toString}",
          |  "name" : null,
          |  "timestamp" : "2016-12-05T20:54:20.827Z",
+         |  "batchId" : 2,
          |  "numInputRows" : 678,
          |  "durationMs" : {
          |    "total" : 0
          |  },
          |  "stateOperators" : [ {
          |    "numRowsTotal" : 0,
-         |    "numRowsUpdated" : 1
+         |    "numRowsUpdated" : 1,
+         |    "memoryUsedBytes" : 2
          |  } ],
          |  "sources" : [ {
          |    "description" : "source",
@@ -105,7 +103,7 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
          |    "description" : "sink"
          |  }
          |}
-      """.stripMargin.trim))
+      """.stripMargin.trim)
     assert(compact(parse(json2)) === testProgress2.json)
   }
 
@@ -121,14 +119,15 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
 
   test("StreamingQueryStatus - prettyJson") {
     val json = testStatus.prettyJson
-    assert(json.equalsIgnoreCRLF(
+    assertJson(
+      json,
       """
         |{
         |  "message" : "active",
         |  "isDataAvailable" : true,
         |  "isTriggerActive" : false
         |}
-      """.stripMargin.trim))
+      """.stripMargin.trim)
   }
 
   test("StreamingQueryStatus - json") {
@@ -209,6 +208,12 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
       }
     }
   }
+
+  def assertJson(source: String, expected: String): Unit = {
+    assert(
+      source.replaceAll("\r\n|\r|\n", System.lineSeparator) ===
+        expected.replaceAll("\r\n|\r|\n", System.lineSeparator))
+  }
 }
 
 object StreamingQueryStatusAndProgressSuite {
@@ -224,7 +229,8 @@ object StreamingQueryStatusAndProgressSuite {
       "min" -> "2016-12-05T20:54:20.827Z",
       "avg" -> "2016-12-05T20:54:20.827Z",
       "watermark" -> "2016-12-05T20:54:20.827Z").asJava),
-    stateOperators = Array(new StateOperatorProgress(numRowsTotal = 0, numRowsUpdated = 1)),
+    stateOperators = Array(new StateOperatorProgress(
+      numRowsTotal = 0, numRowsUpdated = 1, memoryUsedBytes = 2)),
     sources = Array(
       new SourceProgress(
         description = "source",
@@ -247,7 +253,8 @@ object StreamingQueryStatusAndProgressSuite {
     durationMs = new java.util.HashMap(Map("total" -> 0L).mapValues(long2Long).asJava),
     // empty maps should be handled correctly
     eventTime = new java.util.HashMap(Map.empty[String, String].asJava),
-    stateOperators = Array(new StateOperatorProgress(numRowsTotal = 0, numRowsUpdated = 1)),
+    stateOperators = Array(new StateOperatorProgress(
+      numRowsTotal = 0, numRowsUpdated = 1, memoryUsedBytes = 2)),
     sources = Array(
       new SourceProgress(
         description = "source",

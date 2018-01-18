@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io._
 import java.nio.charset.StandardCharsets
+import java.util.Optional
 import java.util.concurrent.TimeUnit
 
 import org.apache.commons.io.IOUtils
@@ -28,7 +29,12 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{AnalysisException, DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousReader
+import org.apache.spark.sql.execution.streaming.sources.RateStreamMicroBatchReader
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
+import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousReader, MicroBatchReader}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ManualClock, SystemClock}
 
@@ -46,7 +52,8 @@ import org.apache.spark.util.{ManualClock, SystemClock}
  *    generated rows. The source will try its best to reach `rowsPerSecond`, but the query may
  *    be resource constrained, and `numPartitions` can be tweaked to help reach the desired speed.
  */
-class RateSourceProvider extends StreamSourceProvider with DataSourceRegister {
+class RateSourceProvider extends StreamSourceProvider with DataSourceRegister
+  with DataSourceV2 with ContinuousReadSupport {
 
   override def sourceSchema(
       sqlContext: SQLContext,
@@ -100,6 +107,14 @@ class RateSourceProvider extends StreamSourceProvider with DataSourceRegister {
       params.get("useManualClock").map(_.toBoolean).getOrElse(false) // Only for testing
     )
   }
+
+  override def createContinuousReader(
+      schema: Optional[StructType],
+      checkpointLocation: String,
+      options: DataSourceV2Options): ContinuousReader = {
+    new RateStreamContinuousReader(options)
+  }
+
   override def shortName(): String = "rate"
 }
 
@@ -200,7 +215,8 @@ class RateStreamSource(
       s"rangeStart: $rangeStart, rangeEnd: $rangeEnd")
 
     if (rangeStart == rangeEnd) {
-      return sqlContext.internalCreateDataFrame(sqlContext.sparkContext.emptyRDD, schema)
+      return sqlContext.internalCreateDataFrame(
+        sqlContext.sparkContext.emptyRDD, schema, isStreaming = true)
     }
 
     val localStartTimeMs = startTimeMs + TimeUnit.SECONDS.toMillis(startSeconds)
@@ -211,7 +227,7 @@ class RateStreamSource(
       val relative = math.round((v - rangeStart) * relativeMsPerValue)
       InternalRow(DateTimeUtils.fromMillis(relative + localStartTimeMs), v)
     }
-    sqlContext.internalCreateDataFrame(rdd, schema)
+    sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
   }
 
   override def stop(): Unit = {}

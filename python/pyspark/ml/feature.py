@@ -34,6 +34,7 @@ __all__ = ['Binarizer',
            'CountVectorizer', 'CountVectorizerModel',
            'DCT',
            'ElementwiseProduct',
+           'FeatureHasher',
            'HashingTF',
            'IDF', 'IDFModel',
            'Imputer', 'ImputerModel',
@@ -44,6 +45,7 @@ __all__ = ['Binarizer',
            'NGram',
            'Normalizer',
            'OneHotEncoder',
+           'OneHotEncoderEstimator', 'OneHotEncoderModel',
            'PCA', 'PCAModel',
            'PolynomialExpansion',
            'QuantileDiscretizer',
@@ -56,6 +58,7 @@ __all__ = ['Binarizer',
            'Tokenizer',
            'VectorAssembler',
            'VectorIndexer', 'VectorIndexerModel',
+           'VectorSizeHint',
            'VectorSlicer',
            'Word2Vec', 'Word2VecModel']
 
@@ -694,6 +697,102 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
         Gets the value of scalingVec or its default value.
         """
         return self.getOrDefault(self.scalingVec)
+
+
+@inherit_doc
+class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures, JavaMLReadable,
+                    JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    Feature hashing projects a set of categorical or numerical features into a feature vector of
+    specified dimension (typically substantially smaller than that of the original feature
+    space). This is done using the hashing trick (https://en.wikipedia.org/wiki/Feature_hashing)
+    to map features to indices in the feature vector.
+
+    The FeatureHasher transformer operates on multiple columns. Each column may contain either
+    numeric or categorical features. Behavior and handling of column data types is as follows:
+
+    * Numeric columns:
+        For numeric features, the hash value of the column name is used to map the
+        feature value to its index in the feature vector. By default, numeric features
+        are not treated as categorical (even when they are integers). To treat them
+        as categorical, specify the relevant columns in `categoricalCols`.
+
+    * String columns:
+        For categorical features, the hash value of the string "column_name=value"
+        is used to map to the vector index, with an indicator value of `1.0`.
+        Thus, categorical features are "one-hot" encoded
+        (similarly to using :py:class:`OneHotEncoder` with `dropLast=false`).
+
+    * Boolean columns:
+        Boolean values are treated in the same way as string columns. That is,
+        boolean features are represented as "column_name=true" or "column_name=false",
+        with an indicator value of `1.0`.
+
+    Null (missing) values are ignored (implicitly zero in the resulting feature vector).
+
+    Since a simple modulo is used to transform the hash function to a vector index,
+    it is advisable to use a power of two as the `numFeatures` parameter;
+    otherwise the features will not be mapped evenly to the vector indices.
+
+    >>> data = [(2.0, True, "1", "foo"), (3.0, False, "2", "bar")]
+    >>> cols = ["real", "bool", "stringNum", "string"]
+    >>> df = spark.createDataFrame(data, cols)
+    >>> hasher = FeatureHasher(inputCols=cols, outputCol="features")
+    >>> hasher.transform(df).head().features
+    SparseVector(262144, {51871: 1.0, 63643: 1.0, 174475: 2.0, 253195: 1.0})
+    >>> hasher.setCategoricalCols(["real"]).transform(df).head().features
+    SparseVector(262144, {51871: 1.0, 63643: 1.0, 171257: 1.0, 253195: 1.0})
+    >>> hasherPath = temp_path + "/hasher"
+    >>> hasher.save(hasherPath)
+    >>> loadedHasher = FeatureHasher.load(hasherPath)
+    >>> loadedHasher.getNumFeatures() == hasher.getNumFeatures()
+    True
+    >>> loadedHasher.transform(df).head().features == hasher.transform(df).head().features
+    True
+
+    .. versionadded:: 2.3.0
+    """
+
+    categoricalCols = Param(Params._dummy(), "categoricalCols",
+                            "numeric columns to treat as categorical",
+                            typeConverter=TypeConverters.toListString)
+
+    @keyword_only
+    def __init__(self, numFeatures=1 << 18, inputCols=None, outputCol=None, categoricalCols=None):
+        """
+        __init__(self, numFeatures=1 << 18, inputCols=None, outputCol=None, categoricalCols=None)
+        """
+        super(FeatureHasher, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.FeatureHasher", self.uid)
+        self._setDefault(numFeatures=1 << 18)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.3.0")
+    def setParams(self, numFeatures=1 << 18, inputCols=None, outputCol=None, categoricalCols=None):
+        """
+        setParams(self, numFeatures=1 << 18, inputCols=None, outputCol=None, categoricalCols=None)
+        Sets params for this FeatureHasher.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.3.0")
+    def setCategoricalCols(self, value):
+        """
+        Sets the value of :py:attr:`categoricalCols`.
+        """
+        return self._set(categoricalCols=value)
+
+    @since("2.3.0")
+    def getCategoricalCols(self):
+        """
+        Gets the value of binary or its default value.
+        """
+        return self.getOrDefault(self.categoricalCols)
 
 
 @inherit_doc
@@ -1479,6 +1578,9 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
     .. note:: This is different from scikit-learn's OneHotEncoder,
         which keeps all categories. The output vectors are sparse.
 
+    .. note:: Deprecated in 2.3.0. :py:class:`OneHotEncoderEstimator` will be renamed to
+        :py:class:`OneHotEncoder` and this :py:class:`OneHotEncoder` will be removed in 3.0.0.
+
     .. seealso::
 
        :py:class:`StringIndexer` for converting categorical values into
@@ -1541,6 +1643,118 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
         Gets the value of dropLast or its default value.
         """
         return self.getOrDefault(self.dropLast)
+
+
+@inherit_doc
+class OneHotEncoderEstimator(JavaEstimator, HasInputCols, HasOutputCols, HasHandleInvalid,
+                             JavaMLReadable, JavaMLWritable):
+    """
+    A one-hot encoder that maps a column of category indices to a column of binary vectors, with
+    at most a single one-value per row that indicates the input category index.
+    For example with 5 categories, an input value of 2.0 would map to an output vector of
+    `[0.0, 0.0, 1.0, 0.0]`.
+    The last category is not included by default (configurable via `dropLast`),
+    because it makes the vector entries sum up to one, and hence linearly dependent.
+    So an input value of 4.0 maps to `[0.0, 0.0, 0.0, 0.0]`.
+
+    Note: This is different from scikit-learn's OneHotEncoder, which keeps all categories.
+    The output vectors are sparse.
+
+    When `handleInvalid` is configured to 'keep', an extra "category" indicating invalid values is
+    added as last category. So when `dropLast` is true, invalid values are encoded as all-zeros
+    vector.
+
+    Note: When encoding multi-column by using `inputCols` and `outputCols` params, input/output
+    cols come in pairs, specified by the order in the arrays, and each pair is treated
+    independently.
+
+    See `StringIndexer` for converting categorical values into category indices
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([(0.0,), (1.0,), (2.0,)], ["input"])
+    >>> ohe = OneHotEncoderEstimator(inputCols=["input"], outputCols=["output"])
+    >>> model = ohe.fit(df)
+    >>> model.transform(df).head().output
+    SparseVector(2, {0: 1.0})
+    >>> ohePath = temp_path + "/oheEstimator"
+    >>> ohe.save(ohePath)
+    >>> loadedOHE = OneHotEncoderEstimator.load(ohePath)
+    >>> loadedOHE.getInputCols() == ohe.getInputCols()
+    True
+    >>> modelPath = temp_path + "/ohe-model"
+    >>> model.save(modelPath)
+    >>> loadedModel = OneHotEncoderModel.load(modelPath)
+    >>> loadedModel.categorySizes == model.categorySizes
+    True
+
+    .. versionadded:: 2.3.0
+    """
+
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "How to handle invalid data during " +
+                          "transform(). Options are 'keep' (invalid data presented as an extra " +
+                          "categorical feature) or error (throw an error). Note that this Param " +
+                          "is only used during transform; during fitting, invalid data will " +
+                          "result in an error.",
+                          typeConverter=TypeConverters.toString)
+
+    dropLast = Param(Params._dummy(), "dropLast", "whether to drop the last category",
+                     typeConverter=TypeConverters.toBoolean)
+
+    @keyword_only
+    def __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True):
+        """
+        __init__(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True)
+        """
+        super(OneHotEncoderEstimator, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.feature.OneHotEncoderEstimator", self.uid)
+        self._setDefault(handleInvalid="error", dropLast=True)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.3.0")
+    def setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True):
+        """
+        setParams(self, inputCols=None, outputCols=None, handleInvalid="error", dropLast=True)
+        Sets params for this OneHotEncoderEstimator.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.3.0")
+    def setDropLast(self, value):
+        """
+        Sets the value of :py:attr:`dropLast`.
+        """
+        return self._set(dropLast=value)
+
+    @since("2.3.0")
+    def getDropLast(self):
+        """
+        Gets the value of dropLast or its default value.
+        """
+        return self.getOrDefault(self.dropLast)
+
+    def _create_model(self, java_model):
+        return OneHotEncoderModel(java_model)
+
+
+class OneHotEncoderModel(JavaModel, JavaMLReadable, JavaMLWritable):
+    """
+    Model fitted by :py:class:`OneHotEncoderEstimator`.
+
+    .. versionadded:: 2.3.0
+    """
+
+    @property
+    @since("2.3.0")
+    def categorySizes(self):
+        """
+        Original number of categories for each feature being encoded.
+        The array contains one value for each input column, in order.
+        """
+        return self._call_java("categorySizes")
 
 
 @inherit_doc
@@ -2413,7 +2627,8 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadabl
 
 
 @inherit_doc
-class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, JavaMLReadable,
+                    JavaMLWritable):
     """
     Class for indexing categorical feature columns in a dataset of `Vector`.
 
@@ -2448,7 +2663,6 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
         do not recompute.
       - Specify certain features to not index, either via a parameter or via existing metadata.
       - Add warning if a categorical feature has only 1 category.
-      - Add option for allowing unknown categories.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([-1.0, 0.0]),),
@@ -2479,6 +2693,15 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
     True
     >>> loadedModel.categoryMaps == model.categoryMaps
     True
+    >>> dfWithInvalid = spark.createDataFrame([(Vectors.dense([3.0, 1.0]),)], ["a"])
+    >>> indexer.getHandleInvalid()
+    'error'
+    >>> model3 = indexer.setHandleInvalid("skip").fit(df)
+    >>> model3.transform(dfWithInvalid).count()
+    0
+    >>> model4 = indexer.setParams(handleInvalid="keep", outputCol="indexed").fit(df)
+    >>> model4.transform(dfWithInvalid).head().indexed
+    DenseVector([2.0, 1.0])
 
     .. versionadded:: 1.4.0
     """
@@ -2488,22 +2711,29 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
                           "(>= 2). If a feature is found to have > maxCategories values, then " +
                           "it is declared continuous.", typeConverter=TypeConverters.toInt)
 
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "How to handle invalid data " +
+                          "(unseen labels or NULL values). Options are 'skip' (filter out " +
+                          "rows with invalid data), 'error' (throw an error), or 'keep' (put " +
+                          "invalid data in a special additional bucket, at index of the number " +
+                          "of categories of the feature).",
+                          typeConverter=TypeConverters.toString)
+
     @keyword_only
-    def __init__(self, maxCategories=20, inputCol=None, outputCol=None):
+    def __init__(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        __init__(self, maxCategories=20, inputCol=None, outputCol=None)
+        __init__(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error")
         """
         super(VectorIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorIndexer", self.uid)
-        self._setDefault(maxCategories=20)
+        self._setDefault(maxCategories=20, handleInvalid="error")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, maxCategories=20, inputCol=None, outputCol=None):
+    def setParams(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error"):
         """
-        setParams(self, maxCategories=20, inputCol=None, outputCol=None)
+        setParams(self, maxCategories=20, inputCol=None, outputCol=None, handleInvalid="error")
         Sets params for this VectorIndexer.
         """
         kwargs = self._input_kwargs
@@ -2674,6 +2904,8 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     |   c|[-0.3794820010662...|
     +----+--------------------+
     ...
+    >>> model.findSynonymsArray("a", 2)
+    [(u'b', 0.25053444504737854), (u'c', -0.6980510950088501)]
     >>> from pyspark.sql.functions import format_number as fmt
     >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
     +----+----------+
@@ -2849,6 +3081,19 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
         if not isinstance(word, basestring):
             word = _convert_to_vector(word)
         return self._call_java("findSynonyms", word, num)
+
+    @since("2.3.0")
+    def findSynonymsArray(self, word, num):
+        """
+        Find "num" number of words closest in similarity to "word".
+        word can be a string or vector representation.
+        Returns an array with two fields word and similarity (which
+        gives the cosine similarity).
+        """
+        if not isinstance(word, basestring):
+            word = _convert_to_vector(word)
+        tuples = self._java_obj.findSynonymsArray(word, num)
+        return list(map(lambda st: (st._1(), st._2()), list(tuples)))
 
 
 @inherit_doc
@@ -3356,6 +3601,84 @@ class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
         List of indices to select (filter).
         """
         return self._call_java("selectedFeatures")
+
+
+@inherit_doc
+class VectorSizeHint(JavaTransformer, HasInputCol, HasHandleInvalid, JavaMLReadable,
+                     JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    A feature transformer that adds size information to the metadata of a vector column.
+    VectorAssembler needs size information for its input columns and cannot be used on streaming
+    dataframes without this metadata.
+
+    .. note:: VectorSizeHint modifies `inputCol` to include size metadata and does not have an
+        outputCol.
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> from pyspark.ml import Pipeline, PipelineModel
+    >>> data = [(Vectors.dense([1., 2., 3.]), 4.)]
+    >>> df = spark.createDataFrame(data, ["vector", "float"])
+    >>>
+    >>> sizeHint = VectorSizeHint(inputCol="vector", size=3, handleInvalid="skip")
+    >>> vecAssembler = VectorAssembler(inputCols=["vector", "float"], outputCol="assembled")
+    >>> pipeline = Pipeline(stages=[sizeHint, vecAssembler])
+    >>>
+    >>> pipelineModel = pipeline.fit(df)
+    >>> pipelineModel.transform(df).head().assembled
+    DenseVector([1.0, 2.0, 3.0, 4.0])
+    >>> vectorSizeHintPath = temp_path + "/vector-size-hint-pipeline"
+    >>> pipelineModel.save(vectorSizeHintPath)
+    >>> loadedPipeline = PipelineModel.load(vectorSizeHintPath)
+    >>> loaded = loadedPipeline.transform(df).head().assembled
+    >>> expected = pipelineModel.transform(df).head().assembled
+    >>> loaded == expected
+    True
+
+    .. versionadded:: 2.3.0
+    """
+
+    size = Param(Params._dummy(), "size", "Size of vectors in column.",
+                 typeConverter=TypeConverters.toInt)
+
+    handleInvalid = Param(Params._dummy(), "handleInvalid",
+                          "How to handle invalid vectors in inputCol. Invalid vectors include "
+                          "nulls and vectors with the wrong size. The options are `skip` (filter "
+                          "out rows with invalid vectors), `error` (throw an error) and "
+                          "`optimistic` (do not check the vector size, and keep all rows). "
+                          "`error` by default.",
+                          TypeConverters.toString)
+
+    @keyword_only
+    def __init__(self, inputCol=None, size=None, handleInvalid="error"):
+        """
+        __init__(self, inputCol=None, size=None, handleInvalid="error")
+        """
+        super(VectorSizeHint, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorSizeHint", self.uid)
+        self._setDefault(handleInvalid="error")
+        self.setParams(**self._input_kwargs)
+
+    @keyword_only
+    @since("2.3.0")
+    def setParams(self, inputCol=None, size=None, handleInvalid="error"):
+        """
+        setParams(self, inputCol=None, size=None, handleInvalid="error")
+        Sets params for this VectorSizeHint.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.3.0")
+    def getSize(self):
+        """ Gets size param, the size of vectors in `inputCol`."""
+        self.getOrDefault(self.size)
+
+    @since("2.3.0")
+    def setSize(self, value):
+        """ Sets size param, the size of vectors in `inputCol`."""
+        self._set(size=value)
 
 
 if __name__ == "__main__":

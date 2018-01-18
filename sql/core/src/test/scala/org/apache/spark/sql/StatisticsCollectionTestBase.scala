@@ -23,12 +23,12 @@ import java.sql.{Date, Timestamp}
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics, CatalogTable}
-import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
+import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, HiveTableRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.Decimal
 
@@ -46,6 +46,10 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
   private val d2 = Date.valueOf("2016-05-09")
   private val t1 = Timestamp.valueOf("2016-05-08 00:00:01")
   private val t2 = Timestamp.valueOf("2016-05-09 00:00:02")
+  private val d1Internal = DateTimeUtils.fromJavaDate(d1)
+  private val d2Internal = DateTimeUtils.fromJavaDate(d2)
+  private val t1Internal = DateTimeUtils.fromJavaTimestamp(t1)
+  private val t2Internal = DateTimeUtils.fromJavaTimestamp(t2)
 
   /**
    * Define a very simple 3 row table used for testing column serialization.
@@ -73,16 +77,53 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     "cdecimal" -> ColumnStat(2, Some(Decimal(dec1)), Some(Decimal(dec2)), 1, 16, 16),
     "cstring" -> ColumnStat(2, None, None, 1, 3, 3),
     "cbinary" -> ColumnStat(2, None, None, 1, 3, 3),
-    "cdate" -> ColumnStat(2, Some(DateTimeUtils.fromJavaDate(d1)),
-      Some(DateTimeUtils.fromJavaDate(d2)), 1, 4, 4),
-    "ctimestamp" -> ColumnStat(2, Some(DateTimeUtils.fromJavaTimestamp(t1)),
-      Some(DateTimeUtils.fromJavaTimestamp(t2)), 1, 8, 8)
+    "cdate" -> ColumnStat(2, Some(d1Internal), Some(d2Internal), 1, 4, 4),
+    "ctimestamp" -> ColumnStat(2, Some(t1Internal), Some(t2Internal), 1, 8, 8)
   )
+
+  /**
+   * A mapping from column to the stats collected including histograms.
+   * The number of bins in the histograms is 2.
+   */
+  protected val statsWithHgms = {
+    val colStats = mutable.LinkedHashMap(stats.toSeq: _*)
+    colStats.update("cbyte", stats("cbyte").copy(histogram =
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 2, 1))))))
+    colStats.update("cshort", stats("cshort").copy(histogram =
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 3, 1))))))
+    colStats.update("cint", stats("cint").copy(histogram =
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 4, 1))))))
+    colStats.update("clong", stats("clong").copy(histogram =
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 5, 1))))))
+    colStats.update("cdouble", stats("cdouble").copy(histogram =
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 6, 1))))))
+    colStats.update("cfloat", stats("cfloat").copy(histogram =
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 7, 1))))))
+    colStats.update("cdecimal", stats("cdecimal").copy(histogram =
+      Some(Histogram(1, Array(HistogramBin(1, 1, 1), HistogramBin(1, 8, 1))))))
+    colStats.update("cdate", stats("cdate").copy(histogram =
+      Some(Histogram(1, Array(HistogramBin(d1Internal, d1Internal, 1),
+        HistogramBin(d1Internal, d2Internal, 1))))))
+    colStats.update("ctimestamp", stats("ctimestamp").copy(histogram =
+      Some(Histogram(1, Array(HistogramBin(t1Internal, t1Internal, 1),
+        HistogramBin(t1Internal, t2Internal, 1))))))
+    colStats
+  }
 
   private val randomName = new Random(31)
 
   def getCatalogTable(tableName: String): CatalogTable = {
     spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+  }
+
+  def getTableFromCatalogCache(tableName: String): LogicalPlan = {
+    val catalog = spark.sessionState.catalog
+    val qualifiedTableName = QualifiedTableName(catalog.getCurrentDatabase, tableName)
+    catalog.getCachedTable(qualifiedTableName)
+  }
+
+  def isTableInCatalogCache(tableName: String): Boolean = {
+    getTableFromCatalogCache(tableName) != null
   }
 
   def getCatalogStatistics(tableName: String): CatalogStatistics = {
@@ -171,7 +212,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     // Analyze only one column.
     sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c1")
     val (relation, catalogTable) = spark.table(tableName).queryExecution.analyzed.collect {
-      case catalogRel: CatalogRelation => (catalogRel, catalogRel.tableMeta)
+      case catalogRel: HiveTableRelation => (catalogRel, catalogRel.tableMeta)
       case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
     }.head
     val emptyColStat = ColumnStat(0, None, None, 0, 4, 4)
@@ -182,11 +223,19 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     assert(catalogTable.stats.get.colStats == Map("c1" -> emptyColStat))
 
     // Check relation statistics
-    assert(relation.stats.sizeInBytes == 0)
-    assert(relation.stats.rowCount == Some(0))
-    assert(relation.stats.attributeStats.size == 1)
-    val (attribute, colStat) = relation.stats.attributeStats.head
-    assert(attribute.name == "c1")
-    assert(colStat == emptyColStat)
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      assert(relation.stats.sizeInBytes == 1)
+      assert(relation.stats.rowCount == Some(0))
+      assert(relation.stats.attributeStats.size == 1)
+      val (attribute, colStat) = relation.stats.attributeStats.head
+      assert(attribute.name == "c1")
+      assert(colStat == emptyColStat)
+    }
+    relation.invalidateStatsCache()
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+      assert(relation.stats.sizeInBytes == 0)
+      assert(relation.stats.rowCount.isEmpty)
+      assert(relation.stats.attributeStats.isEmpty)
+    }
   }
 }

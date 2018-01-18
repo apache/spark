@@ -392,6 +392,7 @@ object FunctionRegistry {
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
     expression[TruncDate]("trunc"),
+    expression[TruncTimestamp]("date_trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
     expression[DayOfWeek]("dayofweek"),
     expression[WeekOfYear]("weekofyear"),
@@ -525,7 +526,15 @@ object FunctionRegistry {
         // Otherwise, find a constructor method that matches the number of arguments, and use that.
         val params = Seq.fill(expressions.size)(classOf[Expression])
         val f = constructors.find(_.getParameterTypes.toSeq == params).getOrElse {
-          throw new AnalysisException(s"Invalid number of arguments for function $name")
+          val validParametersCount = constructors.map(_.getParameterCount).distinct.sorted
+          val expectedNumberOfParameters = if (validParametersCount.length == 1) {
+            validParametersCount.head.toString
+          } else {
+            validParametersCount.init.mkString("one of ", ", ", " and ") +
+              validParametersCount.last
+          }
+          throw new AnalysisException(s"Invalid number of arguments for function $name. " +
+            s"Expected: $expectedNumberOfParameters; Found: ${params.length}")
         }
         Try(f.newInstance(expressions : _*).asInstanceOf[Expression]) match {
           case Success(e) => e
@@ -557,7 +566,9 @@ object FunctionRegistry {
     }
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
-    (name, (new ExpressionInfo(clazz.getCanonicalName, null, name, usage, null), builder))
+    val expressionInfo =
+      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "")
+    (name, (expressionInfo, builder))
   }
 
   /**
@@ -567,7 +578,21 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
-      new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
+      if (df.extended().isEmpty) {
+        new ExpressionInfo(
+          clazz.getCanonicalName,
+          null,
+          name,
+          df.usage(),
+          df.arguments(),
+          df.examples(),
+          df.note(),
+          df.since())
+      } else {
+        // This exists for the backward compatibility with old `ExpressionDescription`s defining
+        // the extended description in `extended()`.
+        new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
+      }
     } else {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }

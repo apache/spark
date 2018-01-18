@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql
 
@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.lit
@@ -44,7 +44,7 @@ private[sql] object Column {
     e match {
       case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
         a.aggregateFunction.toString
-      case expr => usePrettyExpression(expr).sql
+      case expr => toPrettySQL(expr)
     }
   }
 }
@@ -137,7 +137,7 @@ class Column(val expr: Expression) extends Logging {
     case _ => UnresolvedAttribute.quotedString(name)
   })
 
-  override def toString: String = usePrettyExpression(expr).sql
+  override def toString: String = toPrettySQL(expr)
 
   override def equals(that: Any): Boolean = that match {
     case that: Column => that.expr.equals(this.expr)
@@ -175,7 +175,7 @@ class Column(val expr: Expression) extends Logging {
         case c @ Cast(_: NamedExpression, _, _) => UnresolvedAlias(c)
       } match {
         case ne: NamedExpression => ne
-        case other => Alias(expr, usePrettyExpression(expr).sql)()
+        case _ => Alias(expr, toPrettySQL(expr))()
       }
 
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
@@ -184,7 +184,7 @@ class Column(val expr: Expression) extends Logging {
     // Wait until the struct is resolved. This will generate a nicer looking alias.
     case struct: CreateNamedStructLike => UnresolvedAlias(struct)
 
-    case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
+    case expr: Expression => Alias(expr, toPrettySQL(expr))()
   }
 
   /**

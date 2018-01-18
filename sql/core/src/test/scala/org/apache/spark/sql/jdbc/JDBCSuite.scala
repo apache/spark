@@ -26,6 +26,7 @@ import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExplainCommand
@@ -94,6 +95,15 @@ class JDBCSuite extends SparkFunSuite
         |USING org.apache.spark.sql.jdbc
         |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
         |         partitionColumn 'THEID', lowerBound '1', upperBound '4', numPartitions '3')
+       """.stripMargin.replaceAll("\n", " "))
+
+    sql(
+      s"""
+        |CREATE OR REPLACE TEMPORARY VIEW partsoverflow
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
+        |         partitionColumn 'THEID', lowerBound '-9223372036854775808',
+        |         upperBound '9223372036854775807', numPartitions '3')
        """.stripMargin.replaceAll("\n", " "))
 
     conn.prepareStatement("create table test.inttypes (a INT, b BOOLEAN, c TINYINT, "
@@ -238,7 +248,7 @@ class JDBCSuite extends SparkFunSuite
   // Check whether the tables are fetched in the expected degree of parallelism
   def checkNumPartitions(df: DataFrame, expectedNumPartitions: Int): Unit = {
     val jdbcRelations = df.queryExecution.analyzed.collect {
-      case LogicalRelation(r: JDBCRelation, _, _) => r
+      case LogicalRelation(r: JDBCRelation, _, _, _) => r
     }
     assert(jdbcRelations.length == 1)
     assert(jdbcRelations.head.parts.length == expectedNumPartitions,
@@ -284,10 +294,13 @@ class JDBCSuite extends SparkFunSuite
 
     // This is a test to reflect discussion in SPARK-12218.
     // The older versions of spark have this kind of bugs in parquet data source.
-    val df1 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2 AND NAME != 'mary')")
-    val df2 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
+    val df1 = sql("SELECT * FROM foobar WHERE NOT (THEID != 2) OR NOT (NAME != 'mary')")
     assert(df1.collect.toSet === Set(Row("mary", 2)))
-    assert(df2.collect.toSet === Set(Row("mary", 2)))
+
+    // SPARK-22548: Incorrect nested AND expression pushed down to JDBC data source
+    val df2 = sql("SELECT * FROM foobar " +
+      "WHERE (THEID > 0 AND TRIM(NAME) = 'mary') OR (NAME = 'fred')")
+    assert(df2.collect.toSet === Set(Row("fred", 1), Row("mary", 2)))
 
     def checkNotPushdown(df: DataFrame): DataFrame = {
       val parentPlan = df.queryExecution.executedPlan
@@ -376,6 +389,12 @@ class JDBCSuite extends SparkFunSuite
     assert(ids(2) === 3)
   }
 
+  test("overflow of partition bound difference does not give negative stride") {
+    val df = sql("SELECT * FROM partsoverflow")
+    checkNumPartitions(df, expectedNumPartitions = 3)
+    assert(df.collect().length == 3)
+  }
+
   test("Register JDBC query with renamed fields") {
     // Regression test for bug SPARK-7345
     sql(
@@ -404,6 +423,28 @@ class JDBCSuite extends SparkFunSuite
       spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
     }.getMessage
     assert(e.contains("Invalid value `-1` for parameter `fetchsize`"))
+  }
+
+  test("Missing partition columns") {
+    withView("tempPeople") {
+      val e = intercept[IllegalArgumentException] {
+        sql(
+          s"""
+             |CREATE OR REPLACE TEMPORARY VIEW tempPeople
+             |USING org.apache.spark.sql.jdbc
+             |OPTIONS (
+             |  url 'jdbc:h2:mem:testdb0;user=testUser;password=testPass',
+             |  dbtable 'TEST.PEOPLE',
+             |  lowerBound '0',
+             |  upperBound '52',
+             |  numPartitions '53',
+             |  fetchSize '10000' )
+           """.stripMargin.replaceAll("\n", " "))
+      }.getMessage
+      assert(e.contains("When reading JDBC data sources, users need to specify all or none " +
+        "for the following options: 'partitionColumn', 'lowerBound', 'upperBound', and " +
+        "'numPartitions'"))
+    }
   }
 
   test("Basic API with FetchSize") {
@@ -702,11 +743,50 @@ class JDBCSuite extends SparkFunSuite
         } else {
           None
         }
+      override def quoteIdentifier(colName: String): String = {
+        s"My $colName quoteIdentifier"
+      }
+      override def getTableExistsQuery(table: String): String = {
+        s"My $table Table"
+      }
+      override def getSchemaQuery(table: String): String = {
+        s"My $table Schema"
+      }
+      override def isCascadingTruncateTable(): Option[Boolean] = Some(true)
     }, testH2Dialect))
     assert(agg.canHandle("jdbc:h2:xxx"))
     assert(!agg.canHandle("jdbc:h2"))
     assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
+    assert(agg.isCascadingTruncateTable() === Some(true))
+    assert(agg.quoteIdentifier ("Dummy") === "My Dummy quoteIdentifier")
+    assert(agg.getTableExistsQuery ("Dummy") === "My Dummy Table")
+    assert(agg.getSchemaQuery ("Dummy") === "My Dummy Schema")
+  }
+
+  test("Aggregated dialects: isCascadingTruncateTable") {
+    def genDialect(cascadingTruncateTable: Option[Boolean]): JdbcDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = true
+      override def getCatalystType(
+        sqlType: Int,
+        typeName: String,
+        size: Int,
+        md: MetadataBuilder): Option[DataType] = None
+      override def isCascadingTruncateTable(): Option[Boolean] = cascadingTruncateTable
+    }
+
+    def testDialects(cascadings: List[Option[Boolean]], expected: Option[Boolean]): Unit = {
+      val dialects = cascadings.map(genDialect(_))
+      val agg = new AggregatedDialect(dialects)
+      assert(agg.isCascadingTruncateTable() === expected)
+    }
+
+    testDialects(List(Some(true), Some(false), None), Some(true))
+    testDialects(List(Some(true), Some(true), None), Some(true))
+    testDialects(List(Some(false), Some(false), None), None)
+    testDialects(List(Some(true), Some(true)), Some(true))
+    testDialects(List(Some(false), Some(false)), Some(false))
+    testDialects(List(None, None), None)
   }
 
   test("DB2Dialect type mapping") {
@@ -750,6 +830,12 @@ class JDBCSuite extends SparkFunSuite
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
     assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
       Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+    assert(oracleDialect.getCatalystType(OracleDialect.BINARY_FLOAT, "BINARY_FLOAT", 0, null) ==
+      Some(FloatType))
+    assert(oracleDialect.getCatalystType(OracleDialect.BINARY_DOUBLE, "BINARY_DOUBLE", 0, null) ==
+      Some(DoubleType))
+    assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMPTZ, "TIMESTAMP", 0, null) ==
+      Some(TimestampType))
   }
 
   test("table exists query by jdbc dialect") {
@@ -766,6 +852,22 @@ class JDBCSuite extends SparkFunSuite
     assert(db2.getTableExistsQuery(table) == defaultQuery)
     assert(h2.getTableExistsQuery(table) == defaultQuery)
     assert(derby.getTableExistsQuery(table) == defaultQuery)
+  }
+
+  test("truncate table query by jdbc dialect") {
+    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    val h2 = JdbcDialects.get(url)
+    val derby = JdbcDialects.get("jdbc:derby:db")
+    val table = "weblogs"
+    val defaultQuery = s"TRUNCATE TABLE $table"
+    val postgresQuery = s"TRUNCATE TABLE ONLY $table"
+    assert(MySQL.getTruncateQuery(table) == defaultQuery)
+    assert(Postgres.getTruncateQuery(table) == postgresQuery)
+    assert(db2.getTruncateQuery(table) == defaultQuery)
+    assert(h2.getTruncateQuery(table) == defaultQuery)
+    assert(derby.getTruncateQuery(table) == defaultQuery)
   }
 
   test("Test DataFrame.where for Date and Timestamp") {
@@ -931,6 +1033,34 @@ class JDBCSuite extends SparkFunSuite
     assert(e2.contains("User specified schema not supported with `jdbc`"))
   }
 
+  test("jdbc API support custom schema") {
+    val parts = Array[String]("THEID < 2", "THEID >= 2")
+    val customSchema = "NAME STRING, THEID INT"
+    val props = new Properties()
+    props.put("customSchema", customSchema)
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
+    assert(df.schema.size === 2)
+    assert(df.schema === CatalystSqlParser.parseTableSchema(customSchema))
+    assert(df.count() === 3)
+  }
+
+  test("jdbc API custom schema DDL-like strings.") {
+    withTempView("people_view") {
+      val customSchema = "NAME STRING, THEID INT"
+      sql(
+        s"""
+           |CREATE TEMPORARY VIEW people_view
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass',
+           |customSchema '$customSchema')
+        """.stripMargin.replaceAll("\n", " "))
+      val df = sql("select * from people_view")
+      assert(df.schema.length === 2)
+      assert(df.schema === CatalystSqlParser.parseTableSchema(customSchema))
+      assert(df.count() === 3)
+    }
+  }
+
   test("SPARK-15648: teradataDialect StringType data mapping") {
     val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
     assert(teradataDialect.getJDBCType(StringType).
@@ -950,10 +1080,10 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("unsupported types") {
-    var e = intercept[SparkException] {
+    var e = intercept[SQLException] {
       spark.read.jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties()).collect()
     }.getMessage
-    assert(e.contains("java.lang.UnsupportedOperationException: unimplemented"))
+    assert(e.contains("Unsupported type TIMESTAMP_WITH_TIMEZONE"))
     e = intercept[SQLException] {
       spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY", new Properties()).collect()
     }.getMessage
@@ -1007,4 +1137,35 @@ class JDBCSuite extends SparkFunSuite
       assert(sql("select * from people_view").count() == 3)
     }
   }
+
+  test("SPARK-21519: option sessionInitStatement, run SQL to initialize the database session.") {
+    val initSQL1 = "SET @MYTESTVAR 21519"
+    val df1 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "(SELECT NVL(@MYTESTVAR, -1))")
+      .option("sessionInitStatement", initSQL1)
+      .load()
+    assert(df1.collect() === Array(Row(21519)))
+
+    val initSQL2 = "SET SCHEMA DUMMY"
+    val df2 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.PEOPLE")
+      .option("sessionInitStatement", initSQL2)
+      .load()
+    val e = intercept[SparkException] {df2.collect()}.getMessage
+    assert(e.contains("""Schema "DUMMY" not found"""))
+
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW test_sessionInitStatement
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$urlWithUserAndPass',
+         |dbtable '(SELECT NVL(@MYTESTVAR1, -1), NVL(@MYTESTVAR2, -1))',
+         |sessionInitStatement 'SET @MYTESTVAR1 21519; SET @MYTESTVAR2 1234')
+       """.stripMargin)
+
+      val df3 = sql("SELECT * FROM test_sessionInitStatement")
+      assert(df3.collect() === Array(Row(21519, 1234)))
+    }
 }

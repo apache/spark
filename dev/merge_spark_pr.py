@@ -17,10 +17,11 @@
 # limitations under the License.
 #
 
-# Utility for creating well-formed pull request merges and pushing them to Apache.
-#   usage: ./apache-pr-merge.py    (see config env vars below)
+# Utility for creating well-formed pull request merges and pushing them to Apache
+# Spark.
+#   usage: ./merge_spark_pr.py    (see config env vars below)
 #
-# This utility assumes you already have local a Spark git folder and that you
+# This utility assumes you already have a local Spark git folder and that you
 # have added remotes corresponding to both (i) the github apache Spark
 # mirror and (ii) the apache git repo.
 
@@ -29,6 +30,7 @@ import os
 import re
 import subprocess
 import sys
+import traceback
 import urllib2
 
 try:
@@ -241,6 +243,9 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
     cur_summary = issue.fields.summary
     cur_assignee = issue.fields.assignee
     if cur_assignee is None:
+        cur_assignee = choose_jira_assignee(issue, asf_jira)
+    # Check again, we might not have chosen an assignee
+    if cur_assignee is None:
         cur_assignee = "NOT ASSIGNED!!!"
     else:
         cur_assignee = cur_assignee.displayName
@@ -287,6 +292,44 @@ def resolve_jira_issue(merge_branches, comment, default_jira_id=""):
         comment=comment, resolution={'id': resolution.raw['id']})
 
     print("Successfully resolved %s with fixVersions=%s!" % (jira_id, fix_versions))
+
+
+def choose_jira_assignee(issue, asf_jira):
+    """
+    Prompt the user to choose who to assign the issue to in jira, given a list of candidates,
+    including the original reporter and all commentors
+    """
+    while True:
+        try:
+            reporter = issue.fields.reporter
+            commentors = map(lambda x: x.author, issue.fields.comment.comments)
+            candidates = set(commentors)
+            candidates.add(reporter)
+            candidates = list(candidates)
+            print("JIRA is unassigned, choose assignee")
+            for idx, author in enumerate(candidates):
+                if author.key == "apachespark":
+                    continue
+                annotations = ["Reporter"] if author == reporter else []
+                if author in commentors:
+                    annotations.append("Commentor")
+                print("[%d] %s (%s)" % (idx, author.displayName, ",".join(annotations)))
+            raw_assignee = raw_input(
+                "Enter number of user, or userid,  to assign to (blank to leave unassigned):")
+            if raw_assignee == "":
+                return None
+            else:
+                try:
+                    id = int(raw_assignee)
+                    assignee = candidates[id]
+                except:
+                    # assume it's a user id, and try to assign (might fail, we just prompt again)
+                    assignee = asf_jira.user(raw_assignee)
+                asf_jira.assign_issue(issue.key, assignee.key)
+                return assignee
+        except:
+            traceback.print_exc()
+            print("Error assigning JIRA, try again (or leave blank and fix manually)")
 
 
 def resolve_jira_issues(title, merge_branches, comment):
