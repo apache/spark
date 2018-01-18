@@ -222,13 +222,15 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
 }
 
 /**
- * A pattern that collects the filter and inner joins.
+ * A pattern that collects the filter and inner joins and skip projections with attributes only.
  *
  *          Filter
  *            |
  *        inner Join
  *          /    \            ---->      (Seq(plan0, plan1, plan2), conditions)
  *      Filter   plan2
+ *        |
+ *      Project
  *        |
  *  inner join
  *      /    \
@@ -253,19 +255,20 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
     case Filter(filterCondition, j @ Join(_, _, _: InnerLike, _, hint)) if hint == JoinHint.NONE =>
       val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
-
+    case p @ Project(_, child)
+        // Keep flattening joins when the project has attributes only
+        if p.projectList.forall(_.isInstanceOf[Attribute]) =>
+      flattenJoin(child)
     case _ => (Seq((plan, parentJoinType)), Seq.empty)
   }
 
-  def unapply(plan: LogicalPlan)
-      : Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]
-      = plan match {
-    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _, hint))
-        if hint == JoinHint.NONE =>
-      Some(flattenJoin(f))
-    case j @ Join(_, _, joinType, _, hint) if hint == JoinHint.NONE =>
-      Some(flattenJoin(j))
-    case _ => None
+  def unapply(plan: LogicalPlan): Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])] = {
+    val (plans, conditions) = flattenJoin(plan)
+    if (plans.size > 1) {
+      Some((plans, conditions))
+    } else {
+      None
+    }
   }
 }
 

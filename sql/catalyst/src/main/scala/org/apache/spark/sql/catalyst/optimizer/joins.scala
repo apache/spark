@@ -88,6 +88,21 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  // Extract a list of logical plans to be joined for join-order comparisons.
+  // Since `ExtractFiltersAndInnerJoins` handles left-deep trees only, this function have
+  // the same strategy to extract the plan list.
+  private[optimizer] def extractLeftDeepInnerJoins(plan: LogicalPlan)
+    : Seq[LogicalPlan] = plan match {
+    case Join(left, right, _: InnerLike, _, _) => right +: extractLeftDeepInnerJoins(left)
+    case Filter(_, child) => extractLeftDeepInnerJoins(child)
+    case Project(_, child) => extractLeftDeepInnerJoins(child)
+    case _ => Seq(plan)
+  }
+
+  private def sameJoinOrder(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
+    extractLeftDeepInnerJoins(plan1) == extractLeftDeepInnerJoins(plan2)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case p @ ExtractFiltersAndInnerJoins(input, conditions)
         if input.size > 2 && conditions.nonEmpty =>
@@ -103,12 +118,17 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
         createOrderedJoin(input, conditions)
       }
 
-      if (p.sameOutput(reordered)) {
-        reordered
+      // Checks if joins were reordered. If not reordered, returns the original plan
+      if (!sameJoinOrder(reordered, p)) {
+        if (p.sameOutput(reordered)) {
+          reordered
+        } else {
+          // Reordering the joins have changed the order of the columns.
+          // Inject a projection to make sure we restore to the expected ordering.
+          Project(p.output, reordered)
+        }
       } else {
-        // Reordering the joins have changed the order of the columns.
-        // Inject a projection to make sure we restore to the expected ordering.
-        Project(p.output, reordered)
+        reordered
       }
   }
 }

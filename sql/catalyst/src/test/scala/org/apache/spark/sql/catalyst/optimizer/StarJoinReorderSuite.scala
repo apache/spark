@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
 import org.apache.spark.sql.internal.SQLConf._
@@ -580,7 +580,12 @@ class StarJoinReorderSuite extends PlanTest with StatsEstimationTestBase {
 
   private def assertEqualPlans(plan1: LogicalPlan, plan2: LogicalPlan): Unit = {
     val analyzed = plan1.analyze
-    val optimized = Optimize.execute(analyzed)
+    val optimized = Optimize.execute(analyzed) match {
+      // `ReorderJoin` adds `Project` to keep the same order of output attributes.
+      // So, we drop a top `Project` for tests.
+      case project: Project => project.child
+      case p => p
+    }
     val expected = plan2.analyze
 
     assert(equivalentOutput(analyzed, expected)) // if this fails, the expected itself is incorrect
