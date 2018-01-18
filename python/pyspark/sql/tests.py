@@ -1538,6 +1538,12 @@ class SQLTests(ReusedSQLTestCase):
         except ValueError:
             pass
 
+        # Should not take multiple args
+        try:
+            df.writeStream.trigger(processingTime='5 seconds', continuous='1 second')
+        except ValueError:
+            pass
+
         # Should take only keyword args
         try:
             df.writeStream.trigger('5 seconds')
