@@ -1310,15 +1310,23 @@ invalid values downstream.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [VectorAssembler Scala docs](api/scala/index.html#org.apache.spark.ml.feature.VectorSizeHint)
+Refer to the [VectorSizeHint Scala docs](api/scala/index.html#org.apache.spark.ml.feature.VectorSizeHint)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/VectorSizeHintExample.scala %}
 </div>
 
+<div data-lang="java" markdown="1">
+
+Refer to the [VectorSizeHint Java docs](api/java/org/apache/spark/ml/feature/VectorSizeHint.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaVectorSizeHintExample.java %}
+</div>
+
 <div data-lang="python" markdown="1">
 
-Refer to the [VectorAssembler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorSizeHint)
+Refer to the [VectorSizeHint Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorSizeHint)
 for more details on the API.
 
 {% include_example python/ml/vector_size_hint_example.py %}
