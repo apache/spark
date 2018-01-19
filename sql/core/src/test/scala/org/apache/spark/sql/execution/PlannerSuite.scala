@@ -21,9 +21,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
@@ -607,6 +609,21 @@ class PlannerSuite extends SharedSQLContext {
       childPlan = DummySparkPlan(outputOrdering = Seq(orderingA)),
       requiredOrdering = Seq(orderingA, orderingB),
       shouldHaveSort = true)
+  }
+
+  // This is a regression test for SPARK-22084
+  test("the same aggregate expressions can only occur once") {
+    val planner = spark.sessionState.planner
+    import planner._
+
+    var query = testData.groupBy('value).agg(count('key), count('key)).queryExecution.analyzed
+    var aggregations = Aggregation(query).collect { case agg: HashAggregateExec => agg }
+    assert(aggregations.forall(agg => agg.aggregateExpressions.size == 1))
+
+    query = testData.groupBy('value).agg(count('key), countDistinct('key))
+      .queryExecution.analyzed
+    aggregations = Aggregation(query).collect { case agg: HashAggregateExec => agg }
+    assert(aggregations.forall(agg => agg.aggregateExpressions.size == 2))
   }
 }
 
