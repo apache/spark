@@ -410,7 +410,7 @@ object SQLConf {
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
@@ -1064,6 +1064,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val DECIMAL_OPERATIONS_ALLOW_PREC_LOSS =
+    buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
+      .internal()
+      .doc("When true (default), establishing the result type of an arithmetic operation " +
+        "happens according to Hive behavior and SQL ANSI 2011 specification, ie. rounding the " +
+        "decimal part of the result if an exact representation is not possible. Otherwise, NULL " +
+        "is returned in those cases, as previously.")
+      .booleanConf
+      .createWithDefault(true)
+
   val SQL_STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.sql.redaction.string.regex")
       .doc("Regex to decide which parts of strings produced by Spark contain sensitive " +
@@ -1440,6 +1450,8 @@ class SQLConf extends Serializable with Logging {
   def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
+
+  def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
 
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
