@@ -44,7 +44,7 @@ class HiveSessionStateSuite extends SessionStateSuite with TestHiveSingleton {
     val oldValue =
       sparkSession.sparkContext.hadoopConfiguration.get(ConfVars.METASTORECONNECTURLKEY.varname)
     sparkSession.cloneSession()
-    sparkSession.metadataHive
+    sparkSession.sharedState.externalCatalog.client.newSession()
     val newValue =
       sparkSession.sparkContext.hadoopConfiguration.get(ConfVars.METASTORECONNECTURLKEY.varname)
     assert(oldValue == newValue, "cloneSession should not affect the Derby directory")
