@@ -113,13 +113,6 @@ class VectorsSuite extends SparkFunSuite with Logging {
     assert(vec.toArray === arr)
   }
 
-  test("zero-length sparse vector") {
-    val v1 = Vectors.sparse(0, Array.emptyIntArray, Array.emptyDoubleArray)
-    val v2 = Vectors.sparse(0, Array.empty[(Int, Double)])
-    assert(v1.size === 0)
-    assert(v2.size === 0)
-  }
-
   test("sparse argmax") {
     val vec = Vectors.sparse(0, Array.empty[Int], Array.empty[Double]).asInstanceOf[SparseVector]
     assert(vec.argmax === -1)
@@ -501,5 +494,19 @@ class VectorsSuite extends SparkFunSuite with Logging {
 
     assert(mlDenseVectorToArray(dv) === mlDenseVectorToArray(newDV))
     assert(mlSparseVectorToArray(sv) === mlSparseVectorToArray(newSV))
+  }
+
+  test("sparse vector only support non-negative length") {
+    val v1 = Vectors.sparse(0, Array.emptyIntArray, Array.emptyDoubleArray)
+    val v2 = Vectors.sparse(0, Array.empty[(Int, Double)])
+    assert(v1.size === 0)
+    assert(v2.size === 0)
+
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(-1, Array(1), Array(2.0))
+    }
+    intercept[IllegalArgumentException] {
+      Vectors.sparse(-1, Array((1, 2.0)))
+    }
   }
 }
