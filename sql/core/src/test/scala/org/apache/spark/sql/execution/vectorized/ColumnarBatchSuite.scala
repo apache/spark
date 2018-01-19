@@ -875,14 +875,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
         .add("intCol2", IntegerType)
         .add("string", BinaryType)
 
-      val capacity = ColumnarBatch.DEFAULT_BATCH_SIZE
+      val capacity = 4 * 1024
       val columns = schema.fields.map { field =>
         allocate(capacity, field.dataType, memMode)
       }
-      val batch = new ColumnarBatch(schema, columns.toArray, ColumnarBatch.DEFAULT_BATCH_SIZE)
+      val batch = new ColumnarBatch(columns.toArray)
       assert(batch.numCols() == 4)
       assert(batch.numRows() == 0)
-      assert(batch.capacity() > 0)
       assert(batch.rowIterator().hasNext == false)
 
       // Add a row [1, 1.1, NULL]
@@ -1153,7 +1152,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val columnVectors = Seq(new ArrowColumnVector(vector1), new ArrowColumnVector(vector2))
 
     val schema = StructType(Seq(StructField("int1", IntegerType), StructField("int2", IntegerType)))
-    val batch = new ColumnarBatch(schema, columnVectors.toArray[ColumnVector], 11)
+    val batch = new ColumnarBatch(columnVectors.toArray)
     batch.setNumRows(11)
 
     assert(batch.numCols() == 2)

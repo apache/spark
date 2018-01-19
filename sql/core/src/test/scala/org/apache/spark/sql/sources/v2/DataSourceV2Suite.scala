@@ -333,8 +333,7 @@ class BatchReadTask(start: Int, end: Int)
   private final val BATCH_SIZE = 20
   private lazy val i = new OnHeapColumnVector(BATCH_SIZE, IntegerType)
   private lazy val j = new OnHeapColumnVector(BATCH_SIZE, IntegerType)
-  private lazy val batch = new ColumnarBatch(
-    new StructType().add("i", "int").add("j", "int"), Array(i, j), BATCH_SIZE)
+  private lazy val batch = new ColumnarBatch(Array(i, j))
 
   private var current = start
 
