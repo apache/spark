@@ -222,9 +222,9 @@ The `FeatureHasher` transformer operates on multiple columns. Each column may co
 numeric or categorical features. Behavior and handling of column data types is as follows:
 
 - Numeric columns: For numeric features, the hash value of the column name is used to map the
-feature value to its index in the feature vector. Numeric features are never treated as
-categorical, even when they are integers. You must explicitly convert numeric columns containing
-categorical features to strings first.
+feature value to its index in the feature vector. By default, numeric features are not treated
+as categorical (even when they are integers). To treat them as categorical, specify the relevant
+columns using the `categoricalCols` parameter.
 - String columns: For categorical features, the hash value of the string "column_name=value"
 is used to map to the vector index, with an indicator value of `1.0`. Thus, categorical features
 are "one-hot" encoded (similarly to using [OneHotEncoder](ml-features.html#onehotencoder) with
