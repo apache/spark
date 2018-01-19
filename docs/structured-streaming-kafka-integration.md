@@ -59,7 +59,7 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight java %}
 
 // Subscribe to 1 topic
-DataFrame<Row> df = spark
+Dataset<Row> df = spark
   .readStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -68,7 +68,7 @@ DataFrame<Row> df = spark
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 // Subscribe to multiple topics
-DataFrame<Row> df = spark
+Dataset<Row> df = spark
   .readStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -77,7 +77,7 @@ DataFrame<Row> df = spark
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 // Subscribe to a pattern
-DataFrame<Row> df = spark
+Dataset<Row> df = spark
   .readStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -169,7 +169,7 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight java %}
 
 // Subscribe to 1 topic defaults to the earliest and latest offsets
-DataFrame<Row> df = spark
+Dataset<Row> df = spark
   .read()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -178,7 +178,7 @@ DataFrame<Row> df = spark
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
 // Subscribe to multiple topics, specifying explicit Kafka offsets
-DataFrame<Row> df = spark
+Dataset<Row> df = spark
   .read()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -189,7 +189,7 @@ DataFrame<Row> df = spark
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
 // Subscribe to a pattern, at the earliest and latest offsets
-DataFrame<Row> df = spark
+Dataset<Row> df = spark
   .read()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
