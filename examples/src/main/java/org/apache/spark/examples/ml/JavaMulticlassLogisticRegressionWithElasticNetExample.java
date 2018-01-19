@@ -56,6 +56,7 @@ public class JavaMulticlassLogisticRegressionWithElasticNetExample {
         for (double lossPerIteration : objectiveHistory) {
             System.out.println(lossPerIteration);
         }
+
         // for multiclass, we can inspect metrics on a per-label basis
         System.out.println("False positive rate by label: ");
         int i = 0;
