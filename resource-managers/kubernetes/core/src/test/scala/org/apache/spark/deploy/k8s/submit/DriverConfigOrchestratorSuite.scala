@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.submit.steps._
 
@@ -115,6 +115,35 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       classOf[DriverKubernetesCredentialsStep],
       classOf[DependencyResolutionStep],
       classOf[DriverMountSecretsStep])
+  }
+
+  test("Submission using client local dependencies") {
+    val sparkConf = new SparkConf(false)
+      .set(CONTAINER_IMAGE, DRIVER_IMAGE)
+    var orchestrator = new DriverConfigOrchestrator(
+      APP_ID,
+      LAUNCH_TIME,
+      Some(JavaMainAppResource("file:///var/apps/jars/main.jar")),
+      APP_NAME,
+      MAIN_CLASS,
+      APP_ARGS,
+      sparkConf)
+    assertThrows[SparkException] {
+      orchestrator.getAllConfigurationSteps
+    }
+
+    sparkConf.set("spark.files", "/path/to/file1,/path/to/file2")
+    orchestrator = new DriverConfigOrchestrator(
+      APP_ID,
+      LAUNCH_TIME,
+      Some(JavaMainAppResource("local:///var/apps/jars/main.jar")),
+      APP_NAME,
+      MAIN_CLASS,
+      APP_ARGS,
+      sparkConf)
+    assertThrows[SparkException] {
+      orchestrator.getAllConfigurationSteps
+    }
   }
 
   private def validateStepTypes(
