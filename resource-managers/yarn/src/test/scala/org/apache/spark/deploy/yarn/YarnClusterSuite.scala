@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.net.URL
 import java.nio.charset.StandardCharsets
 import java.util.{HashMap => JHashMap}
 
@@ -134,6 +133,39 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       extraConf = Map("spark.hadoop.key" -> "value"),
       extraEnv = Map("SPARK_TEST_HADOOP_CONF_DIR" -> customConf.getAbsolutePath()))
     checkResult(finalState, result)
+  }
+
+  private def testClusterDriverBind(
+      uiEnabled: Boolean,
+      localHost: String,
+      localIp: String,
+      success: Boolean): Unit = {
+    val result = File.createTempFile("result", null, tempDir)
+    val finalState = runSpark(false, mainClassName(YarnClusterDriver.getClass),
+      appArgs = Seq(result.getAbsolutePath()),
+      extraConf = Map(
+        "spark.yarn.appMasterEnv.SPARK_LOCAL_HOSTNAME" -> localHost,
+        "spark.yarn.appMasterEnv.SPARK_LOCAL_IP" -> localIp,
+        "spark.ui.enabled" -> uiEnabled.toString
+      ))
+    if (success) {
+      checkResult(finalState, result, "success")
+    } else {
+      finalState should be (SparkAppHandle.State.FAILED)
+    }
+  }
+
+  test("yarn-cluster driver should be able to bind listeners to MM_HOST") {
+    testClusterDriverBind(uiEnabled = true, "$NM_HOST", "$NM_HOST", success = true)
+  }
+
+  private val unbindableIP = "1.1.1.1"
+  test("yarn-cluster driver works when SPARK_LOCAL_IP is invalid without UI") {
+    testClusterDriverBind(uiEnabled = false, "$NM_HOST", unbindableIP, success = true)
+  }
+
+  test("yarn-cluster driver fails when SPARK_LOCAL_IP is invalid with UI") {
+    testClusterDriverBind(uiEnabled = true, "$NM_HOST", unbindableIP, success = false)
   }
 
   test("run Spark in yarn-client mode with additional jar") {
