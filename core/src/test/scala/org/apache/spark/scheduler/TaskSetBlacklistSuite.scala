@@ -87,8 +87,6 @@ class TaskSetBlacklistSuite extends SparkFunSuite with BeforeAndAfterEach with M
     assert(taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec1"))
 
     assert(!taskSetBlacklist.isExecutorBlacklistedForTaskSet("exec2"))
-    verify(listenerBusMock, never()).post(
-      SparkListenerNodeBlacklistedForStage(0, "hostA", 2, 0, attemptId))
 
     assert(!taskSetBlacklist.isNodeBlacklistedForTaskSet("hostA"))
     verify(listenerBusMock, never())

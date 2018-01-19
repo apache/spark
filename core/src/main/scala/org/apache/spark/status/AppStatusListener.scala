@@ -212,7 +212,7 @@ private[spark] class AppStatusListener(
   }
 
   override def onExecutorBlacklistedForStage(
-    event: SparkListenerExecutorBlacklistedForStage): Unit = {
+      event: SparkListenerExecutorBlacklistedForStage): Unit = {
     updateBlackListStatusForStage(event.executorId, event.stageId, event.stageAttemptId)
   }
 
