@@ -274,4 +274,18 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     checkAnswer(innerJoin, Row(1) :: Nil)
   }
 
+  test("SPARK-23087: don't throw Analysis Exception in CheckCartesianProduct when join condition " +
+    "is false or null") {
+    val df = spark.range(10)
+    val dfNull = spark.range(10).select(lit(null).as("b"))
+    val planNull = df.join(dfNull, $"id" === $"b", "left").queryExecution.analyzed
+
+    spark.sessionState.executePlan(planNull).optimizedPlan
+
+    val dfOne = df.select(lit(1).as("a"))
+    val dfTwo = spark.range(10).select(lit(2).as("a"))
+    val planFalse = dfOne.join(dfTwo, $"a" === $"b", "left").queryExecution.analyzed
+
+    spark.sessionState.executePlan(planFalse).optimizedPlan
+  }
 }
