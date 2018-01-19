@@ -18,20 +18,17 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
-import java.util.{Collections, Date}
+import java.util.Date
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.{HashMap, HashSet}
-import scala.xml.{Elem, Node, Unparsed}
+import scala.xml.{Node, Unparsed}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
-import org.apache.spark.SparkConf
-import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.TaskLocality
 import org.apache.spark.status._
-import org.apache.spark.status.api.v1
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui._
 import org.apache.spark.util.Utils
@@ -1003,7 +1000,7 @@ private object ApiHelper {
     }
   }
 
-  def lastStageNameAndDescription(store: AppStatusStore, job: v1.JobData): (String, String) = {
+  def lastStageNameAndDescription(store: AppStatusStore, job: JobData): (String, String) = {
     store.asOption(store.lastStageAttempt(job.stageIds.max)) match {
       case Some(lastStageAttempt) =>
         (lastStageAttempt.name, lastStageAttempt.description.getOrElse(""))

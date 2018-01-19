@@ -339,9 +339,9 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     val operationGraphContent = store.asOption(store.operationGraphForJob(jobId)) match {
       case Some(operationGraph) => UIUtils.showDagVizForJob(jobId, operationGraph)
       case None =>
-              <div id="no-info">
-                <p>No DAG visualization information to display for job {jobId}</p>
-              </div>
+        <div id="no-info">
+          <p>No DAG visualization information to display for job {jobId}</p>
+        </div>
     }
     content ++= operationGraphContent
 

@@ -70,10 +70,10 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       val status = job.status
       val (_, lastStageDescription) = lastStageNameAndDescription(store, job)
       val displayJobDescription =
-        if (lastStageDescription.isEmpty) {
-          job.name
-        } else {
+        if (lastStageDescription.nonEmpty) {
           UIUtils.makeDescription(lastStageDescription, "", plainText = true).text
+        } else {
+          job.name
         }
       val submissionTime = job.submissionTime.get.getTime()
       val completionTime = job.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
