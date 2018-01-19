@@ -32,7 +32,7 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
 
-abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with SharedSQLContext {
+abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils {
   import testImplicits._
 
   val dataSourceName: String

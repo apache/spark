@@ -23,9 +23,12 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.datasources.HadoopFsRelationTest
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
+class OrcHadoopFsRelationSuite extends SharedSQLContext
+
+abstract class OrcHadoopFsRelationBase extends HadoopFsRelationTest {
   import testImplicits._
 
   override protected val enableAutoThreadAudit = false

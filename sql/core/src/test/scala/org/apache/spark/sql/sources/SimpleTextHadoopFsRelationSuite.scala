@@ -22,9 +22,11 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.execution.datasources.HadoopFsRelationTest
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with PredicateHelper {
+class SimpleTextHadoopFsRelationSuite
+  extends HadoopFsRelationTest with PredicateHelper with SharedSQLContext {
   override val dataSourceName: String = classOf[SimpleTextSource].getCanonicalName
 
   // We have a very limited number of supported types at here since it is just for a

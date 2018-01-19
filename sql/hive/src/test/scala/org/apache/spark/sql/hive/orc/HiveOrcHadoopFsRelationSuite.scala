@@ -19,9 +19,10 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
-import org.apache.spark.sql.execution.datasources.orc.OrcHadoopFsRelationSuite
+import org.apache.spark.sql.execution.datasources.orc.OrcHadoopFsRelationBase
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class HiveOrcHadoopFsRelationSuite extends OrcHadoopFsRelationSuite {
+class HiveOrcHadoopFsRelationSuite extends OrcHadoopFsRelationBase with TestHiveSingleton {
   import testImplicits._
 
   override val dataSourceName: String =

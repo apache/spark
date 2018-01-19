@@ -24,9 +24,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.datasources.HadoopFsRelationTest
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
-class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
+class JsonHadoopFsRelationSuite extends HadoopFsRelationTest with SharedSQLContext {
   override val dataSourceName: String = "json"
 
   private val badJson = "\u0000\u0000\u0000A\u0001AAA"

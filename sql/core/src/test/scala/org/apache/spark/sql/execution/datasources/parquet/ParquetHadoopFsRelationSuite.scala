@@ -27,10 +27,11 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelationTest, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 
-class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
+class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest with SharedSQLContext {
   import testImplicits._
 
   override val dataSourceName: String = "parquet"
