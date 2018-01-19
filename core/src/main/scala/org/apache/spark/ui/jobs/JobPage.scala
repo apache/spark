@@ -336,8 +336,14 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
     content ++= makeTimeline(activeStages ++ completedStages ++ failedStages,
       store.executorList(false), appStartTime)
 
-    content ++= UIUtils.showDagVizForJob(
-      jobId, store.operationGraphForJob(jobId))
+    val operationGraphContent = store.asOption(store.operationGraphForJob(jobId)) match {
+      case Some(operationGraph) => UIUtils.showDagVizForJob(jobId, operationGraph)
+      case None =>
+              <div id="no-info">
+                <p>No information to display for job {jobId}</p>
+              </div>
+    }
+    content ++= operationGraphContent
 
     if (shouldShowActiveStages) {
       content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++
