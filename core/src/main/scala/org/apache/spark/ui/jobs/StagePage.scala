@@ -260,7 +260,11 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
     val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
     def accumulableRow(acc: AccumulableInfo): Seq[Node] = {
-      <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
+      if (acc.name != null && acc.value != null) {
+        <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
+      } else {
+        Nil
+      }
     }
     val accumulableTable = UIUtils.listingTable(
       accumulableHeaders,
@@ -864,7 +868,7 @@ private[ui] class TaskPagedTable(
         {formatBytes(task.taskMetrics.map(_.peakExecutionMemory))}
       </td>
       {if (hasAccumulators(stage)) {
-        accumulatorsInfo(task)
+        <td>{accumulatorsInfo(task)}</td>
       }}
       {if (hasInput(stage)) {
         metricInfo(task) { m =>
@@ -920,8 +924,12 @@ private[ui] class TaskPagedTable(
   }
 
   private def accumulatorsInfo(task: TaskData): Seq[Node] = {
-    task.accumulatorUpdates.map { acc =>
-      Unparsed(StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update}"))
+    task.accumulatorUpdates.flatMap { acc =>
+      if (acc.name != null && acc.update.isDefined) {
+        Unparsed(StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update.get}")) ++ <br />
+      } else {
+        Nil
+      }
     }
   }
 
@@ -985,7 +993,9 @@ private object ApiHelper {
     "Shuffle Spill (Disk)" -> TaskIndexNames.DISK_SPILL,
     "Errors" -> TaskIndexNames.ERROR)
 
-  def hasAccumulators(stageData: StageData): Boolean = stageData.accumulatorUpdates.size > 0
+  def hasAccumulators(stageData: StageData): Boolean = {
+    stageData.accumulatorUpdates.exists { acc => acc.name != null && acc.value != null }
+  }
 
   def hasInput(stageData: StageData): Boolean = stageData.inputBytes > 0
 
