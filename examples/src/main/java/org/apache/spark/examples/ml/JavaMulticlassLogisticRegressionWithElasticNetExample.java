@@ -58,7 +58,7 @@ public class JavaMulticlassLogisticRegressionWithElasticNetExample {
         }
 
         // for multiclass, we can inspect metrics on a per-label basis
-        System.out.println("False positive rate by label: ");
+        System.out.println("False positive rate by label:");
         int i = 0;
         double[] fprLabel = trainingSummary.falsePositiveRateByLabel();
         for (double fpr : fprLabel) {
@@ -66,7 +66,7 @@ public class JavaMulticlassLogisticRegressionWithElasticNetExample {
             i++;
         }
 
-        System.out.println("True positive rate by label: ");
+        System.out.println("True positive rate by label:");
         i = 0;
         double[] tprLabel = trainingSummary.truePositiveRateByLabel();
         for (double tpr : tprLabel) {
@@ -74,7 +74,7 @@ public class JavaMulticlassLogisticRegressionWithElasticNetExample {
             i++;
         }
 
-        System.out.println("Precision by label: ");
+        System.out.println("Precision by label:");
         i = 0;
         double[] precLabel = trainingSummary.precisionByLabel();
         for (double prec : precLabel) {
@@ -82,7 +82,7 @@ public class JavaMulticlassLogisticRegressionWithElasticNetExample {
             i++;
         }
 
-        System.out.println("Recall by label: ");
+        System.out.println("Recall by label:");
         i = 0;
         double[] recLabel = trainingSummary.recallByLabel();
         for (double rec : recLabel) {
@@ -90,7 +90,7 @@ public class JavaMulticlassLogisticRegressionWithElasticNetExample {
             i++;
         }
 
-        System.out.println("F-measure by label: ");
+        System.out.println("F-measure by label:");
         i = 0;
         double[] fLabel = trainingSummary.fMeasureByLabel();
         for (double f : fLabel) {
