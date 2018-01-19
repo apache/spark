@@ -224,7 +224,7 @@ public class HiveSessionImpl implements HiveSession {
   @Override
   public void setOperationLogSessionDir(File operationLogRootDir) {
     if (!operationLogRootDir.exists()) {
-      LOG.warn("The operation log root directory is removed, recreating:" +
+      LOG.warn("The operation log root directory is removed, recreating: " +
           operationLogRootDir.getAbsolutePath());
       if (!operationLogRootDir.mkdirs()) {
         LOG.warn("Unable to create operation log root directory: " +
