@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources
+package org.apache.spark.sql.execution.datasources.json
 
 import java.math.BigDecimal
 
@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
+import org.apache.spark.sql.execution.datasources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
 
 class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {

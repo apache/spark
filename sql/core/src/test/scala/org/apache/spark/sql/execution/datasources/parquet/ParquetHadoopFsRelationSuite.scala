@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources
+package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
@@ -25,7 +25,7 @@ import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
-import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelationTest, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -162,7 +162,6 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   }
 
   test("SPARK-11500: Not deterministic order of columns when using merging schemas.") {
-    import testImplicits._
     withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true") {
       withTempPath { dir =>
         val pathOne = s"${dir.getCanonicalPath}/part=1"

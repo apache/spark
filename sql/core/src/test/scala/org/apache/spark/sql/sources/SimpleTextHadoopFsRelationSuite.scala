@@ -21,6 +21,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
+import org.apache.spark.sql.execution.datasources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
 
 class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with PredicateHelper {

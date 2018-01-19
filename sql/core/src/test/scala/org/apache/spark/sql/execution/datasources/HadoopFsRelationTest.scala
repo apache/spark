@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources
+package org.apache.spark.sql.execution.datasources
 
 import java.io.File
 
@@ -26,15 +26,14 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.DataSourceScanExec
-import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.sources.SimpleTextSource
+import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
 
-abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import spark.implicits._
+abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with SharedSQLContext {
+  import testImplicits._
 
   val dataSourceName: String
 
