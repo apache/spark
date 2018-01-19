@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
-import java.util.Date
+import java.util.{Collections, Date}
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
@@ -999,6 +999,16 @@ private object ApiHelper {
     COLUMN_TO_INDEX.get(sortColumn) match {
       case Some(v) => Option(v)
       case _ => throw new IllegalArgumentException(s"Invalid sort column: $sortColumn")
+    }
+  }
+
+  def lastStageNameAndDescription(store: AppStatusStore): (String, String) = {
+    val stageData = store.stageList(Collections.emptyList()).toList
+    if (stageData.nonEmpty) {
+      val lastStageAttempt = stageData.maxBy(_.attemptId)
+      (lastStageAttempt.name, lastStageAttempt.description.getOrElse(""))
+    } else {
+      ("", "")
     }
   }
 
