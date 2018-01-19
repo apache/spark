@@ -27,6 +27,7 @@ import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils}
@@ -95,74 +96,36 @@ case class Statistics(
  * @param histogram histogram of the values
  */
 case class ColumnStat(
-    distinctCount: BigInt,
-    min: Option[Any],
-    max: Option[Any],
-    nullCount: BigInt,
-    avgLen: Long,
-    maxLen: Long,
+    distinctCount: Option[BigInt] = None,
+    min: Option[Any] = None,
+    max: Option[Any] = None,
+    nullCount: Option[BigInt] = None,
+    avgLen: Option[Long] = None,
+    maxLen: Option[Long] = None,
     histogram: Option[Histogram] = None) {
 
-  // We currently don't store min/max for binary/string type. This can change in the future and
-  // then we need to remove this require.
-  require(min.isEmpty || (!min.get.isInstanceOf[Array[Byte]] && !min.get.isInstanceOf[String]))
-  require(max.isEmpty || (!max.get.isInstanceOf[Array[Byte]] && !max.get.isInstanceOf[String]))
+  // Are distinctCount and nullCount statistics defined?
+  val hasCountStats = distinctCount.isDefined && nullCount.isDefined
 
-  /**
-   * Returns a map from string to string that can be used to serialize the column stats.
-   * The key is the name of the field (e.g. "distinctCount" or "min"), and the value is the string
-   * representation for the value. min/max values are converted to the external data type. For
-   * example, for DateType we store java.sql.Date, and for TimestampType we store
-   * java.sql.Timestamp. The deserialization side is defined in [[ColumnStat.fromMap]].
-   *
-   * As part of the protocol, the returned map always contains a key called "version".
-   * In the case min/max values are null (None), they won't appear in the map.
-   */
-  def toMap(colName: String, dataType: DataType): Map[String, String] = {
-    val map = new scala.collection.mutable.HashMap[String, String]
-    map.put(ColumnStat.KEY_VERSION, "1")
-    map.put(ColumnStat.KEY_DISTINCT_COUNT, distinctCount.toString)
-    map.put(ColumnStat.KEY_NULL_COUNT, nullCount.toString)
-    map.put(ColumnStat.KEY_AVG_LEN, avgLen.toString)
-    map.put(ColumnStat.KEY_MAX_LEN, maxLen.toString)
-    min.foreach { v => map.put(ColumnStat.KEY_MIN_VALUE, toExternalString(v, colName, dataType)) }
-    max.foreach { v => map.put(ColumnStat.KEY_MAX_VALUE, toExternalString(v, colName, dataType)) }
-    histogram.foreach { h => map.put(ColumnStat.KEY_HISTOGRAM, HistogramSerializer.serialize(h)) }
-    map.toMap
-  }
+  // Are min and max statistics defined?
+  val hasMinMaxStats = min.isDefined && max.isDefined
 
-  /**
-   * Converts the given value from Catalyst data type to string representation of external
-   * data type.
-   */
-  private def toExternalString(v: Any, colName: String, dataType: DataType): String = {
-    val externalValue = dataType match {
-      case DateType => DateTimeUtils.toJavaDate(v.asInstanceOf[Int])
-      case TimestampType => DateTimeUtils.toJavaTimestamp(v.asInstanceOf[Long])
-      case BooleanType | _: IntegralType | FloatType | DoubleType => v
-      case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
-      // This version of Spark does not use min/max for binary/string types so we ignore it.
-      case _ =>
-        throw new AnalysisException("Column statistics deserialization is not supported for " +
-          s"column $colName of data type: $dataType.")
-    }
-    externalValue.toString
-  }
+  // Are avgLen and maxLen statistics defined?
+  val hasLenStats = avgLen.isDefined && maxLen.isDefined
 
+  def toCatalogColumnStat(colName: String, dataType: DataType): CatalogColumnStat =
+    CatalogColumnStat(
+      distinctCount = distinctCount,
+      min = min.map(ColumnStat.toExternalString(_, colName, dataType)),
+      max = max.map(ColumnStat.toExternalString(_, colName, dataType)),
+      nullCount = nullCount,
+      avgLen = avgLen,
+      maxLen = maxLen,
+      histogram = histogram)
 }
 
 
 object ColumnStat extends Logging {
-
-  // List of string keys used to serialize ColumnStat
-  val KEY_VERSION = "version"
-  private val KEY_DISTINCT_COUNT = "distinctCount"
-  private val KEY_MIN_VALUE = "min"
-  private val KEY_MAX_VALUE = "max"
-  private val KEY_NULL_COUNT = "nullCount"
-  private val KEY_AVG_LEN = "avgLen"
-  private val KEY_MAX_LEN = "maxLen"
-  private val KEY_HISTOGRAM = "histogram"
 
   /** Returns true iff the we support gathering column statistics on column of the given type. */
   def supportsType(dataType: DataType): Boolean = dataType match {
@@ -187,35 +150,9 @@ object ColumnStat extends Logging {
   }
 
   /**
-   * Creates a [[ColumnStat]] object from the given map. This is used to deserialize column stats
-   * from some external storage. The serialization side is defined in [[ColumnStat.toMap]].
+   * Converts from string representation of data type to the corresponding Catalyst data type.
    */
-  def fromMap(table: String, field: StructField, map: Map[String, String]): Option[ColumnStat] = {
-    try {
-      Some(ColumnStat(
-        distinctCount = BigInt(map(KEY_DISTINCT_COUNT).toLong),
-        // Note that flatMap(Option.apply) turns Option(null) into None.
-        min = map.get(KEY_MIN_VALUE)
-          .map(fromExternalString(_, field.name, field.dataType)).flatMap(Option.apply),
-        max = map.get(KEY_MAX_VALUE)
-          .map(fromExternalString(_, field.name, field.dataType)).flatMap(Option.apply),
-        nullCount = BigInt(map(KEY_NULL_COUNT).toLong),
-        avgLen = map.getOrElse(KEY_AVG_LEN, field.dataType.defaultSize.toString).toLong,
-        maxLen = map.getOrElse(KEY_MAX_LEN, field.dataType.defaultSize.toString).toLong,
-        histogram = map.get(KEY_HISTOGRAM).map(HistogramSerializer.deserialize)
-      ))
-    } catch {
-      case NonFatal(e) =>
-        logWarning(s"Failed to parse column statistics for column ${field.name} in table $table", e)
-        None
-    }
-  }
-
-  /**
-   * Converts from string representation of external data type to the corresponding Catalyst data
-   * type.
-   */
-  private def fromExternalString(s: String, name: String, dataType: DataType): Any = {
+  def fromExternalString(s: String, name: String, dataType: DataType): Any = {
     dataType match {
       case BooleanType => s.toBoolean
       case DateType => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
@@ -233,6 +170,24 @@ object ColumnStat extends Logging {
         throw new AnalysisException("Column statistics deserialization is not supported for " +
           s"column $name of data type: $dataType.")
     }
+  }
+
+  /**
+   * Converts the given value from Catalyst data type to string representation of external
+   * data type.
+   */
+  def toExternalString(v: Any, colName: String, dataType: DataType): String = {
+    val externalValue = dataType match {
+      case DateType => DateTimeUtils.toJavaDate(v.asInstanceOf[Int])
+      case TimestampType => DateTimeUtils.toJavaTimestamp(v.asInstanceOf[Long])
+      case BooleanType | _: IntegralType | FloatType | DoubleType => v
+      case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
+      // This version of Spark does not use min/max for binary/string types so we ignore it.
+      case _ =>
+        throw new AnalysisException("Column statistics deserialization is not supported for " +
+          s"column $colName of data type: $dataType.")
+    }
+    externalValue.toString
   }
 
   /**
@@ -305,15 +260,15 @@ object ColumnStat extends Logging {
       percentiles: Option[ArrayData]): ColumnStat = {
     // The first 6 fields are basic column stats, the 7th is ndvs for histogram bins.
     val cs = ColumnStat(
-      distinctCount = BigInt(row.getLong(0)),
+      distinctCount = Option(BigInt(row.getLong(0))),
       // for string/binary min/max, get should return null
       min = Option(row.get(1, attr.dataType)),
       max = Option(row.get(2, attr.dataType)),
-      nullCount = BigInt(row.getLong(3)),
-      avgLen = row.getLong(4),
-      maxLen = row.getLong(5)
+      nullCount = Option(BigInt(row.getLong(3))),
+      avgLen = Option(row.getLong(4)),
+      maxLen = Option(row.getLong(5))
     )
-    if (row.isNullAt(6)) {
+    if (row.isNullAt(6) || !cs.nullCount.isDefined) {
       cs
     } else {
       val ndvs = row.getArray(6).toLongArray()
@@ -323,7 +278,7 @@ object ColumnStat extends Logging {
       val bins = ndvs.zipWithIndex.map { case (ndv, i) =>
         HistogramBin(endpoints(i), endpoints(i + 1), ndv)
       }
-      val nonNullRows = rowCount - cs.nullCount
+      val nonNullRows = rowCount - cs.nullCount.get
       val histogram = Histogram(nonNullRows.toDouble / ndvs.length, bins)
       cs.copy(histogram = Some(histogram))
     }

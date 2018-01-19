@@ -187,11 +187,11 @@ object StarSchemaDetection extends PredicateHelper {
           stats.rowCount match {
             case Some(rowCount) if rowCount >= 0 =>
               if (stats.attributeStats.nonEmpty && stats.attributeStats.contains(col)) {
-                val colStats = stats.attributeStats.get(col)
-                if (colStats.get.nullCount > 0) {
+                val colStats = stats.attributeStats.get(col).get
+                if (!colStats.hasCountStats || colStats.nullCount.get > 0) {
                   false
                 } else {
-                  val distinctCount = colStats.get.distinctCount
+                  val distinctCount = colStats.distinctCount.get
                   val relDiff = math.abs((distinctCount.toDouble / rowCount.toDouble) - 1.0d)
                   // ndvMaxErr adjusted based on TPCDS 1TB data results
                   relDiff <= conf.ndvMaxError * 2

@@ -24,7 +24,7 @@ import scala.collection.mutable
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, HiveTableRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -67,18 +67,21 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
 
   /** A mapping from column to the stats collected. */
   protected val stats = mutable.LinkedHashMap(
-    "cbool" -> ColumnStat(2, Some(false), Some(true), 1, 1, 1),
-    "cbyte" -> ColumnStat(2, Some(1.toByte), Some(2.toByte), 1, 1, 1),
-    "cshort" -> ColumnStat(2, Some(1.toShort), Some(3.toShort), 1, 2, 2),
-    "cint" -> ColumnStat(2, Some(1), Some(4), 1, 4, 4),
-    "clong" -> ColumnStat(2, Some(1L), Some(5L), 1, 8, 8),
-    "cdouble" -> ColumnStat(2, Some(1.0), Some(6.0), 1, 8, 8),
-    "cfloat" -> ColumnStat(2, Some(1.0f), Some(7.0f), 1, 4, 4),
-    "cdecimal" -> ColumnStat(2, Some(Decimal(dec1)), Some(Decimal(dec2)), 1, 16, 16),
-    "cstring" -> ColumnStat(2, None, None, 1, 3, 3),
-    "cbinary" -> ColumnStat(2, None, None, 1, 3, 3),
-    "cdate" -> ColumnStat(2, Some(d1Internal), Some(d2Internal), 1, 4, 4),
-    "ctimestamp" -> ColumnStat(2, Some(t1Internal), Some(t2Internal), 1, 8, 8)
+    "cbool" -> CatalogColumnStat(Some(2), Some("false"), Some("true"), Some(1), Some(1), Some(1)),
+    "cbyte" -> CatalogColumnStat(Some(2), Some("1"), Some("2"), Some(1), Some(1), Some(1)),
+    "cshort" -> CatalogColumnStat(Some(2), Some("1"), Some("3"), Some(1), Some(2), Some(2)),
+    "cint" -> CatalogColumnStat(Some(2), Some("1"), Some("4"), Some(1), Some(4), Some(4)),
+    "clong" -> CatalogColumnStat(Some(2), Some("1"), Some("5"), Some(1), Some(8), Some(8)),
+    "cdouble" -> CatalogColumnStat(Some(2), Some("1.0"), Some("6.0"), Some(1), Some(8), Some(8)),
+    "cfloat" -> CatalogColumnStat(Some(2), Some("1.0"), Some("7.0"), Some(1), Some(4), Some(4)),
+    "cdecimal" -> CatalogColumnStat(Some(2), Some(dec1.toString), Some(dec2.toString), Some(1),
+      Some(16), Some(16)),
+    "cstring" -> CatalogColumnStat(Some(2), None, None, Some(1), Some(3), Some(3)),
+    "cbinary" -> CatalogColumnStat(Some(2), None, None, Some(1), Some(3), Some(3)),
+    "cdate" -> CatalogColumnStat(Some(2), Some(d1.toString), Some(d2.toString), Some(1), Some(4),
+      Some(4)),
+    "ctimestamp" -> CatalogColumnStat(Some(2), Some(t1.toString), Some(t2.toString), Some(1),
+      Some(8), Some(8))
   )
 
   /**
@@ -151,7 +154,7 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
    */
   def checkColStats(
       df: DataFrame,
-      colStats: mutable.LinkedHashMap[String, ColumnStat]): Unit = {
+      colStats: mutable.LinkedHashMap[String, CatalogColumnStat]): Unit = {
     val tableName = "column_stats_test_" + randomName.nextInt(1000)
     withTable(tableName) {
       df.write.saveAsTable(tableName)
@@ -215,12 +218,13 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
       case catalogRel: HiveTableRelation => (catalogRel, catalogRel.tableMeta)
       case logicalRel: LogicalRelation => (logicalRel, logicalRel.catalogTable.get)
     }.head
-    val emptyColStat = ColumnStat(0, None, None, 0, 4, 4)
+    val emptyColStat = ColumnStat(Some(0), None, None, Some(0), Some(4), Some(4))
+    val emptyCatalogColStat = CatalogColumnStat(Some(0), None, None, Some(0), Some(4), Some(4))
     // Check catalog statistics
     assert(catalogTable.stats.isDefined)
     assert(catalogTable.stats.get.sizeInBytes == 0)
     assert(catalogTable.stats.get.rowCount == Some(0))
-    assert(catalogTable.stats.get.colStats == Map("c1" -> emptyColStat))
+    assert(catalogTable.stats.get.colStats == Map("c1" -> emptyCatalogColStat))
 
     // Check relation statistics
     withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {

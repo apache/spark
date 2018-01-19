@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, HiveTableRelation}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, HistogramBin, HistogramSerializer}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -177,8 +177,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val fetchedStats0 =
         checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(2))
       assert(fetchedStats0.get.colStats == Map(
-        "a" -> ColumnStat(2, Some(1), Some(2), 0, 4, 4),
-        "b" -> ColumnStat(1, Some(1), Some(1), 0, 4, 4)))
+        "a" -> CatalogColumnStat(Some(2), Some("1"), Some("2"), Some(0), Some(4), Some(4)),
+        "b" -> CatalogColumnStat(Some(1), Some("1"), Some("1"), Some(0), Some(4), Some(4))))
     }
   }
 
@@ -208,8 +208,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val fetchedStats1 =
         checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(1)).get
       assert(fetchedStats1.colStats == Map(
-        "C1" -> ColumnStat(distinctCount = 1, min = Some(1), max = Some(1), nullCount = 0,
-          avgLen = 4, maxLen = 4)))
+        "C1" -> CatalogColumnStat(distinctCount = Some(1), min = Some("1"), max = Some("1"),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))))
     }
   }
 
@@ -596,7 +596,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c1")
       val fetchedStats0 =
         checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetchedStats0.get.colStats == Map("c1" -> ColumnStat(0, None, None, 0, 4, 4)))
+      assert(fetchedStats0.get.colStats ==
+        Map("c1" -> CatalogColumnStat(Some(0), None, None, Some(0), Some(4), Some(4))))
 
       // Insert new data and analyze: have the latest column stats.
       sql(s"INSERT INTO TABLE $table SELECT 1, 'a', 10.0")
@@ -604,18 +605,18 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val fetchedStats1 =
         checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(1)).get
       assert(fetchedStats1.colStats == Map(
-        "c1" -> ColumnStat(distinctCount = 1, min = Some(1), max = Some(1), nullCount = 0,
-          avgLen = 4, maxLen = 4)))
+        "c1" -> CatalogColumnStat(distinctCount = Some(1), min = Some("1"), max = Some("1"),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))))
 
       // Analyze another column: since the table is not changed, the precious column stats are kept.
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS c2")
       val fetchedStats2 =
         checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(1)).get
       assert(fetchedStats2.colStats == Map(
-        "c1" -> ColumnStat(distinctCount = 1, min = Some(1), max = Some(1), nullCount = 0,
-          avgLen = 4, maxLen = 4),
-        "c2" -> ColumnStat(distinctCount = 1, min = None, max = None, nullCount = 0,
-          avgLen = 1, maxLen = 1)))
+        "c1" -> CatalogColumnStat(distinctCount = Some(1), min = Some("1"), max = Some("1"),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+        "c2" -> CatalogColumnStat(distinctCount = Some(1), min = None, max = None,
+          nullCount = Some(0), avgLen = Some(1), maxLen = Some(1))))
 
       // Insert new data and analyze: stale column stats are removed and newly collected column
       // stats are added.
@@ -624,10 +625,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val fetchedStats3 =
         checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(2)).get
       assert(fetchedStats3.colStats == Map(
-        "c1" -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2), nullCount = 0,
-          avgLen = 4, maxLen = 4),
-        "c3" -> ColumnStat(distinctCount = 2, min = Some(10.0), max = Some(20.0), nullCount = 0,
-          avgLen = 8, maxLen = 8)))
+        "c1" -> CatalogColumnStat(distinctCount = Some(2), min = Some("1"), max = Some("2"),
+          nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+        "c3" -> CatalogColumnStat(distinctCount = Some(2), min = Some("10.0"), max = Some("20.0"),
+          nullCount = Some(0), avgLen = Some(8), maxLen = Some(8))))
     }
   }
 

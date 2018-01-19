@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -64,12 +64,12 @@ case class AnalyzeColumnCommand(
 
   /**
    * Compute stats for the given columns.
-   * @return (row count, map from column name to ColumnStats)
+   * @return (row count, map from column name to CatalogColumnStats)
    */
   private def computeColumnStats(
       sparkSession: SparkSession,
       tableIdent: TableIdentifier,
-      columnNames: Seq[String]): (Long, Map[String, ColumnStat]) = {
+      columnNames: Seq[String]): (Long, Map[String, CatalogColumnStat]) = {
 
     val conf = sparkSession.sessionState.conf
     val relation = sparkSession.table(tableIdent).logicalPlan
@@ -113,7 +113,7 @@ case class AnalyzeColumnCommand(
     val columnStats = attributesToAnalyze.zipWithIndex.map { case (attr, i) =>
       // according to `ColumnStat.statExprs`, the stats struct always have 7 fields.
       (attr.name, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1, 7), attr, rowCount,
-        attributePercentiles.get(attr)))
+        attributePercentiles.get(attr)).toCatalogColumnStat(attr.name, attr.dataType))
     }.toMap
     (rowCount, columnStats)
   }
