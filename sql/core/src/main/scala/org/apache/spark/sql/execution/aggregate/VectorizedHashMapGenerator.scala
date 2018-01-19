@@ -129,11 +129,7 @@ class VectorizedHashMapGenerator(
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
         // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
         // `ordinal` parameter.
-        val value = if (key.dataType.isInstanceOf[StructType]) {
-          s"vectors[$ordinal].getStruct(buckets[idx])"
-        } else {
-          ctx.getValue(s"vectors[$ordinal]", "buckets[idx]", key.dataType)
-        }
+        val value = ctx.getValue(s"vectors[$ordinal]", key.dataType, "buckets[idx]")
         s"(${ctx.genEqual(key.dataType, value, key.name)})"
       }.mkString(" && ")
     }

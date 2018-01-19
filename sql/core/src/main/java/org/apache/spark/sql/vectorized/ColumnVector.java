@@ -202,7 +202,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the array for rowId.
    */
   public final ColumnarArray getArray(int rowId) {
-    return new ColumnarArray(getChild(0), getArrayOffset(rowId), getArrayLength(rowId));
+    return new ColumnarArray(arrayData(), getArrayOffset(rowId), getArrayLength(rowId));
   }
 
   /**
