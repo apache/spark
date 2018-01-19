@@ -78,11 +78,10 @@ case class InMemoryTableScanExec(
     } else {
       OffHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
     }
-    val columnarBatch = new ColumnarBatch(
-      columnarBatchSchema, columnVectors.asInstanceOf[Array[ColumnVector]], rowCount)
+    val columnarBatch = new ColumnarBatch(columnVectors.asInstanceOf[Array[ColumnVector]])
     columnarBatch.setNumRows(rowCount)
 
-    for (i <- 0 until attributes.length) {
+    for (i <- attributes.indices) {
       ColumnAccessor.decompress(
         cachedColumnarBatch.buffers(columnIndices(i)),
         columnarBatch.column(i).asInstanceOf[WritableColumnVector],
