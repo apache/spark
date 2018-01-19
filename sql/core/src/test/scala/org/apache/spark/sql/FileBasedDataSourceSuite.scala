@@ -54,7 +54,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
   // Only ORC/Parquet support this. `CSV` and `JSON` returns an empty schema.
   // `TEXT` data source always has a single column whose name is `value`.
   Seq("orc", "parquet").foreach { format =>
-    test(s"SPARK-15474 Write and read back non-emtpy schema with empty dataframe - $format") {
+    test(s"SPARK-15474 Write and read back non-empty schema with empty dataframe - $format") {
       withTempPath { file =>
         val path = file.getCanonicalPath
         val emptyDf = Seq((true, 1, "str")).toDF().limit(0)
@@ -68,13 +68,16 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
   }
 
   allFileBasedDataSources.foreach { format =>
-    test(s"SPARK-22146 read files containing special characters using $format") {
-      val nameWithSpecialChars = s"sp&cial%chars"
-      withTempDir { dir =>
-        val tmpFile = s"$dir/$nameWithSpecialChars"
-        spark.createDataset(Seq("a", "b")).write.format(format).save(tmpFile)
-        val fileContent = spark.read.format(format).load(tmpFile)
-        checkAnswer(fileContent, Seq(Row("a"), Row("b")))
+    test(s"SPARK-22146 / SPARK-23148 read files containing special characters using $format") {
+      val nameWithSpecialChars = s"sp&cial%c hars"
+      Seq(true, false).foreach { multiline =>
+        withTempDir { dir =>
+          val tmpFile = s"$dir/$nameWithSpecialChars"
+          spark.createDataset(Seq("a", "b")).write.format(format).save(tmpFile)
+          val reader = spark.read.format(format).option("multiLine", multiline)
+          val fileContent = reader.load(tmpFile)
+          checkAnswer(fileContent, Seq(Row("a"), Row("b")))
+        }
       }
     }
   }
