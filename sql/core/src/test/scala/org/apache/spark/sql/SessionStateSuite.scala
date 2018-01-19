@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.BeforeAndAfterEach
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkFunSuite
@@ -28,8 +26,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
 
-class SessionStateSuite extends SparkFunSuite
-    with BeforeAndAfterEach with BeforeAndAfterAll {
+class SessionStateSuite extends SparkFunSuite {
 
   /**
    * A shared SparkSession for all tests in this suite. Make sure you reset any changes to this
