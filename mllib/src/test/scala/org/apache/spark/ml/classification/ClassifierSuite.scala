@@ -90,6 +90,13 @@ class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
       }
       assert(e.getMessage.contains("requires integers in range"))
     }
+    val df3 = getTestData(Seq.empty[Double])
+    withClue("getNumClasses should fail if dataset is empty") {
+      val e: SparkException = intercept[SparkException] {
+        c.getNumClasses(df3)
+      }
+      assert(e.getMessage == "ML algorithm was given empty dataset.")
+    }
   }
 }
 
