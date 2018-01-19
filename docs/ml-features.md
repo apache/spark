@@ -775,35 +775,43 @@ for more details on the API.
 </div>
 </div>
 
-## OneHotEncoder
+## OneHotEncoder (Deprecated since 2.3.0)
 
-[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features.
+Because this existing `OneHotEncoder` is a stateless transformer, it is not usable on new data where the number of categories may differ from the training data. In order to fix this, a new `OneHotEncoderEstimator` was created that produces an `OneHotEncoderModel` when fitting. For more detail, please see [SPARK-13030](https://issues.apache.org/jira/browse/SPARK-13030).
+
+`OneHotEncoder` has been deprecated in 2.3.0 and will be removed in 3.0.0. Please use [OneHotEncoderEstimator](ml-features.html#onehotencoderestimator) instead.
+
+## OneHotEncoderEstimator
+
+[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a categorical feature, represented as a label index, to a binary vector with at most a single one-value indicating the presence of a specific feature value from among the set of all feature values. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features. For string type input data, it is common to encode categorical features using [StringIndexer](ml-features.html#stringindexer) first.
+
+`OneHotEncoderEstimator` can transform multiple columns, returning an one-hot-encoded output vector column for each input column. It is common to merge these vectors into a single feature vector using [VectorAssembler](ml-features.html#vectorassembler).
+
+`OneHotEncoderEstimator` supports the `handleInvalid` parameter to choose how to handle invalid input during transforming data. Available options include 'keep' (any invalid inputs are assigned to an extra categorical index) and 'error' (throw an error).
 
 **Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [OneHotEncoder Scala docs](api/scala/index.html#org.apache.spark.ml.feature.OneHotEncoder)
-for more details on the API.
+Refer to the [OneHotEncoderEstimator Scala docs](api/scala/index.html#org.apache.spark.ml.feature.OneHotEncoderEstimator) for more details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/OneHotEncoderExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/OneHotEncoderEstimatorExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-Refer to the [OneHotEncoder Java docs](api/java/org/apache/spark/ml/feature/OneHotEncoder.html)
+Refer to the [OneHotEncoderEstimator Java docs](api/java/org/apache/spark/ml/feature/OneHotEncoderEstimator.html)
 for more details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaOneHotEncoderExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaOneHotEncoderEstimatorExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 
-Refer to the [OneHotEncoder Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.OneHotEncoder)
-for more details on the API.
+Refer to the [OneHotEncoderEstimator Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.OneHotEncoderEstimator) for more details on the API.
 
-{% include_example python/ml/onehot_encoder_example.py %}
+{% include_example python/ml/onehot_encoder_estimator_example.py %}
 </div>
 </div>
 
