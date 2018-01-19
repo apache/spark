@@ -48,7 +48,7 @@ if __name__ == "__main__":
         inputCols=["hour", "mobile", "userFeatures"],
         outputCol="features")
 
-    # This dataframe can be used by used by downstream transformers as before
+    # This dataframe can be used by downstream transformers as before
     output = assembler.transform(datasetWithSize)
     print("Assembled columns 'hour', 'mobile', 'userFeatures' to vector column 'features'")
     output.select("features", "clicked").show(truncate=False)

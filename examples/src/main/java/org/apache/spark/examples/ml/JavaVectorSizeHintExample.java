@@ -17,6 +17,11 @@
 
 package org.apache.spark.examples.ml;
 
+import org.apache.spark.sql.SparkSession;
+
+// $example on$
+import java.util.Arrays;
+
 import org.apache.spark.ml.feature.VectorAssembler;
 import org.apache.spark.ml.feature.VectorSizeHint;
 import org.apache.spark.ml.linalg.VectorUDT;
@@ -24,15 +29,9 @@ import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
-
-import java.util.Arrays;
-
 import static org.apache.spark.sql.types.DataTypes.*;
-
-// $example on$
 // $example off$
 
 public class JavaVectorSizeHintExample {
@@ -66,7 +65,7 @@ public class JavaVectorSizeHintExample {
       .setInputCols(new String[]{"hour", "mobile", "userFeatures"})
       .setOutputCol("features");
 
-    // This dataframe can be used by used by downstream transformers as before
+    // This dataframe can be used by downstream transformers as before
     Dataset<Row> output = assembler.transform(datasetWithSize);
     System.out.println("Assembled columns 'hour', 'mobile', 'userFeatures' to vector column " +
         "'features'");

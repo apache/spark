@@ -51,7 +51,7 @@ object VectorSizeHintExample {
       .setInputCols(Array("hour", "mobile", "userFeatures"))
       .setOutputCol("features")
 
-    // This dataframe can be used by used by downstream transformers as before
+    // This dataframe can be used by downstream transformers as before
     val output = assembler.transform(datasetWithSize)
     println("Assembled columns 'hour', 'mobile', 'userFeatures' to vector column 'features'")
     output.select("features", "clicked").show(false)
