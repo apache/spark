@@ -340,7 +340,7 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
       case Some(operationGraph) => UIUtils.showDagVizForJob(jobId, operationGraph)
       case None =>
               <div id="no-info">
-                <p>No information to display for job {jobId}</p>
+                <p>No DAG visualization information to display for job {jobId}</p>
               </div>
     }
     content ++= operationGraphContent
