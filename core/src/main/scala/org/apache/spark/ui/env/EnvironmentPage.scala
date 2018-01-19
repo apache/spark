@@ -48,10 +48,50 @@ private[ui] class EnvironmentPage(
       classPathHeaders, classPathRow, appEnv.classpathEntries, fixedWidth = true)
     val content =
       <span>
-        <h4>Runtime Information</h4> {runtimeInformationTable}
-        <h4>Spark Properties</h4> {sparkPropertiesTable}
-        <h4>System Properties</h4> {systemPropertiesTable}
-        <h4>Classpath Entries</h4> {classpathEntriesTable}
+        <span class="collapse-aggregated-runtimeInformation collapse-table"
+            onClick="collapseTable('collapse-aggregated-runtimeInformation',
+            'aggregated-runtimeInformation')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Runtime Information</a>
+          </h4>
+        </span>
+        <div class="aggregated-runtimeInformation collapsible-table">
+          {runtimeInformationTable}
+        </div>
+        <span class="collapse-aggregated-sparkProperties collapse-table"
+            onClick="collapseTable('collapse-aggregated-sparkProperties',
+            'aggregated-sparkProperties')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Spark Properties</a>
+          </h4>
+        </span>
+        <div class="aggregated-sparkProperties collapsible-table">
+          {sparkPropertiesTable}
+        </div>
+        <span class="collapse-aggregated-systemProperties collapse-table"
+            onClick="collapseTable('collapse-aggregated-systemProperties',
+            'aggregated-systemProperties')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>System Properties</a>
+          </h4>
+        </span>
+        <div class="aggregated-systemProperties collapsible-table">
+          {systemPropertiesTable}
+        </div>
+        <span class="collapse-aggregated-classpathEntries collapse-table"
+            onClick="collapseTable('collapse-aggregated-classpathEntries',
+            'aggregated-classpathEntries')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Classpath Entries</a>
+          </h4>
+        </span>
+        <div class="aggregated-classpathEntries collapsible-table">
+          {classpathEntriesTable}
+        </div>
       </span>
 
     UIUtils.headerSparkPage("Environment", content, parent)
