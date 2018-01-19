@@ -104,17 +104,19 @@ trait MesosSchedulerUtils extends Logging {
       fwInfoBuilder: Protos.FrameworkInfo.Builder): Protos.Credential.Builder = {
     val credBuilder = Credential.newBuilder()
     conf.getOption("spark.mesos.principal")
+      .orElse(Option(conf.getenv("SPARK_MESOS_PRINCIPAL")))
       .orElse(
         conf.getOption("spark.mesos.principal.file")
           .orElse(Option(conf.getenv("SPARK_MESOS_PRINCIPAL_FILE")))
           .map { principalFile =>
-            Files.toString(new File(principalFile), Charset.forName("UTF-8"))
+              Files.toString(new File(principalFile), Charset.forName("UTF-8"))
           }
       ).foreach { principal =>
-        fwInfoBuilder.setPrincipal(principal)
-        credBuilder.setPrincipal(principal)
+         fwInfoBuilder.setPrincipal(principal)
+         credBuilder.setPrincipal(principal)
     }
     conf.getOption("spark.mesos.secret")
+      .orElse(Option(conf.getenv("SPARK_MESOS_SECRET")))
       .orElse(
         conf.getOption("spark.mesos.secret.file")
          .orElse(Option(conf.getenv("SPARK_MESOS_SECRET_FILE")))
@@ -122,7 +124,7 @@ trait MesosSchedulerUtils extends Logging {
            Files.toString(new File(secretFile), Charset.forName("UTF-8"))
          }
       ).foreach { secret =>
-      credBuilder.setSecret(secret)
+         credBuilder.setSecret(secret)
     }
     if (credBuilder.hasSecret && !fwInfoBuilder.hasPrincipal) {
       throw new SparkException(

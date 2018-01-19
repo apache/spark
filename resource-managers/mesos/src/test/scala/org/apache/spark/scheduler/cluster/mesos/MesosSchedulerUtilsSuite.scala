@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import java.io.File
+import java.io.{File, FileNotFoundException}
 
 import scala.collection.immutable.Map
 import scala.collection.JavaConverters._
@@ -264,6 +264,23 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     credBuilder.getPrincipal shouldBe "test-principal"
   }
   
+  test("Principal specified via spark.mesos.principal.file that does not exist") {
+    val conf = new SparkConf()
+    conf.set("spark.mesos.principal.file", "/tmp/does-not-exist")
+    
+    intercept[FileNotFoundException] {
+      val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    }
+  }
+  
+  test("Principal specified via SPARK_MESOS_PRINCIPAL") {
+    val conf = new SparkConfWithEnv(Map("SPARK_MESOS_PRINCIPAL" -> "test-principal"))
+    
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+  }
+  
   test("Principal specified via SPARK_MESOS_PRINCIPAL_FILE") {
     val pFile = File.createTempFile("MesosSchedulerUtilsSuite", ".txt");
     pFile.deleteOnExit()
@@ -273,6 +290,14 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
     credBuilder.hasPrincipal shouldBe true
     credBuilder.getPrincipal shouldBe "test-principal"
+  }
+  
+  test("Principal specified via SPARK_MESOS_PRINCIPAL_FILE that does not exist") {
+    val conf = new SparkConfWithEnv(Map("SPARK_MESOS_PRINCIPAL_FILE" -> "/tmp/does-not-exist"))
+    
+    intercept[FileNotFoundException] {
+      val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    }
   }
   
   test("Secret specified via spark.mesos.secret") {
@@ -302,6 +327,28 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     credBuilder.getSecret shouldBe "my-secret"
   }
   
+  test("Principal specified via spark.mesos.secret.file that does not exist") {
+    val conf = new SparkConf()
+    conf.set("spark.mesos.principal", "test-principal")
+    conf.set("spark.mesos.secret.file", "/tmp/does-not-exist")
+    
+    intercept[FileNotFoundException] {
+      val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    }
+  }
+  
+  test("Principal specified via SPARK_MESOS_SECRET") {   
+    val env = Map("SPARK_MESOS_SECRET" -> "my-secret")
+    val conf = new SparkConfWithEnv(env)
+    conf.set("spark.mesos.principal", "test-principal")
+    
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+    credBuilder.hasSecret shouldBe true
+    credBuilder.getSecret shouldBe "my-secret"
+  }
+  
   test("Principal specified via SPARK_MESOS_SECRET_FILE") {
     val sFile = File.createTempFile("MesosSchedulerUtilsSuite", ".txt");
     sFile.deleteOnExit()
@@ -311,7 +358,6 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     val env = Map("SPARK_MESOS_SECRET_FILE" -> sFilePath)
     val conf = new SparkConfWithEnv(env)
     conf.set("spark.mesos.principal", "test-principal")
-    conf.set("spark.mesos.secret.file", sFile.getAbsolutePath())
     
     val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
     credBuilder.hasPrincipal shouldBe true
@@ -324,6 +370,29 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     val conf = new SparkConf()
     conf.set("spark.mesos.secret", "my-secret")
     
-    an [SparkException] should be thrownBy utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    intercept[SparkException] {
+      utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    }
+  }
+  
+  test("Principal specification preference") {
+    val conf = new SparkConfWithEnv(Map("SPARK_MESOS_PRINCIPAL" -> "other-principal"))
+    conf.set("spark.mesos.principal", "test-principal")
+    
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+  }
+  
+  test("Secret specification preference") {
+    val conf = new SparkConfWithEnv(Map("SPARK_MESOS_SECRET" -> "other-secret"))
+    conf.set("spark.mesos.principal", "test-principal")
+    conf.set("spark.mesos.secret", "my-secret")
+    
+    val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+    credBuilder.hasPrincipal shouldBe true
+    credBuilder.getPrincipal shouldBe "test-principal"
+    credBuilder.hasSecret shouldBe true
+    credBuilder.getSecret shouldBe "my-secret"
   }
 }
