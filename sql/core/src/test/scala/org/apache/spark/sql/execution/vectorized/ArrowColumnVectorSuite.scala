@@ -346,11 +346,11 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     assert(columnVector.dataType === schema)
     assert(columnVector.numNulls === 0)
 
-    val row0 = columnVector.getStruct(0, 2)
+    val row0 = columnVector.getStruct(0)
     assert(row0.getInt(0) === 1)
     assert(row0.getLong(1) === 1L)
 
-    val row1 = columnVector.getStruct(1, 2)
+    val row1 = columnVector.getStruct(1)
     assert(row1.getInt(0) === 2)
     assert(row1.isNullAt(1))
 
