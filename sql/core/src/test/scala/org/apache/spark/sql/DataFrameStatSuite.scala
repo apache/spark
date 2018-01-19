@@ -157,21 +157,21 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
       val errorSingle = 1000 * epsilon
       val errorDouble = 2.0 * errorSingle
 
-      assert(math.abs(single1 - q1 * n) < errorSingle)
-      assert(math.abs(double2 - 2 * q2 * n) < errorDouble)
-      assert(math.abs(s1 - q1 * n) < errorSingle)
-      assert(math.abs(s2 - q2 * n) < errorSingle)
-      assert(math.abs(d1 - 2 * q1 * n) < errorDouble)
-      assert(math.abs(d2 - 2 * q2 * n) < errorDouble)
+      assert(math.abs(single1 - q1 * n) <= errorSingle)
+      assert(math.abs(double2 - 2 * q2 * n) <= errorDouble)
+      assert(math.abs(s1 - q1 * n) <= errorSingle)
+      assert(math.abs(s2 - q2 * n) <= errorSingle)
+      assert(math.abs(d1 - 2 * q1 * n) <= errorDouble)
+      assert(math.abs(d2 - 2 * q2 * n) <= errorDouble)
 
       // Multiple columns
       val Array(Array(ms1, ms2), Array(md1, md2)) =
         df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2), epsilon)
 
-      assert(math.abs(ms1 - q1 * n) < errorSingle)
-      assert(math.abs(ms2 - q2 * n) < errorSingle)
-      assert(math.abs(md1 - 2 * q1 * n) < errorDouble)
-      assert(math.abs(md2 - 2 * q2 * n) < errorDouble)
+      assert(math.abs(ms1 - q1 * n) <= errorSingle)
+      assert(math.abs(ms2 - q2 * n) <= errorSingle)
+      assert(math.abs(md1 - 2 * q1 * n) <= errorDouble)
+      assert(math.abs(md2 - 2 * q2 * n) <= errorDouble)
     }
 
     // quantile should be in the range [0.0, 1.0]
