@@ -87,7 +87,7 @@ More details on parameters can be found in the [R API documentation](api/R/spark
 The `spark.ml` implementation of logistic regression also supports
 extracting a summary of the model over the training set. Note that the
 predictions and metrics which are stored as `DataFrame` in
-`BinaryLogisticRegressionSummary` are annotated `@transient` and hence
+`LogisticRegressionSummary` are annotated `@transient` and hence
 only available on the driver.
 
 <div class="codetabs">
@@ -97,10 +97,6 @@ only available on the driver.
 [`LogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionTrainingSummary)
 provides a summary for a
 [`LogisticRegressionModel`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionModel).
-Currently, only binary classification is supported and the
-summary must be explicitly cast to
-[`BinaryLogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.ml.classification.BinaryLogisticRegressionTrainingSummary).
-This will likely change when multiclass classification is supported.
 
 Continuing the earlier example:
 
@@ -121,7 +117,6 @@ Continuing the earlier example:
 [`LogisticRegressionTrainingSummary`](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegressionSummary)
 provides a summary for a
 [`LogisticRegressionModel`](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegressionModel).
-Currently, only binary classification is supported. Support for multiclass model summaries will be added in the future.
 
 Continuing the earlier example:
 
