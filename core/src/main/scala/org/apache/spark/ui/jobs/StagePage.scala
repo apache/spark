@@ -31,6 +31,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.TaskLocality
 import org.apache.spark.status._
+import org.apache.spark.status.api.v1
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui._
 import org.apache.spark.util.Utils
@@ -1002,13 +1003,11 @@ private object ApiHelper {
     }
   }
 
-  def lastStageNameAndDescription(store: AppStatusStore): (String, String) = {
-    val stageData = store.stageList(Collections.emptyList()).toList
-    if (stageData.nonEmpty) {
-      val lastStageAttempt = stageData.maxBy(_.attemptId)
-      (lastStageAttempt.name, lastStageAttempt.description.getOrElse(""))
-    } else {
-      ("", "")
+  def lastStageNameAndDescription(store: AppStatusStore, job: v1.JobData): (String, String) = {
+    store.asOption(store.lastStageAttempt(job.stageIds.max)) match {
+      case Some(lastStageAttempt) =>
+        (lastStageAttempt.name, lastStageAttempt.description.getOrElse(""))
+      case None => ("", "")
     }
   }
 

@@ -68,7 +68,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }.map { job =>
       val jobId = job.jobId
       val status = job.status
-      val (_, lastStageDescription) = lastStageNameAndDescription(store)
+      val (_, lastStageDescription) = lastStageNameAndDescription(store, job)
       val displayJobDescription =
         if (lastStageDescription.isEmpty) {
           job.name
@@ -435,7 +435,7 @@ private[ui] class JobDataSource(
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
     val submissionTime = jobData.submissionTime
     val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
-    val (lastStageName, lastStageDescription) = lastStageNameAndDescription(store)
+    val (lastStageName, lastStageDescription) = lastStageNameAndDescription(store, jobData)
 
     val jobDescription = UIUtils.makeDescription(lastStageDescription, basePath, plainText = false)
 
