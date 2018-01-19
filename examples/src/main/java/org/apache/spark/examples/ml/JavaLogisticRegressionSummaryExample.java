@@ -61,8 +61,7 @@ public class JavaLogisticRegressionSummaryExample {
     // Obtain the metrics useful to judge performance on test data.
     // We cast the summary to a BinaryLogisticRegressionSummary since the problem is a binary
     // classification problem.
-    BinaryLogisticRegressionSummary binarySummary =
-      (BinaryLogisticRegressionSummary) trainingSummary;
+    BinaryLogisticRegressionSummary binarySummary = trainingSummary.asBinary();
 
     // Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
     Dataset<Row> roc = binarySummary.roc();

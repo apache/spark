@@ -111,10 +111,6 @@ Continuing the earlier example:
 [`LogisticRegressionTrainingSummary`](api/java/org/apache/spark/ml/classification/LogisticRegressionTrainingSummary.html)
 provides a summary for a
 [`LogisticRegressionModel`](api/java/org/apache/spark/ml/classification/LogisticRegressionModel.html).
-Currently, only binary classification is supported and the
-summary must be explicitly cast to
-[`BinaryLogisticRegressionTrainingSummary`](api/java/org/apache/spark/ml/classification/BinaryLogisticRegressionTrainingSummary.html). 
-Support for multiclass model summaries will be added in the future.
 
 Continuing the earlier example:
 
