@@ -73,7 +73,9 @@ public abstract class DBIteratorSuite {
   private static final BaseComparator NATURAL_ORDER = (t1, t2) -> t1.key.compareTo(t2.key);
   private static final BaseComparator REF_INDEX_ORDER = (t1, t2) -> t1.id.compareTo(t2.id);
   private static final BaseComparator COPY_INDEX_ORDER = (t1, t2) -> t1.name.compareTo(t2.name);
-  private static final BaseComparator NUMERIC_INDEX_ORDER = (t1, t2) -> t1.num - t2.num;
+  private static final BaseComparator NUMERIC_INDEX_ORDER = (t1, t2) -> {
+    return Integer.valueOf(t1.num).compareTo(t2.num);
+  };
   private static final BaseComparator CHILD_INDEX_ORDER = (t1, t2) -> t1.child.compareTo(t2.child);
 
   /**
@@ -112,7 +114,8 @@ public abstract class DBIteratorSuite {
       t.key = "key" + i;
       t.id = "id" + i;
       t.name = "name" + RND.nextInt(MAX_ENTRIES);
-      t.num = RND.nextInt(MAX_ENTRIES);
+      // Force one item to have an integer value of zero to test the fix for SPARK-23103.
+      t.num = (i != 0) ? (int) RND.nextLong() : 0;
       t.child = "child" + (i % MIN_ENTRIES);
       allEntries.add(t);
     }
