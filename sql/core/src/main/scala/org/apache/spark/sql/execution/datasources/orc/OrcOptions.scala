@@ -61,10 +61,12 @@ class OrcOptions(
 
 object OrcOptions {
   // The ORC compression short names
-  val shortOrcCompressionCodecNames = Map(
+  private val shortOrcCompressionCodecNames = Map(
     "none" -> "NONE",
     "uncompressed" -> "NONE",
     "snappy" -> "SNAPPY",
     "zlib" -> "ZLIB",
     "lzo" -> "LZO")
+
+  def getORCCompressionCodecName(name: String): String = shortOrcCompressionCodecNames(name)
 }
