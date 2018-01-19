@@ -901,6 +901,11 @@ case class Deduplicate(
  * will be put on the barrier, so only the new nodes created will be analyzed.
  *
  * This analysis barrier will be removed at the end of analysis stage.
+ *
+ * @param child The analyzed plan to be hidden from the barrier.
+ * @param id A globally unique ID for this barrier, which is also used as a DataFrame ID. The
+ *           analyzer relies on this ID to disambiguate attributes in join condition when resolving
+ *           self-join.
  */
 case class AnalysisBarrier(child: LogicalPlan, id: Long) extends LeafNode {
   override protected def innerChildren: Seq[LogicalPlan] = Seq(child)
