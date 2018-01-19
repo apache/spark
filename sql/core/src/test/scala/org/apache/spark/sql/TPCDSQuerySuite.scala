@@ -315,6 +315,7 @@ class TPCDSQuerySuite extends BenchmarkQueryTest {
       """.stripMargin)
   }
 
+  // The TPCDS queries below are based on v1.4
   val tpcdsQueries = Seq(
     "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11",
     "q12", "q13", "q14a", "q14b", "q15", "q16", "q17", "q18", "q19", "q20",
@@ -331,6 +332,30 @@ class TPCDSQuerySuite extends BenchmarkQueryTest {
     val queryString = resourceToString(s"tpcds/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
     test(name) {
+      withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+        // check the plans can be properly generated
+        val plan = sql(queryString).queryExecution.executedPlan
+        checkGeneratedCode(plan)
+      }
+    }
+  }
+
+  val tpcdsQueriesV2_7_0 = Seq(
+    "q1", "q2", "q3", "q4", "q5", "q5a", "q6", "q7", "q8", "q9", "q10", "q10a", "q11",
+    "q12", "q13", "q14_1", "q14_2", "q14a_1", "q14a_2", "q15", "q16", "q17", "q18", "q18a", "q19",
+    "q20", "q21", "q22", "q22a", "q23_1", "q23_2", "q24_1", "q24_2", "q25", "q26", "q27", "q27a",
+    "q28", "q29", "q30", "q31", "q32", "q33", "q34", "q35", "q35a", "q36", "q36a", "q37", "q38",
+    "q39_1", "q39_2", "q40", "q41", "q42", "q43", "q44", "q45", "q46", "q47", "q48", "q49",
+    "q50", "q51", "q51a", "q52", "q53", "q54", "q55", "q56", "q57", "q58", "q59",
+    "q60", "q61", "q62", "q63", "q64", "q65", "q66", "q67", "q67a", "q68", "q69",
+    "q70", "q70a", "q71", "q72", "q73", "q74", "q75", "q76", "q77", "q77a", "q78", "q79",
+    "q80", "q80a", "q81", "q82", "q83", "q84", "q85", "q86", "q86a", "q87", "q88", "q89",
+    "q90", "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
+
+  tpcdsQueriesV2_7_0.foreach { name =>
+    val queryString = resourceToString(s"tpcds-v2.7.0/$name.sql",
+      classLoader = Thread.currentThread().getContextClassLoader)
+    test(s"$name-v2.7") {
       withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
         // check the plans can be properly generated
         val plan = sql(queryString).queryExecution.executedPlan
