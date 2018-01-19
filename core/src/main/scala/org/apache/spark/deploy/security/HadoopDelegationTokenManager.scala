@@ -109,6 +109,8 @@ private[spark] class HadoopDelegationTokenManager(
    * Writes delegation tokens to creds.  Delegation tokens are fetched from all registered
    * providers.
    *
+   * @param hadoopConf hadoop Configuration
+   * @param creds Credentials that will be updated in place (overwritten)
    * @return Time after which the fetched delegation tokens should be renewed.
    */
   def obtainDelegationTokens(
@@ -125,3 +127,4 @@ private[spark] class HadoopDelegationTokenManager(
     }.foldLeft(Long.MaxValue)(math.min)
   }
 }
+

@@ -108,20 +108,22 @@ trait CodegenSupport extends SparkPlan {
 
   /**
    * Consume the generated columns or row from current SparkPlan, call its parent's `doConsume()`.
+   *
+   * Note that `outputVars` and `row` can't both be null.
    */
   final def consume(ctx: CodegenContext, outputVars: Seq[ExprCode], row: String = null): String = {
     val inputVars =
-      if (row != null) {
+      if (outputVars != null) {
+        assert(outputVars.length == output.length)
+        // outputVars will be used to generate the code for UnsafeRow, so we should copy them
+        outputVars.map(_.copy())
+      } else {
+        assert(row != null, "outputVars and row cannot both be null.")
         ctx.currentVars = null
         ctx.INPUT_ROW = row
         output.zipWithIndex.map { case (attr, i) =>
           BoundReference(i, attr.dataType, attr.nullable).genCode(ctx)
         }
-      } else {
-        assert(outputVars != null)
-        assert(outputVars.length == output.length)
-        // outputVars will be used to generate the code for UnsafeRow, so we should copy them
-        outputVars.map(_.copy())
       }
 
     val rowVar = if (row != null) {
@@ -147,6 +149,11 @@ trait CodegenSupport extends SparkPlan {
       }
     }
 
+    // Set up the `currentVars` in the codegen context, as we generate the code of `inputVars`
+    // before calling `parent.doConsume`. We can't set up `INPUT_ROW`, because parent needs to
+    // generate code of `rowVar` manually.
+    ctx.currentVars = inputVars
+    ctx.INPUT_ROW = null
     ctx.freshNamePrefix = parent.variablePrefix
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
     s"""
@@ -193,7 +200,8 @@ trait CodegenSupport extends SparkPlan {
   def usedInputs: AttributeSet = references
 
   /**
-   * Generate the Java source code to process the rows from child SparkPlan.
+   * Generate the Java source code to process the rows from child SparkPlan. This should only be
+   * called from `consume`.
    *
    * This should be override by subclass to support codegen.
    *
@@ -207,6 +215,11 @@ trait CodegenSupport extends SparkPlan {
    *   }
    *
    * Note: A plan can either consume the rows as UnsafeRow (row), or a list of variables (input).
+   *       When consuming as a listing of variables, the code to produce the input is already
+   *       generated and `CodegenContext.currentVars` is already set. When consuming as UnsafeRow,
+   *       implementations need to put `row.code` in the generated code and set
+   *       `CodegenContext.INPUT_ROW` manually. Some plans may need more tweaks as they have
+   *       different inputs(join build side, aggregate buffer, etc.), or other special cases.
    */
   def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     throw new UnsupportedOperationException
@@ -269,9 +282,10 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
   }
 
   override def doProduce(ctx: CodegenContext): String = {
-    val input = ctx.freshName("input")
     // Right now, InputAdapter is only used when there is one input RDD.
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    // Inline mutable state since an InputAdapter is used once in a task for WholeStageCodegen
+    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];",
+      forceInline = true)
     val row = ctx.freshName("row")
     s"""
        | while ($input.hasNext() && !stopEarly()) {

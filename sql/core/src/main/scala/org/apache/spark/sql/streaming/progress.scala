@@ -152,7 +152,7 @@ class StreamingQueryProgress private[sql](
  * @param endOffset              The ending offset for data being read.
  * @param numInputRows           The number of records read from this source.
  * @param inputRowsPerSecond     The rate at which data is arriving from this source.
- * @param processedRowsPerSecond The rate at which data from this source is being procressed by
+ * @param processedRowsPerSecond The rate at which data from this source is being processed by
  *                               Spark.
  * @since 2.1.0
  */

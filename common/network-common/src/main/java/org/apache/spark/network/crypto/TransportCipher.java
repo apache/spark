@@ -30,10 +30,10 @@ import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.*;
-import io.netty.util.AbstractReferenceCounted;
 import org.apache.commons.crypto.stream.CryptoInputStream;
 import org.apache.commons.crypto.stream.CryptoOutputStream;
 
+import org.apache.spark.network.util.AbstractFileRegion;
 import org.apache.spark.network.util.ByteArrayReadableChannel;
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 
@@ -161,7 +161,7 @@ public class TransportCipher {
     }
   }
 
-  private static class EncryptedMessage extends AbstractReferenceCounted implements FileRegion {
+  private static class EncryptedMessage extends AbstractFileRegion {
     private final boolean isByteBuf;
     private final ByteBuf buf;
     private final FileRegion region;
@@ -199,8 +199,43 @@ public class TransportCipher {
     }
 
     @Override
-    public long transfered() {
+    public long transferred() {
       return transferred;
+    }
+
+    @Override
+    public EncryptedMessage touch(Object o) {
+      super.touch(o);
+      if (region != null) {
+        region.touch(o);
+      }
+      if (buf != null) {
+        buf.touch(o);
+      }
+      return this;
+    }
+
+    @Override
+    public EncryptedMessage retain(int increment) {
+      super.retain(increment);
+      if (region != null) {
+        region.retain(increment);
+      }
+      if (buf != null) {
+        buf.retain(increment);
+      }
+      return this;
+    }
+
+    @Override
+    public boolean release(int decrement) {
+      if (region != null) {
+        region.release(decrement);
+      }
+      if (buf != null) {
+        buf.release(decrement);
+      }
+      return super.release(decrement);
     }
 
     @Override

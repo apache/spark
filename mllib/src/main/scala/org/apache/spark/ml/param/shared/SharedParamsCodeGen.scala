@@ -60,9 +60,12 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
+      ParamDesc[Array[String]]("outputCols", "output column names"),
       ParamDesc[Int]("checkpointInterval", "set checkpoint interval (>= 1) or " +
         "disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed " +
-        "every 10 iterations", isValid = "(interval: Int) => interval == -1 || interval >= 1"),
+        "every 10 iterations. Note: this setting will be ignored if the checkpoint directory " +
+        "is not set in the SparkContext",
+        isValid = "(interval: Int) => interval == -1 || interval >= 1"),
       ParamDesc[Boolean]("fitIntercept", "whether to fit an intercept term", Some("true")),
       ParamDesc[String]("handleInvalid", "how to handle invalid entries. Options are skip (which " +
         "will filter out rows with bad values), or error (which will throw an error). More " +
@@ -82,7 +85,14 @@ private[shared] object SharedParamsCodeGen {
         "all instance weights as 1.0"),
       ParamDesc[String]("solver", "the solver algorithm for optimization", finalFields = false),
       ParamDesc[Int]("aggregationDepth", "suggested depth for treeAggregate (>= 2)", Some("2"),
-        isValid = "ParamValidators.gtEq(2)", isExpertParam = true))
+        isValid = "ParamValidators.gtEq(2)", isExpertParam = true),
+      ParamDesc[Boolean]("collectSubModels", "whether to collect a list of sub-models trained " +
+        "during tuning. If set to false, then only the single best sub-model will be available " +
+        "after fitting. If set to true, then all sub-models will be available. Warning: For " +
+        "large models, collecting all sub-models can cause OOMs on the Spark driver",
+        Some("false"), isExpertParam = true),
+      ParamDesc[String]("loss", "the loss function to be optimized", finalFields = false)
+    )
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"

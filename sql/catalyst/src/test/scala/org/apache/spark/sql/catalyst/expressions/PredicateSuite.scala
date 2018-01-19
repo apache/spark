@@ -25,6 +25,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 
@@ -239,6 +240,18 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-22501: In should not generate codes beyond 64KB") {
+    val N = 3000
+    val sets = (1 to N).map(i => Literal(i.toDouble))
+    checkEvaluation(In(Literal(1.0D), sets), true)
+  }
+
+  test("SPARK-22705: In should use less global variables") {
+    val ctx = new CodegenContext()
+    In(Literal(1.0D), Seq(Literal(1.0D), Literal(2.0D))).genCode(ctx)
+    assert(ctx.inlinedMutableStates.isEmpty)
+  }
+
   test("INSET") {
     val hS = HashSet[Any]() + 1 + 2
     val nS = HashSet[Any]() + 1 + 2 + null
@@ -285,26 +298,26 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val udt = new ExamplePointUDT
 
   private val smallValues =
-    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), new Date(2000, 1, 1),
+    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), Date.valueOf("2000-01-01"),
       new Timestamp(1), "a", 1f, 1d, 0f, 0d, false, Array(1L, 2L))
       .map(Literal(_)) ++ Seq(Literal.create(MyStruct(1L, "b")),
       Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))),
       Literal.create(ArrayData.toArrayData(Array(1.0, 2.0)), udt))
   private val largeValues =
-    Seq(2.toByte, 2.toShort, 2, 2L, Decimal(2), Array(2.toByte), new Date(2000, 1, 2),
+    Seq(2.toByte, 2.toShort, 2, 2L, Decimal(2), Array(2.toByte), Date.valueOf("2000-01-02"),
       new Timestamp(2), "b", 2f, 2d, Float.NaN, Double.NaN, true, Array(2L, 1L))
       .map(Literal(_)) ++ Seq(Literal.create(MyStruct(2L, "b")),
       Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 2))),
       Literal.create(ArrayData.toArrayData(Array(1.0, 3.0)), udt))
 
   private val equalValues1 =
-    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), new Date(2000, 1, 1),
+    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), Date.valueOf("2000-01-01"),
       new Timestamp(1), "a", 1f, 1d, Float.NaN, Double.NaN, true, Array(1L, 2L))
       .map(Literal(_)) ++ Seq(Literal.create(MyStruct(1L, "b")),
       Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))),
       Literal.create(ArrayData.toArrayData(Array(1.0, 2.0)), udt))
   private val equalValues2 =
-    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), new Date(2000, 1, 1),
+    Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), Date.valueOf("2000-01-01"),
       new Timestamp(1), "a", 1f, 1d, Float.NaN, Double.NaN, true, Array(1L, 2L))
       .map(Literal(_)) ++ Seq(Literal.create(MyStruct(1L, "b")),
       Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))),
@@ -422,5 +435,11 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("EqualTo double/float infinity") {
     val infinity = Literal(Double.PositiveInfinity)
     checkEvaluation(EqualTo(infinity, infinity), true)
+  }
+
+  test("SPARK-22693: InSet should not use global variables") {
+    val ctx = new CodegenContext
+    InSet(Literal(1), Set(1, 2, 3, 4)).genCode(ctx)
+    assert(ctx.inlinedMutableStates.isEmpty)
   }
 }

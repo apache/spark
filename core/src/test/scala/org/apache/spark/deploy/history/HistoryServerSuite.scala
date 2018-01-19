@@ -23,6 +23,7 @@ import java.util.zip.ZipInputStream
 import javax.servlet._
 import javax.servlet.http.{HttpServletRequest, HttpServletRequestWrapper, HttpServletResponse}
 
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -44,8 +45,9 @@ import org.scalatest.selenium.WebBrowser
 
 import org.apache.spark._
 import org.apache.spark.deploy.history.config._
+import org.apache.spark.status.api.v1.ApplicationInfo
+import org.apache.spark.status.api.v1.JobData
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.ui.jobs.UIData.JobUIData
 import org.apache.spark.util.{ResetSystemProperties, Utils}
 
 /**
@@ -158,7 +160,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
     "executor node blacklisting" -> "applications/app-20161116163331-0000/executors",
     "executor node blacklisting unblacklisting" -> "applications/app-20161115172038-0000/executors",
-    "executor memory usage" -> "applications/app-20161116163331-0000/executors"
+    "executor memory usage" -> "applications/app-20161116163331-0000/executors",
+
+    "app environment" -> "applications/app-20161116163331-0000/environment"
     // Todo: enable this test when logging the even of onBlockUpdated. See: SPARK-13845
     // "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )
@@ -341,7 +345,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
         .map(_.get)
         .filter(_.startsWith(url)).toList
 
-      // there are atleast some URL links that were generated via javascript,
+      // there are at least some URL links that were generated via javascript,
       // and they all contain the spark.ui.proxyBase (uiRoot)
       links.length should be > 4
       all(links) should startWith(url + uiRoot)
@@ -482,7 +486,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       json match {
         case JNothing => Seq()
         case apps: JArray =>
-          apps.filter(app => {
+          apps.children.filter(app => {
             (app \ "attempts") match {
               case attempts: JArray =>
                 val state = (attempts.children.head \ "completed").asInstanceOf[JBool]
@@ -494,12 +498,16 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       }
     }
 
-    def completedJobs(): Seq[JobUIData] = {
-      getAppUI.jobProgressListener.completedJobs
+    def completedJobs(): Seq[JobData] = {
+      getAppUI.store.jobsList(List(JobExecutionStatus.SUCCEEDED).asJava)
     }
 
-    def activeJobs(): Seq[JobUIData] = {
-      getAppUI.jobProgressListener.activeJobs.values.toSeq
+    def activeJobs(): Seq[JobData] = {
+      getAppUI.store.jobsList(List(JobExecutionStatus.RUNNING).asJava)
+    }
+
+    def isApplicationCompleted(appInfo: ApplicationInfo): Boolean = {
+      appInfo.attempts.nonEmpty && appInfo.attempts.head.completed
     }
 
     activeJobs() should have size 0
@@ -534,7 +542,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       assert(4 === getNumJobsRestful(), s"two jobs back-to-back not updated, server=$server\n")
     }
     val jobcount = getNumJobs("/jobs")
-    assert(!provider.getListing().next.completed)
+    assert(!isApplicationCompleted(provider.getListing().next))
 
     listApplications(false) should contain(appId)
 
@@ -542,7 +550,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     resetSparkContext()
     // check the app is now found as completed
     eventually(stdTimeout, stdInterval) {
-      assert(provider.getListing().next.completed,
+      assert(isApplicationCompleted(provider.getListing().next),
         s"application never completed, server=$server\n")
     }
 

@@ -22,120 +22,121 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.{Node, NodeSeq}
 
 import org.apache.spark.scheduler.Schedulable
+import org.apache.spark.status.PoolData
+import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 /** Page showing list of all ongoing and recently finished stages and pools */
 private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   private val sc = parent.sc
-  private val listener = parent.progressListener
   private def isFairScheduler = parent.isFairScheduler
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    listener.synchronized {
-      val activeStages = listener.activeStages.values.toSeq
-      val pendingStages = listener.pendingStages.values.toSeq
-      val completedStages = listener.completedStages.reverse
-      val numCompletedStages = listener.numCompletedStages
-      val failedStages = listener.failedStages.reverse
-      val numFailedStages = listener.numFailedStages
-      val subPath = "stages"
+    val allStages = parent.store.stageList(null)
 
-      val activeStagesTable =
-        new StageTableBase(request, activeStages, "active", "activeStage", parent.basePath, subPath,
-          parent.progressListener, parent.isFairScheduler,
-          killEnabled = parent.killEnabled, isFailedStage = false)
-      val pendingStagesTable =
-        new StageTableBase(request, pendingStages, "pending", "pendingStage", parent.basePath,
-          subPath, parent.progressListener, parent.isFairScheduler,
-          killEnabled = false, isFailedStage = false)
-      val completedStagesTable =
-        new StageTableBase(request, completedStages, "completed", "completedStage", parent.basePath,
-          subPath, parent.progressListener, parent.isFairScheduler,
-          killEnabled = false, isFailedStage = false)
-      val failedStagesTable =
-        new StageTableBase(request, failedStages, "failed", "failedStage", parent.basePath, subPath,
-          parent.progressListener, parent.isFairScheduler,
-          killEnabled = false, isFailedStage = true)
+    val activeStages = allStages.filter(_.status == StageStatus.ACTIVE)
+    val pendingStages = allStages.filter(_.status == StageStatus.PENDING)
+    val completedStages = allStages.filter(_.status == StageStatus.COMPLETE)
+    val failedStages = allStages.filter(_.status == StageStatus.FAILED).reverse
 
-      // For now, pool information is only accessible in live UIs
-      val pools = sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable])
-      val poolTable = new PoolTable(pools, parent)
+    val numFailedStages = failedStages.size
+    val subPath = "stages"
 
-      val shouldShowActiveStages = activeStages.nonEmpty
-      val shouldShowPendingStages = pendingStages.nonEmpty
-      val shouldShowCompletedStages = completedStages.nonEmpty
-      val shouldShowFailedStages = failedStages.nonEmpty
+    val activeStagesTable =
+      new StageTableBase(parent.store, request, activeStages, "active", "activeStage",
+        parent.basePath, subPath, parent.isFairScheduler, parent.killEnabled, false)
+    val pendingStagesTable =
+      new StageTableBase(parent.store, request, pendingStages, "pending", "pendingStage",
+        parent.basePath, subPath, parent.isFairScheduler, false, false)
+    val completedStagesTable =
+      new StageTableBase(parent.store, request, completedStages, "completed", "completedStage",
+        parent.basePath, subPath, parent.isFairScheduler, false, false)
+    val failedStagesTable =
+      new StageTableBase(parent.store, request, failedStages, "failed", "failedStage",
+        parent.basePath, subPath, parent.isFairScheduler, false, true)
 
-      val completedStageNumStr = if (numCompletedStages == completedStages.size) {
-        s"$numCompletedStages"
-      } else {
-        s"$numCompletedStages, only showing ${completedStages.size}"
-      }
+    // For now, pool information is only accessible in live UIs
+    val pools = sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable]).map { pool =>
+      val uiPool = parent.store.asOption(parent.store.pool(pool.name)).getOrElse(
+        new PoolData(pool.name, Set()))
+      pool -> uiPool
+    }.toMap
+    val poolTable = new PoolTable(pools, parent)
 
-      val summary: NodeSeq =
-        <div>
-          <ul class="unstyled">
-            {
-              if (shouldShowActiveStages) {
-                <li>
-                  <a href="#active"><strong>Active Stages:</strong></a>
-                  {activeStages.size}
-                </li>
-              }
-            }
-            {
-              if (shouldShowPendingStages) {
-                <li>
-                  <a href="#pending"><strong>Pending Stages:</strong></a>
-                  {pendingStages.size}
-                </li>
-              }
-            }
-            {
-              if (shouldShowCompletedStages) {
-                <li id="completed-summary">
-                  <a href="#completed"><strong>Completed Stages:</strong></a>
-                  {completedStageNumStr}
-                </li>
-              }
-            }
-            {
-              if (shouldShowFailedStages) {
-                <li>
-                  <a href="#failed"><strong>Failed Stages:</strong></a>
-                  {numFailedStages}
-                </li>
-              }
-            }
-          </ul>
-        </div>
+    val shouldShowActiveStages = activeStages.nonEmpty
+    val shouldShowPendingStages = pendingStages.nonEmpty
+    val shouldShowCompletedStages = completedStages.nonEmpty
+    val shouldShowFailedStages = failedStages.nonEmpty
 
-      var content = summary ++
-        {
-          if (sc.isDefined && isFairScheduler) {
-            <h4>Fair Scheduler Pools ({pools.size})</h4> ++ poolTable.toNodeSeq
-          } else {
-            Seq.empty[Node]
-          }
-        }
-      if (shouldShowActiveStages) {
-        content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++
-        activeStagesTable.toNodeSeq
-      }
-      if (shouldShowPendingStages) {
-        content ++= <h4 id="pending">Pending Stages ({pendingStages.size})</h4> ++
-        pendingStagesTable.toNodeSeq
-      }
-      if (shouldShowCompletedStages) {
-        content ++= <h4 id="completed">Completed Stages ({completedStageNumStr})</h4> ++
-        completedStagesTable.toNodeSeq
-      }
-      if (shouldShowFailedStages) {
-        content ++= <h4 id ="failed">Failed Stages ({numFailedStages})</h4> ++
-        failedStagesTable.toNodeSeq
-      }
-      UIUtils.headerSparkPage("Stages for All Jobs", content, parent)
+    val appSummary = parent.store.appSummary()
+    val completedStageNumStr = if (appSummary.numCompletedStages == completedStages.size) {
+      s"${appSummary.numCompletedStages}"
+    } else {
+      s"${appSummary.numCompletedStages}, only showing ${completedStages.size}"
     }
+
+    val summary: NodeSeq =
+      <div>
+        <ul class="unstyled">
+          {
+            if (shouldShowActiveStages) {
+              <li>
+                <a href="#active"><strong>Active Stages:</strong></a>
+                {activeStages.size}
+              </li>
+            }
+          }
+          {
+            if (shouldShowPendingStages) {
+              <li>
+                <a href="#pending"><strong>Pending Stages:</strong></a>
+                {pendingStages.size}
+              </li>
+            }
+          }
+          {
+            if (shouldShowCompletedStages) {
+              <li id="completed-summary">
+                <a href="#completed"><strong>Completed Stages:</strong></a>
+                {completedStageNumStr}
+              </li>
+            }
+          }
+          {
+            if (shouldShowFailedStages) {
+              <li>
+                <a href="#failed"><strong>Failed Stages:</strong></a>
+                {numFailedStages}
+              </li>
+            }
+          }
+        </ul>
+      </div>
+
+    var content = summary ++
+      {
+        if (sc.isDefined && isFairScheduler) {
+          <h4>Fair Scheduler Pools ({pools.size})</h4> ++ poolTable.toNodeSeq
+        } else {
+          Seq.empty[Node]
+        }
+      }
+    if (shouldShowActiveStages) {
+      content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++
+      activeStagesTable.toNodeSeq
+    }
+    if (shouldShowPendingStages) {
+      content ++= <h4 id="pending">Pending Stages ({pendingStages.size})</h4> ++
+      pendingStagesTable.toNodeSeq
+    }
+    if (shouldShowCompletedStages) {
+      content ++= <h4 id="completed">Completed Stages ({completedStageNumStr})</h4> ++
+      completedStagesTable.toNodeSeq
+    }
+    if (shouldShowFailedStages) {
+      content ++= <h4 id ="failed">Failed Stages ({numFailedStages})</h4> ++
+      failedStagesTable.toNodeSeq
+    }
+    UIUtils.headerSparkPage("Stages for All Jobs", content, parent)
   }
 }
-

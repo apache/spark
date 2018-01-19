@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions._
@@ -30,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.execution.python.{PythonUDF, PythonUdfType}
+import org.apache.spark.sql.execution.python.PythonUDF
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StructType}
 
@@ -449,10 +450,10 @@ class RelationalGroupedDataset protected[sql](
    * workers.
    */
   private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
-    require(expr.pythonUdfType == PythonUdfType.PANDAS_GROUPED_UDF,
-      "Must pass a grouped vectorized python udf")
+    require(expr.evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF,
+      "Must pass a group map udf")
     require(expr.dataType.isInstanceOf[StructType],
-      "The returnType of the vectorized python udf must be a StructType")
+      "The returnType of the udf must be a StructType")
 
     val groupingNamedExpressions = groupingExprs.map {
       case ne: NamedExpression => ne

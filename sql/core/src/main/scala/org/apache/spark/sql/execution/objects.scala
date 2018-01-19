@@ -81,11 +81,8 @@ case class DeserializeToObjectExec(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val bound = ExpressionCanonicalizer.execute(
-      BindReferences.bindReference(deserializer, child.output))
-    ctx.currentVars = input
-    val resultVars = bound.genCode(ctx) :: Nil
-    consume(ctx, resultVars)
+    val resultObj = BindReferences.bindReference(deserializer, child.output).genCode(ctx)
+    consume(ctx, resultObj :: Nil)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -118,11 +115,9 @@ case class SerializeFromObjectExec(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val bound = serializer.map { expr =>
-      ExpressionCanonicalizer.execute(BindReferences.bindReference(expr, child.output))
+    val resultVars = serializer.map { expr =>
+      BindReferences.bindReference[Expression](expr, child.output).genCode(ctx)
     }
-    ctx.currentVars = input
-    val resultVars = bound.map(_.genCode(ctx))
     consume(ctx, resultVars)
   }
 
@@ -224,12 +219,9 @@ case class MapElementsExec(
     val funcObj = Literal.create(func, ObjectType(funcClass))
     val callFunc = Invoke(funcObj, methodName, outputObjAttr.dataType, child.output)
 
-    val bound = ExpressionCanonicalizer.execute(
-      BindReferences.bindReference(callFunc, child.output))
-    ctx.currentVars = input
-    val resultVars = bound.genCode(ctx) :: Nil
+    val result = BindReferences.bindReference(callFunc, child.output).genCode(ctx)
 
-    consume(ctx, resultVars)
+    consume(ctx, result :: Nil)
   }
 
   override protected def doExecute(): RDD[InternalRow] = {
@@ -464,7 +456,7 @@ case class CoGroupExec(
     right: SparkPlan) extends BinaryExecNode with ObjectProducerExec {
 
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(leftGroup) :: ClusteredDistribution(rightGroup) :: Nil
+    HashClusteredDistribution(leftGroup) :: HashClusteredDistribution(rightGroup) :: Nil
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     leftGroup.map(SortOrder(_, Ascending)) :: rightGroup.map(SortOrder(_, Ascending)) :: Nil

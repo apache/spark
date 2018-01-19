@@ -356,7 +356,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     generatedFiles
   }
 
-  /** Delete all the generated rolledover files */
+  /** Delete all the generated rolled over files */
   def cleanup() {
     testFile.getParentFile.listFiles.filter { file =>
       file.getName.startsWith(testFile.getName)

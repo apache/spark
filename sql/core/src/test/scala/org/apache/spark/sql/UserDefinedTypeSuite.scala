@@ -21,7 +21,7 @@ import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
+import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
@@ -44,6 +44,8 @@ object UDT {
       case v: MyDenseVector => java.util.Arrays.equals(this.data, v.data)
       case _ => false
     }
+
+    override def toString: String = data.mkString("(", ", ", ")")
   }
 
   private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
@@ -143,7 +145,8 @@ private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] 
   override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
 }
 
-class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest {
+class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetTest
+    with ExpressionEvalHelper {
   import testImplicits._
 
   private lazy val pointsRDD = Seq(
@@ -303,5 +306,13 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     checkAnswer(
       pointsRDD.except(pointsRDD2),
       Seq(Row(0.0, new UDT.MyDenseVector(Array(0.2, 2.0)))))
+  }
+
+  test("SPARK-23054 Cast UserDefinedType to string") {
+    val udt = new UDT.MyDenseVectorUDT()
+    val vector = new UDT.MyDenseVector(Array(1.0, 3.0, 5.0, 7.0, 9.0))
+    val data = udt.serialize(vector)
+    val ret = Cast(Literal(data, udt), StringType, None)
+    checkEvaluation(ret, "(1.0, 3.0, 5.0, 7.0, 9.0)")
   }
 }
