@@ -43,7 +43,7 @@ if __name__ == "__main__":
     # Print the coefficients and intercept for multinomial logistic regression
     print("Coefficients: \n" + str(lrModel.coefficientMatrix))
     print("Intercept: " + str(lrModel.interceptVector))
-    
+
     trainingSummary = lrModel.summary
 
     # Obtain the objective per iteration
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     print("Precision by label:")
     for i, prec in enumerate(trainingSummary.precisionByLabel):
         print("label %d: %s" % (i, prec))
-        
+
     print("Recall by label:")
     for i, rec in enumerate(trainingSummary.recallByLabel):
         print("label %d: %s" % (i, rec))
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     fMeasure = trainingSummary.weightedFMeasure()
     precision = trainingSummary.weightedPrecision
     recall = trainingSummary.weightedRecall
-    print("Accuracy: %s\nFPR: %s\nTPR: %s\nF-measure: %s\nPrecision: %s\nRecall: %s" 
+    print("Accuracy: %s\nFPR: %s\nTPR: %s\nF-measure: %s\nPrecision: %s\nRecall: %s"
           % (accuracy, falsePositiveRate, truePositiveRate, fMeasure, precision, recall))
     # $example off$
 
