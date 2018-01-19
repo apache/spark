@@ -596,8 +596,6 @@ object KMeans {
 
 /**
  * A vector with its norm for fast distance computation.
- *
- * @see [[org.apache.spark.mllib.clustering.KMeans#fastSquaredDistance]]
  */
 private[clustering] class VectorWithNorm(val vector: Vector, val norm: Double)
     extends Serializable {
