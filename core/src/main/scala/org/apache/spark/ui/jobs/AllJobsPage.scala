@@ -69,12 +69,8 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       val jobId = job.jobId
       val status = job.status
       val (_, lastStageDescription) = lastStageNameAndDescription(store, job)
-      val displayJobDescription =
-        if (lastStageDescription.nonEmpty) {
-          UIUtils.makeDescription(lastStageDescription, "", plainText = true).text
-        } else {
-          job.name
-        }
+      val jobDescription = UIUtils.makeDescription(lastStageDescription, "", plainText = true).text
+
       val submissionTime = job.submissionTime.get.getTime()
       val completionTime = job.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
       val classNameByStatus = status match {
@@ -86,7 +82,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
       // The timeline library treats contents as HTML, so we have to escape them. We need to add
       // extra layers of escaping in order to embed this in a Javascript string literal.
-      val escapedDesc = Utility.escape(displayJobDescription)
+      val escapedDesc = Utility.escape(jobDescription)
       val jsEscapedDesc = StringEscapeUtils.escapeEcmaScript(escapedDesc)
       val jobEventJsonAsStr =
         s"""
