@@ -3440,7 +3440,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
 
     selectorType = Param(Params._dummy(), "selectorType",
                          "The selector type of the ChisqSelector. " +
-                         "Supported options: numTopFeatures (default), percentile and fpr.",
+                         "Supported options: numTopFeatures (default), percentile, fpr, fdr, fwe.",
                          typeConverter=TypeConverters.toString)
 
     numTopFeatures = \

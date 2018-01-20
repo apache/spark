@@ -144,7 +144,7 @@ class FPGrowthModel(JavaModel, JavaMLWritable, JavaMLReadable):
     @since("2.2.0")
     def associationRules(self):
         """
-        Data with three columns:
+        DataFrame with three columns:
         * `antecedent`  - Array of the same type as the input column.
         * `consequent`  - Array of the same type as the input column.
         * `confidence`  - Confidence for the rule (`DoubleType`).

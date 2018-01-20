@@ -334,7 +334,13 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     .. note:: Experimental
 
     Evaluator for Clustering results, which expects two input
-    columns: prediction and features.
+    columns: prediction and features. The metric computes the Silhouette
+    measure using the squared Euclidean distance.
+
+    The Silhouette is a measure for the validation of the consistency
+    within clusters. It ranges between 1 and -1, where a value close to
+    1 means that the points in a cluster are close to the other points
+    in the same cluster and far from the points of the other clusters.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> featureAndPredictions = map(lambda x: (Vectors.dense(x[0]), x[1]),
