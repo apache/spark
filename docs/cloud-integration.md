@@ -180,10 +180,10 @@ under the path, not the number of *new* files, so it can become a slow operation
 The size of the window needs to be set to handle this.
 
 1. Files only appear in an object store once they are completely written; there
-is no need for a worklow of write-then-rename to ensure that files aren't picked up
+is no need for a workflow of write-then-rename to ensure that files aren't picked up
 while they are still being written. Applications can write straight to the monitored directory.
 
-1. Streams should only be checkpointed to an store implementing a fast and
+1. Streams should only be checkpointed to a store implementing a fast and
 atomic `rename()` operation Otherwise the checkpointing may be slow and potentially unreliable.
 
 ## Further Reading
