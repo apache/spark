@@ -1,17 +1,32 @@
 [ {
-  "id": "app-20180109111548-0000",
-  "name": "Spark shell",
-  "attempts": [ {
-    "startTime": "2018-01-09T10:15:42.372GMT",
-    "endTime": "2018-01-09T10:24:37.606GMT",
-    "lastUpdated": "",
-    "duration": 535234,
-    "sparkUser": "attilapiros",
-    "completed": true,
-    "appSparkVersion": "2.3.0-SNAPSHOT",
-    "startTimeEpoch": 1515492942372,
-    "endTimeEpoch": 1515493477606,
-    "lastUpdatedEpoch": 0
+  "id" : "application_1516285256255_0012",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2018-01-18T18:30:35.119GMT",
+    "endTime" : "2018-01-18T18:38:27.938GMT",
+    "lastUpdated" : "",
+    "duration" : 472819,
+    "sparkUser" : "attilapiros",
+    "completed" : true,
+    "appSparkVersion" : "2.3.0-SNAPSHOT",
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1516300235119,
+    "endTimeEpoch" : 1516300707938
+  } ]
+}, {
+  "id" : "app-20180109111548-0000",
+  "name" : "Spark shell",
+  "attempts" : [ {
+    "startTime" : "2018-01-09T10:15:42.372GMT",
+    "endTime" : "2018-01-09T10:24:37.606GMT",
+    "lastUpdated" : "",
+    "duration" : 535234,
+    "sparkUser" : "attilapiros",
+    "completed" : true,
+    "appSparkVersion" : "2.3.0-SNAPSHOT",
+    "lastUpdatedEpoch" : 0,
+    "startTimeEpoch" : 1515492942372,
+    "endTimeEpoch" : 1515493477606
   } ]
 }, {
   "id" : "app-20161116163331-0000",
@@ -24,9 +39,9 @@
     "sparkUser" : "jose",
     "completed" : true,
     "appSparkVersion" : "2.1.0-SNAPSHOT",
-    "endTimeEpoch" : 1479335620587,
+    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1479335609916,
-    "lastUpdatedEpoch" : 0
+    "endTimeEpoch" : 1479335620587
   } ]
 }, {
   "id" : "app-20161115172038-0000",
@@ -39,9 +54,9 @@
     "sparkUser" : "jose",
     "completed" : true,
     "appSparkVersion" : "2.1.0-SNAPSHOT",
-    "endTimeEpoch" : 1479252138874,
+    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1479252037079,
-    "lastUpdatedEpoch" : 0
+    "endTimeEpoch" : 1479252138874
   } ]
 }, {
   "id" : "local-1430917381534",
@@ -54,9 +69,9 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "1.4.0-SNAPSHOT",
-    "endTimeEpoch" : 1430917391398,
+    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1430917380893,
-    "lastUpdatedEpoch" : 0
+    "endTimeEpoch" : 1430917391398
   } ]
 }, {
   "id" : "local-1430917381535",
@@ -70,9 +85,9 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "1.4.0-SNAPSHOT",
-    "endTimeEpoch" : 1430917380950,
+    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1430917380893,
-    "lastUpdatedEpoch" : 0
+    "endTimeEpoch" : 1430917380950
   }, {
     "attemptId" : "1",
     "startTime" : "2015-05-06T13:03:00.880GMT",
@@ -82,9 +97,9 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "1.4.0-SNAPSHOT",
-    "endTimeEpoch" : 1430917380890,
+    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1430917380880,
-    "lastUpdatedEpoch" : 0
+    "endTimeEpoch" : 1430917380890
   } ]
 }, {
   "id" : "local-1426533911241",
@@ -98,9 +113,9 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "",
-    "endTimeEpoch" : 1426633945177,
+    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1426633910242,
-    "lastUpdatedEpoch" : 0
+    "endTimeEpoch" : 1426633945177
   }, {
     "attemptId" : "1",
     "startTime" : "2015-03-16T19:25:10.242GMT",
@@ -110,9 +125,9 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "",
-    "endTimeEpoch" : 1426533945177,
+    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1426533910242,
-    "lastUpdatedEpoch" : 0
+    "endTimeEpoch" : 1426533945177
   } ]
 }, {
   "id" : "local-1425081759269",
@@ -125,8 +140,8 @@
     "sparkUser" : "irashid",
     "completed" : true,
     "appSparkVersion" : "",
-    "endTimeEpoch" : 1425081766912,
+    "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1425081758277,
-    "lastUpdatedEpoch" : 0
+    "endTimeEpoch" : 1425081766912
   } ]
 } ]
