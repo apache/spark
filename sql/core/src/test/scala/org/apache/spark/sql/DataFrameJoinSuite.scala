@@ -283,7 +283,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     spark.sessionState.executePlan(planNull).optimizedPlan
 
     val dfOne = df.select(lit(1).as("a"))
-    val dfTwo = spark.range(10).select(lit(2).as("a"))
+    val dfTwo = spark.range(10).select(lit(2).as("b"))
     val planFalse = dfOne.join(dfTwo, $"a" === $"b", "left").queryExecution.analyzed
 
     spark.sessionState.executePlan(planFalse).optimizedPlan
