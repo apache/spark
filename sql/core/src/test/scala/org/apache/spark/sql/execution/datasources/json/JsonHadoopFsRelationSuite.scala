@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.execution.datasources.HadoopFsRelationTest
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -112,14 +113,16 @@ class JsonHadoopFsRelationSuite extends HadoopFsRelationTest with SharedSQLConte
 
   test("invalid json with leading nulls - from file (multiLine=true)") {
     import testImplicits._
-    withTempDir { tempDir =>
-      val path = tempDir.getAbsolutePath
-      Seq(badJson, """{"a":1}""").toDS().write.mode("overwrite").text(path)
-      val expected = s"""$badJson\n{"a":1}\n"""
-      val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
-      val df =
-        spark.read.format(dataSourceName).option("multiLine", true).schema(schema).load(path)
-      checkAnswer(df, Row(null, expected))
+    withSQLConf(SQLConf.MAX_RECORDS_PER_FILE.key -> "2") {
+      withTempDir { tempDir =>
+        val path = tempDir.getAbsolutePath
+        Seq(badJson, """{"a":1}""").toDS().repartition(1).write.mode("overwrite").text(path)
+        val expected = s"""$badJson\n{"a":1}\n"""
+        val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
+        val df =
+          spark.read.format(dataSourceName).option("multiLine", true).schema(schema).load(path)
+        checkAnswer(df, Row(null, expected))
+      }
     }
   }
 
