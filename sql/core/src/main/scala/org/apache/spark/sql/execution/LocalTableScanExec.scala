@@ -30,7 +30,7 @@ case class LocalTableScanExec(
     output: Seq[Attribute],
     @transient rows: Seq[InternalRow]) extends LeafExecNode {
 
-  override val nodeName: String = s"Scan LocalTable ${output.map(_.name).mkString("[", ",", "]")}"
+  override val nodeName: String = s"Scan LocalTable"
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
