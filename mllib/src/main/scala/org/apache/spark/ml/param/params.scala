@@ -27,7 +27,6 @@ import scala.collection.mutable
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
-import org.slf4j.LoggerFactory
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
@@ -167,8 +166,6 @@ private[ml] object Param {
 @DeveloperApi
 object ParamValidators {
 
-  private val LOGGER = LoggerFactory.getLogger(ParamValidators.getClass)
-
   /** (private[param]) Default validation always return true */
   private[param] def alwaysTrue[T]: T => Boolean = (_: T) => true
 
@@ -254,21 +251,69 @@ object ParamValidators {
   }
 
   /**
-   * Checks that only one of the params passed as arguments is set. If this is not true, an
-   * `IllegalArgumentException` is raised.
+   * Utility for Param validity checks for Transformers which have both single- and multi-column
+   * support.  This utility assumes that `inputCol` indicates single-column usage and
+   * that `inputCols` indicates multi-column usage.
+   *
+   * This checks to ensure that exactly one set of Params has been set, and it
+   * raises an `IllegalArgumentException` if not.
+   *
+   * @param singleColumnParams Params which should be set (or have defaults) if `inputCol` has been
+   *                           set.  This does not need to include `inputCol`.
+   * @param multiColumnParams Params which should be set (or have defaults) if `inputCols` has been
+   *                           set.  This does not need to include `inputCols`.
    */
-  def checkExclusiveParams(model: Params, params: String*): Unit = {
-    val (existingParams, nonExistingParams) = params.partition(model.hasParam)
-    if (nonExistingParams.nonEmpty) {
-      val pronoun = if (nonExistingParams.size == 1) "It" else "They"
-      LOGGER.warn(s"Ignored ${nonExistingParams.mkString("`", "`, `", "`")} while checking " +
-        s"exclusive params. $pronoun don't exist for the specified model the model.")
+  def checkSingleVsMultiColumnParams(
+      model: Params,
+      singleColumnParams: Seq[Param[_]],
+      multiColumnParams: Seq[Param[_]]): Unit = {
+    val name = s"${model.getClass.getSimpleName} $model"
+
+    def checkExclusiveParams(
+        isSingleCol: Boolean,
+        requiredParams: Seq[Param[_]],
+        excludedParams: Seq[Param[_]]): Unit = {
+      val badParamsMsgBuilder = new mutable.StringBuilder()
+
+      val mustUnsetParams = excludedParams.filter(p => model.isSet(p))
+        .map(_.name).mkString(", ")
+      if (mustUnsetParams.nonEmpty)
+        badParamsMsgBuilder ++=
+          s"The following Params are not applicable and should not be set: $mustUnsetParams."
+
+      val mustSetParams = requiredParams.filter(p => !model.isDefined(p))
+        .map(_.name).mkString(", ")
+      if (mustSetParams.nonEmpty)
+        badParamsMsgBuilder ++=
+          s"The following Params must be defined but are not set: $mustSetParams."
+
+      val badParamsMsg = badParamsMsgBuilder.toString()
+
+      if (badParamsMsg.nonEmpty) {
+        val errPrefix = if (isSingleCol) {
+          s"$name has the inputCol Param set for single-column transform."
+        } else {
+          s"$name has the inputCols Param set for multi-column transform."
+        }
+        throw new IllegalArgumentException(s"$errPrefix $badParamsMsg")
+      }
     }
 
-    if (existingParams.count(paramName => model.isSet(model.getParam(paramName))) > 1) {
-      val paramString = existingParams.mkString("`", "`, `", "`")
-      throw new IllegalArgumentException(s"$paramString are exclusive, " +
-        "but more than one among them are set.")
+    val inputCol = model.getParam("inputCol")
+    val inputCols = model.getParam("inputCols")
+
+    if (model.isSet(inputCol)) {
+      require(!model.isSet(inputCols), s"$name requires " +
+        s"exactly one of inputCol, inputCols Params to be set, but both are set.")
+
+      checkExclusiveParams(isSingleCol = true, requiredParams = singleColumnParams,
+        excludedParams = multiColumnParams)
+    } else if (model.isSet(inputCols)) {
+      checkExclusiveParams(isSingleCol = false, requiredParams = multiColumnParams,
+        excludedParams = singleColumnParams)
+    } else {
+      throw new IllegalArgumentException(s"$name requires " +
+        s"exactly one of inputCol, inputCols Params to be set, but neither is set.")
     }
   }
 }
