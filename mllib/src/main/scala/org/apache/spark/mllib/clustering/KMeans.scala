@@ -329,7 +329,7 @@ class KMeans private (
   /**
    * Initialize a set of cluster centers at random.
    */
-  private def initRandom(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {
+  private[spark] def initRandom(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {
     // Select without replacement; may still produce duplicates if the data has < k distinct
     // points, so deduplicate the centroids to match the behavior of k-means|| in the same situation
     data.takeSample(false, k, new XORShiftRandom(this.seed).nextInt())
@@ -345,7 +345,7 @@ class KMeans private (
    *
    * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
    */
-  private[clustering] def initKMeansParallel(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {
+  private[spark] def initKMeansParallel(data: RDD[VectorWithNorm]): Array[VectorWithNorm] = {
     // Initialize empty centers and point costs.
     var costs = data.map(_ => Double.PositiveInfinity)
 
@@ -549,7 +549,7 @@ object KMeans {
   /**
    * Returns the index of the closest center to the given point, as well as the squared distance.
    */
-  private[mllib] def findClosest(
+  private[spark] def findClosest(
       centers: TraversableOnce[VectorWithNorm],
       point: VectorWithNorm): (Int, Double) = {
     var bestDistance = Double.PositiveInfinity
@@ -575,7 +575,7 @@ object KMeans {
   /**
    * Returns the K-means cost of a given point against the given cluster centers.
    */
-  private[mllib] def pointCost(
+  private[spark] def pointCost(
       centers: TraversableOnce[VectorWithNorm],
       point: VectorWithNorm): Double =
     findClosest(centers, point)._2
@@ -584,7 +584,7 @@ object KMeans {
    * Returns the squared Euclidean distance between two vectors computed by
    * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
    */
-  private[clustering] def fastSquaredDistance(
+  private[spark] def fastSquaredDistance(
       v1: VectorWithNorm,
       v2: VectorWithNorm): Double = {
     MLUtils.fastSquaredDistance(v1.vector, v1.norm, v2.vector, v2.norm)
@@ -604,7 +604,7 @@ object KMeans {
  *
  * @see [[org.apache.spark.mllib.clustering.KMeans#fastSquaredDistance]]
  */
-private[clustering]
+private[spark]
 class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable {
 
   def this(vector: Vector) = this(vector, Vectors.norm(vector, 2.0))
