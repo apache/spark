@@ -435,24 +435,23 @@ object ParamsSuite extends SparkFunSuite {
   }
 
   /**
-   * Checks that the class throws an exception in case multiple exclusive params are set
+   * Checks that the class throws an exception in case multiple exclusive params are set.
    * The params to be checked are passed as arguments with their value.
-   * The checks are performed only if all the passed params are defined for the given model.
    */
-  def testExclusiveParams(model: Params, dataset: Dataset[_],
+  def testExclusiveParams(
+      model: Params,
+      dataset: Dataset[_],
       paramsAndValues: (String, Any)*): Unit = {
-    val params = paramsAndValues.map(_._1)
-    if (params.forall(model.hasParam)) {
-      paramsAndValues.foreach { case (paramName, paramValue) =>
-        model.set(model.getParam(paramName), paramValue)
-      }
-      val e = intercept[IllegalArgumentException] {
-        model match {
-          case t: Transformer => t.transform(dataset)
-          case e: Estimator[_] => e.fit(dataset)
-        }
-      }
-      assert(e.getMessage.contains("are exclusive, but more than one"))
+    val m = model.copy(ParamMap.empty)
+    paramsAndValues.foreach { case (paramName, paramValue) =>
+      m.set(m.getParam(paramName), paramValue)
     }
+    val e = intercept[IllegalArgumentException] {
+      m match {
+        case t: Transformer => t.transform(dataset)
+        case e: Estimator[_] => e.fit(dataset)
+      }
+    }
+    assert(e.getMessage.contains("are exclusive, but more than one"))
   }
 }

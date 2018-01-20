@@ -32,7 +32,9 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
- * `Bucketizer` maps a column of continuous features to a column of feature buckets. Since 2.3.0,
+ * `Bucketizer` maps a column of continuous features to a column of feature buckets.
+ *
+ * Since 2.3.0,
  * `Bucketizer` can map multiple columns at once by setting the `inputCols` parameter. Note that
  * when both the `inputCol` and `inputCols` parameters are set, an Exception will be thrown. The
  * `splits` parameter is only used for single column usage, and `splitsArray` is for multiple
@@ -184,11 +186,16 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    ParamValidators.checkExclusiveParams(this, "inputCol", "inputCols")
-    ParamValidators.checkExclusiveParams(this, "outputCol", "outputCols")
-    ParamValidators.checkExclusiveParams(this, "splits", "splitsArray")
+    ParamValidators.checkSingleVsMultiColumnParams(this, Seq(outputCol, splits),
+      Seq(outputCols, splitsArray))
 
     if (isSet(inputCols)) {
+      require(getInputCols.length == getOutputCols.length &&
+        getInputCols.length == getSplitsArray.length, s"Bucketizer $this has mismatched Params " +
+        s"for multi-column transform.  Params (inputCols, outputCols, splitsArray) should have " +
+        s"equal lengths, but they have different lengths: " +
+        s"(${getInputCols.length}, ${getOutputCols.length}, ${getSplitsArray.length}).")
+
       var transformedSchema = schema
       $(inputCols).zip($(outputCols)).zipWithIndex.foreach { case ((inputCol, outputCol), idx) =>
         SchemaUtils.checkNumericType(transformedSchema, inputCol)
