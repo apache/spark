@@ -258,7 +258,8 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
   def checkForTableWithCompressProp(format: String, compressCodecs: List[String]): Unit = {
     Seq(true, false).foreach { isPartitioned =>
       Seq(true, false).foreach { convertMetastore =>
-        Seq(true, false).foreach { usingCTAS =>
+        // TODO: Also verify CTAS(usingCTAS=true) cases when the bug(SPARK-22926) is fixed.
+        Seq(false).foreach { usingCTAS =>
           checkTableCompressionCodecForCodecs(
             format,
             isPartitioned,
@@ -266,13 +267,16 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
             usingCTAS,
             compressionCodecs = compressCodecs,
             tableCompressionCodecs = compressCodecs) {
-            case
-              (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec, tableSize) =>
-              // After SPARK-22926, table-level will take effect
-              val expectCompressionCodec = tableCompressionCodec.get
-              assert(expectCompressionCodec == realCompressionCodec)
-              assert(checkTableSize(format, expectCompressionCodec,
-                isPartitioned, convertMetastore, usingCTAS, tableSize))
+            case (tableCodec, sessionCodec, realCodec, tableSize) =>
+              // For non-partitioned table and when convertMetastore is true, Expect session-level
+              // take effect, and in other cases expect table-level take effect
+              // TODO: It should always be table-level taking effect when the bug(SPARK-22926)
+              // is fixed
+              val expectCodec =
+                if (convertMetastore && !isPartitioned) sessionCodec else tableCodec.get
+              assert(expectCodec == realCodec)
+              assert(checkTableSize(
+                format, expectCodec, isPartitioned, convertMetastore, usingCTAS, tableSize))
           }
         }
       }
@@ -282,7 +286,8 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
   def checkForTableWithoutCompressProp(format: String, compressCodecs: List[String]): Unit = {
     Seq(true, false).foreach { isPartitioned =>
       Seq(true, false).foreach { convertMetastore =>
-        Seq(true, false).foreach { usingCTAS =>
+        // TODO: Also verify CTAS(usingCTAS=true) cases when the bug(SPARK-22926) is fixed.
+        Seq(false).foreach { usingCTAS =>
           checkTableCompressionCodecForCodecs(
             format,
             isPartitioned,
@@ -291,11 +296,11 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
             compressionCodecs = compressCodecs,
             tableCompressionCodecs = List(null)) {
             case
-              (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec, tableSize) =>
+              (tableCodec, sessionCodec, realCodec, tableSize) =>
               // Always expect session-level take effect
-              assert(sessionCompressionCodec == realCompressionCodec)
-              assert(checkTableSize(format, sessionCompressionCodec,
-              isPartitioned, convertMetastore, usingCTAS, tableSize))
+              assert(sessionCodec == realCodec)
+              assert(checkTableSize(
+                format, sessionCodec, isPartitioned, convertMetastore, usingCTAS, tableSize))
           }
         }
       }
@@ -326,14 +331,14 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
               ) { writeDataToTable(tableName, partitionValue) }
             }
             val tablePath = getTablePartitionPath(tmpDir, tableName, None)
-            val relCompressionCodecs =
+            val realCompressionCodecs =
               if (isPartitioned) compressCodecs.flatMap { codec =>
                 getTableCompressionCodec(s"$tablePath/p=$codec", format)
               } else {
                 getTableCompressionCodec(tablePath, format)
               }
 
-            assert(relCompressionCodecs.distinct.sorted == compressCodecs.sorted)
+            assert(realCompressionCodecs.distinct.sorted == compressCodecs.sorted)
             val recordsNum = sql(s"SELECT * from $tableName").count()
             assert(recordsNum == maxRecordNum * compressCodecs.length)
           }
