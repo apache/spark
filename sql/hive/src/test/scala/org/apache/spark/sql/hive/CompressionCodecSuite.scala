@@ -295,8 +295,7 @@ class CompressionCodecSuite extends TestHiveSingleton with ParquetTest with Befo
             usingCTAS,
             compressionCodecs = compressCodecs,
             tableCompressionCodecs = List(null)) {
-            case
-              (tableCodec, sessionCodec, realCodec, tableSize) =>
+            case (tableCodec, sessionCodec, realCodec, tableSize) =>
               // Always expect session-level take effect
               assert(sessionCodec == realCodec)
               assert(checkTableSize(
