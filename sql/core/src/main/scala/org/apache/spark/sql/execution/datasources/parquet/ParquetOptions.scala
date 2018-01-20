@@ -83,6 +83,7 @@ object ParquetOptions {
     "gzip" -> CompressionCodecName.GZIP,
     "lzo" -> CompressionCodecName.LZO)
 
-  def getParquetCompressionCodecName(name: String): String =
+  def getParquetCompressionCodecName(name: String): String = {
     shortParquetCompressionCodecNames(name).name()
+  }
 }
