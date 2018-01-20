@@ -125,7 +125,7 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 ### Creating a Kafka Source for Batch Queries 
 If you have a use case that is better suited to batch processing,
-you can create an Dataset/DataFrame for a defined range of offsets.
+you can create a Dataset/DataFrame for a defined range of offsets.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -597,7 +597,7 @@ Note that the following Kafka params cannot be set and the Kafka source or sink 
 - **key.serializer**: Keys are always serialized with ByteArraySerializer or StringSerializer. Use
 DataFrame operations to explicitly serialize the keys into either strings or byte arrays.
 - **value.serializer**: values are always serialized with ByteArraySerializer or StringSerializer. Use
-DataFrame oeprations to explicitly serialize the values into either strings or byte arrays.
+DataFrame operations to explicitly serialize the values into either strings or byte arrays.
 - **enable.auto.commit**: Kafka source doesn't commit any offset.
 - **interceptor.classes**: Kafka source always read keys and values as byte arrays. It's not safe to
  use ConsumerInterceptor as it may break the query.
