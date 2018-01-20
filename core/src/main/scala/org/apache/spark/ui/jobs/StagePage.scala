@@ -1001,11 +1001,8 @@ private object ApiHelper {
   }
 
   def lastStageNameAndDescription(store: AppStatusStore, job: JobData): (String, String) = {
-    store.asOption(store.lastStageAttempt(job.stageIds.max)) match {
-      case Some(lastStageAttempt) =>
-        (lastStageAttempt.name, lastStageAttempt.description.getOrElse(job.name))
-      case None => ("", "")
-    }
+    val stage = store.asOption(store.lastStageAttempt(job.stageIds.max))
+    (stage.map(_.name).getOrElse(""), stage.flatMap(_.description).getOrElse(job.name))
   }
 
 }
