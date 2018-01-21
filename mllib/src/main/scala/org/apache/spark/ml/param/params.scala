@@ -277,15 +277,17 @@ object ParamValidators {
 
       val mustUnsetParams = excludedParams.filter(p => model.isSet(p))
         .map(_.name).mkString(", ")
-      if (mustUnsetParams.nonEmpty)
+      if (mustUnsetParams.nonEmpty) {
         badParamsMsgBuilder ++=
           s"The following Params are not applicable and should not be set: $mustUnsetParams."
+      }
 
       val mustSetParams = requiredParams.filter(p => !model.isDefined(p))
         .map(_.name).mkString(", ")
-      if (mustSetParams.nonEmpty)
+      if (mustSetParams.nonEmpty) {
         badParamsMsgBuilder ++=
           s"The following Params must be defined but are not set: $mustSetParams."
+      }
 
       val badParamsMsg = badParamsMsgBuilder.toString()
 
