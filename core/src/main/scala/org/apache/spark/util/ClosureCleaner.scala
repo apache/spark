@@ -207,7 +207,7 @@ private[spark] object ClosureCleaner extends Logging {
       accessedFields: Map[Class[_], Set[String]]): Unit = {
 
     if (!isClosure(func.getClass)) {
-      logDebug("Expected a closure; got " + func.getClass.getName)
+      logDebug(s"Expected a closure; got ${func.getClass.getName}")
       return
     }
 
