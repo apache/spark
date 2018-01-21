@@ -48,7 +48,7 @@ private[hive] case class HiveSimpleUDF(
   with Logging
   with UserDefinedExpression {
 
-  override def deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
+  override lazy val deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
 
   override def nullable: Boolean = true
 
@@ -131,7 +131,7 @@ private[hive] case class HiveGenericUDF(
 
   override def nullable: Boolean = true
 
-  override def deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
+  override lazy val deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
 
   override def foldable: Boolean =
     isUDFDeterministic && returnInspector.isInstanceOf[ConstantObjectInspector]

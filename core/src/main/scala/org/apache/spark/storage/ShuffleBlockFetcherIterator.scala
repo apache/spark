@@ -28,7 +28,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient, TempShuffleFileManager}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient, TempFileManager}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBufferOutputStream
@@ -69,7 +69,7 @@ final class ShuffleBlockFetcherIterator(
     maxBlocksInFlightPerAddress: Int,
     maxReqSizeShuffleToMem: Long,
     detectCorrupt: Boolean)
-  extends Iterator[(BlockId, InputStream)] with TempShuffleFileManager with Logging {
+  extends Iterator[(BlockId, InputStream)] with TempFileManager with Logging {
 
   import ShuffleBlockFetcherIterator._
 
@@ -162,11 +162,11 @@ final class ShuffleBlockFetcherIterator(
     currentResult = null
   }
 
-  override def createTempShuffleFile(): File = {
+  override def createTempFile(): File = {
     blockManager.diskBlockManager.createTempLocalBlock()._2
   }
 
-  override def registerTempShuffleFileToClean(file: File): Boolean = synchronized {
+  override def registerTempFileToClean(file: File): Boolean = synchronized {
     if (isZombie) {
       false
     } else {

@@ -90,6 +90,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     >>> item_recs.where(item_recs.item == 2)\
         .select("recommendations.user", "recommendations.rating").collect()
     [Row(user=[2, 1, 0], rating=[4.901..., 3.981..., -0.138...])]
+    >>> user_subset = df.where(df.user == 2)
+    >>> user_subset_recs = model.recommendForUserSubset(user_subset, 3)
+    >>> user_subset_recs.select("recommendations.item", "recommendations.rating").first()
+    Row(item=[2, 1, 0], rating=[4.901..., 1.056..., -1.501...])
+    >>> item_subset = df.where(df.item == 0)
+    >>> item_subset_recs = model.recommendForItemSubset(item_subset, 3)
+    >>> item_subset_recs.select("recommendations.user", "recommendations.rating").first()
+    Row(user=[0, 1, 2], rating=[3.910..., 2.625..., -1.501...])
     >>> als_path = temp_path + "/als"
     >>> als.save(als_path)
     >>> als2 = ALS.load(als_path)
@@ -413,6 +421,36 @@ class ALSModel(JavaModel, JavaMLWritable, JavaMLReadable):
                  stored as an array of (userCol, rating) Rows.
         """
         return self._call_java("recommendForAllItems", numUsers)
+
+    @since("2.3.0")
+    def recommendForUserSubset(self, dataset, numItems):
+        """
+        Returns top `numItems` items recommended for each user id in the input data set. Note that
+        if there are duplicate ids in the input dataset, only one set of recommendations per unique
+        id will be returned.
+
+        :param dataset: a Dataset containing a column of user ids. The column name must match
+                        `userCol`.
+        :param numItems: max number of recommendations for each user
+        :return: a DataFrame of (userCol, recommendations), where recommendations are
+                 stored as an array of (itemCol, rating) Rows.
+        """
+        return self._call_java("recommendForUserSubset", dataset, numItems)
+
+    @since("2.3.0")
+    def recommendForItemSubset(self, dataset, numUsers):
+        """
+        Returns top `numUsers` users recommended for each item id in the input data set. Note that
+        if there are duplicate ids in the input dataset, only one set of recommendations per unique
+        id will be returned.
+
+        :param dataset: a Dataset containing a column of item ids. The column name must match
+                        `itemCol`.
+        :param numUsers: max number of recommendations for each item
+        :return: a DataFrame of (itemCol, recommendations), where recommendations are
+                 stored as an array of (userCol, rating) Rows.
+        """
+        return self._call_java("recommendForItemSubset", dataset, numUsers)
 
 
 if __name__ == "__main__":

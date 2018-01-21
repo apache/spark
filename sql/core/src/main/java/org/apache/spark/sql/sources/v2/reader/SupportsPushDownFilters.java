@@ -35,4 +35,11 @@ public interface SupportsPushDownFilters {
    * Pushes down filters, and returns unsupported filters.
    */
   Filter[] pushFilters(Filter[] filters);
+
+  /**
+   * Returns the filters that are pushed in {@link #pushFilters(Filter[])}.
+   * It's possible that there is no filters in the query and {@link #pushFilters(Filter[])}
+   * is never called, empty array should be returned for this case.
+   */
+  Filter[] pushedFilters();
 }

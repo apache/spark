@@ -58,14 +58,23 @@ setMethod("initialize", "SparkDataFrame", function(.Object, sdf, isCached) {
 #' Set options/mode and then return the write object
 #' @noRd
 setWriteOptions <- function(write, path = NULL, mode = "error", ...) {
-    options <- varargsToStrEnv(...)
-    if (!is.null(path)) {
-      options[["path"]] <- path
-    }
-    jmode <- convertToJSaveMode(mode)
-    write <- callJMethod(write, "mode", jmode)
-    write <- callJMethod(write, "options", options)
-    write
+  options <- varargsToStrEnv(...)
+  if (!is.null(path)) {
+    options[["path"]] <- path
+  }
+  write <- setWriteMode(write, mode)
+  write <- callJMethod(write, "options", options)
+  write
+}
+
+#' Set mode and then return the write object
+#' @noRd
+setWriteMode <- function(write, mode) {
+  if (!is.character(mode)) {
+    stop("mode should be character or omitted. It is 'error' by default.")
+  }
+  write <- handledCallJMethod(write, "mode", mode)
+  write
 }
 
 #' @export
@@ -556,9 +565,8 @@ setMethod("registerTempTable",
 setMethod("insertInto",
           signature(x = "SparkDataFrame", tableName = "character"),
           function(x, tableName, overwrite = FALSE) {
-            jmode <- convertToJSaveMode(ifelse(overwrite, "overwrite", "append"))
             write <- callJMethod(x@sdf, "write")
-            write <- callJMethod(write, "mode", jmode)
+            write <- setWriteMode(write, ifelse(overwrite, "overwrite", "append"))
             invisible(callJMethod(write, "insertInto", tableName))
           })
 
@@ -810,7 +818,8 @@ setMethod("toJSON",
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -841,7 +850,8 @@ setMethod("write.json",
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -872,7 +882,8 @@ setMethod("write.orc",
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -917,7 +928,8 @@ setMethod("saveAsParquetFile",
 #'
 #' @param x A SparkDataFrame
 #' @param path The directory where the file is saved
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -1191,6 +1203,9 @@ setMethod("collect",
                     vec <- do.call(c, col)
                     stopifnot(class(vec) != "list")
                     class(vec) <- PRIMITIVE_TYPES[[colType]]
+                    if (is.character(vec) && stringsAsFactors) {
+                      vec <- as.factor(vec)
+                    }
                     df[[colIndex]] <- vec
                   } else {
                     df[[colIndex]] <- col
@@ -1923,13 +1938,15 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' @param i,subset (Optional) a logical expression to filter on rows.
 #'                 For extract operator [[ and replacement operator [[<-, the indexing parameter for
 #'                 a single Column.
-#' @param j,select expression for the single Column or a list of columns to select from the SparkDataFrame.
+#' @param j,select expression for the single Column or a list of columns to select from the
+#'                 SparkDataFrame.
 #' @param drop if TRUE, a Column will be returned if the resulting dataset has only one column.
 #'             Otherwise, a SparkDataFrame will always be returned.
 #' @param value a Column or an atomic vector in the length of 1 as literal value, or \code{NULL}.
 #'              If \code{NULL}, the specified Column is dropped.
 #' @param ... currently not used.
-#' @return A new SparkDataFrame containing only the rows that meet the condition with selected columns.
+#' @return A new SparkDataFrame containing only the rows that meet the condition with selected
+#'         columns.
 #' @export
 #' @family SparkDataFrame functions
 #' @aliases subset,SparkDataFrame-method
@@ -2280,6 +2297,7 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' @param ... additional sorting fields
 #' @param decreasing a logical argument indicating sorting order for columns when
 #'                   a character vector is specified for col
+#' @param withinPartitions a logical argument indicating whether to sort only within each partition
 #' @return A SparkDataFrame where all elements are sorted.
 #' @family SparkDataFrame functions
 #' @aliases arrange,SparkDataFrame,Column-method
@@ -2295,16 +2313,21 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' arrange(df, asc(df$col1), desc(abs(df$col2)))
 #' arrange(df, "col1", decreasing = TRUE)
 #' arrange(df, "col1", "col2", decreasing = c(TRUE, FALSE))
+#' arrange(df, "col1", "col2", withinPartitions = TRUE)
 #' }
 #' @note arrange(SparkDataFrame, Column) since 1.4.0
 setMethod("arrange",
           signature(x = "SparkDataFrame", col = "Column"),
-          function(x, col, ...) {
+          function(x, col, ..., withinPartitions = FALSE) {
               jcols <- lapply(list(col, ...), function(c) {
                 c@jc
               })
 
-            sdf <- callJMethod(x@sdf, "sort", jcols)
+            if (withinPartitions) {
+              sdf <- callJMethod(x@sdf, "sortWithinPartitions", jcols)
+            } else {
+              sdf <- callJMethod(x@sdf, "sort", jcols)
+            }
             dataFrame(sdf)
           })
 
@@ -2315,7 +2338,7 @@ setMethod("arrange",
 #' @note arrange(SparkDataFrame, character) since 1.4.0
 setMethod("arrange",
           signature(x = "SparkDataFrame", col = "character"),
-          function(x, col, ..., decreasing = FALSE) {
+          function(x, col, ..., decreasing = FALSE, withinPartitions = FALSE) {
 
             # all sorting columns
             by <- list(col, ...)
@@ -2339,7 +2362,7 @@ setMethod("arrange",
               }
             })
 
-            do.call("arrange", c(x, jcols))
+            do.call("arrange", c(x, jcols, withinPartitions = withinPartitions))
           })
 
 #' @rdname arrange
@@ -2608,12 +2631,12 @@ setMethod("merge",
             } else {
               # if by or both by.x and by.y have length 0, use Cartesian Product
               joinRes <- crossJoin(x, y)
-              return (joinRes)
+              return(joinRes)
             }
 
             # sets alias for making colnames unique in dataframes 'x' and 'y'
-            colsX <- generateAliasesForIntersectedCols(x, by, suffixes[1])
-            colsY <- generateAliasesForIntersectedCols(y, by, suffixes[2])
+            colsX <- genAliasesForIntersectedCols(x, by, suffixes[1])
+            colsY <- genAliasesForIntersectedCols(y, by, suffixes[2])
 
             # selects columns with their aliases from dataframes
             # in case same column names are present in both data frames
@@ -2661,9 +2684,8 @@ setMethod("merge",
 #' @param intersectedColNames a list of intersected column names of the SparkDataFrame
 #' @param suffix a suffix for the column name
 #' @return list of columns
-#'
-#' @note generateAliasesForIntersectedCols since 1.6.0
-generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
+#' @noRd
+genAliasesForIntersectedCols <- function(x, intersectedColNames, suffix) {
   allColNames <- names(x)
   # sets alias for making colnames unique in dataframe 'x'
   cols <- lapply(allColNames, function(colName) {
@@ -2671,7 +2693,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
     if (colName %in% intersectedColNames) {
       newJoin <- paste(colName, suffix, sep = "")
       if (newJoin %in% allColNames){
-        stop ("The following column name: ", newJoin, " occurs more than once in the 'DataFrame'.",
+        stop("The following column name: ", newJoin, " occurs more than once in the 'DataFrame'.",
           "Please use different suffixes for the intersected columns.")
       }
       col <- alias(col, newJoin)
@@ -2831,7 +2853,7 @@ setMethod("intersect",
 #' except
 #'
 #' Return a new SparkDataFrame containing rows in this SparkDataFrame
-#' but not in another SparkDataFrame. This is equivalent to \code{EXCEPT} in SQL.
+#' but not in another SparkDataFrame. This is equivalent to \code{EXCEPT DISTINCT} in SQL.
 #'
 #' @param x a SparkDataFrame.
 #' @param y a SparkDataFrame.
@@ -2867,18 +2889,19 @@ setMethod("except",
 #' Additionally, mode is used to specify the behavior of the save operation when data already
 #' exists in the data source. There are four modes:
 #' \itemize{
-#'   \item append: Contents of this SparkDataFrame are expected to be appended to existing data.
-#'   \item overwrite: Existing data is expected to be overwritten by the contents of this
+#'   \item 'append': Contents of this SparkDataFrame are expected to be appended to existing data.
+#'   \item 'overwrite': Existing data is expected to be overwritten by the contents of this
 #'         SparkDataFrame.
-#'   \item error: An exception is expected to be thrown.
-#'   \item ignore: The save operation is expected to not save the contents of the SparkDataFrame
+#'   \item 'error' or 'errorifexists': An exception is expected to be thrown.
+#'   \item 'ignore': The save operation is expected to not save the contents of the SparkDataFrame
 #'         and to not change the existing data.
 #' }
 #'
 #' @param df a SparkDataFrame.
 #' @param path a name for the table.
 #' @param source a name for external data source.
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default)
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -2936,17 +2959,18 @@ setMethod("saveDF",
 #'
 #' Additionally, mode is used to specify the behavior of the save operation when
 #' data already exists in the data source. There are four modes: \cr
-#'  append: Contents of this SparkDataFrame are expected to be appended to existing data. \cr
-#'  overwrite: Existing data is expected to be overwritten by the contents of this
+#'  'append': Contents of this SparkDataFrame are expected to be appended to existing data. \cr
+#'  'overwrite': Existing data is expected to be overwritten by the contents of this
 #'     SparkDataFrame. \cr
-#'  error: An exception is expected to be thrown. \cr
-#'  ignore: The save operation is expected to not save the contents of the SparkDataFrame
+#'  'error' or 'errorifexists': An exception is expected to be thrown. \cr
+#'  'ignore': The save operation is expected to not save the contents of the SparkDataFrame
 #'     and to not change the existing data. \cr
 #'
 #' @param df a SparkDataFrame.
 #' @param tableName a name for the table.
 #' @param source a name for external data source.
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default).
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional option(s) passed to the method.
 #'
 #' @family SparkDataFrame functions
@@ -2968,12 +2992,11 @@ setMethod("saveAsTable",
             if (is.null(source)) {
               source <- getDefaultSqlSource()
             }
-            jmode <- convertToJSaveMode(mode)
             options <- varargsToStrEnv(...)
 
             write <- callJMethod(df@sdf, "write")
             write <- callJMethod(write, "format", source)
-            write <- callJMethod(write, "mode", jmode)
+            write <- setWriteMode(write, mode)
             write <- callJMethod(write, "options", options)
             invisible(callJMethod(write, "saveAsTable", tableName))
           })
@@ -3031,10 +3054,10 @@ setMethod("describe",
 #' \item stddev
 #' \item min
 #' \item max
-#' \item arbitrary approximate percentiles specified as a percentage (eg, "75%")
+#' \item arbitrary approximate percentiles specified as a percentage (eg, "75\%")
 #' }
 #' If no statistics are given, this function computes count, mean, stddev, min,
-#' approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
+#' approximate quartiles (percentiles at 25\%, 50\%, and 75\%), and max.
 #' This function is meant for exploratory data analysis, as we make no guarantee about the
 #' backward compatibility of the schema of the resulting Dataset. If you want to
 #' programmatically compute summary statistics, use the \code{agg} function instead.
@@ -3058,7 +3081,8 @@ setMethod("describe",
 #' summary(select(df, "age", "height"))
 #' }
 #' @note summary(SparkDataFrame) since 1.5.0
-#' @note The statistics provided by \code{summary} were change in 2.3.0 use \link{describe} for previous defaults.
+#' @note The statistics provided by \code{summary} were change in 2.3.0 use \link{describe} for
+#'       previous defaults.
 #' @seealso \link{describe}
 setMethod("summary",
           signature(object = "SparkDataFrame"),
@@ -3231,7 +3255,7 @@ setMethod("as.data.frame",
 #'
 #' @family SparkDataFrame functions
 #' @rdname attach
-#' @aliases attach,SparkDataFrame-method
+#' @aliases attach attach,SparkDataFrame-method
 #' @param what (SparkDataFrame) The SparkDataFrame to attach
 #' @param pos (integer) Specify position in search() where to attach.
 #' @param name (character) Name to use for the attached SparkDataFrame. Names
@@ -3247,9 +3271,12 @@ setMethod("as.data.frame",
 #' @note attach since 1.6.0
 setMethod("attach",
           signature(what = "SparkDataFrame"),
-          function(what, pos = 2, name = deparse(substitute(what)), warn.conflicts = TRUE) {
-            newEnv <- assignNewEnv(what)
-            attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
+          function(what, pos = 2L, name = deparse(substitute(what), backtick = FALSE),
+                   warn.conflicts = TRUE) {
+            args <- as.list(environment()) # capture all parameters - this must be the first line
+            newEnv <- assignNewEnv(args$what)
+            args$what <- newEnv
+            do.call(attach, args)
           })
 
 #' Evaluate a R expression in an environment constructed from a SparkDataFrame
@@ -3536,18 +3563,19 @@ setMethod("histogram",
 #' Also, mode is used to specify the behavior of the save operation when
 #' data already exists in the data source. There are four modes:
 #' \itemize{
-#'   \item append: Contents of this SparkDataFrame are expected to be appended to existing data.
-#'   \item overwrite: Existing data is expected to be overwritten by the contents of this
+#'   \item 'append': Contents of this SparkDataFrame are expected to be appended to existing data.
+#'   \item 'overwrite': Existing data is expected to be overwritten by the contents of this
 #'         SparkDataFrame.
-#'   \item error: An exception is expected to be thrown.
-#'   \item ignore: The save operation is expected to not save the contents of the SparkDataFrame
+#'   \item 'error' or 'errorifexists': An exception is expected to be thrown.
+#'   \item 'ignore': The save operation is expected to not save the contents of the SparkDataFrame
 #'         and to not change the existing data.
 #' }
 #'
 #' @param x a SparkDataFrame.
 #' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}.
 #' @param tableName yhe name of the table in the external database.
-#' @param mode one of 'append', 'overwrite', 'error', 'ignore' save mode (it is 'error' by default).
+#' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
+#'             save mode (it is 'error' by default)
 #' @param ... additional JDBC database connection properties.
 #' @family SparkDataFrame functions
 #' @rdname write.jdbc
@@ -3564,10 +3592,9 @@ setMethod("histogram",
 setMethod("write.jdbc",
           signature(x = "SparkDataFrame", url = "character", tableName = "character"),
           function(x, url, tableName, mode = "error", ...) {
-            jmode <- convertToJSaveMode(mode)
             jprops <- varargsToJProperties(...)
             write <- callJMethod(x@sdf, "write")
-            write <- callJMethod(write, "mode", jmode)
+            write <- setWriteMode(write, mode)
             invisible(handledCallJMethod(write, "jdbc", url, tableName, jprops))
           })
 
@@ -3634,7 +3661,8 @@ setMethod("getNumPartitions",
 #' isStreaming
 #'
 #' Returns TRUE if this SparkDataFrame contains one or more sources that continuously return data
-#' as it arrives.
+#' as it arrives. A dataset that reads data from a streaming source must be executed as a
+#' \code{StreamingQuery} using \code{write.stream}.
 #'
 #' @param x A SparkDataFrame
 #' @return TRUE if this SparkDataFrame is from a streaming source
@@ -3680,7 +3708,17 @@ setMethod("isStreaming",
 #' @param df a streaming SparkDataFrame.
 #' @param source a name for external data source.
 #' @param outputMode one of 'append', 'complete', 'update'.
-#' @param ... additional argument(s) passed to the method.
+#' @param partitionBy a name or a list of names of columns to partition the output by on the file
+#'        system. If specified, the output is laid out on the file system similar to Hive's
+#'        partitioning scheme.
+#' @param trigger.processingTime a processing time interval as a string, e.g. '5 seconds',
+#'        '1 minute'. This is a trigger that runs a query periodically based on the processing
+#'        time. If value is '0 seconds', the query will run as fast as possible, this is the
+#'        default. Only one trigger can be set.
+#' @param trigger.once a logical, must be set to \code{TRUE}. This is a trigger that processes only
+#'        one batch of data in a streaming query then terminates the query. Only one trigger can be
+#'        set.
+#' @param ... additional external data source specific named options.
 #'
 #' @family SparkDataFrame functions
 #' @seealso \link{read.stream}
@@ -3698,7 +3736,8 @@ setMethod("isStreaming",
 #' # console
 #' q <- write.stream(wordCounts, "console", outputMode = "complete")
 #' # text stream
-#' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp")
+#' q <- write.stream(df, "text", path = "/home/user/out", checkpointLocation = "/home/user/cp"
+#'                   partitionBy = c("year", "month"), trigger.processingTime = "30 seconds")
 #' # memory stream
 #' q <- write.stream(wordCounts, "memory", queryName = "outs", outputMode = "complete")
 #' head(sql("SELECT * from outs"))
@@ -3710,7 +3749,8 @@ setMethod("isStreaming",
 #' @note experimental
 setMethod("write.stream",
           signature(df = "SparkDataFrame"),
-          function(df, source = NULL, outputMode = NULL, ...) {
+          function(df, source = NULL, outputMode = NULL, partitionBy = NULL,
+                   trigger.processingTime = NULL, trigger.once = NULL, ...) {
             if (!is.null(source) && !is.character(source)) {
               stop("source should be character, NULL or omitted. It is the data source specified ",
                    "in 'spark.sql.sources.default' configuration by default.")
@@ -3721,11 +3761,42 @@ setMethod("write.stream",
             if (is.null(source)) {
               source <- getDefaultSqlSource()
             }
+            cols <- NULL
+            if (!is.null(partitionBy)) {
+              if (!all(sapply(partitionBy, function(c) { is.character(c) }))) {
+                stop("All partitionBy column names should be characters.")
+              }
+              cols <- as.list(partitionBy)
+            }
+            jtrigger <- NULL
+            if (!is.null(trigger.processingTime) && !is.na(trigger.processingTime)) {
+              if (!is.null(trigger.once)) {
+                stop("Multiple triggers not allowed.")
+              }
+              interval <- as.character(trigger.processingTime)
+              if (nchar(interval) == 0) {
+                stop("Value for trigger.processingTime must be a non-empty string.")
+              }
+              jtrigger <- handledCallJStatic("org.apache.spark.sql.streaming.Trigger",
+                                             "ProcessingTime",
+                                             interval)
+            } else if (!is.null(trigger.once) && !is.na(trigger.once)) {
+              if (!is.logical(trigger.once) || !trigger.once) {
+                stop("Value for trigger.once must be TRUE.")
+              }
+              jtrigger <- callJStatic("org.apache.spark.sql.streaming.Trigger", "Once")
+            }
             options <- varargsToStrEnv(...)
             write <- handledCallJMethod(df@sdf, "writeStream")
             write <- callJMethod(write, "format", source)
             if (!is.null(outputMode)) {
               write <- callJMethod(write, "outputMode", outputMode)
+            }
+            if (!is.null(cols)) {
+              write <- callJMethod(write, "partitionBy", cols)
+            }
+            if (!is.null(jtrigger)) {
+              write <- callJMethod(write, "trigger", jtrigger)
             }
             write <- callJMethod(write, "options", options)
             ssq <- handledCallJMethod(write, "start")
@@ -3761,12 +3832,39 @@ setMethod("checkpoint",
             dataFrame(df)
           })
 
+#' localCheckpoint
+#'
+#' Returns a locally checkpointed version of this SparkDataFrame. Checkpointing can be used to
+#' truncate the logical plan, which is especially useful in iterative algorithms where the plan
+#' may grow exponentially. Local checkpoints are stored in the executors using the caching
+#' subsystem and therefore they are not reliable.
+#'
+#' @param x A SparkDataFrame
+#' @param eager whether to locally checkpoint this SparkDataFrame immediately
+#' @return a new locally checkpointed SparkDataFrame
+#' @family SparkDataFrame functions
+#' @aliases localCheckpoint,SparkDataFrame-method
+#' @rdname localCheckpoint
+#' @name localCheckpoint
+#' @export
+#' @examples
+#'\dontrun{
+#' df <- localCheckpoint(df)
+#' }
+#' @note localCheckpoint since 2.3.0
+setMethod("localCheckpoint",
+          signature(x = "SparkDataFrame"),
+          function(x, eager = TRUE) {
+            df <- callJMethod(x@sdf, "localCheckpoint", as.logical(eager))
+            dataFrame(df)
+          })
+
 #' cube
 #'
 #' Create a multi-dimensional cube for the SparkDataFrame using the specified columns.
 #'
-#' If grouping expression is missing \code{cube} creates a single global aggregate and is equivalent to
-#' direct application of \link{agg}.
+#' If grouping expression is missing \code{cube} creates a single global aggregate and is
+#' equivalent to direct application of \link{agg}.
 #'
 #' @param x a SparkDataFrame.
 #' @param ... character name(s) or Column(s) to group on.
@@ -3800,8 +3898,8 @@ setMethod("cube",
 #'
 #' Create a multi-dimensional rollup for the SparkDataFrame using the specified columns.
 #'
-#' If grouping expression is missing \code{rollup} creates a single global aggregate and is equivalent to
-#' direct application of \link{agg}.
+#' If grouping expression is missing \code{rollup} creates a single global aggregate and is
+#' equivalent to direct application of \link{agg}.
 #'
 #' @param x a SparkDataFrame.
 #' @param ... character name(s) or Column(s) to group on.
@@ -3911,5 +4009,49 @@ setMethod("broadcast",
           signature(x = "SparkDataFrame"),
           function(x) {
             sdf <- callJStatic("org.apache.spark.sql.functions", "broadcast", x@sdf)
+            dataFrame(sdf)
+          })
+
+#' withWatermark
+#'
+#' Defines an event time watermark for this streaming SparkDataFrame. A watermark tracks a point in
+#' time before which we assume no more late data is going to arrive.
+#'
+#' Spark will use this watermark for several purposes:
+#' \itemize{
+#'  \item To know when a given time window aggregation can be finalized and thus can be emitted
+#' when using output modes that do not allow updates.
+#'  \item To minimize the amount of state that we need to keep for on-going aggregations.
+#' }
+#' The current watermark is computed by looking at the \code{MAX(eventTime)} seen across
+#' all of the partitions in the query minus a user specified \code{delayThreshold}. Due to the cost
+#' of coordinating this value across partitions, the actual watermark used is only guaranteed
+#' to be at least \code{delayThreshold} behind the actual event time.  In some cases we may still
+#' process records that arrive more than \code{delayThreshold} late.
+#'
+#' @param x a streaming SparkDataFrame
+#' @param eventTime a string specifying the name of the Column that contains the event time of the
+#'                  row.
+#' @param delayThreshold a string specifying the minimum delay to wait to data to arrive late,
+#'                       relative to the latest record that has been processed in the form of an
+#'                       interval (e.g. "1 minute" or "5 hours"). NOTE: This should not be negative.
+#' @return a SparkDataFrame.
+#' @aliases withWatermark,SparkDataFrame,character,character-method
+#' @family SparkDataFrame functions
+#' @rdname withWatermark
+#' @name withWatermark
+#' @export
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' schema <- structType(structField("time", "timestamp"), structField("value", "double"))
+#' df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = 1)
+#' df <- withWatermark(df, "time", "10 minutes")
+#' }
+#' @note withWatermark since 2.3.0
+setMethod("withWatermark",
+          signature(x = "SparkDataFrame", eventTime = "character", delayThreshold = "character"),
+          function(x, eventTime, delayThreshold) {
+            sdf <- callJMethod(x@sdf, "withWatermark", eventTime, delayThreshold)
             dataFrame(sdf)
           })

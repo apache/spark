@@ -26,7 +26,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.vectorized.ColumnarBatch
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.NextIterator
 
 /**
@@ -66,6 +66,7 @@ class FileScanRDD(
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
   private val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
+  private val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
@@ -142,7 +143,7 @@ class FileScanRDD(
           // Sets InputFileBlockHolder for the file block's information
           InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
 
-          if (ignoreCorruptFiles) {
+          if (ignoreMissingFiles || ignoreCorruptFiles) {
             currentIterator = new NextIterator[Object] {
               // The readFunction may read some bytes before consuming the iterator, e.g.,
               // vectorized Parquet reader. Here we use lazy val to delay the creation of
@@ -158,9 +159,13 @@ class FileScanRDD(
                     null
                   }
                 } catch {
-                  // Throw FileNotFoundException even `ignoreCorruptFiles` is true
-                  case e: FileNotFoundException => throw e
-                  case e @ (_: RuntimeException | _: IOException) =>
+                  case e: FileNotFoundException if ignoreMissingFiles =>
+                    logWarning(s"Skipped missing file: $currentFile", e)
+                    finished = true
+                    null
+                  // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+                  case e: FileNotFoundException if !ignoreMissingFiles => throw e
+                  case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
                     logWarning(
                       s"Skipped the rest of the content in the corrupted file: $currentFile", e)
                     finished = true

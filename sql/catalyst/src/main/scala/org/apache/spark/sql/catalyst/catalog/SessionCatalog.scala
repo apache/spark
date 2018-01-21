@@ -99,7 +99,7 @@ class SessionCatalog(
   protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
 
   /**
-   * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
+   * Checks if the given name conforms the Hive standard ("[a-zA-Z_0-9]+"),
    * i.e. if this name only contains characters, numbers, and _.
    *
    * This method is intended to have the same behavior of
@@ -324,18 +324,16 @@ class SessionCatalog(
   }
 
   /**
-   * Alter the schema of a table identified by the provided table identifier. The new schema
-   * should still contain the existing bucket columns and partition columns used by the table. This
-   * method will also update any Spark SQL-related parameters stored as Hive table properties (such
-   * as the schema itself).
+   * Alter the data schema of a table identified by the provided table identifier. The new data
+   * schema should not have conflict column names with the existing partition columns, and should
+   * still contain all the existing data columns.
    *
    * @param identifier TableIdentifier
-   * @param newSchema Updated schema to be used for the table (must contain existing partition and
-   *                  bucket columns, and partition columns need to be at the end)
+   * @param newDataSchema Updated data schema to be used for the table
    */
-  def alterTableSchema(
+  def alterTableDataSchema(
       identifier: TableIdentifier,
-      newSchema: StructType): Unit = {
+      newDataSchema: StructType): Unit = {
     val db = formatDatabaseName(identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(identifier.table)
     val tableIdentifier = TableIdentifier(table, Some(db))
@@ -343,10 +341,10 @@ class SessionCatalog(
     requireTableExists(tableIdentifier)
 
     val catalogTable = externalCatalog.getTable(db, table)
-    val oldSchema = catalogTable.schema
-
+    val oldDataSchema = catalogTable.dataSchema
     // not supporting dropping columns yet
-    val nonExistentColumnNames = oldSchema.map(_.name).filterNot(columnNameResolved(newSchema, _))
+    val nonExistentColumnNames =
+      oldDataSchema.map(_.name).filterNot(columnNameResolved(newDataSchema, _))
     if (nonExistentColumnNames.nonEmpty) {
       throw new AnalysisException(
         s"""
@@ -355,8 +353,7 @@ class SessionCatalog(
          """.stripMargin)
     }
 
-    // assuming the newSchema has all partition columns at the end as required
-    externalCatalog.alterTableSchema(db, table, newSchema)
+    externalCatalog.alterTableDataSchema(db, table, newDataSchema)
   }
 
   private def columnNameResolved(schema: StructType, colName: String): Boolean = {

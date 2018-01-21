@@ -185,10 +185,9 @@ class TextSuite extends QueryTest with SharedSQLContext {
     val data = df.collect()
     assert(data(0) == Row("This is a test file for the text data source"))
     assert(data(1) == Row("1+1"))
-    // non ascii characters are not allowed in the code, so we disable the scalastyle here.
-    // scalastyle:off
+    // scalastyle:off nonascii
     assert(data(2) == Row("数据砖头"))
-    // scalastyle:on
+    // scalastyle:on nonascii
     assert(data(3) == Row("\"doh\""))
     assert(data.length == 4)
   }

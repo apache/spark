@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
@@ -82,6 +82,11 @@ private[spark] class TaskSetManager(
   // be re-run because the missing map data needs to be regenerated first.
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
+
+  // Set the coresponding index of Boolean var when the task killed by other attempt tasks,
+  // this happened while we set the `spark.speculation` to true. The task killed by others
+  // should not resubmit while executor lost.
+  private val killedByOtherAttempt: Array[Boolean] = new Array[Boolean](numTasks)
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   private[scheduler] var tasksSuccessful = 0
@@ -483,11 +488,11 @@ private[spark] class TaskSetManager(
             abort(s"$msg Exception during serialization: $e")
             throw new TaskNotSerializableException(e)
         }
-        if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
+        if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
           !emittedTaskSizeWarning) {
           emittedTaskSizeWarning = true
           logWarning(s"Stage ${task.stageId} contains a task of very large size " +
-            s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
+            s"(${serializedTask.limit() / 1024} KB). The maximum recommended task size is " +
             s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
         }
         addRunningTask(taskId)
@@ -497,7 +502,7 @@ private[spark] class TaskSetManager(
         // val timeTaken = clock.getTime() - startTime
         val taskName = s"task ${info.id} in stage ${taskSet.id}"
         logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
-          s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit} bytes)")
+          s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes)")
 
         sched.dagScheduler.taskStarted(task, info)
         new TaskDescription(
@@ -729,6 +734,7 @@ private[spark] class TaskSetManager(
       logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for task ${attemptInfo.id} " +
         s"in stage ${taskSet.id} (TID ${attemptInfo.taskId}) on ${attemptInfo.host} " +
         s"as the attempt ${info.attemptNumber} succeeded on ${info.host}")
+      killedByOtherAttempt(index) = true
       sched.backend.killTask(
         attemptInfo.taskId,
         attemptInfo.executorId,
@@ -915,7 +921,7 @@ private[spark] class TaskSetManager(
         && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
-        if (successful(index)) {
+        if (successful(index) && !killedByOtherAttempt(index)) {
           successful(index) = false
           copiesRunning(index) -= 1
           tasksSuccessful -= 1
@@ -980,7 +986,7 @@ private[spark] class TaskSetManager(
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
-    val defaultWait = conf.get("spark.locality.wait", "3s")
+    val defaultWait = conf.get(config.LOCALITY_WAIT)
     val localityWaitKey = level match {
       case TaskLocality.PROCESS_LOCAL => "spark.locality.wait.process"
       case TaskLocality.NODE_LOCAL => "spark.locality.wait.node"
@@ -989,7 +995,7 @@ private[spark] class TaskSetManager(
     }
 
     if (localityWaitKey != null) {
-      conf.getTimeAsMs(localityWaitKey, defaultWait)
+      conf.getTimeAsMs(localityWaitKey, defaultWait.toString)
     } else {
       0L
     }

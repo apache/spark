@@ -68,7 +68,7 @@ object HypothesisTestingExample {
     // against the label.
     val featureTestResults: Array[ChiSqTestResult] = Statistics.chiSqTest(obs)
     featureTestResults.zipWithIndex.foreach { case (k, v) =>
-      println("Column " + (v + 1).toString + ":")
+      println(s"Column ${(v + 1)} :")
       println(k)
     }  // summary of the test
     // $example off$

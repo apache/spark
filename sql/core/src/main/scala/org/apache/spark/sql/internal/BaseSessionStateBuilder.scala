@@ -266,7 +266,8 @@ abstract class BaseSessionStateBuilder(
    * This gets cloned from parent if available, otherwise is a new instance is created.
    */
   protected def listenerManager: ExecutionListenerManager = {
-    parentState.map(_.listenerManager.clone()).getOrElse(new ExecutionListenerManager)
+    parentState.map(_.listenerManager.clone()).getOrElse(
+      new ExecutionListenerManager(session.sparkContext.conf))
   }
 
   /**

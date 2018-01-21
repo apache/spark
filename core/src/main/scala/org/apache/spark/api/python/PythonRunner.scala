@@ -34,8 +34,18 @@ import org.apache.spark.util._
  */
 private[spark] object PythonEvalType {
   val NON_UDF = 0
-  val SQL_BATCHED_UDF = 1
-  val SQL_PANDAS_UDF = 2
+
+  val SQL_BATCHED_UDF = 100
+
+  val SQL_PANDAS_SCALAR_UDF = 200
+  val SQL_PANDAS_GROUP_MAP_UDF = 201
+
+  def toString(pythonEvalType: Int): String = pythonEvalType match {
+    case NON_UDF => "NON_UDF"
+    case SQL_BATCHED_UDF => "SQL_BATCHED_UDF"
+    case SQL_PANDAS_SCALAR_UDF => "SQL_PANDAS_SCALAR_UDF"
+    case SQL_PANDAS_GROUP_MAP_UDF => "SQL_PANDAS_GROUP_MAP_UDF"
+  }
 }
 
 /**
@@ -314,10 +324,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         logDebug("Exception thrown after task interruption", e)
         throw new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
 
-      case e: Exception if env.isStopped =>
-        logDebug("Exception thrown after context is stopped", e)
-        null.asInstanceOf[OUT]  // exit silently
-
       case e: Exception if writerThread.exception.isDefined =>
         logError("Python worker exited unexpectedly (crashed)", e)
         logError("This may have been caused by a prior exception:", writerThread.exception.get)
@@ -336,6 +342,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
   class MonitorThread(env: SparkEnv, worker: Socket, context: TaskContext)
     extends Thread(s"Worker Monitor for $pythonExec") {
 
+    /** How long to wait before killing the python worker if a task cannot be interrupted. */
+    private val taskKillTimeout = env.conf.getTimeAsMs("spark.python.task.killTimeout", "2s")
+
     setDaemon(true)
 
     override def run() {
@@ -345,12 +354,18 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         Thread.sleep(2000)
       }
       if (!context.isCompleted) {
-        try {
-          logWarning("Incomplete task interrupted: Attempting to kill Python Worker")
-          env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
-        } catch {
-          case e: Exception =>
-            logError("Exception when trying to kill worker", e)
+        Thread.sleep(taskKillTimeout)
+        if (!context.isCompleted) {
+          try {
+            // Mimic the task name used in `Executor` to help the user find out the task to blame.
+            val taskName = s"${context.partitionId}.${context.taskAttemptId} " +
+              s"in stage ${context.stageId} (TID ${context.taskAttemptId})"
+            logWarning(s"Incomplete task $taskName interrupted: Attempting to kill Python Worker")
+            env.destroyPythonWorker(pythonExec, envVars.asScala.toMap, worker)
+          } catch {
+            case e: Exception =>
+              logError("Exception when trying to kill worker", e)
+          }
         }
       }
     }

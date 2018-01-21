@@ -146,6 +146,12 @@ class DataSourceWithHiveMetastoreCatalogSuite
     'id cast StringType as 'd2
   ).coalesce(1)
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sparkSession.sessionState.catalog.reset()
+    sparkSession.metadataHive.reset()
+  }
+
   Seq(
     "parquet" -> ((
       "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
@@ -160,13 +166,13 @@ class DataSourceWithHiveMetastoreCatalogSuite
     ))
   ).foreach { case (provider, (inputFormat, outputFormat, serde)) =>
     test(s"Persist non-partitioned $provider relation into metastore as managed table") {
-      withTable("t") {
+      withTable("default.t") {
         withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true") {
           testDF
             .write
             .mode(SaveMode.Overwrite)
             .format(provider)
-            .saveAsTable("t")
+            .saveAsTable("default.t")
         }
 
         val hiveTable = sessionState.catalog.getTableMetadata(TableIdentifier("t", Some("default")))
@@ -181,14 +187,15 @@ class DataSourceWithHiveMetastoreCatalogSuite
         assert(columns.map(_.name) === Seq("d1", "d2"))
         assert(columns.map(_.dataType) === Seq(DecimalType(10, 3), StringType))
 
-        checkAnswer(table("t"), testDF)
-        assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") === Seq("1.1\t1", "2.1\t2"))
+        checkAnswer(table("default.t"), testDF)
+        assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM default.t") ===
+          Seq("1.1\t1", "2.1\t2"))
       }
     }
 
     test(s"Persist non-partitioned $provider relation into metastore as external table") {
       withTempPath { dir =>
-        withTable("t") {
+        withTable("default.t") {
           val path = dir.getCanonicalFile
 
           withSQLConf(SQLConf.PARQUET_WRITE_LEGACY_FORMAT.key -> "true") {
@@ -197,7 +204,7 @@ class DataSourceWithHiveMetastoreCatalogSuite
               .mode(SaveMode.Overwrite)
               .format(provider)
               .option("path", path.toString)
-              .saveAsTable("t")
+              .saveAsTable("default.t")
           }
 
           val hiveTable =
@@ -213,8 +220,8 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(columns.map(_.name) === Seq("d1", "d2"))
           assert(columns.map(_.dataType) === Seq(DecimalType(10, 3), StringType))
 
-          checkAnswer(table("t"), testDF)
-          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") ===
+          checkAnswer(table("default.t"), testDF)
+          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM default.t") ===
             Seq("1.1\t1", "2.1\t2"))
         }
       }
@@ -222,9 +229,9 @@ class DataSourceWithHiveMetastoreCatalogSuite
 
     test(s"Persist non-partitioned $provider relation into metastore as managed table using CTAS") {
       withTempPath { dir =>
-        withTable("t") {
+        withTable("default.t") {
           sql(
-            s"""CREATE TABLE t USING $provider
+            s"""CREATE TABLE default.t USING $provider
                |OPTIONS (path '${dir.toURI}')
                |AS SELECT 1 AS d1, "val_1" AS d2
              """.stripMargin)
@@ -242,8 +249,9 @@ class DataSourceWithHiveMetastoreCatalogSuite
           assert(columns.map(_.name) === Seq("d1", "d2"))
           assert(columns.map(_.dataType) === Seq(IntegerType, StringType))
 
-          checkAnswer(table("t"), Row(1, "val_1"))
-          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM t") === Seq("1\tval_1"))
+          checkAnswer(table("default.t"), Row(1, "val_1"))
+          assert(sparkSession.metadataHive.runSqlHive("SELECT * FROM default.t") ===
+            Seq("1\tval_1"))
         }
       }
     }
