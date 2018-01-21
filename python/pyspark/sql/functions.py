@@ -2104,7 +2104,8 @@ def udf(f=None, returnType=StringType()):
     >>> random_udf = udf(lambda: int(random.random() * 100), IntegerType()).asNondeterministic()
 
     .. note:: The user-defined functions are considered to be able to return null values by default.
-        If your function is not deterministic, call `asNonNullable` on the user defined function. E.g.:
+        If your function is not deterministic, call `asNonNullable` on the user defined function.
+        E.g.:
 
     >>> from pyspark.sql.types import StringType
     >>> import getpass
@@ -2239,7 +2240,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     >>> random = random.asNondeterministic()  # doctest: +SKIP
 
     .. note:: The user-defined functions are considered to be able to return null values by default.
-        If your function is not deterministic, call `asNonNullable` on the user defined function. E.g.:
+        If your function is not deterministic, call `asNonNullable` on the user defined function.
+        E.g.:
 
     >>> @pandas_udf('string', PandasUDFType.SCALAR)  # doctest: +SKIP
     ... def get_user(v):
