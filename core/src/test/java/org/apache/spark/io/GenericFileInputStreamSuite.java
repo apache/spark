@@ -57,6 +57,11 @@ public abstract class GenericFileInputStreamSuite {
     for (int i = 0; i < randomBytes.length; i++) {
       assertEquals(randomBytes[i], (byte) inputStream.read());
     }
+
+    assertEquals(-1, inputStream.read());
+    assertEquals(0, inputStream.available());
+    // double check
+    assertEquals(-1, inputStream.read());
   }
 
   @Test
@@ -70,6 +75,11 @@ public abstract class GenericFileInputStreamSuite {
         i++;
       }
     }
+
+    assertEquals(-1, inputStream.read());
+    assertEquals(0, inputStream.available());
+    // double check
+    assertEquals(-1, inputStream.read());
   }
 
   @Test
@@ -125,6 +135,8 @@ public abstract class GenericFileInputStreamSuite {
   @Test
   public void testBytesSkippedAfterEOF() throws IOException {
     assertEquals(randomBytes.length, inputStream.skip(randomBytes.length + 1));
+    assertEquals(-1, inputStream.read());
+    // double check, ensure we couldn't read the dirty data.
     assertEquals(-1, inputStream.read());
   }
 }

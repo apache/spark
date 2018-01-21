@@ -30,6 +30,7 @@ import io.netty.channel.DefaultFileRegion
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
+import org.apache.spark.io.NioBufferedFileInputStream
 import org.apache.spark.network.util.{AbstractFileRegion, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.util.Utils
@@ -152,7 +153,7 @@ private class DiskBlockData(
     file: File,
     blockSize: Long) extends BlockData {
 
-  override def toInputStream(): InputStream = new FileInputStream(file)
+  override def toInputStream(): InputStream = new NioBufferedFileInputStream(file)
 
   /**
   * Returns a Netty-friendly wrapper for the block's data.
@@ -184,7 +185,7 @@ private class DiskBlockData(
     Utils.tryWithResource(open()) { channel =>
       if (blockSize < minMemoryMapBytes) {
         // For small files, directly read rather than memory map.
-        val buf = ByteBuffer.allocate(blockSize.toInt)
+        val buf = ByteBuffer.allocateDirect(blockSize.toInt)
         JavaUtils.readFully(channel, buf)
         buf.flip()
         buf
@@ -207,7 +208,10 @@ private class EncryptedBlockData(
     conf: SparkConf,
     key: Array[Byte]) extends BlockData {
 
-  override def toInputStream(): InputStream = Channels.newInputStream(open())
+  override def toInputStream(): InputStream = {
+    val fileInput = new NioBufferedFileInputStream(file)
+    CryptoStreamUtils.createCryptoInputStream(fileInput, conf, key)
+  }
 
   override def toNetty(): Object = new ReadableChannelFileRegion(open(), blockSize)
 
@@ -236,7 +240,7 @@ private class EncryptedBlockData(
     // all bytes into memory to send the block to the remote executor, so it's ok to do this
     // as long as the block fits in a Java array.
     assert(blockSize <= Int.MaxValue, "Block is too large to be wrapped in a byte buffer.")
-    val dst = ByteBuffer.allocate(blockSize.toInt)
+    val dst = ByteBuffer.allocateDirect(blockSize.toInt)
     val in = open()
     try {
       JavaUtils.readFully(in, dst)

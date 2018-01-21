@@ -61,6 +61,7 @@ public final class NioBufferedFileInputStream extends InputStream {
         nRead = fileChannel.read(byteBuffer);
       }
       if (nRead < 0) {
+        byteBuffer.flip();
         return false;
       }
       byteBuffer.flip();
@@ -91,7 +92,12 @@ public final class NioBufferedFileInputStream extends InputStream {
 
   @Override
   public synchronized int available() throws IOException {
-    return byteBuffer.remaining();
+    int n = byteBuffer.remaining();
+    long avail = fileChannel.size() - fileChannel.position();
+    long total = avail + n;
+    return avail > (Long.MAX_VALUE - n)
+      ? Integer.MAX_VALUE : total > Integer.MAX_VALUE
+      ? Integer.MAX_VALUE : (int)total;
   }
 
   @Override
