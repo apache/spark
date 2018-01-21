@@ -61,21 +61,21 @@ case class QueryExecutionMetering() {
   /** Dump statistics about time spent running specific rules. */
   def dumpTimeSpent(): String = {
     val map = timeMap.asMap().asScala
-    val maxSize = map.keys.map(_.toString.length).max
+    val maxLengthRuleNames = map.keys.map(_.toString.length).max
 
-    val colRuleName = "Rule".padTo(maxSize, " ").mkString
-    val colRunTime = "Total Time".padTo(22, " ").mkString
-    val colTimeEffectiveRuns = "Effective Time".padTo(22, " ").mkString
-    val colNumRuns = "Total Runs".padTo(22, " ").mkString
-    val colNumEffectiveRuns = "Effective Runs".padTo(22, " ").mkString
+    val colRuleName = "Rule".padTo(maxLengthRuleNames, " ").mkString
+    val colRunTime = "Effective Time / Total Time".padTo(len = 47, " ").mkString
+    val colNumRuns = "Effective Runs / Total Runs".padTo(len = 47, " ").mkString
 
-    val ruleMetrics = map.toSeq.sortBy(_._2).reverseMap { case (k, v) =>
-      val ruleName = k.padTo(maxSize, " ").mkString
-      val runtime = v.toString.padTo(len = 22, " ").mkString
-      val numRuns = numRunsMap.get(k).toString.padTo(len = 22, " ").mkString
-      val numEffectiveRuns = numEffectiveRunsMap.get(k).toString.padTo(len = 22, " ").mkString
-      val timeEffectiveRuns = timeEffectiveRunsMap.get(k).toString.padTo(len = 22, " ").mkString
-      s"$ruleName $runtime $timeEffectiveRuns $numRuns $numEffectiveRuns"
+    val ruleMetrics = map.toSeq.sortBy(_._2).reverseMap { case (name, time) =>
+      val timeEffectiveRun = timeEffectiveRunsMap.get(name)
+      val numRuns = numRunsMap.get(name)
+      val numEffectiveRun = numEffectiveRunsMap.get(name)
+
+      val ruleName = name.padTo(maxLengthRuleNames, " ").mkString
+      val runtimeValue = s"$timeEffectiveRun / $time".padTo(len = 47, " ").mkString
+      val numRunValue = s"$numEffectiveRun / $numRuns".padTo(len = 47, " ").mkString
+      s"$ruleName $runtimeValue $numRunValue"
     }.mkString("\n", "\n", "")
 
     s"""
@@ -83,7 +83,7 @@ case class QueryExecutionMetering() {
        |Total number of runs: $totalNumRuns
        |Total time: ${totalTime / 1000000000D} seconds
        |
-       |$colRuleName $colRunTime $colTimeEffectiveRuns $colNumRuns $colNumEffectiveRuns
+       |$colRuleName $colRunTime $colNumRuns
        |$ruleMetrics
      """.stripMargin
   }
