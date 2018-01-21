@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.rules
 
-import com.google.common.util.concurrent.AtomicLongMap
 import scala.collection.JavaConverters._
+
+import com.google.common.util.concurrent.AtomicLongMap
 
 case class QueryExecutionMetering() {
   private val timeMap = AtomicLongMap.create[String]()
