@@ -199,7 +199,7 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
   override def prettyName: String = name.unquotedString
   override def toString: String = s"'$name(${children.mkString(", ")})"
 
-  override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
+  override def eval(input: InternalRow = EmptyRow): TraversableOnce[InternalRow] =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
@@ -294,7 +294,7 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
     } else {
       val from = input.inputSet.map(_.name).mkString(", ")
       val targetString = target.get.mkString(".")
-      throw new AnalysisException(s"cannot resolve '$targetString.*' give input columns '$from'")
+      throw new AnalysisException(s"cannot resolve '$targetString.*' given input columns '$from'")
     }
   }
 

@@ -611,8 +611,8 @@ class Analyzer(
           if (AnalysisContext.get.nestedViewDepth > conf.maxNestedViewDepth) {
             view.failAnalysis(s"The depth of view ${view.desc.identifier} exceeds the maximum " +
               s"view resolution depth (${conf.maxNestedViewDepth}). Analysis is aborted to " +
-              "avoid errors. Increase the value of spark.sql.view.maxNestedViewDepth to work " +
-              "aroud this.")
+              s"avoid errors. Increase the value of ${SQLConf.MAX_NESTED_VIEW_DEPTH.key} to work " +
+              "around this.")
           }
           executeSameContext(child)
         }
@@ -653,7 +653,7 @@ class Analyzer(
         // Note that if the database is not defined, it is possible we are looking up a temp view.
         case e: NoSuchDatabaseException =>
           u.failAnalysis(s"Table or view not found: ${tableIdentWithDb.unquotedString}, the " +
-            s"database ${e.db} doesn't exsits.")
+            s"database ${e.db} doesn't exist.")
       }
     }
 
@@ -1222,7 +1222,7 @@ class Analyzer(
                     wf
                   }
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
-                case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
+                case agg: AggregateFunction => agg.toAggregateExpression(isDistinct)
                 // This function is not an aggregate function, just return the resolved one.
                 case other =>
                   if (isDistinct) {
@@ -1524,7 +1524,7 @@ class Analyzer(
   }
 
   /**
-   * Extracts [[Generator]] from the projectList of a [[Project]] operator and create [[Generate]]
+   * Extracts [[Generator]] from the projectList of a [[Project]] operator and creates [[Generate]]
    * operator under [[Project]].
    *
    * This rule will throw [[AnalysisException]] for following cases:
