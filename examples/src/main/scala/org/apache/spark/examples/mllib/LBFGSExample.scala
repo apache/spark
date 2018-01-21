@@ -82,7 +82,7 @@ object LBFGSExample {
 
     println("Loss of each step in training process")
     loss.foreach(println)
-    println("Area under ROC = " + auROC)
+    println(s"Area under ROC = $auROC")
     // $example off$
 
     sc.stop()

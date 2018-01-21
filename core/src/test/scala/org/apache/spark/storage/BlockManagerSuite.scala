@@ -31,8 +31,8 @@ import org.apache.commons.lang3.RandomUtils
 import org.mockito.{Matchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest._
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.TimeLimits._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
@@ -57,9 +57,12 @@ import org.apache.spark.util.io.ChunkedByteBuffer
 
 class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach
   with PrivateMethodTester with LocalSparkContext with ResetSystemProperties
-  with EncryptionFunSuite {
+  with EncryptionFunSuite with TimeLimits {
 
   import BlockManagerSuite._
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val defaultSignaler: Signaler = ThreadSignaler
 
   var conf: SparkConf = null
   var store: BlockManager = null
@@ -87,7 +90,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       testConf: Option[SparkConf] = None): BlockManager = {
     val bmConf = testConf.map(_.setAll(conf.getAll)).getOrElse(conf)
     bmConf.set("spark.testing.memory", maxMem.toString)
-    bmConf.set("spark.memory.offHeap.size", maxMem.toString)
+    bmConf.set(MEMORY_OFFHEAP_SIZE.key, maxMem.toString)
     val serializer = new KryoSerializer(bmConf)
     val encryptionKey = if (bmConf.get(IO_ENCRYPTION_ENABLED)) {
       Some(CryptoStreamUtils.createKey(bmConf))
@@ -1449,6 +1452,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 }
 
 private object BlockManagerSuite {
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val defaultSignaler: Signaler = ThreadSignaler
 
   private implicit class BlockManagerTestUtils(store: BlockManager) {
 

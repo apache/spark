@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, MonotonicallyIncreasingID}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, CurrentDate, CurrentTimestamp, MonotonicallyIncreasingID}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
@@ -336,6 +336,29 @@ object UnsupportedOperationChecker {
 
       // Check if there are unsupported expressions in streaming query plan.
       checkUnsupportedExpressions(subPlan)
+    }
+  }
+
+  def checkForContinuous(plan: LogicalPlan, outputMode: OutputMode): Unit = {
+    checkForStreaming(plan, outputMode)
+
+    plan.foreachUp { implicit subPlan =>
+      subPlan match {
+        case (_: Project | _: Filter | _: MapElements | _: MapPartitions |
+              _: DeserializeToObject | _: SerializeFromObject) =>
+        case node if node.nodeName == "StreamingRelationV2" =>
+        case node =>
+          throwError(s"Continuous processing does not support ${node.nodeName} operations.")
+      }
+
+      subPlan.expressions.foreach { e =>
+        if (e.collectLeaves().exists {
+          case (_: CurrentTimestamp | _: CurrentDate) => true
+          case _ => false
+        }) {
+          throwError(s"Continuous processing does not support current time operations.")
+        }
+      }
     }
   }
 

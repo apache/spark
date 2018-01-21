@@ -26,7 +26,10 @@ import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink}
+import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
+import org.apache.spark.sql.execution.streaming.sources.{MemoryPlanV2, MemorySinkV2}
+import org.apache.spark.sql.sources.v2.streaming.{ContinuousWriteSupport, MicroBatchWriteSupport}
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -240,14 +243,23 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
       if (extraOptions.get("queryName").isEmpty) {
         throw new AnalysisException("queryName must be specified for memory sink")
       }
-      val sink = new MemorySink(df.schema, outputMode)
-      val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
+      val (sink, resultDf) = trigger match {
+        case _: ContinuousTrigger =>
+          val s = new MemorySinkV2()
+          val r = Dataset.ofRows(df.sparkSession, new MemoryPlanV2(s, df.schema.toAttributes))
+          (s, r)
+        case _ =>
+          val s = new MemorySink(df.schema, outputMode)
+          val r = Dataset.ofRows(df.sparkSession, new MemoryPlan(s))
+          (s, r)
+      }
       val chkpointLoc = extraOptions.get("checkpointLocation")
       val recoverFromChkpoint = outputMode == OutputMode.Complete()
       val query = df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
         chkpointLoc,
         df,
+        extraOptions.toMap,
         sink,
         outputMode,
         useTempCheckpointLocation = true,
@@ -262,31 +274,36 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         extraOptions.get("queryName"),
         extraOptions.get("checkpointLocation"),
         df,
+        extraOptions.toMap,
         sink,
         outputMode,
         useTempCheckpointLocation = true,
         trigger = trigger)
     } else {
-      val (useTempCheckpointLocation, recoverFromCheckpointLocation) =
-        if (source == "console") {
-          (true, false)
-        } else {
-          (false, true)
-        }
-      val dataSource =
-        DataSource(
-          df.sparkSession,
-          className = source,
-          options = extraOptions.toMap,
-          partitionColumns = normalizedParCols.getOrElse(Nil))
+      val ds = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
+      val sink = (ds.newInstance(), trigger) match {
+        case (w: ContinuousWriteSupport, _: ContinuousTrigger) => w
+        case (_, _: ContinuousTrigger) => throw new UnsupportedOperationException(
+            s"Data source $source does not support continuous writing")
+        case (w: MicroBatchWriteSupport, _) => w
+        case _ =>
+          val ds = DataSource(
+            df.sparkSession,
+            className = source,
+            options = extraOptions.toMap,
+            partitionColumns = normalizedParCols.getOrElse(Nil))
+          ds.createSink(outputMode)
+      }
+
       df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
         extraOptions.get("checkpointLocation"),
         df,
-        dataSource.createSink(outputMode),
+        extraOptions.toMap,
+        sink,
         outputMode,
-        useTempCheckpointLocation = useTempCheckpointLocation,
-        recoverFromCheckpointLocation = recoverFromCheckpointLocation,
+        useTempCheckpointLocation = source == "console",
+        recoverFromCheckpointLocation = true,
         trigger = trigger)
     }
   }

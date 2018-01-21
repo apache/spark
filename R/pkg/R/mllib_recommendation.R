@@ -48,6 +48,8 @@ setClass("ALSModel", representation(jobj = "jobj"))
 #' @param numUserBlocks number of user blocks used to parallelize computation (> 0).
 #' @param numItemBlocks number of item blocks used to parallelize computation (> 0).
 #' @param checkpointInterval number of checkpoint intervals (>= 1) or disable checkpoint (-1).
+#'                           Note: this setting will be ignored if the checkpoint directory is not
+#'                           set.
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.als} returns a fitted ALS model.
 #' @rdname spark.als

@@ -1517,24 +1517,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("decimal precision with multiply/division") {
-    checkAnswer(sql("select 10.3 * 3.0"), Row(BigDecimal("30.90")))
-    checkAnswer(sql("select 10.3000 * 3.0"), Row(BigDecimal("30.90000")))
-    checkAnswer(sql("select 10.30000 * 30.0"), Row(BigDecimal("309.000000")))
-    checkAnswer(sql("select 10.300000000000000000 * 3.000000000000000000"),
-      Row(BigDecimal("30.900000000000000000000000000000000000", new MathContext(38))))
-    checkAnswer(sql("select 10.300000000000000000 * 3.0000000000000000000"),
-      Row(null))
-
-    checkAnswer(sql("select 10.3 / 3.0"), Row(BigDecimal("3.433333")))
-    checkAnswer(sql("select 10.3000 / 3.0"), Row(BigDecimal("3.4333333")))
-    checkAnswer(sql("select 10.30000 / 30.0"), Row(BigDecimal("0.343333333")))
-    checkAnswer(sql("select 10.300000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.433333333333333333333333333", new MathContext(38))))
-    checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.4333333333333333333333333333", new MathContext(38))))
-  }
-
   test("SPARK-10215 Div of Decimal returns null") {
     val d = Decimal(1.12321).toBigDecimal
     val df = Seq((d, 1)).toDF("a", "b")
@@ -1664,7 +1646,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
     }
-    assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
+    assert(e.message.contains("Hive built-in ORC data source must be used with Hive support"))
 
     e = intercept[AnalysisException] {
       sql(s"select id from `com.databricks.spark.avro`.`file_path`")
@@ -2714,6 +2696,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |WHERE t1.col1 = 1 AND 1 = t1.col2 AND t1.col1 = t2.col AND t1.col2 = t2.col
         """.stripMargin)
       checkAnswer(df, Row(1, 1, 1))
+    }
+  }
+
+  test("SPARK-23079: constraints should be inferred correctly with aliases") {
+    withTable("t") {
+      spark.range(5).write.saveAsTable("t")
+      val t = spark.read.table("t")
+      val left = t.withColumn("xid", $"id" + lit(1)).as("x")
+      val right = t.withColumnRenamed("id", "xid").as("y")
+      val df = left.join(right, "xid").filter("id = 3").toDF()
+      checkAnswer(df, Row(4, 3))
     }
   }
 

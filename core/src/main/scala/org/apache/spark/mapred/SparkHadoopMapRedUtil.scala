@@ -70,7 +70,8 @@ object SparkHadoopMapRedUtil extends Logging {
       if (shouldCoordinateWithDriver) {
         val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
         val taskAttemptNumber = TaskContext.get().attemptNumber()
-        val canCommit = outputCommitCoordinator.canCommit(jobId, splitId, taskAttemptNumber)
+        val stageId = TaskContext.get().stageId()
+        val canCommit = outputCommitCoordinator.canCommit(stageId, splitId, taskAttemptNumber)
 
         if (canCommit) {
           performCommit()
@@ -80,7 +81,7 @@ object SparkHadoopMapRedUtil extends Logging {
           logInfo(message)
           // We need to abort the task so that the driver can reschedule new attempts, if necessary
           committer.abortTask(mrTaskContext)
-          throw new CommitDeniedException(message, jobId, splitId, taskAttemptNumber)
+          throw new CommitDeniedException(message, stageId, splitId, taskAttemptNumber)
         }
       } else {
         // Speculation is disabled or a user has chosen to manually bypass the commit coordination

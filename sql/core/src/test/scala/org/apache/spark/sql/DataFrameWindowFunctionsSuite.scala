@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -54,56 +55,6 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(1, "1") :: Row(2, "2") :: Row(null, null) :: Row(null, null) :: Nil)
   }
 
-  test("Window.rowsBetween") {
-    val df = Seq(("one", 1), ("two", 2)).toDF("key", "value")
-    // Running (cumulative) sum
-    checkAnswer(
-      df.select('key, sum("value").over(
-        Window.rowsBetween(Window.unboundedPreceding, Window.currentRow))),
-      Row("one", 1) :: Row("two", 3) :: Nil
-    )
-  }
-
-  test("lead") {
-    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-
-    checkAnswer(
-      df.select(
-        lead("value", 1).over(Window.partitionBy($"key").orderBy($"value"))),
-      Row("1") :: Row(null) :: Row("2") :: Row(null) :: Nil)
-  }
-
-  test("lag") {
-    val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-
-    checkAnswer(
-      df.select(
-        lag("value", 1).over(Window.partitionBy($"key").orderBy($"value"))),
-      Row(null) :: Row("1") :: Row(null) :: Row("2") :: Nil)
-  }
-
-  test("lead with default value") {
-    val df = Seq((1, "1"), (1, "1"), (2, "2"), (1, "1"),
-                 (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        lead("value", 2, "n/a").over(Window.partitionBy("key").orderBy("value"))),
-      Seq(Row("1"), Row("1"), Row("n/a"), Row("n/a"), Row("2"), Row("n/a"), Row("n/a")))
-  }
-
-  test("lag with default value") {
-    val df = Seq((1, "1"), (1, "1"), (2, "2"), (1, "1"),
-                 (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        lag("value", 2, "n/a").over(Window.partitionBy($"key").orderBy($"value"))),
-      Seq(Row("n/a"), Row("n/a"), Row("1"), Row("1"), Row("n/a"), Row("n/a"), Row("2")))
-  }
-
   test("rank functions in unspecific window") {
     val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
     df.createOrReplaceTempView("window_table")
@@ -133,199 +84,6 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       // Here we missed .orderBy("key")!
       df.select(row_number().over(Window.partitionBy("value"))).collect())
     assert(e.message.contains("requires window to be ordered"))
-  }
-
-  test("aggregation and rows between") {
-    val df = Seq((1, "1"), (2, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        avg("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 2))),
-      Seq(Row(4.0d / 3.0d), Row(4.0d / 3.0d), Row(3.0d / 2.0d), Row(2.0d), Row(2.0d)))
-  }
-
-  test("aggregation and range between") {
-    val df = Seq((1, "1"), (1, "1"), (3, "1"), (2, "2"), (2, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        avg("key").over(Window.partitionBy($"value").orderBy($"key").rangeBetween(-1, 1))),
-      Seq(Row(4.0d / 3.0d), Row(4.0d / 3.0d), Row(7.0d / 4.0d), Row(5.0d / 2.0d),
-        Row(2.0d), Row(2.0d)))
-  }
-
-  test("row between should accept integer values as boundary") {
-    val df = Seq((1L, "1"), (1L, "1"), (2147483650L, "1"),
-      (3L, "2"), (2L, "1"), (2147483650L, "2"))
-      .toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        $"key",
-        count("key").over(
-          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483647))),
-      Seq(Row(1, 3), Row(1, 4), Row(2, 2), Row(3, 2), Row(2147483650L, 1), Row(2147483650L, 1))
-    )
-
-    val e = intercept[AnalysisException](
-      df.select(
-        $"key",
-        count("key").over(
-          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L))))
-    assert(e.message.contains("Boundary end is not a valid integer: 2147483648"))
-  }
-
-  test("range between should accept int/long values as boundary") {
-    val df = Seq((1L, "1"), (1L, "1"), (2147483650L, "1"),
-      (3L, "2"), (2L, "1"), (2147483650L, "2"))
-      .toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        $"key",
-        count("key").over(
-          Window.partitionBy($"value").orderBy($"key").rangeBetween(0, 2147483648L))),
-      Seq(Row(1, 3), Row(1, 3), Row(2, 2), Row(3, 2), Row(2147483650L, 1), Row(2147483650L, 1))
-    )
-    checkAnswer(
-      df.select(
-        $"key",
-        count("key").over(
-          Window.partitionBy($"value").orderBy($"key").rangeBetween(-2147483649L, 0))),
-      Seq(Row(1, 2), Row(1, 2), Row(2, 3), Row(2147483650L, 2), Row(2147483650L, 4), Row(3, 1))
-    )
-
-    def dt(date: String): Date = Date.valueOf(date)
-
-    val df2 = Seq((dt("2017-08-01"), "1"), (dt("2017-08-01"), "1"), (dt("2020-12-31"), "1"),
-      (dt("2017-08-03"), "2"), (dt("2017-08-02"), "1"), (dt("2020-12-31"), "2"))
-      .toDF("key", "value")
-    checkAnswer(
-      df2.select(
-        $"key",
-        count("key").over(
-          Window.partitionBy($"value").orderBy($"key").rangeBetween(lit(0), lit(2)))),
-      Seq(Row(dt("2017-08-01"), 3), Row(dt("2017-08-01"), 3), Row(dt("2020-12-31"), 1),
-        Row(dt("2017-08-03"), 1), Row(dt("2017-08-02"), 1), Row(dt("2020-12-31"), 1))
-    )
-  }
-
-  test("range between should accept double values as boundary") {
-    val df = Seq((1.0D, "1"), (1.0D, "1"), (100.001D, "1"),
-      (3.3D, "2"), (2.02D, "1"), (100.001D, "2"))
-      .toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        $"key",
-        count("key").over(
-          Window.partitionBy($"value").orderBy($"key")
-            .rangeBetween(currentRow, lit(2.5D)))),
-      Seq(Row(1.0, 3), Row(1.0, 3), Row(100.001, 1), Row(3.3, 1), Row(2.02, 1), Row(100.001, 1))
-    )
-  }
-
-  test("range between should accept interval values as boundary") {
-    def ts(timestamp: Long): Timestamp = new Timestamp(timestamp * 1000)
-
-    val df = Seq((ts(1501545600), "1"), (ts(1501545600), "1"), (ts(1609372800), "1"),
-      (ts(1503000000), "2"), (ts(1502000000), "1"), (ts(1609372800), "2"))
-      .toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        $"key",
-        count("key").over(
-          Window.partitionBy($"value").orderBy($"key")
-            .rangeBetween(currentRow,
-              lit(CalendarInterval.fromString("interval 23 days 4 hours"))))),
-      Seq(Row(ts(1501545600), 3), Row(ts(1501545600), 3), Row(ts(1609372800), 1),
-        Row(ts(1503000000), 1), Row(ts(1502000000), 1), Row(ts(1609372800), 1))
-    )
-  }
-
-  test("aggregation and rows between with unbounded") {
-    val df = Seq((1, "1"), (2, "2"), (2, "3"), (1, "3"), (3, "2"), (4, "3")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        $"key",
-        last("key").over(
-          Window.partitionBy($"value").orderBy($"key")
-            .rowsBetween(Window.currentRow, Window.unboundedFollowing)),
-        last("key").over(
-          Window.partitionBy($"value").orderBy($"key")
-            .rowsBetween(Window.unboundedPreceding, Window.currentRow)),
-        last("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1))),
-      Seq(Row(1, 1, 1, 1), Row(2, 3, 2, 3), Row(3, 3, 3, 3), Row(1, 4, 1, 2), Row(2, 4, 2, 4),
-        Row(4, 4, 4, 4)))
-  }
-
-  test("aggregation and range between with unbounded") {
-    val df = Seq((5, "1"), (5, "2"), (4, "2"), (6, "2"), (3, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        $"key",
-        last("value").over(
-          Window.partitionBy($"value").orderBy($"key").rangeBetween(-2, -1))
-          .equalTo("2")
-          .as("last_v"),
-        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(Long.MinValue, 1))
-          .as("avg_key1"),
-        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(0, Long.MaxValue))
-          .as("avg_key2"),
-        avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-1, 0))
-          .as("avg_key3")
-      ),
-      Seq(Row(3, null, 3.0d, 4.0d, 3.0d),
-        Row(5, false, 4.0d, 5.0d, 5.0d),
-        Row(2, null, 2.0d, 17.0d / 4.0d, 2.0d),
-        Row(4, true, 11.0d / 3.0d, 5.0d, 4.0d),
-        Row(5, true, 17.0d / 4.0d, 11.0d / 2.0d, 4.5d),
-        Row(6, true, 17.0d / 4.0d, 6.0d, 11.0d / 2.0d)))
-  }
-
-  test("reverse sliding range frame") {
-    val df = Seq(
-      (1, "Thin", "Cell Phone", 6000),
-      (2, "Normal", "Tablet", 1500),
-      (3, "Mini", "Tablet", 5500),
-      (4, "Ultra thin", "Cell Phone", 5500),
-      (5, "Very thin", "Cell Phone", 6000),
-      (6, "Big", "Tablet", 2500),
-      (7, "Bendable", "Cell Phone", 3000),
-      (8, "Foldable", "Cell Phone", 3000),
-      (9, "Pro", "Tablet", 4500),
-      (10, "Pro2", "Tablet", 6500)).
-      toDF("id", "product", "category", "revenue")
-    val window = Window.
-      partitionBy($"category").
-      orderBy($"revenue".desc).
-      rangeBetween(-2000L, 1000L)
-    checkAnswer(
-      df.select(
-        $"id",
-        avg($"revenue").over(window).cast("int")),
-      Row(1, 5833) :: Row(2, 2000) :: Row(3, 5500) ::
-        Row(4, 5833) :: Row(5, 5833) :: Row(6, 2833) ::
-        Row(7, 3000) :: Row(8, 3000) :: Row(9, 5500) ::
-        Row(10, 6000) :: Nil)
-  }
-
-  // This is here to illustrate the fact that reverse order also reverses offsets.
-  test("reverse unbounded range frame") {
-    val df = Seq(1, 2, 4, 3, 2, 1).
-      map(Tuple1.apply).
-      toDF("value")
-    val window = Window.orderBy($"value".desc)
-    checkAnswer(
-      df.select(
-        $"value",
-        sum($"value").over(window.rangeBetween(Long.MinValue, 1)),
-        sum($"value").over(window.rangeBetween(1, Long.MaxValue))),
-      Row(1, 13, null) :: Row(2, 13, 2) :: Row(4, 7, 9) ::
-        Row(3, 11, 6) :: Row(2, 13, 2) :: Row(1, 13, null) :: Nil)
   }
 
   test("statistical functions") {
@@ -518,9 +276,46 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(3, "1", null, 3.0, 4.0, 3.0), Row(5, "1", false, 4.0, 5.0, 5.0)))
   }
 
+  test("Window spill with less than the inMemoryThreshold") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value")
+
+    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "2",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "2") {
+      assertNotSpilled(sparkContext, "select") {
+        df.select($"key", sum("value").over(window)).collect()
+      }
+    }
+  }
+
+  test("Window spill with more than the inMemoryThreshold but less than the spillThreshold") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value")
+
+    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "2") {
+      assertNotSpilled(sparkContext, "select") {
+        df.select($"key", sum("value").over(window)).collect()
+      }
+    }
+  }
+
+  test("Window spill with more than the inMemoryThreshold and spillThreshold") {
+    val df = Seq((1, "1"), (2, "2"), (1, "3"), (2, "4")).toDF("key", "value")
+    val window = Window.partitionBy($"key").orderBy($"value")
+
+    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      assertSpilled(sparkContext, "select") {
+        df.select($"key", sum("value").over(window)).collect()
+      }
+    }
+  }
+
   test("SPARK-21258: complex object in combination with spilling") {
     // Make sure we trigger the spilling path.
-    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "17") {
+    withSQLConf(SQLConf.WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+      SQLConf.WINDOW_EXEC_BUFFER_SPILL_THRESHOLD.key -> "17") {
       val sampleSchema = new StructType().
         add("f0", StringType).
         add("f1", LongType).
@@ -558,7 +353,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
 
       import testImplicits._
 
-      spark.read.schema(sampleSchema).json(input.toDS()).select(c0, c1).foreach { _ => () }
+      assertSpilled(sparkContext, "select") {
+        spark.read.schema(sampleSchema).json(input.toDS()).select(c0, c1).foreach { _ => () }
+      }
     }
   }
 }
