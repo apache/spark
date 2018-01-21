@@ -284,7 +284,7 @@ case class SampleExec(
       val samplerClass = classOf[PoissonSampler[UnsafeRow]].getName
       val initSampler = ctx.freshName("initSampler")
 
-      // inline mutable state since not many Sample operations in a task
+      // Inline mutable state since not many Sample operations in a task
       val sampler = ctx.addMutableState(s"$samplerClass<UnsafeRow>", "sampleReplace",
         v => {
           val initSamplerFuncName = ctx.addNewFunction(initSampler,
@@ -371,7 +371,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val ev = ExprCode("", "false", value)
     val BigInt = classOf[java.math.BigInteger].getName
 
-    // inline mutable state since not many Range operations in a task
+    // Inline mutable state since not many Range operations in a task
     val taskContext = ctx.addMutableState("TaskContext", "taskContext",
       v => s"$v = TaskContext.get();", forceInline = true)
     val inputMetrics = ctx.addMutableState("InputMetrics", "inputMetrics",

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Not}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Literal, Not}
 import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -195,6 +195,14 @@ class ReplaceOperatorSuite extends PlanTest {
         ),
         input)
 
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("add one grouping key if necessary when replace Deduplicate with Aggregate") {
+    val input = LocalRelation()
+    val query = Deduplicate(Seq.empty, input) // dropDuplicates()
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = Aggregate(Seq(Literal(1)), input.output, input)
     comparePlans(optimized, correctAnswer)
   }
 

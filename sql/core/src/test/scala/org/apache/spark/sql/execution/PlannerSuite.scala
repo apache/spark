@@ -260,11 +260,16 @@ class PlannerSuite extends SharedSQLContext {
   // do they satisfy the distribution requirements? As a result, we need at least four test cases.
 
   private def assertDistributionRequirementsAreSatisfied(outputPlan: SparkPlan): Unit = {
-    if (outputPlan.children.length > 1
-        && outputPlan.requiredChildDistribution.toSet != Set(UnspecifiedDistribution)) {
-      val childPartitionings = outputPlan.children.map(_.outputPartitioning)
-      if (!Partitioning.allCompatible(childPartitionings)) {
-        fail(s"Partitionings are not compatible: $childPartitionings")
+    if (outputPlan.children.length > 1) {
+      val childPartitionings = outputPlan.children.zip(outputPlan.requiredChildDistribution)
+        .filter {
+          case (_, UnspecifiedDistribution) => false
+          case (_, _: BroadcastDistribution) => false
+          case _ => true
+        }.map(_._1.outputPartitioning)
+
+      if (childPartitionings.map(_.numPartitions).toSet.size > 1) {
+        fail(s"Partitionings doesn't have same number of partitions: $childPartitionings")
       }
     }
     outputPlan.children.zip(outputPlan.requiredChildDistribution).foreach {
@@ -274,40 +279,7 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  test("EnsureRequirements with incompatible child partitionings which satisfy distribution") {
-    // Consider an operator that requires inputs that are clustered by two expressions (e.g.
-    // sort merge join where there are multiple columns in the equi-join condition)
-    val clusteringA = Literal(1) :: Nil
-    val clusteringB = Literal(2) :: Nil
-    val distribution = ClusteredDistribution(clusteringA ++ clusteringB)
-    // Say that the left and right inputs are each partitioned by _one_ of the two join columns:
-    val leftPartitioning = HashPartitioning(clusteringA, 1)
-    val rightPartitioning = HashPartitioning(clusteringB, 1)
-    // Individually, each input's partitioning satisfies the clustering distribution:
-    assert(leftPartitioning.satisfies(distribution))
-    assert(rightPartitioning.satisfies(distribution))
-    // However, these partitionings are not compatible with each other, so we still need to
-    // repartition both inputs prior to performing the join:
-    assert(!leftPartitioning.compatibleWith(rightPartitioning))
-    assert(!rightPartitioning.compatibleWith(leftPartitioning))
-    val inputPlan = DummySparkPlan(
-      children = Seq(
-        DummySparkPlan(outputPartitioning = leftPartitioning),
-        DummySparkPlan(outputPartitioning = rightPartitioning)
-      ),
-      requiredChildDistribution = Seq(distribution, distribution),
-      requiredChildOrdering = Seq(Seq.empty, Seq.empty)
-    )
-    val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
-    assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case e: ShuffleExchangeExec => true }.isEmpty) {
-      fail(s"Exchange should have been added:\n$outputPlan")
-    }
-  }
-
   test("EnsureRequirements with child partitionings with different numbers of output partitions") {
-    // This is similar to the previous test, except it checks that partitionings are not compatible
-    // unless they produce the same number of partitions.
     val clustering = Literal(1) :: Nil
     val distribution = ClusteredDistribution(clustering)
     val inputPlan = DummySparkPlan(
@@ -386,18 +358,15 @@ class PlannerSuite extends SharedSQLContext {
     }
   }
 
-  test("EnsureRequirements eliminates Exchange if child has Exchange with same partitioning") {
+  test("EnsureRequirements eliminates Exchange if child has same partitioning") {
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
-    val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
-    val childPartitioning = HashPartitioning(Literal(2) :: Nil, 5)
-    assert(!childPartitioning.satisfies(distribution))
-    val inputPlan = ShuffleExchangeExec(finalPartitioning,
-      DummySparkPlan(
-        children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
-        requiredChildDistribution = Seq(distribution),
-        requiredChildOrdering = Seq(Seq.empty)),
-      None)
+    val partitioning = HashPartitioning(Literal(1) :: Nil, 5)
+    assert(partitioning.satisfies(distribution))
 
+    val inputPlan = ShuffleExchangeExec(
+      partitioning,
+      DummySparkPlan(outputPartitioning = partitioning),
+      None)
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 2) {
@@ -407,17 +376,13 @@ class PlannerSuite extends SharedSQLContext {
 
   test("EnsureRequirements does not eliminate Exchange with different partitioning") {
     val distribution = ClusteredDistribution(Literal(1) :: Nil)
-    // Number of partitions differ
-    val finalPartitioning = HashPartitioning(Literal(1) :: Nil, 8)
-    val childPartitioning = HashPartitioning(Literal(2) :: Nil, 5)
-    assert(!childPartitioning.satisfies(distribution))
-    val inputPlan = ShuffleExchangeExec(finalPartitioning,
-      DummySparkPlan(
-        children = DummySparkPlan(outputPartitioning = childPartitioning) :: Nil,
-        requiredChildDistribution = Seq(distribution),
-        requiredChildOrdering = Seq(Seq.empty)),
-      None)
+    val partitioning = HashPartitioning(Literal(2) :: Nil, 5)
+    assert(!partitioning.satisfies(distribution))
 
+    val inputPlan = ShuffleExchangeExec(
+      partitioning,
+      DummySparkPlan(outputPartitioning = partitioning),
+      None)
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 1) {

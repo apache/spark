@@ -23,6 +23,8 @@ import java.util.{Calendar, TimeZone}
 
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -443,7 +445,8 @@ case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCas
     nullSafeCodeGen(ctx, ev, time => {
       val cal = classOf[Calendar].getName
       val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      val c = ctx.addMutableState(cal, "cal",
+      val c = "calDayOfWeek"
+      ctx.addImmutableStateIfNotExists(cal, c,
         v => s"""$v = $cal.getInstance($dtu.getTimeZone("UTC"));""")
       s"""
         $c.setTimeInMillis($time * 1000L * 3600L * 24L);
@@ -484,8 +487,9 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, time => {
       val cal = classOf[Calendar].getName
+      val c = "calWeekOfYear"
       val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
-      val c = ctx.addMutableState(cal, "cal", v =>
+      ctx.addImmutableStateIfNotExists(cal, c, v =>
         s"""
            |$v = $cal.getInstance($dtu.getTimeZone("UTC"));
            |$v.setFirstDayOfWeek($cal.MONDAY);
@@ -1006,7 +1010,7 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     if (right.foldable) {
-      val tz = right.eval()
+      val tz = right.eval().asInstanceOf[UTF8String]
       if (tz == null) {
         ev.copy(code = s"""
            |boolean ${ev.isNull} = true;
@@ -1015,9 +1019,11 @@ case class FromUTCTimestamp(left: Expression, right: Expression)
       } else {
         val tzClass = classOf[TimeZone].getName
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
         val tzTerm = ctx.addMutableState(tzClass, "tz",
-          v => s"""$v = $dtu.getTimeZone("$tz");""")
-        val utcTerm = ctx.addMutableState(tzClass, "utc",
+          v => s"""$v = $dtu.getTimeZone("$escapedTz");""")
+        val utcTerm = "tzUTC"
+        ctx.addImmutableStateIfNotExists(tzClass, utcTerm,
           v => s"""$v = $dtu.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
         ev.copy(code = s"""
@@ -1182,7 +1188,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     if (right.foldable) {
-      val tz = right.eval()
+      val tz = right.eval().asInstanceOf[UTF8String]
       if (tz == null) {
         ev.copy(code = s"""
            |boolean ${ev.isNull} = true;
@@ -1191,9 +1197,11 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
       } else {
         val tzClass = classOf[TimeZone].getName
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        val escapedTz = StringEscapeUtils.escapeJava(tz.toString)
         val tzTerm = ctx.addMutableState(tzClass, "tz",
-          v => s"""$v = $dtu.getTimeZone("$tz");""")
-        val utcTerm = ctx.addMutableState(tzClass, "utc",
+          v => s"""$v = $dtu.getTimeZone("$escapedTz");""")
+        val utcTerm = "tzUTC"
+        ctx.addImmutableStateIfNotExists(tzClass, utcTerm,
           v => s"""$v = $dtu.getTimeZone("UTC");""")
         val eval = left.genCode(ctx)
         ev.copy(code = s"""

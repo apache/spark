@@ -161,6 +161,8 @@ print.summary.decisionTree <- function(x) {
 #'                            >= 1.
 #' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
+#'                           Note: this setting will be ignored if the checkpoint directory is not
+#'                           set.
 #' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
@@ -382,6 +384,8 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #' @param minInstancesPerNode Minimum number of instances each child must have after split.
 #' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
+#'                           Note: this setting will be ignored if the checkpoint directory is not
+#'                           set.
 #' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
@@ -595,6 +599,8 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #' @param minInstancesPerNode Minimum number of instances each child must have after split.
 #' @param minInfoGain Minimum information gain for a split to be considered at a tree node.
 #' @param checkpointInterval Param for set checkpoint interval (>= 1) or disable checkpoint (-1).
+#'                           Note: this setting will be ignored if the checkpoint directory is not
+#'                           set.
 #' @param maxMemoryInMB Maximum memory in MB allocated to histogram aggregation.
 #' @param cacheNodeIds If FALSE, the algorithm will pass trees to executors to match instances with
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching

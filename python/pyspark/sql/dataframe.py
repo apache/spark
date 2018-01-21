@@ -1364,7 +1364,8 @@ class DataFrame(object):
         """ Return a new :class:`DataFrame` containing rows in this frame
         but not in another frame.
 
-        This is equivalent to `EXCEPT` in SQL.
+        This is equivalent to `EXCEPT DISTINCT` in SQL.
+
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
 
@@ -1906,9 +1907,9 @@ class DataFrame(object):
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
                 from pyspark.sql.types import _check_dataframe_localize_timestamps
-                from pyspark.sql.utils import _require_minimum_pyarrow_version
+                from pyspark.sql.utils import require_minimum_pyarrow_version
                 import pyarrow
-                _require_minimum_pyarrow_version()
+                require_minimum_pyarrow_version()
                 tables = self._collectAsArrow()
                 if tables:
                     table = pyarrow.concat_tables(tables)

@@ -35,6 +35,16 @@ case class DataSourceV2Relation(
   }
 }
 
+/**
+ * A specialization of DataSourceV2Relation with the streaming bit set to true. Otherwise identical
+ * to the non-streaming relation.
+ */
+class StreamingDataSourceV2Relation(
+    fullOutput: Seq[AttributeReference],
+    reader: DataSourceV2Reader) extends DataSourceV2Relation(fullOutput, reader) {
+  override def isStreaming: Boolean = true
+}
+
 object DataSourceV2Relation {
   def apply(reader: DataSourceV2Reader): DataSourceV2Relation = {
     new DataSourceV2Relation(reader.readSchema().toAttributes, reader)

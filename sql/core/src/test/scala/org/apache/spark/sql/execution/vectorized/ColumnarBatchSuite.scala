@@ -33,6 +33,7 @@ import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -874,14 +875,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
         .add("intCol2", IntegerType)
         .add("string", BinaryType)
 
-      val capacity = ColumnarBatch.DEFAULT_BATCH_SIZE
+      val capacity = 4 * 1024
       val columns = schema.fields.map { field =>
         allocate(capacity, field.dataType, memMode)
       }
-      val batch = new ColumnarBatch(schema, columns.toArray, ColumnarBatch.DEFAULT_BATCH_SIZE)
+      val batch = new ColumnarBatch(columns.toArray)
       assert(batch.numCols() == 4)
       assert(batch.numRows() == 0)
-      assert(batch.capacity() > 0)
       assert(batch.rowIterator().hasNext == false)
 
       // Add a row [1, 1.1, NULL]
@@ -918,10 +918,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(it.hasNext == false)
 
       // Reset and add 3 rows
-      batch.reset()
-      assert(batch.numRows() == 0)
-      assert(batch.rowIterator().hasNext == false)
-
+      columns.foreach(_.reset())
       // Add rows [NULL, 2.2, 2, "abc"], [3, NULL, 3, ""], [4, 4.4, 4, "world]
       columns(0).putNull(0)
       columns(1).putDouble(0, 2.2)
@@ -1155,7 +1152,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val columnVectors = Seq(new ArrowColumnVector(vector1), new ArrowColumnVector(vector2))
 
     val schema = StructType(Seq(StructField("int1", IntegerType), StructField("int2", IntegerType)))
-    val batch = new ColumnarBatch(schema, columnVectors.toArray[ColumnVector], 11)
+    val batch = new ColumnarBatch(columnVectors.toArray)
     batch.setNumRows(11)
 
     assert(batch.numCols() == 2)
