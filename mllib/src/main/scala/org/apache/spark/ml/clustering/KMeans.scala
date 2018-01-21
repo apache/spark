@@ -26,7 +26,7 @@ import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
+import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
@@ -70,6 +70,15 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   /** @group expertGetParam */
   @Since("1.5.0")
   def getInitMode: String = $(initMode)
+
+  @Since("2.4.0")
+  final val distanceMeasure = new Param[String](this, "distanceMeasure", "The distance measure. " +
+    "Supported options: 'euclidean' and 'cosine'.",
+    (value: String) => MLlibKMeans.validateDistanceMeasure(value))
+
+  /** @group expertGetParam */
+  @Since("2.4.0")
+  def getDistanceMeasure: String = $(distanceMeasure)
 
   /**
    * Param for the number of steps for the k-means|| initialization mode. This is an advanced
@@ -260,7 +269,8 @@ class KMeans @Since("1.5.0") (
     maxIter -> 20,
     initMode -> MLlibKMeans.K_MEANS_PARALLEL,
     initSteps -> 2,
-    tol -> 1e-4)
+    tol -> 1e-4,
+    distanceMeasure -> DistanceMeasure.EUCLIDEAN)
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeans = defaultCopy(extra)
@@ -283,6 +293,10 @@ class KMeans @Since("1.5.0") (
   /** @group expertSetParam */
   @Since("1.5.0")
   def setInitMode(value: String): this.type = set(initMode, value)
+
+  /** @group expertSetParam */
+  @Since("2.4.0")
+  def setDistanceMeasure(value: String): this.type = set(distanceMeasure, value)
 
   /** @group expertSetParam */
   @Since("1.5.0")
@@ -314,7 +328,8 @@ class KMeans @Since("1.5.0") (
     }
 
     val instr = Instrumentation.create(this, instances)
-    instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
+    instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, distanceMeasure,
+      maxIter, seed, tol)
     val algo = new MLlibKMeans()
       .setK($(k))
       .setInitializationMode($(initMode))
@@ -322,6 +337,7 @@ class KMeans @Since("1.5.0") (
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
       .setEpsilon($(tol))
+      .setDistanceMeasure($(distanceMeasure))
     val parentModel = algo.run(instances, Option(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
