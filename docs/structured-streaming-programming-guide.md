@@ -1108,7 +1108,11 @@ streamingDf.join(staticDf, "type", "right_join")  # right outer join with a stat
 staticDf = read.df(...)
 streamingDf = read.stream(...)
 joined <- merge(streamingDf, staticDf, sort = FALSE)  # inner equi-join with a static DF
-joined <- join(staticDf, streamingDf, streamingDf$value == staticDf$value, "right_outer")
+joined <- join(
+            staticDf,
+            streamingDf, 
+            streamingDf$value == staticDf$value,
+            "right_outer")  # right outer join with a static DF
 {% endhighlight %}
 
 </div>
@@ -1523,9 +1527,9 @@ streamingDf <- dropDuplicates(streamingDf, "guid", "eventTime")
 Many usecases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.GroupState)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)).
 
 ### Unsupported Operations
-There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets.
+There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets. 
 Some of them are as follows.
-
+ 
 - Multiple streaming aggregations (i.e. a chain of aggregations on a streaming DF) are not yet supported on streaming Datasets.
 
 - Limit and take first N rows are not supported on streaming Datasets.
