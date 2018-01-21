@@ -1101,6 +1101,17 @@ streamingDf.join(staticDf, "type", "right_join")  # right outer join with a stat
 {% endhighlight %}
 
 </div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+staticDf = read.df(...)
+streamingDf = read.stream(...)
+joined <- merge(streamingDf, staticDf, sort = FALSE)  # inner equi-join with a static DF
+joined <- join(staticDf, streamingDf, streamingDf$value == staticDf$value, "right_outer")
+{% endhighlight %}
+
+</div>
 </div>
 
 Note that stream-static joins are not stateful, so no state management is necessary.
@@ -1228,6 +1239,30 @@ impressionsWithWatermark.join(
 {% endhighlight %}
 
 </div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+impressions <- read.stream(...)
+clicks <- read.stream(...)
+
+# Apply watermarks on event-time columns
+impressionsWithWatermark <- withWatermark(impressions, "impressionTime", "2 hours")
+clicksWithWatermark <- withWatermark(clicks, "clickTime", "3 hours")
+
+# Join with event-time constraints
+joined <- join(
+  impressionsWithWatermark,
+  clicksWithWatermark,
+  expr(
+    paste(
+      "clickAdId = impressionAdId AND",
+      "clickTime >= impressionTime AND",
+      "clickTime <= impressionTime + interval 1 hour"
+)))
+
+{% endhighlight %}
+
+</div>
 </div>
 
 ##### Outer Joins with Watermarking
@@ -1284,6 +1319,23 @@ impressionsWithWatermark.join(
     """),
   "leftOuter"                 # can be "inner", "leftOuter", "rightOuter"
 )
+
+{% endhighlight %}
+
+</div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+joined <- join(
+  impressionsWithWatermark,
+  clicksWithWatermark,
+  expr(
+    paste(
+      "clickAdId = impressionAdId AND",
+      "clickTime >= impressionTime AND",
+      "clickTime <= impressionTime + interval 1 hour"),
+  "left_outer"                 # can be "inner", "left_outer", "right_outer"
+))
 
 {% endhighlight %}
 
@@ -1451,15 +1503,29 @@ streamingDf \
 {% endhighlight %}
 
 </div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+streamingDf <- read.stream(...)
+
+// Without watermark using guid column
+streamingDf <- dropDuplicates(streamingDf, "guid")
+
+// With watermark using guid and eventTime columns
+streamingDf <- withWatermark(streamingDf, "eventTime", "10 seconds")
+streamingDf <- dropDuplicates(streamingDf, "guid", "eventTime")
+{% endhighlight %}
+
+</div>
 </div>
 
 ### Arbitrary Stateful Operations
 Many usecases require more advanced stateful operations than aggregations. For example, in many usecases, you have to track sessions from data streams of events. For doing such sessionization, you will have to save arbitrary types of data as state, and perform arbitrary operations on the state using the data stream events in every trigger. Since Spark 2.2, this can be done using the operation `mapGroupsWithState` and the more powerful operation `flatMapGroupsWithState`. Both operations allow you to apply user-defined code on grouped Datasets to update user-defined state. For more concrete details, take a look at the API documentation ([Scala](api/scala/index.html#org.apache.spark.sql.streaming.GroupState)/[Java](api/java/org/apache/spark/sql/streaming/GroupState.html)) and the examples ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/sql/streaming/StructuredSessionization.scala)/[Java]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/sql/streaming/JavaStructuredSessionization.java)).
 
 ### Unsupported Operations
-There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets. 
+There are a few DataFrame/Dataset operations that are not supported with streaming DataFrames/Datasets.
 Some of them are as follows.
- 
+
 - Multiple streaming aggregations (i.e. a chain of aggregations on a streaming DF) are not yet supported on streaming Datasets.
 
 - Limit and take first N rows are not supported on streaming Datasets.
