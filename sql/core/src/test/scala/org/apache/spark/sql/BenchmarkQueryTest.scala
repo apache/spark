@@ -46,7 +46,7 @@ abstract class BenchmarkQueryTest extends QueryTest with SharedSQLContext with B
 
   override def beforeAll() {
     super.beforeAll()
-    RuleExecutor.resetTime()
+    RuleExecutor.resetMetrics()
   }
 
   protected def checkGeneratedCode(plan: SparkPlan): Unit = {
