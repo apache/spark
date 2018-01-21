@@ -597,6 +597,11 @@ class SQLTests(ReusedSQLTestCase):
         self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udf",
                                 lambda: spark.udf.registerJavaFunction("udf1", "non_existed_udf"))
 
+        # This is to check if a deprecated 'SQLContext.registerJavaFunction' can call its alias.
+        sqlContext = spark._wrapped
+        self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udf",
+                                lambda: sqlContext.registerJavaFunction("udf1", "non_existed_udf"))
+
     def test_udf_no_nulls(self):
         from pyspark.sql.functions import udf
         plus_four = udf(lambda x: x + 4, IntegerType()).asNonNullable()

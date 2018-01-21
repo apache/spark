@@ -59,7 +59,7 @@ def _create_udf(f, returnType, evalType):
 
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
-        f, returnType=returnType, name=None, evalType=evalType, deterministic=True)
+        f, returnType=returnType, name=None, evalType=evalType, deterministic=True, nullable=True)
     return udf_obj._wrapped()
 
 
@@ -73,7 +73,8 @@ class UserDefinedFunction(object):
                  returnType=StringType(),
                  name=None,
                  evalType=PythonEvalType.SQL_BATCHED_UDF,
-                 deterministic=True):
+                 deterministic=True,
+                 nullable=True):
         if not callable(func):
             raise TypeError(
                 "Invalid function: not a function or callable (__call__ is not defined): "
@@ -98,7 +99,7 @@ class UserDefinedFunction(object):
             else func.__class__.__name__)
         self.evalType = evalType
         self.deterministic = deterministic
-        self.nullable = True
+        self.nullable = nullable
 
     @property
     def returnType(self):
@@ -295,7 +296,8 @@ class UDFRegistration(object):
                     "Invalid f: f must be either SQL_BATCHED_UDF or SQL_PANDAS_SCALAR_UDF")
             register_udf = UserDefinedFunction(f.func, returnType=f.returnType, name=name,
                                                evalType=f.evalType,
-                                               deterministic=f.deterministic)
+                                               deterministic=f.deterministic,
+                                               nullable=f.nullable)
             return_udf = f
         else:
             if returnType is None:
