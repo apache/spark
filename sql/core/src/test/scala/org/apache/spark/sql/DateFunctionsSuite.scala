@@ -387,7 +387,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("to_date(s)"),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
 
-      // Now with format
+    // now with format
     checkAnswer(
       df.select(to_date(col("t"), "yyyy-MM-dd")),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")),
@@ -400,7 +400,7 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(to_date(col("s"), "yyyy-MM-dd")),
       Seq(Row(Date.valueOf("2015-07-22")), Row(Date.valueOf("2014-12-31")), Row(null)))
 
-    //  now switch format
+    // now switch format
     checkAnswer(
       df.select(to_date(col("s"), "yyyy-dd-MM")),
       Seq(Row(null), Row(null), Row(Date.valueOf("2014-12-31"))))
@@ -433,6 +433,52 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("trunc(t, 'Month')"),
       Seq(Row(Date.valueOf("2015-07-01")), Row(Date.valueOf("2014-12-01"))))
+  }
+
+  test("function date_trunc") {
+    val df = Seq(
+      (1, Timestamp.valueOf("2015-07-22 10:01:40.523")),
+      (2, Timestamp.valueOf("2014-12-31 05:29:06.876"))).toDF("i", "t")
+
+    checkAnswer(
+      df.select(date_trunc("YY", col("t"))),
+      Seq(Row(Timestamp.valueOf("2015-01-01 00:00:00")),
+        Row(Timestamp.valueOf("2014-01-01 00:00:00"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('MONTH', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-01 00:00:00")),
+        Row(Timestamp.valueOf("2014-12-01 00:00:00"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('DAY', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-22 00:00:00")),
+        Row(Timestamp.valueOf("2014-12-31 00:00:00"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('HOUR', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-22 10:00:00")),
+        Row(Timestamp.valueOf("2014-12-31 05:00:00"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('MINUTE', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-22 10:01:00")),
+        Row(Timestamp.valueOf("2014-12-31 05:29:00"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('SECOND', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-22 10:01:40")),
+        Row(Timestamp.valueOf("2014-12-31 05:29:06"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('WEEK', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-20 00:00:00")),
+        Row(Timestamp.valueOf("2014-12-29 00:00:00"))))
+
+    checkAnswer(
+      df.selectExpr("date_trunc('QUARTER', t)"),
+      Seq(Row(Timestamp.valueOf("2015-07-01 00:00:00")),
+        Row(Timestamp.valueOf("2014-10-01 00:00:00"))))
   }
 
   test("from_unixtime") {

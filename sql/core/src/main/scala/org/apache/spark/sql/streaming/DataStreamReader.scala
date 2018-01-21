@@ -17,15 +17,21 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.{Locale, Optional}
+
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.streaming.StreamingRelation
+import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
+import org.apache.spark.sql.sources.StreamSourceProvider
+import org.apache.spark.sql.sources.v2.DataSourceV2Options
+import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.Utils
 
 /**
  * Interface used to load a streaming `Dataset` from external storage systems (e.g. file systems,
@@ -33,7 +39,6 @@ import org.apache.spark.sql.types.StructType
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 final class DataStreamReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
@@ -59,7 +64,25 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
+   * Specifies the schema by using the input DDL-formatted string. Some data sources (e.g. JSON) can
+   * infer the input schema automatically from data. By specifying the schema here, the underlying
+   * data source can skip the schema inference step, and thus speed up data loading.
+   *
+   * @since 2.3.0
+   */
+  def schema(schemaString: String): DataStreamReader = {
+    this.userSpecifiedSchema = Option(StructType.fromDDL(schemaString))
+    this
+  }
+
+  /**
    * Adds an input option for the underlying data source.
+   *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
@@ -92,6 +115,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * (Scala-specific) Adds input options for the underlying data source.
    *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
+   *
    * @since 2.0.0
    */
   def options(options: scala.collection.Map[String, String]): DataStreamReader = {
@@ -101,6 +130,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
 
   /**
    * Adds input options for the underlying data source.
+   *
+   * You can set the following option(s):
+   * <ul>
+   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
+   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
@@ -117,18 +152,50 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * @since 2.0.0
    */
   def load(): DataFrame = {
-    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+    if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "read files of Hive data source directly.")
     }
 
-    val dataSource =
-      DataSource(
-        sparkSession,
-        userSpecifiedSchema = userSpecifiedSchema,
-        className = source,
-        options = extraOptions.toMap)
-    Dataset.ofRows(sparkSession, StreamingRelation(dataSource))
+    val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).newInstance()
+    val options = new DataSourceV2Options(extraOptions.asJava)
+    // We need to generate the V1 data source so we can pass it to the V2 relation as a shim.
+    // We can't be sure at this point whether we'll actually want to use V2, since we don't know the
+    // writer or whether the query is continuous.
+    val v1DataSource = DataSource(
+      sparkSession,
+      userSpecifiedSchema = userSpecifiedSchema,
+      className = source,
+      options = extraOptions.toMap)
+    val v1Relation = ds match {
+      case _: StreamSourceProvider => Some(StreamingRelation(v1DataSource))
+      case _ => None
+    }
+    ds match {
+      case s: MicroBatchReadSupport =>
+        val tempReader = s.createMicroBatchReader(
+          Optional.ofNullable(userSpecifiedSchema.orNull),
+          Utils.createTempDir(namePrefix = s"temporaryReader").getCanonicalPath,
+          options)
+        Dataset.ofRows(
+          sparkSession,
+          StreamingRelationV2(
+            s, source, extraOptions.toMap,
+            tempReader.readSchema().toAttributes, v1Relation)(sparkSession))
+      case s: ContinuousReadSupport =>
+        val tempReader = s.createContinuousReader(
+          Optional.ofNullable(userSpecifiedSchema.orNull),
+          Utils.createTempDir(namePrefix = s"temporaryReader").getCanonicalPath,
+          options)
+        Dataset.ofRows(
+          sparkSession,
+          StreamingRelationV2(
+            s, source, extraOptions.toMap,
+            tempReader.readSchema().toAttributes, v1Relation)(sparkSession))
+      case _ =>
+        // Code path for data source v1.
+        Dataset.ofRows(sparkSession, StreamingRelation(v1DataSource))
+    }
   }
 
   /**
@@ -143,8 +210,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   /**
    * Loads a JSON file stream and returns the results as a `DataFrame`.
    *
-   * Both JSON (one record per file) and <a href="http://jsonlines.org/">JSON Lines</a>
-   * (newline-delimited JSON) are supported and can be selected with the `wholeFile` option.
+   * <a href="http://jsonlines.org/">JSON Lines</a> (newline-delimited JSON) is supported by
+   * default. For JSON (one record per file), set the `multiLine` option to true.
    *
    * This function goes through the input once to determine the input schema. If you know the
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
@@ -164,6 +231,9 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * (e.g. 00012)</li>
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
+   * <li>`allowUnquotedControlChars` (default `false`): allows JSON Strings to contain unquoted
+   * control characters (ASCII characters with value less than 32, including tab and line feed
+   * characters) or not.</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    * during parsing.
    *   <ul>
@@ -183,12 +253,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps.</li>
-   * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines,
+   * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
    * </ul>
    *
@@ -207,24 +275,27 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
-   * <li>`sep` (default `,`): sets the single character as a separator for each
+   * <li>`sep` (default `,`): sets a single character as a separator for each
    * field and value.</li>
    * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
    * type.</li>
-   * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
+   * <li>`quote` (default `"`): sets a single character used for escaping quoted values where
    * the separator can be part of the value. If you would like to turn off quotations, you need to
    * set not `null` but an empty string. This behaviour is different form
    * `com.databricks.spark.csv`.</li>
-   * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
+   * <li>`escape` (default `\`): sets a single character used for escaping quotes inside
    * an already quoted value.</li>
-   * <li>`comment` (default empty string): sets the single character used for skipping lines
+   * <li>`charToEscapeQuoteEscaping` (default `escape` or `\0`): sets a single character used for
+   * escaping the escape for the quote character. The default value is escape character when escape
+   * and quote characters are different, `\0` otherwise.</li>
+   * <li>`comment` (default empty string): sets a single character used for skipping lines
    * beginning with this character. By default, it is disabled.</li>
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
    * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
    * requires one extra pass over the data.</li>
-   * <li>`ignoreLeadingWhiteSpace` (default `false`): defines whether or not leading whitespaces
-   * from values being read should be skipped.</li>
-   * <li>`ignoreTrailingWhiteSpace` (default `false`): defines whether or not trailing
+   * <li>`ignoreLeadingWhiteSpace` (default `false`): a flag indicating whether or not leading
+   * whitespaces from values being read should be skipped.</li>
+   * <li>`ignoreTrailingWhiteSpace` (default `false`): a flag indicating whether or not trailing
    * whitespaces from values being read should be skipped.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value. Since
    * 2.0.1, this applies to all supported types including the string type.</li>
@@ -236,17 +307,15 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`dateFormat` (default `yyyy-MM-dd`): sets the string that indicates a date format.
    * Custom date formats follow the formats at `java.text.SimpleDateFormat`. This applies to
    * date type.</li>
-   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSZZ`): sets the string that
+   * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
-   * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps.</li>
    * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
    * a record can have.</li>
    * <li>`maxCharsPerColumn` (default `-1`): defines the maximum number of characters allowed
    * for any given value being read. By default, it is -1 meaning unlimited length</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   *    during parsing.
+   *    during parsing. It supports the following case-insensitive modes.
    *   <ul>
    *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
    *     the malformed string into a field configured by `columnNameOfCorruptRecord`. To keep
@@ -261,12 +330,27 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
    * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
-   * <li>`wholeFile` (default `false`): parse one record, which may span multiple lines.</li>
+   * <li>`multiLine` (default `false`): parse one record, which may span multiple lines.</li>
    * </ul>
    *
    * @since 2.0.0
    */
   def csv(path: String): DataFrame = format("csv").load(path)
+
+  /**
+   * Loads a ORC file stream, returning the result as a `DataFrame`.
+   *
+   * You can set the following ORC-specific option(s) for reading ORC files:
+   * <ul>
+   * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
+   * considered in every trigger.</li>
+   * </ul>
+   *
+   * @since 2.3.0
+   */
+  def orc(path: String): DataFrame = {
+    format("orc").load(path)
+  }
 
   /**
    * Loads a Parquet file stream, returning the result as a `DataFrame`.

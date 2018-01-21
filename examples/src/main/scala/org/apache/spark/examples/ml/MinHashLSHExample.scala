@@ -21,14 +21,14 @@ package org.apache.spark.examples.ml
 // $example on$
 import org.apache.spark.ml.feature.MinHashLSH
 import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.col
 // $example off$
-import org.apache.spark.sql.SparkSession
 
 /**
  * An example demonstrating MinHashLSH.
  * Run with:
- *   bin/run-example org.apache.spark.examples.ml.MinHashLSHExample
+ *   bin/run-example ml.MinHashLSHExample
  */
 object MinHashLSHExample {
   def main(args: Array[String]): Unit = {

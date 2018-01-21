@@ -42,6 +42,7 @@ private[r] class GBTRegressorWrapper private (
   lazy val featureImportances: Vector = gbtrModel.featureImportances
   lazy val numTrees: Int = gbtrModel.getNumTrees
   lazy val treeWeights: Array[Double] = gbtrModel.treeWeights
+  lazy val maxDepth: Int = gbtrModel.getMaxDepth
 
   def summary: String = gbtrModel.toDebugString
 

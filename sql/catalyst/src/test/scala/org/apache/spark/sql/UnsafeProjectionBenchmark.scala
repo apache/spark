@@ -24,7 +24,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Benchmark
 
 /**
- * Benchmark [[UnsafeProjection]] for fixed-length/primitive-type fields.
+ * Benchmark `UnsafeProjection` for fixed-length/primitive-type fields.
  */
 object UnsafeProjectionBenchmark {
 

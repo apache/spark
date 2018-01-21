@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql
 
-import java.beans.BeanInfo
 import java.util.Properties
 
 import scala.collection.immutable
@@ -421,8 +420,11 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * converted to Catalyst rows.
    */
   private[sql]
-  def internalCreateDataFrame(catalystRows: RDD[InternalRow], schema: StructType) = {
-    sparkSession.internalCreateDataFrame(catalystRows, schema)
+  def internalCreateDataFrame(
+      catalystRows: RDD[InternalRow],
+      schema: StructType,
+      isStreaming: Boolean = false) = {
+    sparkSession.internalCreateDataFrame(catalystRows, schema, isStreaming)
   }
 
   /**
@@ -506,7 +508,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
 
   /**
-   * :: Experimental ::
    * Returns a `DataStreamReader` that can be used to read streaming data in as a `DataFrame`.
    * {{{
    *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
@@ -515,7 +516,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    *
    * @since 2.0.0
    */
-  @Experimental
   @InterfaceStability.Evolving
   def readStream: DataStreamReader = sparkSession.readStream
 
@@ -527,8 +527,9 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
+  @deprecated("use sparkSession.catalog.createTable instead.", "2.2.0")
   def createExternalTable(tableName: String, path: String): DataFrame = {
-    sparkSession.catalog.createExternalTable(tableName, path)
+    sparkSession.catalog.createTable(tableName, path)
   }
 
   /**
@@ -538,11 +539,12 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
+  @deprecated("use sparkSession.catalog.createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       path: String,
       source: String): DataFrame = {
-    sparkSession.catalog.createExternalTable(tableName, path, source)
+    sparkSession.catalog.createTable(tableName, path, source)
   }
 
   /**
@@ -552,11 +554,12 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
+  @deprecated("use sparkSession.catalog.createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
       options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.catalog.createExternalTable(tableName, source, options)
+    sparkSession.catalog.createTable(tableName, source, options)
   }
 
   /**
@@ -567,11 +570,12 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
+  @deprecated("use sparkSession.catalog.createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
       options: Map[String, String]): DataFrame = {
-    sparkSession.catalog.createExternalTable(tableName, source, options)
+    sparkSession.catalog.createTable(tableName, source, options)
   }
 
   /**
@@ -581,12 +585,13 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
+  @deprecated("use sparkSession.catalog.createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
       schema: StructType,
       options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.catalog.createExternalTable(tableName, source, schema, options)
+    sparkSession.catalog.createTable(tableName, source, schema, options)
   }
 
   /**
@@ -597,12 +602,13 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
+  @deprecated("use sparkSession.catalog.createTable instead.", "2.2.0")
   def createExternalTable(
       tableName: String,
       source: String,
       schema: StructType,
       options: Map[String, String]): DataFrame = {
-    sparkSession.catalog.createExternalTable(tableName, source, schema, options)
+    sparkSession.catalog.createTable(tableName, source, schema, options)
   }
 
   /**
@@ -1089,9 +1095,9 @@ object SQLContext {
    * method for internal use.
    */
   private[sql] def beansToRows(
-        data: Iterator[_],
-        beanClass: Class[_],
-        attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
+      data: Iterator[_],
+      beanClass: Class[_],
+      attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
     val extractors =
       JavaTypeInference.getJavaBeanReadableProperties(beanClass).map(_.getReadMethod)
     val methodsToConverts = extractors.zip(attrs).map { case (e, attr) =>

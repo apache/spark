@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.net.URI
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.types.StructType
 
 /**
  * A command used to create a data source table.
@@ -54,7 +57,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     // Create the relation to validate the arguments before writing the metadata to the metastore,
     // and infer the table schema and partition if users didn't specify schema in CREATE TABLE.
-    val pathOption = table.storage.locationUri.map("path" -> _)
+    val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
     // Fill in some default table options from the session conf
     val tableWithDefaultOptions = table.copy(
       identifier = table.identifier.copy(
@@ -69,7 +72,8 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         className = table.provider.get,
         bucketSpec = table.bucketSpec,
         options = table.storage.properties ++ pathOption,
-        catalogTable = Some(tableWithDefaultOptions)).resolveRelation()
+        // As discussed in SPARK-19583, we don't check if the location is existed
+        catalogTable = Some(tableWithDefaultOptions)).resolveRelation(checkFilesExist = false)
 
     val partitionColumnNames = if (table.schema.nonEmpty) {
       table.partitionColumnNames
@@ -82,14 +86,32 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       }
     }
 
-    val newTable = table.copy(
-      schema = dataSource.schema,
-      partitionColumnNames = partitionColumnNames,
-      // If metastore partition management for file source tables is enabled, we start off with
-      // partition provider hive, but no partitions in the metastore. The user has to call
-      // `msck repair table` to populate the table partitions.
-      tracksPartitionsInCatalog = partitionColumnNames.nonEmpty &&
-        sessionState.conf.manageFilesourcePartitions)
+    val newTable = dataSource match {
+      // Since Spark 2.1, we store the inferred schema of data source in metastore, to avoid
+      // inferring the schema again at read path. However if the data source has overlapped columns
+      // between data and partition schema, we can't store it in metastore as it breaks the
+      // assumption of table schema. Here we fallback to the behavior of Spark prior to 2.1, store
+      // empty schema in metastore and infer it at runtime. Note that this also means the new
+      // scalable partitioning handling feature(introduced at Spark 2.1) is disabled in this case.
+      case r: HadoopFsRelation if r.overlappedPartCols.nonEmpty =>
+        logWarning("It is not recommended to create a table with overlapped data and partition " +
+          "columns, as Spark cannot store a valid table schema and has to infer it at runtime, " +
+          "which hurts performance. Please check your data files and remove the partition " +
+          "columns in it.")
+        table.copy(schema = new StructType(), partitionColumnNames = Nil)
+
+      case _ =>
+        table.copy(
+          schema = dataSource.schema,
+          partitionColumnNames = partitionColumnNames,
+          // If metastore partition management for file source tables is enabled, we start off with
+          // partition provider hive, but no partitions in the metastore. The user has to call
+          // `msck repair table` to populate the table partitions.
+          tracksPartitionsInCatalog = partitionColumnNames.nonEmpty &&
+            sessionState.conf.manageFilesourcePartitions)
+
+    }
+
     // We will return Nil or throw exception at the beginning if the table already exists, so when
     // we reach here, the table should not exist and we should set `ignoreIfExists` to false.
     sessionState.catalog.createTable(newTable, ignoreIfExists = false)
@@ -141,7 +163,7 @@ case class CreateDataSourceTableAsSelectCommand(
       }
 
       saveDataIntoTable(
-        sparkSession, table, table.storage.locationUri, query, mode, tableExists = true)
+        sparkSession, table, table.storage.locationUri, query, SaveMode.Append, tableExists = true)
     } else {
       assert(table.schema.isEmpty)
 
@@ -151,7 +173,7 @@ case class CreateDataSourceTableAsSelectCommand(
         table.storage.locationUri
       }
       val result = saveDataIntoTable(
-        sparkSession, table, tableLocation, query, mode, tableExists = false)
+        sparkSession, table, tableLocation, query, SaveMode.Overwrite, tableExists = false)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -175,12 +197,12 @@ case class CreateDataSourceTableAsSelectCommand(
   private def saveDataIntoTable(
       session: SparkSession,
       table: CatalogTable,
-      tableLocation: Option[String],
+      tableLocation: Option[URI],
       data: LogicalPlan,
       mode: SaveMode,
       tableExists: Boolean): BaseRelation = {
     // Create the relation based on the input logical plan: `data`.
-    val pathOption = tableLocation.map("path" -> _)
+    val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
     val dataSource = DataSource(
       session,
       className = table.provider.get,
@@ -190,7 +212,7 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.writeAndRead(mode, Dataset.ofRows(session, query))
+      dataSource.writeAndRead(mode, query)
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)

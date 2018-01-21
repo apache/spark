@@ -22,9 +22,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.*;
 
 import com.google.common.collect.ImmutableMap;
 import org.apache.spark.unsafe.Platform;
@@ -224,10 +222,13 @@ public class UTF8StringSuite {
 
   @Test
   public void trims() {
+    assertEquals(fromString("1"), fromString("1").trim());
+
     assertEquals(fromString("hello"), fromString("  hello ").trim());
     assertEquals(fromString("hello "), fromString("  hello ").trimLeft());
     assertEquals(fromString("  hello"), fromString("  hello ").trimRight());
 
+    assertEquals(EMPTY_UTF8, EMPTY_UTF8.trim());
     assertEquals(EMPTY_UTF8, fromString("  ").trim());
     assertEquals(EMPTY_UTF8, fromString("  ").trimLeft());
     assertEquals(EMPTY_UTF8, fromString("  ").trimRight());
@@ -607,5 +608,187 @@ public class UTF8StringSuite {
     fromAddress(array, Platform.INT_ARRAY_OFFSET, length)
         .writeTo(outputStream);
     assertEquals("大千世界", outputStream.toString("UTF-8"));
+  }
+
+  @Test
+  public void testToShort() throws IOException {
+    Map<String, Short> inputToExpectedOutput = new HashMap<>();
+    inputToExpectedOutput.put("1", (short) 1);
+    inputToExpectedOutput.put("+1", (short) 1);
+    inputToExpectedOutput.put("-1", (short) -1);
+    inputToExpectedOutput.put("0", (short) 0);
+    inputToExpectedOutput.put("1111.12345678901234567890", (short) 1111);
+    inputToExpectedOutput.put(String.valueOf(Short.MAX_VALUE), Short.MAX_VALUE);
+    inputToExpectedOutput.put(String.valueOf(Short.MIN_VALUE), Short.MIN_VALUE);
+
+    Random rand = new Random();
+    for (int i = 0; i < 10; i++) {
+      short value = (short) rand.nextInt();
+      inputToExpectedOutput.put(String.valueOf(value), value);
+    }
+
+    IntWrapper wrapper = new IntWrapper();
+    for (Map.Entry<String, Short> entry : inputToExpectedOutput.entrySet()) {
+      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toShort(wrapper));
+      assertEquals((short) entry.getValue(), wrapper.value);
+    }
+
+    List<String> negativeInputs =
+      Arrays.asList("", "  ", "null", "NULL", "\n", "~1212121", "3276700");
+
+    for (String negativeInput : negativeInputs) {
+      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toShort(wrapper));
+    }
+  }
+
+  @Test
+  public void testToByte() throws IOException {
+    Map<String, Byte> inputToExpectedOutput = new HashMap<>();
+    inputToExpectedOutput.put("1", (byte) 1);
+    inputToExpectedOutput.put("+1",(byte)  1);
+    inputToExpectedOutput.put("-1", (byte)  -1);
+    inputToExpectedOutput.put("0", (byte)  0);
+    inputToExpectedOutput.put("111.12345678901234567890", (byte) 111);
+    inputToExpectedOutput.put(String.valueOf(Byte.MAX_VALUE), Byte.MAX_VALUE);
+    inputToExpectedOutput.put(String.valueOf(Byte.MIN_VALUE), Byte.MIN_VALUE);
+
+    Random rand = new Random();
+    for (int i = 0; i < 10; i++) {
+      byte value = (byte) rand.nextInt();
+      inputToExpectedOutput.put(String.valueOf(value), value);
+    }
+
+    IntWrapper intWrapper = new IntWrapper();
+    for (Map.Entry<String, Byte> entry : inputToExpectedOutput.entrySet()) {
+      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toByte(intWrapper));
+      assertEquals((byte) entry.getValue(), intWrapper.value);
+    }
+
+    List<String> negativeInputs =
+      Arrays.asList("", "  ", "null", "NULL", "\n", "~1212121", "12345678901234567890");
+
+    for (String negativeInput : negativeInputs) {
+      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toByte(intWrapper));
+    }
+  }
+
+  @Test
+  public void testToInt() throws IOException {
+    Map<String, Integer> inputToExpectedOutput = new HashMap<>();
+    inputToExpectedOutput.put("1", 1);
+    inputToExpectedOutput.put("+1", 1);
+    inputToExpectedOutput.put("-1", -1);
+    inputToExpectedOutput.put("0", 0);
+    inputToExpectedOutput.put("11111.1234567", 11111);
+    inputToExpectedOutput.put(String.valueOf(Integer.MAX_VALUE), Integer.MAX_VALUE);
+    inputToExpectedOutput.put(String.valueOf(Integer.MIN_VALUE), Integer.MIN_VALUE);
+
+    Random rand = new Random();
+    for (int i = 0; i < 10; i++) {
+      int value = rand.nextInt();
+      inputToExpectedOutput.put(String.valueOf(value), value);
+    }
+
+    IntWrapper intWrapper = new IntWrapper();
+    for (Map.Entry<String, Integer> entry : inputToExpectedOutput.entrySet()) {
+      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toInt(intWrapper));
+      assertEquals((int) entry.getValue(), intWrapper.value);
+    }
+
+    List<String> negativeInputs =
+      Arrays.asList("", "  ", "null", "NULL", "\n", "~1212121", "12345678901234567890");
+
+    for (String negativeInput : negativeInputs) {
+      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toInt(intWrapper));
+    }
+  }
+
+  @Test
+  public void testToLong() throws IOException {
+    Map<String, Long> inputToExpectedOutput = new HashMap<>();
+    inputToExpectedOutput.put("1", 1L);
+    inputToExpectedOutput.put("+1", 1L);
+    inputToExpectedOutput.put("-1", -1L);
+    inputToExpectedOutput.put("0", 0L);
+    inputToExpectedOutput.put("1076753423.12345678901234567890", 1076753423L);
+    inputToExpectedOutput.put(String.valueOf(Long.MAX_VALUE), Long.MAX_VALUE);
+    inputToExpectedOutput.put(String.valueOf(Long.MIN_VALUE), Long.MIN_VALUE);
+
+    Random rand = new Random();
+    for (int i = 0; i < 10; i++) {
+      long value = rand.nextLong();
+      inputToExpectedOutput.put(String.valueOf(value), value);
+    }
+
+    LongWrapper wrapper = new LongWrapper();
+    for (Map.Entry<String, Long> entry : inputToExpectedOutput.entrySet()) {
+      assertTrue(entry.getKey(), UTF8String.fromString(entry.getKey()).toLong(wrapper));
+      assertEquals((long) entry.getValue(), wrapper.value);
+    }
+
+    List<String> negativeInputs = Arrays.asList("", "  ", "null", "NULL", "\n", "~1212121",
+        "1234567890123456789012345678901234");
+
+    for (String negativeInput : negativeInputs) {
+      assertFalse(negativeInput, UTF8String.fromString(negativeInput).toLong(wrapper));
+    }
+  }
+
+  @Test
+  public void trimBothWithTrimString() {
+    assertEquals(fromString("hello"), fromString("  hello ").trim(fromString(" ")));
+    assertEquals(fromString("o"), fromString("  hello ").trim(fromString(" hle")));
+    assertEquals(fromString("h e"), fromString("ooh e ooo").trim(fromString("o ")));
+    assertEquals(fromString(""), fromString("ooo...oooo").trim(fromString("o.")));
+    assertEquals(fromString("b"), fromString("%^b[]@").trim(fromString("][@^%")));
+
+    assertEquals(EMPTY_UTF8, fromString("  ").trim(fromString(" ")));
+
+    assertEquals(fromString("数据砖头"), fromString("  数据砖头 ").trim());
+    assertEquals(fromString("数"), fromString("a数b").trim(fromString("ab")));
+    assertEquals(fromString(""), fromString("a").trim(fromString("a数b")));
+    assertEquals(fromString(""), fromString("数数 数数数").trim(fromString("数 ")));
+    assertEquals(fromString("据砖头"), fromString("数]数[数据砖头#数数").trim(fromString("[数]#")));
+    assertEquals(fromString("据砖头数数 "), fromString("数数数据砖头数数 ").trim(fromString("数")));
+  }
+
+  @Test
+  public void trimLeftWithTrimString() {
+    assertEquals(fromString("  hello "), fromString("  hello ").trimLeft(fromString("")));
+    assertEquals(fromString(""), fromString("a").trimLeft(fromString("a")));
+    assertEquals(fromString("b"), fromString("b").trimLeft(fromString("a")));
+    assertEquals(fromString("ba"), fromString("ba").trimLeft(fromString("a")));
+    assertEquals(fromString(""), fromString("aaaaaaa").trimLeft(fromString("a")));
+    assertEquals(fromString("trim"), fromString("oabtrim").trimLeft(fromString("bao")));
+    assertEquals(fromString("rim "), fromString("ooootrim ").trimLeft(fromString("otm")));
+
+    assertEquals(EMPTY_UTF8, fromString("  ").trimLeft(fromString(" ")));
+
+    assertEquals(fromString("数据砖头 "), fromString("  数据砖头 ").trimLeft(fromString(" ")));
+    assertEquals(fromString("数"), fromString("数").trimLeft(fromString("a")));
+    assertEquals(fromString("a"), fromString("a").trimLeft(fromString("数")));
+    assertEquals(fromString("砖头数数"), fromString("数数数据砖头数数").trimLeft(fromString("据数")));
+    assertEquals(fromString("据砖头数数"), fromString(" 数数数据砖头数数").trimLeft(fromString("数 ")));
+    assertEquals(fromString("据砖头数数"), fromString("aa数数数据砖头数数").trimLeft(fromString("a数砖")));
+    assertEquals(fromString("$S,.$BR"), fromString(",,,,%$S,.$BR").trimLeft(fromString("%,")));
+  }
+
+  @Test
+  public void trimRightWithTrimString() {
+    assertEquals(fromString("  hello "), fromString("  hello ").trimRight(fromString("")));
+    assertEquals(fromString(""), fromString("a").trimRight(fromString("a")));
+    assertEquals(fromString("cc"), fromString("ccbaaaa").trimRight(fromString("ba")));
+    assertEquals(fromString(""), fromString("aabbbbaaa").trimRight(fromString("ab")));
+    assertEquals(fromString("  he"), fromString("  hello ").trimRight(fromString(" ol")));
+    assertEquals(fromString("oohell"),
+        fromString("oohellooo../*&").trimRight(fromString("./,&%*o")));
+
+    assertEquals(EMPTY_UTF8, fromString("  ").trimRight(fromString(" ")));
+
+    assertEquals(fromString("  数据砖头"), fromString("  数据砖头 ").trimRight(fromString(" ")));
+    assertEquals(fromString("数数砖头"), fromString("数数砖头数aa数").trimRight(fromString("a数")));
+    assertEquals(fromString(""), fromString("数数数据砖ab").trimRight(fromString("数据砖ab")));
+    assertEquals(fromString("头"), fromString("头a???/").trimRight(fromString("数?/*&^%a")));
+    assertEquals(fromString("头"), fromString("头数b数数 [").trimRight(fromString(" []数b")));
   }
 }

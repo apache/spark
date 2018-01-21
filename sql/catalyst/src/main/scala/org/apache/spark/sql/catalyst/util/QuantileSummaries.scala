@@ -105,7 +105,7 @@ class QuantileSummaries(
         if (newSamples.isEmpty || (sampleIdx == sampled.length && opsIdx == sorted.length - 1)) {
           0
         } else {
-          math.floor(2 * relativeError * currentCount).toInt
+          math.floor(2 * relativeError * currentCount).toLong
         }
 
       val tuple = Stats(currentSample, 1, delta)
@@ -176,35 +176,37 @@ class QuantileSummaries(
    * @param quantile the target quantile
    * @return
    */
-  def query(quantile: Double): Double = {
+  def query(quantile: Double): Option[Double] = {
     require(quantile >= 0 && quantile <= 1.0, "quantile should be in the range [0.0, 1.0]")
     require(headSampled.isEmpty,
       "Cannot operate on an uncompressed summary, call compress() first")
 
+    if (sampled.isEmpty) return None
+
     if (quantile <= relativeError) {
-      return sampled.head.value
+      return Some(sampled.head.value)
     }
 
     if (quantile >= 1 - relativeError) {
-      return sampled.last.value
+      return Some(sampled.last.value)
     }
 
     // Target rank
-    val rank = math.ceil(quantile * count).toInt
-    val targetError = math.ceil(relativeError * count)
+    val rank = math.ceil(quantile * count).toLong
+    val targetError = relativeError * count
     // Minimum rank at current sample
-    var minRank = 0
-    var i = 1
+    var minRank = 0L
+    var i = 0
     while (i < sampled.length - 1) {
       val curSample = sampled(i)
       minRank += curSample.g
       val maxRank = minRank + curSample.delta
       if (maxRank - targetError <= rank && rank <= minRank + targetError) {
-        return curSample.value
+        return Some(curSample.value)
       }
       i += 1
     }
-    sampled.last.value
+    Some(sampled.last.value)
   }
 }
 
@@ -233,7 +235,7 @@ object QuantileSummaries {
    * @param g the minimum rank jump from the previous value's minimum rank
    * @param delta the maximum span of the rank.
    */
-  case class Stats(value: Double, g: Int, delta: Int)
+  case class Stats(value: Double, g: Long, delta: Long)
 
   private def compressImmut(
       currentSamples: IndexedSeq[Stats],

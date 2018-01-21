@@ -18,8 +18,8 @@
 package org.apache.spark.shuffle
 
 import java.io._
-
-import com.google.common.io.ByteStreams
+import java.nio.channels.Channels
+import java.nio.file.Files
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -61,7 +61,7 @@ private[spark] class IndexShuffleBlockResolver(
 
   /**
    * Remove data file and index file that contain the output data from one map.
-   * */
+   */
   def removeDataByMap(shuffleId: Int, mapId: Int): Unit = {
     var file = getDataFile(shuffleId, mapId)
     if (file.exists()) {
@@ -132,7 +132,7 @@ private[spark] class IndexShuffleBlockResolver(
    * replace them with new ones.
    *
    * Note: the `lengths` will be updated to match the existing index file if use the existing ones.
-   * */
+   */
   def writeIndexFileAndCommit(
       shuffleId: Int,
       mapId: Int,
@@ -196,11 +196,24 @@ private[spark] class IndexShuffleBlockResolver(
     // find out the consolidated file, then the offset within that from our index
     val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
 
-    val in = new DataInputStream(new FileInputStream(indexFile))
+    // SPARK-22982: if this FileInputStream's position is seeked forward by another piece of code
+    // which is incorrectly using our file descriptor then this code will fetch the wrong offsets
+    // (which may cause a reducer to be sent a different reducer's data). The explicit position
+    // checks added here were a useful debugging aid during SPARK-22982 and may help prevent this
+    // class of issue from re-occurring in the future which is why they are left here even though
+    // SPARK-22982 is fixed.
+    val channel = Files.newByteChannel(indexFile.toPath)
+    channel.position(blockId.reduceId * 8)
+    val in = new DataInputStream(Channels.newInputStream(channel))
     try {
-      ByteStreams.skipFully(in, blockId.reduceId * 8)
       val offset = in.readLong()
       val nextOffset = in.readLong()
+      val actualPosition = channel.position()
+      val expectedPosition = blockId.reduceId * 8 + 16
+      if (actualPosition != expectedPosition) {
+        throw new Exception(s"SPARK-22982: Incorrect channel position after index file reads: " +
+          s"expected $expectedPosition but actual position was $actualPosition.")
+      }
       new FileSegmentManagedBuffer(
         transportConf,
         getDataFile(blockId.shuffleId, blockId.mapId),

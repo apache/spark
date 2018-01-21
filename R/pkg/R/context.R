@@ -258,7 +258,7 @@ includePackage <- function(sc, pkg) {
 #'
 #' # Large Matrix object that we want to broadcast
 #' randomMat <- matrix(nrow=100, ncol=10, data=rnorm(1000))
-#' randomMatBr <- broadcast(sc, randomMat)
+#' randomMatBr <- broadcastRDD(sc, randomMat)
 #'
 #' # Use the broadcast variable inside the function
 #' useBroadcast <- function(x) {
@@ -266,7 +266,7 @@ includePackage <- function(sc, pkg) {
 #' }
 #' sumRDD <- lapply(rdd, useBroadcast)
 #'}
-broadcast <- function(sc, object) {
+broadcastRDD <- function(sc, object) {
   objName <- as.character(substitute(object))
   serializedObj <- serialize(object, connection = NULL)
 
@@ -291,7 +291,7 @@ broadcast <- function(sc, object) {
 #' rdd <- parallelize(sc, 1:2, 2L)
 #' checkpoint(rdd)
 #'}
-setCheckpointDir <- function(sc, dirName) {
+setCheckpointDirSC <- function(sc, dirName) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
 }
 
@@ -329,8 +329,14 @@ spark.addFile <- function(path, recursive = FALSE) {
 #' spark.getSparkFilesRootDirectory()
 #'}
 #' @note spark.getSparkFilesRootDirectory since 2.1.0
-spark.getSparkFilesRootDirectory <- function() {
-  callJStatic("org.apache.spark.SparkFiles", "getRootDirectory")
+spark.getSparkFilesRootDirectory <- function() { # nolint
+  if (Sys.getenv("SPARKR_IS_RUNNING_ON_WORKER") == "") {
+    # Running on driver.
+    callJStatic("org.apache.spark.SparkFiles", "getRootDirectory")
+  } else {
+    # Running on worker.
+    Sys.getenv("SPARKR_SPARKFILES_ROOT_DIR")
+  }
 }
 
 #' Get the absolute path of a file added through spark.addFile.
@@ -345,7 +351,13 @@ spark.getSparkFilesRootDirectory <- function() {
 #'}
 #' @note spark.getSparkFiles since 2.1.0
 spark.getSparkFiles <- function(fileName) {
-  callJStatic("org.apache.spark.SparkFiles", "get", as.character(fileName))
+  if (Sys.getenv("SPARKR_IS_RUNNING_ON_WORKER") == "") {
+    # Running on driver.
+    callJStatic("org.apache.spark.SparkFiles", "get", as.character(fileName))
+  } else {
+    # Running on worker.
+    file.path(spark.getSparkFilesRootDirectory(), as.character(fileName))
+  }
 }
 
 #' Run a function over a list of elements, distributing the computations with Spark
@@ -409,4 +421,23 @@ spark.lapply <- function(list, func) {
 setLogLevel <- function(level) {
   sc <- getSparkContext()
   invisible(callJMethod(sc, "setLogLevel", level))
+}
+
+#' Set checkpoint directory
+#'
+#' Set the directory under which SparkDataFrame are going to be checkpointed. The directory must be
+#' a HDFS path if running on a cluster.
+#'
+#' @rdname setCheckpointDir
+#' @param directory Directory path to checkpoint to
+#' @seealso \link{checkpoint}
+#' @export
+#' @examples
+#'\dontrun{
+#' setCheckpointDir("/checkpoint")
+#'}
+#' @note setCheckpointDir since 2.2.0
+setCheckpointDir <- function(directory) {
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(directory))))
 }

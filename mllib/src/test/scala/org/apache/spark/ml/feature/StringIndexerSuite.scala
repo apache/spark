@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
@@ -45,12 +45,11 @@ class StringIndexerSuite
     val indexer = new StringIndexer()
       .setInputCol("label")
       .setOutputCol("labelIndex")
-      .fit(df)
+    val indexerModel = indexer.fit(df)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(indexer)
+    MLTestingUtils.checkCopyAndUids(indexer, indexerModel)
 
-    val transformed = indexer.transform(df)
+    val transformed = indexerModel.transform(df)
     val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
     assert(attr.values.get === Array("a", "c", "b"))
@@ -64,7 +63,7 @@ class StringIndexerSuite
 
   test("StringIndexerUnseen") {
     val data = Seq((0, "a"), (1, "b"), (4, "b"))
-    val data2 = Seq((0, "a"), (1, "b"), (2, "c"))
+    val data2 = Seq((0, "a"), (1, "b"), (2, "c"), (3, "d"))
     val df = data.toDF("id", "label")
     val df2 = data2.toDF("id", "label")
     val indexer = new StringIndexer()
@@ -75,22 +74,32 @@ class StringIndexerSuite
     intercept[SparkException] {
       indexer.transform(df2).collect()
     }
-    val indexerSkipInvalid = new StringIndexer()
-      .setInputCol("label")
-      .setOutputCol("labelIndex")
-      .setHandleInvalid("skip")
-      .fit(df)
+
+    indexer.setHandleInvalid("skip")
     // Verify that we skip the c record
-    val transformed = indexerSkipInvalid.transform(df2)
-    val attr = Attribute.fromStructField(transformed.schema("labelIndex"))
+    val transformedSkip = indexer.transform(df2)
+    val attrSkip = Attribute.fromStructField(transformedSkip.schema("labelIndex"))
       .asInstanceOf[NominalAttribute]
-    assert(attr.values.get === Array("b", "a"))
-    val output = transformed.select("id", "labelIndex").rdd.map { r =>
+    assert(attrSkip.values.get === Array("b", "a"))
+    val outputSkip = transformedSkip.select("id", "labelIndex").rdd.map { r =>
       (r.getInt(0), r.getDouble(1))
     }.collect().toSet
     // a -> 1, b -> 0
-    val expected = Set((0, 1.0), (1, 0.0))
-    assert(output === expected)
+    val expectedSkip = Set((0, 1.0), (1, 0.0))
+    assert(outputSkip === expectedSkip)
+
+    indexer.setHandleInvalid("keep")
+    // Verify that we keep the unseen records
+    val transformedKeep = indexer.transform(df2)
+    val attrKeep = Attribute.fromStructField(transformedKeep.schema("labelIndex"))
+      .asInstanceOf[NominalAttribute]
+    assert(attrKeep.values.get === Array("b", "a", "__unknown"))
+    val outputKeep = transformedKeep.select("id", "labelIndex").rdd.map { r =>
+      (r.getInt(0), r.getDouble(1))
+    }.collect().toSet
+    // a -> 1, b -> 0, c -> 2, d -> 3
+    val expectedKeep = Set((0, 1.0), (1, 0.0), (2, 2.0), (3, 2.0))
+    assert(outputKeep === expectedKeep)
   }
 
   test("StringIndexer with a numeric input column") {
@@ -110,6 +119,51 @@ class StringIndexerSuite
     // 100 -> 0, 200 -> 2, 300 -> 1
     val expected = Set((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0))
     assert(output === expected)
+  }
+
+  test("StringIndexer with NULLs") {
+    val data: Seq[(Int, String)] = Seq((0, "a"), (1, "b"), (2, "b"), (3, null))
+    val data2: Seq[(Int, String)] = Seq((0, "a"), (1, "b"), (3, null))
+    val df = data.toDF("id", "label")
+    val df2 = data2.toDF("id", "label")
+
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+
+    withClue("StringIndexer should throw error when setHandleInvalid=error " +
+      "when given NULL values") {
+      intercept[SparkException] {
+        indexer.setHandleInvalid("error")
+        indexer.fit(df).transform(df2).collect()
+      }
+    }
+
+    indexer.setHandleInvalid("skip")
+    val transformedSkip = indexer.fit(df).transform(df2)
+    val attrSkip = Attribute
+      .fromStructField(transformedSkip.schema("labelIndex"))
+      .asInstanceOf[NominalAttribute]
+    assert(attrSkip.values.get === Array("b", "a"))
+    val outputSkip = transformedSkip.select("id", "labelIndex").rdd.map { r =>
+      (r.getInt(0), r.getDouble(1))
+    }.collect().toSet
+    // a -> 1, b -> 0
+    val expectedSkip = Set((0, 1.0), (1, 0.0))
+    assert(outputSkip === expectedSkip)
+
+    indexer.setHandleInvalid("keep")
+    val transformedKeep = indexer.fit(df).transform(df2)
+    val attrKeep = Attribute
+      .fromStructField(transformedKeep.schema("labelIndex"))
+      .asInstanceOf[NominalAttribute]
+    assert(attrKeep.values.get === Array("b", "a", "__unknown"))
+    val outputKeep = transformedKeep.select("id", "labelIndex").rdd.map { r =>
+      (r.getInt(0), r.getDouble(1))
+    }.collect().toSet
+    // a -> 1, b -> 0, null -> 2
+    val expectedKeep = Set((0, 1.0), (1, 0.0), (3, 2.0))
+    assert(outputKeep === expectedKeep)
   }
 
   test("StringIndexerModel should keep silent if the input column does not exist.") {
@@ -236,5 +290,45 @@ class StringIndexerSuite
     val attrs =
       NominalAttribute.decodeStructField(transformed.schema("labelIndex"), preserveName = true)
     assert(attrs.name.nonEmpty && attrs.name.get === "labelIndex")
+  }
+
+  test("StringIndexer order types") {
+    val data = Seq((0, "b"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "b"))
+    val df = data.toDF("id", "label")
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+
+    val expected = Seq(Set((0, 0.0), (1, 0.0), (2, 2.0), (3, 1.0), (4, 1.0), (5, 0.0)),
+      Set((0, 2.0), (1, 2.0), (2, 0.0), (3, 1.0), (4, 1.0), (5, 2.0)),
+      Set((0, 1.0), (1, 1.0), (2, 0.0), (3, 2.0), (4, 2.0), (5, 1.0)),
+      Set((0, 1.0), (1, 1.0), (2, 2.0), (3, 0.0), (4, 0.0), (5, 1.0)))
+
+    var idx = 0
+    for (orderType <- StringIndexer.supportedStringOrderType) {
+      val transformed = indexer.setStringOrderType(orderType).fit(df).transform(df)
+      val output = transformed.select("id", "labelIndex").rdd.map { r =>
+        (r.getInt(0), r.getDouble(1))
+      }.collect().toSet
+      assert(output === expected(idx))
+      idx += 1
+    }
+  }
+
+  test("SPARK-22446: StringIndexerModel's indexer UDF should not apply on filtered data") {
+    val df = List(
+         ("A", "London", "StrA"),
+         ("B", "Bristol", null),
+         ("C", "New York", "StrC")).toDF("ID", "CITY", "CONTENT")
+
+    val dfNoBristol = df.filter($"CONTENT".isNotNull)
+
+    val model = new StringIndexer()
+      .setInputCol("CITY")
+      .setOutputCol("CITYIndexed")
+      .fit(dfNoBristol)
+
+    val dfWithIndex = model.transform(dfNoBristol)
+    assert(dfWithIndex.filter($"CITYIndexed" === 1.0).count == 1)
   }
 }

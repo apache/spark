@@ -27,7 +27,7 @@ description: GraphX graph processing library guide for Spark SPARK_VERSION_SHORT
 [EdgeContext]: api/scala/index.html#org.apache.spark.graphx.EdgeContext
 [GraphOps.collectNeighborIds]: api/scala/index.html#org.apache.spark.graphx.GraphOps@collectNeighborIds(EdgeDirection):VertexRDD[Array[VertexId]]
 [GraphOps.collectNeighbors]: api/scala/index.html#org.apache.spark.graphx.GraphOps@collectNeighbors(EdgeDirection):VertexRDD[Array[(VertexId,VD)]]
-[RDD Persistence]: programming-guide.html#rdd-persistence
+[RDD Persistence]: rdd-programming-guide.html#rdd-persistence
 [Graph.cache]: api/scala/index.html#org.apache.spark.graphx.Graph@cache():Graph[VD,ED]
 [GraphOps.pregel]: api/scala/index.html#org.apache.spark.graphx.GraphOps@pregel[A](A,Int,EdgeDirection)((VertexId,VD,A)⇒VD,(EdgeTriplet[VD,ED])⇒Iterator[(VertexId,A)],(A,A)⇒A)(ClassTag[A]):Graph[VD,ED]
 [PartitionStrategy]: api/scala/index.html#org.apache.spark.graphx.PartitionStrategy$
@@ -708,7 +708,9 @@ messages remaining.
 > messaging function.  These constraints allow additional optimization within GraphX.
 
 The following is the type signature of the [Pregel operator][GraphOps.pregel] as well as a *sketch*
-of its implementation (note calls to graph.cache have been removed):
+of its implementation (note: to avoid stackOverflowError due to long lineage chains, pregel support periodically
+checkpoint graph and messages by setting "spark.graphx.pregel.checkpointInterval" to a positive number,
+say 10. And set checkpoint directory as well using SparkContext.setCheckpointDir(directory: String)):
 
 {% highlight scala %}
 class GraphOps[VD, ED] {
@@ -722,6 +724,7 @@ class GraphOps[VD, ED] {
     : Graph[VD, ED] = {
     // Receive the initial message at each vertex
     var g = mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) ).cache()
+
     // compute the messages
     var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
     var activeMessages = messages.count()
@@ -734,8 +737,8 @@ class GraphOps[VD, ED] {
       // Send new messages, skipping edges where neither side received a message. We must cache
       // messages so it can be materialized on the next line, allowing us to uncache the previous
       // iteration.
-      messages = g.mapReduceTriplets(
-        sendMsg, mergeMsg, Some((oldMessages, activeDirection))).cache()
+      messages = GraphXUtils.mapReduceTriplets(
+        g, sendMsg, mergeMsg, Some((oldMessages, activeDirection))).cache()
       activeMessages = messages.count()
       i += 1
     }
@@ -925,7 +928,7 @@ switch to 2D-partitioning or other heuristics included in GraphX.
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-Once the edges have be partitioned the key challenge to efficient graph-parallel computation is
+Once the edges have been partitioned the key challenge to efficient graph-parallel computation is
 efficiently joining vertex attributes with the edges.  Because real-world graphs typically have more
 edges than vertices, we move vertex attributes to the edges.  Because not all partitions will
 contain edges adjacent to all vertices we internally maintain a routing table which identifies where

@@ -29,9 +29,9 @@ setOldClass("jobj")
 #' @param col1 name of the first column. Distinct items will make the first item of each row.
 #' @param col2 name of the second column. Distinct items will make the column names of the output.
 #' @return a local R data.frame representing the contingency table. The first column of each row
-#'         will be the distinct values of \code{col1} and the column names will be the distinct values
-#'         of \code{col2}. The name of the first column will be "\code{col1}_\code{col2}". Pairs
-#'         that have no occurrences will have zero as their counts.
+#'         will be the distinct values of \code{col1} and the column names will be the distinct
+#'         values of \code{col2}. The name of the first column will be "\code{col1}_\code{col2}".
+#'         Pairs that have no occurrences will have zero as their counts.
 #'
 #' @rdname crosstab
 #' @name crosstab
@@ -52,22 +52,23 @@ setMethod("crosstab",
             collect(dataFrame(sct))
           })
 
-#' Calculate the sample covariance of two numerical columns of a SparkDataFrame.
+#' @details
+#' \code{cov}: When applied to SparkDataFrame, this calculates the sample covariance of two
+#' numerical columns of \emph{one} SparkDataFrame.
 #'
 #' @param colName1 the name of the first column
 #' @param colName2 the name of the second column
 #' @return The covariance of the two columns.
 #'
 #' @rdname cov
-#' @name cov
 #' @aliases cov,SparkDataFrame-method
 #' @family stat functions
 #' @export
 #' @examples
-#'\dontrun{
-#' df <- read.json("/path/to/file.json")
-#' cov <- cov(df, "title", "gender")
-#' }
+#'
+#' \dontrun{
+#' cov(df, "mpg", "hp")
+#' cov(df, df$mpg, df$hp)}
 #' @note cov since 1.6.0
 setMethod("cov",
           signature(x = "SparkDataFrame"),
@@ -93,11 +94,10 @@ setMethod("cov",
 #' @family stat functions
 #' @export
 #' @examples
-#'\dontrun{
-#' df <- read.json("/path/to/file.json")
-#' corr <- corr(df, "title", "gender")
-#' corr <- corr(df, "title", "gender", method = "pearson")
-#' }
+#'
+#' \dontrun{
+#' corr(df, "mpg", "hp")
+#' corr(df, "mpg", "hp", method = "pearson")}
 #' @note corr since 1.6.0
 setMethod("corr",
           signature(x = "SparkDataFrame"),
@@ -149,7 +149,8 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' This method implements a variation of the Greenwald-Khanna algorithm (with some speed
 #' optimizations). The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670
 #' Space-efficient Online Computation of Quantile Summaries]] by Greenwald and Khanna.
-#' Note that rows containing any NA values will be removed before calculation.
+#' Note that NA values will be ignored in numerical columns before calculation. For
+#'   columns only containing NA values, an empty list is returned.
 #'
 #' @param x A SparkDataFrame.
 #' @param cols A single column name, or a list of names for multiple columns.
@@ -158,8 +159,8 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' @param relativeError The relative target precision to achieve (>= 0). If set to zero,
 #'                      the exact quantiles are computed, which could be very expensive.
 #'                      Note that values greater than 1 are accepted but give the same result as 1.
-#' @return The approximate quantiles at the given probabilities. If the input is a single column name,
-#'         the output is a list of approximate quantiles in that column; If the input is
+#' @return The approximate quantiles at the given probabilities. If the input is a single column
+#'         name, the output is a list of approximate quantiles in that column; If the input is
 #'         multiple column names, the output should be a list, and each element in it is a list of
 #'         numeric values which represents the approximate quantiles in corresponding column.
 #'

@@ -53,8 +53,15 @@ case object NullsLast extends NullOrdering{
 /**
  * An expression that can be used to sort a tuple.  This class extends expression primarily so that
  * transformations over expression will descend into its child.
+ * `sameOrderExpressions` is a set of expressions with the same sort order as the child. It is
+ * derived from equivalence relation in an operator, e.g. left/right keys of an inner sort merge
+ * join.
  */
-case class SortOrder(child: Expression, direction: SortDirection, nullOrdering: NullOrdering)
+case class SortOrder(
+    child: Expression,
+    direction: SortDirection,
+    nullOrdering: NullOrdering,
+    sameOrderExpressions: Set[Expression])
   extends UnaryExpression with Unevaluable {
 
   /** Sort order is not foldable because we don't have an eval for it. */
@@ -75,11 +82,42 @@ case class SortOrder(child: Expression, direction: SortDirection, nullOrdering: 
   override def sql: String = child.sql + " " + direction.sql + " " + nullOrdering.sql
 
   def isAscending: Boolean = direction == Ascending
+
+  def satisfies(required: SortOrder): Boolean = {
+    (sameOrderExpressions + child).exists(required.child.semanticEquals) &&
+      direction == required.direction && nullOrdering == required.nullOrdering
+  }
 }
 
 object SortOrder {
-  def apply(child: Expression, direction: SortDirection): SortOrder = {
-    new SortOrder(child, direction, direction.defaultNullOrdering)
+  def apply(
+     child: Expression,
+     direction: SortDirection,
+     sameOrderExpressions: Set[Expression] = Set.empty): SortOrder = {
+    new SortOrder(child, direction, direction.defaultNullOrdering, sameOrderExpressions)
+  }
+
+  /**
+   * Returns if a sequence of SortOrder satisfies another sequence of SortOrder.
+   *
+   * SortOrder sequence A satisfies SortOrder sequence B if and only if B is an equivalent of A
+   * or of A's prefix. Here are examples of ordering A satisfying ordering B:
+   * <ul>
+   *   <li>ordering A is [x, y] and ordering B is [x]</li>
+   *   <li>ordering A is [x(sameOrderExpressions=x1)] and ordering B is [x1]</li>
+   *   <li>ordering A is [x(sameOrderExpressions=x1), y] and ordering B is [x1]</li>
+   * </ul>
+   */
+  def orderingSatisfies(ordering1: Seq[SortOrder], ordering2: Seq[SortOrder]): Boolean = {
+    if (ordering2.isEmpty) {
+      true
+    } else if (ordering2.length > ordering1.length) {
+      false
+    } else {
+      ordering2.zip(ordering1).forall {
+        case (o2, o1) => o1.satisfies(o2)
+      }
+    }
   }
 }
 

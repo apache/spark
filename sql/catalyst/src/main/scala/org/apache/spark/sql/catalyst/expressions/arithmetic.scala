@@ -26,7 +26,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the negated value of `expr`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1);
        -1
@@ -89,7 +89,7 @@ case class UnaryPositive(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the absolute value of the numeric value.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(-1);
        1
@@ -113,7 +113,7 @@ case class Abs(child: Expression)
   protected override def nullSafeEval(input: Any): Any = numeric.abs(input)
 }
 
-abstract class BinaryArithmetic extends BinaryOperator {
+abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
 
   override def dataType: DataType = left.dataType
 
@@ -141,12 +141,12 @@ object BinaryArithmetic {
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`+`expr2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT 1 _FUNC_ 2;
        3
   """)
-case class Add(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
+case class Add(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -177,13 +177,12 @@ case class Add(left: Expression, right: Expression) extends BinaryArithmetic wit
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`-`expr2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT 2 _FUNC_ 1;
        1
   """)
-case class Subtract(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
+case class Subtract(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
 
@@ -214,13 +213,12 @@ case class Subtract(left: Expression, right: Expression)
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`*`expr2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT 2 _FUNC_ 3;
        6
   """)
-case class Multiply(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
+case class Multiply(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = NumericType
 
@@ -235,7 +233,7 @@ case class Multiply(left: Expression, right: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns `expr1`/`expr2`. It always performs floating point division.",
-  extended = """
+  examples = """
     Examples:
       > SELECT 3 _FUNC_ 2;
        1.5
@@ -243,8 +241,7 @@ case class Multiply(left: Expression, right: Expression)
        1.0
   """)
 // scalastyle:on line.size.limit
-case class Divide(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
+case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
@@ -319,13 +316,14 @@ case class Divide(left: Expression, right: Expression)
 
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns the remainder after `expr1`/`expr2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT 2 _FUNC_ 1.8;
        0.2
+      > SELECT MOD(2, 1.8);
+       0.2
   """)
-case class Remainder(left: Expression, right: Expression)
-    extends BinaryArithmetic with NullIntolerant {
+case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def inputType: AbstractDataType = NumericType
 
@@ -405,14 +403,14 @@ case class Remainder(left: Expression, right: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns the positive value of `expr1` mod `expr2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(10, 3);
        1
       > SELECT _FUNC_(-10, 3);
        2
   """)
-case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic with NullIntolerant {
+case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
 
   override def toString: String = s"pmod($left, $right)"
 
@@ -423,52 +421,101 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic wi
 
   override def inputType: AbstractDataType = NumericType
 
-  protected override def nullSafeEval(left: Any, right: Any) =
-    dataType match {
-      case IntegerType => pmod(left.asInstanceOf[Int], right.asInstanceOf[Int])
-      case LongType => pmod(left.asInstanceOf[Long], right.asInstanceOf[Long])
-      case ShortType => pmod(left.asInstanceOf[Short], right.asInstanceOf[Short])
-      case ByteType => pmod(left.asInstanceOf[Byte], right.asInstanceOf[Byte])
-      case FloatType => pmod(left.asInstanceOf[Float], right.asInstanceOf[Float])
-      case DoubleType => pmod(left.asInstanceOf[Double], right.asInstanceOf[Double])
-      case _: DecimalType => pmod(left.asInstanceOf[Decimal], right.asInstanceOf[Decimal])
+  override def nullable: Boolean = true
+
+  override def eval(input: InternalRow): Any = {
+    val input2 = right.eval(input)
+    if (input2 == null || input2 == 0) {
+      null
+    } else {
+      val input1 = left.eval(input)
+      if (input1 == null) {
+        null
+      } else {
+        input1 match {
+          case i: Integer => pmod(i, input2.asInstanceOf[java.lang.Integer])
+          case l: Long => pmod(l, input2.asInstanceOf[java.lang.Long])
+          case s: Short => pmod(s, input2.asInstanceOf[java.lang.Short])
+          case b: Byte => pmod(b, input2.asInstanceOf[java.lang.Byte])
+          case f: Float => pmod(f, input2.asInstanceOf[java.lang.Float])
+          case d: Double => pmod(d, input2.asInstanceOf[java.lang.Double])
+          case d: Decimal => pmod(d, input2.asInstanceOf[Decimal])
+        }
+      }
     }
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-      val remainder = ctx.freshName("remainder")
-      dataType match {
-        case dt: DecimalType =>
-          val decimalAdd = "$plus"
-          s"""
-            ${ctx.javaType(dataType)} $remainder = $eval1.remainder($eval2);
-            if ($remainder.compare(new org.apache.spark.sql.types.Decimal().set(0)) < 0) {
-              ${ev.value} = ($remainder.$decimalAdd($eval2)).remainder($eval2);
-            } else {
-              ${ev.value} = $remainder;
-            }
-          """
-        // byte and short are casted into int when add, minus, times or divide
-        case ByteType | ShortType =>
-          s"""
-            ${ctx.javaType(dataType)} $remainder = (${ctx.javaType(dataType)})($eval1 % $eval2);
-            if ($remainder < 0) {
-              ${ev.value} = (${ctx.javaType(dataType)})(($remainder + $eval2) % $eval2);
-            } else {
-              ${ev.value} = $remainder;
-            }
-          """
-        case _ =>
-          s"""
-            ${ctx.javaType(dataType)} $remainder = $eval1 % $eval2;
-            if ($remainder < 0) {
-              ${ev.value} = ($remainder + $eval2) % $eval2;
-            } else {
-              ${ev.value} = $remainder;
-            }
-          """
-      }
-    })
+    val eval1 = left.genCode(ctx)
+    val eval2 = right.genCode(ctx)
+    val isZero = if (dataType.isInstanceOf[DecimalType]) {
+      s"${eval2.value}.isZero()"
+    } else {
+      s"${eval2.value} == 0"
+    }
+    val remainder = ctx.freshName("remainder")
+    val javaType = ctx.javaType(dataType)
+
+    val result = dataType match {
+      case DecimalType.Fixed(_, _) =>
+        val decimalAdd = "$plus"
+        s"""
+          ${ctx.javaType(dataType)} $remainder = ${eval1.value}.remainder(${eval2.value});
+          if ($remainder.compare(new org.apache.spark.sql.types.Decimal().set(0)) < 0) {
+            ${ev.value}=($remainder.$decimalAdd(${eval2.value})).remainder(${eval2.value});
+          } else {
+            ${ev.value}=$remainder;
+          }
+        """
+      // byte and short are casted into int when add, minus, times or divide
+      case ByteType | ShortType =>
+        s"""
+          ${ctx.javaType(dataType)} $remainder =
+            (${ctx.javaType(dataType)})(${eval1.value} % ${eval2.value});
+          if ($remainder < 0) {
+            ${ev.value}=(${ctx.javaType(dataType)})(($remainder + ${eval2.value}) % ${eval2.value});
+          } else {
+            ${ev.value}=$remainder;
+          }
+        """
+      case _ =>
+        s"""
+          ${ctx.javaType(dataType)} $remainder = ${eval1.value} % ${eval2.value};
+          if ($remainder < 0) {
+            ${ev.value}=($remainder + ${eval2.value}) % ${eval2.value};
+          } else {
+            ${ev.value}=$remainder;
+          }
+        """
+    }
+
+    if (!left.nullable && !right.nullable) {
+      ev.copy(code = s"""
+        ${eval2.code}
+        boolean ${ev.isNull} = false;
+        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
+        if ($isZero) {
+          ${ev.isNull} = true;
+        } else {
+          ${eval1.code}
+          $result
+        }""")
+    } else {
+      ev.copy(code = s"""
+        ${eval2.code}
+        boolean ${ev.isNull} = false;
+        $javaType ${ev.value} = ${ctx.defaultValue(javaType)};
+        if (${eval2.isNull} || $isZero) {
+          ${ev.isNull} = true;
+        } else {
+          ${eval1.code}
+          if (${eval1.isNull}) {
+            ${ev.isNull} = true;
+          } else {
+            $result
+          }
+        }""")
+    }
   }
 
   private def pmod(a: Int, n: Int): Int = {
@@ -503,7 +550,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic wi
 
   private def pmod(a: Decimal, n: Decimal): Decimal = {
     val r = a % n
-    if (r.compare(Decimal.ZERO) < 0) {(r + n) % n} else r
+    if (r != null && r.compare(Decimal.ZERO) < 0) {(r + n) % n} else r
   }
 
   override def sql: String = s"$prettyName(${left.sql}, ${right.sql})"
@@ -515,7 +562,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic wi
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns the least value of all parameters, skipping null values.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        2
@@ -529,13 +576,14 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(s"LEAST requires at least 2 arguments")
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName requires at least two arguments")
     } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
           s" got LEAST(${children.map(_.dataType.simpleString).mkString(", ")}).")
     } else {
-      TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)
+      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }
   }
 
@@ -554,23 +602,36 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    val first = evalChildren(0)
-    val rest = evalChildren.drop(1)
-    def updateEval(eval: ExprCode): String = {
+    ev.isNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
+    val evals = evalChildren.map(eval =>
       s"""
-        ${eval.code}
-        if (!${eval.isNull} && (${ev.isNull} ||
-          ${ctx.genGreater(dataType, ev.value, eval.value)})) {
-          ${ev.isNull} = false;
-          ${ev.value} = ${eval.value};
-        }
-      """
-    }
-    ev.copy(code = s"""
-      ${first.code}
-      boolean ${ev.isNull} = ${first.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
-      ${rest.map(updateEval).mkString("\n")}""")
+         |${eval.code}
+         |if (!${eval.isNull} && (${ev.isNull} ||
+         |  ${ctx.genGreater(dataType, ev.value, eval.value)})) {
+         |  ${ev.isNull} = false;
+         |  ${ev.value} = ${eval.value};
+         |}
+      """.stripMargin
+    )
+
+    val resultType = ctx.javaType(dataType)
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = evals,
+      funcName = "least",
+      extraArguments = Seq(resultType -> ev.value),
+      returnType = resultType,
+      makeSplitFunction = body =>
+        s"""
+          |$body
+          |return ${ev.value};
+        """.stripMargin,
+      foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
+    ev.copy(code =
+      s"""
+         |${ev.isNull} = true;
+         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+         |$codes
+      """.stripMargin)
   }
 }
 
@@ -580,7 +641,7 @@ case class Least(children: Seq[Expression]) extends Expression {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns the greatest value of all parameters, skipping null values.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        10
@@ -594,13 +655,14 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length <= 1) {
-      TypeCheckResult.TypeCheckFailure(s"GREATEST requires at least 2 arguments")
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName requires at least two arguments")
     } else if (children.map(_.dataType).distinct.count(_ != NullType) > 1) {
       TypeCheckResult.TypeCheckFailure(
         s"The expressions should all have the same type," +
           s" got GREATEST(${children.map(_.dataType.simpleString).mkString(", ")}).")
     } else {
-      TypeUtils.checkForOrderingExpr(dataType, "function " + prettyName)
+      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
     }
   }
 
@@ -619,22 +681,35 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    val first = evalChildren(0)
-    val rest = evalChildren.drop(1)
-    def updateEval(eval: ExprCode): String = {
+    ev.isNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
+    val evals = evalChildren.map(eval =>
       s"""
-        ${eval.code}
-        if (!${eval.isNull} && (${ev.isNull} ||
-          ${ctx.genGreater(dataType, eval.value, ev.value)})) {
-          ${ev.isNull} = false;
-          ${ev.value} = ${eval.value};
-        }
-      """
-    }
-    ev.copy(code = s"""
-      ${first.code}
-      boolean ${ev.isNull} = ${first.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${first.value};
-      ${rest.map(updateEval).mkString("\n")}""")
+         |${eval.code}
+         |if (!${eval.isNull} && (${ev.isNull} ||
+         |  ${ctx.genGreater(dataType, eval.value, ev.value)})) {
+         |  ${ev.isNull} = false;
+         |  ${ev.value} = ${eval.value};
+         |}
+      """.stripMargin
+    )
+
+    val resultType = ctx.javaType(dataType)
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = evals,
+      funcName = "greatest",
+      extraArguments = Seq(resultType -> ev.value),
+      returnType = resultType,
+      makeSplitFunction = body =>
+        s"""
+           |$body
+           |return ${ev.value};
+        """.stripMargin,
+      foldFunctions = _.map(funcCall => s"${ev.value} = $funcCall;").mkString("\n"))
+    ev.copy(code =
+      s"""
+         |${ev.isNull} = true;
+         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+         |$codes
+      """.stripMargin)
   }
 }

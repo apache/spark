@@ -29,9 +29,9 @@
 set -o pipefail
 set -e
 
-FWDIR="$(cd `dirname "${BASH_SOURCE[0]}"`; pwd)"
-pushd $FWDIR > /dev/null
-. $FWDIR/find-r.sh
+FWDIR="$(cd "`dirname "${BASH_SOURCE[0]}"`"; pwd)"
+pushd "$FWDIR" > /dev/null
+. "$FWDIR/find-r.sh"
 
 # Generate Rd files if devtools is installed
-"$R_SCRIPT_PATH/"Rscript -e ' if("devtools" %in% rownames(installed.packages())) { library(devtools); devtools::document(pkg="./pkg", roclets=c("rd")) }'
+"$R_SCRIPT_PATH/Rscript" -e ' if("devtools" %in% rownames(installed.packages())) { library(devtools); devtools::document(pkg="./pkg", roclets=c("rd")) }'

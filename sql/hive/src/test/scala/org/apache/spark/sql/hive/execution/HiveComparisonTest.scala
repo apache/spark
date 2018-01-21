@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io._
 import java.nio.charset.StandardCharsets
 import java.util
+import java.util.Locale
 
 import scala.util.control.NonFatal
 
@@ -30,6 +31,7 @@ import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
 
@@ -45,6 +47,8 @@ import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
  */
 abstract class HiveComparisonTest
   extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen {
+
+  override protected val enableAutoThreadAudit = false
 
   /**
    * Path to the test datasets. We find this by looking up "hive-test-path-helper.txt" file.
@@ -191,12 +195,7 @@ abstract class HiveComparisonTest
     "last_modified_by",
     "last_modified_time",
     "Owner:",
-    "COLUMN_STATS_ACCURATE",
     // The following are hive specific schema parameters which we do not need to match exactly.
-    "numFiles",
-    "numRows",
-    "rawDataSize",
-    "totalSize",
     "totalNumberFiles",
     "maxFileSize",
     "minFileSize"
@@ -207,6 +206,7 @@ abstract class HiveComparisonTest
   // This list contains indicators for those lines which do not have actual results and we
   // want to ignore.
   lazy val ignoredLineIndicators = Seq(
+    "# Detailed Table Information",
     "# Partition Information",
     "# col_name"
   )
@@ -298,10 +298,11 @@ abstract class HiveComparisonTest
         // thus the tables referenced in those DDL commands cannot be extracted for use by our
         // test table auto-loading mechanism. In addition, the tests which use the SHOW TABLES
         // command expect these tables to exist.
-        val hasShowTableCommand = queryList.exists(_.toLowerCase.contains("show tables"))
+        val hasShowTableCommand =
+          queryList.exists(_.toLowerCase(Locale.ROOT).contains("show tables"))
         for (table <- Seq("src", "srcpart")) {
           val hasMatchingQuery = queryList.exists { query =>
-            val normalizedQuery = query.toLowerCase.stripSuffix(";")
+            val normalizedQuery = query.toLowerCase(Locale.ROOT).stripSuffix(";")
             normalizedQuery.endsWith(table) ||
               normalizedQuery.contains(s"from $table") ||
               normalizedQuery.contains(s"from default.$table")
@@ -343,7 +344,10 @@ abstract class HiveComparisonTest
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
           val query = new TestHiveQueryExecution(queryString.replace("../../data", testDataPath))
-          try { (query, prepareAnswer(query, query.hiveResultString())) } catch {
+          def getResult(): Seq[String] = {
+            SQLExecution.withNewExecutionId(query.sparkSession, query)(query.hiveResultString())
+          }
+          try { (query, prepareAnswer(query, getResult())) } catch {
             case e: Throwable =>
               val errorMessage =
                 s"""
@@ -358,7 +362,7 @@ abstract class HiveComparisonTest
               stringToFile(new File(failedDirectory, testCaseName), errorMessage + consoleTestCase)
               fail(errorMessage)
           }
-        }.toSeq
+        }
 
         (queryList, hiveResults, catalystResults).zipped.foreach {
           case (query, hive, (hiveQuery, catalyst)) =>
@@ -369,6 +373,7 @@ abstract class HiveComparisonTest
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) &&
                 (!hiveQuery.logical.isInstanceOf[ShowFunctionsCommand]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeFunctionCommand]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeTableCommand]) &&
                 preparedHive != catalyst) {
 
               val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive
@@ -442,7 +447,7 @@ abstract class HiveComparisonTest
           "create table",
           "drop index"
         )
-        !queryList.map(_.toLowerCase).exists { query =>
+        !queryList.map(_.toLowerCase(Locale.ROOT)).exists { query =>
           excludedSubstrings.exists(s => query.contains(s))
         }
       }

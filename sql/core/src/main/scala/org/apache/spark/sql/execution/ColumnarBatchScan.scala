@@ -17,21 +17,23 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 
 /**
- * Helper trait for abstracting scan functionality using
- * [[org.apache.spark.sql.execution.vectorized.ColumnarBatch]]es.
+ * Helper trait for abstracting scan functionality using [[ColumnarBatch]]es.
  */
 private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
-  val inMemoryTableScan: InMemoryTableScanExec = null
+  def vectorTypes: Option[Seq[String]] = None
+
+  protected def supportsBatch: Boolean = true
+
+  protected def needsUnsafeRowConversion: Boolean = true
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -69,31 +71,36 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
    */
   // TODO: return ColumnarBatch.Rows instead
   override protected def doProduce(ctx: CodegenContext): String = {
-    val input = ctx.freshName("input")
     // PhysicalRDD always just has one input
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    val input = ctx.addMutableState("scala.collection.Iterator", "input",
+      v => s"$v = inputs[0];")
+    if (supportsBatch) {
+      produceBatches(ctx, input)
+    } else {
+      produceRows(ctx, input)
+    }
+  }
 
+  private def produceBatches(ctx: CodegenContext, input: String): String = {
     // metrics
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     val scanTimeMetric = metricTerm(ctx, "scanTime")
-    val scanTimeTotalNs = ctx.freshName("scanTime")
-    ctx.addMutableState("long", scanTimeTotalNs, s"$scanTimeTotalNs = 0;")
+    val scanTimeTotalNs = ctx.addMutableState(ctx.JAVA_LONG, "scanTime") // init as scanTime = 0
 
-    val columnarBatchClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch"
-    val batch = ctx.freshName("batch")
-    ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
+    val columnarBatchClz = classOf[ColumnarBatch].getName
+    val batch = ctx.addMutableState(columnarBatchClz, "batch")
 
-    val columnVectorClz = "org.apache.spark.sql.execution.vectorized.ColumnVector"
-    val idx = ctx.freshName("batchIdx")
-    ctx.addMutableState("int", idx, s"$idx = 0;")
-    val colVars = output.indices.map(i => ctx.freshName("colInstance" + i))
-    val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
-      ctx.addMutableState(columnVectorClz, name, s"$name = null;")
-      s"$name = $batch.column($i);"
-    }
+    val idx = ctx.addMutableState(ctx.JAVA_INT, "batchIdx") // init as batchIdx = 0
+    val columnVectorClzs = vectorTypes.getOrElse(
+      Seq.fill(output.indices.size)(classOf[ColumnVector].getName))
+    val (colVars, columnAssigns) = columnVectorClzs.zipWithIndex.map {
+      case (columnVectorClz, i) =>
+        val name = ctx.addMutableState(columnVectorClz, s"colInstance$i")
+        (name, s"$name = ($columnVectorClz) $batch.column($i);")
+    }.unzip
 
     val nextBatch = ctx.freshName("nextBatch")
-    ctx.addNewFunction(nextBatch,
+    val nextBatchFuncName = ctx.addNewFunction(nextBatch,
       s"""
          |private void $nextBatch() throws java.io.IOException {
          |  long getBatchStart = System.nanoTime();
@@ -111,23 +118,54 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val columnsBatchInput = (output zip colVars).map { case (attr, colVar) =>
       genCodeColumnVector(ctx, colVar, rowidx, attr.dataType, attr.nullable)
     }
+    val localIdx = ctx.freshName("localIdx")
+    val localEnd = ctx.freshName("localEnd")
+    val numRows = ctx.freshName("numRows")
+    val shouldStop = if (parent.needStopCheck) {
+      s"if (shouldStop()) { $idx = $rowidx + 1; return; }"
+    } else {
+      "// shouldStop check is eliminated"
+    }
     s"""
        |if ($batch == null) {
-       |  $nextBatch();
+       |  $nextBatchFuncName();
        |}
        |while ($batch != null) {
-       |  int numRows = $batch.numRows();
-       |  while ($idx < numRows) {
-       |    int $rowidx = $idx++;
+       |  int $numRows = $batch.numRows();
+       |  int $localEnd = $numRows - $idx;
+       |  for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
+       |    int $rowidx = $idx + $localIdx;
        |    ${consume(ctx, columnsBatchInput).trim}
-       |    if (shouldStop()) return;
+       |    $shouldStop
        |  }
+       |  $idx = $numRows;
        |  $batch = null;
-       |  $nextBatch();
+       |  $nextBatchFuncName();
        |}
        |$scanTimeMetric.add($scanTimeTotalNs / (1000 * 1000));
        |$scanTimeTotalNs = 0;
      """.stripMargin
   }
 
+  private def produceRows(ctx: CodegenContext, input: String): String = {
+    val numOutputRows = metricTerm(ctx, "numOutputRows")
+    val row = ctx.freshName("row")
+
+    ctx.INPUT_ROW = row
+    ctx.currentVars = null
+    // Always provide `outputVars`, so that the framework can help us build unsafe row if the input
+    // row is not unsafe row, i.e. `needsUnsafeRowConversion` is true.
+    val outputVars = output.zipWithIndex.map { case (a, i) =>
+      BoundReference(i, a.dataType, a.nullable).genCode(ctx)
+    }
+    val inputRow = if (needsUnsafeRowConversion) null else row
+    s"""
+       |while ($input.hasNext()) {
+       |  InternalRow $row = (InternalRow) $input.next();
+       |  $numOutputRows.add(1);
+       |  ${consume(ctx, outputVars, inputRow).trim}
+       |  if (shouldStop()) return;
+       |}
+     """.stripMargin
+  }
 }

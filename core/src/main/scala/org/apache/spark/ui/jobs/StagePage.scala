@@ -19,28 +19,25 @@ package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
 import java.util.Date
+import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.HashSet
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.xml.{Elem, Node, Unparsed}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.SparkConf
-import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo, TaskLocality}
+import org.apache.spark.internal.config._
+import org.apache.spark.scheduler.TaskLocality
+import org.apache.spark.status._
+import org.apache.spark.status.api.v1._
 import org.apache.spark.ui._
-import org.apache.spark.ui.exec.ExecutorsListener
-import org.apache.spark.ui.jobs.UIData._
-import org.apache.spark.util.{Distribution, Utils}
+import org.apache.spark.util.Utils
 
 /** Page showing statistics and task list for a given stage */
-private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
-  import StagePage._
-
-  private val progressListener = parent.progressListener
-  private val operationGraphListener = parent.operationGraphListener
-  private val executorsListener = parent.executorsListener
+private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends WebUIPage("stage") {
+  import ApiHelper._
 
   private val TIMELINE_LEGEND = {
     <div class="legend-area">
@@ -70,553 +67,463 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   // if we find that it's okay.
   private val MAX_TIMELINE_TASKS = parent.conf.getInt("spark.ui.timeline.tasks.maximum", 1000)
 
-  private def getLocalitySummaryString(stageData: StageUIData): String = {
-    val localities = stageData.taskData.values.map(_.taskInfo.taskLocality)
-    val localityCounts = localities.groupBy(identity).mapValues(_.size)
-    val localityNamesAndCounts = localityCounts.toSeq.map { case (locality, count) =>
-      val localityName = locality match {
-        case TaskLocality.PROCESS_LOCAL => "Process local"
-        case TaskLocality.NODE_LOCAL => "Node local"
-        case TaskLocality.RACK_LOCAL => "Rack local"
-        case TaskLocality.ANY => "Any"
+  private def getLocalitySummaryString(localitySummary: Map[String, Long]): String = {
+    val names = Map(
+      TaskLocality.PROCESS_LOCAL.toString() -> "Process local",
+      TaskLocality.NODE_LOCAL.toString() -> "Node local",
+      TaskLocality.RACK_LOCAL.toString() -> "Rack local",
+      TaskLocality.ANY.toString() -> "Any")
+    val localityNamesAndCounts = names.flatMap { case (key, name) =>
+      localitySummary.get(key).map { count =>
+        s"$name: $count"
       }
-      s"$localityName: $count"
-    }
+    }.toSeq
     localityNamesAndCounts.sorted.mkString("; ")
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    progressListener.synchronized {
-      val parameterId = request.getParameter("id")
-      require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
+    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
+    require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-      val parameterAttempt = request.getParameter("attempt")
-      require(parameterAttempt != null && parameterAttempt.nonEmpty, "Missing attempt parameter")
+    val parameterAttempt = UIUtils.stripXSS(request.getParameter("attempt"))
+    require(parameterAttempt != null && parameterAttempt.nonEmpty, "Missing attempt parameter")
 
-      val parameterTaskPage = request.getParameter("task.page")
-      val parameterTaskSortColumn = request.getParameter("task.sort")
-      val parameterTaskSortDesc = request.getParameter("task.desc")
-      val parameterTaskPageSize = request.getParameter("task.pageSize")
-      val parameterTaskPrevPageSize = request.getParameter("task.prevPageSize")
+    val parameterTaskPage = UIUtils.stripXSS(request.getParameter("task.page"))
+    val parameterTaskSortColumn = UIUtils.stripXSS(request.getParameter("task.sort"))
+    val parameterTaskSortDesc = UIUtils.stripXSS(request.getParameter("task.desc"))
+    val parameterTaskPageSize = UIUtils.stripXSS(request.getParameter("task.pageSize"))
+    val parameterTaskPrevPageSize = UIUtils.stripXSS(request.getParameter("task.prevPageSize"))
 
-      val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
-      val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
-        UIUtils.decodeURLParameter(sortColumn)
-      }.getOrElse("Index")
-      val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
-      val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
-      val taskPrevPageSize = Option(parameterTaskPrevPageSize).map(_.toInt).getOrElse(taskPageSize)
+    val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
+    val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
+      UIUtils.decodeURLParameter(sortColumn)
+    }.getOrElse("Index")
+    val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
+    val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
+    val taskPrevPageSize = Option(parameterTaskPrevPageSize).map(_.toInt).getOrElse(taskPageSize)
 
-      val stageId = parameterId.toInt
-      val stageAttemptId = parameterAttempt.toInt
-      val stageDataOption = progressListener.stageIdToData.get((stageId, stageAttemptId))
+    val stageId = parameterId.toInt
+    val stageAttemptId = parameterAttempt.toInt
 
-      val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
-      if (stageDataOption.isEmpty) {
+    val stageHeader = s"Details for Stage $stageId (Attempt $stageAttemptId)"
+    val stageData = parent.store
+      .asOption(parent.store.stageAttempt(stageId, stageAttemptId, details = false))
+      .getOrElse {
         val content =
           <div id="no-info">
             <p>No information to display for Stage {stageId} (Attempt {stageAttemptId})</p>
           </div>
         return UIUtils.headerSparkPage(stageHeader, content, parent)
-
-      }
-      if (stageDataOption.get.taskData.isEmpty) {
-        val content =
-          <div>
-            <h4>Summary Metrics</h4> No tasks have started yet
-            <h4>Tasks</h4> No tasks have started yet
-          </div>
-        return UIUtils.headerSparkPage(stageHeader, content, parent)
       }
 
-      val stageData = stageDataOption.get
-      val tasks = stageData.taskData.values.toSeq.sortBy(_.taskInfo.launchTime)
-      val numCompleted = stageData.numCompleteTasks
-      val totalTasks = stageData.numActiveTasks +
-        stageData.numCompleteTasks + stageData.numFailedTasks
-      val totalTasksNumStr = if (totalTasks == tasks.size) {
-        s"$totalTasks"
-      } else {
-        s"$totalTasks, showing ${tasks.size}"
-      }
+    val localitySummary = store.localitySummary(stageData.stageId, stageData.attemptId)
 
-      val allAccumulables = progressListener.stageIdToData((stageId, stageAttemptId)).accumulables
-      val externalAccumulables = allAccumulables.values.filter { acc => !acc.internal }
-      val hasAccumulators = externalAccumulables.size > 0
-
-      val summary =
+    val totalTasks = stageData.numActiveTasks + stageData.numCompleteTasks +
+      stageData.numFailedTasks + stageData.numKilledTasks
+    if (totalTasks == 0) {
+      val content =
         <div>
-          <ul class="unstyled">
+          <h4>Summary Metrics</h4> No tasks have started yet
+          <h4>Tasks</h4> No tasks have started yet
+        </div>
+      return UIUtils.headerSparkPage(stageHeader, content, parent)
+    }
+
+    val storedTasks = store.taskCount(stageData.stageId, stageData.attemptId)
+    val numCompleted = stageData.numCompleteTasks
+    val totalTasksNumStr = if (totalTasks == storedTasks) {
+      s"$totalTasks"
+    } else {
+      s"$totalTasks, showing ${storedTasks}"
+    }
+
+    val summary =
+      <div>
+        <ul class="unstyled">
+          <li>
+            <strong>Total Time Across All Tasks: </strong>
+            {UIUtils.formatDuration(stageData.executorRunTime)}
+          </li>
+          <li>
+            <strong>Locality Level Summary: </strong>
+            {getLocalitySummaryString(localitySummary)}
+          </li>
+          {if (hasInput(stageData)) {
             <li>
-              <strong>Total Time Across All Tasks: </strong>
-              {UIUtils.formatDuration(stageData.executorRunTime)}
+              <strong>Input Size / Records: </strong>
+              {s"${Utils.bytesToString(stageData.inputBytes)} / ${stageData.inputRecords}"}
+            </li>
+          }}
+          {if (hasOutput(stageData)) {
+            <li>
+              <strong>Output: </strong>
+              {s"${Utils.bytesToString(stageData.outputBytes)} / ${stageData.outputRecords}"}
+            </li>
+          }}
+          {if (hasShuffleRead(stageData)) {
+            <li>
+              <strong>Shuffle Read: </strong>
+              {s"${Utils.bytesToString(stageData.shuffleReadBytes)} / " +
+               s"${stageData.shuffleReadRecords}"}
+            </li>
+          }}
+          {if (hasShuffleWrite(stageData)) {
+            <li>
+              <strong>Shuffle Write: </strong>
+               {s"${Utils.bytesToString(stageData.shuffleWriteBytes)} / " +
+               s"${stageData.shuffleWriteRecords}"}
+            </li>
+          }}
+          {if (hasBytesSpilled(stageData)) {
+            <li>
+              <strong>Shuffle Spill (Memory): </strong>
+              {Utils.bytesToString(stageData.memoryBytesSpilled)}
             </li>
             <li>
-              <strong>Locality Level Summary: </strong>
-              {getLocalitySummaryString(stageData)}
+              <strong>Shuffle Spill (Disk): </strong>
+              {Utils.bytesToString(stageData.diskBytesSpilled)}
             </li>
-            {if (stageData.hasInput) {
-              <li>
-                <strong>Input Size / Records: </strong>
-                {s"${Utils.bytesToString(stageData.inputBytes)} / ${stageData.inputRecords}"}
-              </li>
-            }}
-            {if (stageData.hasOutput) {
-              <li>
-                <strong>Output: </strong>
-                {s"${Utils.bytesToString(stageData.outputBytes)} / ${stageData.outputRecords}"}
-              </li>
-            }}
-            {if (stageData.hasShuffleRead) {
-              <li>
-                <strong>Shuffle Read: </strong>
-                {s"${Utils.bytesToString(stageData.shuffleReadTotalBytes)} / " +
-                 s"${stageData.shuffleReadRecords}"}
-              </li>
-            }}
-            {if (stageData.hasShuffleWrite) {
-              <li>
-                <strong>Shuffle Write: </strong>
-                 {s"${Utils.bytesToString(stageData.shuffleWriteBytes)} / " +
-                 s"${stageData.shuffleWriteRecords}"}
-              </li>
-            }}
-            {if (stageData.hasBytesSpilled) {
-              <li>
-                <strong>Shuffle Spill (Memory): </strong>
-                {Utils.bytesToString(stageData.memoryBytesSpilled)}
-              </li>
-              <li>
-                <strong>Shuffle Spill (Disk): </strong>
-                {Utils.bytesToString(stageData.diskBytesSpilled)}
-              </li>
-            }}
-          </ul>
-        </div>
+          }}
+        </ul>
+      </div>
 
-      val showAdditionalMetrics =
-        <div>
-          <span class="expand-additional-metrics">
-            <span class="expand-additional-metrics-arrow arrow-closed"></span>
-            <a>Show Additional Metrics</a>
-          </span>
-          <div class="additional-metrics collapsed">
-            <ul>
-              <li>
-                  <input type="checkbox" id="select-all-metrics"/>
-                  <span class="additional-metric-title"><em>(De)select All</em></span>
-              </li>
-              <li>
-                <span data-toggle="tooltip"
-                      title={ToolTips.SCHEDULER_DELAY} data-placement="right">
-                  <input type="checkbox" name={TaskDetailsClassNames.SCHEDULER_DELAY}/>
-                  <span class="additional-metric-title">Scheduler Delay</span>
-                </span>
-              </li>
-              <li>
-                <span data-toggle="tooltip"
-                      title={ToolTips.TASK_DESERIALIZATION_TIME} data-placement="right">
-                  <input type="checkbox" name={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}/>
-                  <span class="additional-metric-title">Task Deserialization Time</span>
-                </span>
-              </li>
-              {if (stageData.hasShuffleRead) {
-                <li>
-                  <span data-toggle="tooltip"
-                        title={ToolTips.SHUFFLE_READ_BLOCKED_TIME} data-placement="right">
-                    <input type="checkbox" name={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}/>
-                    <span class="additional-metric-title">Shuffle Read Blocked Time</span>
-                  </span>
-                </li>
-                <li>
-                  <span data-toggle="tooltip"
-                        title={ToolTips.SHUFFLE_READ_REMOTE_SIZE} data-placement="right">
-                    <input type="checkbox" name={TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE}/>
-                    <span class="additional-metric-title">Shuffle Remote Reads</span>
-                  </span>
-                </li>
-              }}
-              <li>
-                <span data-toggle="tooltip"
-                      title={ToolTips.RESULT_SERIALIZATION_TIME} data-placement="right">
-                  <input type="checkbox" name={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}/>
-                  <span class="additional-metric-title">Result Serialization Time</span>
-                </span>
-              </li>
-              <li>
-                <span data-toggle="tooltip"
-                      title={ToolTips.GETTING_RESULT_TIME} data-placement="right">
-                  <input type="checkbox" name={TaskDetailsClassNames.GETTING_RESULT_TIME}/>
-                  <span class="additional-metric-title">Getting Result Time</span>
-                </span>
-              </li>
-              <li>
-                <span data-toggle="tooltip"
-                      title={ToolTips.PEAK_EXECUTION_MEMORY} data-placement="right">
-                  <input type="checkbox" name={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}/>
-                  <span class="additional-metric-title">Peak Execution Memory</span>
-                </span>
-              </li>
-            </ul>
-          </div>
-        </div>
-
-      val dagViz = UIUtils.showDagVizForStage(
-        stageId, operationGraphListener.getOperationGraphForStage(stageId))
-
-      val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
-      def accumulableRow(acc: AccumulableInfo): Seq[Node] = {
-        (acc.name, acc.value) match {
-          case (Some(name), Some(value)) => <tr><td>{name}</td><td>{value}</td></tr>
-          case _ => Seq.empty[Node]
-        }
-      }
-      val accumulableTable = UIUtils.listingTable(
-        accumulableHeaders,
-        accumulableRow,
-        externalAccumulables.toSeq)
-
-      val page: Int = {
-        // If the user has changed to a larger page size, then go to page 1 in order to avoid
-        // IndexOutOfBoundsException.
-        if (taskPageSize <= taskPrevPageSize) {
-          taskPage
-        } else {
-          1
-        }
-      }
-      val currentTime = System.currentTimeMillis()
-      val (taskTable, taskTableHTML) = try {
-        val _taskTable = new TaskPagedTable(
-          parent.conf,
-          UIUtils.prependBaseUri(parent.basePath) +
-            s"/stages/stage?id=${stageId}&attempt=${stageAttemptId}",
-          tasks,
-          hasAccumulators,
-          stageData.hasInput,
-          stageData.hasOutput,
-          stageData.hasShuffleRead,
-          stageData.hasShuffleWrite,
-          stageData.hasBytesSpilled,
-          currentTime,
-          pageSize = taskPageSize,
-          sortColumn = taskSortColumn,
-          desc = taskSortDesc,
-          executorsListener = executorsListener
-        )
-        (_taskTable, _taskTable.table(page))
-      } catch {
-        case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
-          val errorMessage =
-            <div class="alert alert-error">
-              <p>Error while rendering stage table:</p>
-              <pre>
-                {Utils.exceptionString(e)}
-              </pre>
-            </div>
-          (null, errorMessage)
-      }
-
-      val jsForScrollingDownToTaskTable =
-        <script>
-          {Unparsed {
-            """
-              |$(function() {
-              |  if (/.*&task.sort=.*$/.test(location.search)) {
-              |    var topOffset = $("#tasks-section").offset().top;
-              |    $("html,body").animate({scrollTop: topOffset}, 200);
-              |  }
-              |});
-            """.stripMargin
-           }
-          }
-        </script>
-
-      val taskIdsInPage = if (taskTable == null) Set.empty[Long]
-        else taskTable.dataSource.slicedTaskIds
-
-      // Excludes tasks which failed and have incomplete metrics
-      val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.metrics.isDefined)
-
-      val summaryTable: Option[Seq[Node]] =
-        if (validTasks.size == 0) {
-          None
-        }
-        else {
-          def getDistributionQuantiles(data: Seq[Double]): IndexedSeq[Double] =
-            Distribution(data).get.getQuantiles()
-          def getFormattedTimeQuantiles(times: Seq[Double]): Seq[Node] = {
-            getDistributionQuantiles(times).map { millis =>
-              <td>{UIUtils.formatDuration(millis.toLong)}</td>
-            }
-          }
-          def getFormattedSizeQuantiles(data: Seq[Double]): Seq[Elem] = {
-            getDistributionQuantiles(data).map(d => <td>{Utils.bytesToString(d.toLong)}</td>)
-          }
-
-          val deserializationTimes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.executorDeserializeTime.toDouble
-          }
-          val deserializationQuantiles =
-            <td>
-              <span data-toggle="tooltip" title={ToolTips.TASK_DESERIALIZATION_TIME}
-                    data-placement="right">
-                Task Deserialization Time
-              </span>
-            </td> +: getFormattedTimeQuantiles(deserializationTimes)
-
-          val serviceTimes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.executorRunTime.toDouble
-          }
-          val serviceQuantiles = <td>Duration</td> +: getFormattedTimeQuantiles(serviceTimes)
-
-          val gcTimes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.jvmGCTime.toDouble
-          }
-          val gcQuantiles =
-            <td>
+    val showAdditionalMetrics =
+      <div>
+        <span class="expand-additional-metrics">
+          <span class="expand-additional-metrics-arrow arrow-closed"></span>
+          <a>Show Additional Metrics</a>
+        </span>
+        <div class="additional-metrics collapsed">
+          <ul>
+            <li>
+                <input type="checkbox" id="select-all-metrics"/>
+                <span class="additional-metric-title"><em>(De)select All</em></span>
+            </li>
+            <li>
               <span data-toggle="tooltip"
-                  title={ToolTips.GC_TIME} data-placement="right">GC Time
+                    title={ToolTips.SCHEDULER_DELAY} data-placement="right">
+                <input type="checkbox" name={TaskDetailsClassNames.SCHEDULER_DELAY}/>
+                <span class="additional-metric-title">Scheduler Delay</span>
               </span>
-            </td> +: getFormattedTimeQuantiles(gcTimes)
-
-          val serializationTimes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.resultSerializationTime.toDouble
-          }
-          val serializationQuantiles =
-            <td>
+            </li>
+            <li>
+              <span data-toggle="tooltip"
+                    title={ToolTips.TASK_DESERIALIZATION_TIME} data-placement="right">
+                <input type="checkbox" name={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}/>
+                <span class="additional-metric-title">Task Deserialization Time</span>
+              </span>
+            </li>
+            {if (stageData.shuffleReadBytes > 0) {
+              <li>
+                <span data-toggle="tooltip"
+                      title={ToolTips.SHUFFLE_READ_BLOCKED_TIME} data-placement="right">
+                  <input type="checkbox" name={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}/>
+                  <span class="additional-metric-title">Shuffle Read Blocked Time</span>
+                </span>
+              </li>
+              <li>
+                <span data-toggle="tooltip"
+                      title={ToolTips.SHUFFLE_READ_REMOTE_SIZE} data-placement="right">
+                  <input type="checkbox" name={TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE}/>
+                  <span class="additional-metric-title">Shuffle Remote Reads</span>
+                </span>
+              </li>
+            }}
+            <li>
               <span data-toggle="tooltip"
                     title={ToolTips.RESULT_SERIALIZATION_TIME} data-placement="right">
-                Result Serialization Time
+                <input type="checkbox" name={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}/>
+                <span class="additional-metric-title">Result Serialization Time</span>
               </span>
-            </td> +: getFormattedTimeQuantiles(serializationTimes)
-
-          val gettingResultTimes = validTasks.map { taskUIData: TaskUIData =>
-            getGettingResultTime(taskUIData.taskInfo, currentTime).toDouble
-          }
-          val gettingResultQuantiles =
-            <td>
+            </li>
+            <li>
               <span data-toggle="tooltip"
-                  title={ToolTips.GETTING_RESULT_TIME} data-placement="right">
-                Getting Result Time
+                    title={ToolTips.GETTING_RESULT_TIME} data-placement="right">
+                <input type="checkbox" name={TaskDetailsClassNames.GETTING_RESULT_TIME}/>
+                <span class="additional-metric-title">Getting Result Time</span>
               </span>
-            </td> +:
-            getFormattedTimeQuantiles(gettingResultTimes)
-
-          val peakExecutionMemory = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.peakExecutionMemory.toDouble
-          }
-          val peakExecutionMemoryQuantiles = {
-            <td>
+            </li>
+            <li>
               <span data-toggle="tooltip"
                     title={ToolTips.PEAK_EXECUTION_MEMORY} data-placement="right">
-                Peak Execution Memory
+                <input type="checkbox" name={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}/>
+                <span class="additional-metric-title">Peak Execution Memory</span>
               </span>
-            </td> +: getFormattedSizeQuantiles(peakExecutionMemory)
-          }
-
-          // The scheduler delay includes the network delay to send the task to the worker
-          // machine and to send back the result (but not the time to fetch the task result,
-          // if it needed to be fetched from the block manager on the worker).
-          val schedulerDelays = validTasks.map { taskUIData: TaskUIData =>
-            getSchedulerDelay(taskUIData.taskInfo, taskUIData.metrics.get, currentTime).toDouble
-          }
-          val schedulerDelayTitle = <td><span data-toggle="tooltip"
-            title={ToolTips.SCHEDULER_DELAY} data-placement="right">Scheduler Delay</span></td>
-          val schedulerDelayQuantiles = schedulerDelayTitle +:
-            getFormattedTimeQuantiles(schedulerDelays)
-          def getFormattedSizeQuantilesWithRecords(data: Seq[Double], records: Seq[Double])
-            : Seq[Elem] = {
-            val recordDist = getDistributionQuantiles(records).iterator
-            getDistributionQuantiles(data).map(d =>
-              <td>{s"${Utils.bytesToString(d.toLong)} / ${recordDist.next().toLong}"}</td>
-            )
-          }
-
-          val inputSizes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.inputMetrics.bytesRead.toDouble
-          }
-
-          val inputRecords = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.inputMetrics.recordsRead.toDouble
-          }
-
-          val inputQuantiles = <td>Input Size / Records</td> +:
-            getFormattedSizeQuantilesWithRecords(inputSizes, inputRecords)
-
-          val outputSizes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.outputMetrics.bytesWritten.toDouble
-          }
-
-          val outputRecords = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.outputMetrics.recordsWritten.toDouble
-          }
-
-          val outputQuantiles = <td>Output Size / Records</td> +:
-            getFormattedSizeQuantilesWithRecords(outputSizes, outputRecords)
-
-          val shuffleReadBlockedTimes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.shuffleReadMetrics.fetchWaitTime.toDouble
-          }
-          val shuffleReadBlockedQuantiles =
-            <td>
-              <span data-toggle="tooltip"
-                    title={ToolTips.SHUFFLE_READ_BLOCKED_TIME} data-placement="right">
-                Shuffle Read Blocked Time
-              </span>
-            </td> +:
-            getFormattedTimeQuantiles(shuffleReadBlockedTimes)
-
-          val shuffleReadTotalSizes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.shuffleReadMetrics.totalBytesRead.toDouble
-          }
-          val shuffleReadTotalRecords = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.shuffleReadMetrics.recordsRead.toDouble
-          }
-          val shuffleReadTotalQuantiles =
-            <td>
-              <span data-toggle="tooltip"
-                    title={ToolTips.SHUFFLE_READ} data-placement="right">
-                Shuffle Read Size / Records
-              </span>
-            </td> +:
-            getFormattedSizeQuantilesWithRecords(shuffleReadTotalSizes, shuffleReadTotalRecords)
-
-          val shuffleReadRemoteSizes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.shuffleReadMetrics.remoteBytesRead.toDouble
-          }
-          val shuffleReadRemoteQuantiles =
-            <td>
-              <span data-toggle="tooltip"
-                    title={ToolTips.SHUFFLE_READ_REMOTE_SIZE} data-placement="right">
-                Shuffle Remote Reads
-              </span>
-            </td> +:
-            getFormattedSizeQuantiles(shuffleReadRemoteSizes)
-
-          val shuffleWriteSizes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.shuffleWriteMetrics.bytesWritten.toDouble
-          }
-
-          val shuffleWriteRecords = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.shuffleWriteMetrics.recordsWritten.toDouble
-          }
-
-          val shuffleWriteQuantiles = <td>Shuffle Write Size / Records</td> +:
-            getFormattedSizeQuantilesWithRecords(shuffleWriteSizes, shuffleWriteRecords)
-
-          val memoryBytesSpilledSizes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.memoryBytesSpilled.toDouble
-          }
-          val memoryBytesSpilledQuantiles = <td>Shuffle spill (memory)</td> +:
-            getFormattedSizeQuantiles(memoryBytesSpilledSizes)
-
-          val diskBytesSpilledSizes = validTasks.map { taskUIData: TaskUIData =>
-            taskUIData.metrics.get.diskBytesSpilled.toDouble
-          }
-          val diskBytesSpilledQuantiles = <td>Shuffle spill (disk)</td> +:
-            getFormattedSizeQuantiles(diskBytesSpilledSizes)
-
-          val listings: Seq[Seq[Node]] = Seq(
-            <tr>{serviceQuantiles}</tr>,
-            <tr class={TaskDetailsClassNames.SCHEDULER_DELAY}>{schedulerDelayQuantiles}</tr>,
-            <tr class={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}>
-              {deserializationQuantiles}
-            </tr>
-            <tr>{gcQuantiles}</tr>,
-            <tr class={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}>
-              {serializationQuantiles}
-            </tr>,
-            <tr class={TaskDetailsClassNames.GETTING_RESULT_TIME}>{gettingResultQuantiles}</tr>,
-            <tr class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
-              {peakExecutionMemoryQuantiles}
-            </tr>,
-            if (stageData.hasInput) <tr>{inputQuantiles}</tr> else Nil,
-            if (stageData.hasOutput) <tr>{outputQuantiles}</tr> else Nil,
-            if (stageData.hasShuffleRead) {
-              <tr class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>
-                {shuffleReadBlockedQuantiles}
-              </tr>
-              <tr>{shuffleReadTotalQuantiles}</tr>
-              <tr class={TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE}>
-                {shuffleReadRemoteQuantiles}
-              </tr>
-            } else {
-              Nil
-            },
-            if (stageData.hasShuffleWrite) <tr>{shuffleWriteQuantiles}</tr> else Nil,
-            if (stageData.hasBytesSpilled) <tr>{memoryBytesSpilledQuantiles}</tr> else Nil,
-            if (stageData.hasBytesSpilled) <tr>{diskBytesSpilledQuantiles}</tr> else Nil)
-
-          val quantileHeaders = Seq("Metric", "Min", "25th percentile",
-            "Median", "75th percentile", "Max")
-          // The summary table does not use CSS to stripe rows, which doesn't work with hidden
-          // rows (instead, JavaScript in table.js is used to stripe the non-hidden rows).
-          Some(UIUtils.listingTable(
-            quantileHeaders,
-            identity[Seq[Node]],
-            listings,
-            fixedWidth = true,
-            id = Some("task-summary-table"),
-            stripeRowsWithCss = false))
-        }
-
-      val executorTable = new ExecutorTable(stageId, stageAttemptId, parent)
-
-      val maybeAccumulableTable: Seq[Node] =
-        if (hasAccumulators) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
-
-      val aggMetrics =
-        <span class="collapse-aggregated-metrics collapse-table"
-              onClick="collapseTable('collapse-aggregated-metrics','aggregated-metrics')">
-          <h4>
-            <span class="collapse-table-arrow arrow-open"></span>
-            <a>Aggregated Metrics by Executor</a>
-          </h4>
-        </span>
-        <div class="aggregated-metrics collapsible-table">
-          {executorTable.toNodeSeq}
+            </li>
+          </ul>
         </div>
+      </div>
 
-      val content =
-        summary ++
-        dagViz ++
-        showAdditionalMetrics ++
-        makeTimeline(
-          // Only show the tasks in the table
-          stageData.taskData.values.toSeq.filter(t => taskIdsInPage.contains(t.taskInfo.taskId)),
-          currentTime) ++
-        <h4>Summary Metrics for <a href="#tasks-section">{numCompleted} Completed Tasks</a></h4> ++
-        <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
-        aggMetrics ++
-        maybeAccumulableTable ++
-        <h4 id="tasks-section">Tasks ({totalTasksNumStr})</h4> ++
-          taskTableHTML ++ jsForScrollingDownToTaskTable
-      UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
+    val stageGraph = parent.store.asOption(parent.store.operationGraphForStage(stageId))
+    val dagViz = UIUtils.showDagVizForStage(stageId, stageGraph)
+
+    val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
+    def accumulableRow(acc: AccumulableInfo): Seq[Node] = {
+      if (acc.name != null && acc.value != null) {
+        <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
+      } else {
+        Nil
+      }
     }
+    val accumulableTable = UIUtils.listingTable(
+      accumulableHeaders,
+      accumulableRow,
+      stageData.accumulatorUpdates.toSeq)
+
+    val page: Int = {
+      // If the user has changed to a larger page size, then go to page 1 in order to avoid
+      // IndexOutOfBoundsException.
+      if (taskPageSize <= taskPrevPageSize) {
+        taskPage
+      } else {
+        1
+      }
+    }
+    val currentTime = System.currentTimeMillis()
+    val (taskTable, taskTableHTML) = try {
+      val _taskTable = new TaskPagedTable(
+        stageData,
+        UIUtils.prependBaseUri(parent.basePath) +
+          s"/stages/stage?id=${stageId}&attempt=${stageAttemptId}",
+        currentTime,
+        pageSize = taskPageSize,
+        sortColumn = taskSortColumn,
+        desc = taskSortDesc,
+        store = parent.store
+      )
+      (_taskTable, _taskTable.table(page))
+    } catch {
+      case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
+        val errorMessage =
+          <div class="alert alert-error">
+            <p>Error while rendering stage table:</p>
+            <pre>
+              {Utils.exceptionString(e)}
+            </pre>
+          </div>
+        (null, errorMessage)
+    }
+
+    val jsForScrollingDownToTaskTable =
+      <script>
+        {Unparsed {
+          """
+            |$(function() {
+            |  if (/.*&task.sort=.*$/.test(location.search)) {
+            |    var topOffset = $("#tasks-section").offset().top;
+            |    $("html,body").animate({scrollTop: topOffset}, 200);
+            |  }
+            |});
+          """.stripMargin
+          }
+        }
+      </script>
+
+    val metricsSummary = store.taskSummary(stageData.stageId, stageData.attemptId,
+      Array(0, 0.25, 0.5, 0.75, 1.0))
+
+    val summaryTable = metricsSummary.map { metrics =>
+      def timeQuantiles(data: IndexedSeq[Double]): Seq[Node] = {
+        data.map { millis =>
+          <td>{UIUtils.formatDuration(millis.toLong)}</td>
+        }
+      }
+
+      def sizeQuantiles(data: IndexedSeq[Double]): Seq[Node] = {
+        data.map { size =>
+          <td>{Utils.bytesToString(size.toLong)}</td>
+        }
+      }
+
+      def sizeQuantilesWithRecords(
+          data: IndexedSeq[Double],
+          records: IndexedSeq[Double]) : Seq[Node] = {
+        data.zip(records).map { case (d, r) =>
+          <td>{s"${Utils.bytesToString(d.toLong)} / ${r.toLong}"}</td>
+        }
+      }
+
+      def titleCell(title: String, tooltip: String): Seq[Node] = {
+        <td>
+          <span data-toggle="tooltip" title={tooltip} data-placement="right">
+            {title}
+          </span>
+        </td>
+      }
+
+      def simpleTitleCell(title: String): Seq[Node] = <td>{title}</td>
+
+      val deserializationQuantiles = titleCell("Task Deserialization Time",
+        ToolTips.TASK_DESERIALIZATION_TIME) ++ timeQuantiles(metrics.executorDeserializeTime)
+
+      val serviceQuantiles = simpleTitleCell("Duration") ++ timeQuantiles(metrics.executorRunTime)
+
+      val gcQuantiles = titleCell("GC Time", ToolTips.GC_TIME) ++ timeQuantiles(metrics.jvmGcTime)
+
+      val serializationQuantiles = titleCell("Result Serialization Time",
+        ToolTips.RESULT_SERIALIZATION_TIME) ++ timeQuantiles(metrics.resultSerializationTime)
+
+      val gettingResultQuantiles = titleCell("Getting Result Time", ToolTips.GETTING_RESULT_TIME) ++
+        timeQuantiles(metrics.gettingResultTime)
+
+      val peakExecutionMemoryQuantiles = titleCell("Peak Execution Memory",
+        ToolTips.PEAK_EXECUTION_MEMORY) ++ sizeQuantiles(metrics.peakExecutionMemory)
+
+      // The scheduler delay includes the network delay to send the task to the worker
+      // machine and to send back the result (but not the time to fetch the task result,
+      // if it needed to be fetched from the block manager on the worker).
+      val schedulerDelayQuantiles = titleCell("Scheduler Delay", ToolTips.SCHEDULER_DELAY) ++
+        timeQuantiles(metrics.schedulerDelay)
+
+      def inputQuantiles: Seq[Node] = {
+        simpleTitleCell("Input Size / Records") ++
+          sizeQuantilesWithRecords(metrics.inputMetrics.bytesRead, metrics.inputMetrics.recordsRead)
+      }
+
+      def outputQuantiles: Seq[Node] = {
+        simpleTitleCell("Output Size / Records") ++
+          sizeQuantilesWithRecords(metrics.outputMetrics.bytesWritten,
+            metrics.outputMetrics.recordsWritten)
+      }
+
+      def shuffleReadBlockedQuantiles: Seq[Node] = {
+        titleCell("Shuffle Read Blocked Time", ToolTips.SHUFFLE_READ_BLOCKED_TIME) ++
+          timeQuantiles(metrics.shuffleReadMetrics.fetchWaitTime)
+      }
+
+      def shuffleReadTotalQuantiles: Seq[Node] = {
+        titleCell("Shuffle Read Size / Records", ToolTips.SHUFFLE_READ) ++
+          sizeQuantilesWithRecords(metrics.shuffleReadMetrics.readBytes,
+            metrics.shuffleReadMetrics.readRecords)
+      }
+
+      def shuffleReadRemoteQuantiles: Seq[Node] = {
+        titleCell("Shuffle Remote Reads", ToolTips.SHUFFLE_READ_REMOTE_SIZE) ++
+          sizeQuantiles(metrics.shuffleReadMetrics.remoteBytesRead)
+      }
+
+      def shuffleWriteQuantiles: Seq[Node] = {
+        simpleTitleCell("Shuffle Write Size / Records") ++
+          sizeQuantilesWithRecords(metrics.shuffleWriteMetrics.writeBytes,
+            metrics.shuffleWriteMetrics.writeRecords)
+      }
+
+      def memoryBytesSpilledQuantiles: Seq[Node] = {
+        simpleTitleCell("Shuffle spill (memory)") ++ sizeQuantiles(metrics.memoryBytesSpilled)
+      }
+
+      def diskBytesSpilledQuantiles: Seq[Node] = {
+        simpleTitleCell("Shuffle spill (disk)") ++ sizeQuantiles(metrics.diskBytesSpilled)
+      }
+
+      val listings: Seq[Seq[Node]] = Seq(
+        <tr>{serviceQuantiles}</tr>,
+        <tr class={TaskDetailsClassNames.SCHEDULER_DELAY}>{schedulerDelayQuantiles}</tr>,
+        <tr class={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}>
+          {deserializationQuantiles}
+        </tr>
+        <tr>{gcQuantiles}</tr>,
+        <tr class={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}>
+          {serializationQuantiles}
+        </tr>,
+        <tr class={TaskDetailsClassNames.GETTING_RESULT_TIME}>{gettingResultQuantiles}</tr>,
+        <tr class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
+          {peakExecutionMemoryQuantiles}
+        </tr>,
+        if (hasInput(stageData)) <tr>{inputQuantiles}</tr> else Nil,
+        if (hasOutput(stageData)) <tr>{outputQuantiles}</tr> else Nil,
+        if (hasShuffleRead(stageData)) {
+          <tr class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>
+            {shuffleReadBlockedQuantiles}
+          </tr>
+          <tr>{shuffleReadTotalQuantiles}</tr>
+          <tr class={TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE}>
+            {shuffleReadRemoteQuantiles}
+          </tr>
+        } else {
+          Nil
+        },
+        if (hasShuffleWrite(stageData)) <tr>{shuffleWriteQuantiles}</tr> else Nil,
+        if (hasBytesSpilled(stageData)) <tr>{memoryBytesSpilledQuantiles}</tr> else Nil,
+        if (hasBytesSpilled(stageData)) <tr>{diskBytesSpilledQuantiles}</tr> else Nil)
+
+      val quantileHeaders = Seq("Metric", "Min", "25th percentile", "Median", "75th percentile",
+        "Max")
+      // The summary table does not use CSS to stripe rows, which doesn't work with hidden
+      // rows (instead, JavaScript in table.js is used to stripe the non-hidden rows).
+      UIUtils.listingTable(
+        quantileHeaders,
+        identity[Seq[Node]],
+        listings,
+        fixedWidth = true,
+        id = Some("task-summary-table"),
+        stripeRowsWithCss = false)
+    }
+
+    val executorTable = new ExecutorTable(stageData, parent.store)
+
+    val maybeAccumulableTable: Seq[Node] =
+      if (hasAccumulators(stageData)) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
+
+    val aggMetrics =
+      <span class="collapse-aggregated-metrics collapse-table"
+            onClick="collapseTable('collapse-aggregated-metrics','aggregated-metrics')">
+        <h4>
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Aggregated Metrics by Executor</a>
+        </h4>
+      </span>
+      <div class="aggregated-metrics collapsible-table">
+        {executorTable.toNodeSeq}
+      </div>
+
+    val content =
+      summary ++
+      dagViz ++
+      showAdditionalMetrics ++
+      makeTimeline(
+        // Only show the tasks in the table
+        Option(taskTable).map(_.dataSource.tasks).getOrElse(Nil),
+        currentTime) ++
+      <h4>Summary Metrics for <a href="#tasks-section">{numCompleted} Completed Tasks</a></h4> ++
+      <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
+      aggMetrics ++
+      maybeAccumulableTable ++
+      <span id="tasks-section" class="collapse-aggregated-tasks collapse-table"
+          onClick="collapseTable('collapse-aggregated-tasks','aggregated-tasks')">
+        <h4>
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Tasks ({totalTasksNumStr})</a>
+        </h4>
+      </span> ++
+      <div class="aggregated-tasks collapsible-table">
+        {taskTableHTML ++ jsForScrollingDownToTaskTable}
+      </div>
+    UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
   }
 
-  def makeTimeline(tasks: Seq[TaskUIData], currentTime: Long): Seq[Node] = {
+  def makeTimeline(tasks: Seq[TaskData], currentTime: Long): Seq[Node] = {
     val executorsSet = new HashSet[(String, String)]
     var minLaunchTime = Long.MaxValue
     var maxFinishTime = Long.MinValue
 
     val executorsArrayStr =
-      tasks.sortBy(-_.taskInfo.launchTime).take(MAX_TIMELINE_TASKS).map { taskUIData =>
-        val taskInfo = taskUIData.taskInfo
+      tasks.sortBy(-_.launchTime.getTime()).take(MAX_TIMELINE_TASKS).map { taskInfo =>
         val executorId = taskInfo.executorId
         val host = taskInfo.host
         executorsSet += ((executorId, host))
 
-        val launchTime = taskInfo.launchTime
-        val finishTime = if (!taskInfo.running) taskInfo.finishTime else currentTime
+        val launchTime = taskInfo.launchTime.getTime()
+        val finishTime = taskInfo.duration.map(taskInfo.launchTime.getTime() + _)
+          .getOrElse(currentTime)
         val totalExecutionTime = finishTime - launchTime
         minLaunchTime = launchTime.min(minLaunchTime)
         maxFinishTime = finishTime.max(maxFinishTime)
 
         def toProportion(time: Long) = time.toDouble / totalExecutionTime * 100
 
-        val metricsOpt = taskUIData.metrics
+        val metricsOpt = taskInfo.taskMetrics
         val shuffleReadTime =
           metricsOpt.map(_.shuffleReadMetrics.fetchWaitTime).getOrElse(0L)
         val shuffleReadTimeProportion = toProportion(shuffleReadTime)
@@ -628,14 +535,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         val serializationTimeProportion = toProportion(serializationTime)
         val deserializationTime = metricsOpt.map(_.executorDeserializeTime).getOrElse(0L)
         val deserializationTimeProportion = toProportion(deserializationTime)
-        val gettingResultTime = getGettingResultTime(taskUIData.taskInfo, currentTime)
+        val gettingResultTime = AppStatusUtils.gettingResultTime(taskInfo)
         val gettingResultTimeProportion = toProportion(gettingResultTime)
-        val schedulerDelay =
-          metricsOpt.map(getSchedulerDelay(taskInfo, _, currentTime)).getOrElse(0L)
+        val schedulerDelay = AppStatusUtils.schedulerDelay(taskInfo)
         val schedulerDelayProportion = toProportion(schedulerDelay)
 
         val executorOverhead = serializationTime + deserializationTime
-        val executorRunTime = if (taskInfo.running) {
+        val executorRunTime = if (taskInfo.duration.isDefined) {
           totalExecutionTime - executorOverhead - gettingResultTime
         } else {
           metricsOpt.map(_.executorRunTime).getOrElse(
@@ -662,7 +568,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           serializationTimeProportionPos + serializationTimeProportion
 
         val index = taskInfo.index
-        val attempt = taskInfo.attemptNumber
+        val attempt = taskInfo.attempt
 
         val svgTag =
           if (totalExecutionTime == 0) {
@@ -704,7 +610,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                  |Status: ${taskInfo.status}<br>
                  |Launch Time: ${UIUtils.formatDate(new Date(launchTime))}
                  |${
-                     if (!taskInfo.running) {
+                     if (!taskInfo.duration.isDefined) {
                        s"""<br>Finish Time: ${UIUtils.formatDate(new Date(finishTime))}"""
                      } else {
                         ""
@@ -743,7 +649,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       {
         if (MAX_TIMELINE_TASKS < tasks.size) {
           <strong>
-            This stage has more than the maximum number of tasks that can be shown in the
+            This page has more than the maximum number of tasks that can be shown in the
             visualization! Only the most recent {MAX_TIMELINE_TASKS} tasks
             (of {tasks.size} total) are shown.
           </strong>
@@ -768,393 +674,49 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
 }
 
-private[ui] object StagePage {
-  private[ui] def getGettingResultTime(info: TaskInfo, currentTime: Long): Long = {
-    if (info.gettingResult) {
-      if (info.finished) {
-        info.finishTime - info.gettingResultTime
-      } else {
-        // The task is still fetching the result.
-        currentTime - info.gettingResultTime
-      }
-    } else {
-      0L
-    }
-  }
-
-  private[ui] def getSchedulerDelay(
-      info: TaskInfo, metrics: TaskMetricsUIData, currentTime: Long): Long = {
-    if (info.finished) {
-      val totalExecutionTime = info.finishTime - info.launchTime
-      val executorOverhead = (metrics.executorDeserializeTime +
-        metrics.resultSerializationTime)
-      math.max(
-        0,
-        totalExecutionTime - metrics.executorRunTime - executorOverhead -
-          getGettingResultTime(info, currentTime))
-    } else {
-      // The task is still running and the metrics like executorRunTime are not available.
-      0L
-    }
-  }
-}
-
-private[ui] case class TaskTableRowInputData(inputSortable: Long, inputReadable: String)
-
-private[ui] case class TaskTableRowOutputData(outputSortable: Long, outputReadable: String)
-
-private[ui] case class TaskTableRowShuffleReadData(
-    shuffleReadBlockedTimeSortable: Long,
-    shuffleReadBlockedTimeReadable: String,
-    shuffleReadSortable: Long,
-    shuffleReadReadable: String,
-    shuffleReadRemoteSortable: Long,
-    shuffleReadRemoteReadable: String)
-
-private[ui] case class TaskTableRowShuffleWriteData(
-    writeTimeSortable: Long,
-    writeTimeReadable: String,
-    shuffleWriteSortable: Long,
-    shuffleWriteReadable: String)
-
-private[ui] case class TaskTableRowBytesSpilledData(
-    memoryBytesSpilledSortable: Long,
-    memoryBytesSpilledReadable: String,
-    diskBytesSpilledSortable: Long,
-    diskBytesSpilledReadable: String)
-
-/**
- * Contains all data that needs for sorting and generating HTML. Using this one rather than
- * TaskUIData to avoid creating duplicate contents during sorting the data.
- */
-private[ui] class TaskTableRowData(
-    val index: Int,
-    val taskId: Long,
-    val attempt: Int,
-    val speculative: Boolean,
-    val status: String,
-    val taskLocality: String,
-    val executorIdAndHost: String,
-    val launchTime: Long,
-    val duration: Long,
-    val formatDuration: String,
-    val schedulerDelay: Long,
-    val taskDeserializationTime: Long,
-    val gcTime: Long,
-    val serializationTime: Long,
-    val gettingResultTime: Long,
-    val peakExecutionMemoryUsed: Long,
-    val accumulators: Option[String], // HTML
-    val input: Option[TaskTableRowInputData],
-    val output: Option[TaskTableRowOutputData],
-    val shuffleRead: Option[TaskTableRowShuffleReadData],
-    val shuffleWrite: Option[TaskTableRowShuffleWriteData],
-    val bytesSpilled: Option[TaskTableRowBytesSpilledData],
-    val error: String,
-    val logs: Map[String, String])
-
 private[ui] class TaskDataSource(
-    tasks: Seq[TaskUIData],
-    hasAccumulators: Boolean,
-    hasInput: Boolean,
-    hasOutput: Boolean,
-    hasShuffleRead: Boolean,
-    hasShuffleWrite: Boolean,
-    hasBytesSpilled: Boolean,
+    stage: StageData,
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean,
-    executorsListener: ExecutorsListener) extends PagedDataSource[TaskTableRowData](pageSize) {
-  import StagePage._
+    store: AppStatusStore) extends PagedDataSource[TaskData](pageSize) {
+  import ApiHelper._
 
-  // Convert TaskUIData to TaskTableRowData which contains the final contents to show in the table
-  // so that we can avoid creating duplicate contents during sorting the data
-  private val data = tasks.map(taskRow).sorted(ordering(sortColumn, desc))
+  // Keep an internal cache of executor log maps so that long task lists render faster.
+  private val executorIdToLogs = new HashMap[String, Map[String, String]]()
 
-  private var _slicedTaskIds: Set[Long] = null
+  private var _tasksToShow: Seq[TaskData] = null
 
-  override def dataSize: Int = data.size
+  override def dataSize: Int = stage.numTasks
 
-  override def sliceData(from: Int, to: Int): Seq[TaskTableRowData] = {
-    val r = data.slice(from, to)
-    _slicedTaskIds = r.map(_.taskId).toSet
-    r
+  override def sliceData(from: Int, to: Int): Seq[TaskData] = {
+    if (_tasksToShow == null) {
+      _tasksToShow = store.taskList(stage.stageId, stage.attemptId, from, to - from,
+        indexName(sortColumn), !desc)
+    }
+    _tasksToShow
   }
 
-  def slicedTaskIds: Set[Long] = _slicedTaskIds
+  def tasks: Seq[TaskData] = _tasksToShow
 
-  private def taskRow(taskData: TaskUIData): TaskTableRowData = {
-    val info = taskData.taskInfo
-    val metrics = taskData.metrics
-    val duration = taskData.taskDuration.getOrElse(1L)
-    val formatDuration = taskData.taskDuration.map(d => UIUtils.formatDuration(d)).getOrElse("")
-    val schedulerDelay = metrics.map(getSchedulerDelay(info, _, currentTime)).getOrElse(0L)
-    val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
-    val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)
-    val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
-    val gettingResultTime = getGettingResultTime(info, currentTime)
-
-    val externalAccumulableReadable = info.accumulables
-      .filterNot(_.internal)
-      .flatMap { a =>
-        (a.name, a.update) match {
-          case (Some(name), Some(update)) => Some(StringEscapeUtils.escapeHtml4(s"$name: $update"))
-          case _ => None
-        }
-      }
-    val peakExecutionMemoryUsed = metrics.map(_.peakExecutionMemory).getOrElse(0L)
-
-    val maybeInput = metrics.map(_.inputMetrics)
-    val inputSortable = maybeInput.map(_.bytesRead).getOrElse(0L)
-    val inputReadable = maybeInput
-      .map(m => s"${Utils.bytesToString(m.bytesRead)}")
-      .getOrElse("")
-    val inputRecords = maybeInput.map(_.recordsRead.toString).getOrElse("")
-
-    val maybeOutput = metrics.map(_.outputMetrics)
-    val outputSortable = maybeOutput.map(_.bytesWritten).getOrElse(0L)
-    val outputReadable = maybeOutput
-      .map(m => s"${Utils.bytesToString(m.bytesWritten)}")
-      .getOrElse("")
-    val outputRecords = maybeOutput.map(_.recordsWritten.toString).getOrElse("")
-
-    val maybeShuffleRead = metrics.map(_.shuffleReadMetrics)
-    val shuffleReadBlockedTimeSortable = maybeShuffleRead.map(_.fetchWaitTime).getOrElse(0L)
-    val shuffleReadBlockedTimeReadable =
-      maybeShuffleRead.map(ms => UIUtils.formatDuration(ms.fetchWaitTime)).getOrElse("")
-
-    val totalShuffleBytes = maybeShuffleRead.map(_.totalBytesRead)
-    val shuffleReadSortable = totalShuffleBytes.getOrElse(0L)
-    val shuffleReadReadable = totalShuffleBytes.map(Utils.bytesToString).getOrElse("")
-    val shuffleReadRecords = maybeShuffleRead.map(_.recordsRead.toString).getOrElse("")
-
-    val remoteShuffleBytes = maybeShuffleRead.map(_.remoteBytesRead)
-    val shuffleReadRemoteSortable = remoteShuffleBytes.getOrElse(0L)
-    val shuffleReadRemoteReadable = remoteShuffleBytes.map(Utils.bytesToString).getOrElse("")
-
-    val maybeShuffleWrite = metrics.map(_.shuffleWriteMetrics)
-    val shuffleWriteSortable = maybeShuffleWrite.map(_.bytesWritten).getOrElse(0L)
-    val shuffleWriteReadable = maybeShuffleWrite
-      .map(m => s"${Utils.bytesToString(m.bytesWritten)}").getOrElse("")
-    val shuffleWriteRecords = maybeShuffleWrite
-      .map(_.recordsWritten.toString).getOrElse("")
-
-    val maybeWriteTime = metrics.map(_.shuffleWriteMetrics.writeTime)
-    val writeTimeSortable = maybeWriteTime.getOrElse(0L)
-    val writeTimeReadable = maybeWriteTime.map(t => t / (1000 * 1000)).map { ms =>
-      if (ms == 0) "" else UIUtils.formatDuration(ms)
-    }.getOrElse("")
-
-    val maybeMemoryBytesSpilled = metrics.map(_.memoryBytesSpilled)
-    val memoryBytesSpilledSortable = maybeMemoryBytesSpilled.getOrElse(0L)
-    val memoryBytesSpilledReadable =
-      maybeMemoryBytesSpilled.map(Utils.bytesToString).getOrElse("")
-
-    val maybeDiskBytesSpilled = metrics.map(_.diskBytesSpilled)
-    val diskBytesSpilledSortable = maybeDiskBytesSpilled.getOrElse(0L)
-    val diskBytesSpilledReadable = maybeDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
-
-    val input =
-      if (hasInput) {
-        Some(TaskTableRowInputData(inputSortable, s"$inputReadable / $inputRecords"))
-      } else {
-        None
-      }
-
-    val output =
-      if (hasOutput) {
-        Some(TaskTableRowOutputData(outputSortable, s"$outputReadable / $outputRecords"))
-      } else {
-        None
-      }
-
-    val shuffleRead =
-      if (hasShuffleRead) {
-        Some(TaskTableRowShuffleReadData(
-          shuffleReadBlockedTimeSortable,
-          shuffleReadBlockedTimeReadable,
-          shuffleReadSortable,
-          s"$shuffleReadReadable / $shuffleReadRecords",
-          shuffleReadRemoteSortable,
-          shuffleReadRemoteReadable
-        ))
-      } else {
-        None
-      }
-
-    val shuffleWrite =
-      if (hasShuffleWrite) {
-        Some(TaskTableRowShuffleWriteData(
-          writeTimeSortable,
-          writeTimeReadable,
-          shuffleWriteSortable,
-          s"$shuffleWriteReadable / $shuffleWriteRecords"
-        ))
-      } else {
-        None
-      }
-
-    val bytesSpilled =
-      if (hasBytesSpilled) {
-        Some(TaskTableRowBytesSpilledData(
-          memoryBytesSpilledSortable,
-          memoryBytesSpilledReadable,
-          diskBytesSpilledSortable,
-          diskBytesSpilledReadable
-        ))
-      } else {
-        None
-      }
-
-    val logs = executorsListener.executorToTaskSummary.get(info.executorId)
-      .map(_.executorLogs).getOrElse(Map.empty)
-    new TaskTableRowData(
-      info.index,
-      info.taskId,
-      info.attemptNumber,
-      info.speculative,
-      info.status,
-      info.taskLocality.toString,
-      s"${info.executorId} / ${info.host}",
-      info.launchTime,
-      duration,
-      formatDuration,
-      schedulerDelay,
-      taskDeserializationTime,
-      gcTime,
-      serializationTime,
-      gettingResultTime,
-      peakExecutionMemoryUsed,
-      if (hasAccumulators) Some(externalAccumulableReadable.mkString("<br/>")) else None,
-      input,
-      output,
-      shuffleRead,
-      shuffleWrite,
-      bytesSpilled,
-      taskData.errorMessage.getOrElse(""),
-      logs)
-  }
-
-  /**
-   * Return Ordering according to sortColumn and desc
-   */
-  private def ordering(sortColumn: String, desc: Boolean): Ordering[TaskTableRowData] = {
-    val ordering: Ordering[TaskTableRowData] = sortColumn match {
-      case "Index" => Ordering.by(_.index)
-      case "ID" => Ordering.by(_.taskId)
-      case "Attempt" => Ordering.by(_.attempt)
-      case "Status" => Ordering.by(_.status)
-      case "Locality Level" => Ordering.by(_.taskLocality)
-      case "Executor ID / Host" => Ordering.by(_.executorIdAndHost)
-      case "Launch Time" => Ordering.by(_.launchTime)
-      case "Duration" => Ordering.by(_.duration)
-      case "Scheduler Delay" => Ordering.by(_.schedulerDelay)
-      case "Task Deserialization Time" => Ordering.by(_.taskDeserializationTime)
-      case "GC Time" => Ordering.by(_.gcTime)
-      case "Result Serialization Time" => Ordering.by(_.serializationTime)
-      case "Getting Result Time" => Ordering.by(_.gettingResultTime)
-      case "Peak Execution Memory" => Ordering.by(_.peakExecutionMemoryUsed)
-      case "Accumulators" =>
-        if (hasAccumulators) {
-          Ordering.by(_.accumulators.get)
-        } else {
-          throw new IllegalArgumentException(
-            "Cannot sort by Accumulators because of no accumulators")
-        }
-      case "Input Size / Records" =>
-        if (hasInput) {
-          Ordering.by(_.input.get.inputSortable)
-        } else {
-          throw new IllegalArgumentException(
-            "Cannot sort by Input Size / Records because of no inputs")
-        }
-      case "Output Size / Records" =>
-        if (hasOutput) {
-          Ordering.by(_.output.get.outputSortable)
-        } else {
-          throw new IllegalArgumentException(
-            "Cannot sort by Output Size / Records because of no outputs")
-        }
-      // ShuffleRead
-      case "Shuffle Read Blocked Time" =>
-        if (hasShuffleRead) {
-          Ordering.by(_.shuffleRead.get.shuffleReadBlockedTimeSortable)
-        } else {
-          throw new IllegalArgumentException(
-            "Cannot sort by Shuffle Read Blocked Time because of no shuffle reads")
-        }
-      case "Shuffle Read Size / Records" =>
-        if (hasShuffleRead) {
-          Ordering.by(_.shuffleRead.get.shuffleReadSortable)
-        } else {
-          throw new IllegalArgumentException(
-            "Cannot sort by Shuffle Read Size / Records because of no shuffle reads")
-        }
-      case "Shuffle Remote Reads" =>
-        if (hasShuffleRead) {
-          Ordering.by(_.shuffleRead.get.shuffleReadRemoteSortable)
-        } else {
-          throw new IllegalArgumentException(
-            "Cannot sort by Shuffle Remote Reads because of no shuffle reads")
-        }
-      // ShuffleWrite
-      case "Write Time" =>
-        if (hasShuffleWrite) {
-          Ordering.by(_.shuffleWrite.get.writeTimeSortable)
-        } else {
-          throw new IllegalArgumentException(
-            "Cannot sort by Write Time because of no shuffle writes")
-        }
-      case "Shuffle Write Size / Records" =>
-        if (hasShuffleWrite) {
-          Ordering.by(_.shuffleWrite.get.shuffleWriteSortable)
-        } else {
-          throw new IllegalArgumentException(
-            "Cannot sort by Shuffle Write Size / Records because of no shuffle writes")
-        }
-      // BytesSpilled
-      case "Shuffle Spill (Memory)" =>
-        if (hasBytesSpilled) {
-          Ordering.by(_.bytesSpilled.get.memoryBytesSpilledSortable)
-        } else {
-          throw new IllegalArgumentException(
-            "Cannot sort by Shuffle Spill (Memory) because of no spills")
-        }
-      case "Shuffle Spill (Disk)" =>
-        if (hasBytesSpilled) {
-          Ordering.by(_.bytesSpilled.get.diskBytesSpilledSortable)
-        } else {
-          throw new IllegalArgumentException(
-            "Cannot sort by Shuffle Spill (Disk) because of no spills")
-        }
-      case "Errors" => Ordering.by(_.error)
-      case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
-    }
-    if (desc) {
-      ordering.reverse
-    } else {
-      ordering
-    }
+  def executorLogs(id: String): Map[String, String] = {
+    executorIdToLogs.getOrElseUpdate(id,
+      store.asOption(store.executorSummary(id)).map(_.executorLogs).getOrElse(Map.empty))
   }
 
 }
 
 private[ui] class TaskPagedTable(
-    conf: SparkConf,
+    stage: StageData,
     basePath: String,
-    data: Seq[TaskUIData],
-    hasAccumulators: Boolean,
-    hasInput: Boolean,
-    hasOutput: Boolean,
-    hasShuffleRead: Boolean,
-    hasShuffleWrite: Boolean,
-    hasBytesSpilled: Boolean,
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean,
-    executorsListener: ExecutorsListener) extends PagedTable[TaskTableRowData] {
+    store: AppStatusStore) extends PagedTable[TaskData] {
+
+  import ApiHelper._
 
   override def tableId: String = "task-table"
 
@@ -1168,18 +730,12 @@ private[ui] class TaskPagedTable(
   override def pageNumberFormField: String = "task.page"
 
   override val dataSource: TaskDataSource = new TaskDataSource(
-    data,
-    hasAccumulators,
-    hasInput,
-    hasOutput,
-    hasShuffleRead,
-    hasShuffleWrite,
-    hasBytesSpilled,
+    stage,
     currentTime,
     pageSize,
     sortColumn,
     desc,
-    executorsListener)
+    store)
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
@@ -1199,29 +755,29 @@ private[ui] class TaskPagedTable(
     val taskHeadersAndCssClasses: Seq[(String, String)] =
       Seq(
         ("Index", ""), ("ID", ""), ("Attempt", ""), ("Status", ""), ("Locality Level", ""),
-        ("Executor ID / Host", ""), ("Launch Time", ""), ("Duration", ""),
+        ("Executor ID", ""), ("Host", ""), ("Launch Time", ""), ("Duration", ""),
         ("Scheduler Delay", TaskDetailsClassNames.SCHEDULER_DELAY),
         ("Task Deserialization Time", TaskDetailsClassNames.TASK_DESERIALIZATION_TIME),
         ("GC Time", ""),
         ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
         ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME),
         ("Peak Execution Memory", TaskDetailsClassNames.PEAK_EXECUTION_MEMORY)) ++
-        {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
-        {if (hasInput) Seq(("Input Size / Records", "")) else Nil} ++
-        {if (hasOutput) Seq(("Output Size / Records", "")) else Nil} ++
-        {if (hasShuffleRead) {
+        {if (hasAccumulators(stage)) Seq(("Accumulators", "")) else Nil} ++
+        {if (hasInput(stage)) Seq(("Input Size / Records", "")) else Nil} ++
+        {if (hasOutput(stage)) Seq(("Output Size / Records", "")) else Nil} ++
+        {if (hasShuffleRead(stage)) {
           Seq(("Shuffle Read Blocked Time", TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME),
             ("Shuffle Read Size / Records", ""),
             ("Shuffle Remote Reads", TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE))
         } else {
           Nil
         }} ++
-        {if (hasShuffleWrite) {
+        {if (hasShuffleWrite(stage)) {
           Seq(("Write Time", ""), ("Shuffle Write Size / Records", ""))
         } else {
           Nil
         }} ++
-        {if (hasBytesSpilled) {
+        {if (hasBytesSpilled(stage)) {
           Seq(("Shuffle Spill (Memory)", ""), ("Shuffle Spill (Disk)", ""))
         } else {
           Nil
@@ -1263,71 +819,122 @@ private[ui] class TaskPagedTable(
     <thead>{headerRow}</thead>
   }
 
-  def row(task: TaskTableRowData): Seq[Node] = {
+  def row(task: TaskData): Seq[Node] = {
+    def formatDuration(value: Option[Long], hideZero: Boolean = false): String = {
+      value.map { v =>
+        if (v > 0 || !hideZero) UIUtils.formatDuration(v) else ""
+      }.getOrElse("")
+    }
+
+    def formatBytes(value: Option[Long]): String = {
+      Utils.bytesToString(value.getOrElse(0L))
+    }
+
     <tr>
       <td>{task.index}</td>
       <td>{task.taskId}</td>
       <td>{if (task.speculative) s"${task.attempt} (speculative)" else task.attempt.toString}</td>
       <td>{task.status}</td>
       <td>{task.taskLocality}</td>
+      <td>{task.executorId}</td>
       <td>
-        <div style="float: left">{task.executorIdAndHost}</div>
+        <div style="float: left">{task.host}</div>
         <div style="float: right">
         {
-          task.logs.map {
+          dataSource.executorLogs(task.executorId).map {
             case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
           }
         }
         </div>
       </td>
-      <td>{UIUtils.formatDate(new Date(task.launchTime))}</td>
-      <td>{task.formatDuration}</td>
+      <td>{UIUtils.formatDate(task.launchTime)}</td>
+      <td>{formatDuration(task.duration)}</td>
       <td class={TaskDetailsClassNames.SCHEDULER_DELAY}>
-        {UIUtils.formatDuration(task.schedulerDelay)}
+        {UIUtils.formatDuration(AppStatusUtils.schedulerDelay(task))}
       </td>
       <td class={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}>
-        {UIUtils.formatDuration(task.taskDeserializationTime)}
+        {formatDuration(task.taskMetrics.map(_.executorDeserializeTime))}
       </td>
       <td>
-        {if (task.gcTime > 0) UIUtils.formatDuration(task.gcTime) else ""}
+        {formatDuration(task.taskMetrics.map(_.jvmGcTime), hideZero = true)}
       </td>
       <td class={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}>
-        {UIUtils.formatDuration(task.serializationTime)}
+        {formatDuration(task.taskMetrics.map(_.resultSerializationTime))}
       </td>
       <td class={TaskDetailsClassNames.GETTING_RESULT_TIME}>
-        {UIUtils.formatDuration(task.gettingResultTime)}
+        {UIUtils.formatDuration(AppStatusUtils.gettingResultTime(task))}
       </td>
       <td class={TaskDetailsClassNames.PEAK_EXECUTION_MEMORY}>
-        {Utils.bytesToString(task.peakExecutionMemoryUsed)}
+        {formatBytes(task.taskMetrics.map(_.peakExecutionMemory))}
       </td>
-      {if (task.accumulators.nonEmpty) {
-        <td>{Unparsed(task.accumulators.get)}</td>
+      {if (hasAccumulators(stage)) {
+        <td>{accumulatorsInfo(task)}</td>
       }}
-      {if (task.input.nonEmpty) {
-        <td>{task.input.get.inputReadable}</td>
+      {if (hasInput(stage)) {
+        metricInfo(task) { m =>
+          val bytesRead = Utils.bytesToString(m.inputMetrics.bytesRead)
+          val records = m.inputMetrics.recordsRead
+          <td>{bytesRead} / {records}</td>
+        }
       }}
-      {if (task.output.nonEmpty) {
-        <td>{task.output.get.outputReadable}</td>
+      {if (hasOutput(stage)) {
+        metricInfo(task) { m =>
+          val bytesWritten = Utils.bytesToString(m.outputMetrics.bytesWritten)
+          val records = m.outputMetrics.recordsWritten
+          <td>{bytesWritten} / {records}</td>
+        }
       }}
-      {if (task.shuffleRead.nonEmpty) {
+      {if (hasShuffleRead(stage)) {
         <td class={TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME}>
-          {task.shuffleRead.get.shuffleReadBlockedTimeReadable}
+          {formatDuration(task.taskMetrics.map(_.shuffleReadMetrics.fetchWaitTime))}
         </td>
-        <td>{task.shuffleRead.get.shuffleReadReadable}</td>
+        <td>{
+          metricInfo(task) { m =>
+            val bytesRead = Utils.bytesToString(totalBytesRead(m.shuffleReadMetrics))
+            val records = m.shuffleReadMetrics.recordsRead
+            Unparsed(s"$bytesRead / $records")
+          }
+        }</td>
         <td class={TaskDetailsClassNames.SHUFFLE_READ_REMOTE_SIZE}>
-          {task.shuffleRead.get.shuffleReadRemoteReadable}
+          {formatBytes(task.taskMetrics.map(_.shuffleReadMetrics.remoteBytesRead))}
         </td>
       }}
-      {if (task.shuffleWrite.nonEmpty) {
-        <td>{task.shuffleWrite.get.writeTimeReadable}</td>
-        <td>{task.shuffleWrite.get.shuffleWriteReadable}</td>
+      {if (hasShuffleWrite(stage)) {
+        <td>{
+          formatDuration(
+            task.taskMetrics.map { m =>
+              TimeUnit.NANOSECONDS.toMillis(m.shuffleWriteMetrics.writeTime)
+            },
+            hideZero = true)
+        }</td>
+        <td>{
+          metricInfo(task) { m =>
+            val bytesWritten = Utils.bytesToString(m.shuffleWriteMetrics.bytesWritten)
+            val records = m.shuffleWriteMetrics.recordsWritten
+            Unparsed(s"$bytesWritten / $records")
+          }
+        }</td>
       }}
-      {if (task.bytesSpilled.nonEmpty) {
-        <td>{task.bytesSpilled.get.memoryBytesSpilledReadable}</td>
-        <td>{task.bytesSpilled.get.diskBytesSpilledReadable}</td>
+      {if (hasBytesSpilled(stage)) {
+        <td>{formatBytes(task.taskMetrics.map(_.memoryBytesSpilled))}</td>
+        <td>{formatBytes(task.taskMetrics.map(_.diskBytesSpilled))}</td>
       }}
-      {errorMessageCell(task.error)}
+      {errorMessageCell(task.errorMessage.getOrElse(""))}
     </tr>
+  }
+
+  private def accumulatorsInfo(task: TaskData): Seq[Node] = {
+    task.accumulatorUpdates.flatMap { acc =>
+      if (acc.name != null && acc.update.isDefined) {
+        Unparsed(StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update.get}")) ++ <br />
+      } else {
+        Nil
+      }
+    }
+  }
+
+  private def metricInfo(task: TaskData)(fn: TaskMetrics => Seq[Node]): Seq[Node] = {
+    task.taskMetrics.map(fn).getOrElse(Nil)
   }
 
   private def errorMessageCell(error: String): Seq[Node] = {
@@ -1354,4 +961,63 @@ private[ui] class TaskPagedTable(
     }
     <td>{errorSummary}{details}</td>
   }
+}
+
+private object ApiHelper {
+
+
+  private val COLUMN_TO_INDEX = Map(
+    "ID" -> null.asInstanceOf[String],
+    "Index" -> TaskIndexNames.TASK_INDEX,
+    "Attempt" -> TaskIndexNames.ATTEMPT,
+    "Status" -> TaskIndexNames.STATUS,
+    "Locality Level" -> TaskIndexNames.LOCALITY,
+    "Executor ID / Host" -> TaskIndexNames.EXECUTOR,
+    "Launch Time" -> TaskIndexNames.LAUNCH_TIME,
+    "Duration" -> TaskIndexNames.DURATION,
+    "Scheduler Delay" -> TaskIndexNames.SCHEDULER_DELAY,
+    "Task Deserialization Time" -> TaskIndexNames.DESER_TIME,
+    "GC Time" -> TaskIndexNames.GC_TIME,
+    "Result Serialization Time" -> TaskIndexNames.SER_TIME,
+    "Getting Result Time" -> TaskIndexNames.GETTING_RESULT_TIME,
+    "Peak Execution Memory" -> TaskIndexNames.PEAK_MEM,
+    "Accumulators" -> TaskIndexNames.ACCUMULATORS,
+    "Input Size / Records" -> TaskIndexNames.INPUT_SIZE,
+    "Output Size / Records" -> TaskIndexNames.OUTPUT_SIZE,
+    "Shuffle Read Blocked Time" -> TaskIndexNames.SHUFFLE_READ_TIME,
+    "Shuffle Read Size / Records" -> TaskIndexNames.SHUFFLE_TOTAL_READS,
+    "Shuffle Remote Reads" -> TaskIndexNames.SHUFFLE_REMOTE_READS,
+    "Write Time" -> TaskIndexNames.SHUFFLE_WRITE_TIME,
+    "Shuffle Write Size / Records" -> TaskIndexNames.SHUFFLE_WRITE_SIZE,
+    "Shuffle Spill (Memory)" -> TaskIndexNames.MEM_SPILL,
+    "Shuffle Spill (Disk)" -> TaskIndexNames.DISK_SPILL,
+    "Errors" -> TaskIndexNames.ERROR)
+
+  def hasAccumulators(stageData: StageData): Boolean = {
+    stageData.accumulatorUpdates.exists { acc => acc.name != null && acc.value != null }
+  }
+
+  def hasInput(stageData: StageData): Boolean = stageData.inputBytes > 0
+
+  def hasOutput(stageData: StageData): Boolean = stageData.outputBytes > 0
+
+  def hasShuffleRead(stageData: StageData): Boolean = stageData.shuffleReadBytes > 0
+
+  def hasShuffleWrite(stageData: StageData): Boolean = stageData.shuffleWriteBytes > 0
+
+  def hasBytesSpilled(stageData: StageData): Boolean = {
+    stageData.diskBytesSpilled > 0 || stageData.memoryBytesSpilled > 0
+  }
+
+  def totalBytesRead(metrics: ShuffleReadMetrics): Long = {
+    metrics.localBytesRead + metrics.remoteBytesRead
+  }
+
+  def indexName(sortColumn: String): Option[String] = {
+    COLUMN_TO_INDEX.get(sortColumn) match {
+      case Some(v) => Option(v)
+      case _ => throw new IllegalArgumentException(s"Invalid sort column: $sortColumn")
+    }
+  }
+
 }

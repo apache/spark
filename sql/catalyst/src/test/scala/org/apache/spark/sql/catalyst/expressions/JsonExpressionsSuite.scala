@@ -21,8 +21,9 @@ import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, ParseModes}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -38,6 +39,10 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       |"email":"amy@only_for_json_udf_test.net","owner":"amy","zip code":"94025",
       |"fb:testid":"1234"}
       |""".stripMargin
+
+  /* invalid json with leading nulls would trigger java.io.CharConversionException
+   in Jackson's JsonFactory.createParser(byte[]) due to RFC-4627 encoding detection */
+  val badJson = "\u0000\u0000\u0000A\u0001AAA"
 
   test("$.store.bicycle") {
     checkEvaluation(
@@ -224,6 +229,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null)
   }
 
+  test("SPARK-16548: character conversion") {
+    checkEvaluation(
+      GetJsonObject(Literal(badJson), Literal("$.a")),
+      null
+    )
+  }
+
   test("non foldable literal") {
     checkEvaluation(
       GetJsonObject(NonFoldableLiteral(json), NonFoldableLiteral("$.fb:testid")),
@@ -340,10 +352,36 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       InternalRow(null, null, null, null, null))
   }
 
+  test("SPARK-16548: json_tuple - invalid json with leading nulls") {
+    checkJsonTuple(
+      JsonTuple(Literal(badJson) :: jsonTupleQuery),
+      InternalRow(null, null, null, null, null))
+  }
+
   test("json_tuple - preserve newlines") {
     checkJsonTuple(
       JsonTuple(Literal("{\"a\":\"b\nc\"}") :: Literal("a") :: Nil),
       InternalRow(UTF8String.fromString("b\nc")))
+  }
+
+  test("SPARK-21677: json_tuple throws NullPointException when column is null as string type") {
+    checkJsonTuple(
+      JsonTuple(Literal("""{"f1": 1, "f2": 2}""") ::
+        NonFoldableLiteral("f1") ::
+        NonFoldableLiteral("cast(NULL AS STRING)") ::
+        NonFoldableLiteral("f2") ::
+        Nil),
+      InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("2")))
+  }
+
+  test("SPARK-21804: json_tuple returns null values within repeated columns except the first one") {
+    checkJsonTuple(
+      JsonTuple(Literal("""{"f1": 1, "f2": 2}""") ::
+        NonFoldableLiteral("f1") ::
+        NonFoldableLiteral("cast(NULL AS STRING)") ::
+        NonFoldableLiteral("f1") ::
+        Nil),
+      InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("1")))
   }
 
   val gmtId = Option(DateTimeUtils.TimeZoneGMT.getID)
@@ -352,7 +390,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val jsonData = """{"a": 1}"""
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
-      JsonToStruct(schema, Map.empty, Literal(jsonData), gmtId),
+      JsonToStructs(schema, Map.empty, Literal(jsonData), gmtId),
       InternalRow(1)
     )
   }
@@ -361,23 +399,86 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val jsonData = """{"a" 1}"""
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
-      JsonToStruct(schema, Map.empty, Literal(jsonData), gmtId),
+      JsonToStructs(schema, Map.empty, Literal(jsonData), gmtId),
       null
     )
 
     // Other modes should still return `null`.
     checkEvaluation(
-      JsonToStruct(schema, Map("mode" -> ParseModes.PERMISSIVE_MODE), Literal(jsonData), gmtId),
+      JsonToStructs(schema, Map("mode" -> PermissiveMode.name), Literal(jsonData), gmtId),
       null
     )
+  }
+
+  test("from_json - input=array, schema=array, output=array") {
+    val input = """[{"a": 1}, {"a": 2}]"""
+    val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val output = InternalRow(1) :: InternalRow(2) :: Nil
+    checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=object, schema=array, output=array of single row") {
+    val input = """{"a": 1}"""
+    val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val output = InternalRow(1) :: Nil
+    checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=empty array, schema=array, output=empty array") {
+    val input = "[ ]"
+    val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val output = Nil
+    checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=empty object, schema=array, output=array of single row with null") {
+    val input = "{ }"
+    val schema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val output = InternalRow(null) :: Nil
+    checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=array of single object, schema=struct, output=single row") {
+    val input = """[{"a": 1}]"""
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val output = InternalRow(1)
+    checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=array, schema=struct, output=null") {
+    val input = """[{"a": 1}, {"a": 2}]"""
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val output = null
+    checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=empty array, schema=struct, output=null") {
+    val input = """[]"""
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val output = null
+    checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), gmtId), output)
+  }
+
+  test("from_json - input=empty object, schema=struct, output=single row with null") {
+    val input = """{  }"""
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val output = InternalRow(null)
+    checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), gmtId), output)
   }
 
   test("from_json null input column") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
-      JsonToStruct(schema, Map.empty, Literal.create(null, StringType), gmtId),
+      JsonToStructs(schema, Map.empty, Literal.create(null, StringType), gmtId),
       null
     )
+  }
+
+  test("SPARK-20549: from_json bad UTF-8") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    checkEvaluation(
+      JsonToStructs(schema, Map.empty, Literal(badJson), gmtId),
+      null)
   }
 
   test("from_json with timestamp") {
@@ -388,14 +489,14 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     c.set(2016, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 123)
     checkEvaluation(
-      JsonToStruct(schema, Map.empty, Literal(jsonData1), gmtId),
+      JsonToStructs(schema, Map.empty, Literal(jsonData1), gmtId),
       InternalRow(c.getTimeInMillis * 1000L)
     )
     // The result doesn't change because the json string includes timezone string ("Z" here),
     // which means the string represents the timestamp string in the timezone regardless of
     // the timeZoneId parameter.
     checkEvaluation(
-      JsonToStruct(schema, Map.empty, Literal(jsonData1), Option("PST")),
+      JsonToStructs(schema, Map.empty, Literal(jsonData1), Option("PST")),
       InternalRow(c.getTimeInMillis * 1000L)
     )
 
@@ -405,7 +506,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       c.set(2016, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
       checkEvaluation(
-        JsonToStruct(
+        JsonToStructs(
           schema,
           Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss"),
           Literal(jsonData2),
@@ -413,9 +514,10 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         InternalRow(c.getTimeInMillis * 1000L)
       )
       checkEvaluation(
-        JsonToStruct(
+        JsonToStructs(
           schema,
-          Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss", "timeZone" -> tz.getID),
+          Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+            DateTimeUtils.TIMEZONE_OPTION -> tz.getID),
           Literal(jsonData2),
           gmtId),
         InternalRow(c.getTimeInMillis * 1000L)
@@ -426,25 +528,52 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-19543: from_json empty input column") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     checkEvaluation(
-      JsonToStruct(schema, Map.empty, Literal.create(" ", StringType), gmtId),
+      JsonToStructs(schema, Map.empty, Literal.create(" ", StringType), gmtId),
       null
     )
   }
 
-  test("to_json") {
+  test("to_json - struct") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     val struct = Literal.create(create_row(1), schema)
     checkEvaluation(
-      StructToJson(Map.empty, struct, gmtId),
+      StructsToJson(Map.empty, struct, gmtId),
       """{"a":1}"""
     )
+  }
+
+  test("to_json - array") {
+    val inputSchema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val input = new GenericArrayData(InternalRow(1) :: InternalRow(2) :: Nil)
+    val output = """[{"a":1},{"a":2}]"""
+    checkEvaluation(
+      StructsToJson(Map.empty, Literal.create(input, inputSchema), gmtId),
+      output)
+  }
+
+  test("to_json - array with single empty row") {
+    val inputSchema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val input = new GenericArrayData(InternalRow(null) :: Nil)
+    val output = """[{}]"""
+    checkEvaluation(
+      StructsToJson(Map.empty, Literal.create(input, inputSchema), gmtId),
+      output)
+  }
+
+  test("to_json - empty array") {
+    val inputSchema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val input = new GenericArrayData(Nil)
+    val output = """[]"""
+    checkEvaluation(
+      StructsToJson(Map.empty, Literal.create(input, inputSchema), gmtId),
+      output)
   }
 
   test("to_json null input column") {
     val schema = StructType(StructField("a", IntegerType) :: Nil)
     val struct = Literal.create(null, schema)
     checkEvaluation(
-      StructToJson(Map.empty, struct, gmtId),
+      StructsToJson(Map.empty, struct, gmtId),
       null
     )
   }
@@ -457,27 +586,98 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val struct = Literal.create(create_row(c.getTimeInMillis * 1000L), schema)
 
     checkEvaluation(
-      StructToJson(Map.empty, struct, gmtId),
+      StructsToJson(Map.empty, struct, gmtId),
       """{"t":"2016-01-01T00:00:00.000Z"}"""
     )
     checkEvaluation(
-      StructToJson(Map.empty, struct, Option("PST")),
+      StructsToJson(Map.empty, struct, Option("PST")),
       """{"t":"2015-12-31T16:00:00.000-08:00"}"""
     )
 
     checkEvaluation(
-      StructToJson(
-        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss", "timeZone" -> gmtId.get),
+      StructsToJson(
+        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+          DateTimeUtils.TIMEZONE_OPTION -> gmtId.get),
         struct,
         gmtId),
       """{"t":"2016-01-01T00:00:00"}"""
     )
     checkEvaluation(
-      StructToJson(
-        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss", "timeZone" -> "PST"),
+      StructsToJson(
+        Map("timestampFormat" -> "yyyy-MM-dd'T'HH:mm:ss",
+          DateTimeUtils.TIMEZONE_OPTION -> "PST"),
         struct,
         gmtId),
       """{"t":"2015-12-31T16:00:00"}"""
     )
+  }
+
+  test("SPARK-21513: to_json support map[string, struct] to json") {
+    val schema = MapType(StringType, StructType(StructField("a", IntegerType) :: Nil))
+    val input = Literal.create(ArrayBasedMapData(Map("test" -> InternalRow(1))), schema)
+    checkEvaluation(
+      StructsToJson(Map.empty, input),
+      """{"test":{"a":1}}"""
+    )
+  }
+
+  test("SPARK-21513: to_json support map[struct, struct] to json") {
+    val schema = MapType(StructType(StructField("a", IntegerType) :: Nil),
+      StructType(StructField("b", IntegerType) :: Nil))
+    val input = Literal.create(ArrayBasedMapData(Map(InternalRow(1) -> InternalRow(2))), schema)
+    checkEvaluation(
+      StructsToJson(Map.empty, input),
+      """{"[1]":{"b":2}}"""
+    )
+  }
+
+  test("SPARK-21513: to_json support map[string, integer] to json") {
+    val schema = MapType(StringType, IntegerType)
+    val input = Literal.create(ArrayBasedMapData(Map("a" -> 1)), schema)
+    checkEvaluation(
+      StructsToJson(Map.empty, input),
+      """{"a":1}"""
+    )
+  }
+
+  test("to_json - array with maps") {
+    val inputSchema = ArrayType(MapType(StringType, IntegerType))
+    val input = new GenericArrayData(ArrayBasedMapData(
+      Map("a" -> 1)) :: ArrayBasedMapData(Map("b" -> 2)) :: Nil)
+    val output = """[{"a":1},{"b":2}]"""
+    checkEvaluation(
+      StructsToJson(Map.empty, Literal.create(input, inputSchema), gmtId),
+      output)
+  }
+
+  test("to_json - array with single map") {
+    val inputSchema = ArrayType(MapType(StringType, IntegerType))
+    val input = new GenericArrayData(ArrayBasedMapData(Map("a" -> 1)) :: Nil)
+    val output = """[{"a":1}]"""
+    checkEvaluation(
+      StructsToJson(Map.empty, Literal.create(input, inputSchema), gmtId),
+      output)
+  }
+
+  test("to_json: verify MapType's value type instead of key type") {
+    // Keys in map are treated as strings when converting to JSON. The type doesn't matter at all.
+    val mapType1 = MapType(CalendarIntervalType, IntegerType)
+    val schema1 = StructType(StructField("a", mapType1) :: Nil)
+    val struct1 = Literal.create(null, schema1)
+    checkEvaluation(
+      StructsToJson(Map.empty, struct1, gmtId),
+      null
+    )
+
+    // The value type must be valid for converting to JSON.
+    val mapType2 = MapType(IntegerType, CalendarIntervalType)
+    val schema2 = StructType(StructField("a", mapType2) :: Nil)
+    val struct2 = Literal.create(null, schema2)
+    intercept[TreeNodeException[_]] {
+      checkEvaluation(
+        StructsToJson(Map.empty, struct2, gmtId),
+        null
+      )
+    }
   }
 }

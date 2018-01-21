@@ -18,6 +18,9 @@
 package org.apache.spark.ml.util
 
 import java.io.IOException
+import java.util.Locale
+
+import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 import org.json4s._
@@ -44,9 +47,11 @@ private[util] sealed trait BaseReadWrite {
 
   /**
    * Sets the Spark SQLContext to use for saving/loading.
+   *
+   * @deprecated Use session instead. This method will be removed in 3.0.0.
    */
   @Since("1.6.0")
-  @deprecated("Use session instead, This method will be removed in 2.2.0.", "2.0.0")
+  @deprecated("Use session instead. This method will be removed in 3.0.0.", "2.0.0")
   def context(sqlContext: SQLContext): this.type = {
     optionSparkSession = Option(sqlContext.sparkSession)
     this
@@ -94,20 +99,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   @Since("1.6.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def save(path: String): Unit = {
-    val hadoopConf = sc.hadoopConfiguration
-    val outputPath = new Path(path)
-    val fs = outputPath.getFileSystem(hadoopConf)
-    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    if (fs.exists(qualifiedOutputPath)) {
-      if (shouldOverwrite) {
-        logInfo(s"Path $path already exists. It will be overwritten.")
-        // TODO: Revert back to the original content if save is not successful.
-        fs.delete(qualifiedOutputPath, true)
-      } else {
-        throw new IOException(
-          s"Path $path already exists. Please use write.overwrite().save(path) to overwrite it.")
-      }
-    }
+    new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sc)
     saveImpl(path)
   }
 
@@ -117,6 +109,22 @@ abstract class MLWriter extends BaseReadWrite with Logging {
    */
   @Since("1.6.0")
   protected def saveImpl(path: String): Unit
+
+  /**
+   * Map to store extra options for this writer.
+   */
+  protected val optionMap: mutable.Map[String, String] = new mutable.HashMap[String, String]()
+
+  /**
+   * Adds an option to the underlying MLWriter. See the documentation for the specific model's
+   * writer for possible options. The option name (key) is case-insensitive.
+   */
+  @Since("2.3.0")
+  def option(key: String, value: String): this.type = {
+    require(key != null && !key.isEmpty)
+    optionMap.put(key.toLowerCase(Locale.ROOT), value)
+    this
+  }
 
   /**
    * Overwrites if the output path already exists.
@@ -407,17 +415,27 @@ private[ml] object DefaultParamsReader {
 
   /**
    * Extract Params from metadata, and set them in the instance.
-   * This works if all Params implement [[org.apache.spark.ml.param.Param.jsonDecode()]].
+   * This works if all Params (except params included by `skipParams` list) implement
+   * [[org.apache.spark.ml.param.Param.jsonDecode()]].
+   *
+   * @param skipParams The params included in `skipParams` won't be set. This is useful if some
+   *                   params don't implement [[org.apache.spark.ml.param.Param.jsonDecode()]]
+   *                   and need special handling.
    * TODO: Move to [[Metadata]] method
    */
-  def getAndSetParams(instance: Params, metadata: Metadata): Unit = {
+  def getAndSetParams(
+      instance: Params,
+      metadata: Metadata,
+      skipParams: Option[List[String]] = None): Unit = {
     implicit val format = DefaultFormats
     metadata.params match {
       case JObject(pairs) =>
         pairs.foreach { case (paramName, jsonValue) =>
-          val param = instance.getParam(paramName)
-          val value = param.jsonDecode(compact(render(jsonValue)))
-          instance.set(param, value)
+          if (skipParams == None || !skipParams.get.contains(paramName)) {
+            val param = instance.getParam(paramName)
+            val value = param.jsonDecode(compact(render(jsonValue)))
+            instance.set(param, value)
+          }
         }
       case _ =>
         throw new IllegalArgumentException(
@@ -466,5 +484,26 @@ private[ml] object MetaAlgorithmReadWrite {
     }
     val subStageMaps = subStages.flatMap(getUidMapImpl)
     List((instance.uid, instance)) ++ subStageMaps
+  }
+}
+
+private[ml] class FileSystemOverwrite extends Logging {
+
+  def handleOverwrite(path: String, shouldOverwrite: Boolean, sc: SparkContext): Unit = {
+    val hadoopConf = sc.hadoopConfiguration
+    val outputPath = new Path(path)
+    val fs = outputPath.getFileSystem(hadoopConf)
+    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    if (fs.exists(qualifiedOutputPath)) {
+      if (shouldOverwrite) {
+        logInfo(s"Path $path already exists. It will be overwritten.")
+        // TODO: Revert back to the original content if save is not successful.
+        fs.delete(qualifiedOutputPath, true)
+      } else {
+        throw new IOException(s"Path $path already exists. To overwrite it, " +
+          s"please use write.overwrite().save(path) for Scala and use " +
+          s"write().overwrite().save(path) for Java and Python.")
+      }
+    }
   }
 }

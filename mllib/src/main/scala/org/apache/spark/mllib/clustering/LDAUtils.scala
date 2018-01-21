@@ -29,7 +29,7 @@ private[clustering] object LDAUtils {
    */
   private[clustering] def logSumExp(x: BDV[Double]): Double = {
     val a = max(x)
-    a + log(sum(exp(x :- a)))
+    a + log(sum(exp(x -:- a)))
   }
 
   /**

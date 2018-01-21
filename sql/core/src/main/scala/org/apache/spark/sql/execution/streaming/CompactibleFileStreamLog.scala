@@ -40,7 +40,7 @@ import org.apache.spark.sql.SparkSession
  * doing a compaction, it will read all old log files and merge them with the new batch.
  */
 abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
-    metadataLogVersion: String,
+    metadataLogVersion: Int,
     sparkSession: SparkSession,
     path: String)
   extends HDFSMetadataLog[Array[T]](sparkSession, path) {
@@ -134,7 +134,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
 
   override def serialize(logData: Array[T], out: OutputStream): Unit = {
     // called inside a try-finally where the underlying stream is closed in the caller
-    out.write(metadataLogVersion.getBytes(UTF_8))
+    out.write(("v" + metadataLogVersion).getBytes(UTF_8))
     logData.foreach { data =>
       out.write('\n')
       out.write(Serialization.write(data).getBytes(UTF_8))
@@ -146,10 +146,7 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
-    val version = lines.next()
-    if (version != metadataLogVersion) {
-      throw new IllegalStateException(s"Unknown log version: ${version}")
-    }
+    val version = parseVersion(lines.next(), metadataLogVersion)
     lines.map(Serialization.read[T]).toArray
   }
 
@@ -172,13 +169,15 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
    */
   private def compact(batchId: Long, logs: Array[T]): Boolean = {
     val validBatches = getValidBatchesBeforeCompactionBatch(batchId, compactInterval)
-    val allLogs = validBatches.flatMap(batchId => super.get(batchId)).flatten ++ logs
-    if (super.add(batchId, compactLogs(allLogs).toArray)) {
-      true
-    } else {
-      // Return false as there is another writer.
-      false
-    }
+    val allLogs = validBatches.map { id =>
+      super.get(id).getOrElse {
+        throw new IllegalStateException(
+          s"${batchIdToPath(id)} doesn't exist when compacting batch $batchId " +
+            s"(compactInterval: $compactInterval)")
+      }
+    }.flatten ++ logs
+    // Return false as there is another writer.
+    super.add(batchId, compactLogs(allLogs).toArray)
   }
 
   /**
@@ -193,7 +192,13 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
       if (latestId >= 0) {
         try {
           val logs =
-            getAllValidBatches(latestId, compactInterval).flatMap(id => super.get(id)).flatten
+            getAllValidBatches(latestId, compactInterval).map { id =>
+              super.get(id).getOrElse {
+                throw new IllegalStateException(
+                  s"${batchIdToPath(id)} doesn't exist " +
+                    s"(latestId: $latestId, compactInterval: $compactInterval)")
+              }
+            }.flatten
           return compactLogs(logs).toArray
         } catch {
           case e: IOException =>

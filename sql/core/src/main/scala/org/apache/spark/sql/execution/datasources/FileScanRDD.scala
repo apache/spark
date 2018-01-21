@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.IOException
+import java.io.{FileNotFoundException, IOException}
 
 import scala.collection.mutable
 
@@ -26,7 +26,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.vectorized.ColumnarBatch
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.NextIterator
 
 /**
@@ -44,7 +44,7 @@ case class PartitionedFile(
     filePath: String,
     start: Long,
     length: Long,
-    locations: Array[String] = Array.empty) {
+    @transient locations: Array[String] = Array.empty) {
   override def toString: String = {
     s"path: $filePath, range: $start-${start + length}, partition values: $partitionValues"
   }
@@ -66,6 +66,7 @@ class FileScanRDD(
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
   private val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
+  private val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
@@ -101,9 +102,7 @@ class FileScanRDD(
         // Kill the task in case it has been marked as killed. This logic is from
         // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
         // to avoid performance overhead.
-        if (context.isInterrupted()) {
-          throw new TaskKilledException
-        }
+        context.killTaskIfInterrupted()
         (currentIterator != null && currentIterator.hasNext) || nextIterator()
       }
       def next(): Object = {
@@ -121,6 +120,20 @@ class FileScanRDD(
         nextElement
       }
 
+      private def readCurrentFile(): Iterator[InternalRow] = {
+        try {
+          readFunction(currentFile)
+        } catch {
+          case e: FileNotFoundException =>
+            throw new FileNotFoundException(
+              e.getMessage + "\n" +
+                "It is possible the underlying files have been updated. " +
+                "You can explicitly invalidate the cache in Spark by " +
+                "running 'REFRESH TABLE tableName' command in SQL or " +
+                "by recreating the Dataset/DataFrame involved.")
+        }
+      }
+
       /** Advances to the next file. Returns true if a new non-empty iterator is available. */
       private def nextIterator(): Boolean = {
         updateBytesReadWithFileSize()
@@ -130,54 +143,40 @@ class FileScanRDD(
           // Sets InputFileBlockHolder for the file block's information
           InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
 
-          try {
-            if (ignoreCorruptFiles) {
-              currentIterator = new NextIterator[Object] {
-                private val internalIter = {
-                  try {
-                    // The readFunction may read files before consuming the iterator.
-                    // E.g., vectorized Parquet reader.
-                    readFunction(currentFile)
-                  } catch {
-                    case e @(_: RuntimeException | _: IOException) =>
-                      logWarning(s"Skipped the rest content in the corrupted file: $currentFile", e)
-                      Iterator.empty
-                  }
-                }
+          if (ignoreMissingFiles || ignoreCorruptFiles) {
+            currentIterator = new NextIterator[Object] {
+              // The readFunction may read some bytes before consuming the iterator, e.g.,
+              // vectorized Parquet reader. Here we use lazy val to delay the creation of
+              // iterator so that we will throw exception in `getNext`.
+              private lazy val internalIter = readCurrentFile()
 
-                override def getNext(): AnyRef = {
-                  try {
-                    if (internalIter.hasNext) {
-                      internalIter.next()
-                    } else {
-                      finished = true
-                      null
-                    }
-                  } catch {
-                    case e: IOException =>
-                      logWarning(s"Skipped the rest content in the corrupted file: $currentFile", e)
-                      finished = true
-                      null
+              override def getNext(): AnyRef = {
+                try {
+                  if (internalIter.hasNext) {
+                    internalIter.next()
+                  } else {
+                    finished = true
+                    null
                   }
+                } catch {
+                  case e: FileNotFoundException if ignoreMissingFiles =>
+                    logWarning(s"Skipped missing file: $currentFile", e)
+                    finished = true
+                    null
+                  // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+                  case e: FileNotFoundException if !ignoreMissingFiles => throw e
+                  case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+                    logWarning(
+                      s"Skipped the rest of the content in the corrupted file: $currentFile", e)
+                    finished = true
+                    null
                 }
-
-                override def close(): Unit = {}
               }
-            } else {
-              currentIterator = readFunction(currentFile)
+
+              override def close(): Unit = {}
             }
-          } catch {
-            case e: IOException if ignoreCorruptFiles =>
-              logWarning(s"Skipped the rest content in the corrupted file: $currentFile", e)
-              currentIterator = Iterator.empty
-            case e: java.io.FileNotFoundException =>
-              throw new java.io.FileNotFoundException(
-                e.getMessage + "\n" +
-                  "It is possible the underlying files have been updated. " +
-                  "You can explicitly invalidate the cache in Spark by " +
-                  "running 'REFRESH TABLE tableName' command in SQL or " +
-                  "by recreating the Dataset/DataFrame involved."
-              )
+          } else {
+            currentIterator = readCurrentFile()
           }
 
           hasNext

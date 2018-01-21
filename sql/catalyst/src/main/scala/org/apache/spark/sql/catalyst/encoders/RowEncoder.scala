@@ -22,11 +22,11 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -89,46 +89,59 @@ object RowEncoder {
         udtClass,
         Nil,
         dataType = ObjectType(udtClass), false)
-      Invoke(obj, "serialize", udt, inputObject :: Nil)
+      Invoke(obj, "serialize", udt, inputObject :: Nil, returnNullable = false)
 
     case TimestampType =>
       StaticInvoke(
         DateTimeUtils.getClass,
         TimestampType,
         "fromJavaTimestamp",
-        inputObject :: Nil)
+        inputObject :: Nil,
+        returnNullable = false)
 
     case DateType =>
       StaticInvoke(
         DateTimeUtils.getClass,
         DateType,
         "fromJavaDate",
-        inputObject :: Nil)
+        inputObject :: Nil,
+        returnNullable = false)
 
     case d: DecimalType =>
       StaticInvoke(
         Decimal.getClass,
         d,
         "fromDecimal",
-        inputObject :: Nil)
+        inputObject :: Nil,
+        returnNullable = false)
 
     case StringType =>
       StaticInvoke(
         classOf[UTF8String],
         StringType,
         "fromString",
-        inputObject :: Nil)
+        inputObject :: Nil,
+        returnNullable = false)
 
-    case t @ ArrayType(et, cn) =>
+    case t @ ArrayType(et, containsNull) =>
       et match {
         case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
           StaticInvoke(
             classOf[ArrayData],
             t,
             "toArrayData",
-            inputObject :: Nil)
+            inputObject :: Nil,
+            returnNullable = false)
+
         case _ => MapObjects(
-          element => serializerFor(ValidateExternalType(element, et), et),
+          element => {
+            val value = serializerFor(ValidateExternalType(element, et), et)
+            if (!containsNull) {
+              AssertNotNull(value, Seq.empty)
+            } else {
+              value
+            }
+          },
           inputObject,
           ObjectType(classOf[Object]))
       }
@@ -136,22 +149,33 @@ object RowEncoder {
     case t @ MapType(kt, vt, valueNullable) =>
       val keys =
         Invoke(
-          Invoke(inputObject, "keysIterator", ObjectType(classOf[scala.collection.Iterator[_]])),
+          Invoke(inputObject, "keysIterator", ObjectType(classOf[scala.collection.Iterator[_]]),
+            returnNullable = false),
           "toSeq",
-          ObjectType(classOf[scala.collection.Seq[_]]))
+          ObjectType(classOf[scala.collection.Seq[_]]), returnNullable = false)
       val convertedKeys = serializerFor(keys, ArrayType(kt, false))
 
       val values =
         Invoke(
-          Invoke(inputObject, "valuesIterator", ObjectType(classOf[scala.collection.Iterator[_]])),
+          Invoke(inputObject, "valuesIterator", ObjectType(classOf[scala.collection.Iterator[_]]),
+            returnNullable = false),
           "toSeq",
-          ObjectType(classOf[scala.collection.Seq[_]]))
+          ObjectType(classOf[scala.collection.Seq[_]]), returnNullable = false)
       val convertedValues = serializerFor(values, ArrayType(vt, valueNullable))
 
-      NewInstance(
+      val nonNullOutput = NewInstance(
         classOf[ArrayBasedMapData],
         convertedKeys :: convertedValues :: Nil,
-        dataType = t)
+        dataType = t,
+        propagateNull = false)
+
+      if (inputObject.nullable) {
+        If(IsNull(inputObject),
+          Literal.create(null, inputType),
+          nonNullOutput)
+      } else {
+        nonNullOutput
+      }
 
     case StructType(fields) =>
       val nonNullOutput = CreateNamedStruct(fields.zipWithIndex.flatMap { case (field, index) =>
@@ -252,32 +276,36 @@ object RowEncoder {
         DateTimeUtils.getClass,
         ObjectType(classOf[java.sql.Timestamp]),
         "toJavaTimestamp",
-        input :: Nil)
+        input :: Nil,
+        returnNullable = false)
 
     case DateType =>
       StaticInvoke(
         DateTimeUtils.getClass,
         ObjectType(classOf[java.sql.Date]),
         "toJavaDate",
-        input :: Nil)
+        input :: Nil,
+        returnNullable = false)
 
     case _: DecimalType =>
-      Invoke(input, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]))
+      Invoke(input, "toJavaBigDecimal", ObjectType(classOf[java.math.BigDecimal]),
+        returnNullable = false)
 
     case StringType =>
-      Invoke(input, "toString", ObjectType(classOf[String]))
+      Invoke(input, "toString", ObjectType(classOf[String]), returnNullable = false)
 
     case ArrayType(et, nullable) =>
       val arrayData =
         Invoke(
           MapObjects(deserializerFor(_), input, et),
           "array",
-          ObjectType(classOf[Array[_]]))
+          ObjectType(classOf[Array[_]]), returnNullable = false)
       StaticInvoke(
         scala.collection.mutable.WrappedArray.getClass,
         ObjectType(classOf[Seq[_]]),
         "make",
-        arrayData :: Nil)
+        arrayData :: Nil,
+        returnNullable = false)
 
     case MapType(kt, vt, valueNullable) =>
       val keyArrayType = ArrayType(kt, false)
@@ -290,7 +318,8 @@ object RowEncoder {
         ArrayBasedMapData.getClass,
         ObjectType(classOf[Map[_, _]]),
         "toScalaMap",
-        keyData :: valueData :: Nil)
+        keyData :: valueData :: Nil,
+        returnNullable = false)
 
     case schema @ StructType(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>

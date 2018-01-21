@@ -24,9 +24,11 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, TaskInfo => MesosTaskInfo, _}
+import org.apache.mesos.SchedulerDriver
 import org.apache.mesos.protobuf.ByteString
 
 import org.apache.spark.{SparkContext, SparkException, TaskState}
+import org.apache.spark.deploy.mesos.config
 import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -65,7 +67,9 @@ private[spark] class MesosFineGrainedSchedulerBackend(
 
   // reject offers with mismatched constraints in seconds
   private val rejectOfferDurationForUnmetConstraints =
-    getRejectOfferDurationForUnmetConstraints(sc)
+    getRejectOfferDurationForUnmetConstraints(sc.conf)
+
+  private var schedulerDriver: SchedulerDriver = _
 
   @volatile var appId: String = _
 
@@ -89,6 +93,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
 
   /**
    * Creates a MesosExecutorInfo that is used to launch a Mesos executor.
+ *
    * @param availableResources Available resources that is offered by Mesos
    * @param execId The executor id to assign to this new executor.
    * @return A tuple of the new mesos executor info and the remaining available resources.
@@ -104,7 +109,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     val environment = Environment.newBuilder()
     sc.conf.getOption("spark.executor.extraClassPath").foreach { cp =>
       environment.addVariables(
-        Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
+        Environment.Variable.newBuilder().setName("SPARK_EXECUTOR_CLASSPATH").setValue(cp).build())
     }
     val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").getOrElse("")
 
@@ -155,7 +160,8 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       .setCommand(command)
       .setData(ByteString.copyFrom(createExecArg()))
 
-    executorInfo.setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
+    executorInfo.setContainer(
+      MesosSchedulerBackendUtil.buildContainerInfo(sc.conf))
     (executorInfo.build(), resourcesAfterMem.asJava)
   }
 
@@ -178,10 +184,13 @@ private[spark] class MesosFineGrainedSchedulerBackend(
   override def offerRescinded(d: org.apache.mesos.SchedulerDriver, o: OfferID) {}
 
   override def registered(
-      d: org.apache.mesos.SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
+      driver: org.apache.mesos.SchedulerDriver,
+      frameworkId: FrameworkID,
+      masterInfo: MasterInfo) {
     inClassLoader() {
       appId = frameworkId.getValue
       logInfo("Registered as framework ID " + appId)
+      this.schedulerDriver = driver
       markRegistered()
     }
   }
@@ -383,13 +392,13 @@ private[spark] class MesosFineGrainedSchedulerBackend(
   }
 
   override def stop() {
-    if (mesosDriver != null) {
-      mesosDriver.stop()
+    if (schedulerDriver != null) {
+      schedulerDriver.stop()
     }
   }
 
   override def reviveOffers() {
-    mesosDriver.reviveOffers()
+    schedulerDriver.reviveOffers()
   }
 
   override def frameworkMessage(
@@ -425,8 +434,9 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     recordSlaveLost(d, slaveId, ExecutorExited(status, exitCausedByApp = true))
   }
 
-  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {
-    mesosDriver.killTask(
+  override def killTask(
+      taskId: Long, executorId: String, interruptThread: Boolean, reason: String): Unit = {
+    schedulerDriver.killTask(
       TaskID.newBuilder()
         .setValue(taskId.toString).build()
     )

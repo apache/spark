@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
+import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
@@ -50,10 +50,10 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getInitMode === MLlibKMeans.K_MEANS_PARALLEL)
     assert(kmeans.getInitSteps === 2)
     assert(kmeans.getTol === 1e-4)
+    assert(kmeans.getDistanceMeasure === DistanceMeasure.EUCLIDEAN)
     val model = kmeans.setMaxIter(1).fit(dataset)
 
-    // copied model must have the same parent
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(kmeans, model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
@@ -69,6 +69,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       .setInitSteps(3)
       .setSeed(123)
       .setTol(1e-3)
+      .setDistanceMeasure(DistanceMeasure.COSINE)
 
     assert(kmeans.getK === 9)
     assert(kmeans.getFeaturesCol === "test_feature")
@@ -78,6 +79,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getInitSteps === 3)
     assert(kmeans.getSeed === 123)
     assert(kmeans.getTol === 1e-3)
+    assert(kmeans.getDistanceMeasure === DistanceMeasure.COSINE)
   }
 
   test("parameters validation") {
@@ -89,6 +91,9 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     }
     intercept[IllegalArgumentException] {
       new KMeans().setInitSteps(0)
+    }
+    intercept[IllegalArgumentException] {
+      new KMeans().setDistanceMeasure("no_such_a_measure")
     }
   }
 
@@ -145,12 +150,44 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(model.getPredictionCol == predictionColName)
   }
 
+  test("KMeans using cosine distance") {
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+      Vectors.dense(1.0, 1.0),
+      Vectors.dense(10.0, 10.0),
+      Vectors.dense(1.0, 0.5),
+      Vectors.dense(10.0, 4.4),
+      Vectors.dense(-1.0, 1.0),
+      Vectors.dense(-100.0, 90.0)
+    )).map(v => TestRow(v)))
+
+    val model = new KMeans()
+      .setK(3)
+      .setSeed(1)
+      .setInitMode(MLlibKMeans.RANDOM)
+      .setTol(1e-6)
+      .setDistanceMeasure(DistanceMeasure.COSINE)
+      .fit(df)
+
+    val predictionDf = model.transform(df)
+    assert(predictionDf.select("prediction").distinct().count() == 3)
+    val predictionsMap = predictionDf.collect().map(row =>
+      row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
+    assert(predictionsMap(Vectors.dense(1.0, 1.0)) ==
+      predictionsMap(Vectors.dense(10.0, 10.0)))
+    assert(predictionsMap(Vectors.dense(1.0, 0.5)) ==
+      predictionsMap(Vectors.dense(10.0, 4.4)))
+    assert(predictionsMap(Vectors.dense(-1.0, 1.0)) ==
+      predictionsMap(Vectors.dense(-100.0, 90.0)))
+
+  }
+
   test("read/write") {
     def checkModelData(model: KMeansModel, model2: KMeansModel): Unit = {
       assert(model.clusterCenters === model2.clusterCenters)
     }
     val kmeans = new KMeans()
-    testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings,
+      KMeansSuite.allParamSettings, checkModelData)
   }
 }
 
@@ -182,6 +219,7 @@ object KMeansSuite {
     "predictionCol" -> "myPrediction",
     "k" -> 3,
     "maxIter" -> 2,
-    "tol" -> 0.01
+    "tol" -> 0.01,
+    "distanceMeasure" -> DistanceMeasure.EUCLIDEAN
   )
 }

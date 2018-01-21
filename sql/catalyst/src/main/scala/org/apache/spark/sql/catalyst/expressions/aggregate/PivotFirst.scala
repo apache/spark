@@ -91,14 +91,12 @@ case class PivotFirst(
 
   override def update(mutableAggBuffer: InternalRow, inputRow: InternalRow): Unit = {
     val pivotColValue = pivotColumn.eval(inputRow)
-    if (pivotColValue != null) {
-      // We ignore rows whose pivot column value is not in the list of pivot column values.
-      val index = pivotIndex.getOrElse(pivotColValue, -1)
-      if (index >= 0) {
-        val value = valueColumn.eval(inputRow)
-        if (value != null) {
-          updateRow(mutableAggBuffer, mutableAggBufferOffset + index, value)
-        }
+    // We ignore rows whose pivot column value is not in the list of pivot column values.
+    val index = pivotIndex.getOrElse(pivotColValue, -1)
+    if (index >= 0) {
+      val value = valueColumn.eval(inputRow)
+      if (value != null) {
+        updateRow(mutableAggBuffer, mutableAggBufferOffset + index, value)
       }
     }
   }
@@ -140,7 +138,9 @@ case class PivotFirst(
 
 
   override val aggBufferAttributes: Seq[AttributeReference] =
-    pivotIndex.toList.sortBy(_._2).map(kv => AttributeReference(kv._1.toString, valueDataType)())
+    pivotIndex.toList.sortBy(_._2).map { kv =>
+      AttributeReference(Option(kv._1).getOrElse("null").toString, valueDataType)()
+    }
 
   override val aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 

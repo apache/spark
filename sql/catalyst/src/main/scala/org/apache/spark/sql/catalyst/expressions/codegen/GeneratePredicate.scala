@@ -66,18 +66,19 @@ object GeneratePredicate extends CodeGenerator[Expression, Predicate] {
           ${ctx.initPartition()}
         }
 
-        ${ctx.declareAddedFunctions()}
-
         public boolean eval(InternalRow ${ctx.INPUT_ROW}) {
           ${eval.code}
           return !${eval.isNull} && ${eval.value};
         }
+
+        ${ctx.declareAddedFunctions()}
       }"""
 
     val code = CodeFormatter.stripOverlappingComments(
       new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"Generated predicate '$predicate':\n${CodeFormatter.format(code)}")
 
-    CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]
+    val (clazz, _) = CodeGenerator.compile(code)
+    clazz.generate(ctx.references.toArray).asInstanceOf[Predicate]
   }
 }

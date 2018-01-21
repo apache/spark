@@ -17,18 +17,23 @@
 
 package org.apache.spark.sql.internal
 
+import java.net.URL
+import java.util.Locale
+
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
-import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
+import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 
@@ -79,39 +84,57 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   val cacheManager: CacheManager = new CacheManager
 
   /**
-   * A listener for SQL-specific [[org.apache.spark.scheduler.SparkListenerEvent]]s.
+   * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
+   * [[org.apache.spark.scheduler.SparkListenerEvent]]s.
    */
-  val listener: SQLListener = createListenerAndUI(sparkContext)
+  val statusStore: SQLAppStatusStore = {
+    val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
+    val listener = new SQLAppStatusListener(sparkContext.conf, kvStore, live = true)
+    sparkContext.listenerBus.addToStatusQueue(listener)
+    val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
+    sparkContext.ui.foreach(new SQLTab(statusStore, _))
+    statusStore
+  }
 
   /**
    * A catalog that interacts with external systems.
    */
-  val externalCatalog: ExternalCatalog =
-    SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
+  lazy val externalCatalog: ExternalCatalog = {
+    val externalCatalog = SharedState.reflect[ExternalCatalog, SparkConf, Configuration](
       SharedState.externalCatalogClassName(sparkContext.conf),
       sparkContext.conf,
       sparkContext.hadoopConfiguration)
 
-  // Create the default database if it doesn't exist.
-  {
     val defaultDbDefinition = CatalogDatabase(
-      SessionCatalog.DEFAULT_DATABASE, "default database", warehousePath, Map())
-    // Initialize default database if it doesn't exist
+      SessionCatalog.DEFAULT_DATABASE,
+      "default database",
+      CatalogUtils.stringToURI(warehousePath),
+      Map())
+    // Create default database if it doesn't exist
     if (!externalCatalog.databaseExists(SessionCatalog.DEFAULT_DATABASE)) {
       // There may be another Spark application creating default database at the same time, here we
       // set `ignoreIfExists = true` to avoid `DatabaseAlreadyExists` exception.
       externalCatalog.createDatabase(defaultDbDefinition, ignoreIfExists = true)
     }
+
+    // Make sure we propagate external catalog events to the spark listener bus
+    externalCatalog.addListener(new ExternalCatalogEventListener {
+      override def onEvent(event: ExternalCatalogEvent): Unit = {
+        sparkContext.listenerBus.post(event)
+      }
+    })
+
+    externalCatalog
   }
 
   /**
    * A manager for global temporary views.
    */
-  val globalTempViewManager: GlobalTempViewManager = {
+  lazy val globalTempViewManager: GlobalTempViewManager = {
     // System preserved database should not exists in metastore. However it's hard to guarantee it
     // for every session, because case-sensitivity differs. Here we always lowercase it to make our
     // life easier.
-    val globalTempDB = sparkContext.conf.get(GLOBAL_TEMP_DATABASE).toLowerCase
+    val globalTempDB = sparkContext.conf.get(GLOBAL_TEMP_DATABASE).toLowerCase(Locale.ROOT)
     if (externalCatalog.databaseExists(globalTempDB)) {
       throw new SparkException(
         s"$globalTempDB is a system preserved database, please rename your existing database " +
@@ -127,22 +150,15 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   val jarClassLoader = new NonClosableMutableURLClassLoader(
     org.apache.spark.util.Utils.getContextOrSparkClassLoader)
 
-  /**
-   * Create a SQLListener then add it into SparkContext, and create a SQLTab if there is SparkUI.
-   */
-  private def createListenerAndUI(sc: SparkContext): SQLListener = {
-    if (SparkSession.sqlListener.get() == null) {
-      val listener = new SQLListener(sc.conf)
-      if (SparkSession.sqlListener.compareAndSet(null, listener)) {
-        sc.addSparkListener(listener)
-        sc.ui.foreach(new SQLTab(listener, _))
-      }
-    }
-    SparkSession.sqlListener.get()
-  }
 }
 
-object SharedState {
+object SharedState extends Logging {
+  try {
+    URL.setURLStreamHandlerFactory(new FsUrlStreamHandlerFactory())
+  } catch {
+    case e: Error =>
+      logWarning("URL.setURLStreamHandlerFactory failed to set FsUrlStreamHandlerFactory")
+  }
 
   private val HIVE_EXTERNAL_CATALOG_CLASS_NAME = "org.apache.spark.sql.hive.HiveExternalCatalog"
 

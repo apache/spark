@@ -10,7 +10,7 @@ Spark can run on hardware clusters managed by [Apache Mesos](http://mesos.apache
 The advantages of deploying Spark with Mesos include:
 
 - dynamic partitioning between Spark and other
-  [frameworks](https://mesos.apache.org/documentation/latest/mesos-frameworks/)
+  [frameworks](https://mesos.apache.org/documentation/latest/frameworks/)
 - scalable partitioning between multiple instances of Spark
 
 # How it Works
@@ -33,7 +33,8 @@ To get started, follow the steps below to install Mesos and deploy Spark jobs vi
 # Installing Mesos
 
 Spark {{site.SPARK_VERSION}} is designed for use with Mesos {{site.MESOS_VERSION}} or newer and does not
-require any special patches of Mesos.
+require any special patches of Mesos. File and environment-based secrets support requires Mesos 1.3.0 or
+newer.
 
 If you already have a Mesos cluster running, you can skip this Mesos installation step.
 
@@ -46,7 +47,7 @@ To install Apache Mesos from source, follow these steps:
 
 1. Download a Mesos release from a
    [mirror](http://www.apache.org/dyn/closer.lua/mesos/{{site.MESOS_VERSION}}/)
-2. Follow the Mesos [Getting Started](http://mesos.apache.org/gettingstarted) page for compiling and
+2. Follow the Mesos [Getting Started](http://mesos.apache.org/getting-started) page for compiling and
    installing Mesos
 
 **Note:** If you want to run Mesos without installing it into the default paths on your system
@@ -61,7 +62,7 @@ third party projects publish binary releases that may be helpful in setting Meso
 
 One of those is Mesosphere.  To install Mesos using the binary releases provided by Mesosphere:
 
-1. Download Mesos installation package from [downloads page](http://mesosphere.io/downloads/)
+1. Download Mesos installation package from [downloads page](https://open.mesosphere.com/downloads/mesos/)
 2. Follow their instructions for installation and configuration
 
 The Mesosphere installation documents suggest setting up ZooKeeper to handle Mesos master failover,
@@ -153,10 +154,14 @@ can find the results of the driver from the Mesos Web UI.
 To use cluster mode, you must start the `MesosClusterDispatcher` in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
 passing in the Mesos master URL (e.g: mesos://host:5050). This starts the `MesosClusterDispatcher` as a daemon running on the host.
 
+By setting the Mesos proxy config property (requires mesos version >= 1.4), `--conf spark.mesos.proxy.baseURL=http://localhost:5050` when launching the dispatcher, the mesos sandbox URI for each driver is added to the mesos dispatcher UI.
+
 If you like to run the `MesosClusterDispatcher` with Marathon, you need to run the `MesosClusterDispatcher` in the foreground (i.e: `bin/spark-class org.apache.spark.deploy.mesos.MesosClusterDispatcher`). Note that the `MesosClusterDispatcher` not yet supports multiple instances for HA.
 
 The `MesosClusterDispatcher` also supports writing recovery state into Zookeeper. This will allow the `MesosClusterDispatcher` to be able to recover all submitted and running containers on relaunch.   In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
-For more information about these configurations please refer to the configurations (doc)[configurations.html#deploy].
+For more information about these configurations please refer to the configurations [doc](configuration.html#deploy).
+
+You can also specify any additional jars required by the `MesosClusterDispatcher` in the classpath by setting the environment variable SPARK_DAEMON_CLASSPATH in spark-env.
 
 From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master URL
 to the URL of the `MesosClusterDispatcher` (e.g: mesos://dispatcher:7077). You can view driver statuses on the
@@ -198,7 +203,7 @@ details and default values.
 
 Executors are brought up eagerly when the application starts, until
 `spark.cores.max` is reached.  If you don't set `spark.cores.max`, the
-Spark application will reserve all resources offered to it by Mesos,
+Spark application will consume all resources offered to it by Mesos,
 so we of course urge you to set this variable in any sort of
 multi-tenant cluster, including one which runs multiple concurrent
 Spark applications.
@@ -209,7 +214,7 @@ provide such guarantees on the offer stream.
 
 In this mode spark executors will honor port allocation if such is
 provided from the user. Specifically if the user defines
-`spark.executor.port` or `spark.blockManager.port` in Spark configuration,
+`spark.blockManager.port` in Spark configuration,
 the mesos scheduler will check the available offers for a valid port
 range containing the port numbers. If no such range is available it will
 not launch any task. If no restriction is imposed on port numbers by the
@@ -258,7 +263,10 @@ resource offers will be accepted.
 conf.set("spark.mesos.constraints", "os:centos7;us-east-1:false")
 {% endhighlight %}
 
-For example, Let's say `spark.mesos.constraints` is set to `os:centos7;us-east-1:false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+For example, Let's say `spark.mesos.constraints` is set to `os:centos7;us-east-1:false`, then the resource offers will
+be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+
+To constrain where driver tasks are run, use `spark.mesos.driver.constraints`
 
 # Mesos Docker Support
 
@@ -357,6 +365,16 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.executor.docker.parameters</code></td>
+  <td>(none)</td>
+  <td>
+    Set the list of custom parameters which will be passed into the <code>docker run</code> command when launching the Spark executor on Mesos using the docker containerizer. The format of this property is a comma-separated list of
+    key/value pairs. Example:
+
+    <pre>key1=val1,key2=val2,key3=val3</pre>
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.executor.docker.volumes</code></td>
   <td>(none)</td>
   <td>
@@ -365,6 +383,16 @@ See the [configuration page](configuration.html) for information on Spark config
     mappings following the form passed to <code>docker run -v</code>. That is they take the form:
 
     <pre>[host_path:]container_path[:ro|:rw]</pre>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.task.labels</code></td>
+  <td>(none)</td>
+  <td>
+    Set the Mesos labels to add to each task. Labels are free-form key-value pairs.
+    Key-value pairs should be separated by a colon, and commas used to
+    list more than one.  If your label includes a colon or comma, you
+    can escape it with a backslash.  Ex. key:value,key2:a\:b.
   </td>
 </tr>
 <tr>
@@ -406,7 +434,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.secret</code></td>
   <td>(none)</td>
   <td>
-    Set the secret with which Spark framework will use to authenticate with Mesos.
+    Set the secret with which Spark framework will use to authenticate with Mesos. Used, for example, when
+    authenticating with the registry.
   </td>
 </tr>
 <tr>
@@ -421,7 +450,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.constraints</code></td>
   <td>(none)</td>
   <td>
-    Attribute based constraints on mesos resource offers. By default, all resource offers will be accepted. Refer to <a href="http://mesos.apache.org/documentation/attributes-resources/">Mesos Attributes & Resources</a> for more information on attributes.
+    Attribute based constraints on mesos resource offers. By default, all resource offers will be accepted. This setting
+    applies only to executors. Refer to <a href="http://mesos.apache.org/documentation/attributes-resources/">Mesos
+    Attributes & Resources</a> for more information on attributes.
     <ul>
       <li>Scalar constraints are matched with "less than equal" semantics i.e. value in the constraint must be less than or equal to the value in the resource offer.</li>
       <li>Range constraints are matched with "contains" semantics i.e. value in the constraint must be within the resource offer's value.</li>
@@ -429,6 +460,14 @@ See the [configuration page](configuration.html) for information on Spark config
       <li>Text constraints are matched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
       <li>In case there is no value present as a part of the constraint any offer with the corresponding attribute will be accepted (without value check).</li>
     </ul>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.constraints</code></td>
+  <td>(none)</td>
+  <td>
+    Same as <code>spark.mesos.constraints</code> except applied to drivers when launched through the dispatcher. By default,
+    all offers with sufficient resources will be accepted.
   </td>
 </tr>
 <tr>
@@ -449,6 +488,119 @@ See the [configuration page](configuration.html) for information on Spark config
     If unset it will point to Spark's internal web UI.
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.driver.labels</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Mesos labels to add to the driver.  See <code>spark.mesos.task.labels</code>
+    for formatting information.
+  </td>
+</tr>
+
+<tr>
+  <td>
+    <code>spark.mesos.driver.secret.values</code>,
+    <code>spark.mesos.driver.secret.names</code>,
+    <code>spark.mesos.executor.secret.values</code>,
+    <code>spark.mesos.executor.secret.names</code>,
+  </td>
+  <td><code>(none)</code></td>
+  <td>
+    <p>
+      A secret is specified by its contents and destination. These properties
+      specify a secret's contents. To specify a secret's destination, see the cell below.
+    </p>
+    <p>
+      You can specify a secret's contents either (1) by value or (2) by reference.
+    </p>
+    <p>
+      (1) To specify a secret by value, set the
+      <code>spark.mesos.[driver|executor].secret.values</code>
+      property, to make the secret available in the driver or executors.
+      For example, to make a secret password "guessme" available to the driver process, set:
+    
+      <pre>spark.mesos.driver.secret.values=guessme</pre>
+    </p>
+    <p>
+      (2) To specify a secret that has been placed in a secret store
+      by reference, specify its name within the secret store
+      by setting the <code>spark.mesos.[driver|executor].secret.names</code>
+      property. For example, to make a secret password named "password" in a secret store
+      available to the driver process, set:
+
+      <pre>spark.mesos.driver.secret.names=password</pre>
+    </p>
+    <p>
+      Note: To use a secret store, make sure one has been integrated with Mesos via a custom
+      <a href="http://mesos.apache.org/documentation/latest/secrets/">SecretResolver
+      module</a>.
+    </p>
+    <p>
+      To specify multiple secrets, provide a comma-separated list:
+
+      <pre>spark.mesos.driver.secret.values=guessme,passwd123</pre>
+
+      or
+
+      <pre>spark.mesos.driver.secret.names=password1,password2</pre>
+    </p>
+  </td>
+</tr>
+
+<tr>
+  <td>
+    <code>spark.mesos.driver.secret.envkeys</code>,
+    <code>spark.mesos.driver.secret.filenames</code>,
+    <code>spark.mesos.executor.secret.envkeys</code>,
+    <code>spark.mesos.executor.secret.filenames</code>,
+  </td>
+  <td><code>(none)</code></td>
+  <td>
+    <p>
+      A secret is specified by its contents and destination. These properties
+      specify a secret's destination. To specify a secret's contents, see the cell above.
+    </p>
+    <p>
+      You can specify a secret's destination in the driver or
+      executors as either (1) an environment variable or (2) as a file.
+    </p>
+    <p>
+      (1) To make an environment-based secret, set the
+      <code>spark.mesos.[driver|executor].secret.envkeys</code> property.
+      The secret will appear as an environment variable with the
+      given name in the driver or executors. For example, to make a secret password available
+      to the driver process as $PASSWORD, set:
+
+      <pre>spark.mesos.driver.secret.envkeys=PASSWORD</pre>
+    </p>
+    <p>
+      (2) To make a file-based secret, set the
+      <code>spark.mesos.[driver|executor].secret.filenames</code> property.
+      The secret will appear in the contents of a file with the given file name in
+      the driver or executors. For example, to make a secret password available in a
+      file named "pwdfile" in the driver process, set:
+
+      <pre>spark.mesos.driver.secret.filenames=pwdfile</pre>
+    </p>
+    <p>
+      Paths are relative to the container's work directory. Absolute paths must
+      already exist. Note: File-based secrets require a custom
+      <a href="http://mesos.apache.org/documentation/latest/secrets/">SecretResolver
+      module</a>.
+    </p>
+    <p>
+      To specify env vars or file names corresponding to multiple secrets,
+      provide a comma-separated list:
+
+      <pre>spark.mesos.driver.secret.envkeys=PASSWORD1,PASSWORD2</pre>
+    
+      or
+    
+      <pre>spark.mesos.driver.secret.filenames=pwdfile1,pwdfile2</pre>
+    </p>
+  </td>
+</tr>
+
 <tr>
   <td><code>spark.mesos.driverEnv.[EnvironmentVariableName]</code></td>
   <td><code>(none)</code></td>
@@ -507,6 +659,20 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.network.labels</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Pass network labels to CNI plugins.  This is a comma-separated list
+    of key-value pairs, where each key-value pair has the format key:value.
+    Example:
+
+    <pre>key1:val1,key2:val2</pre>
+    See
+    <a href="http://mesos.apache.org/documentation/latest/cni/#mesos-meta-data-to-cni-plugins">the Mesos CNI docs</a>
+    for more details.
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.fetcherCache.enable</code></td>
   <td><code>false</code></td>
   <td>
@@ -514,6 +680,41 @@ See the [configuration page](configuration.html) for information on Spark config
     `spark.mesos.uris`) will be cached by the <a
     href="http://mesos.apache.org/documentation/latest/fetcher/">Mesos
     Fetcher Cache</a>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.failoverTimeout</code></td>
+  <td><code>0.0</code></td>
+  <td>
+    The amount of time (in seconds) that the master will wait for the 
+    driver to reconnect, after being temporarily disconnected, before 
+    it tears down the driver framework by killing all its 
+    executors. The default value is zero, meaning no timeout: if the 
+    driver disconnects, the master immediately tears down the framework.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDuration</code></td>
+  <td><code>120s</code></td>
+  <td>
+    Time to consider unused resources refused, serves as a fallback of
+    `spark.mesos.rejectOfferDurationForUnmetConstraints`,
+    `spark.mesos.rejectOfferDurationForReachedMaxCores`
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDurationForUnmetConstraints</code></td>
+  <td><code>spark.mesos.rejectOfferDuration</code></td>
+  <td>
+    Time to consider unused resources refused with unmet constraints
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDurationForReachedMaxCores</code></td>
+  <td><code>spark.mesos.rejectOfferDuration</code></td>
+  <td>
+    Time to consider unused resources refused when maximum number of cores
+    <code>spark.cores.max</code> is reached
   </td>
 </tr>
 </table>

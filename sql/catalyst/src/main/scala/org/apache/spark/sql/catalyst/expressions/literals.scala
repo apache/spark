@@ -32,11 +32,13 @@ import java.util.Objects
 import javax.xml.bind.DatatypeConverter
 
 import scala.math.{BigDecimal, BigInt}
+import scala.reflect.runtime.universe.TypeTag
+import scala.util.Try
 
 import org.json4s.JsonAST._
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -56,7 +58,7 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case b: Boolean => Literal(b, BooleanType)
-    case d: BigDecimal => Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale))
+    case d: BigDecimal => Literal(Decimal(d), DecimalType.fromBigDecimal(d))
     case d: JavaBigDecimal =>
       Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
@@ -151,6 +153,14 @@ object Literal {
 
   def create(v: Any, dataType: DataType): Literal = {
     Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
+  }
+
+  def create[T : TypeTag](v: T): Literal = Try {
+    val ScalaReflection.Schema(dataType, _) = ScalaReflection.schemaFor[T]
+    val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
+    Literal(convert(v), dataType)
+  }.getOrElse {
+    Literal(v)
   }
 
   /**
@@ -280,7 +290,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
-            val boxedValue = ctx.addReferenceMinorObj(v)
+            val boxedValue = ctx.addReferenceObj("boxedValue", v)
             val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
             ev.copy(code = code)
           } else {
@@ -289,7 +299,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
-            val boxedValue = ctx.addReferenceMinorObj(v)
+            val boxedValue = ctx.addReferenceObj("boxedValue", v)
             val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
             ev.copy(code = code)
           } else {
@@ -299,8 +309,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           ev.copy(code = "", value = s"($javaType)$value")
         case TimestampType | LongType =>
           ev.copy(code = "", value = s"${value}L")
-        case other =>
-          ev.copy(code = "", value = ctx.addReferenceMinorObj(value, ctx.javaType(dataType)))
+        case _ =>
+          ev.copy(code = "", value = ctx.addReferenceObj("literal", value,
+            ctx.javaType(dataType)))
       }
     }
   }

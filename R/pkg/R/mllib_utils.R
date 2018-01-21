@@ -32,8 +32,9 @@
 #' @rdname write.ml
 #' @name write.ml
 #' @export
-#' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.gaussianMixture},
-#' @seealso \link{spark.gbt}, \link{spark.glm}, \link{glm}, \link{spark.isoreg},
+#' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.decisionTree},
+#' @seealso \link{spark.gaussianMixture}, \link{spark.gbt},
+#' @seealso \link{spark.glm}, \link{glm}, \link{spark.isoreg},
 #' @seealso \link{spark.kmeans},
 #' @seealso \link{spark.lda}, \link{spark.logit},
 #' @seealso \link{spark.mlp}, \link{spark.naiveBayes},
@@ -48,8 +49,9 @@ NULL
 #' @rdname predict
 #' @name predict
 #' @export
-#' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.gaussianMixture},
-#' @seealso \link{spark.gbt}, \link{spark.glm}, \link{glm}, \link{spark.isoreg},
+#' @seealso \link{spark.als}, \link{spark.bisectingKmeans}, \link{spark.decisionTree},
+#' @seealso \link{spark.gaussianMixture}, \link{spark.gbt},
+#' @seealso \link{spark.glm}, \link{glm}, \link{spark.isoreg},
 #' @seealso \link{spark.kmeans},
 #' @seealso \link{spark.logit}, \link{spark.mlp}, \link{spark.naiveBayes},
 #' @seealso \link{spark.randomForest}, \link{spark.survreg}, \link{spark.svmLinear}
@@ -110,6 +112,10 @@ read.ml <- function(path) {
     new("RandomForestRegressionModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.RandomForestClassifierWrapper")) {
     new("RandomForestClassificationModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.DecisionTreeRegressorWrapper")) {
+    new("DecisionTreeRegressionModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.DecisionTreeClassifierWrapper")) {
+    new("DecisionTreeClassificationModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GBTRegressorWrapper")) {
     new("GBTRegressionModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.GBTClassifierWrapper")) {
@@ -118,6 +124,8 @@ read.ml <- function(path) {
     new("BisectingKMeansModel", jobj = jobj)
   } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.LinearSVCWrapper")) {
     new("LinearSVCModel", jobj = jobj)
+  } else if (isInstanceOf(jobj, "org.apache.spark.ml.r.FPGrowthWrapper")) {
+    new("FPGrowthModel", jobj = jobj)
   } else {
     stop("Unsupported model: ", jobj)
   }

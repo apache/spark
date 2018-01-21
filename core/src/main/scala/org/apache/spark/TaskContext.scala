@@ -24,6 +24,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener}
 
 
@@ -65,7 +66,7 @@ object TaskContext {
    * An empty task context that does not represent an actual task.  This is only used in tests.
    */
   private[spark] def empty(): TaskContextImpl = {
-    new TaskContextImpl(0, 0, 0, 0, null, new Properties, null)
+    new TaskContextImpl(0, 0, 0, 0, 0, null, new Properties, null)
   }
 }
 
@@ -104,7 +105,9 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Adds a (Java friendly) listener to be executed on task completion.
-   * This will be called in all situation - success, failure, or cancellation.
+   * This will be called in all situations - success, failure, or cancellation. Adding a listener
+   * to an already completed task will result in that listener being called immediately.
+   *
    * An example use is for HadoopRDD to register a callback to close the input stream.
    *
    * Exceptions thrown by the listener will result in failure of the task.
@@ -113,7 +116,9 @@ abstract class TaskContext extends Serializable {
 
   /**
    * Adds a listener in the form of a Scala closure to be executed on task completion.
-   * This will be called in all situations - success, failure, or cancellation.
+   * This will be called in all situations - success, failure, or cancellation. Adding a listener
+   * to an already completed task will result in that listener being called immediately.
+   *
    * An example use is for HadoopRDD to register a callback to close the input stream.
    *
    * Exceptions thrown by the listener will result in failure of the task.
@@ -125,14 +130,14 @@ abstract class TaskContext extends Serializable {
   }
 
   /**
-   * Adds a listener to be executed on task failure.
-   * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
+   * Adds a listener to be executed on task failure. Adding a listener to an already failed task
+   * will result in that listener being called immediately.
    */
   def addTaskFailureListener(listener: TaskFailureListener): TaskContext
 
   /**
-   * Adds a listener to be executed on task failure.
-   * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
+   * Adds a listener to be executed on task failure.  Adding a listener to an already failed task
+   * will result in that listener being called immediately.
    */
   def addTaskFailureListener(f: (TaskContext, Throwable) => Unit): TaskContext = {
     addTaskFailureListener(new TaskFailureListener {
@@ -144,6 +149,13 @@ abstract class TaskContext extends Serializable {
    * The ID of the stage that this task belong to.
    */
   def stageId(): Int
+
+  /**
+   * How many times the stage that this task belongs to has been attempted. The first stage attempt
+   * will be assigned stageAttemptNumber = 0, and subsequent attempts will have increasing attempt
+   * numbers.
+   */
+  def stageAttemptNumber(): Int
 
   /**
    * The ID of the RDD partition that is computed by this task.
@@ -180,6 +192,16 @@ abstract class TaskContext extends Serializable {
   def getMetricsSources(sourceName: String): Seq[Source]
 
   /**
+   * If the task is interrupted, throws TaskKilledException with the reason for the interrupt.
+   */
+  private[spark] def killTaskIfInterrupted(): Unit
+
+  /**
+   * If the task is interrupted, the reason this task was killed, otherwise None.
+   */
+  private[spark] def getKillReason(): Option[String]
+
+  /**
    * Returns the manager for this task's managed memory.
    */
   private[spark] def taskMemoryManager(): TaskMemoryManager
@@ -189,5 +211,11 @@ abstract class TaskContext extends Serializable {
    * deserializing in executors.
    */
   private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit
+
+  /**
+   * Record that this task has failed due to a fetch failure from a remote host.  This allows
+   * fetch-failure handling to get triggered by the driver, regardless of intervening user-code.
+   */
+  private[spark] def setFetchFailed(fetchFailed: FetchFailedException): Unit
 
 }

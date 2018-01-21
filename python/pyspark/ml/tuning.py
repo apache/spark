@@ -14,21 +14,43 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import itertools
 import numpy as np
+from multiprocessing.pool import ThreadPool
 
-from pyspark import SparkContext
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
+from pyspark.ml.common import _py2java
 from pyspark.ml.param import Params, Param, TypeConverters
-from pyspark.ml.param.shared import HasSeed
+from pyspark.ml.param.shared import HasParallelism, HasSeed
+from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.functions import rand
-from pyspark.ml.common import inherit_doc, _py2java
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
            'TrainValidationSplitModel']
+
+
+def _parallelFitTasks(est, train, eva, validation, epm):
+    """
+    Creates a list of callables which can be called from different threads to fit and evaluate
+    an estimator in parallel. Each callable returns an `(index, metric)` pair.
+
+    :param est: Estimator, the estimator to be fit.
+    :param train: DataFrame, training data set, used for fitting.
+    :param eva: Evaluator, used to compute `metric`
+    :param validation: DataFrame, validation data set, used for evaluation.
+    :param epm: Sequence of ParamMap, params maps to be used during fitting & evaluation.
+    :return: (int, float), an index into `epm` and the associated metric value.
+    """
+    modelIter = est.fitMultiple(train, epm)
+
+    def singleTask():
+        index, model = next(modelIter)
+        metric = eva.evaluate(model.transform(validation, epm[index]))
+        return index, metric
+
+    return [singleTask] * len(epm)
 
 
 class ParamGridBuilder(object):
@@ -140,8 +162,37 @@ class ValidatorParams(HasSeed):
         """
         return self.getOrDefault(self.evaluator)
 
+    @classmethod
+    def _from_java_impl(cls, java_stage):
+        """
+        Return Python estimator, estimatorParamMaps, and evaluator from a Java ValidatorParams.
+        """
 
-class CrossValidator(Estimator, ValidatorParams):
+        # Load information from java_stage to the instance.
+        estimator = JavaParams._from_java(java_stage.getEstimator())
+        evaluator = JavaParams._from_java(java_stage.getEvaluator())
+        epms = [estimator._transfer_param_map_from_java(epm)
+                for epm in java_stage.getEstimatorParamMaps()]
+        return estimator, epms, evaluator
+
+    def _to_java_impl(self):
+        """
+        Return Java estimator, estimatorParamMaps, and evaluator from this Python instance.
+        """
+
+        gateway = SparkContext._gateway
+        cls = SparkContext._jvm.org.apache.spark.ml.param.ParamMap
+
+        java_epms = gateway.new_array(cls, len(self.getEstimatorParamMaps()))
+        for idx, epm in enumerate(self.getEstimatorParamMaps()):
+            java_epms[idx] = self.getEstimator()._transfer_param_map_to_java(epm)
+
+        java_estimator = self.getEstimator()._to_java()
+        java_evaluator = self.getEvaluator()._to_java()
+        return java_estimator, java_epms, java_evaluator
+
+
+class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLWritable):
     """
 
     K-fold cross validation performs model selection by splitting the dataset into a set of
@@ -164,7 +215,8 @@ class CrossValidator(Estimator, ValidatorParams):
     >>> lr = LogisticRegression()
     >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
     >>> evaluator = BinaryClassificationEvaluator()
-    >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+    >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
+    ...     parallelism=2)
     >>> cvModel = cv.fit(dataset)
     >>> cvModel.avgMetrics[0]
     0.5
@@ -179,26 +231,26 @@ class CrossValidator(Estimator, ValidatorParams):
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
-                 seed=None):
+                 seed=None, parallelism=1):
         """
         __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                 seed=None)
+                 seed=None, parallelism=1)
         """
         super(CrossValidator, self).__init__()
-        self._setDefault(numFolds=3)
-        kwargs = self.__init__._input_kwargs
+        self._setDefault(numFolds=3, parallelism=1)
+        kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @keyword_only
     @since("1.4.0")
     def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
-                  seed=None):
+                  seed=None, parallelism=1):
         """
         setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                  seed=None):
+                  seed=None, parallelism=1):
         Sets params for cross validator.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     @since("1.4.0")
@@ -226,17 +278,21 @@ class CrossValidator(Estimator, ValidatorParams):
         randCol = self.uid + "_rand"
         df = dataset.select("*", rand(seed).alias(randCol))
         metrics = [0.0] * numModels
+
+        pool = ThreadPool(processes=min(self.getParallelism(), numModels))
+
         for i in range(nFolds):
             validateLB = i * h
             validateUB = (i + 1) * h
             condition = (df[randCol] >= validateLB) & (df[randCol] < validateUB)
-            validation = df.filter(condition)
-            train = df.filter(~condition)
-            for j in range(numModels):
-                model = est.fit(train, epm[j])
-                # TODO: duplicate evaluator to take extra params from input
-                metric = eva.evaluate(model.transform(validation, epm[j]))
-                metrics[j] += metric/nFolds
+            validation = df.filter(condition).cache()
+            train = df.filter(~condition).cache()
+
+            tasks = _parallelFitTasks(est, train, eva, validation, epm)
+            for j, metric in pool.imap_unordered(lambda f: f(), tasks):
+                metrics[j] += (metric / nFolds)
+            validation.unpersist()
+            train.unpersist()
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
@@ -265,8 +321,55 @@ class CrossValidator(Estimator, ValidatorParams):
             newCV.setEvaluator(self.getEvaluator().copy(extra))
         return newCV
 
+    @since("2.3.0")
+    def write(self):
+        """Returns an MLWriter instance for this ML instance."""
+        return JavaMLWriter(self)
 
-class CrossValidatorModel(Model, ValidatorParams):
+    @classmethod
+    @since("2.3.0")
+    def read(cls):
+        """Returns an MLReader instance for this class."""
+        return JavaMLReader(cls)
+
+    @classmethod
+    def _from_java(cls, java_stage):
+        """
+        Given a Java CrossValidator, create and return a Python wrapper of it.
+        Used for ML persistence.
+        """
+
+        estimator, epms, evaluator = super(CrossValidator, cls)._from_java_impl(java_stage)
+        numFolds = java_stage.getNumFolds()
+        seed = java_stage.getSeed()
+        parallelism = java_stage.getParallelism()
+        # Create a new instance of this stage.
+        py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
+                       numFolds=numFolds, seed=seed, parallelism=parallelism)
+        py_stage._resetUid(java_stage.uid())
+        return py_stage
+
+    def _to_java(self):
+        """
+        Transfer this instance to a Java CrossValidator. Used for ML persistence.
+
+        :return: Java object equivalent to this instance.
+        """
+
+        estimator, epms, evaluator = super(CrossValidator, self)._to_java_impl()
+
+        _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.CrossValidator", self.uid)
+        _java_obj.setEstimatorParamMaps(epms)
+        _java_obj.setEvaluator(evaluator)
+        _java_obj.setEstimator(estimator)
+        _java_obj.setSeed(self.getSeed())
+        _java_obj.setNumFolds(self.getNumFolds())
+        _java_obj.setParallelism(self.getParallelism())
+
+        return _java_obj
+
+
+class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
     """
 
     CrossValidatorModel contains the model with the highest average cross-validation
@@ -304,8 +407,55 @@ class CrossValidatorModel(Model, ValidatorParams):
         avgMetrics = self.avgMetrics
         return CrossValidatorModel(bestModel, avgMetrics)
 
+    @since("2.3.0")
+    def write(self):
+        """Returns an MLWriter instance for this ML instance."""
+        return JavaMLWriter(self)
 
-class TrainValidationSplit(Estimator, ValidatorParams):
+    @classmethod
+    @since("2.3.0")
+    def read(cls):
+        """Returns an MLReader instance for this class."""
+        return JavaMLReader(cls)
+
+    @classmethod
+    def _from_java(cls, java_stage):
+        """
+        Given a Java CrossValidatorModel, create and return a Python wrapper of it.
+        Used for ML persistence.
+        """
+
+        bestModel = JavaParams._from_java(java_stage.bestModel())
+        estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
+
+        py_stage = cls(bestModel=bestModel).setEstimator(estimator)
+        py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
+
+        py_stage._resetUid(java_stage.uid())
+        return py_stage
+
+    def _to_java(self):
+        """
+        Transfer this instance to a Java CrossValidatorModel. Used for ML persistence.
+
+        :return: Java object equivalent to this instance.
+        """
+
+        sc = SparkContext._active_spark_context
+        # TODO: persist average metrics as well
+        _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.CrossValidatorModel",
+                                             self.uid,
+                                             self.bestModel._to_java(),
+                                             _py2java(sc, []))
+        estimator, epms, evaluator = super(CrossValidatorModel, self)._to_java_impl()
+
+        _java_obj.set("evaluator", evaluator)
+        _java_obj.set("estimator", estimator)
+        _java_obj.set("estimatorParamMaps", epms)
+        return _java_obj
+
+
+class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -326,7 +476,8 @@ class TrainValidationSplit(Estimator, ValidatorParams):
     >>> lr = LogisticRegression()
     >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
     >>> evaluator = BinaryClassificationEvaluator()
-    >>> tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+    >>> tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
+    ...     parallelism=2)
     >>> tvsModel = tvs.fit(dataset)
     >>> evaluator.evaluate(tvsModel.transform(dataset))
     0.8333...
@@ -339,26 +490,26 @@ class TrainValidationSplit(Estimator, ValidatorParams):
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
-                 seed=None):
+                 parallelism=1, seed=None):
         """
         __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
-                 seed=None)
+                 parallelism=1, seed=None)
         """
         super(TrainValidationSplit, self).__init__()
-        self._setDefault(trainRatio=0.75)
-        kwargs = self.__init__._input_kwargs
+        self._setDefault(trainRatio=0.75, parallelism=1)
+        kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @since("2.0.0")
     @keyword_only
     def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
-                  seed=None):
+                  parallelism=1, seed=None):
         """
         setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
-                  seed=None):
+                  parallelism=1, seed=None):
         Sets params for the train validation split.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     @since("2.0.0")
@@ -384,14 +535,18 @@ class TrainValidationSplit(Estimator, ValidatorParams):
         seed = self.getOrDefault(self.seed)
         randCol = self.uid + "_rand"
         df = dataset.select("*", rand(seed).alias(randCol))
-        metrics = [0.0] * numModels
         condition = (df[randCol] >= tRatio)
-        validation = df.filter(condition)
-        train = df.filter(~condition)
-        for j in range(numModels):
-            model = est.fit(train, epm[j])
-            metric = eva.evaluate(model.transform(validation, epm[j]))
-            metrics[j] += metric
+        validation = df.filter(condition).cache()
+        train = df.filter(~condition).cache()
+
+        tasks = _parallelFitTasks(est, train, eva, validation, epm)
+        pool = ThreadPool(processes=min(self.getParallelism(), numModels))
+        metrics = [None] * numModels
+        for j, metric in pool.imap_unordered(lambda f: f(), tasks):
+            metrics[j] = metric
+        train.unpersist()
+        validation.unpersist()
+
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
         else:
@@ -419,8 +574,55 @@ class TrainValidationSplit(Estimator, ValidatorParams):
             newTVS.setEvaluator(self.getEvaluator().copy(extra))
         return newTVS
 
+    @since("2.3.0")
+    def write(self):
+        """Returns an MLWriter instance for this ML instance."""
+        return JavaMLWriter(self)
 
-class TrainValidationSplitModel(Model, ValidatorParams):
+    @classmethod
+    @since("2.3.0")
+    def read(cls):
+        """Returns an MLReader instance for this class."""
+        return JavaMLReader(cls)
+
+    @classmethod
+    def _from_java(cls, java_stage):
+        """
+        Given a Java TrainValidationSplit, create and return a Python wrapper of it.
+        Used for ML persistence.
+        """
+
+        estimator, epms, evaluator = super(TrainValidationSplit, cls)._from_java_impl(java_stage)
+        trainRatio = java_stage.getTrainRatio()
+        seed = java_stage.getSeed()
+        parallelism = java_stage.getParallelism()
+        # Create a new instance of this stage.
+        py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
+                       trainRatio=trainRatio, seed=seed, parallelism=parallelism)
+        py_stage._resetUid(java_stage.uid())
+        return py_stage
+
+    def _to_java(self):
+        """
+        Transfer this instance to a Java TrainValidationSplit. Used for ML persistence.
+        :return: Java object equivalent to this instance.
+        """
+
+        estimator, epms, evaluator = super(TrainValidationSplit, self)._to_java_impl()
+
+        _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.TrainValidationSplit",
+                                             self.uid)
+        _java_obj.setEstimatorParamMaps(epms)
+        _java_obj.setEvaluator(evaluator)
+        _java_obj.setEstimator(estimator)
+        _java_obj.setTrainRatio(self.getTrainRatio())
+        _java_obj.setSeed(self.getSeed())
+        _java_obj.setParallelism(self.getParallelism())
+
+        return _java_obj
+
+
+class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -456,6 +658,55 @@ class TrainValidationSplitModel(Model, ValidatorParams):
         bestModel = self.bestModel.copy(extra)
         validationMetrics = list(self.validationMetrics)
         return TrainValidationSplitModel(bestModel, validationMetrics)
+
+    @since("2.3.0")
+    def write(self):
+        """Returns an MLWriter instance for this ML instance."""
+        return JavaMLWriter(self)
+
+    @classmethod
+    @since("2.3.0")
+    def read(cls):
+        """Returns an MLReader instance for this class."""
+        return JavaMLReader(cls)
+
+    @classmethod
+    def _from_java(cls, java_stage):
+        """
+        Given a Java TrainValidationSplitModel, create and return a Python wrapper of it.
+        Used for ML persistence.
+        """
+
+        # Load information from java_stage to the instance.
+        bestModel = JavaParams._from_java(java_stage.bestModel())
+        estimator, epms, evaluator = super(TrainValidationSplitModel,
+                                           cls)._from_java_impl(java_stage)
+        # Create a new instance of this stage.
+        py_stage = cls(bestModel=bestModel).setEstimator(estimator)
+        py_stage = py_stage.setEstimatorParamMaps(epms).setEvaluator(evaluator)
+
+        py_stage._resetUid(java_stage.uid())
+        return py_stage
+
+    def _to_java(self):
+        """
+        Transfer this instance to a Java TrainValidationSplitModel. Used for ML persistence.
+        :return: Java object equivalent to this instance.
+        """
+
+        sc = SparkContext._active_spark_context
+        # TODO: persst validation metrics as well
+        _java_obj = JavaParams._new_java_obj(
+            "org.apache.spark.ml.tuning.TrainValidationSplitModel",
+            self.uid,
+            self.bestModel._to_java(),
+            _py2java(sc, []))
+        estimator, epms, evaluator = super(TrainValidationSplitModel, self)._to_java_impl()
+
+        _java_obj.set("evaluator", evaluator)
+        _java_obj.set("estimator", estimator)
+        _java_obj.set("estimatorParamMaps", epms)
+        return _java_obj
 
 
 if __name__ == "__main__":

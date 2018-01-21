@@ -53,9 +53,9 @@ are calculated based on the mapped indices. This approach avoids the need to com
 term-to-index map, which can be expensive for a large corpus, but it suffers from potential hash 
 collisions, where different raw features may become the same term after hashing. To reduce the 
 chance of collision, we can increase the target feature dimension, i.e. the number of buckets 
-of the hash table. Since a simple modulo is used to transform the hash function to a column index, 
-it is advisable to use a power of two as the feature dimension, otherwise the features will 
-not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`.
+of the hash table. Since a simple modulo on the hashed value is used to determine the vector index,
+it is advisable to use a power of two as the feature dimension, otherwise the features will not
+be mapped evenly to the vector indices. The default feature dimension is `$2^{18} = 262,144$`.
 An optional binary toggle parameter controls term frequency counts. When set to true all nonzero
 frequency counts are set to 1. This is especially useful for discrete probabilistic models that
 model binary, rather than integer, counts.
@@ -65,7 +65,7 @@ model binary, rather than integer, counts.
 
 **IDF**: `IDF` is an `Estimator` which is fit on a dataset and produces an `IDFModel`.  The 
 `IDFModel` takes feature vectors (generally created from `HashingTF` or `CountVectorizer`) and 
-scales each column. Intuitively, it down-weights columns which appear frequently in a corpus.
+scales each feature. Intuitively, it down-weights features which appear frequently in a corpus.
 
 **Note:** `spark.ml` doesn't provide tools for text segmentation.
 We refer users to the [Stanford NLP Group](http://nlp.stanford.edu/) and 
@@ -208,6 +208,89 @@ and the [CountVectorizerModel Python docs](api/python/pyspark.ml.html#pyspark.ml
 for more details on the API.
 
 {% include_example python/ml/count_vectorizer_example.py %}
+</div>
+</div>
+
+## FeatureHasher
+
+Feature hashing projects a set of categorical or numerical features into a feature vector of
+specified dimension (typically substantially smaller than that of the original feature
+space). This is done using the [hashing trick](https://en.wikipedia.org/wiki/Feature_hashing)
+to map features to indices in the feature vector.
+
+The `FeatureHasher` transformer operates on multiple columns. Each column may contain either
+numeric or categorical features. Behavior and handling of column data types is as follows:
+
+- Numeric columns: For numeric features, the hash value of the column name is used to map the
+feature value to its index in the feature vector. By default, numeric features are not treated
+as categorical (even when they are integers). To treat them as categorical, specify the relevant
+columns using the `categoricalCols` parameter.
+- String columns: For categorical features, the hash value of the string "column_name=value"
+is used to map to the vector index, with an indicator value of `1.0`. Thus, categorical features
+are "one-hot" encoded (similarly to using [OneHotEncoder](ml-features.html#onehotencoder) with
+`dropLast=false`).
+- Boolean columns: Boolean values are treated in the same way as string columns. That is,
+boolean features are represented as "column_name=true" or "column_name=false", with an indicator
+value of `1.0`.
+
+Null (missing) values are ignored (implicitly zero in the resulting feature vector).
+
+The hash function used here is also the [MurmurHash 3](https://en.wikipedia.org/wiki/MurmurHash)
+used in [HashingTF](ml-features.html#tf-idf). Since a simple modulo on the hashed value is used to
+determine the vector index, it is advisable to use a power of two as the numFeatures parameter;
+otherwise the features will not be mapped evenly to the vector indices.
+
+**Examples**
+
+Assume that we have a DataFrame with 4 input columns `real`, `bool`, `stringNum`, and `string`.
+These different data types as input will illustrate the behavior of the transform to produce a
+column of feature vectors.
+
+~~~~
+real| bool|stringNum|string
+----|-----|---------|------
+ 2.2| true|        1|   foo
+ 3.3|false|        2|   bar
+ 4.4|false|        3|   baz
+ 5.5|false|        4|   foo
+~~~~
+
+Then the output of `FeatureHasher.transform` on this DataFrame is:
+
+~~~~
+real|bool |stringNum|string|features
+----|-----|---------|------|-------------------------------------------------------
+2.2 |true |1        |foo   |(262144,[51871, 63643,174475,253195],[1.0,1.0,2.2,1.0])
+3.3 |false|2        |bar   |(262144,[6031,  80619,140467,174475],[1.0,1.0,1.0,3.3])
+4.4 |false|3        |baz   |(262144,[24279,140467,174475,196810],[1.0,1.0,4.4,1.0])
+5.5 |false|4        |foo   |(262144,[63643,140467,168512,174475],[1.0,1.0,1.0,5.5])
+~~~~
+
+The resulting feature vectors could then be passed to a learning algorithm.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [FeatureHasher Scala docs](api/scala/index.html#org.apache.spark.ml.feature.FeatureHasher)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/FeatureHasherExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [FeatureHasher Java docs](api/java/org/apache/spark/ml/feature/FeatureHasher.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaFeatureHasherExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [FeatureHasher Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.FeatureHasher)
+for more details on the API.
+
+{% include_example python/ml/feature_hasher_example.py %}
 </div>
 </div>
 
@@ -503,6 +586,7 @@ for more details on the API.
 
 `StringIndexer` encodes a string column of labels to a column of label indices.
 The indices are in `[0, numLabels)`, ordered by label frequencies, so the most frequent label gets index `0`.
+The unseen labels will be put at index numLabels if user chooses to keep them.
 If the input column is numeric, we cast it to string and index the string
 values. When downstream pipeline components such as `Estimator` or
 `Transformer` make use of this string-indexed label, you must set the input
@@ -542,12 +626,13 @@ column, we should get the following:
 "a" gets index `0` because it is the most frequent, followed by "c" with index `1` and "b" with
 index `2`.
 
-Additionally, there are two strategies regarding how `StringIndexer` will handle
+Additionally, there are three strategies regarding how `StringIndexer` will handle
 unseen labels when you have fit a `StringIndexer` on one dataset and then use it
 to transform another:
 
 - throw an exception (which is the default)
 - skip the row containing the unseen label entirely
+- put unseen labels in a special additional bucket, at index numLabels
 
 **Examples**
 
@@ -561,6 +646,7 @@ Let's go back to our previous example but this time reuse our previously defined
  1  | b
  2  | c
  3  | d
+ 4  | e
 ~~~~
 
 If you've not set how `StringIndexer` handles unseen labels or set it to
@@ -576,7 +662,22 @@ will be generated:
  2  | c        | 1.0
 ~~~~
 
-Notice that the row containing "d" does not appear.
+Notice that the rows containing "d" or "e" do not appear.
+
+If you call `setHandleInvalid("keep")`, the following dataset
+will be generated:
+
+~~~~
+ id | category | categoryIndex
+----|----------|---------------
+ 0  | a        | 0.0
+ 1  | b        | 2.0
+ 2  | c        | 1.0
+ 3  | d        | 3.0
+ 4  | e        | 3.0
+~~~~
+
+Notice that the rows containing "d" or "e" are mapped to index "3.0"
 
 <div class="codetabs">
 
@@ -674,35 +775,43 @@ for more details on the API.
 </div>
 </div>
 
-## OneHotEncoder
+## OneHotEncoder (Deprecated since 2.3.0)
 
-[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features.
+Because this existing `OneHotEncoder` is a stateless transformer, it is not usable on new data where the number of categories may differ from the training data. In order to fix this, a new `OneHotEncoderEstimator` was created that produces an `OneHotEncoderModel` when fitting. For more detail, please see [SPARK-13030](https://issues.apache.org/jira/browse/SPARK-13030).
+
+`OneHotEncoder` has been deprecated in 2.3.0 and will be removed in 3.0.0. Please use [OneHotEncoderEstimator](ml-features.html#onehotencoderestimator) instead.
+
+## OneHotEncoderEstimator
+
+[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a categorical feature, represented as a label index, to a binary vector with at most a single one-value indicating the presence of a specific feature value from among the set of all feature values. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features. For string type input data, it is common to encode categorical features using [StringIndexer](ml-features.html#stringindexer) first.
+
+`OneHotEncoderEstimator` can transform multiple columns, returning an one-hot-encoded output vector column for each input column. It is common to merge these vectors into a single feature vector using [VectorAssembler](ml-features.html#vectorassembler).
+
+`OneHotEncoderEstimator` supports the `handleInvalid` parameter to choose how to handle invalid input during transforming data. Available options include 'keep' (any invalid inputs are assigned to an extra categorical index) and 'error' (throw an error).
 
 **Examples**
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-Refer to the [OneHotEncoder Scala docs](api/scala/index.html#org.apache.spark.ml.feature.OneHotEncoder)
-for more details on the API.
+Refer to the [OneHotEncoderEstimator Scala docs](api/scala/index.html#org.apache.spark.ml.feature.OneHotEncoderEstimator) for more details on the API.
 
-{% include_example scala/org/apache/spark/examples/ml/OneHotEncoderExample.scala %}
+{% include_example scala/org/apache/spark/examples/ml/OneHotEncoderEstimatorExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 
-Refer to the [OneHotEncoder Java docs](api/java/org/apache/spark/ml/feature/OneHotEncoder.html)
+Refer to the [OneHotEncoderEstimator Java docs](api/java/org/apache/spark/ml/feature/OneHotEncoderEstimator.html)
 for more details on the API.
 
-{% include_example java/org/apache/spark/examples/ml/JavaOneHotEncoderExample.java %}
+{% include_example java/org/apache/spark/examples/ml/JavaOneHotEncoderEstimatorExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
 
-Refer to the [OneHotEncoder Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.OneHotEncoder)
-for more details on the API.
+Refer to the [OneHotEncoderEstimator Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.OneHotEncoderEstimator) for more details on the API.
 
-{% include_example python/ml/onehot_encoder_example.py %}
+{% include_example python/ml/onehot_encoder_estimator_example.py %}
 </div>
 </div>
 
@@ -1264,6 +1373,74 @@ for more details on the API.
 {% include_example python/ml/quantile_discretizer_example.py %}
 </div>
 
+</div>
+
+
+## Imputer
+
+The `Imputer` transformer completes missing values in a dataset, either using the mean or the 
+median of the columns in which the missing values are located. The input columns should be of
+`DoubleType` or `FloatType`. Currently `Imputer` does not support categorical features and possibly
+creates incorrect values for columns containing categorical features. Imputer can impute custom values 
+other than 'NaN' by `.setMissingValue(custom_value)`. For example, `.setMissingValue(0)` will impute 
+all occurrences of (0).
+
+**Note** all `null` values in the input columns are treated as missing, and so are also imputed.
+
+**Examples**
+
+Suppose that we have a DataFrame with the columns `a` and `b`:
+
+~~~
+      a     |      b      
+------------|-----------
+     1.0    | Double.NaN
+     2.0    | Double.NaN
+ Double.NaN |     3.0   
+     4.0    |     4.0   
+     5.0    |     5.0   
+~~~
+
+In this example, Imputer will replace all occurrences of `Double.NaN` (the default for the missing value)
+with the mean (the default imputation strategy) computed from the other values in the corresponding columns.
+In this example, the surrogate values for columns `a` and `b` are 3.0 and 4.0 respectively. After
+transformation, the missing values in the output columns will be replaced by the surrogate value for
+the relevant column.
+
+~~~
+      a     |      b     | out_a | out_b   
+------------|------------|-------|-------
+     1.0    | Double.NaN |  1.0  |  4.0 
+     2.0    | Double.NaN |  2.0  |  4.0 
+ Double.NaN |     3.0    |  3.0  |  3.0 
+     4.0    |     4.0    |  4.0  |  4.0
+     5.0    |     5.0    |  5.0  |  5.0 
+~~~
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Imputer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Imputer)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/ImputerExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Imputer Java docs](api/java/org/apache/spark/ml/feature/Imputer.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaImputerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Imputer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.Imputer)
+for more details on the API.
+
+{% include_example python/ml/imputer_example.py %}
+</div>
 </div>
 
 # Feature Selectors

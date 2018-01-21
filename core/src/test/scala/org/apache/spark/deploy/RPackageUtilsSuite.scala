@@ -133,6 +133,17 @@ class RPackageUtilsSuite
     }
   }
 
+  test("jars without manifest return false") {
+    IvyTestUtils.withRepository(main, None, None) { repo =>
+      val jar = IvyTestUtils.packJar(new File(new URI(repo)), dep1, Nil,
+        useIvyLayout = false, withR = false, None)
+      Utils.tryWithResource(new JarFile(jar)) { jarFile =>
+        assert(jarFile.getManifest == null, "jar file should have null manifest")
+        assert(!RPackageUtils.checkManifestForR(jarFile), "null manifest should return false")
+      }
+    }
+  }
+
   test("SparkR zipping works properly") {
     val tempDir = Files.createTempDir()
     Utils.tryWithSafeFinally {

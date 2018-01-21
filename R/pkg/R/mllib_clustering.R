@@ -60,9 +60,9 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #' @param maxIter maximum iteration number.
 #' @param seed the random seed.
 #' @param minDivisibleClusterSize The minimum number of points (if greater than or equal to 1.0)
-#'                                or the minimum proportion of points (if less than 1.0) of a divisible cluster.
-#'                                Note that it is an expert parameter. The default value should be good enough
-#'                                for most cases.
+#'                                or the minimum proportion of points (if less than 1.0) of a
+#'                                divisible cluster. Note that it is an expert parameter. The
+#'                                default value should be good enough for most cases.
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.bisectingKmeans} returns a fitted bisecting k-means model.
 #' @rdname spark.bisectingKmeans
@@ -72,8 +72,9 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' df <- createDataFrame(iris)
-#' model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
+#' t <- as.data.frame(Titanic)
+#' df <- createDataFrame(t)
+#' model <- spark.bisectingKmeans(df, Class ~ Survived, k = 4)
 #' summary(model)
 #'
 #' # get fitted result from a bisecting k-means model
@@ -82,7 +83,7 @@ setClass("LDAModel", representation(jobj = "jobj"))
 #'
 #' # fitted values on training data
 #' fitted <- predict(model, df)
-#' head(select(fitted, "Sepal_Length", "prediction"))
+#' head(select(fitted, "Class", "prediction"))
 #'
 #' # save fitted model to input path
 #' path <- "path/to/model"
@@ -324,10 +325,11 @@ setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "charact
 #'                Note that the response variable of formula is empty in spark.kmeans.
 #' @param k number of centers.
 #' @param maxIter maximum iteration number.
-#' @param initMode the initialization algorithm choosen to fit the model.
+#' @param initMode the initialization algorithm chosen to fit the model.
 #' @param seed the random seed for cluster initialization.
 #' @param initSteps the number of steps for the k-means|| initialization mode.
-#'                  This is an advanced setting, the default of 2 is almost always enough. Must be > 0.
+#'                  This is an advanced setting, the default of 2 is almost always enough.
+#'                  Must be > 0.
 #' @param tol convergence tolerance of iterations.
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.kmeans} returns a fitted k-means model.
@@ -338,14 +340,14 @@ setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "charact
 #' @examples
 #' \dontrun{
 #' sparkR.session()
-#' data(iris)
-#' df <- createDataFrame(iris)
-#' model <- spark.kmeans(df, Sepal_Length ~ Sepal_Width, k = 4, initMode = "random")
+#' t <- as.data.frame(Titanic)
+#' df <- createDataFrame(t)
+#' model <- spark.kmeans(df, Class ~ Survived, k = 4, initMode = "random")
 #' summary(model)
 #'
 #' # fitted values on training data
 #' fitted <- predict(model, df)
-#' head(select(fitted, "Sepal_Length", "prediction"))
+#' head(select(fitted, "Class", "prediction"))
 #'
 #' # save fitted model to input path
 #' path <- "path/to/model"
@@ -497,11 +499,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
 #' @export
 #' @examples
 #' \dontrun{
-#' # nolint start
-#' # An example "path/to/file" can be
-#' # paste0(Sys.getenv("SPARK_HOME"), "/data/mllib/sample_lda_libsvm_data.txt")
-#' # nolint end
-#' text <- read.df("path/to/file", source = "libsvm")
+#' text <- read.df("data/mllib/sample_lda_libsvm_data.txt", source = "libsvm")
 #' model <- spark.lda(data = text, optimizer = "em")
 #'
 #' # get a summary of the model
@@ -551,8 +549,8 @@ setMethod("spark.lda", signature(data = "SparkDataFrame"),
 #'         \item{\code{topics}}{top 10 terms and their weights of all topics}
 #'         \item{\code{vocabulary}}{whole terms of the training corpus, NULL if libsvm format file
 #'               used as training set}
-#'         \item{\code{trainingLogLikelihood}}{Log likelihood of the observed tokens in the training set,
-#'               given the current parameter estimates:
+#'         \item{\code{trainingLogLikelihood}}{Log likelihood of the observed tokens in the
+#'               training set, given the current parameter estimates:
 #'               log P(docs | topics, topic distributions for docs, Dirichlet hyperparameters)
 #'               It is only for distributed LDA model (i.e., optimizer = "em")}
 #'         \item{\code{logPrior}}{Log probability of the current parameter estimate:

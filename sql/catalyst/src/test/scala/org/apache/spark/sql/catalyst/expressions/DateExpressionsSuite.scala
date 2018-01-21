@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, Locale, TimeZone}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
@@ -76,6 +77,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
     }
     checkEvaluation(DayOfYear(Literal.create(null, DateType)), null)
+
+    checkEvaluation(DayOfYear(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 288)
+    checkEvaluation(DayOfYear(Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime))), 277)
     checkConsistencyBetweenInterpretedAndCodegen(DayOfYear, DateType)
   }
 
@@ -96,6 +100,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
+    checkEvaluation(Year(Literal(new Date(sdf.parse("1582-01-01 13:10:15").getTime))), 1582)
+    checkEvaluation(Year(Literal(new Date(sdf.parse("1581-12-31 13:10:15").getTime))), 1581)
     checkConsistencyBetweenInterpretedAndCodegen(Year, DateType)
   }
 
@@ -116,6 +122,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
+
+    checkEvaluation(Quarter(Literal(new Date(sdf.parse("1582-10-01 13:10:15").getTime))), 4)
+    checkEvaluation(Quarter(Literal(new Date(sdf.parse("1582-09-30 13:10:15").getTime))), 3)
     checkConsistencyBetweenInterpretedAndCodegen(Quarter, DateType)
   }
 
@@ -124,6 +133,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Month(Literal(d)), 4)
     checkEvaluation(Month(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 4)
     checkEvaluation(Month(Cast(Literal(ts), DateType, gmtId)), 11)
+
+    checkEvaluation(Month(Literal(new Date(sdf.parse("1582-04-28 13:10:15").getTime))), 4)
+    checkEvaluation(Month(Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime))), 10)
+    checkEvaluation(Month(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 10)
 
     val c = Calendar.getInstance()
     (2003 to 2004).foreach { y =>
@@ -146,6 +159,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(DayOfMonth(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 8)
     checkEvaluation(DayOfMonth(Cast(Literal(ts), DateType, gmtId)), 8)
 
+    checkEvaluation(DayOfMonth(Literal(new Date(sdf.parse("1582-04-28 13:10:15").getTime))), 28)
+    checkEvaluation(DayOfMonth(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 15)
+    checkEvaluation(DayOfMonth(Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime))), 4)
+
     val c = Calendar.getInstance()
     (1999 to 2000).foreach { y =>
       c.set(y, 0, 1, 0, 0, 0)
@@ -160,7 +177,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Seconds") {
     assert(Second(Literal.create(null, DateType), gmtId).resolved === false)
-    assert(Second(Cast(Literal(d), TimestampType), None).resolved === true)
+    assert(Second(Cast(Literal(d), TimestampType, gmtId), gmtId).resolved === true)
     checkEvaluation(Second(Cast(Literal(d), TimestampType, gmtId), gmtId), 0)
     checkEvaluation(Second(Cast(Literal(sdf.format(d)), TimestampType, gmtId), gmtId), 15)
     checkEvaluation(Second(Literal(ts), gmtId), 15)
@@ -180,12 +197,28 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("DayOfWeek") {
+    checkEvaluation(DayOfWeek(Literal.create(null, DateType)), null)
+    checkEvaluation(DayOfWeek(Literal(d)), Calendar.WEDNESDAY)
+    checkEvaluation(DayOfWeek(Cast(Literal(sdfDate.format(d)), DateType, gmtId)),
+      Calendar.WEDNESDAY)
+    checkEvaluation(DayOfWeek(Cast(Literal(ts), DateType, gmtId)), Calendar.FRIDAY)
+    checkEvaluation(DayOfWeek(Cast(Literal("2011-05-06"), DateType, gmtId)), Calendar.FRIDAY)
+    checkEvaluation(DayOfWeek(Literal(new Date(sdf.parse("2017-05-27 13:10:15").getTime))),
+      Calendar.SATURDAY)
+    checkEvaluation(DayOfWeek(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))),
+      Calendar.FRIDAY)
+    checkConsistencyBetweenInterpretedAndCodegen(DayOfWeek, DateType)
+  }
+
   test("WeekOfYear") {
     checkEvaluation(WeekOfYear(Literal.create(null, DateType)), null)
     checkEvaluation(WeekOfYear(Literal(d)), 15)
     checkEvaluation(WeekOfYear(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 15)
     checkEvaluation(WeekOfYear(Cast(Literal(ts), DateType, gmtId)), 45)
     checkEvaluation(WeekOfYear(Cast(Literal("2011-05-06"), DateType, gmtId)), 18)
+    checkEvaluation(WeekOfYear(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 40)
+    checkEvaluation(WeekOfYear(Literal(new Date(sdf.parse("1582-10-04 13:10:15").getTime))), 40)
     checkConsistencyBetweenInterpretedAndCodegen(WeekOfYear, DateType)
   }
 
@@ -220,7 +253,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Hour") {
     assert(Hour(Literal.create(null, DateType), gmtId).resolved === false)
-    assert(Hour(Literal(ts), None).resolved === true)
+    assert(Hour(Literal(ts), gmtId).resolved === true)
     checkEvaluation(Hour(Cast(Literal(d), TimestampType, gmtId), gmtId), 0)
     checkEvaluation(Hour(Cast(Literal(sdf.format(d)), TimestampType, gmtId), gmtId), 13)
     checkEvaluation(Hour(Literal(ts), gmtId), 13)
@@ -246,7 +279,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("Minute") {
     assert(Minute(Literal.create(null, DateType), gmtId).resolved === false)
-    assert(Minute(Literal(ts), None).resolved === true)
+    assert(Minute(Literal(ts), gmtId).resolved === true)
     checkEvaluation(Minute(Cast(Literal(d), TimestampType, gmtId), gmtId), 0)
     checkEvaluation(
       Minute(Cast(Literal(sdf.format(d)), TimestampType, gmtId), gmtId), 10)
@@ -495,15 +528,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       NextDay(Literal(Date.valueOf("2015-07-23")), Literal.create(null, StringType)), null)
   }
 
-  test("function to_date") {
-    checkEvaluation(
-      ToDate(Literal(Date.valueOf("2015-07-22"))),
-      DateTimeUtils.fromJavaDate(Date.valueOf("2015-07-22")))
-    checkEvaluation(ToDate(Literal.create(null, DateType)), null)
-    checkConsistencyBetweenInterpretedAndCodegen(ToDate, DateType)
-  }
-
-  test("function trunc") {
+  test("TruncDate") {
     def testTrunc(input: Date, fmt: String, expected: Date): Unit = {
       checkEvaluation(TruncDate(Literal.create(input, DateType), Literal.create(fmt, StringType)),
         expected)
@@ -519,9 +544,80 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       testTrunc(date, fmt, Date.valueOf("2015-07-01"))
     }
     testTrunc(date, "DD", null)
+    testTrunc(date, "SECOND", null)
+    testTrunc(date, "HOUR", null)
     testTrunc(date, null, null)
     testTrunc(null, "MON", null)
     testTrunc(null, null, null)
+  }
+
+  test("TruncTimestamp") {
+    def testTrunc(input: Timestamp, fmt: String, expected: Timestamp): Unit = {
+      checkEvaluation(
+        TruncTimestamp(Literal.create(fmt, StringType), Literal.create(input, TimestampType)),
+        expected)
+      checkEvaluation(
+        TruncTimestamp(
+          NonFoldableLiteral.create(fmt, StringType), Literal.create(input, TimestampType)),
+        expected)
+    }
+
+    withDefaultTimeZone(TimeZoneGMT) {
+      val inputDate = Timestamp.valueOf("2015-07-22 05:30:06")
+
+      Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-01-01 00:00:00"))
+      }
+
+      Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-01 00:00:00"))
+      }
+
+      Seq("DAY", "day", "DD", "dd").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-22 00:00:00"))
+      }
+
+      Seq("HOUR", "hour").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-22 05:00:00"))
+      }
+
+      Seq("MINUTE", "minute").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-22 05:30:00"))
+      }
+
+      Seq("SECOND", "second").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-22 05:30:06"))
+      }
+
+      Seq("WEEK", "week").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-20 00:00:00"))
+      }
+
+      Seq("QUARTER", "quarter").foreach { fmt =>
+        testTrunc(
+          inputDate, fmt,
+          Timestamp.valueOf("2015-07-01 00:00:00"))
+      }
+
+      testTrunc(inputDate, "INVALID", null)
+      testTrunc(inputDate, null, null)
+      testTrunc(null, "MON", null)
+      testTrunc(null, null, null)
+    }
   }
 
   test("from_unixtime") {
@@ -696,6 +792,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
+    // Test escaping of timezone
+    GenerateUnsafeProjection.generate(
+      ToUTCTimestamp(Literal(Timestamp.valueOf("2015-07-24 00:00:00")), Literal("\"quote")) :: Nil)
   }
 
   test("from_utc_timestamp") {
@@ -716,5 +815,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test(null, "UTC", null)
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
+    // Test escaping of timezone
+    GenerateUnsafeProjection.generate(FromUTCTimestamp(Literal(0), Literal("\"quote")) :: Nil)
   }
 }

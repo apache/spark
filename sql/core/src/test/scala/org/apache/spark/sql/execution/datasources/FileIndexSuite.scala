@@ -27,7 +27,10 @@ import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.{KnownSizeEstimation, SizeEstimator}
 
 class FileIndexSuite extends SharedSQLContext {
 
@@ -134,15 +137,15 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
-  test("PartitioningAwareFileIndex - file filtering") {
-    assert(!PartitioningAwareFileIndex.shouldFilterOut("abcd"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut(".ab"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("_cd"))
-    assert(!PartitioningAwareFileIndex.shouldFilterOut("_metadata"))
-    assert(!PartitioningAwareFileIndex.shouldFilterOut("_common_metadata"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("_ab_metadata"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("_cd_common_metadata"))
-    assert(PartitioningAwareFileIndex.shouldFilterOut("a._COPYING_"))
+  test("InMemoryFileIndex - file filtering") {
+    assert(!InMemoryFileIndex.shouldFilterOut("abcd"))
+    assert(InMemoryFileIndex.shouldFilterOut(".ab"))
+    assert(InMemoryFileIndex.shouldFilterOut("_cd"))
+    assert(!InMemoryFileIndex.shouldFilterOut("_metadata"))
+    assert(!InMemoryFileIndex.shouldFilterOut("_common_metadata"))
+    assert(InMemoryFileIndex.shouldFilterOut("_ab_metadata"))
+    assert(InMemoryFileIndex.shouldFilterOut("_cd_common_metadata"))
+    assert(InMemoryFileIndex.shouldFilterOut("a._COPYING_"))
   }
 
   test("SPARK-17613 - PartitioningAwareFileIndex: base path w/o '/' at end") {
@@ -179,6 +182,21 @@ class FileIndexSuite extends SharedSQLContext {
     }
   }
 
+  test("InMemoryFileIndex with empty rootPaths when PARALLEL_PARTITION_DISCOVERY_THRESHOLD" +
+    "is a nonpositive number") {
+    withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
+      new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
+    }
+
+    val e = intercept[IllegalArgumentException] {
+      withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "-1") {
+        new InMemoryFileIndex(spark, Seq.empty, Map.empty, None)
+      }
+    }.getMessage
+    assert(e.contains("The maximum number of paths allowed for listing files at " +
+      "driver side must not be negative"))
+  }
+
   test("refresh for InMemoryFileIndex with FileStatusCache") {
     withTempDir { dir =>
       val fileStatusCache = FileStatusCache.getOrCreate(spark)
@@ -202,6 +220,32 @@ class FileIndexSuite extends SharedSQLContext {
 
       assert(catalog.leafDirPaths.size == 1)
       assert(catalog.leafDirPaths.head == fs.makeQualified(dirPath))
+    }
+  }
+
+  test("SPARK-20280 - FileStatusCache with a partition with very many files") {
+    /* fake the size, otherwise we need to allocate 2GB of data to trigger this bug */
+    class MyFileStatus extends FileStatus with KnownSizeEstimation {
+      override def estimatedSize: Long = 1000 * 1000 * 1000
+    }
+    /* files * MyFileStatus.estimatedSize should overflow to negative integer
+     * so, make it between 2bn and 4bn
+     */
+    val files = (1 to 3).map { i =>
+      new MyFileStatus()
+    }
+    val fileStatusCache = FileStatusCache.getOrCreate(spark)
+    fileStatusCache.putLeafFiles(new Path("/tmp", "abc"), files.toArray)
+  }
+
+  test("SPARK-20367 - properly unescape column names in inferPartitioning") {
+    withTempPath { path =>
+      val colToUnescape = "Column/#%'?"
+      spark
+        .range(1)
+        .select(col("id").as(colToUnescape), col("id"))
+        .write.partitionBy(colToUnescape).parquet(path.getAbsolutePath)
+      assert(spark.read.parquet(path.getAbsolutePath).schema.exists(_.name == colToUnescape))
     }
   }
 }

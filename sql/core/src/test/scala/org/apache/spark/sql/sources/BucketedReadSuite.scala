@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.execution.exchange.ShuffleExchange
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -90,6 +90,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       originalDataFrame: DataFrame): Unit = {
     // This test verifies parts of the plan. Disable whole stage codegen.
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val strategy = DataSourceStrategy(spark.sessionState.conf)
       val bucketedDataFrame = spark.table("bucketed_table").select("i", "j", "k")
       val BucketSpec(numBuckets, bucketColumnNames, _) = bucketSpec
       // Limit: bucket pruning only works when the bucket column has one and only one column
@@ -98,7 +99,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       val bucketColumn = bucketedDataFrame.schema.toAttributes(bucketColumnIndex)
       val matchedBuckets = new BitSet(numBuckets)
       bucketValues.foreach { value =>
-        matchedBuckets.set(DataSourceStrategy.getBucketId(bucketColumn, numBuckets, value))
+        matchedBuckets.set(strategy.getBucketId(bucketColumn, numBuckets, value))
       }
 
       // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
@@ -301,10 +302,10 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
         // check existence of shuffle
         assert(
-          joinOperator.left.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleLeft,
+          joinOperator.left.find(_.isInstanceOf[ShuffleExchangeExec]).isDefined == shuffleLeft,
           s"expected shuffle in plan to be $shuffleLeft but found\n${joinOperator.left}")
         assert(
-          joinOperator.right.find(_.isInstanceOf[ShuffleExchange]).isDefined == shuffleRight,
+          joinOperator.right.find(_.isInstanceOf[ShuffleExchangeExec]).isDefined == shuffleRight,
           s"expected shuffle in plan to be $shuffleRight but found\n${joinOperator.right}")
 
         // check existence of sort
@@ -505,7 +506,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         agged.sort("i", "j"),
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
-      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchange]).isEmpty)
+      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
     }
   }
 
@@ -519,7 +520,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         agged.sort("i", "j"),
         df1.groupBy("i", "j").agg(max("k")).sort("i", "j"))
 
-      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchange]).isEmpty)
+      assert(agged.queryExecution.executedPlan.find(_.isInstanceOf[ShuffleExchangeExec]).isEmpty)
     }
   }
 
@@ -540,6 +541,96 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         joinPredicates && filterLeft && filterRight
       }
     )
+  }
+
+  test("SPARK-19122 Re-order join predicates if they match with the child's output partitioning") {
+    val bucketedTableTestSpec = BucketedTableTestSpec(
+      Some(BucketSpec(8, Seq("i", "j", "k"), Seq("i", "j", "k"))),
+      numPartitions = 1,
+      expectedShuffle = false,
+      expectedSort = false)
+
+    // If the set of join columns is equal to the set of bucketed + sort columns, then
+    // the order of join keys in the query should not matter and there should not be any shuffle
+    // and sort added in the query plan
+    Seq(
+      Seq("i", "j", "k"),
+      Seq("i", "k", "j"),
+      Seq("j", "k", "i"),
+      Seq("j", "i", "k"),
+      Seq("k", "j", "i"),
+      Seq("k", "i", "j")
+    ).foreach(joinKeys => {
+      testBucketing(
+        bucketedTableTestSpecLeft = bucketedTableTestSpec,
+        bucketedTableTestSpecRight = bucketedTableTestSpec,
+        joinCondition = joinCondition(joinKeys)
+      )
+    })
+  }
+
+  test("SPARK-19122 No re-ordering should happen if set of join columns != set of child's " +
+    "partitioning columns") {
+
+    // join predicates is a super set of child's partitioning columns
+    val bucketedTableTestSpec1 =
+      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), numPartitions = 1)
+    testBucketing(
+      bucketedTableTestSpecLeft = bucketedTableTestSpec1,
+      bucketedTableTestSpecRight = bucketedTableTestSpec1,
+      joinCondition = joinCondition(Seq("i", "j", "k"))
+    )
+
+    // child's partitioning columns is a super set of join predicates
+    val bucketedTableTestSpec2 =
+      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j", "k"), Seq("i", "j", "k"))),
+        numPartitions = 1)
+    testBucketing(
+      bucketedTableTestSpecLeft = bucketedTableTestSpec2,
+      bucketedTableTestSpecRight = bucketedTableTestSpec2,
+      joinCondition = joinCondition(Seq("i", "j"))
+    )
+
+    // set of child's partitioning columns != set join predicates (despite the lengths of the
+    // sets are same)
+    val bucketedTableTestSpec3 =
+      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), numPartitions = 1)
+    testBucketing(
+      bucketedTableTestSpecLeft = bucketedTableTestSpec3,
+      bucketedTableTestSpecRight = bucketedTableTestSpec3,
+      joinCondition = joinCondition(Seq("j", "k"))
+    )
+  }
+
+  test("SPARK-22042 ReorderJoinPredicates can break when child's partitioning is not decided") {
+    withTable("bucketed_table", "table1", "table2") {
+      df.write.format("parquet").saveAsTable("table1")
+      df.write.format("parquet").saveAsTable("table2")
+      df.write.format("parquet").bucketBy(8, "j", "k").saveAsTable("bucketed_table")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+        checkAnswer(
+          sql("""
+                |SELECT ab.i, ab.j, ab.k, c.i, c.j, c.k
+                |FROM (
+                |  SELECT a.i, a.j, a.k
+                |  FROM bucketed_table a
+                |  JOIN table1 b
+                |  ON a.i = b.i
+                |) ab
+                |JOIN table2 c
+                |ON ab.i = c.i
+              """.stripMargin),
+          sql("""
+                |SELECT a.i, a.j, a.k, c.i, c.j, c.k
+                |FROM bucketed_table a
+                |JOIN table1 b
+                |ON a.i = b.i
+                |JOIN table2 c
+                |ON a.i = c.i
+              """.stripMargin))
+      }
+    }
   }
 
   test("error if there exists any malformed bucket files") {

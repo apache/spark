@@ -25,6 +25,8 @@ import scala.util.control.NonFatal
 import scala.xml._
 import scala.xml.transform.{RewriteRule, RuleTransformer}
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.scope.RDDOperationGraph
 
@@ -33,6 +35,8 @@ private[spark] object UIUtils extends Logging {
   val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed"
   val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
   val TABLE_CLASS_STRIPED_SORTABLE = TABLE_CLASS_STRIPED + " sortable"
+
+  private val NEWLINE_AND_SINGLE_QUOTE_REGEX = raw"(?i)(\r\n|\n|\r|%0D%0A|%0A|%0D|'|%27)".r
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -228,7 +232,7 @@ private[spark] object UIUtils extends Logging {
             <div class="brand">
               <a href={prependBaseUri("/")} class="brand">
                 <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
-                <span class="version">{org.apache.spark.SPARK_VERSION}</span>
+                <span class="version">{activeTab.appSparkVersion}</span>
               </a>
             </div>
             <p class="navbar-text pull-right">
@@ -342,7 +346,7 @@ private[spark] object UIUtils extends Logging {
       completed: Int,
       failed: Int,
       skipped: Int,
-      killed: Int,
+      reasonToNumKilled: Map[String, Int],
       total: Int): Seq[Node] = {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
     // started + completed can be > total when there are speculative tasks
@@ -352,9 +356,13 @@ private[spark] object UIUtils extends Logging {
     <div class="progress">
       <span style="text-align:center; position:absolute; width:100%; left:0;">
         {completed}/{total}
+        { if (failed == 0 && skipped == 0 && started > 0) s"($started running)" }
         { if (failed > 0) s"($failed failed)" }
         { if (skipped > 0) s"($skipped skipped)" }
-        { if (killed > 0) s"($killed killed)" }
+        { reasonToNumKilled.toSeq.sortBy(-_._2).map {
+            case (reason, count) => s"($count killed: $reason)"
+          }
+        }
       </span>
       <div class="bar bar-completed" style={completeWidth}></div>
       <div class="bar bar-running" style={startWidth}></div>
@@ -443,7 +451,7 @@ private[spark] object UIUtils extends Logging {
       val xml = XML.loadString(s"""<span class="description-input">$desc</span>""")
 
       // Verify that this has only anchors and span (we are wrapping in span)
-      val allowedNodeLabels = Set("a", "span")
+      val allowedNodeLabels = Set("a", "span", "br")
       val illegalNodes = xml \\ "_"  filterNot { case node: Node =>
         allowedNodeLabels.contains(node.label)
       }
@@ -522,6 +530,23 @@ private[spark] object UIUtils extends Logging {
       s"/proxy/$id"
     } else {
       origHref
+    }
+  }
+
+  /**
+   * Remove suspicious characters of user input to prevent Cross-Site scripting (XSS) attacks
+   *
+   * For more information about XSS testing:
+   * https://www.owasp.org/index.php/XSS_Filter_Evasion_Cheat_Sheet and
+   * https://www.owasp.org/index.php/Testing_for_Reflected_Cross_site_scripting_(OTG-INPVAL-001)
+   */
+  def stripXSS(requestParameter: String): String = {
+    if (requestParameter == null) {
+      null
+    } else {
+      // Remove new lines and single quotes, followed by escaping HTML version 4.0
+      StringEscapeUtils.escapeHtml4(
+        NEWLINE_AND_SINGLE_QUOTE_REGEX.replaceAllIn(requestParameter, ""))
     }
   }
 }

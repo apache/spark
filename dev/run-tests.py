@@ -111,7 +111,7 @@ def determine_modules_to_test(changed_modules):
     >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
     >>> x # doctest: +NORMALIZE_WHITESPACE
     ['sql', 'hive', 'mllib', 'sql-kafka-0-10', 'examples', 'hive-thriftserver',
-     'pyspark-sql', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
+     'pyspark-sql', 'repl', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
     """
     modules_to_test = set()
     for module in changed_modules:
@@ -253,9 +253,9 @@ def kill_zinc_on_port(zinc_port):
     """
     Kill the Zinc process running on the given port, if one exists.
     """
-    cmd = ("/usr/sbin/lsof -P |grep %s | grep LISTEN "
-           "| awk '{ print $2; }' | xargs kill") % zinc_port
-    subprocess.check_call(cmd, shell=True)
+    cmd = "%s -P |grep %s | grep LISTEN | awk '{ print $2; }' | xargs kill"
+    lsof_exe = which("lsof")
+    subprocess.check_call(cmd % (lsof_exe if lsof_exe else "/usr/sbin/lsof", zinc_port), shell=True)
 
 
 def exec_maven(mvn_args=()):
@@ -276,9 +276,9 @@ def exec_sbt(sbt_args=()):
 
     sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")] + sbt_args
 
-    sbt_output_filter = re.compile("^.*[info].*Resolving" + "|" +
-                                   "^.*[warn].*Merging" + "|" +
-                                   "^.*[info].*Including")
+    sbt_output_filter = re.compile(b"^.*[info].*Resolving" + b"|" +
+                                   b"^.*[warn].*Merging" + b"|" +
+                                   b"^.*[info].*Including")
 
     # NOTE: echo "q" is needed because sbt on encountering a build file
     # with failure (either resolution or compilation) prompts the user for
@@ -289,7 +289,7 @@ def exec_sbt(sbt_args=()):
                                 stdin=echo_proc.stdout,
                                 stdout=subprocess.PIPE)
     echo_proc.wait()
-    for line in iter(sbt_proc.stdout.readline, ''):
+    for line in iter(sbt_proc.stdout.readline, b''):
         if not sbt_output_filter.match(line):
             print(line, end='')
     retcode = sbt_proc.wait()
@@ -344,6 +344,19 @@ def build_spark_sbt(hadoop_version):
     exec_sbt(profiles_and_goals)
 
 
+def build_spark_unidoc_sbt(hadoop_version):
+    set_title_and_block("Building Unidoc API Documentation", "BLOCK_DOCUMENTATION")
+    # Enable all of the profiles for the build:
+    build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
+    sbt_goals = ["unidoc"]
+    profiles_and_goals = build_profiles + sbt_goals
+
+    print("[info] Building Spark unidoc (w/Hive 1.2.1) using SBT with these arguments: ",
+          " ".join(profiles_and_goals))
+
+    exec_sbt(profiles_and_goals)
+
+
 def build_spark_assembly_sbt(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
@@ -352,6 +365,16 @@ def build_spark_assembly_sbt(hadoop_version):
     print("[info] Building Spark assembly (w/Hive 1.2.1) using SBT with these arguments: ",
           " ".join(profiles_and_goals))
     exec_sbt(profiles_and_goals)
+
+    # Note that we skip Unidoc build only if Hadoop 2.6 is explicitly set in this SBT build.
+    # Due to a different dependency resolution in SBT & Unidoc by an unknown reason, the
+    # documentation build fails on a specific machine & environment in Jenkins but it was unable
+    # to reproduce. Please see SPARK-20343. This is a band-aid fix that should be removed in
+    # the future.
+    is_hadoop_version_2_6 = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE") == "hadoop2.6"
+    if not is_hadoop_version_2_6:
+        # Make sure that Java and Scala API documentation can be generated
+        build_spark_unidoc_sbt(hadoop_version)
 
 
 def build_apache_spark(build_tool, hadoop_version):

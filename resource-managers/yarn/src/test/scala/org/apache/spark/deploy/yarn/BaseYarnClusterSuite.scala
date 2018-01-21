@@ -62,18 +62,14 @@ abstract class BaseYarnClusterSuite
   protected var hadoopConfDir: File = _
   private var logConfDir: File = _
 
-  var oldSystemProperties: Properties = null
-
   def newYarnConfig(): YarnConfiguration
 
   override def beforeAll() {
     super.beforeAll()
-    oldSystemProperties = SerializationUtils.clone(System.getProperties)
 
     tempDir = Utils.createTempDir()
     logConfDir = new File(tempDir, "log4j")
     logConfDir.mkdir()
-    System.setProperty("SPARK_YARN_MODE", "true")
 
     val logConfFile = new File(logConfDir, "log4j.properties")
     Files.write(LOG4J_CONF, logConfFile, StandardCharsets.UTF_8)
@@ -124,7 +120,6 @@ abstract class BaseYarnClusterSuite
     try {
       yarnCluster.stop()
     } finally {
-      System.setProperties(oldSystemProperties)
       super.afterAll()
     }
   }

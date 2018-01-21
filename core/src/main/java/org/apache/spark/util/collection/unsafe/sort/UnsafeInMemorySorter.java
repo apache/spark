@@ -23,8 +23,8 @@ import java.util.LinkedList;
 import org.apache.avro.reflect.Nullable;
 
 import org.apache.spark.TaskContext;
-import org.apache.spark.TaskKilledException;
 import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UnsafeAlignedOffset;
@@ -163,7 +163,9 @@ public final class UnsafeInMemorySorter {
    */
   public void free() {
     if (consumer != null) {
-      consumer.freeArray(array);
+      if (array != null) {
+        consumer.freeArray(array);
+      }
       array = null;
     }
   }
@@ -171,6 +173,15 @@ public final class UnsafeInMemorySorter {
   public void reset() {
     if (consumer != null) {
       consumer.freeArray(array);
+      // the call to consumer.allocateArray may trigger a spill which in turn access this instance
+      // and eventually re-enter this method and try to free the array again.  by setting the array
+      // to null and its length to 0 we effectively make the spill code-path a no-op.  setting the
+      // array to null also indicates that it has already been de-allocated which prevents a double
+      // de-allocation in free().
+      array = null;
+      usableCapacity = 0;
+      pos = 0;
+      nullBoundaryPos = 0;
       array = consumer.allocateArray(initialSize);
       usableCapacity = getUsableCapacity();
     }
@@ -202,7 +213,7 @@ public final class UnsafeInMemorySorter {
 
   public void expandPointerArray(LongArray newArray) {
     if (newArray.size() < array.size()) {
-      throw new OutOfMemoryError("Not enough memory to grow pointer array");
+      throw new SparkOutOfMemoryError("Not enough memory to grow pointer array");
     }
     Platform.copyMemory(
       array.getBaseObject(),
@@ -291,8 +302,8 @@ public final class UnsafeInMemorySorter {
       // to avoid performance overhead. This check is added here in `loadNext()` instead of in
       // `hasNext()` because it's technically possible for the caller to be relying on
       // `getNumRecords()` instead of `hasNext()` to know when to stop.
-      if (taskContext != null && taskContext.isInterrupted()) {
-        throw new TaskKilledException();
+      if (taskContext != null) {
+        taskContext.killTaskIfInterrupted();
       }
       // This pointer points to a 4-byte record length, followed by the record's bytes
       final long recordPointer = array.get(offset + position);

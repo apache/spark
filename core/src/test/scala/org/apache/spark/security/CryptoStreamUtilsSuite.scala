@@ -16,9 +16,11 @@
  */
 package org.apache.spark.security
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, FileInputStream, FileOutputStream}
+import java.nio.channels.Channels
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.UUID
+import java.nio.file.Files
+import java.util.{Arrays, Random, UUID}
 
 import com.google.common.io.ByteStreams
 
@@ -118,6 +120,47 @@ class CryptoStreamUtilsSuite extends SparkFunSuite {
       assert(content === decrypted)
     } finally {
       sc.stop()
+    }
+  }
+
+  test("crypto stream wrappers") {
+    val testData = new Array[Byte](128 * 1024)
+    new Random().nextBytes(testData)
+
+    val conf = createConf()
+    val key = createKey(conf)
+    val file = Files.createTempFile("crypto", ".test").toFile()
+    file.deleteOnExit()
+
+    val outStream = createCryptoOutputStream(new FileOutputStream(file), conf, key)
+    try {
+      ByteStreams.copy(new ByteArrayInputStream(testData), outStream)
+    } finally {
+      outStream.close()
+    }
+
+    val inStream = createCryptoInputStream(new FileInputStream(file), conf, key)
+    try {
+      val inStreamData = ByteStreams.toByteArray(inStream)
+      assert(Arrays.equals(inStreamData, testData))
+    } finally {
+      inStream.close()
+    }
+
+    val outChannel = createWritableChannel(new FileOutputStream(file).getChannel(), conf, key)
+    try {
+      val inByteChannel = Channels.newChannel(new ByteArrayInputStream(testData))
+      ByteStreams.copy(inByteChannel, outChannel)
+    } finally {
+      outChannel.close()
+    }
+
+    val inChannel = createReadableChannel(new FileInputStream(file).getChannel(), conf, key)
+    try {
+      val inChannelData = ByteStreams.toByteArray(Channels.newInputStream(inChannel))
+      assert(Arrays.equals(inChannelData, testData))
+    } finally {
+      inChannel.close()
     }
   }
 

@@ -17,19 +17,14 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
 import java.util.Properties
-
-import scala.collection.mutable
-import scala.collection.mutable.HashMap
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.APP_CALLER_CONTEXT
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util._
 
 /**
@@ -84,6 +79,7 @@ private[spark] abstract class Task[T](
     SparkEnv.get.blockManager.registerTask(taskAttemptId)
     context = new TaskContextImpl(
       stageId,
+      stageAttemptId, // stageAttemptId and stageAttemptNumber are semantically equal
       partitionId,
       taskAttemptId,
       attemptNumber,
@@ -94,8 +90,8 @@ private[spark] abstract class Task[T](
     TaskContext.setTaskContext(context)
     taskThread = Thread.currentThread()
 
-    if (_killed) {
-      kill(interruptThread = false)
+    if (_reasonIfKilled != null) {
+      kill(interruptThread = false, _reasonIfKilled)
     }
 
     new CallerContext(
@@ -120,24 +116,33 @@ private[spark] abstract class Task[T](
           case t: Throwable =>
             e.addSuppressed(t)
         }
+        context.markTaskCompleted(Some(e))
         throw e
     } finally {
-      // Call the task completion callbacks.
-      context.markTaskCompleted()
       try {
-        Utils.tryLogNonFatalError {
-          // Release memory used by this thread for unrolling blocks
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
-          SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.OFF_HEAP)
-          // Notify any tasks waiting for execution memory to be freed to wake up and try to
-          // acquire memory again. This makes impossible the scenario where a task sleeps forever
-          // because there are no other tasks left to notify it. Since this is safe to do but may
-          // not be strictly necessary, we should revisit whether we can remove this in the future.
-          val memoryManager = SparkEnv.get.memoryManager
-          memoryManager.synchronized { memoryManager.notifyAll() }
-        }
+        // Call the task completion callbacks. If "markTaskCompleted" is called twice, the second
+        // one is no-op.
+        context.markTaskCompleted(None)
       } finally {
-        TaskContext.unset()
+        try {
+          Utils.tryLogNonFatalError {
+            // Release memory used by this thread for unrolling blocks
+            SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP)
+            SparkEnv.get.blockManager.memoryStore.releaseUnrollMemoryForThisTask(
+              MemoryMode.OFF_HEAP)
+            // Notify any tasks waiting for execution memory to be freed to wake up and try to
+            // acquire memory again. This makes impossible the scenario where a task sleeps forever
+            // because there are no other tasks left to notify it. Since this is safe to do but may
+            // not be strictly necessary, we should revisit whether we can remove this in the
+            // future.
+            val memoryManager = SparkEnv.get.memoryManager
+            memoryManager.synchronized { memoryManager.notifyAll() }
+          }
+        } finally {
+          // Though we unset the ThreadLocal here, the context member variable itself is still
+          // queried directly in the TaskRunner to check for FetchFailedExceptions.
+          TaskContext.unset()
+        }
       }
     }
   }
@@ -152,26 +157,26 @@ private[spark] abstract class Task[T](
 
   def preferredLocations: Seq[TaskLocation] = Nil
 
-  // Map output tracker epoch. Will be set by TaskScheduler.
+  // Map output tracker epoch. Will be set by TaskSetManager.
   var epoch: Long = -1
 
   // Task context, to be initialized in run().
-  @transient protected var context: TaskContextImpl = _
+  @transient var context: TaskContextImpl = _
 
   // The actual Thread on which the task is running, if any. Initialized in run().
   @volatile @transient private var taskThread: Thread = _
 
-  // A flag to indicate whether the task is killed. This is used in case context is not yet
-  // initialized when kill() is invoked.
-  @volatile @transient private var _killed = false
+  // If non-null, this task has been killed and the reason is as specified. This is used in case
+  // context is not yet initialized when kill() is invoked.
+  @volatile @transient private var _reasonIfKilled: String = null
 
   protected var _executorDeserializeTime: Long = 0
   protected var _executorDeserializeCpuTime: Long = 0
 
   /**
-   * Whether the task has been killed.
+   * If defined, this task has been killed and this option contains the reason.
    */
-  def killed: Boolean = _killed
+  def reasonIfKilled: Option[String] = Option(_reasonIfKilled)
 
   /**
    * Returns the amount of time spent deserializing the RDD and function to be run.
@@ -185,14 +190,11 @@ private[spark] abstract class Task[T](
    */
   def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulatorV2[_, _]] = {
     if (context != null) {
-      context.taskMetrics.internalAccums.filter { a =>
-        // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
-        // value will be updated at driver side.
-        // Note: internal accumulators representing task metrics always count failed values
-        !a.isZero || a.name == Some(InternalAccumulator.RESULT_SIZE)
-      // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not filter
-      // them out.
-      } ++ context.taskMetrics.externalAccums.filter(a => !taskFailed || a.countFailedValues)
+      // Note: internal accumulators representing task metrics always count failed values
+      context.taskMetrics.nonZeroInternalAccums() ++
+        // zero value external accumulators may still be useful, e.g. SQLMetrics, we should not
+        // filter them out.
+        context.taskMetrics.externalAccums.filter(a => !taskFailed || a.countFailedValues)
     } else {
       Seq.empty
     }
@@ -204,10 +206,11 @@ private[spark] abstract class Task[T](
    * be called multiple times.
    * If interruptThread is true, we will also call Thread.interrupt() on the Task's executor thread.
    */
-  def kill(interruptThread: Boolean) {
-    _killed = true
+  def kill(interruptThread: Boolean, reason: String) {
+    require(reason != null)
+    _reasonIfKilled = reason
     if (context != null) {
-      context.markInterrupted()
+      context.markInterrupted(reason)
     }
     if (interruptThread && taskThread != null) {
       taskThread.interrupt()

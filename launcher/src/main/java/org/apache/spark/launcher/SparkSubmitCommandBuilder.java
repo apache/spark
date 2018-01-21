@@ -240,7 +240,6 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       addOptionString(cmd, System.getenv("SPARK_DAEMON_JAVA_OPTS"));
     }
     addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
-    addOptionString(cmd, System.getenv("SPARK_JAVA_OPTS"));
 
     // We don't want the client to specify Xmx. These have to be set by their corresponding
     // memory flag --driver-memory or configuration entry spark.driver.memory
@@ -356,7 +355,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     env.put(submitArgsEnvVariable, submitArgs.toString());
   }
 
-  private boolean isClientMode(Map<String, String> userProps) {
+  boolean isClientMode(Map<String, String> userProps) {
     String userMaster = firstNonEmpty(master, userProps.get(SparkLauncher.SPARK_MASTER));
     String userDeployMode = firstNonEmpty(deployMode, userProps.get(SparkLauncher.DEPLOY_MODE));
     // Default master is "local[*]", so assume client mode in that case

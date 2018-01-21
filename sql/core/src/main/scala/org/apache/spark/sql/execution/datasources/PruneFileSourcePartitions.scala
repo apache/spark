@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import org.apache.spark.sql.catalyst.catalog.CatalogStatistics
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
@@ -34,6 +35,7 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
               _,
               _,
               _),
+            _,
             _,
             _))
         if filters.nonEmpty && fsRelation.partitionSchemaOption.isDefined =>
@@ -59,10 +61,11 @@ private[sql] object PruneFileSourcePartitions extends Rule[LogicalPlan] {
         val prunedFileIndex = catalogFileIndex.filterPartitions(partitionKeyFilters.toSeq)
         val prunedFsRelation =
           fsRelation.copy(location = prunedFileIndex)(sparkSession)
+        // Change table stats based on the sizeInBytes of pruned files
+        val withStats = logicalRelation.catalogTable.map(_.copy(
+          stats = Some(CatalogStatistics(sizeInBytes = BigInt(prunedFileIndex.sizeInBytes)))))
         val prunedLogicalRelation = logicalRelation.copy(
-          relation = prunedFsRelation,
-          expectedOutputAttributes = Some(logicalRelation.output))
-
+          relation = prunedFsRelation, catalogTable = withStats)
         // Keep partition-pruning predicates so that they are visible in physical planning
         val filterExpression = filters.reduceLeft(And)
         val filter = Filter(filterExpression, prunedLogicalRelation)

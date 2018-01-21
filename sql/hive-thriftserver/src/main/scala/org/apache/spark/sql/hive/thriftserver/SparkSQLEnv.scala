@@ -22,7 +22,7 @@ import java.io.PrintStream
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.util.Utils
 
 /** A singleton object for the master program. The slaves should not access this. */
@@ -49,11 +49,12 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkContext = sparkSession.sparkContext
       sqlContext = sparkSession.sqlContext
 
-      val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
-      sessionState.metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
-      sessionState.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
-      sessionState.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
-      sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
+      val metadataHive = sparkSession
+        .sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
+      metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
+      metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
+      sparkSession.conf.set(HiveUtils.FAKE_HIVE_VERSION.key, HiveUtils.builtinHiveVersion)
     }
   }
 

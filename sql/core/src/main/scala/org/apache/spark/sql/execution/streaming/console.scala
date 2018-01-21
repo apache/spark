@@ -17,47 +17,59 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
+import java.util.Optional
+
+import org.apache.spark.sql._
+import org.apache.spark.sql.execution.streaming.sources.{ConsoleContinuousWriter, ConsoleMicroBatchWriter, ConsoleWriter}
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
+import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
+import org.apache.spark.sql.sources.v2.streaming.{ContinuousWriteSupport, MicroBatchWriteSupport}
+import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter
+import org.apache.spark.sql.sources.v2.writer.DataSourceV2Writer
 import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.StructType
 
-class ConsoleSink(options: Map[String, String]) extends Sink with Logging {
-  // Number of rows to display, by default 20 rows
-  private val numRowsToShow = options.get("numRows").map(_.toInt).getOrElse(20)
-
-  // Truncate the displayed data if it is too long, by default it is true
-  private val isTruncated = options.get("truncate").map(_.toBoolean).getOrElse(true)
-
-  // Track the batch id
-  private var lastBatchId = -1L
-
-  override def addBatch(batchId: Long, data: DataFrame): Unit = synchronized {
-    val batchIdStr = if (batchId <= lastBatchId) {
-      s"Rerun batch: $batchId"
-    } else {
-      lastBatchId = batchId
-      s"Batch: $batchId"
-    }
-
-    // scalastyle:off println
-    println("-------------------------------------------")
-    println(batchIdStr)
-    println("-------------------------------------------")
-    // scalastyle:off println
-    data.sparkSession.createDataFrame(
-      data.sparkSession.sparkContext.parallelize(data.collect()), data.schema)
-      .show(numRowsToShow, isTruncated)
-  }
+case class ConsoleRelation(override val sqlContext: SQLContext, data: DataFrame)
+  extends BaseRelation {
+  override def schema: StructType = data.schema
 }
 
-class ConsoleSinkProvider extends StreamSinkProvider with DataSourceRegister {
-  def createSink(
+class ConsoleSinkProvider extends DataSourceV2
+  with MicroBatchWriteSupport
+  with ContinuousWriteSupport
+  with DataSourceRegister
+  with CreatableRelationProvider {
+
+  override def createMicroBatchWriter(
+      queryId: String,
+      batchId: Long,
+      schema: StructType,
+      mode: OutputMode,
+      options: DataSourceV2Options): Optional[DataSourceV2Writer] = {
+    Optional.of(new ConsoleMicroBatchWriter(batchId, schema, options))
+  }
+
+  override def createContinuousWriter(
+      queryId: String,
+      schema: StructType,
+      mode: OutputMode,
+      options: DataSourceV2Options): Optional[ContinuousWriter] = {
+    Optional.of(new ConsoleContinuousWriter(schema, options))
+  }
+
+  def createRelation(
       sqlContext: SQLContext,
+      mode: SaveMode,
       parameters: Map[String, String],
-      partitionColumns: Seq[String],
-      outputMode: OutputMode): Sink = {
-    new ConsoleSink(parameters)
+      data: DataFrame): BaseRelation = {
+    // Number of rows to display, by default 20 rows
+    val numRowsToShow = parameters.get("numRows").map(_.toInt).getOrElse(20)
+
+    // Truncate the displayed data if it is too long, by default it is true
+    val isTruncated = parameters.get("truncate").map(_.toBoolean).getOrElse(true)
+    data.show(numRowsToShow, isTruncated)
+
+    ConsoleRelation(sqlContext, data)
   }
 
   def shortName(): String = "console"

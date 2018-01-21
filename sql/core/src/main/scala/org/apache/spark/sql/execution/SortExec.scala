@@ -124,33 +124,35 @@ case class SortExec(
   // Name of sorter variable used in codegen.
   private var sorterVariable: String = _
 
+  // The result rows come from the sort buffer, so this operator doesn't need to copy its result
+  // even if its child does.
+  override def needCopyResult: Boolean = false
+
+  // Sort operator always consumes all the input rows before outputting any result, so we don't need
+  // a stop check before sorting.
+  override def needStopCheck: Boolean = false
+
   override protected def doProduce(ctx: CodegenContext): String = {
-    val needToSort = ctx.freshName("needToSort")
-    ctx.addMutableState("boolean", needToSort, s"$needToSort = true;")
+    val needToSort = ctx.addMutableState(ctx.JAVA_BOOLEAN, "needToSort", v => s"$v = true;")
 
     // Initialize the class member variables. This includes the instance of the Sorter and
     // the iterator to return sorted rows.
     val thisPlan = ctx.addReferenceObj("plan", this)
-    sorterVariable = ctx.freshName("sorter")
-    ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, sorterVariable,
-      s"$sorterVariable = $thisPlan.createSorter();")
-    val metrics = ctx.freshName("metrics")
-    ctx.addMutableState(classOf[TaskMetrics].getName, metrics,
-      s"$metrics = org.apache.spark.TaskContext.get().taskMetrics();")
-    val sortedIterator = ctx.freshName("sortedIter")
-    ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", sortedIterator, "")
+    // Inline mutable state since not many Sort operations in a task
+    sorterVariable = ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, "sorter",
+      v => s"$v = $thisPlan.createSorter();", forceInline = true)
+    val metrics = ctx.addMutableState(classOf[TaskMetrics].getName, "metrics",
+      v => s"$v = org.apache.spark.TaskContext.get().taskMetrics();", forceInline = true)
+    val sortedIterator = ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "sortedIter",
+      forceInline = true)
 
     val addToSorter = ctx.freshName("addToSorter")
-    ctx.addNewFunction(addToSorter,
+    val addToSorterFuncName = ctx.addNewFunction(addToSorter,
       s"""
         | private void $addToSorter() throws java.io.IOException {
         |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
         | }
       """.stripMargin.trim)
-
-    // The child could change `copyResult` to true, but we had already consumed all the rows,
-    // so `copyResult` should be reset to `false`.
-    ctx.copyResult = false
 
     val outputRow = ctx.freshName("outputRow")
     val peakMemory = metricTerm(ctx, "peakMemory")
@@ -160,7 +162,7 @@ case class SortExec(
     s"""
        | if ($needToSort) {
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
-       |   $addToSorter();
+       |   $addToSorterFuncName();
        |   $sortedIterator = $sorterVariable.sort();
        |   $sortTime.add($sorterVariable.getSortTimeNanos() / 1000000);
        |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());

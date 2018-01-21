@@ -24,7 +24,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, udf}
 
 class VectorAssemblerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -79,7 +79,10 @@ class VectorAssemblerSuite
     val thrown = intercept[IllegalArgumentException] {
       assembler.transform(df)
     }
-    assert(thrown.getMessage contains "Data type StringType is not supported")
+    assert(thrown.getMessage contains
+      "Data type StringType of column a is not supported.\n" +
+      "Data type StringType of column b is not supported.\n" +
+      "Data type StringType of column c is not supported.")
   }
 
   test("ML attributes") {
@@ -122,5 +125,26 @@ class VectorAssemblerSuite
       .setInputCols(Array("myInputCol", "myInputCol2"))
       .setOutputCol("myOutputCol")
     testDefaultReadWrite(t)
+  }
+
+  test("SPARK-22446: VectorAssembler's UDF should not apply on filtered data") {
+    val df = Seq(
+      (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L),
+      (0, 1.0, null, "b", null, 20L)
+    ).toDF("id", "x", "y", "name", "z", "n")
+
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("x", "z", "n"))
+      .setOutputCol("features")
+
+    val filteredDF = df.filter($"y".isNotNull)
+
+    val vectorUDF = udf { vector: Vector =>
+      vector.numActives
+    }
+
+    assert(assembler.transform(filteredDF).select("features")
+      .filter(vectorUDF($"features") > 1)
+      .count() == 1)
   }
 }

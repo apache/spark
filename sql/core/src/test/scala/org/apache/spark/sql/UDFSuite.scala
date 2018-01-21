@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.api.java._
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.command.ExplainCommand
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
+import org.apache.spark.sql.types.{DataTypes, DoubleType}
 
 private case class FunctionResult(f1: String, f2: String)
 
@@ -71,12 +75,21 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("error reporting for incorrect number of arguments") {
+  test("error reporting for incorrect number of arguments - builtin function") {
     val df = spark.emptyDataFrame
     val e = intercept[AnalysisException] {
       df.selectExpr("substr('abcd', 2, 3, 4)")
     }
-    assert(e.getMessage.contains("arguments"))
+    assert(e.getMessage.contains("Invalid number of arguments for function substr. Expected:"))
+  }
+
+  test("error reporting for incorrect number of arguments - udf") {
+    val df = spark.emptyDataFrame
+    val e = intercept[AnalysisException] {
+      spark.udf.register("foo", (_: String).length)
+      df.selectExpr("foo(2, 3, 4)")
+    }
+    assert(e.getMessage.contains("Invalid number of arguments for function foo. Expected:"))
   }
 
   test("error reporting for undefined functions") {
@@ -93,9 +106,36 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(sql("SELECT strLenScala('test')").head().getInt(0) === 4)
   }
 
-  test("ZeroArgument UDF") {
-    spark.udf.register("random0", () => { Math.random()})
-    assert(sql("SELECT random0()").head().getDouble(0) >= 0.0)
+  test("UDF defined using UserDefinedFunction") {
+    import functions.udf
+    val foo = udf((x: Int) => x + 1)
+    spark.udf.register("foo", foo)
+    assert(sql("select foo(5)").head().getInt(0) == 6)
+  }
+
+  test("ZeroArgument non-deterministic UDF") {
+    val foo = udf(() => Math.random())
+    spark.udf.register("random0", foo.asNondeterministic())
+    val df = sql("SELECT random0()")
+    assert(df.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+    assert(df.head().getDouble(0) >= 0.0)
+
+    val foo1 = foo.asNondeterministic()
+    val df1 = testData.select(foo1())
+    assert(df1.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+    assert(df1.head().getDouble(0) >= 0.0)
+
+    val bar = udf(() => Math.random(), DataTypes.DoubleType).asNondeterministic()
+    val df2 = testData.select(bar())
+    assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+    assert(df2.head().getDouble(0) >= 0.0)
+
+    val javaUdf = udf(new UDF0[Double] {
+      override def call(): Double = Math.random()
+    }, DoubleType).asNondeterministic()
+    val df3 = testData.select(javaUdf())
+    assert(df3.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+    assert(df3.head().getDouble(0) >= 0.0)
   }
 
   test("TwoArgument UDF") {
@@ -256,10 +296,12 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       val sparkPlan = spark.sessionState.executePlan(explain).executedPlan
       sparkPlan.executeCollect().map(_.getString(0).trim).headOption.getOrElse("")
     }
-    val udf1 = "myUdf1"
-    val udf2 = "myUdf2"
-    spark.udf.register(udf1, (n: Int) => { n + 1 })
-    spark.udf.register(udf2, (n: Int) => { n * 1 })
-    assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"UDF:$udf1(UDF:$udf2(1))"))
+    val udf1Name = "myUdf1"
+    val udf2Name = "myUdf2"
+    val udf1 = spark.udf.register(udf1Name, (n: Int) => n + 1)
+    val udf2 = spark.udf.register(udf2Name, (n: Int) => n * 1)
+    assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
+    assert(explainStr(spark.range(1).select(udf1(udf2(functions.lit(1)))))
+      .contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
   }
 }

@@ -19,11 +19,13 @@ package org.apache.spark.serializer
 
 import java.io._
 import java.nio.ByteBuffer
+import java.util.Locale
 import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 import com.esotericsoftware.kryo.{Kryo, KryoException, Serializer => KryoClassSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
@@ -174,7 +176,38 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(None.getClass)
     kryo.register(Nil.getClass)
     kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
+    kryo.register(Utils.classForName("scala.collection.immutable.Map$EmptyMap$"))
     kryo.register(classOf[ArrayBuffer[Any]])
+
+    // We can't load those class directly in order to avoid unnecessary jar dependencies.
+    // We load them safely, ignore it if the class not found.
+    Seq(
+      "org.apache.spark.ml.feature.Instance",
+      "org.apache.spark.ml.feature.LabeledPoint",
+      "org.apache.spark.ml.feature.OffsetInstance",
+      "org.apache.spark.ml.linalg.DenseMatrix",
+      "org.apache.spark.ml.linalg.DenseVector",
+      "org.apache.spark.ml.linalg.Matrix",
+      "org.apache.spark.ml.linalg.SparseMatrix",
+      "org.apache.spark.ml.linalg.SparseVector",
+      "org.apache.spark.ml.linalg.Vector",
+      "org.apache.spark.ml.tree.impl.TreePoint",
+      "org.apache.spark.mllib.clustering.VectorWithNorm",
+      "org.apache.spark.mllib.linalg.DenseMatrix",
+      "org.apache.spark.mllib.linalg.DenseVector",
+      "org.apache.spark.mllib.linalg.Matrix",
+      "org.apache.spark.mllib.linalg.SparseMatrix",
+      "org.apache.spark.mllib.linalg.SparseVector",
+      "org.apache.spark.mllib.linalg.Vector",
+      "org.apache.spark.mllib.regression.LabeledPoint"
+    ).foreach { name =>
+      try {
+        val clazz = Utils.classForName(name)
+        kryo.register(clazz)
+      } catch {
+        case NonFatal(_) => // do nothing
+      }
+    }
 
     kryo.setClassLoader(classLoader)
     kryo
@@ -244,7 +277,8 @@ class KryoDeserializationStream(
       kryo.readClassAndObject(input).asInstanceOf[T]
     } catch {
       // DeserializationStream uses the EOF exception to indicate stopping condition.
-      case e: KryoException if e.getMessage.toLowerCase.contains("buffer underflow") =>
+      case e: KryoException
+        if e.getMessage.toLowerCase(Locale.ROOT).contains("buffer underflow") =>
         throw new EOFException
     }
   }
@@ -384,9 +418,16 @@ private[serializer] object KryoSerializer {
     classOf[HighlyCompressedMapStatus],
     classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
+    classOf[Array[Boolean]],
     classOf[Array[Byte]],
     classOf[Array[Short]],
+    classOf[Array[Int]],
     classOf[Array[Long]],
+    classOf[Array[Float]],
+    classOf[Array[Double]],
+    classOf[Array[Char]],
+    classOf[Array[String]],
+    classOf[Array[Array[String]]],
     classOf[BoundedPriorityQueue[_]],
     classOf[SparkConf]
   )
@@ -491,8 +532,8 @@ private class JavaIterableWrapperSerializer
 private object JavaIterableWrapperSerializer extends Logging {
   // The class returned by JavaConverters.asJava
   // (scala.collection.convert.Wrappers$IterableWrapper).
-  val wrapperClass =
-    scala.collection.convert.WrapAsJava.asJavaIterable(Seq(1)).getClass
+  import scala.collection.JavaConverters._
+  val wrapperClass = Seq(1).asJava.getClass
 
   // Get the underlying method so we can use it to get the Scala collection for serialization.
   private val underlyingMethodOpt = {

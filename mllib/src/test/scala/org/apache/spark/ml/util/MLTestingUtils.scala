@@ -31,11 +31,15 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 object MLTestingUtils extends SparkFunSuite {
-  def checkCopy(model: Model[_]): Unit = {
+
+  def checkCopyAndUids[T <: Estimator[_]](estimator: T, model: Model[_]): Unit = {
+    assert(estimator.uid === model.uid, "Model uid does not match parent estimator")
+
+    // copied model must have the same parent
     val copied = model.copy(ParamMap.empty)
       .asInstanceOf[Model[_]]
-    assert(copied.parent.uid == model.parent.uid)
     assert(copied.parent == model.parent)
+    assert(copied.parent.uid == model.parent.uid)
   }
 
   def checkNumericTypes[M <: Model[M], T <: Estimator[M]](
@@ -156,7 +160,6 @@ object MLTestingUtils extends SparkFunSuite {
       featuresColName: String = "features",
       censorColName: String = "censor"): Map[NumericType, DataFrame] = {
     val df = spark.createDataFrame(Seq(
-      (0, Vectors.dense(0)),
       (1, Vectors.dense(1)),
       (2, Vectors.dense(2)),
       (3, Vectors.dense(3)),
@@ -260,12 +263,13 @@ object MLTestingUtils extends SparkFunSuite {
       data: Dataset[LabeledPoint],
       estimator: E with HasWeightCol,
       numClasses: Int,
-      modelEquals: (M, M) => Unit): Unit = {
+      modelEquals: (M, M) => Unit,
+      outlierRatio: Int): Unit = {
     import data.sqlContext.implicits._
     val outlierDS = data.withColumn("weight", lit(1.0)).as[Instance].flatMap {
       case Instance(l, w, f) =>
         val outlierLabel = if (numClasses == 0) -l else numClasses - l - 1
-        List.fill(3)(Instance(outlierLabel, 0.0001, f)) ++ List(Instance(l, w, f))
+        List.fill(outlierRatio)(Instance(outlierLabel, 0.0001, f)) ++ List(Instance(l, w, f))
     }
     val trueModel = estimator.set(estimator.weightCol, "").fit(data)
     val outlierModel = estimator.set(estimator.weightCol, "weight").fit(outlierDS)

@@ -49,7 +49,7 @@ public interface Service {
    * The transition must be from {@link STATE#NOTINITED} to {@link STATE#INITED} unless the
    * operation failed and an exception was raised.
    *
-   * @param config
+   * @param conf
    *          the configuration of the service
    */
   void init(HiveConf conf);

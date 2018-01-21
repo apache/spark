@@ -58,7 +58,8 @@ private[spark] object BlockManagerMessages {
 
   case class RegisterBlockManager(
       blockManagerId: BlockManagerId,
-      maxMemSize: Long,
+      maxOnHeapMemSize: Long,
+      maxOffHeapMemSize: Long,
       sender: RpcEndpointRef)
     extends ToBlockManagerMaster
 
@@ -91,6 +92,13 @@ private[spark] object BlockManagerMessages {
   }
 
   case class GetLocations(blockId: BlockId) extends ToBlockManagerMaster
+
+  case class GetLocationsAndStatus(blockId: BlockId) extends ToBlockManagerMaster
+
+  // The response message of `GetLocationsAndStatus` request.
+  case class BlockLocationsAndStatus(locations: Seq[BlockManagerId], status: BlockStatus) {
+    assert(locations.nonEmpty)
+  }
 
   case class GetLocationsMultipleBlockIds(blockIds: Array[BlockId]) extends ToBlockManagerMaster
 

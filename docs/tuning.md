@@ -12,7 +12,7 @@ Because of the in-memory nature of most Spark computations, Spark programs can b
 by any resource in the cluster: CPU, network bandwidth, or memory.
 Most often, if the data fits in memory, the bottleneck is network bandwidth, but sometimes, you
 also need to do some tuning, such as
-[storing RDDs in serialized form](programming-guide.html#rdd-persistence), to
+[storing RDDs in serialized form](rdd-programming-guide.html#rdd-persistence), to
 decrease memory usage.
 This guide will cover two main topics: data serialization, which is crucial for good network
 performance and can also reduce memory use, and memory tuning. We also sketch several smaller topics.
@@ -155,7 +155,7 @@ pointer-based data structures and wrapper objects. There are several ways to do 
 
 When your objects are still too large to efficiently store despite this tuning, a much simpler way
 to reduce memory usage is to store them in *serialized* form, using the serialized StorageLevels in
-the [RDD persistence API](programming-guide.html#rdd-persistence), such as `MEMORY_ONLY_SER`.
+the [RDD persistence API](rdd-programming-guide.html#rdd-persistence), such as `MEMORY_ONLY_SER`.
 Spark will then store each RDD partition as one large byte array.
 The only downside of storing data in serialized form is slower access times, due to having to
 deserialize each object on the fly.
@@ -219,7 +219,7 @@ temporary objects created during task execution. Some steps which may be useful 
   
 * Try the G1GC garbage collector with `-XX:+UseG1GC`. It can improve performance in some situations where
   garbage collection is a bottleneck. Note that with large executor heap sizes, it may be important to
-  increase the [G1 region size](https://blogs.oracle.com/g1gc/entry/g1_gc_tuning_a_case) 
+  increase the [G1 region size](http://www.oracle.com/technetwork/articles/java/g1gc-1984535.html) 
   with `-XX:G1HeapRegionSize`
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
@@ -262,7 +262,7 @@ number of cores in your clusters.
 
 ## Broadcasting Large Variables
 
-Using the [broadcast functionality](programming-guide.html#broadcast-variables)
+Using the [broadcast functionality](rdd-programming-guide.html#broadcast-variables)
 available in `SparkContext` can greatly reduce the size of each serialized task, and the cost
 of launching a job over a cluster. If your tasks use any large object from the driver program
 inside of them (e.g. a static lookup table), consider turning it into a broadcast variable.

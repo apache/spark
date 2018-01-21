@@ -19,10 +19,10 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
@@ -30,7 +30,9 @@ import org.apache.spark.sql.types._
 class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
   import testImplicits._
 
-  override val dataSourceName: String = classOf[OrcFileFormat].getCanonicalName
+  override protected val enableAutoThreadAudit = false
+  override val dataSourceName: String =
+    classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName
 
   // ORC does not play well with NullType and UDT.
   override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
@@ -42,12 +44,9 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
-      val basePath = new Path(file.getCanonicalPath)
-      val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
-      val qualifiedBasePath = fs.makeQualified(basePath)
-
       for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
-        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
+        val partitionDir = new Path(
+          CatalogUtils.URIToString(makeQualifiedPath(file.getCanonicalPath)), s"p1=$p1/p2=$p2")
         sparkContext
           .parallelize(for (i <- 1 to 3) yield (i, s"val_$i", p1))
           .toDF("a", "b", "p1")
@@ -118,4 +117,9 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       assert("SNAPPY" === expectedCompressionKind.name())
     }
   }
+}
+
+class HiveOrcHadoopFsRelationSuite extends OrcHadoopFsRelationSuite {
+  override val dataSourceName: String =
+    classOf[org.apache.spark.sql.hive.orc.OrcFileFormat].getCanonicalName
 }

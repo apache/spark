@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.tree.impurity
 
+import java.util.Locale
+
 import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
@@ -160,7 +162,7 @@ private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) exten
    * Fails if the array is empty.
    */
   protected def indexOfLargestArrayElement(array: Array[Double]): Int = {
-    val result = array.foldLeft(-1, Double.MinValue, 0) {
+    val result = array.foldLeft((-1, Double.MinValue, 0)) {
       case ((maxIndex, maxValue, currentIndex), currentValue) =>
         if (currentValue > maxValue) {
           (currentIndex, currentValue, currentIndex + 1)
@@ -184,7 +186,7 @@ private[spark] object ImpurityCalculator {
    * the given stats.
    */
   def getCalculator(impurity: String, stats: Array[Double]): ImpurityCalculator = {
-    impurity match {
+    impurity.toLowerCase(Locale.ROOT) match {
       case "gini" => new GiniCalculator(stats)
       case "entropy" => new EntropyCalculator(stats)
       case "variance" => new VarianceCalculator(stats)

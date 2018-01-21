@@ -21,7 +21,6 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
-
 class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("concat") {
@@ -44,6 +43,24 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     testConcat("数据", null, "砖头")
     // scalastyle:on
+  }
+
+  test("SPARK-22498: Concat should not generate codes beyond 64KB") {
+    val N = 5000
+    val strs = (1 to N).map(x => s"s$x")
+    checkEvaluation(Concat(strs.map(Literal.create(_, StringType))), strs.mkString, EmptyRow)
+  }
+
+  test("SPARK-22771 Check Concat.checkInputDataTypes results") {
+    assert(Concat(Seq.empty[Expression]).checkInputDataTypes().isSuccess)
+    assert(Concat(Literal.create("a") :: Literal.create("b") :: Nil)
+      .checkInputDataTypes().isSuccess)
+    assert(Concat(Literal.create("a".getBytes) :: Literal.create("b".getBytes) :: Nil)
+      .checkInputDataTypes().isSuccess)
+    assert(Concat(Literal.create(1) :: Literal.create(2) :: Nil)
+      .checkInputDataTypes().isFailure)
+    assert(Concat(Literal.create("a") :: Literal.create("b".getBytes) :: Nil)
+      .checkInputDataTypes().isFailure)
   }
 
   test("concat_ws") {
@@ -75,6 +92,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
+  test("SPARK-22549: ConcatWs should not generate codes beyond 64KB") {
+    val N = 5000
+    val sepExpr = Literal.create("#", StringType)
+    val strings1 = (1 to N).map(x => s"s$x")
+    val inputsExpr1 = strings1.map(Literal.create(_, StringType))
+    checkEvaluation(ConcatWs(sepExpr +: inputsExpr1), strings1.mkString("#"), EmptyRow)
+
+    val strings2 = (1 to N).map(x => Seq(s"s$x"))
+    val inputsExpr2 = strings2.map(Literal.create(_, ArrayType(StringType)))
+    checkEvaluation(
+      ConcatWs(sepExpr +: inputsExpr2), strings2.map(s => s(0)).mkString("#"), EmptyRow)
+  }
+
   test("elt") {
     def testElt(result: String, n: java.lang.Integer, args: String*): Unit = {
       checkEvaluation(
@@ -96,6 +126,13 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(Elt(Seq(Literal(1))).checkInputDataTypes().isFailure)
     assert(Elt(Seq(Literal(1), Literal("A"))).checkInputDataTypes().isSuccess)
     assert(Elt(Seq(Literal(1), Literal(2))).checkInputDataTypes().isFailure)
+  }
+
+  test("SPARK-22550: Elt should not generate codes beyond 64KB") {
+    val N = 10000
+    val strings = (1 to N).map(x => s"s$x")
+    val args = Literal.create(N, IntegerType) +: strings.map(Literal.create(_, StringType))
+    checkEvaluation(Elt(args), s"s$N")
   }
 
   test("StringComparison") {
@@ -263,6 +300,19 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Ascii(Literal.create(null, StringType)), null, create_row("abdef"))
   }
 
+  test("string for ascii") {
+    val a = 'a.long.at(0)
+    checkEvaluation(Chr(Literal(48L)), "0", create_row("abdef"))
+    checkEvaluation(Chr(a), "a", create_row(97L))
+    checkEvaluation(Chr(a), "a", create_row(97L + 256L))
+    checkEvaluation(Chr(a), "", create_row(-9L))
+    checkEvaluation(Chr(a), Character.MIN_VALUE.toString, create_row(0L))
+    checkEvaluation(Chr(a), Character.MIN_VALUE.toString, create_row(256L))
+    checkEvaluation(Chr(a), null, create_row(null))
+    checkEvaluation(Chr(a), 149.toChar.toString, create_row(149L))
+    checkEvaluation(Chr(Literal.create(null, LongType)), null, create_row("abdef"))
+  }
+
   test("base64/unbase64 for string") {
     val a = 'a.string.at(0)
     val b = 'b.binary.at(0)
@@ -359,6 +409,26 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(SoundEx(Literal("!!")), "!!")
   }
 
+  test("replace") {
+    checkEvaluation(
+      StringReplace(Literal("replace"), Literal("pl"), Literal("123")), "re123ace")
+    checkEvaluation(StringReplace(Literal("replace"), Literal("pl"), Literal("")), "reace")
+    checkEvaluation(StringReplace(Literal("replace"), Literal(""), Literal("123")), "replace")
+    checkEvaluation(StringReplace(Literal.create(null, StringType),
+      Literal("pl"), Literal("123")), null)
+    checkEvaluation(StringReplace(Literal("replace"),
+      Literal.create(null, StringType), Literal("123")), null)
+    checkEvaluation(StringReplace(Literal("replace"),
+      Literal("pl"), Literal.create(null, StringType)), null)
+    // test for multiple replace
+    checkEvaluation(StringReplace(Literal("abcabc"), Literal("b"), Literal("12")), "a12ca12c")
+    checkEvaluation(StringReplace(Literal("abcdabcd"), Literal("bc"), Literal("")), "adad")
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(StringReplace(Literal("花花世界"), Literal("花世"), Literal("ab")), "花ab界")
+    // scalastyle:on
+  }
+
   test("translate") {
     checkEvaluation(
       StringTranslate(Literal("translate"), Literal("rnlt"), Literal("123")), "1a2s3ae")
@@ -373,26 +443,78 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:on
   }
 
-  test("TRIM/LTRIM/RTRIM") {
+  test("TRIM") {
     val s = 'a.string.at(0)
     checkEvaluation(StringTrim(Literal(" aa  ")), "aa", create_row(" abdef "))
+    checkEvaluation(StringTrim("aa", "a"), "", create_row(" abdef "))
+    checkEvaluation(StringTrim(Literal(" aabbtrimccc"), "ab cd"), "trim", create_row("bdef"))
+    checkEvaluation(StringTrim(Literal("a<a >@>.,>"), "a.,@<>"), " ", create_row(" abdef "))
     checkEvaluation(StringTrim(s), "abdef", create_row(" abdef "))
-
-    checkEvaluation(StringTrimLeft(Literal(" aa  ")), "aa  ", create_row(" abdef "))
-    checkEvaluation(StringTrimLeft(s), "abdef ", create_row(" abdef "))
-
-    checkEvaluation(StringTrimRight(Literal(" aa  ")), " aa", create_row(" abdef "))
-    checkEvaluation(StringTrimRight(s), " abdef", create_row(" abdef "))
+    checkEvaluation(StringTrim(s, "abd"), "ef", create_row("abdefa"))
+    checkEvaluation(StringTrim(s, "a"), "bdef", create_row("aaabdefaaaa"))
+    checkEvaluation(StringTrim(s, "SLSQ"), "park", create_row("SSparkSQLS"))
 
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
-    checkEvaluation(StringTrimRight(s), "  花花世界", create_row("  花花世界 "))
-    checkEvaluation(StringTrimLeft(s), "花花世界 ", create_row("  花花世界 "))
     checkEvaluation(StringTrim(s), "花花世界", create_row("  花花世界 "))
+    checkEvaluation(StringTrim(s, "花世界"), "", create_row("花花世界花花"))
+    checkEvaluation(StringTrim(s, "花 "), "世界", create_row(" 花花世界花花"))
+    checkEvaluation(StringTrim(s, "花 "), "世界", create_row(" 花 花 世界 花 花 "))
+    checkEvaluation(StringTrim(s, "a花世"), "界", create_row("aa花花世界花花aa"))
+    checkEvaluation(StringTrim(s, "a@#( )"), "花花世界花花", create_row("aa()花花世界花花@ #"))
+    checkEvaluation(StringTrim(Literal("花trim"), "花 "), "trim", create_row(" abdef "))
     // scalastyle:on
-    checkEvaluation(StringTrim(Literal.create(null, StringType)), null)
-    checkEvaluation(StringTrimLeft(Literal.create(null, StringType)), null)
-    checkEvaluation(StringTrimRight(Literal.create(null, StringType)), null)
+    checkEvaluation(StringTrim(Literal("a"), Literal.create(null, StringType)), null)
+    checkEvaluation(StringTrim(Literal.create(null, StringType), Literal("a")), null)
+  }
+
+  test("LTRIM") {
+    val s = 'a.string.at(0)
+    checkEvaluation(StringTrimLeft(Literal(" aa  ")), "aa  ", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(Literal("aa"), "a"), "", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(Literal("aa "), "a "), "", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(Literal("aabbcaaaa"), "ab"), "caaaa", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(s), "abdef ", create_row(" abdef "))
+    checkEvaluation(StringTrimLeft(s, "a"), "bdefa", create_row("abdefa"))
+    checkEvaluation(StringTrimLeft(s, "a "), "bdefaaaa", create_row(" aaabdefaaaa"))
+    checkEvaluation(StringTrimLeft(s, "Spk"), "arkSQLS", create_row("SSparkSQLS"))
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(StringTrimLeft(s), "花花世界 ", create_row("  花花世界 "))
+    checkEvaluation(StringTrimLeft(s, "花"), "世界花花", create_row("花花世界花花"))
+    checkEvaluation(StringTrimLeft(s, "花 世"), "界花花", create_row(" 花花世界花花"))
+    checkEvaluation(StringTrimLeft(s, "花"), "a花花世界花花 ", create_row("a花花世界花花 "))
+    checkEvaluation(StringTrimLeft(s, "a花界"), "世界花花aa", create_row("aa花花世界花花aa"))
+    checkEvaluation(StringTrimLeft(s, "a世界"), "花花世界花花", create_row("花花世界花花"))
+    // scalastyle:on
+    checkEvaluation(StringTrimLeft(Literal.create(null, StringType), Literal("a")), null)
+    checkEvaluation(StringTrimLeft(Literal("a"), Literal.create(null, StringType)), null)
+  }
+
+  test("RTRIM") {
+    val s = 'a.string.at(0)
+    checkEvaluation(StringTrimRight(Literal(" aa  ")), " aa", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Literal("a"), "a"), "", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Literal("ab"), "ab"), "", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Literal("aabbaaaa %"), "a %"), "aabb", create_row("def"))
+    checkEvaluation(StringTrimRight(s), " abdef", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(s, "a"), "abdef", create_row("abdefa"))
+    checkEvaluation(StringTrimRight(s, "abf de"), "", create_row(" aaabdefaaaa"))
+    checkEvaluation(StringTrimRight(s, "S*&"), "SSparkSQL", create_row("SSparkSQLS*"))
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(StringTrimRight(Literal("a"), "花"), "a", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Literal("花"), "a"), "花", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(Literal("花花世界"), "界花世"), "", create_row(" abdef "))
+    checkEvaluation(StringTrimRight(s), "  花花世界", create_row("  花花世界 "))
+    checkEvaluation(StringTrimRight(s, "花a#"), "花花世界", create_row("花花世界花花###aa花"))
+    checkEvaluation(StringTrimRight(s, "花"), "", create_row("花花花花"))
+    checkEvaluation(StringTrimRight(s, "花 界b@"), " 花花世", create_row(" 花花世 b界@花花 "))
+    // scalastyle:on
+    checkEvaluation(StringTrimRight(Literal("a"), Literal.create(null, StringType)), null)
+    checkEvaluation(StringTrimRight(Literal.create(null, StringType), Literal("a")), null)
   }
 
   test("FORMAT") {
@@ -406,6 +528,14 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       FormatString(Literal("aa%d%s"), Literal.create(null, IntegerType), "cc"), "aanullcc")
     checkEvaluation(
       FormatString(Literal("aa%d%s"), 12, Literal.create(null, StringType)), "aa12null")
+  }
+
+  test("SPARK-22603: FormatString should not generate codes beyond 64KB") {
+    val N = 4500
+    val args = (1 to N).map(i => Literal.create(i.toString, StringType))
+    val format = "%s" * N
+    val expected = (1 to N).map(i => i.toString).mkString
+    checkEvaluation(FormatString(Literal(format) +: args: _*), expected)
   }
 
   test("INSTR") {
@@ -525,20 +655,40 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:off
     // non ascii characters are not allowed in the source code, so we disable the scalastyle.
     checkEvaluation(Length(Literal("a花花c")), 4, create_row(string))
+    checkEvaluation(OctetLength(Literal("a花花c")), 8, create_row(string))
+    checkEvaluation(BitLength(Literal("a花花c")), 8 * 8, create_row(string))
     // scalastyle:on
     checkEvaluation(Length(Literal(bytes)), 5, create_row(Array.empty[Byte]))
+    checkEvaluation(OctetLength(Literal(bytes)), 5, create_row(Array.empty[Byte]))
+    checkEvaluation(BitLength(Literal(bytes)), 5 * 8, create_row(Array.empty[Byte]))
 
     checkEvaluation(Length(a), 5, create_row(string))
+    checkEvaluation(OctetLength(a), 5, create_row(string))
+    checkEvaluation(BitLength(a), 5 * 8, create_row(string))
     checkEvaluation(Length(b), 5, create_row(bytes))
+    checkEvaluation(OctetLength(b), 5, create_row(bytes))
+    checkEvaluation(BitLength(b), 5 * 8, create_row(bytes))
 
     checkEvaluation(Length(a), 0, create_row(""))
+    checkEvaluation(OctetLength(a), 0, create_row(""))
+    checkEvaluation(BitLength(a), 0, create_row(""))
     checkEvaluation(Length(b), 0, create_row(Array.empty[Byte]))
+    checkEvaluation(OctetLength(b), 0, create_row(Array.empty[Byte]))
+    checkEvaluation(BitLength(b), 0, create_row(Array.empty[Byte]))
 
     checkEvaluation(Length(a), null, create_row(null))
+    checkEvaluation(OctetLength(a), null, create_row(null))
+    checkEvaluation(BitLength(a), null, create_row(null))
     checkEvaluation(Length(b), null, create_row(null))
+    checkEvaluation(OctetLength(b), null, create_row(null))
+    checkEvaluation(BitLength(b), null, create_row(null))
 
     checkEvaluation(Length(Literal.create(null, StringType)), null, create_row(string))
+    checkEvaluation(OctetLength(Literal.create(null, StringType)), null, create_row(string))
+    checkEvaluation(BitLength(Literal.create(null, StringType)), null, create_row(string))
     checkEvaluation(Length(Literal.create(null, BinaryType)), null, create_row(bytes))
+    checkEvaluation(OctetLength(Literal.create(null, BinaryType)), null, create_row(bytes))
+    checkEvaluation(BitLength(Literal.create(null, BinaryType)), null, create_row(bytes))
   }
 
   test("format_number / FormatNumber") {

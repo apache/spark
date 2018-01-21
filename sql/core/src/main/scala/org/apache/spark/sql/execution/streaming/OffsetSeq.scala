@@ -20,6 +20,9 @@ package org.apache.spark.sql.execution.streaming
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.RuntimeConfig
+import org.apache.spark.sql.internal.SQLConf.{SHUFFLE_PARTITIONS, STATE_STORE_PROVIDER_CLASS}
 
 /**
  * An ordered collection of offsets, used to track the progress of processing data from one or more
@@ -35,7 +38,7 @@ case class OffsetSeq(offsets: Seq[Option[Offset]], metadata: Option[OffsetSeqMet
    * This method is typically used to associate a serialized offset with actual sources (which
    * cannot be serialized).
    */
-  def toStreamProgress(sources: Seq[Source]): StreamProgress = {
+  def toStreamProgress(sources: Seq[BaseStreamingSource]): StreamProgress = {
     assert(sources.size == offsets.size)
     new StreamProgress ++ sources.zip(offsets).collect { case (s, Some(o)) => (s, o) }
   }
@@ -70,13 +73,49 @@ object OffsetSeq {
  * bound the lateness of data that will processed. Time unit: milliseconds
  * @param batchTimestampMs: The current batch processing timestamp.
  * Time unit: milliseconds
+ * @param conf: Additional conf_s to be persisted across batches, e.g. number of shuffle partitions.
  */
-case class OffsetSeqMetadata(var batchWatermarkMs: Long = 0, var batchTimestampMs: Long = 0) {
+case class OffsetSeqMetadata(
+    batchWatermarkMs: Long = 0,
+    batchTimestampMs: Long = 0,
+    conf: Map[String, String] = Map.empty) {
   def json: String = Serialization.write(this)(OffsetSeqMetadata.format)
 }
 
-object OffsetSeqMetadata {
+object OffsetSeqMetadata extends Logging {
   private implicit val format = Serialization.formats(NoTypeHints)
-  def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)
-}
+  private val relevantSQLConfs = Seq(SHUFFLE_PARTITIONS, STATE_STORE_PROVIDER_CLASS)
 
+  def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)
+
+  def apply(
+      batchWatermarkMs: Long,
+      batchTimestampMs: Long,
+      sessionConf: RuntimeConfig): OffsetSeqMetadata = {
+    val confs = relevantSQLConfs.map { conf => conf.key -> sessionConf.get(conf.key) }.toMap
+    OffsetSeqMetadata(batchWatermarkMs, batchTimestampMs, confs)
+  }
+
+  /** Set the SparkSession configuration with the values in the metadata */
+  def setSessionConf(metadata: OffsetSeqMetadata, sessionConf: RuntimeConfig): Unit = {
+    OffsetSeqMetadata.relevantSQLConfs.map(_.key).foreach { confKey =>
+
+      metadata.conf.get(confKey) match {
+
+        case Some(valueInMetadata) =>
+          // Config value exists in the metadata, update the session config with this value
+          val optionalValueInSession = sessionConf.getOption(confKey)
+          if (optionalValueInSession.isDefined && optionalValueInSession.get != valueInMetadata) {
+            logWarning(s"Updating the value of conf '$confKey' in current session from " +
+              s"'${optionalValueInSession.get}' to '$valueInMetadata'.")
+          }
+          sessionConf.set(confKey, valueInMetadata)
+
+        case None =>
+          // For backward compatibility, if a config was not recorded in the offset log,
+          // then log it, and let the existing conf value in SparkSession prevail.
+          logWarning (s"Conf '$confKey' was not found in the offset log, using existing value")
+      }
+    }
+  }
+}

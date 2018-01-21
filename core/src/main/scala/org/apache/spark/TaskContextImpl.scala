@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.util.Properties
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -26,11 +27,23 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util._
 
+/**
+ * A [[TaskContext]] implementation.
+ *
+ * A small note on thread safety. The interrupted & fetchFailed fields are volatile, this makes
+ * sure that updates are always visible across threads. The complete & failed flags and their
+ * callbacks are protected by locking on the context instance. For instance, this ensures
+ * that you cannot add a completion listener in one thread while we are completing (and calling
+ * the completion listeners) in another thread. Other state is immutable, however the exposed
+ * `TaskMetrics` & `MetricsSystem` objects are not thread safe.
+ */
 private[spark] class TaskContextImpl(
-    val stageId: Int,
-    val partitionId: Int,
+    override val stageId: Int,
+    override val stageAttemptNumber: Int,
+    override val partitionId: Int,
     override val taskAttemptId: Long,
     override val attemptNumber: Int,
     override val taskMemoryManager: TaskMemoryManager,
@@ -47,75 +60,108 @@ private[spark] class TaskContextImpl(
   /** List of callback functions to execute when the task fails. */
   @transient private val onFailureCallbacks = new ArrayBuffer[TaskFailureListener]
 
-  // Whether the corresponding task has been killed.
-  @volatile private var interrupted: Boolean = false
+  // If defined, the corresponding task has been killed and this option contains the reason.
+  @volatile private var reasonIfKilled: Option[String] = None
 
   // Whether the task has completed.
-  @volatile private var completed: Boolean = false
+  private var completed: Boolean = false
 
   // Whether the task has failed.
-  @volatile private var failed: Boolean = false
+  private var failed: Boolean = false
 
-  override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
-    onCompleteCallbacks += listener
+  // Throwable that caused the task to fail
+  private var failure: Throwable = _
+
+  // If there was a fetch failure in the task, we store it here, to make sure user-code doesn't
+  // hide the exception.  See SPARK-19276
+  @volatile private var _fetchFailedException: Option[FetchFailedException] = None
+
+  @GuardedBy("this")
+  override def addTaskCompletionListener(listener: TaskCompletionListener)
+      : this.type = synchronized {
+    if (completed) {
+      listener.onTaskCompletion(this)
+    } else {
+      onCompleteCallbacks += listener
+    }
     this
   }
 
-  override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
-    onFailureCallbacks += listener
+  @GuardedBy("this")
+  override def addTaskFailureListener(listener: TaskFailureListener)
+      : this.type = synchronized {
+    if (failed) {
+      listener.onTaskFailure(this, failure)
+    } else {
+      onFailureCallbacks += listener
+    }
     this
   }
 
   /** Marks the task as failed and triggers the failure listeners. */
-  private[spark] def markTaskFailed(error: Throwable): Unit = {
-    // failure callbacks should only be called once
+  @GuardedBy("this")
+  private[spark] def markTaskFailed(error: Throwable): Unit = synchronized {
     if (failed) return
     failed = true
-    val errorMsgs = new ArrayBuffer[String](2)
-    // Process failure callbacks in the reverse order of registration
-    onFailureCallbacks.reverse.foreach { listener =>
-      try {
-        listener.onTaskFailure(this, error)
-      } catch {
-        case e: Throwable =>
-          errorMsgs += e.getMessage
-          logError("Error in TaskFailureListener", e)
-      }
-    }
-    if (errorMsgs.nonEmpty) {
-      throw new TaskCompletionListenerException(errorMsgs, Option(error))
+    failure = error
+    invokeListeners(onFailureCallbacks, "TaskFailureListener", Option(error)) {
+      _.onTaskFailure(this, error)
     }
   }
 
   /** Marks the task as completed and triggers the completion listeners. */
-  private[spark] def markTaskCompleted(): Unit = {
+  @GuardedBy("this")
+  private[spark] def markTaskCompleted(error: Option[Throwable]): Unit = synchronized {
+    if (completed) return
     completed = true
+    invokeListeners(onCompleteCallbacks, "TaskCompletionListener", error) {
+      _.onTaskCompletion(this)
+    }
+  }
+
+  private def invokeListeners[T](
+      listeners: Seq[T],
+      name: String,
+      error: Option[Throwable])(
+      callback: T => Unit): Unit = {
     val errorMsgs = new ArrayBuffer[String](2)
-    // Process complete callbacks in the reverse order of registration
-    onCompleteCallbacks.reverse.foreach { listener =>
+    // Process callbacks in the reverse order of registration
+    listeners.reverse.foreach { listener =>
       try {
-        listener.onTaskCompletion(this)
+        callback(listener)
       } catch {
         case e: Throwable =>
           errorMsgs += e.getMessage
-          logError("Error in TaskCompletionListener", e)
+          logError(s"Error in $name", e)
       }
     }
     if (errorMsgs.nonEmpty) {
-      throw new TaskCompletionListenerException(errorMsgs)
+      throw new TaskCompletionListenerException(errorMsgs, error)
     }
   }
 
   /** Marks the task for interruption, i.e. cancellation. */
-  private[spark] def markInterrupted(): Unit = {
-    interrupted = true
+  private[spark] def markInterrupted(reason: String): Unit = {
+    reasonIfKilled = Some(reason)
   }
 
-  override def isCompleted(): Boolean = completed
+  private[spark] override def killTaskIfInterrupted(): Unit = {
+    val reason = reasonIfKilled
+    if (reason.isDefined) {
+      throw new TaskKilledException(reason.get)
+    }
+  }
+
+  private[spark] override def getKillReason(): Option[String] = {
+    reasonIfKilled
+  }
+
+  @GuardedBy("this")
+  override def isCompleted(): Boolean = synchronized(completed)
 
   override def isRunningLocally(): Boolean = false
 
-  override def isInterrupted(): Boolean = interrupted
+  override def isInterrupted(): Boolean = reasonIfKilled.isDefined
 
   override def getLocalProperty(key: String): String = localProperties.getProperty(key)
 
@@ -125,5 +171,11 @@ private[spark] class TaskContextImpl(
   private[spark] override def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
     taskMetrics.registerAccumulator(a)
   }
+
+  private[spark] override def setFetchFailed(fetchFailed: FetchFailedException): Unit = {
+    this._fetchFailedException = Option(fetchFailed)
+  }
+
+  private[spark] def fetchFailed: Option[FetchFailedException] = _fetchFailedException
 
 }

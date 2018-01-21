@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -73,11 +75,12 @@ abstract class Expression extends TreeNode[Expression] {
    * - it relies on some mutable internal state, or
    * - it relies on some implicit input that is not part of the children expression list.
    * - it has non-deterministic child or children.
+   * - it assumes the input satisfies some certain condition via the child operator.
    *
    * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
    * By default leaf expressions are deterministic as Nil.forall(_.deterministic) returns true.
    */
-  def deterministic: Boolean = children.forall(_.deterministic)
+  lazy val deterministic: Boolean = children.forall(_.deterministic)
 
   def nullable: Boolean
 
@@ -101,13 +104,44 @@ abstract class Expression extends TreeNode[Expression] {
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
-      val ve = doGenCode(ctx, ExprCode("", isNull, value))
-      if (ve.code.nonEmpty) {
+      val eval = doGenCode(ctx, ExprCode("", isNull, value))
+      reduceCodeSize(ctx, eval)
+      if (eval.code.nonEmpty) {
         // Add `this` in the comment.
-        ve.copy(code = s"${ctx.registerComment(this.toString)}\n" + ve.code.trim)
+        eval.copy(code = s"${ctx.registerComment(this.toString)}\n" + eval.code.trim)
       } else {
-        ve
+        eval
       }
+    }
+  }
+
+  private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
+    // TODO: support whole stage codegen too
+    if (eval.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+      val setIsNull = if (eval.isNull != "false" && eval.isNull != "true") {
+        val globalIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "globalIsNull")
+        val localIsNull = eval.isNull
+        eval.isNull = globalIsNull
+        s"$globalIsNull = $localIsNull;"
+      } else {
+        ""
+      }
+
+      val javaType = ctx.javaType(dataType)
+      val newValue = ctx.freshName("value")
+
+      val funcName = ctx.freshName(nodeName)
+      val funcFullName = ctx.addNewFunction(funcName,
+        s"""
+           |private $javaType $funcName(InternalRow ${ctx.INPUT_ROW}) {
+           |  ${eval.code.trim}
+           |  $setIsNull
+           |  return ${eval.value};
+           |}
+           """.stripMargin)
+
+      eval.value = newValue
+      eval.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
     }
   }
 
@@ -184,7 +218,7 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns a user-facing string representation of this expression's name.
    * This should usually match the name of the function in SQL.
    */
-  def prettyName: String = nodeName.toLowerCase
+  def prettyName: String = nodeName.toLowerCase(Locale.ROOT)
 
   protected def flatArguments: Iterator[Any] = productIterator.flatMap {
     case t: Traversable[_] => t
@@ -239,6 +273,10 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   override def nullable: Boolean = child.nullable
   override def foldable: Boolean = child.foldable
   override def dataType: DataType = child.dataType
+  // As this expression gets replaced at optimization with its `child" expression,
+  // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
+  // are semantically equal.
+  override lazy val canonicalized: Expression = child.canonicalized
 }
 
 
@@ -259,7 +297,7 @@ trait NonSQLExpression extends Expression {
  * An expression that is nondeterministic.
  */
 trait Nondeterministic extends Expression {
-  final override def deterministic: Boolean = false
+  final override lazy val deterministic: Boolean = false
   final override def foldable: Boolean = false
 
   @transient
@@ -491,7 +529,7 @@ abstract class BinaryExpression extends Expression {
  * A [[BinaryExpression]] that is an operator, with two properties:
  *
  * 1. The string representation is "x symbol y", rather than "funcName(x, y)".
- * 2. Two inputs are expected to the be same type. If the two inputs have different types,
+ * 2. Two inputs are expected to be of the same type. If the two inputs have different types,
  *    the analyzer will find the tightest common type and do the proper type casting.
  */
 abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
@@ -629,3 +667,9 @@ abstract class TernaryExpression extends Expression {
     }
   }
 }
+
+/**
+ * Common base trait for user-defined functions, including UDF/UDAF/UDTF of different languages
+ * and Hive function wrappers.
+ */
+trait UserDefinedExpression

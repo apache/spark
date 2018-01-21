@@ -25,9 +25,7 @@ import org.apache.hadoop.util.VersionInfo
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
-private[client] class HiveClientBuilder {
-  private val sparkConf = new SparkConf()
-
+private[client] object HiveClientBuilder {
   // In order to speed up test execution during development or in Jenkins, you can specify the path
   // of an existing Ivy cache:
   private val ivyPath: Option[String] = {
@@ -35,22 +33,26 @@ private[client] class HiveClientBuilder {
       Some(new File(sys.props("java.io.tmpdir"), "hive-ivy-cache").getAbsolutePath))
   }
 
-  private def buildConf() = {
+  private def buildConf(extraConf: Map[String, String]) = {
     lazy val warehousePath = Utils.createTempDir()
     lazy val metastorePath = Utils.createTempDir()
     metastorePath.delete()
-    Map(
+    extraConf ++ Map(
       "javax.jdo.option.ConnectionURL" -> s"jdbc:derby:;databaseName=$metastorePath;create=true",
       "hive.metastore.warehouse.dir" -> warehousePath.toString)
   }
 
-  def buildClient(version: String, hadoopConf: Configuration): HiveClient = {
+  // for testing only
+  def buildClient(
+      version: String,
+      hadoopConf: Configuration,
+      extraConf: Map[String, String] = Map.empty): HiveClient = {
     IsolatedClientLoader.forVersion(
       hiveMetastoreVersion = version,
       hadoopVersion = VersionInfo.getVersion,
-      sparkConf = sparkConf,
+      sparkConf = new SparkConf(),
       hadoopConf = hadoopConf,
-      config = buildConf(),
+      config = buildConf(extraConf),
       ivyPath = ivyPath).createClient()
   }
 }

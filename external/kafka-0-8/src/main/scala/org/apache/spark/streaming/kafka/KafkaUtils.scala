@@ -20,7 +20,7 @@ package org.apache.spark.streaming.kafka
 import java.io.OutputStream
 import java.lang.{Integer => JInt, Long => JLong, Number => JNumber}
 import java.nio.charset.StandardCharsets
-import java.util.{List => JList, Map => JMap, Set => JSet}
+import java.util.{List => JList, Locale, Map => JMap, Set => JSet}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -41,6 +41,7 @@ import org.apache.spark.streaming.api.java._
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ReceiverInputDStream}
 import org.apache.spark.streaming.util.WriteAheadLogUtils
 
+@deprecated("Update to Kafka 0.10 integration", "2.3.0")
 object KafkaUtils {
   /**
    * Create an input stream that pulls messages from Kafka Brokers.
@@ -206,7 +207,7 @@ object KafkaUtils {
       kafkaParams: Map[String, String],
       topics: Set[String]
     ): Map[TopicAndPartition, Long] = {
-    val reset = kafkaParams.get("auto.offset.reset").map(_.toLowerCase)
+    val reset = kafkaParams.get("auto.offset.reset").map(_.toLowerCase(Locale.ROOT))
     val result = for {
       topicPartitions <- kc.getPartitions(topics).right
       leaderOffsets <- (if (reset == Some("smallest")) {

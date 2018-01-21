@@ -58,6 +58,7 @@ object KinesisUtils {
    * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
    * gets the AWS credentials.
    */
+  @deprecated("Use KinesisInputDStream.builder instead", "2.2.0")
   def createStream[T: ClassTag](
       ssc: StreamingContext,
       kinesisAppName: String,
@@ -72,8 +73,9 @@ object KinesisUtils {
     // Setting scope to override receiver stream's scope of "receiver stream"
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, DefaultCredentialsProvider)
+        KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
+        kinesisAppName, checkpointInterval, storageLevel,
+        cleanedHandler, DefaultCredentials, None, None)
     }
   }
 
@@ -108,6 +110,7 @@ object KinesisUtils {
    * is enabled. Make sure that your checkpoint directory is secure.
    */
   // scalastyle:off
+  @deprecated("Use KinesisInputDStream.builder instead", "2.2.0")
   def createStream[T: ClassTag](
       ssc: StreamingContext,
       kinesisAppName: String,
@@ -123,12 +126,13 @@ object KinesisUtils {
     // scalastyle:on
     val cleanedHandler = ssc.sc.clean(messageHandler)
     ssc.withNamedScope("kinesis stream") {
-      val kinesisCredsProvider = BasicCredentialsProvider(
+      val kinesisCredsProvider = BasicCredentials(
         awsAccessKeyId = awsAccessKeyId,
         awsSecretKey = awsSecretKey)
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, kinesisCredsProvider)
+        KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
+        kinesisAppName, checkpointInterval, storageLevel,
+        cleanedHandler, kinesisCredsProvider, None, None)
     }
   }
 
@@ -160,7 +164,7 @@ object KinesisUtils {
    * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
    * @param stsAssumeRoleArn ARN of IAM role to assume when using STS sessions to read from
    *                         Kinesis stream.
-   * @param stsSessionName Name to uniquely identify STS sessions if multiple princples assume
+   * @param stsSessionName Name to uniquely identify STS sessions if multiple principals assume
    *                       the same role.
    * @param stsExternalId External ID that can be used to validate against the assumed IAM role's
    *                      trust policy.
@@ -169,6 +173,7 @@ object KinesisUtils {
    * is enabled. Make sure that your checkpoint directory is secure.
    */
   // scalastyle:off
+  @deprecated("Use KinesisInputDStream.builder instead", "2.2.0")
   def createStream[T: ClassTag](
       ssc: StreamingContext,
       kinesisAppName: String,
@@ -187,16 +192,17 @@ object KinesisUtils {
     // scalastyle:on
     val cleanedHandler = ssc.sc.clean(messageHandler)
     ssc.withNamedScope("kinesis stream") {
-      val kinesisCredsProvider = STSCredentialsProvider(
+      val kinesisCredsProvider = STSCredentials(
         stsRoleArn = stsAssumeRoleArn,
         stsSessionName = stsSessionName,
         stsExternalId = Option(stsExternalId),
-        longLivedCredsProvider = BasicCredentialsProvider(
+        longLivedCreds = BasicCredentials(
           awsAccessKeyId = awsAccessKeyId,
           awsSecretKey = awsSecretKey))
       new KinesisInputDStream[T](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        cleanedHandler, kinesisCredsProvider)
+        KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
+        kinesisAppName, checkpointInterval, storageLevel,
+        cleanedHandler, kinesisCredsProvider, None, None)
     }
   }
 
@@ -227,6 +233,7 @@ object KinesisUtils {
    * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
    * gets the AWS credentials.
    */
+  @deprecated("Use KinesisInputDStream.builder instead", "2.2.0")
   def createStream(
       ssc: StreamingContext,
       kinesisAppName: String,
@@ -239,8 +246,9 @@ object KinesisUtils {
     // Setting scope to override receiver stream's scope of "receiver stream"
     ssc.withNamedScope("kinesis stream") {
       new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        defaultMessageHandler, DefaultCredentialsProvider)
+        KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
+        kinesisAppName, checkpointInterval, storageLevel,
+        KinesisInputDStream.defaultMessageHandler, DefaultCredentials, None, None)
     }
   }
 
@@ -272,6 +280,7 @@ object KinesisUtils {
    * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
    * is enabled. Make sure that your checkpoint directory is secure.
    */
+  @deprecated("Use KinesisInputDStream.builder instead", "2.2.0")
   def createStream(
       ssc: StreamingContext,
       kinesisAppName: String,
@@ -284,12 +293,13 @@ object KinesisUtils {
       awsAccessKeyId: String,
       awsSecretKey: String): ReceiverInputDStream[Array[Byte]] = {
     ssc.withNamedScope("kinesis stream") {
-      val kinesisCredsProvider = BasicCredentialsProvider(
+      val kinesisCredsProvider = BasicCredentials(
         awsAccessKeyId = awsAccessKeyId,
         awsSecretKey = awsSecretKey)
       new KinesisInputDStream[Array[Byte]](ssc, streamName, endpointUrl, validateRegion(regionName),
-        initialPositionInStream, kinesisAppName, checkpointInterval, storageLevel,
-        defaultMessageHandler, kinesisCredsProvider)
+        KinesisInitialPositions.fromKinesisInitialPosition(initialPositionInStream),
+        kinesisAppName, checkpointInterval, storageLevel,
+        KinesisInputDStream.defaultMessageHandler, kinesisCredsProvider, None, None)
     }
   }
 
@@ -323,6 +333,7 @@ object KinesisUtils {
    * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
    * gets the AWS credentials.
    */
+  @deprecated("Use KinesisInputDStream.builder instead", "2.2.0")
   def createStream[T](
       jssc: JavaStreamingContext,
       kinesisAppName: String,
@@ -372,6 +383,7 @@ object KinesisUtils {
    * is enabled. Make sure that your checkpoint directory is secure.
    */
   // scalastyle:off
+  @deprecated("Use KinesisInputDStream.builder instead", "2.2.0")
   def createStream[T](
       jssc: JavaStreamingContext,
       kinesisAppName: String,
@@ -422,7 +434,7 @@ object KinesisUtils {
    * @param awsSecretKey  AWS SecretKey (if null, will use DefaultAWSCredentialsProviderChain)
    * @param stsAssumeRoleArn ARN of IAM role to assume when using STS sessions to read from
    *                         Kinesis stream.
-   * @param stsSessionName Name to uniquely identify STS sessions if multiple princples assume
+   * @param stsSessionName Name to uniquely identify STS sessions if multiple princpals assume
    *                       the same role.
    * @param stsExternalId External ID that can be used to validate against the assumed IAM role's
    *                      trust policy.
@@ -431,6 +443,7 @@ object KinesisUtils {
    * is enabled. Make sure that your checkpoint directory is secure.
    */
   // scalastyle:off
+  @deprecated("Use KinesisInputDStream.builder instead", "2.2.0")
   def createStream[T](
       jssc: JavaStreamingContext,
       kinesisAppName: String,
@@ -482,6 +495,7 @@ object KinesisUtils {
    * on the workers. See AWS documentation to understand how DefaultAWSCredentialsProviderChain
    * gets the AWS credentials.
    */
+  @deprecated("Use KinesisInputDStream.builder instead", "2.2.0")
   def createStream(
       jssc: JavaStreamingContext,
       kinesisAppName: String,
@@ -493,7 +507,8 @@ object KinesisUtils {
       storageLevel: StorageLevel
     ): JavaReceiverInputDStream[Array[Byte]] = {
     createStream[Array[Byte]](jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
-      initialPositionInStream, checkpointInterval, storageLevel, defaultMessageHandler(_))
+      initialPositionInStream, checkpointInterval, storageLevel,
+      KinesisInputDStream.defaultMessageHandler(_))
   }
 
   /**
@@ -524,6 +539,7 @@ object KinesisUtils {
    * @note The given AWS credentials will get saved in DStream checkpoints if checkpointing
    * is enabled. Make sure that your checkpoint directory is secure.
    */
+  @deprecated("Use KinesisInputDStream.builder instead", "2.2.0")
   def createStream(
       jssc: JavaStreamingContext,
       kinesisAppName: String,
@@ -537,21 +553,13 @@ object KinesisUtils {
       awsSecretKey: String): JavaReceiverInputDStream[Array[Byte]] = {
     createStream[Array[Byte]](jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
       initialPositionInStream, checkpointInterval, storageLevel,
-      defaultMessageHandler(_), awsAccessKeyId, awsSecretKey)
+      KinesisInputDStream.defaultMessageHandler(_), awsAccessKeyId, awsSecretKey)
   }
 
   private def validateRegion(regionName: String): String = {
     Option(RegionUtils.getRegion(regionName)).map { _.getName }.getOrElse {
       throw new IllegalArgumentException(s"Region name '$regionName' is not valid")
     }
-  }
-
-  private[kinesis] def defaultMessageHandler(record: Record): Array[Byte] = {
-    if (record == null) return null
-    val byteBuffer = record.getData()
-    val byteArray = new Array[Byte](byteBuffer.remaining())
-    byteBuffer.get(byteArray)
-    byteArray
   }
 }
 
@@ -597,7 +605,7 @@ private class KinesisUtilsPythonHelper {
       validateAwsCreds(awsAccessKeyId, awsSecretKey)
       KinesisUtils.createStream(jssc.ssc, kinesisAppName, streamName, endpointUrl, regionName,
         getInitialPositionInStream(initialPositionInStream), checkpointInterval, storageLevel,
-        KinesisUtils.defaultMessageHandler(_), awsAccessKeyId, awsSecretKey,
+        KinesisInputDStream.defaultMessageHandler(_), awsAccessKeyId, awsSecretKey,
         stsAssumeRoleArn, stsSessionName, stsExternalId)
     } else {
       validateAwsCreds(awsAccessKeyId, awsSecretKey)

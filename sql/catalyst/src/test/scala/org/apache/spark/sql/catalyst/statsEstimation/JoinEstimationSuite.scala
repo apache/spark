@@ -23,8 +23,9 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, EqualTo}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, Project, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{DateType, TimestampType, _}
 
 
@@ -66,6 +67,213 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     rowCount = 2,
     attributeStats = AttributeMap(Seq("key-1-2", "key-2-3").map(nameToColInfo)))
 
+  private def estimateByHistogram(
+      leftHistogram: Histogram,
+      rightHistogram: Histogram,
+      expectedMin: Double,
+      expectedMax: Double,
+      expectedNdv: Long,
+      expectedRows: Long): Unit = {
+    val col1 = attr("key1")
+    val col2 = attr("key2")
+    val c1 = generateJoinChild(col1, leftHistogram, expectedMin, expectedMax)
+    val c2 = generateJoinChild(col2, rightHistogram, expectedMin, expectedMax)
+
+    val c1JoinC2 = Join(c1, c2, Inner, Some(EqualTo(col1, col2)))
+    val c2JoinC1 = Join(c2, c1, Inner, Some(EqualTo(col2, col1)))
+    val expectedStatsAfterJoin = Statistics(
+      sizeInBytes = expectedRows * (8 + 2 * 4),
+      rowCount = Some(expectedRows),
+      attributeStats = AttributeMap(Seq(
+        col1 -> c1.stats.attributeStats(col1).copy(
+          distinctCount = expectedNdv, min = Some(expectedMin), max = Some(expectedMax)),
+        col2 -> c2.stats.attributeStats(col2).copy(
+          distinctCount = expectedNdv, min = Some(expectedMin), max = Some(expectedMax))))
+    )
+
+    // Join order should not affect estimation result.
+    Seq(c1JoinC2, c2JoinC1).foreach { join =>
+      assert(join.stats == expectedStatsAfterJoin)
+    }
+  }
+
+  private def generateJoinChild(
+      col: Attribute,
+      histogram: Histogram,
+      expectedMin: Double,
+      expectedMax: Double): LogicalPlan = {
+    val colStat = inferColumnStat(histogram)
+    StatsTestPlan(
+      outputList = Seq(col),
+      rowCount = (histogram.height * histogram.bins.length).toLong,
+      attributeStats = AttributeMap(Seq(col -> colStat)))
+  }
+
+  /** Column statistics should be consistent with histograms in tests. */
+  private def inferColumnStat(histogram: Histogram): ColumnStat = {
+    var ndv = 0L
+    for (i <- histogram.bins.indices) {
+      val bin = histogram.bins(i)
+      if (i == 0 || bin.hi != histogram.bins(i - 1).hi) {
+        ndv += bin.ndv
+      }
+    }
+    ColumnStat(distinctCount = ndv, min = Some(histogram.bins.head.lo),
+      max = Some(histogram.bins.last.hi), nullCount = 0, avgLen = 4, maxLen = 4,
+      histogram = Some(histogram))
+  }
+
+  test("equi-height histograms: a bin is contained by another one") {
+    val histogram1 = Histogram(height = 300, Array(
+      HistogramBin(lo = 10, hi = 30, ndv = 10), HistogramBin(lo = 30, hi = 60, ndv = 30)))
+    val histogram2 = Histogram(height = 100, Array(
+      HistogramBin(lo = 0, hi = 50, ndv = 50), HistogramBin(lo = 50, hi = 100, ndv = 40)))
+    // test bin trimming
+    val (t0, h0) = trimBin(histogram2.bins(0), height = 100, lowerBound = 10, upperBound = 60)
+    assert(t0 == HistogramBin(lo = 10, hi = 50, ndv = 40) && h0 == 80)
+    val (t1, h1) = trimBin(histogram2.bins(1), height = 100, lowerBound = 10, upperBound = 60)
+    assert(t1 == HistogramBin(lo = 50, hi = 60, ndv = 8) && h1 == 20)
+
+    val expectedRanges = Seq(
+      // histogram1.bins(0) overlaps t0
+      OverlappedRange(10, 30, 10, 40 * 1 / 2, 300, 80 * 1 / 2),
+      // histogram1.bins(1) overlaps t0
+      OverlappedRange(30, 50, 30 * 2 / 3, 40 * 1 / 2, 300 * 2 / 3, 80 * 1 / 2),
+      // histogram1.bins(1) overlaps t1
+      OverlappedRange(50, 60, 30 * 1 / 3, 8, 300 * 1 / 3, 20)
+    )
+    assert(expectedRanges.equals(
+      getOverlappedRanges(histogram1, histogram2, lowerBound = 10, upperBound = 60)))
+
+    estimateByHistogram(
+      leftHistogram = histogram1,
+      rightHistogram = histogram2,
+      expectedMin = 10,
+      expectedMax = 60,
+      expectedNdv = 10 + 20 + 8,
+      expectedRows = 300 * 40 / 20 + 200 * 40 / 20 + 100 * 20 / 10)
+  }
+
+  test("equi-height histograms: a bin has only one value after trimming") {
+    val histogram1 = Histogram(height = 300, Array(
+      HistogramBin(lo = 50, hi = 60, ndv = 10), HistogramBin(lo = 60, hi = 75, ndv = 3)))
+    val histogram2 = Histogram(height = 100, Array(
+      HistogramBin(lo = 0, hi = 50, ndv = 50), HistogramBin(lo = 50, hi = 100, ndv = 40)))
+    // test bin trimming
+    val (t0, h0) = trimBin(histogram2.bins(0), height = 100, lowerBound = 50, upperBound = 75)
+    assert(t0 == HistogramBin(lo = 50, hi = 50, ndv = 1) && h0 == 2)
+    val (t1, h1) = trimBin(histogram2.bins(1), height = 100, lowerBound = 50, upperBound = 75)
+    assert(t1 == HistogramBin(lo = 50, hi = 75, ndv = 20) && h1 == 50)
+
+    val expectedRanges = Seq(
+      // histogram1.bins(0) overlaps t0
+      OverlappedRange(50, 50, 1, 1, 300 / 10, 2),
+      // histogram1.bins(0) overlaps t1
+      OverlappedRange(50, 60, 10, 20 * 10 / 25, 300, 50 * 10 / 25),
+      // histogram1.bins(1) overlaps t1
+      OverlappedRange(60, 75, 3, 20 * 15 / 25, 300, 50 * 15 / 25)
+    )
+    assert(expectedRanges.equals(
+      getOverlappedRanges(histogram1, histogram2, lowerBound = 50, upperBound = 75)))
+
+    estimateByHistogram(
+      leftHistogram = histogram1,
+      rightHistogram = histogram2,
+      expectedMin = 50,
+      expectedMax = 75,
+      expectedNdv = 1 + 8 + 3,
+      expectedRows = 30 * 2 / 1 + 300 * 20 / 10 + 300 * 30 / 12)
+  }
+
+  test("equi-height histograms: skew distribution (some bins have only one value)") {
+    val histogram1 = Histogram(height = 300, Array(
+      HistogramBin(lo = 30, hi = 30, ndv = 1),
+      HistogramBin(lo = 30, hi = 30, ndv = 1),
+      HistogramBin(lo = 30, hi = 60, ndv = 30)))
+    val histogram2 = Histogram(height = 100, Array(
+      HistogramBin(lo = 0, hi = 50, ndv = 50), HistogramBin(lo = 50, hi = 100, ndv = 40)))
+    // test bin trimming
+    val (t0, h0) = trimBin(histogram2.bins(0), height = 100, lowerBound = 30, upperBound = 60)
+    assert(t0 == HistogramBin(lo = 30, hi = 50, ndv = 20) && h0 == 40)
+    val (t1, h1) = trimBin(histogram2.bins(1), height = 100, lowerBound = 30, upperBound = 60)
+    assert(t1 ==HistogramBin(lo = 50, hi = 60, ndv = 8) && h1 == 20)
+
+    val expectedRanges = Seq(
+      OverlappedRange(30, 30, 1, 1, 300, 40 / 20),
+      OverlappedRange(30, 30, 1, 1, 300, 40 / 20),
+      OverlappedRange(30, 50, 30 * 2 / 3, 20, 300 * 2 / 3, 40),
+      OverlappedRange(50, 60, 30 * 1 / 3, 8, 300 * 1 / 3, 20)
+    )
+    assert(expectedRanges.equals(
+      getOverlappedRanges(histogram1, histogram2, lowerBound = 30, upperBound = 60)))
+
+    estimateByHistogram(
+      leftHistogram = histogram1,
+      rightHistogram = histogram2,
+      expectedMin = 30,
+      expectedMax = 60,
+      expectedNdv = 1 + 20 + 8,
+      expectedRows = 300 * 2 / 1 + 300 * 2 / 1 + 200 * 40 / 20 + 100 * 20 / 10)
+  }
+
+  test("equi-height histograms: skew distribution (histograms have different skewed values") {
+    val histogram1 = Histogram(height = 300, Array(
+      HistogramBin(lo = 30, hi = 30, ndv = 1), HistogramBin(lo = 30, hi = 60, ndv = 30)))
+    val histogram2 = Histogram(height = 100, Array(
+      HistogramBin(lo = 0, hi = 50, ndv = 50), HistogramBin(lo = 50, hi = 50, ndv = 1)))
+    // test bin trimming
+    val (t0, h0) = trimBin(histogram1.bins(1), height = 300, lowerBound = 30, upperBound = 50)
+    assert(t0 == HistogramBin(lo = 30, hi = 50, ndv = 20) && h0 == 200)
+    val (t1, h1) = trimBin(histogram2.bins(0), height = 100, lowerBound = 30, upperBound = 50)
+    assert(t1 == HistogramBin(lo = 30, hi = 50, ndv = 20) && h1 == 40)
+
+    val expectedRanges = Seq(
+      OverlappedRange(30, 30, 1, 1, 300, 40 / 20),
+      OverlappedRange(30, 50, 20, 20, 200, 40),
+      OverlappedRange(50, 50, 1, 1, 200 / 20, 100)
+    )
+    assert(expectedRanges.equals(
+      getOverlappedRanges(histogram1, histogram2, lowerBound = 30, upperBound = 50)))
+
+    estimateByHistogram(
+      leftHistogram = histogram1,
+      rightHistogram = histogram2,
+      expectedMin = 30,
+      expectedMax = 50,
+      expectedNdv = 1 + 20,
+      expectedRows = 300 * 2 / 1 + 200 * 40 / 20 + 10 * 100 / 1)
+  }
+
+  test("equi-height histograms: skew distribution (both histograms have the same skewed value") {
+    val histogram1 = Histogram(height = 300, Array(
+      HistogramBin(lo = 30, hi = 30, ndv = 1), HistogramBin(lo = 30, hi = 60, ndv = 30)))
+    val histogram2 = Histogram(height = 150, Array(
+      HistogramBin(lo = 0, hi = 30, ndv = 30), HistogramBin(lo = 30, hi = 30, ndv = 1)))
+    // test bin trimming
+    val (t0, h0) = trimBin(histogram1.bins(1), height = 300, lowerBound = 30, upperBound = 30)
+    assert(t0 == HistogramBin(lo = 30, hi = 30, ndv = 1) && h0 == 10)
+    val (t1, h1) = trimBin(histogram2.bins(0), height = 150, lowerBound = 30, upperBound = 30)
+    assert(t1 == HistogramBin(lo = 30, hi = 30, ndv = 1) && h1 == 5)
+
+    val expectedRanges = Seq(
+      OverlappedRange(30, 30, 1, 1, 300, 5),
+      OverlappedRange(30, 30, 1, 1, 300, 150),
+      OverlappedRange(30, 30, 1, 1, 10, 5),
+      OverlappedRange(30, 30, 1, 1, 10, 150)
+    )
+    assert(expectedRanges.equals(
+      getOverlappedRanges(histogram1, histogram2, lowerBound = 30, upperBound = 30)))
+
+    estimateByHistogram(
+      leftHistogram = histogram1,
+      rightHistogram = histogram2,
+      expectedMin = 30,
+      expectedMax = 30,
+      // only one value: 30
+      expectedNdv = 1,
+      expectedRows = 300 * 5 / 1 + 300 * 150 / 1 + 10 * 5 / 1 + 10 * 150 / 1)
+  }
+
   test("cross join") {
     // table1 (key-1-5 int, key-5-9 int): (1, 9), (2, 8), (3, 7), (4, 6), (5, 5)
     // table2 (key-1-2 int, key-2-4 int): (1, 2), (2, 3), (2, 4)
@@ -76,7 +284,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       // Keep the column stat from both sides unchanged.
       attributeStats = AttributeMap(
         Seq("key-1-5", "key-5-9", "key-1-2", "key-2-4").map(nameToColInfo)))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("disjoint inner join") {
@@ -89,7 +297,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       sizeInBytes = 1,
       rowCount = Some(0),
       attributeStats = AttributeMap(Nil))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("disjoint left outer join") {
@@ -105,7 +313,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
         // Null count for right side columns = left row count
         Seq(nameToAttr("key-1-2") -> nullColumnStat(nameToAttr("key-1-2").dataType, 5),
           nameToAttr("key-2-4") -> nullColumnStat(nameToAttr("key-2-4").dataType, 5))))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("disjoint right outer join") {
@@ -121,7 +329,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
         // Null count for left side columns = right row count
         Seq(nameToAttr("key-1-5") -> nullColumnStat(nameToAttr("key-1-5").dataType, 3),
           nameToAttr("key-5-9") -> nullColumnStat(nameToAttr("key-5-9").dataType, 3))))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("disjoint full outer join") {
@@ -139,7 +347,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
           nameToAttr("key-5-9") -> columnInfo(nameToAttr("key-5-9")).copy(nullCount = 3),
           nameToAttr("key-1-2") -> columnInfo(nameToAttr("key-1-2")).copy(nullCount = 5),
           nameToAttr("key-2-4") -> columnInfo(nameToAttr("key-2-4")).copy(nullCount = 5))))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("inner join") {
@@ -160,7 +368,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(
         Seq(nameToAttr("key-1-5") -> joinedColStat, nameToAttr("key-1-2") -> joinedColStat,
           nameToAttr("key-5-9") -> colStatForkey59, nameToColInfo("key-2-4"))))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("inner join with multiple equi-join keys") {
@@ -182,7 +390,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(
         Seq(nameToAttr("key-1-2") -> joinedColStat1, nameToAttr("key-1-2") -> joinedColStat1,
           nameToAttr("key-2-4") -> joinedColStat2, nameToAttr("key-2-3") -> joinedColStat2)))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("left outer join") {
@@ -200,7 +408,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(
         Seq(nameToColInfo("key-1-2"), nameToColInfo("key-2-3"),
           nameToColInfo("key-1-2"), nameToAttr("key-2-4") -> joinedColStat)))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("right outer join") {
@@ -218,7 +426,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(
         Seq(nameToColInfo("key-1-2"), nameToAttr("key-2-4") -> joinedColStat,
           nameToColInfo("key-1-2"), nameToColInfo("key-2-3"))))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("full outer join") {
@@ -233,7 +441,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       // Keep the column stat from both sides unchanged.
       attributeStats = AttributeMap(Seq(nameToColInfo("key-1-2"), nameToColInfo("key-2-4"),
         nameToColInfo("key-1-2"), nameToColInfo("key-2-3"))))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 
   test("left semi/anti join") {
@@ -247,31 +455,31 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
         sizeInBytes = 3 * (8 + 4 * 2),
         rowCount = Some(3),
         attributeStats = AttributeMap(Seq(nameToColInfo("key-1-2"), nameToColInfo("key-2-4"))))
-      assert(join.stats(conf) == expectedStats)
+      assert(join.stats == expectedStats)
     }
   }
 
   test("test join keys of different types") {
     /** Columns in a table with only one row */
     def genColumnData: mutable.LinkedHashMap[Attribute, ColumnStat] = {
-      val dec = new java.math.BigDecimal("1.000000000000000000")
-      val date = Date.valueOf("2016-05-08")
-      val timestamp = Timestamp.valueOf("2016-05-08 00:00:01")
+      val dec = Decimal("1.000000000000000000")
+      val date = DateTimeUtils.fromJavaDate(Date.valueOf("2016-05-08"))
+      val timestamp = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-05-08 00:00:01"))
       mutable.LinkedHashMap[Attribute, ColumnStat](
         AttributeReference("cbool", BooleanType)() -> ColumnStat(distinctCount = 1,
           min = Some(false), max = Some(false), nullCount = 0, avgLen = 1, maxLen = 1),
         AttributeReference("cbyte", ByteType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 1, maxLen = 1),
+          min = Some(1.toByte), max = Some(1.toByte), nullCount = 0, avgLen = 1, maxLen = 1),
         AttributeReference("cshort", ShortType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 2, maxLen = 2),
+          min = Some(1.toShort), max = Some(1.toShort), nullCount = 0, avgLen = 2, maxLen = 2),
         AttributeReference("cint", IntegerType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 4, maxLen = 4),
+          min = Some(1), max = Some(1), nullCount = 0, avgLen = 4, maxLen = 4),
         AttributeReference("clong", LongType)() -> ColumnStat(distinctCount = 1,
           min = Some(1L), max = Some(1L), nullCount = 0, avgLen = 8, maxLen = 8),
         AttributeReference("cdouble", DoubleType)() -> ColumnStat(distinctCount = 1,
           min = Some(1.0), max = Some(1.0), nullCount = 0, avgLen = 8, maxLen = 8),
         AttributeReference("cfloat", FloatType)() -> ColumnStat(distinctCount = 1,
-          min = Some(1.0), max = Some(1.0), nullCount = 0, avgLen = 4, maxLen = 4),
+          min = Some(1.0f), max = Some(1.0f), nullCount = 0, avgLen = 4, maxLen = 4),
         AttributeReference("cdec", DecimalType.SYSTEM_DEFAULT)() -> ColumnStat(distinctCount = 1,
           min = Some(dec), max = Some(dec), nullCount = 0, avgLen = 16, maxLen = 16),
         AttributeReference("cstring", StringType)() -> ColumnStat(distinctCount = 1,
@@ -305,7 +513,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
           sizeInBytes = 1 * (8 + 2 * getColSize(key1, columnInfo1(key1))),
           rowCount = Some(1),
           attributeStats = AttributeMap(Seq(key1 -> columnInfo1(key1), key2 -> columnInfo1(key1))))
-        assert(join.stats(conf) == expectedStats)
+        assert(join.stats == expectedStats)
       }
     }
   }
@@ -322,6 +530,6 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       sizeInBytes = 1,
       rowCount = Some(0),
       attributeStats = AttributeMap(Nil))
-    assert(join.stats(conf) == expectedStats)
+    assert(join.stats == expectedStats)
   }
 }

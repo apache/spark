@@ -32,7 +32,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{AccumulatorContext, LongAccumulator}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -45,8 +45,29 @@ import org.apache.spark.util.{AccumulatorContext, LongAccumulator}
  *
  * 2. `Tuple1(Option(x))` is used together with `AnyVal` types like `Int` to ensure the inferred
  *    data type is nullable.
+ *
+ * NOTE:
+ *
+ * This file intendedly enables record-level filtering explicitly. If new test cases are
+ * dependent on this configuration, don't forget you better explicitly set this configuration
+ * within the test.
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    // Note that there are many tests here that require record-level filtering set to be true.
+    spark.conf.set(SQLConf.PARQUET_RECORD_FILTER_ENABLED.key, "true")
+  }
+
+  override def afterEach(): Unit = {
+    try {
+      spark.conf.unset(SQLConf.PARQUET_RECORD_FILTER_ENABLED.key)
+    } finally {
+      super.afterEach()
+    }
+  }
+
   private def checkFilterPredicate(
       df: DataFrame,
       predicate: Predicate,
@@ -63,7 +84,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
         var maybeRelation: Option[HadoopFsRelation] = None
         val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters, LogicalRelation(relation: HadoopFsRelation, _, _)) =>
+          case PhysicalOperation(_, filters,
+                                 LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
             maybeRelation = Some(relation)
             filters
         }.flatten.reduceLeftOption(_ && _)
@@ -368,7 +390,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("Filter applied on merged Parquet schema with new column should work") {
     import testImplicits._
-    Seq("true", "false").map { vectorized =>
+    Seq("true", "false").foreach { vectorized =>
       withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
         SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
@@ -490,7 +512,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("Fiters should be pushed down for vectorized Parquet reader at row group level") {
+  test("Filters should be pushed down for vectorized Parquet reader at row group level") {
     import testImplicits._
 
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
@@ -499,18 +521,20 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         val path = s"${dir.getCanonicalPath}/table"
         (1 to 1024).map(i => (101, i)).toDF("a", "b").write.parquet(path)
 
-        Seq(("true", (x: Long) => x == 0), ("false", (x: Long) => x > 0)).map { case (push, func) =>
-          withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> push) {
-            val accu = new LongAccumulator
-            accu.register(sparkContext, Some("numRowGroups"))
+        Seq(true, false).foreach { enablePushDown =>
+          withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> enablePushDown.toString) {
+            val accu = new NumRowGroupsAcc
+            sparkContext.register(accu)
 
             val df = spark.read.parquet(path).filter("a < 100")
-            df.foreachPartition(_.foreach(v => accu.add(0)))
+            df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
             df.collect
 
-            val numRowGroups = AccumulatorContext.lookForAccumulatorByName("numRowGroups")
-            assert(numRowGroups.isDefined)
-            assert(func(numRowGroups.get.asInstanceOf[LongAccumulator].value))
+            if (enablePushDown) {
+              assert(accu.value == 0)
+            } else {
+              assert(accu.value > 0)
+            }
             AccumulatorContext.remove(accu.id)
           }
         }
@@ -536,4 +560,70 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       // scalastyle:on nonascii
     }
   }
+
+  test("SPARK-20364: Disable Parquet predicate pushdown for fields having dots in the names") {
+    import testImplicits._
+
+    Seq(true, false).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
+          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> true.toString,
+          SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+        withTempPath { path =>
+          Seq(Some(1), None).toDF("col.dots").write.parquet(path.getAbsolutePath)
+          val readBack = spark.read.parquet(path.getAbsolutePath).where("`col.dots` IS NOT NULL")
+          assert(readBack.count() == 1)
+        }
+      }
+    }
+  }
+
+  test("Filters should be pushed down for Parquet readers at row group level") {
+    import testImplicits._
+
+    withSQLConf(
+      // Makes sure disabling 'spark.sql.parquet.recordFilter' still enables
+      // row group level filtering.
+      SQLConf.PARQUET_RECORD_FILTER_ENABLED.key -> "false",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+      withTempPath { path =>
+        val data = (1 to 1024)
+        data.toDF("a").coalesce(1)
+          .write.option("parquet.block.size", 512)
+          .parquet(path.getAbsolutePath)
+        val df = spark.read.parquet(path.getAbsolutePath).filter("a == 500")
+        // Here, we strip the Spark side filter and check the actual results from Parquet.
+        val actual = stripSparkFilter(df).collect().length
+        // Since those are filtered at row group level, the result count should be less
+        // than the total length but should not be a single record.
+        // Note that, if record level filtering is enabled, it should be a single record.
+        // If no filter is pushed down to Parquet, it should be the total length of data.
+        assert(actual > 1 && actual < data.length)
+      }
+    }
+  }
+}
+
+class NumRowGroupsAcc extends AccumulatorV2[Integer, Integer] {
+  private var _sum = 0
+
+  override def isZero: Boolean = _sum == 0
+
+  override def copy(): AccumulatorV2[Integer, Integer] = {
+    val acc = new NumRowGroupsAcc()
+    acc._sum = _sum
+    acc
+  }
+
+  override def reset(): Unit = _sum = 0
+
+  override def add(v: Integer): Unit = _sum += v
+
+  override def merge(other: AccumulatorV2[Integer, Integer]): Unit = other match {
+    case a: NumRowGroupsAcc => _sum += a._sum
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+  }
+
+  override def value: Integer = _sum
 }

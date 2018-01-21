@@ -18,8 +18,10 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 /**
@@ -29,25 +31,60 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   import testImplicits._
 
   test("show cost in explain command") {
-    // Only has sizeInBytes before ANALYZE command
-    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "), "sizeInBytes")
-    checkKeywordsNotExist(sql("EXPLAIN COST  SELECT * FROM src "), "rowCount")
+    val explainCostCommand = "EXPLAIN COST  SELECT * FROM src"
+    // For readability, we only show optimized plan and physical plan in explain cost command
+    checkKeywordsExist(sql(explainCostCommand),
+      "Optimized Logical Plan", "Physical Plan")
+    checkKeywordsNotExist(sql(explainCostCommand),
+      "Parsed Logical Plan", "Analyzed Logical Plan")
 
-    // Has both sizeInBytes and rowCount after ANALYZE command
-    sql("ANALYZE TABLE src COMPUTE STATISTICS")
-    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "), "sizeInBytes", "rowCount")
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+      // Only has sizeInBytes before ANALYZE command
+      checkKeywordsExist(sql(explainCostCommand), "sizeInBytes")
+      checkKeywordsNotExist(sql(explainCostCommand), "rowCount")
 
-    // No cost information
+      // Has both sizeInBytes and rowCount after ANALYZE command
+      sql("ANALYZE TABLE src COMPUTE STATISTICS")
+      checkKeywordsExist(sql(explainCostCommand), "sizeInBytes", "rowCount")
+    }
+
+    spark.sessionState.catalog.refreshTable(TableIdentifier("src"))
+
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+      // Don't show rowCount if cbo is disabled
+      checkKeywordsExist(sql(explainCostCommand), "sizeInBytes")
+      checkKeywordsNotExist(sql(explainCostCommand), "rowCount")
+    }
+
+    // No statistics information if "cost" is not specified
     checkKeywordsNotExist(sql("EXPLAIN  SELECT * FROM src "), "sizeInBytes", "rowCount")
   }
 
   test("explain extended command") {
     checkKeywordsExist(sql(" explain   select * from src where key=123 "),
-                   "== Physical Plan ==")
+                   "== Physical Plan ==",
+                   "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+
     checkKeywordsNotExist(sql(" explain   select * from src where key=123 "),
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",
-                   "== Optimized Logical Plan ==")
+                   "== Optimized Logical Plan ==",
+                   "Owner",
+                   "Database",
+                   "Created",
+                   "Last Access",
+                   "Type",
+                   "Provider",
+                   "Properties",
+                   "Statistics",
+                   "Location",
+                   "Serde Library",
+                   "InputFormat",
+                   "OutputFormat",
+                   "Partition Provider",
+                   "Schema"
+    )
+
     checkKeywordsExist(sql(" explain   extended select * from src where key=123 "),
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",
@@ -133,5 +170,22 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     intercept[ParseException] {
       sql("EXPLAIN EXTENDED CODEGEN SELECT 1")
     }
+  }
+
+  test("SPARK-23021 AnalysisBarrier should not cut off explain output for parsed logical plans") {
+    val df = Seq((1, 1)).toDF("a", "b").groupBy("a").count().limit(1)
+    val outputStream = new java.io.ByteArrayOutputStream()
+    Console.withOut(outputStream) {
+      df.explain(true)
+    }
+    assert(outputStream.toString.replaceAll("""#\d+""", "#0").contains(
+      s"""== Parsed Logical Plan ==
+         |GlobalLimit 1
+         |+- LocalLimit 1
+         |   +- AnalysisBarrier
+         |         +- Aggregate [a#0], [a#0, count(1) AS count#0L]
+         |            +- Project [_1#0 AS a#0, _2#0 AS b#0]
+         |               +- LocalRelation [_1#0, _2#0]
+         |""".stripMargin))
   }
 }

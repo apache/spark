@@ -29,9 +29,10 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import IntegerType, Row, StringType
+from pyspark.sql.udf import UDFRegistration
 from pyspark.sql.utils import install_exception_handler
 
-__all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
+__all__ = ["SQLContext", "HiveContext"]
 
 
 class SQLContext(object):
@@ -147,7 +148,7 @@ class SQLContext(object):
 
         :return: :class:`UDFRegistration`
         """
-        return UDFRegistration(self)
+        return self.sparkSession.udf
 
     @since(1.4)
     def range(self, start, end=None, step=1, numPartitions=None):
@@ -172,61 +173,29 @@ class SQLContext(object):
         """
         return self.sparkSession.range(start, end, step, numPartitions)
 
-    @ignore_unicode_prefix
     @since(1.2)
-    def registerFunction(self, name, f, returnType=StringType()):
-        """Registers a python function (including lambda function) as a UDF
-        so it can be used in SQL statements.
+    def registerFunction(self, name, f, returnType=None):
+        """An alias for :func:`spark.udf.register`.
+        See :meth:`pyspark.sql.UDFRegistration.register`.
 
-        In addition to a name and the function itself, the return type can be optionally specified.
-        When the return type is not given it default to a string and conversion will automatically
-        be done.  For any other return type, the produced object must match the specified type.
-
-        :param name: name of the UDF
-        :param f: python function
-        :param returnType: a :class:`pyspark.sql.types.DataType` object
-
-        >>> sqlContext.registerFunction("stringLengthString", lambda x: len(x))
-        >>> sqlContext.sql("SELECT stringLengthString('test')").collect()
-        [Row(stringLengthString(test)=u'4')]
-
-        >>> from pyspark.sql.types import IntegerType
-        >>> sqlContext.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
-        >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt(test)=4)]
-
-        >>> from pyspark.sql.types import IntegerType
-        >>> sqlContext.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
-        >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt(test)=4)]
+        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.register` instead.
         """
-        self.sparkSession.catalog.registerFunction(name, f, returnType)
+        warnings.warn(
+            "Deprecated in 2.3.0. Use spark.udf.register instead.",
+            DeprecationWarning)
+        return self.sparkSession.udf.register(name, f, returnType)
 
-    @ignore_unicode_prefix
     @since(2.1)
     def registerJavaFunction(self, name, javaClassName, returnType=None):
-        """Register a java UDF so it can be used in SQL statements.
+        """An alias for :func:`spark.udf.registerJavaFunction`.
+        See :meth:`pyspark.sql.UDFRegistration.registerJavaFunction`.
 
-        In addition to a name and the function itself, the return type can be optionally specified.
-        When the return type is not specified we would infer it via reflection.
-        :param name:  name of the UDF
-        :param javaClassName: fully qualified name of java class
-        :param returnType: a :class:`pyspark.sql.types.DataType` object
-
-        >>> sqlContext.registerJavaFunction("javaStringLength",
-        ...   "test.org.apache.spark.sql.JavaStringLength", IntegerType())
-        >>> sqlContext.sql("SELECT javaStringLength('test')").collect()
-        [Row(UDF(test)=4)]
-        >>> sqlContext.registerJavaFunction("javaStringLength2",
-        ...   "test.org.apache.spark.sql.JavaStringLength")
-        >>> sqlContext.sql("SELECT javaStringLength2('test')").collect()
-        [Row(UDF(test)=4)]
-
+        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.registerJavaFunction` instead.
         """
-        jdt = None
-        if returnType is not None:
-            jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
-        self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
+        warnings.warn(
+            "Deprecated in 2.3.0. Use spark.udf.registerJavaFunction instead.",
+            DeprecationWarning)
+        return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):
@@ -385,7 +354,7 @@ class SQLContext(object):
 
     @since(1.0)
     def table(self, tableName):
-        """Returns the specified table as a :class:`DataFrame`.
+        """Returns the specified table or view as a :class:`DataFrame`.
 
         :return: :class:`DataFrame`
 
@@ -470,7 +439,7 @@ class SQLContext(object):
         Returns a :class:`DataStreamReader` that can be used to read data streams
         as a streaming :class:`DataFrame`.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :return: :class:`DataStreamReader`
 
@@ -486,7 +455,7 @@ class SQLContext(object):
         """Returns a :class:`StreamingQueryManager` that allows managing all the
         :class:`StreamingQuery` StreamingQueries active on `this` context.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
         """
         from pyspark.sql.streaming import StreamingQueryManager
         return StreamingQueryManager(self._ssql_ctx.streams())
@@ -536,18 +505,6 @@ class HiveContext(SQLContext):
         call this function to invalidate the cache.
         """
         self._ssql_ctx.refreshTable(tableName)
-
-
-class UDFRegistration(object):
-    """Wrapper for user-defined function registration."""
-
-    def __init__(self, sqlContext):
-        self.sqlContext = sqlContext
-
-    def register(self, name, f, returnType=StringType()):
-        return self.sqlContext.registerFunction(name, f, returnType)
-
-    register.__doc__ = SQLContext.registerFunction.__doc__
 
 
 def _test():

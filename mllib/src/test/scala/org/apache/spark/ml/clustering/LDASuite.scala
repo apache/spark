@@ -176,7 +176,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val lda = new LDA().setK(k).setSeed(1).setOptimizer("online").setMaxIter(2)
     val model = lda.fit(dataset)
 
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(lda, model)
 
     assert(model.isInstanceOf[LocalLDAModel])
     assert(model.vocabSize === vocabSize)
@@ -221,7 +221,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val lda = new LDA().setK(k).setSeed(1).setOptimizer("em").setMaxIter(2)
     val model_ = lda.fit(dataset)
 
-    MLTestingUtils.checkCopy(model_)
+    MLTestingUtils.checkCopyAndUids(lda, model_)
 
     assert(model_.isInstanceOf[DistributedLDAModel])
     val model = model_.asInstanceOf[DistributedLDAModel]
@@ -250,7 +250,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
         Vectors.dense(model2.getDocConcentration) absTol 1e-6)
     }
     val lda = new LDA()
-    testEstimatorAndModelReadWrite(lda, dataset, LDASuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(lda, dataset, LDASuite.allParamSettings,
+      LDASuite.allParamSettings, checkModelData)
   }
 
   test("read/write DistributedLDAModel") {
@@ -271,6 +272,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     }
     val lda = new LDA()
     testEstimatorAndModelReadWrite(lda, dataset,
+      LDASuite.allParamSettings ++ Map("optimizer" -> "em"),
       LDASuite.allParamSettings ++ Map("optimizer" -> "em"), checkModelData)
   }
 
@@ -310,5 +312,15 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val model = model_.asInstanceOf[DistributedLDAModel]
 
     assert(model.getCheckpointFiles.isEmpty)
+  }
+
+  test("string params should be case-insensitive") {
+    val lda = new LDA()
+    Seq("eM", "oNLinE").foreach { optimizer =>
+      lda.setOptimizer(optimizer)
+      assert(lda.getOptimizer === optimizer)
+      val model = lda.fit(dataset)
+      assert(model.getOptimizer === optimizer)
+    }
   }
 }

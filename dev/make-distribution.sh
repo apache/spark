@@ -140,7 +140,7 @@ echo "Spark version is $VERSION"
 if [ "$MAKE_TGZ" == "true" ]; then
   echo "Making spark-$VERSION-bin-$NAME.tgz"
 else
-  echo "Making distribution for Spark $VERSION in $DISTDIR..."
+  echo "Making distribution for Spark $VERSION in '$DISTDIR'..."
 fi
 
 # Build uber fat JAR
@@ -168,10 +168,16 @@ echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 # Copy jars
 cp "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
 
-# Only create the yarn directory if the yarn artifacts were build.
+# Only create the yarn directory if the yarn artifacts were built.
 if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then
-  mkdir "$DISTDIR"/yarn
+  mkdir "$DISTDIR/yarn"
   cp "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/yarn"
+fi
+
+# Only create and copy the dockerfiles directory if the kubernetes artifacts were built.
+if [ -d "$SPARK_HOME"/resource-managers/kubernetes/core/target/ ]; then
+  mkdir -p "$DISTDIR/kubernetes/"
+  cp -a "$SPARK_HOME"/resource-managers/kubernetes/docker/src/main/dockerfiles "$DISTDIR/kubernetes/"
 fi
 
 # Copy examples and dependencies
@@ -179,7 +185,7 @@ mkdir -p "$DISTDIR/examples/jars"
 cp "$SPARK_HOME"/examples/target/scala*/jars/* "$DISTDIR/examples/jars"
 
 # Deduplicate jars that have already been packaged as part of the main Spark dependencies.
-for f in "$DISTDIR/examples/jars/"*; do
+for f in "$DISTDIR"/examples/jars/*; do
   name=$(basename "$f")
   if [ -f "$DISTDIR/jars/$name" ]; then
     rm "$DISTDIR/examples/jars/$name"
@@ -188,14 +194,14 @@ done
 
 # Copy example sources (needed for python and SQL)
 mkdir -p "$DISTDIR/examples/src/main"
-cp -r "$SPARK_HOME"/examples/src/main "$DISTDIR/examples/src/"
+cp -r "$SPARK_HOME/examples/src/main" "$DISTDIR/examples/src/"
 
 # Copy license and ASF files
 cp "$SPARK_HOME/LICENSE" "$DISTDIR"
 cp -r "$SPARK_HOME/licenses" "$DISTDIR"
 cp "$SPARK_HOME/NOTICE" "$DISTDIR"
 
-if [ -e "$SPARK_HOME"/CHANGES.txt ]; then
+if [ -e "$SPARK_HOME/CHANGES.txt" ]; then
   cp "$SPARK_HOME/CHANGES.txt" "$DISTDIR"
 fi
 
@@ -217,43 +223,43 @@ fi
 # Make R package - this is used for both CRAN release and packing R layout into distribution
 if [ "$MAKE_R" == "true" ]; then
   echo "Building R source package"
-  R_PACKAGE_VERSION=`grep Version $SPARK_HOME/R/pkg/DESCRIPTION | awk '{print $NF}'`
+  R_PACKAGE_VERSION=`grep Version "$SPARK_HOME/R/pkg/DESCRIPTION" | awk '{print $NF}'`
   pushd "$SPARK_HOME/R" > /dev/null
   # Build source package and run full checks
   # Do not source the check-cran.sh - it should be run from where it is for it to set SPARK_HOME
-  NO_TESTS=1 "$SPARK_HOME/"R/check-cran.sh
+  NO_TESTS=1 "$SPARK_HOME/R/check-cran.sh"
 
   # Move R source package to match the Spark release version if the versions are not the same.
   # NOTE(shivaram): `mv` throws an error on Linux if source and destination are same file
   if [ "$R_PACKAGE_VERSION" != "$VERSION" ]; then
-    mv $SPARK_HOME/R/SparkR_"$R_PACKAGE_VERSION".tar.gz $SPARK_HOME/R/SparkR_"$VERSION".tar.gz
+    mv "$SPARK_HOME/R/SparkR_$R_PACKAGE_VERSION.tar.gz" "$SPARK_HOME/R/SparkR_$VERSION.tar.gz"
   fi
 
   # Install source package to get it to generate vignettes rds files, etc.
-  VERSION=$VERSION "$SPARK_HOME/"R/install-source-package.sh
+  VERSION=$VERSION "$SPARK_HOME/R/install-source-package.sh"
   popd > /dev/null
 else
   echo "Skipping building R source package"
 fi
 
 # Copy other things
-mkdir "$DISTDIR"/conf
-cp "$SPARK_HOME"/conf/*.template "$DISTDIR"/conf
+mkdir "$DISTDIR/conf"
+cp "$SPARK_HOME"/conf/*.template "$DISTDIR/conf"
 cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
 
 # Remove the python distribution from dist/ if we built it
 if [ "$MAKE_PIP" == "true" ]; then
-  rm -f $DISTDIR/python/dist/pyspark-*.tar.gz
+  rm -f "$DISTDIR"/python/dist/pyspark-*.tar.gz
 fi
 
 cp -r "$SPARK_HOME/sbin" "$DISTDIR"
 # Copy SparkR if it exists
-if [ -d "$SPARK_HOME"/R/lib/SparkR ]; then
-  mkdir -p "$DISTDIR"/R/lib
-  cp -r "$SPARK_HOME/R/lib/SparkR" "$DISTDIR"/R/lib
-  cp "$SPARK_HOME/R/lib/sparkr.zip" "$DISTDIR"/R/lib
+if [ -d "$SPARK_HOME/R/lib/SparkR" ]; then
+  mkdir -p "$DISTDIR/R/lib"
+  cp -r "$SPARK_HOME/R/lib/SparkR" "$DISTDIR/R/lib"
+  cp "$SPARK_HOME/R/lib/sparkr.zip" "$DISTDIR/R/lib"
 fi
 
 if [ "$MAKE_TGZ" == "true" ]; then

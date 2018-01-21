@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 
 class InferFiltersFromConstraintsSuite extends PlanTest {
 
@@ -32,7 +33,9 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         PushPredicateThroughJoin,
         PushDownPredicate,
         InferFiltersFromConstraints,
-        CombineFilters) :: Nil
+        CombineFilters,
+        SimplifyBinaryComparison,
+        BooleanSimplification) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -149,43 +152,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
     val correctAnswer = t1
-      .where(IsNotNull('a) && IsNotNull('b) && 'a <=> 'a && 'b <=> 'b &&'a === 'b)
+      .where(IsNotNull('a) && IsNotNull('b) &&'a === 'b)
       .select('a, 'b.as('d)).as("t")
-      .join(t2.where(IsNotNull('a) && 'a <=> 'a), Inner,
+      .join(t2.where(IsNotNull('a)), Inner,
         Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
-      .analyze
-    val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("inner join with alias: don't generate constraints for recursive functions") {
-    val t1 = testRelation.subquery('t1)
-    val t2 = testRelation.subquery('t2)
-
-    val originalQuery = t1.select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col)).as("t")
-      .join(t2, Inner,
-        Some("t.a".attr === "t2.a".attr
-          && "t.d".attr === "t2.a".attr
-          && "t.int_col".attr === "t2.a".attr))
-      .analyze
-    val correctAnswer = t1
-      .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
-        && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a)) && 'a <=> 'a
-        && Coalesce(Seq('a, 'a)) <=> 'b && Coalesce(Seq('a, 'a)) <=> Coalesce(Seq('a, 'a))
-        && 'a === 'b && IsNotNull(Coalesce(Seq('a, 'b))) && 'a === Coalesce(Seq('a, 'b))
-        && Coalesce(Seq('a, 'b)) <=> Coalesce(Seq('b, 'b)) && Coalesce(Seq('a, 'b)) === 'b
-        && IsNotNull('b) && IsNotNull(Coalesce(Seq('b, 'b)))
-        && 'b === Coalesce(Seq('b, 'b)) && 'b <=> Coalesce(Seq('b, 'b))
-        && Coalesce(Seq('b, 'b)) <=> Coalesce(Seq('b, 'b)) && 'b <=> 'b)
-      .select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col)).as("t")
-      .join(t2
-        .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))
-          && 'a === Coalesce(Seq('a, 'a)) && 'a <=> Coalesce(Seq('a, 'a)) && 'a <=> 'a
-          && Coalesce(Seq('a, 'a)) <=> Coalesce(Seq('a, 'a))), Inner,
-        Some("t.a".attr === "t2.a".attr
-          && "t.d".attr === "t2.a".attr
-          && "t.int_col".attr === "t2.a".attr
-          && Coalesce(Seq("t.d".attr, "t.d".attr)) <=> "t.int_col".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
@@ -200,5 +170,26 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         .select('a.as('x), 'b.as('y)).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("No inferred filter when constraint propagation is disabled") {
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, originalQuery)
+    }
+  }
+
+  test("constraints should be inferred from aliased literals") {
+    val originalLeft = testRelation.subquery('left).as("left")
+    val optimizedLeft = testRelation.subquery('left).where(IsNotNull('a) && 'a === 2).as("left")
+
+    val right = Project(Seq(Literal(2).as("two")), testRelation.subquery('right)).as("right")
+    val condition = Some("left.a".attr === "right.two".attr)
+
+    val original = originalLeft.join(right, Inner, condition)
+    val correct = optimizedLeft.join(right, Inner, condition)
+
+    comparePlans(Optimize.execute(original.analyze), correct.analyze)
   }
 }

@@ -75,7 +75,7 @@ object Window {
   }
 
   /**
-   * Value representing the last row in the partition, equivalent to "UNBOUNDED PRECEDING" in SQL.
+   * Value representing the first row in the partition, equivalent to "UNBOUNDED PRECEDING" in SQL.
    * This can be used to specify the frame boundaries:
    *
    * {{{
@@ -113,7 +113,7 @@ object Window {
    * Creates a [[WindowSpec]] with the frame boundaries defined,
    * from `start` (inclusive) to `end` (inclusive).
    *
-   * Both `start` and `end` are relative positions from the current row. For example, "0" means
+   * Both `start` and `end` are positions relative to the current row. For example, "0" means
    * "current row", while "-1" means the row before the current row, and "5" means the fifth row
    * after the current row.
    *
@@ -131,9 +131,9 @@ object Window {
    *   import org.apache.spark.sql.expressions.Window
    *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b"))
    *     .toDF("id", "category")
-   *   df.withColumn("sum",
-   *       sum('id) over Window.partitionBy('category).orderBy('id).rowsBetween(0,1))
-   *     .show()
+   *   val byCategoryOrderedById =
+   *     Window.partitionBy('category).orderBy('id).rowsBetween(Window.currentRow, 1)
+   *   df.withColumn("sum", sum('id) over byCategoryOrderedById).show()
    *
    *   +---+--------+---+
    *   | id|category|sum|
@@ -150,7 +150,7 @@ object Window {
    * @param start boundary start, inclusive. The frame is unbounded if this is
    *              the minimum long value (`Window.unboundedPreceding`).
    * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  (`Window.unboundedFollowing`).
+   *            maximum long value (`Window.unboundedFollowing`).
    * @since 2.1.0
    */
   // Note: when updating the doc for this method, also update WindowSpec.rowsBetween.
@@ -162,30 +162,30 @@ object Window {
    * Creates a [[WindowSpec]] with the frame boundaries defined,
    * from `start` (inclusive) to `end` (inclusive).
    *
-   * Both `start` and `end` are relative from the current row. For example, "0" means "current row",
+   * Both `start` and `end` are relative to the current row. For example, "0" means "current row",
    * while "-1" means one off before the current row, and "5" means the five off after the
    * current row.
    *
    * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`,
-   * and `Window.currentRow` to specify special boundary values, rather than using integral
-   * values directly.
+   * and `Window.currentRow` to specify special boundary values, rather than using long values
+   * directly.
    *
-   * A range based boundary is based on the actual value of the ORDER BY
+   * A range-based boundary is based on the actual value of the ORDER BY
    * expression(s). An offset is used to alter the value of the ORDER BY expression, for
    * instance if the current order by expression has a value of 10 and the lower bound offset
    * is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
    * number of constraints on the ORDER BY expressions: there can be only one expression and this
-   * expression must have a numerical data type. An exception can be made when the offset is 0,
-   * because no value modification is needed, in this case multiple and non-numeric ORDER BY
-   * expression are allowed.
+   * expression must have a numerical data type. An exception can be made when the offset is
+   * unbounded, because no value modification is needed, in this case multiple and non-numeric
+   * ORDER BY expression are allowed.
    *
    * {{{
    *   import org.apache.spark.sql.expressions.Window
    *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b"))
    *     .toDF("id", "category")
-   *   df.withColumn("sum",
-   *       sum('id) over Window.partitionBy('category).orderBy('id).rangeBetween(0,1))
-   *     .show()
+   *   val byCategoryOrderedById =
+   *     Window.partitionBy('category).orderBy('id).rangeBetween(Window.currentRow, 1)
+   *   df.withColumn("sum", sum('id) over byCategoryOrderedById).show()
    *
    *   +---+--------+---+
    *   | id|category|sum|
@@ -202,11 +202,62 @@ object Window {
    * @param start boundary start, inclusive. The frame is unbounded if this is
    *              the minimum long value (`Window.unboundedPreceding`).
    * @param end boundary end, inclusive. The frame is unbounded if this is the
-   *            maximum long value  (`Window.unboundedFollowing`).
+   *            maximum long value (`Window.unboundedFollowing`).
    * @since 2.1.0
    */
   // Note: when updating the doc for this method, also update WindowSpec.rangeBetween.
   def rangeBetween(start: Long, end: Long): WindowSpec = {
+    spec.rangeBetween(start, end)
+  }
+
+  /**
+   * Creates a [[WindowSpec]] with the frame boundaries defined,
+   * from `start` (inclusive) to `end` (inclusive).
+   *
+   * Both `start` and `end` are relative to the current row. For example, "lit(0)" means
+   * "current row", while "lit(-1)" means one off before the current row, and "lit(5)" means the
+   * five off after the current row.
+   *
+   * Users should use `unboundedPreceding()`, `unboundedFollowing()`, and `currentRow()` from
+   * [[org.apache.spark.sql.functions]] to specify special boundary values, literals are not
+   * transformed to [[org.apache.spark.sql.catalyst.expressions.SpecialFrameBoundary]]s.
+   *
+   * A range-based boundary is based on the actual value of the ORDER BY
+   * expression(s). An offset is used to alter the value of the ORDER BY expression, for
+   * instance if the current order by expression has a value of 10 and the lower bound offset
+   * is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
+   * number of constraints on the ORDER BY expressions: there can be only one expression and this
+   * expression must have a numerical/date/timestamp data type. An exception can be made when the
+   * offset is unbounded, because no value modification is needed, in this case multiple and
+   * non-numerical/date/timestamp data type ORDER BY expression are allowed.
+   *
+   * {{{
+   *   import org.apache.spark.sql.expressions.Window
+   *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b"))
+   *     .toDF("id", "category")
+   *   val byCategoryOrderedById =
+   *     Window.partitionBy('category).orderBy('id).rangeBetween(currentRow(), lit(1))
+   *   df.withColumn("sum", sum('id) over byCategoryOrderedById).show()
+   *
+   *   +---+--------+---+
+   *   | id|category|sum|
+   *   +---+--------+---+
+   *   |  1|       b|  3|
+   *   |  2|       b|  5|
+   *   |  3|       b|  3|
+   *   |  1|       a|  4|
+   *   |  1|       a|  4|
+   *   |  2|       a|  2|
+   *   +---+--------+---+
+   * }}}
+   *
+   * @param start boundary start, inclusive. The frame is unbounded if the expression is
+   *              [[org.apache.spark.sql.catalyst.expressions.UnboundedPreceding]].
+   * @param end boundary end, inclusive. The frame is unbounded if the expression is
+   *            [[org.apache.spark.sql.catalyst.expressions.UnboundedFollowing]].
+   * @since 2.3.0
+   */
+  def rangeBetween(start: Column, end: Column): WindowSpec = {
     spec.rangeBetween(start, end)
   }
 
@@ -221,7 +272,8 @@ object Window {
  *
  * {{{
  *   // PARTITION BY country ORDER BY date ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
- *   Window.partitionBy("country").orderBy("date").rowsBetween(Long.MinValue, 0)
+ *   Window.partitionBy("country").orderBy("date")
+ *     .rowsBetween(Window.unboundedPreceding, Window.currentRow)
  *
  *   // PARTITION BY country ORDER BY date ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING
  *   Window.partitionBy("country").orderBy("date").rowsBetween(-3, 3)

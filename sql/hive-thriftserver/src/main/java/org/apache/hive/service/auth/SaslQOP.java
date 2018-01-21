@@ -19,6 +19,7 @@
 package org.apache.hive.service.auth;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -52,7 +53,7 @@ public enum SaslQOP {
 
   public static SaslQOP fromString(String str) {
     if (str != null) {
-      str = str.toLowerCase();
+      str = str.toLowerCase(Locale.ROOT);
     }
     SaslQOP saslQOP = STR_TO_ENUM.get(str);
     if (saslQOP == null) {

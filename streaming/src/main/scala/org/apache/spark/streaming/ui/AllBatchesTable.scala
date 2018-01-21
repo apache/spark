@@ -25,7 +25,7 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
 
   protected def columns: Seq[Node] = {
     <th>Batch Time</th>
-      <th>Input Size</th>
+      <th>Records</th>
       <th>Scheduling Delay
         {SparkUIUtils.tooltip("Time taken by Streaming scheduler to submit jobs of a batch", "top")}
       </th>
@@ -97,7 +97,7 @@ private[ui] abstract class BatchTableBase(tableId: String, batchInterval: Long) 
         completed = batch.numCompletedOutputOp,
         failed = batch.numFailedOutputOp,
         skipped = 0,
-        killed = 0,
+        reasonToNumKilled = Map.empty,
         total = batch.outputOperations.size)
       }
     </td>

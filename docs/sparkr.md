@@ -264,6 +264,36 @@ head(arrange(waiting_counts, desc(waiting_counts$count)))
 {% endhighlight %}
 </div>
 
+In addition to standard aggregations, SparkR supports [OLAP cube](https://en.wikipedia.org/wiki/OLAP_cube) operators `cube`:
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+head(agg(cube(df, "cyl", "disp", "gear"), avg(df$mpg)))
+##  cyl  disp gear avg(mpg)
+##1  NA 140.8    4     22.8
+##2   4  75.7    4     30.4
+##3   8 400.0    3     19.2
+##4   8 318.0    3     15.5
+##5  NA 351.0   NA     15.8
+##6  NA 275.8   NA     16.3
+{% endhighlight %}
+</div>
+
+and `rollup`:
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+head(agg(rollup(df, "cyl", "disp", "gear"), avg(df$mpg)))
+##  cyl  disp gear avg(mpg)
+##1   4  75.7    4     30.4
+##2   8 400.0    3     19.2
+##3   8 318.0    3     15.5
+##4   4  78.7   NA     32.4
+##5   8 304.0    3     15.2
+##6   4  79.0   NA     27.3
+{% endhighlight %}
+</div>
+
 ### Operating on Columns
 
 SparkR also provides a number of functions that can directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions.
@@ -394,7 +424,108 @@ head(result[order(result$max_eruption, decreasing = TRUE), ])
 {% endhighlight %}
 </div>
 
-#### Data type mapping between R and Spark
+#### Run local R functions distributed using `spark.lapply`
+
+##### spark.lapply
+Similar to `lapply` in native R, `spark.lapply` runs a function over a list of elements and distributes the computations with Spark.
+Applies a function in a manner that is similar to `doParallel` or `lapply` to elements of a list. The results of all the computations
+should fit in a single machine. If that is not the case they can do something like `df <- createDataFrame(list)` and then use
+`dapply`
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+# Perform distributed training of multiple models with spark.lapply. Here, we pass
+# a read-only list of arguments which specifies family the generalized linear model should be.
+families <- c("gaussian", "poisson")
+train <- function(family) {
+  model <- glm(Sepal.Length ~ Sepal.Width + Species, iris, family = family)
+  summary(model)
+}
+# Return a list of model's summaries
+model.summaries <- spark.lapply(families, train)
+
+# Print the summary of each model
+print(model.summaries)
+
+{% endhighlight %}
+</div>
+
+## Running SQL Queries from SparkR
+A SparkDataFrame can also be registered as a temporary view in Spark SQL and that allows you to run SQL queries over its data.
+The `sql` function enables applications to run SQL queries programmatically and returns the result as a `SparkDataFrame`.
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+# Load a JSON file
+people <- read.df("./examples/src/main/resources/people.json", "json")
+
+# Register this SparkDataFrame as a temporary view.
+createOrReplaceTempView(people, "people")
+
+# SQL statements can be run by using the sql method
+teenagers <- sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+head(teenagers)
+##    name
+##1 Justin
+
+{% endhighlight %}
+</div>
+
+# Machine Learning
+
+## Algorithms
+
+SparkR supports the following machine learning algorithms currently:
+
+#### Classification
+
+* [`spark.logit`](api/R/spark.logit.html): [`Logistic Regression`](ml-classification-regression.html#logistic-regression)
+* [`spark.mlp`](api/R/spark.mlp.html): [`Multilayer Perceptron (MLP)`](ml-classification-regression.html#multilayer-perceptron-classifier)
+* [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes`](ml-classification-regression.html#naive-bayes)
+* [`spark.svmLinear`](api/R/spark.svmLinear.html): [`Linear Support Vector Machine`](ml-classification-regression.html#linear-support-vector-machine)
+
+#### Regression
+
+* [`spark.survreg`](api/R/spark.survreg.html): [`Accelerated Failure Time (AFT) Survival  Model`](ml-classification-regression.html#survival-regression)
+* [`spark.glm`](api/R/spark.glm.html) or [`glm`](api/R/glm.html): [`Generalized Linear Model (GLM)`](ml-classification-regression.html#generalized-linear-regression)
+* [`spark.isoreg`](api/R/spark.isoreg.html): [`Isotonic Regression`](ml-classification-regression.html#isotonic-regression)
+
+#### Tree
+
+* [`spark.decisionTree`](api/R/spark.decisionTree.html): `Decision Tree for` [`Regression`](ml-classification-regression.html#decision-tree-regression) `and` [`Classification`](ml-classification-regression.html#decision-tree-classifier)
+* [`spark.gbt`](api/R/spark.gbt.html): `Gradient Boosted Trees for` [`Regression`](ml-classification-regression.html#gradient-boosted-tree-regression) `and` [`Classification`](ml-classification-regression.html#gradient-boosted-tree-classifier)
+* [`spark.randomForest`](api/R/spark.randomForest.html): `Random Forest for` [`Regression`](ml-classification-regression.html#random-forest-regression) `and` [`Classification`](ml-classification-regression.html#random-forest-classifier)
+
+#### Clustering
+
+* [`spark.bisectingKmeans`](api/R/spark.bisectingKmeans.html): [`Bisecting k-means`](ml-clustering.html#bisecting-k-means)
+* [`spark.gaussianMixture`](api/R/spark.gaussianMixture.html): [`Gaussian Mixture Model (GMM)`](ml-clustering.html#gaussian-mixture-model-gmm)
+* [`spark.kmeans`](api/R/spark.kmeans.html): [`K-Means`](ml-clustering.html#k-means)
+* [`spark.lda`](api/R/spark.lda.html): [`Latent Dirichlet Allocation (LDA)`](ml-clustering.html#latent-dirichlet-allocation-lda)
+
+#### Collaborative Filtering
+
+* [`spark.als`](api/R/spark.als.html): [`Alternating Least Squares (ALS)`](ml-collaborative-filtering.html#collaborative-filtering)
+
+#### Frequent Pattern Mining
+
+* [`spark.fpGrowth`](api/R/spark.fpGrowth.html) : [`FP-growth`](ml-frequent-pattern-mining.html#fp-growth)
+
+#### Statistics
+
+* [`spark.kstest`](api/R/spark.kstest.html): `Kolmogorov-Smirnov Test`
+
+Under the hood, SparkR uses MLlib to train the model. Please refer to the corresponding section of MLlib user guide for example code.
+Users can call `summary` to print a summary of the fitted model, [predict](api/R/predict.html) to make predictions on new data, and [write.ml](api/R/write.ml.html)/[read.ml](api/R/read.ml.html) to save/load fitted models.
+SparkR supports a subset of the available R formula operators for model fitting, including ‘~’, ‘.’, ‘:’, ‘+’, and ‘-‘.
+
+
+## Model persistence
+
+The following example shows how to save/load a MLlib model by SparkR.
+{% include_example read_write r/ml/ml.R %}
+
+# Data type mapping between R and Spark
 <table class="table">
 <tr><th>R</th><th>Spark</th></tr>
 <tr>
@@ -463,99 +594,9 @@ head(result[order(result$max_eruption, decreasing = TRUE), ])
 </tr>
 </table>
 
-#### Run local R functions distributed using `spark.lapply`
+# Structured Streaming
 
-##### spark.lapply
-Similar to `lapply` in native R, `spark.lapply` runs a function over a list of elements and distributes the computations with Spark.
-Applies a function in a manner that is similar to `doParallel` or `lapply` to elements of a list. The results of all the computations
-should fit in a single machine. If that is not the case they can do something like `df <- createDataFrame(list)` and then use
-`dapply`
-
-<div data-lang="r"  markdown="1">
-{% highlight r %}
-# Perform distributed training of multiple models with spark.lapply. Here, we pass
-# a read-only list of arguments which specifies family the generalized linear model should be.
-families <- c("gaussian", "poisson")
-train <- function(family) {
-  model <- glm(Sepal.Length ~ Sepal.Width + Species, iris, family = family)
-  summary(model)
-}
-# Return a list of model's summaries
-model.summaries <- spark.lapply(families, train)
-
-# Print the summary of each model
-print(model.summaries)
-
-{% endhighlight %}
-</div>
-
-## Running SQL Queries from SparkR
-A SparkDataFrame can also be registered as a temporary view in Spark SQL and that allows you to run SQL queries over its data.
-The `sql` function enables applications to run SQL queries programmatically and returns the result as a `SparkDataFrame`.
-
-<div data-lang="r"  markdown="1">
-{% highlight r %}
-# Load a JSON file
-people <- read.df("./examples/src/main/resources/people.json", "json")
-
-# Register this SparkDataFrame as a temporary view.
-createOrReplaceTempView(people, "people")
-
-# SQL statements can be run by using the sql method
-teenagers <- sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
-head(teenagers)
-##    name
-##1 Justin
-
-{% endhighlight %}
-</div>
-
-# Machine Learning
-
-## Algorithms
-
-SparkR supports the following machine learning algorithms currently:
-
-#### Classification
-
-* [`spark.logit`](api/R/spark.logit.html): [`Logistic Regression`](ml-classification-regression.html#logistic-regression)
-* [`spark.mlp`](api/R/spark.mlp.html): [`Multilayer Perceptron (MLP)`](ml-classification-regression.html#multilayer-perceptron-classifier)
-* [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes`](ml-classification-regression.html#naive-bayes)
-
-#### Regression
-
-* [`spark.survreg`](api/R/spark.survreg.html): [`Accelerated Failure Time (AFT) Survival  Model`](ml-classification-regression.html#survival-regression)
-* [`spark.glm`](api/R/spark.glm.html) or [`glm`](api/R/glm.html): [`Generalized Linear Model (GLM)`](ml-classification-regression.html#generalized-linear-regression)
-* [`spark.isoreg`](api/R/spark.isoreg.html): [`Isotonic Regression`](ml-classification-regression.html#isotonic-regression)
-
-#### Tree
-
-* [`spark.gbt`](api/R/spark.gbt.html): `Gradient Boosted Trees for` [`Regression`](ml-classification-regression.html#gradient-boosted-tree-regression) `and` [`Classification`](ml-classification-regression.html#gradient-boosted-tree-classifier)
-* [`spark.randomForest`](api/R/spark.randomForest.html): `Random Forest for` [`Regression`](ml-classification-regression.html#random-forest-regression) `and` [`Classification`](ml-classification-regression.html#random-forest-classifier)
-
-#### Clustering
-
-* [`spark.gaussianMixture`](api/R/spark.gaussianMixture.html): [`Gaussian Mixture Model (GMM)`](ml-clustering.html#gaussian-mixture-model-gmm)
-* [`spark.kmeans`](api/R/spark.kmeans.html): [`K-Means`](ml-clustering.html#k-means)
-* [`spark.lda`](api/R/spark.lda.html): [`Latent Dirichlet Allocation (LDA)`](ml-clustering.html#latent-dirichlet-allocation-lda)
-
-#### Collaborative Filtering
-
-* [`spark.als`](api/R/spark.als.html): [`Alternating Least Squares (ALS)`](ml-collaborative-filtering.html#collaborative-filtering)
-
-#### Statistics
-
-* [`spark.kstest`](api/R/spark.kstest.html): `Kolmogorov-Smirnov Test`
-
-Under the hood, SparkR uses MLlib to train the model. Please refer to the corresponding section of MLlib user guide for example code.
-Users can call `summary` to print a summary of the fitted model, [predict](api/R/predict.html) to make predictions on new data, and [write.ml](api/R/write.ml.html)/[read.ml](api/R/read.ml.html) to save/load fitted models.
-SparkR supports a subset of the available R formula operators for model fitting, including ‘~’, ‘.’, ‘:’, ‘+’, and ‘-‘.
-
-
-## Model persistence
-
-The following example shows how to save/load a MLlib model by SparkR.
-{% include_example read_write r/ml/ml.R %}
+SparkR supports the Structured Streaming API. Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. For more information see the R API on the [Structured Streaming Programming Guide](structured-streaming-programming-guide.html)
 
 # R Function Name Conflicts
 
@@ -608,3 +649,17 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 ## Upgrading to SparkR 2.1.0
 
  - `join` no longer performs Cartesian Product by default, use `crossJoin` instead.
+
+## Upgrading to SparkR 2.2.0
+
+ - A `numPartitions` parameter has been added to `createDataFrame` and `as.DataFrame`. When splitting the data, the partition position calculation has been made to match the one in Scala.
+ - The method `createExternalTable` has been deprecated to be replaced by `createTable`. Either methods can be called to create external or managed table. Additional catalog methods have also been added.
+ - By default, derby.log is now saved to `tempdir()`. This will be created when instantiating the SparkSession with `enableHiveSupport` set to `TRUE`.
+ - `spark.lda` was not setting the optimizer correctly. It has been corrected.
+ - Several model summary outputs are updated to have `coefficients` as `matrix`. This includes `spark.logit`, `spark.kmeans`, `spark.glm`. Model summary outputs for `spark.gaussianMixture` have added log-likelihood as `loglik`.
+
+## Upgrading to SparkR 2.3.0
+
+ - The `stringsAsFactors` parameter was previously ignored with `collect`, for example, in `collect(createDataFrame(iris), stringsAsFactors = TRUE))`. It has been corrected.
+ - For `summary`, option for statistics to compute has been added. Its output is changed from that from `describe`.
+ - A warning can be raised if versions of SparkR package and the Spark JVM do not match.

@@ -113,7 +113,7 @@ sparkR.stop <- function() {
 #'                  list(spark.executor.memory="4g"),
 #'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
 #'                  c("one.jar", "two.jar", "three.jar"),
-#'                  c("com.databricks:spark-avro_2.10:2.0.1"))
+#'                  c("com.databricks:spark-avro_2.11:2.0.1"))
 #'}
 #' @note sparkR.init since 1.4.0
 sparkR.init <- function(
@@ -322,9 +322,18 @@ sparkRHive.init <- function(jsc = NULL) {
 #' SparkSession or initializes a new SparkSession.
 #' Additional Spark properties can be set in \code{...}, and these named parameters take priority
 #' over values in \code{master}, \code{appName}, named lists of \code{sparkConfig}.
-#' When called in an interactive session, this checks for the Spark installation, and, if not
+#'
+#' When called in an interactive session, this method checks for the Spark installation, and, if not
 #' found, it will be downloaded and cached automatically. Alternatively, \code{install.spark} can
 #' be called manually.
+#'
+#' A default warehouse is created automatically in the current directory when a managed table is
+#' created via \code{sql} statement \code{CREATE TABLE}, for example. To change the location of the
+#' warehouse, set the named parameter \code{spark.sql.warehouse.dir} to the SparkSession. Along with
+#' the warehouse, an accompanied metastore may also be automatically created in the current
+#' directory when a new SparkSession is initialized with \code{enableHiveSupport} set to
+#' \code{TRUE}, which is the default. For more details, refer to Hive configuration at
+#' \url{http://spark.apache.org/docs/latest/sql-programming-guide.html#hive-tables}.
 #'
 #' For details on how to initialize and use SparkR, refer to SparkR programming guide at
 #' \url{http://spark.apache.org/docs/latest/sparkr.html#starting-up-sparksession}.
@@ -348,7 +357,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #' sparkR.session("yarn-client", "SparkR", "/home/spark",
 #'                list(spark.executor.memory="4g"),
 #'                c("one.jar", "two.jar", "three.jar"),
-#'                c("com.databricks:spark-avro_2.10:2.0.1"))
+#'                c("com.databricks:spark-avro_2.11:2.0.1"))
 #' sparkR.session(spark.master = "yarn-client", spark.executor.memory = "4g")
 #'}
 #' @note sparkR.session since 2.0.0
@@ -381,6 +390,10 @@ sparkR.session <- function(
     deployMode <- sparkConfigMap[["spark.submit.deployMode"]]
   }
 
+  if (!exists("spark.r.sql.derby.temp.dir", envir = sparkConfigMap)) {
+    sparkConfigMap[["spark.r.sql.derby.temp.dir"]] <- tempdir()
+  }
+
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
     retHome <- sparkCheckInstall(sparkHome, master, deployMode)
     if (!is.null(retHome)) sparkHome <- retHome
@@ -407,6 +420,18 @@ sparkR.session <- function(
                                 enableHiveSupport)
     assign(".sparkRsession", sparkSession, envir = .sparkREnv)
   }
+
+  # Check if version number of SparkSession matches version number of SparkR package
+  jvmVersion <- callJMethod(sparkSession, "version")
+  # Remove -SNAPSHOT from jvm versions
+  jvmVersionStrip <- gsub("-SNAPSHOT", "", jvmVersion)
+  rPackageVersion <- paste0(packageVersion("SparkR"))
+
+  if (jvmVersionStrip != rPackageVersion) {
+    warning(paste("Version mismatch between Spark JVM and SparkR package. JVM version was",
+                  jvmVersion, ", while R package version was", rPackageVersion))
+  }
+
   sparkSession
 }
 
@@ -520,6 +545,68 @@ cancelJobGroup <- function(sc, groupId) {
     groupIdToUse <- sc
     cancelJobGroup.default(groupIdToUse)
   }
+}
+
+#' Set a human readable description of the current job.
+#'
+#' Set a description that is shown as a job description in UI.
+#'
+#' @param value The job description of the current job.
+#' @rdname setJobDescription
+#' @name setJobDescription
+#' @examples
+#'\dontrun{
+#' setJobDescription("This is an example job.")
+#'}
+#' @note setJobDescription since 2.3.0
+setJobDescription <- function(value) {
+  if (!is.null(value)) {
+    value <- as.character(value)
+  }
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setJobDescription", value))
+}
+
+#' Set a local property that affects jobs submitted from this thread, such as the
+#' Spark fair scheduler pool.
+#'
+#' @param key The key for a local property.
+#' @param value The value for a local property.
+#' @rdname setLocalProperty
+#' @name setLocalProperty
+#' @examples
+#'\dontrun{
+#' setLocalProperty("spark.scheduler.pool", "poolA")
+#'}
+#' @note setLocalProperty since 2.3.0
+setLocalProperty <- function(key, value) {
+  if (is.null(key) || is.na(key)) {
+    stop("key should not be NULL or NA.")
+  }
+  if (!is.null(value)) {
+    value <- as.character(value)
+  }
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setLocalProperty", as.character(key), value))
+}
+
+#' Get a local property set in this thread, or \code{NULL} if it is missing. See
+#' \code{setLocalProperty}.
+#'
+#' @param key The key for a local property.
+#' @rdname getLocalProperty
+#' @name getLocalProperty
+#' @examples
+#'\dontrun{
+#' getLocalProperty("spark.scheduler.pool")
+#'}
+#' @note getLocalProperty since 2.3.0
+getLocalProperty <- function(key) {
+  if (is.null(key) || is.na(key)) {
+    stop("key should not be NULL or NA.")
+  }
+  sc <- getSparkContext()
+  callJMethod(sc, "getLocalProperty", as.character(key))
 }
 
 sparkConfToSubmitOps <- new.env()

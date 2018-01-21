@@ -22,20 +22,22 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.streaming.ProcessingTime
+import org.apache.spark.sql.streaming.{ProcessingTime, Trigger}
 
 class ProcessingTimeSuite extends SparkFunSuite {
 
   test("create") {
-    assert(ProcessingTime(10.seconds).intervalMs === 10 * 1000)
-    assert(ProcessingTime.create(10, TimeUnit.SECONDS).intervalMs === 10 * 1000)
-    assert(ProcessingTime("1 minute").intervalMs === 60 * 1000)
-    assert(ProcessingTime("interval 1 minute").intervalMs === 60 * 1000)
+    def getIntervalMs(trigger: Trigger): Long = trigger.asInstanceOf[ProcessingTime].intervalMs
 
-    intercept[IllegalArgumentException] { ProcessingTime(null: String) }
-    intercept[IllegalArgumentException] { ProcessingTime("") }
-    intercept[IllegalArgumentException] { ProcessingTime("invalid") }
-    intercept[IllegalArgumentException] { ProcessingTime("1 month") }
-    intercept[IllegalArgumentException] { ProcessingTime("1 year") }
+    assert(getIntervalMs(Trigger.ProcessingTime(10.seconds)) === 10 * 1000)
+    assert(getIntervalMs(Trigger.ProcessingTime(10, TimeUnit.SECONDS)) === 10 * 1000)
+    assert(getIntervalMs(Trigger.ProcessingTime("1 minute")) === 60 * 1000)
+    assert(getIntervalMs(Trigger.ProcessingTime("interval 1 minute")) === 60 * 1000)
+
+    intercept[IllegalArgumentException] { Trigger.ProcessingTime(null: String) }
+    intercept[IllegalArgumentException] { Trigger.ProcessingTime("") }
+    intercept[IllegalArgumentException] { Trigger.ProcessingTime("invalid") }
+    intercept[IllegalArgumentException] { Trigger.ProcessingTime("1 month") }
+    intercept[IllegalArgumentException] { Trigger.ProcessingTime("1 year") }
   }
 }

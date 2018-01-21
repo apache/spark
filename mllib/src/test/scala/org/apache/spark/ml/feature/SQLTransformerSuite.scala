@@ -22,6 +22,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.storage.StorageLevel
 
 class SQLTransformerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -59,5 +60,16 @@ class SQLTransformerSuite
       .transformSchema(df.schema)
     val expected = StructType(Seq(StructField("id1", LongType, nullable = false)))
     assert(outputSchema === expected)
+  }
+
+  test("SPARK-22538: SQLTransformer should not unpersist given dataset") {
+    val df = spark.range(10)
+    df.cache()
+    df.count()
+    assert(df.storageLevel != StorageLevel.NONE)
+    new SQLTransformer()
+      .setStatement("SELECT id + 1 AS id1 FROM __THIS__")
+      .transform(df)
+    assert(df.storageLevel != StorageLevel.NONE)
   }
 }

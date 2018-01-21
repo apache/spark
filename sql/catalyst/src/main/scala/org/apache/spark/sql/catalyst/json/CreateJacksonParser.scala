@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.io.InputStream
+import java.io.{ByteArrayInputStream, InputStream, InputStreamReader}
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.hadoop.io.Text
@@ -33,14 +33,18 @@ private[sql] object CreateJacksonParser extends Serializable {
     val bb = record.getByteBuffer
     assert(bb.hasArray)
 
-    jsonFactory.createParser(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+    val bain = new ByteArrayInputStream(
+      bb.array(), bb.arrayOffset() + bb.position(), bb.remaining())
+
+    jsonFactory.createParser(new InputStreamReader(bain, "UTF-8"))
   }
 
   def text(jsonFactory: JsonFactory, record: Text): JsonParser = {
-    jsonFactory.createParser(record.getBytes, 0, record.getLength)
+    val bain = new ByteArrayInputStream(record.getBytes, 0, record.getLength)
+    jsonFactory.createParser(new InputStreamReader(bain, "UTF-8"))
   }
 
   def inputStream(jsonFactory: JsonFactory, record: InputStream): JsonParser = {
-    jsonFactory.createParser(record)
+    jsonFactory.createParser(new InputStreamReader(record, "UTF-8"))
   }
 }

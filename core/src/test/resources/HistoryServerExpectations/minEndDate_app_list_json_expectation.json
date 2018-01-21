@@ -8,6 +8,7 @@
     "duration" : 10671,
     "sparkUser" : "jose",
     "completed" : true,
+    "appSparkVersion" : "2.1.0-SNAPSHOT",
     "startTimeEpoch" : 1479335609916,
     "lastUpdatedEpoch" : 0,
     "endTimeEpoch" : 1479335620587
@@ -22,6 +23,7 @@
     "duration" : 101795,
     "sparkUser" : "jose",
     "completed" : true,
+    "appSparkVersion" : "2.1.0-SNAPSHOT",
     "startTimeEpoch" : 1479252037079,
     "lastUpdatedEpoch" : 0,
     "endTimeEpoch" : 1479252138874
@@ -36,6 +38,7 @@
     "duration" : 10505,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "1.4.0-SNAPSHOT",
     "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1430917380893,
     "endTimeEpoch" : 1430917391398
@@ -51,6 +54,7 @@
     "duration" : 57,
     "sparkUser" : "irashid",
     "completed" : true,
+    "appSparkVersion" : "1.4.0-SNAPSHOT",
     "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1430917380893,
     "endTimeEpoch" : 1430917380950
@@ -62,7 +66,7 @@
     "duration" : 10,
     "sparkUser" : "irashid",
     "completed" : true,
-    "completed" : true,
+    "appSparkVersion" : "1.4.0-SNAPSHOT",
     "lastUpdatedEpoch" : 0,
     "startTimeEpoch" : 1430917380880,
     "endTimeEpoch" : 1430917380890

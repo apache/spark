@@ -59,6 +59,34 @@ This approach is named "ALS-WR" and discussed in the paper
 It makes `regParam` less dependent on the scale of the dataset, so we can apply the
 best parameter learned from a sampled subset to the full dataset and expect similar performance.
 
+### Cold-start strategy
+
+When making predictions using an `ALSModel`, it is common to encounter users and/or items in the 
+test dataset that were not present during training the model. This typically occurs in two 
+scenarios:
+
+1. In production, for new users or items that have no rating history and on which the model has not 
+been trained (this is the "cold start problem").
+2. During cross-validation, the data is split between training and evaluation sets. When using 
+simple random splits as in Spark's `CrossValidator` or `TrainValidationSplit`, it is actually 
+very common to encounter users and/or items in the evaluation set that are not in the training set
+
+By default, Spark assigns `NaN` predictions during `ALSModel.transform` when a user and/or item 
+factor is not present in the model. This can be useful in a production system, since it indicates 
+a new user or item, and so the system can make a decision on some fallback to use as the prediction.
+
+However, this is undesirable during cross-validation, since any `NaN` predicted values will result
+in `NaN` results for the evaluation metric (for example when using `RegressionEvaluator`).
+This makes model selection impossible.
+
+Spark allows users to set the `coldStartStrategy` parameter
+to "drop" in order to drop any rows in the `DataFrame` of predictions that contain `NaN` values. 
+The evaluation metric will then be computed over the non-`NaN` data and will be valid. 
+Usage of this parameter is illustrated in the example below.
+
+**Note:** currently the supported cold start strategies are "nan" (the default behavior mentioned 
+above) and "drop". Further strategies may be supported in future.
+
 **Examples**
 
 <div class="codetabs">

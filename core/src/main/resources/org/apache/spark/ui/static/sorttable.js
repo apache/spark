@@ -207,8 +207,8 @@ sorttable = {
 
     hasInputs = (typeof node.getElementsByTagName == 'function') &&
                  node.getElementsByTagName('input').length;
-    
-    if (node.getAttribute("sorttable_customkey") != null) {
+
+    if (node.nodeType == 1 && node.getAttribute("sorttable_customkey") != null) {
       return node.getAttribute("sorttable_customkey");
     }
     else if (typeof node.textContent != 'undefined' && !hasInputs) {

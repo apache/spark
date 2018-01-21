@@ -22,15 +22,15 @@ import java.util.{List => JList}
 import java.util.NoSuchElementException
 
 import scala.annotation.varargs
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.ml.linalg.JsonVectorConverter
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{JsonMatrixConverter, JsonVectorConverter, Matrix, Vector}
 import org.apache.spark.ml.util.Identifiable
 
 /**
@@ -94,9 +94,11 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
         compact(render(JString(x)))
       case v: Vector =>
         JsonVectorConverter.toJson(v)
+      case m: Matrix =>
+        JsonMatrixConverter.toJson(m)
       case _ =>
         throw new NotImplementedError(
-          "The default jsonEncode only supports string and vector. " +
+          "The default jsonEncode only supports string, vector and matrix. " +
             s"${this.getClass.getName} must override jsonEncode for ${value.getClass.getName}.")
     }
   }
@@ -122,17 +124,35 @@ private[ml] object Param {
 
   /** Decodes a param value from JSON. */
   def jsonDecode[T](json: String): T = {
-    parse(json) match {
+    val jValue = parse(json)
+    jValue match {
       case JString(x) =>
         x.asInstanceOf[T]
       case JObject(v) =>
         val keys = v.map(_._1)
-        assert(keys.contains("type") && keys.contains("values"),
-          s"Expect a JSON serialized vector but cannot find fields 'type' and 'values' in $json.")
-        JsonVectorConverter.fromJson(json).asInstanceOf[T]
+        if (keys.contains("class")) {
+          implicit val formats = DefaultFormats
+          val className = (jValue \ "class").extract[String]
+          className match {
+            case JsonMatrixConverter.className =>
+              val checkFields = Array("numRows", "numCols", "values", "isTransposed", "type")
+              require(checkFields.forall(keys.contains), s"Expect a JSON serialized Matrix" +
+                s" but cannot find fields ${checkFields.mkString(", ")} in $json.")
+              JsonMatrixConverter.fromJson(json).asInstanceOf[T]
+
+            case s => throw new SparkException(s"unrecognized class $s in $json")
+          }
+        } else {
+          // "class" info in JSON was added in Spark 2.3(SPARK-22289). JSON support for Vector was
+          // implemented before that and does not have "class" attribute.
+          require(keys.contains("type") && keys.contains("values"), s"Expect a JSON serialized" +
+            s" vector/matrix but cannot find fields 'type' and 'values' in $json.")
+          JsonVectorConverter.fromJson(json).asInstanceOf[T]
+        }
+
       case _ =>
         throw new NotImplementedError(
-          "The default jsonDecode only supports string and vector. " +
+          "The default jsonDecode only supports string, vector and matrix. " +
             s"${this.getClass.getName} must override jsonDecode to support its value type.")
     }
   }
@@ -486,6 +506,45 @@ class DoubleArrayParam(parent: Params, name: String, doc: String, isValid: Array
         values.map(DoubleParam.jValueDecode).toArray
       case _ =>
         throw new IllegalArgumentException(s"Cannot decode $json to Array[Double].")
+    }
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Specialized version of `Param[Array[Array[Double]]]` for Java.
+ */
+@DeveloperApi
+class DoubleArrayArrayParam(
+    parent: Params,
+    name: String,
+    doc: String,
+    isValid: Array[Array[Double]] => Boolean)
+  extends Param[Array[Array[Double]]](parent, name, doc, isValid) {
+
+  def this(parent: Params, name: String, doc: String) =
+    this(parent, name, doc, ParamValidators.alwaysTrue)
+
+  /** Creates a param pair with a `java.util.List` of values (for Java and Python). */
+  def w(value: java.util.List[java.util.List[java.lang.Double]]): ParamPair[Array[Array[Double]]] =
+    w(value.asScala.map(_.asScala.map(_.asInstanceOf[Double]).toArray).toArray)
+
+  override def jsonEncode(value: Array[Array[Double]]): String = {
+    import org.json4s.JsonDSL._
+    compact(render(value.toSeq.map(_.toSeq.map(DoubleParam.jValueEncode))))
+  }
+
+  override def jsonDecode(json: String): Array[Array[Double]] = {
+    parse(json) match {
+      case JArray(values) =>
+        values.map {
+          case JArray(values) =>
+            values.map(DoubleParam.jValueDecode).toArray
+          case _ =>
+            throw new IllegalArgumentException(s"Cannot decode $json to Array[Array[Double]].")
+        }.toArray
+      case _ =>
+        throw new IllegalArgumentException(s"Cannot decode $json to Array[Array[Double]].")
     }
   }
 }

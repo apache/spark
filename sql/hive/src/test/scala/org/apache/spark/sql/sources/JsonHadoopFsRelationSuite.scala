@@ -21,12 +21,14 @@ import java.math.BigDecimal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.types._
 
 class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String = "json"
+
+  private val badJson = "\u0000\u0000\u0000A\u0001AAA"
 
   // JSON does not write data of NullType and does not play well with BinaryType.
   override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
@@ -38,12 +40,9 @@ class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
-      val basePath = new Path(file.getCanonicalPath)
-      val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
-      val qualifiedBasePath = fs.makeQualified(basePath)
-
       for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
-        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
+        val partitionDir = new Path(
+          CatalogUtils.URIToString(makeQualifiedPath(file.getCanonicalPath)), s"p1=$p1/p2=$p2")
         sparkContext
           .parallelize(for (i <- 1 to 3) yield s"""{"a":$i,"b":"val_$i"}""")
           .saveAsTextFile(partitionDir.toString)
@@ -107,5 +106,37 @@ class JsonHadoopFsRelationSuite extends HadoopFsRelationTest {
         df
       )
     }
+  }
+
+  test("invalid json with leading nulls - from file (multiLine=true)") {
+    import testImplicits._
+    withTempDir { tempDir =>
+      val path = tempDir.getAbsolutePath
+      Seq(badJson, """{"a":1}""").toDS().write.mode("overwrite").text(path)
+      val expected = s"""$badJson\n{"a":1}\n"""
+      val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
+      val df =
+        spark.read.format(dataSourceName).option("multiLine", true).schema(schema).load(path)
+      checkAnswer(df, Row(null, expected))
+    }
+  }
+
+  test("invalid json with leading nulls - from file (multiLine=false)") {
+    import testImplicits._
+    withTempDir { tempDir =>
+      val path = tempDir.getAbsolutePath
+      Seq(badJson, """{"a":1}""").toDS().write.mode("overwrite").text(path)
+      val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
+      val df =
+        spark.read.format(dataSourceName).option("multiLine", false).schema(schema).load(path)
+      checkAnswer(df, Seq(Row(1, null), Row(null, badJson)))
+    }
+  }
+
+  test("invalid json with leading nulls - from dataset") {
+    import testImplicits._
+    checkAnswer(
+      spark.read.json(Seq(badJson).toDS()),
+      Row(badJson))
   }
 }
