@@ -39,9 +39,9 @@ case class AnalyzeColumnCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
-    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
-    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
-    val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
+    val db = tableIdent.database
+    val tableIdentWithDB = TableIdentifier(tableIdent.table, db)
+    val tableMeta = sessionState.catalog.getTempViewOrPermanentTableMetadata(tableIdentWithDB)
     if (tableMeta.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }

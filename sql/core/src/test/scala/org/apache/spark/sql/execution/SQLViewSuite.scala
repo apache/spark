@@ -155,14 +155,22 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       assertNoSuchTable(s"TRUNCATE TABLE $viewName")
       assertNoSuchTable(s"SHOW CREATE TABLE $viewName")
       assertNoSuchTable(s"SHOW PARTITIONS $viewName")
-      assertAnalysisException(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
-      assertAnalysisException(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
     }
   }
-  
-  private def assertAnalysisException(query: String): Unit = {
-    intercept[AnalysisException] {
-      sql(query)
+
+  test("SPARK-22954 - Issue AnalysisException when analysis is run on view") {
+    val viewName = "testView"
+    val analyzeNotSupportedOnViewsMsg = "ANALYZE TABLE is not supported on views."
+    withTempView(viewName) {
+      spark.range(10).createTempView(viewName)
+
+      assert(intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS")
+      }.getMessage.contains(analyzeNotSupportedOnViewsMsg))
+
+      assert(intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+      }.getMessage.contains(analyzeNotSupportedOnViewsMsg))
     }
   }
   
