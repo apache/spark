@@ -172,7 +172,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
       }.getMessage.contains(analyzeNotSupportedOnViewsMsg))
     }
   }
-  
+
   private def assertNoSuchTable(query: String): Unit = {
     intercept[NoSuchTableException] {
       sql(query)
