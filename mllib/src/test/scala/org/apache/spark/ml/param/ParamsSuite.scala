@@ -452,6 +452,5 @@ object ParamsSuite extends SparkFunSuite {
         case e: Estimator[_] => e.fit(dataset)
       }
     }
-    assert(e.getMessage.contains("are exclusive, but more than one"))
   }
 }
