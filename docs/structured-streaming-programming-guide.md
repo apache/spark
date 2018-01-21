@@ -1105,8 +1105,8 @@ streamingDf.join(staticDf, "type", "right_join")  # right outer join with a stat
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
-staticDf = read.df(...)
-streamingDf = read.stream(...)
+staticDf <- read.df(...)
+streamingDf <- read.stream(...)
 joined <- merge(streamingDf, staticDf, sort = FALSE)  # inner equi-join with a static DF
 joined <- join(
             staticDf,
