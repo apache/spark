@@ -56,6 +56,12 @@ private case class SerializedMemoryEntry[T](
   def size: Long = buffer.size
 }
 
+private trait ValuesHolder[T] {
+  def storeValue(value: T): Unit
+  def esitimatedSize(roughly: Boolean): Long
+  def buildEntry(): MemoryEntry[T]
+}
+
 private[storage] trait BlockEvictionHandler {
   /**
    * Drop a block from memory, possibly putting it on disk if applicable. Called when the memory
@@ -174,10 +180,8 @@ private[spark] class MemoryStore(
    * @param values The values which need be stored.
    * @param classTag the [[ClassTag]] for the block.
    * @param memoryMode The values saved mode.
-   * @param storeValue Store the record of values to the MemoryStore.
-   * @param estimateSize Get the memory size which used to unroll the block. The parameters
-   *                     determine whether we need precise size.
-   * @param createMemoryEntry Using [[MemoryEntry]] to hold the stored values or bytes.
+   * @param valuesHolder A holder that supports storing record of values into memory store as
+   *        values of bytes.
    * @return if the block is stored successfully, return the stored data size. Else return the
    *         memory has used for unroll the block.
    */
@@ -186,9 +190,7 @@ private[spark] class MemoryStore(
       values: Iterator[T],
       classTag: ClassTag[T],
       memoryMode: MemoryMode,
-      storeValue: T => Unit,
-      estimateSize: Boolean => Long,
-      createMemoryEntry: () => MemoryEntry[T]): Either[Long, Long] = {
+      valuesHolder: ValuesHolder[T]): Either[Long, Long] = {
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
 
     // Number of elements unrolled so far
@@ -219,10 +221,10 @@ private[spark] class MemoryStore(
 
     // Unroll this block safely, checking whether we have exceeded our threshold periodically
     while (values.hasNext && keepUnrolling) {
-      storeValue(values.next())
+      valuesHolder.storeValue(values.next())
       if (elementsUnrolled % memoryCheckPeriod == 0) {
-        // we don't need the precise size.
-        val currentSize = estimateSize(false)
+        // For performance reason, just get the rough value
+        val currentSize = valuesHolder.esitimatedSize(true)
         // If our vector's size has exceeded the threshold, request more memory
         if (currentSize >= memoryThreshold) {
           val amountToRequest = (currentSize * memoryGrowthFactor - memoryThreshold).toLong
@@ -239,8 +241,8 @@ private[spark] class MemoryStore(
     }
 
     if (keepUnrolling) {
-      // get the precise size
-      val size = estimateSize(true)
+      // We need more precise value
+      val size = valuesHolder.esitimatedSize(false)
       def transferUnrollToStorage(amount: Long): Unit = {
         // Synchronize so that transfer is atomic
         memoryManager.synchronized {
@@ -271,7 +273,7 @@ private[spark] class MemoryStore(
 
       if (enoughStorageMemory) {
         entries.synchronized {
-          entries.put(blockId, createMemoryEntry())
+          entries.put(blockId, valuesHolder.buildEntry())
         }
         logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(
           blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
@@ -289,12 +291,6 @@ private[spark] class MemoryStore(
   /**
    * Attempt to put the given block in memory store as values.
    *
-   * It's possible that the iterator is too large to materialize and store in memory. To avoid
-   * OOM exceptions, this method will gradually unroll the iterator while periodically checking
-   * whether there is enough free memory. If the block is successfully materialized, then the
-   * temporary unroll memory used during the materialization is "transferred" to storage memory,
-   * so we won't acquire more memory than is actually needed to store the block.
-   *
    * @return in case of success, the estimated size of the stored data. In case of failure, return
    *         an iterator containing the values of the block. The returned iterator will be backed
    *         by the combination of the partially-unrolled block and the remaining elements of the
@@ -307,40 +303,43 @@ private[spark] class MemoryStore(
       values: Iterator[T],
       classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
 
-    // Underlying vector for unrolling the block
-    var vector = new SizeTrackingVector[T]()(classTag)
-    var arrayValues: Array[T] = null
-    var preciseSize: Long = -1
+    val valuesHolder = new ValuesHolder[T] {
+      // Underlying vector for unrolling the block
+      var vector = new SizeTrackingVector[T]()(classTag)
+      var arrayValues: Array[T] = null
+      var preciseSize: Long = -1
 
-    def storeValue(value: T): Unit = {
-      vector += value
-    }
+      override def storeValue(value: T): Unit = {
+        vector += value
+      }
 
-    def estimateSize(precise: Boolean): Long = {
-      if (precise) {
-        // We only call need the precise size after all values unrolled.
-        arrayValues = vector.toArray
-        preciseSize = SizeEstimator.estimate(arrayValues)
-        preciseSize
-      } else {
-        vector.estimateSize()
+      override def esitimatedSize(roughly: Boolean): Long = {
+        if (!roughly) {
+          // We only need the more precise size after all values unrolled.
+          arrayValues = vector.toArray
+          vector = null
+          preciseSize = SizeEstimator.estimate(arrayValues)
+          preciseSize
+        } else {
+          // For performance, rough estimate
+          vector.estimateSize()
+        }
+      }
+
+      override def buildEntry(): MemoryEntry[T] = {
+        // We successfully unrolled the entirety of this block
+        DeserializedMemoryEntry[T](arrayValues, preciseSize, classTag)
       }
     }
 
-    def createMemoryEntry(): MemoryEntry[T] = {
-      // We successfully unrolled the entirety of this block
-      DeserializedMemoryEntry[T](arrayValues, preciseSize, classTag)
-    }
-
-    putIterator(blockId, values, classTag, MemoryMode.ON_HEAP, storeValue,
-      estimateSize, createMemoryEntry) match {
+    putIterator(blockId, values, classTag, MemoryMode.ON_HEAP, valuesHolder) match {
       case Right(storedSize) => Right(storedSize)
       case Left(unrollMemoryUsedByThisBlock) =>
         // We ran out of space while unrolling the values for this block
-        val (unrolledIterator, size) = if (vector != null) {
-          (vector.iterator, vector.estimateSize())
+        val (unrolledIterator, size) = if (valuesHolder.vector != null) {
+          (valuesHolder.vector.iterator, valuesHolder.vector.estimateSize())
         } else {
-          (arrayValues.toIterator, preciseSize)
+          (valuesHolder.arrayValues.toIterator, valuesHolder.preciseSize)
         }
 
         logUnrollFailureMessage(blockId, size)
@@ -355,12 +354,6 @@ private[spark] class MemoryStore(
 
   /**
    * Attempt to put the given block in memory store as bytes.
-   *
-   * It's possible that the iterator is too large to materialize and store in memory. To avoid
-   * OOM exceptions, this method will gradually unroll the iterator while periodically checking
-   * whether there is enough free memory. If the block is successfully materialized, then the
-   * temporary unroll memory used during the materialization is "transferred" to storage memory,
-   * so we won't acquire more memory than is actually needed to store the block.
    *
    * @return in case of success, the estimated size of the stored data. In case of failure,
    *         return a handle which allows the caller to either finish the serialization by
@@ -377,47 +370,49 @@ private[spark] class MemoryStore(
 
     require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
 
-    val allocator = memoryMode match {
-      case MemoryMode.ON_HEAP => ByteBuffer.allocate _
-      case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
-    }
-
-    // Initial per-task memory to request for unrolling blocks (bytes).
-    val initialMemoryThreshold = unrollMemoryThreshold
-    val redirectableStream = new RedirectableOutputStream
-    val chunkSize = if (initialMemoryThreshold > Int.MaxValue) {
-      logWarning(s"Initial memory threshold of ${Utils.bytesToString(initialMemoryThreshold)} " +
-        s"is too large to be set as chunk size. Chunk size has been capped to " +
-        s"${Utils.bytesToString(Int.MaxValue)}")
-      Int.MaxValue
-    } else {
-      initialMemoryThreshold.toInt
-    }
-    val bbos = new ChunkedByteBufferOutputStream(chunkSize, allocator)
-    redirectableStream.setOutputStream(bbos)
-    val serializationStream: SerializationStream = {
-      val autoPick = !blockId.isInstanceOf[StreamBlockId]
-      val ser = serializerManager.getSerializer(classTag, autoPick).newInstance()
-      ser.serializeStream(serializerManager.wrapForCompression(blockId, redirectableStream))
-    }
-
-    def storeValue(value: T): Unit = {
-      serializationStream.writeObject(value)(classTag)
-    }
-
-    def estimateSize(precise: Boolean): Long = {
-      if (precise) {
-        serializationStream.close()
+    val valuesHolder = new ValuesHolder[T] {
+      val allocator = memoryMode match {
+        case MemoryMode.ON_HEAP => ByteBuffer.allocate _
+        case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
       }
-      bbos.size
+
+      // Initial per-task memory to request for unrolling blocks (bytes).
+      val initialMemoryThreshold = unrollMemoryThreshold
+      val redirectableStream = new RedirectableOutputStream
+      val chunkSize = if (initialMemoryThreshold > Int.MaxValue) {
+        logWarning(s"Initial memory threshold of ${Utils.bytesToString(initialMemoryThreshold)} " +
+          s"is too large to be set as chunk size. Chunk size has been capped to " +
+          s"${Utils.bytesToString(Int.MaxValue)}")
+        Int.MaxValue
+      } else {
+        initialMemoryThreshold.toInt
+      }
+
+      val bbos = new ChunkedByteBufferOutputStream(chunkSize, allocator)
+      redirectableStream.setOutputStream(bbos)
+      val serializationStream: SerializationStream = {
+        val autoPick = !blockId.isInstanceOf[StreamBlockId]
+        val ser = serializerManager.getSerializer(classTag, autoPick).newInstance()
+        ser.serializeStream(serializerManager.wrapForCompression(blockId, redirectableStream))
+      }
+
+      override def storeValue(value: T): Unit = {
+        serializationStream.writeObject(value)(classTag)
+      }
+
+      override def esitimatedSize(roughly: Boolean): Long = {
+        if (!roughly) {
+          serializationStream.close()
+        }
+        bbos.size
+      }
+
+      override def buildEntry(): MemoryEntry[T] = {
+        SerializedMemoryEntry[T](bbos.toChunkedByteBuffer, memoryMode, classTag)
+      }
     }
 
-    def createMemoryEntry(): MemoryEntry[T] = {
-      SerializedMemoryEntry[T](bbos.toChunkedByteBuffer, memoryMode, classTag)
-    }
-
-    putIterator(blockId, values, classTag, memoryMode, storeValue,
-      estimateSize, createMemoryEntry) match {
+    putIterator(blockId, values, classTag, memoryMode, valuesHolder) match {
       case Right(storedSize) => Right(storedSize)
       case Left(unrollMemoryUsedByThisBlock) =>
         // We ran out of space while unrolling the values for this block
@@ -426,11 +421,11 @@ private[spark] class MemoryStore(
           this,
           serializerManager,
           blockId,
-          serializationStream,
-          redirectableStream,
+          valuesHolder.serializationStream,
+          valuesHolder.redirectableStream,
           unrollMemoryUsedByThisBlock,
           memoryMode,
-          bbos,
+          valuesHolder.bbos,
           values,
           classTag))
     }
