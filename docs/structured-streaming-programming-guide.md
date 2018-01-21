@@ -1101,6 +1101,21 @@ streamingDf.join(staticDf, "type", "right_join")  # right outer join with a stat
 {% endhighlight %}
 
 </div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+staticDf <- read.df(...)
+streamingDf <- read.stream(...)
+joined <- merge(streamingDf, staticDf, sort = FALSE)  # inner equi-join with a static DF
+joined <- join(
+            staticDf,
+            streamingDf, 
+            streamingDf$value == staticDf$value,
+            "right_outer")  # right outer join with a static DF
+{% endhighlight %}
+
+</div>
 </div>
 
 Note that stream-static joins are not stateful, so no state management is necessary.
@@ -1228,6 +1243,30 @@ impressionsWithWatermark.join(
 {% endhighlight %}
 
 </div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+impressions <- read.stream(...)
+clicks <- read.stream(...)
+
+# Apply watermarks on event-time columns
+impressionsWithWatermark <- withWatermark(impressions, "impressionTime", "2 hours")
+clicksWithWatermark <- withWatermark(clicks, "clickTime", "3 hours")
+
+# Join with event-time constraints
+joined <- join(
+  impressionsWithWatermark,
+  clicksWithWatermark,
+  expr(
+    paste(
+      "clickAdId = impressionAdId AND",
+      "clickTime >= impressionTime AND",
+      "clickTime <= impressionTime + interval 1 hour"
+)))
+
+{% endhighlight %}
+
+</div>
 </div>
 
 ##### Outer Joins with Watermarking
@@ -1284,6 +1323,23 @@ impressionsWithWatermark.join(
     """),
   "leftOuter"                 # can be "inner", "leftOuter", "rightOuter"
 )
+
+{% endhighlight %}
+
+</div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+joined <- join(
+  impressionsWithWatermark,
+  clicksWithWatermark,
+  expr(
+    paste(
+      "clickAdId = impressionAdId AND",
+      "clickTime >= impressionTime AND",
+      "clickTime <= impressionTime + interval 1 hour"),
+  "left_outer"                 # can be "inner", "left_outer", "right_outer"
+))
 
 {% endhighlight %}
 
@@ -1441,13 +1497,27 @@ streamingDf
 {% highlight python %}
 streamingDf = spark.readStream. ...
 
-// Without watermark using guid column
+# Without watermark using guid column
 streamingDf.dropDuplicates("guid")
 
-// With watermark using guid and eventTime columns
+# With watermark using guid and eventTime columns
 streamingDf \
   .withWatermark("eventTime", "10 seconds") \
   .dropDuplicates("guid", "eventTime")
+{% endhighlight %}
+
+</div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+streamingDf <- read.stream(...)
+
+# Without watermark using guid column
+streamingDf <- dropDuplicates(streamingDf, "guid")
+
+# With watermark using guid and eventTime columns
+streamingDf <- withWatermark(streamingDf, "eventTime", "10 seconds")
+streamingDf <- dropDuplicates(streamingDf, "guid", "eventTime")
 {% endhighlight %}
 
 </div>
