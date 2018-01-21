@@ -80,7 +80,7 @@ case class QueryExecutionMetering() {
 
     s"""
        |=== Metrics of Analyzer/Optimizer Rules ===
-       |Total number of runs = $totalNumRuns
+       |Total number of runs: $totalNumRuns
        |Total time: ${totalTime / 1000000000D} seconds
        |
        |$colRuleName $colRunTime $colTimeEffectiveRuns $colNumRuns $colNumEffectiveRuns
