@@ -1497,10 +1497,10 @@ streamingDf
 {% highlight python %}
 streamingDf = spark.readStream. ...
 
-// Without watermark using guid column
+# Without watermark using guid column
 streamingDf.dropDuplicates("guid")
 
-// With watermark using guid and eventTime columns
+# With watermark using guid and eventTime columns
 streamingDf \
   .withWatermark("eventTime", "10 seconds") \
   .dropDuplicates("guid", "eventTime")
@@ -1512,10 +1512,10 @@ streamingDf \
 {% highlight r %}
 streamingDf <- read.stream(...)
 
-// Without watermark using guid column
+# Without watermark using guid column
 streamingDf <- dropDuplicates(streamingDf, "guid")
 
-// With watermark using guid and eventTime columns
+# With watermark using guid and eventTime columns
 streamingDf <- withWatermark(streamingDf, "eventTime", "10 seconds")
 streamingDf <- dropDuplicates(streamingDf, "guid", "eventTime")
 {% endhighlight %}
