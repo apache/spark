@@ -180,7 +180,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     val bucketizers: Seq[UserDefinedFunction] = seqOfSplits.zipWithIndex.map { case (splits, idx) =>
       udf { (feature: java.lang.Double) =>
         Bucketizer.binarySearchForBuckets(splits,
-          if (feature == null) None else Option(feature.toDouble),
+          if (feature == null) None else Option(feature),
           keepInvalid)
       }.withName(s"bucketizer_$idx")
     }
