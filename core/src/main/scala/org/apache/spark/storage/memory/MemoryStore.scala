@@ -175,7 +175,7 @@ private[spark] class MemoryStore(
    * @param classTag the [[ClassTag]] for the block.
    * @param memoryMode The values saved mode.
    * @param valuesHolder A holder that supports storing record of values into memory store as
-   *        values of bytes.
+   *        values or bytes.
    * @return if the block is stored successfully, return the stored data size. Else return the
    *         memory has used for unroll the block.
    */
@@ -356,7 +356,7 @@ private[spark] class MemoryStore(
       case Right(storedSize) => Right(storedSize)
       case Left(unrollMemoryUsedByThisBlock) =>
         // We ran out of space while unrolling the values for this block
-        logUnrollFailureMessage(blockId, unrollMemoryUsedByThisBlock)
+        logUnrollFailureMessage(blockId, valuesHolder.bbos.size)
         Left(new PartiallySerializedBlock(
           this,
           serializerManager,
