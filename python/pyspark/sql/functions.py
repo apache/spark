@@ -2239,7 +2239,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        >>> df = spark.createDataFrame(
        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
        ...     ("id", "v"))
-       >>> @pandas_udf("double", PandasUDFType.GROUP_AGG)
+       >>> @pandas_udf("double", PandasUDFType.GROUP_AGG)  # doctest: +SKIP
        ... def mean_udf(v):
        ...     return v.mean()
        >>> df.groupby("id").agg(mean_udf(df['v'])).show()  # doctest: +SKIP
