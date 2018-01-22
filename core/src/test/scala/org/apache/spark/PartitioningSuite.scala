@@ -262,14 +262,11 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
 
   test("defaultPartitioner") {
     val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 150)
-    val rdd2 = sc
-      .parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+    val rdd2 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
       .partitionBy(new HashPartitioner(10))
-    val rdd3 = sc
-      .parallelize(Array((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
+    val rdd3 = sc.parallelize(Array((1, 6), (7, 8), (3, 10), (5, 12), (13, 14)))
       .partitionBy(new HashPartitioner(100))
-    val rdd4 = sc
-      .parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+    val rdd4 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
       .partitionBy(new HashPartitioner(9))
     val rdd5 = sc.parallelize((1 to 10).map(x => (x, x)), 11)
 
@@ -299,6 +296,8 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
       val rdd4 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
         .partitionBy(new HashPartitioner(9))
       val rdd5 = sc.parallelize((1 to 10).map(x => (x, x)), 11)
+      val rdd6 = sc.parallelize(Array((1, 2), (2, 3), (2, 4), (3, 4)))
+        .partitionBy(new HashPartitioner(3))
 
       val partitioner1 = Partitioner.defaultPartitioner(rdd1, rdd2)
       val partitioner2 = Partitioner.defaultPartitioner(rdd2, rdd3)
@@ -306,6 +305,7 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
       val partitioner4 = Partitioner.defaultPartitioner(rdd1, rdd2, rdd3)
       val partitioner5 = Partitioner.defaultPartitioner(rdd4, rdd5)
       val partitioner6 = Partitioner.defaultPartitioner(rdd5, rdd5)
+      val partitioner7 = Partitioner.defaultPartitioner(rdd1, rdd6)
 
       assert(partitioner1.numPartitions == rdd2.getNumPartitions)
       assert(partitioner2.numPartitions == rdd3.getNumPartitions)
@@ -313,6 +313,7 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
       assert(partitioner4.numPartitions == rdd3.getNumPartitions)
       assert(partitioner5.numPartitions == rdd4.getNumPartitions)
       assert(partitioner6.numPartitions == sc.defaultParallelism)
+      assert(partitioner7.numPartitions == sc.defaultParallelism)
     } finally {
       sc.conf.remove("spark.default.parallelism")
     }

@@ -358,8 +358,8 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
-  test("cogroup between multiple RDD when defaultParallelism is set with huge number of " +
-    "partitions from upstream RDDs") {
+  test("cogroup between multiple RDD when defaultParallelism is set; with huge number of " +
+    "partitions in upstream RDDs") {
     assert(!sc.conf.contains("spark.default.parallelism"))
     try {
       sc.conf.set("spark.default.parallelism", "4")

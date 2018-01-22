@@ -46,10 +46,10 @@ object Partitioner {
    * If spark.default.parallelism is set, we'll use the value of SparkContext defaultParallelism
    * as the default partitions number, otherwise we'll use the max number of upstream partitions.
    *
-   * If any of the RDDs already has a partitioner, and the partitioner is an eligible one (with a
-   * partitions number that is not less than the max number of upstream partitions by an order of
-   * magnitude), or the number of partitions is larger than the default one, we'll choose the
-   * exsiting partitioner.
+   * When available, we choose the partitioner from rdds with maximum number of partitions. If this
+   * partitioner is eligible (number of partitions within an order of maximum number of partitions
+   * in rdds), or has partition number higher than default partitions number - we use this
+   * partitioner.
    *
    * Otherwise, we'll use a new HashPartitioner with the default partitions number.
    *
