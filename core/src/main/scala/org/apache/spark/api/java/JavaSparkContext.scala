@@ -50,12 +50,12 @@ class JavaSparkContext(val sc: SparkContext)
    * Create a JavaSparkContext that loads settings from system properties (for instance, when
    * launching with ./bin/spark-submit).
    */
-  def this() = this(new SparkContext())
+  def this() = this(SparkContext.getOrCreate())
 
   /**
    * @param conf a [[org.apache.spark.SparkConf]] object specifying Spark parameters
    */
-  def this(conf: SparkConf) = this(new SparkContext(conf))
+  def this(conf: SparkConf) = this(SparkContext.getOrCreate(conf))
 
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
