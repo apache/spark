@@ -363,16 +363,43 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       store.executorList(false), startTime)
 
     if (shouldShowActiveJobs) {
-      content ++= <h4 id="active">Active Jobs ({activeJobs.size})</h4> ++
-        activeJobsTable
+      content ++=
+        <span id="active" class="collapse-aggregated-activeJobs collapse-table"
+            onClick="collapseTable('collapse-aggregated-activeJobs','aggregated-activeJobs')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Active Jobs ({activeJobs.size})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-activeJobs collapsible-table">
+          {activeJobsTable}
+        </div>
     }
     if (shouldShowCompletedJobs) {
-      content ++= <h4 id="completed">Completed Jobs ({completedJobNumStr})</h4> ++
-        completedJobsTable
+      content ++=
+        <span id="completed" class="collapse-aggregated-completedJobs collapse-table"
+            onClick="collapseTable('collapse-aggregated-completedJobs','aggregated-completedJobs')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Completed Jobs ({completedJobNumStr})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-completedJobs collapsible-table">
+          {completedJobsTable}
+        </div>
     }
     if (shouldShowFailedJobs) {
-      content ++= <h4 id ="failed">Failed Jobs ({failedJobs.size})</h4> ++
-        failedJobsTable
+      content ++=
+        <span id ="failed" class="collapse-aggregated-failedJobs collapse-table"
+            onClick="collapseTable('collapse-aggregated-failedJobs','aggregated-failedJobs')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Failed Jobs ({failedJobs.size})</a>
+          </h4>
+        </span> ++
+      <div class="aggregated-failedJobs collapsible-table">
+        {failedJobsTable}
+      </div>
     }
 
     val helpText = """A job is triggered by an action, like count() or saveAsTextFile().""" +

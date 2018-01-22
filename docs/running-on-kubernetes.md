@@ -8,6 +8,10 @@ title: Running Spark on Kubernetes
 Spark can run on clusters managed by [Kubernetes](https://kubernetes.io). This feature makes use of native
 Kubernetes scheduler that has been added to Spark.
 
+**The Kubernetes scheduler is currently experimental.
+In future versions, there may be behavioral changes around configuration,
+container images and entrypoints.**
+
 # Prerequisites
 
 * A runnable distribution of Spark 2.3 or above.
@@ -41,11 +45,10 @@ logs and remains in "completed" state in the Kubernetes API until it's eventuall
 
 Note that in the completed state, the driver pod does *not* use any computational or memory resources.
 
-The driver and executor pod scheduling is handled by Kubernetes. It will be possible to affect Kubernetes scheduling
-decisions for driver and executor pods using advanced primitives like
-[node selectors](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector)
-and [node/pod affinities](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity)
-in a future release.
+The driver and executor pod scheduling is handled by Kubernetes. It is possible to schedule the
+driver and executor pods on a subset of available nodes through a [node selector](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector)
+using the configuration property for it. It will be possible to use more advanced
+scheduling hints like [node/pod affinities](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) in a future release.
 
 # Submitting Applications to Kubernetes
 
@@ -62,8 +65,10 @@ use with the Kubernetes backend.
 
 Example usage is:
 
-    ./bin/docker-image-tool.sh -r <repo> -t my-tag build
-    ./bin/docker-image-tool.sh -r <repo> -t my-tag push
+```bash
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag build
+$ ./bin/docker-image-tool.sh -r <repo> -t my-tag push
+```
 
 ## Cluster Mode
 
@@ -94,7 +99,7 @@ must consist of lower case alphanumeric characters, `-`, and `.`  and must start
 If you have a Kubernetes cluster setup, one way to discover the apiserver URL is by executing `kubectl cluster-info`.
 
 ```bash
-kubectl cluster-info
+$ kubectl cluster-info
 Kubernetes master is running at http://127.0.0.1:6443
 ```
 
@@ -105,7 +110,7 @@ authenticating proxy, `kubectl proxy` to communicate to the Kubernetes API.
 The local proxy can be started by:
 
 ```bash
-kubectl proxy
+$ kubectl proxy
 ```
 
 If the local proxy is running at localhost:8001, `--master k8s://http://127.0.0.1:8001` can be used as the argument to
@@ -117,7 +122,10 @@ This URI is the location of the example jar that is already in the Docker image.
 If your application's dependencies are all hosted in remote locations like HDFS or HTTP servers, they may be referred to
 by their appropriate remote URIs. Also, application dependencies can be pre-mounted into custom-built Docker images.
 Those dependencies can be added to the classpath by referencing them with `local://` URIs and/or setting the
-`SPARK_EXTRA_CLASSPATH` environment variable in your Dockerfiles.
+`SPARK_EXTRA_CLASSPATH` environment variable in your Dockerfiles. The `local://` scheme is also required when referring to
+dependencies in custom-built Docker images in `spark-submit`. Note that using application dependencies from the submission
+client's local file system is currently not yet supported.
+
 
 ### Using Remote Dependencies
 When there are application dependencies hosted in remote locations like HDFS or HTTP servers, the driver and executor pods
@@ -170,7 +178,7 @@ Logs can be accessed using the Kubernetes API and the `kubectl` CLI. When a Spar
 to stream logs from the application using:
 
 ```bash
-kubectl -n=<namespace> logs -f <driver-pod-name>
+$ kubectl -n=<namespace> logs -f <driver-pod-name>
 ```
 
 The same logs can also be accessed through the
@@ -183,7 +191,7 @@ The UI associated with any application can be accessed locally using
 [`kubectl port-forward`](https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/#forward-a-local-port-to-a-port-on-the-pod).
 
 ```bash
-kubectl port-forward <driver-pod-name> 4040:4040
+$ kubectl port-forward <driver-pod-name> 4040:4040
 ```
 
 Then, the Spark driver UI can be accessed on `http://localhost:4040`.
@@ -197,13 +205,13 @@ are errors during the running of the application, often, the best way to investi
 To get some basic information about the scheduling decisions made around the driver pod, you can run:
 
 ```bash
-kubectl describe pod <spark-driver-pod>
+$ kubectl describe pod <spark-driver-pod>
 ```
 
 If the pod has encountered a runtime error, the status can be probed further using:
 
 ```bash
-kubectl logs <spark-driver-pod>
+$ kubectl logs <spark-driver-pod>
 ```
 
 Status and logs of failed executor pods can be checked in similar ways. Finally, deleting the driver pod will clean up the entire spark
@@ -251,7 +259,7 @@ To create a custom service account, a user can use the `kubectl create serviceac
 following command creates a service account named `spark`:
 
 ```bash
-kubectl create serviceaccount spark
+$ kubectl create serviceaccount spark
 ```
 
 To grant a service account a `Role` or `ClusterRole`, a `RoleBinding` or `ClusterRoleBinding` is needed. To create
@@ -260,7 +268,7 @@ for `ClusterRoleBinding`) command. For example, the following command creates an
 namespace and grants it to the `spark` service account created above:
 
 ```bash
-kubectl create clusterrolebinding spark-role --clusterrole=edit --serviceaccount=default:spark --namespace=default
+$ kubectl create clusterrolebinding spark-role --clusterrole=edit --serviceaccount=default:spark --namespace=default
 ```
 
 Note that a `Role` can only be used to grant access to resources (like pods) within a single namespace, whereas a
@@ -538,14 +546,6 @@ specific to Spark on Kubernetes.
   <td>
     Name of the driver pod. If not set, the driver pod name is set to "spark.app.name" suffixed by the current timestamp
     to avoid name conflicts.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.executor.podNamePrefix</code></td>
-  <td>(none)</td>
-  <td>
-    Prefix for naming the executor pods.
-    If not set, the executor pod name is set to driver pod name suffixed by an integer.
   </td>
 </tr>
 <tr>

@@ -260,7 +260,11 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
 
     val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
     def accumulableRow(acc: AccumulableInfo): Seq[Node] = {
-      <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
+      if (acc.name != null && acc.value != null) {
+        <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
+      } else {
+        Nil
+      }
     }
     val accumulableTable = UIUtils.listingTable(
       accumulableHeaders,
@@ -486,8 +490,16 @@ private[ui] class StagePage(parent: StagesTab, store: AppStatusStore) extends We
       <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
       aggMetrics ++
       maybeAccumulableTable ++
-      <h4 id="tasks-section">Tasks ({totalTasksNumStr})</h4> ++
-        taskTableHTML ++ jsForScrollingDownToTaskTable
+      <span id="tasks-section" class="collapse-aggregated-tasks collapse-table"
+          onClick="collapseTable('collapse-aggregated-tasks','aggregated-tasks')">
+        <h4>
+          <span class="collapse-table-arrow arrow-open"></span>
+          <a>Tasks ({totalTasksNumStr})</a>
+        </h4>
+      </span> ++
+      <div class="aggregated-tasks collapsible-table">
+        {taskTableHTML ++ jsForScrollingDownToTaskTable}
+      </div>
     UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true)
   }
 
@@ -856,7 +868,7 @@ private[ui] class TaskPagedTable(
         {formatBytes(task.taskMetrics.map(_.peakExecutionMemory))}
       </td>
       {if (hasAccumulators(stage)) {
-        accumulatorsInfo(task)
+        <td>{accumulatorsInfo(task)}</td>
       }}
       {if (hasInput(stage)) {
         metricInfo(task) { m =>
@@ -912,8 +924,12 @@ private[ui] class TaskPagedTable(
   }
 
   private def accumulatorsInfo(task: TaskData): Seq[Node] = {
-    task.accumulatorUpdates.map { acc =>
-      Unparsed(StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update}"))
+    task.accumulatorUpdates.flatMap { acc =>
+      if (acc.name != null && acc.update.isDefined) {
+        Unparsed(StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update.get}")) ++ <br />
+      } else {
+        Nil
+      }
     }
   }
 
@@ -977,7 +993,9 @@ private object ApiHelper {
     "Shuffle Spill (Disk)" -> TaskIndexNames.DISK_SPILL,
     "Errors" -> TaskIndexNames.ERROR)
 
-  def hasAccumulators(stageData: StageData): Boolean = stageData.accumulatorUpdates.size > 0
+  def hasAccumulators(stageData: StageData): Boolean = {
+    stageData.accumulatorUpdates.exists { acc => acc.name != null && acc.value != null }
+  }
 
   def hasInput(stageData: StageData): Boolean = stageData.inputBytes > 0
 

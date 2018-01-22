@@ -94,7 +94,7 @@ class VectorizedHashMapGenerator(
        |
        |  public $generatedClassName() {
        |    vectors = ${classOf[OnHeapColumnVector].getName}.allocateColumns(capacity, schema);
-       |    batch = new ${classOf[ColumnarBatch].getName}(schema, vectors, capacity);
+       |    batch = new ${classOf[ColumnarBatch].getName}(vectors);
        |
        |    // Generates a projection to return the aggregate buffer only.
        |    ${classOf[OnHeapColumnVector].getName}[] aggBufferVectors =
