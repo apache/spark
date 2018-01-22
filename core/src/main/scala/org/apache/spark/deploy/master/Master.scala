@@ -125,6 +125,8 @@ private[deploy] class Master(
   private var restServer: Option[StandaloneRestServer] = None
   private var restServerBoundPort: Option[Int] = None
 
+  var startupTime: Long = 0
+
   override def onStart(): Unit = {
     logInfo("Starting Spark master at " + masterUrl)
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
@@ -179,6 +181,7 @@ private[deploy] class Master(
     }
     persistenceEngine = persistenceEngine_
     leaderElectionAgent = leaderElectionAgent_
+    startupTime = System.currentTimeMillis()
   }
 
   override def onStop() {
