@@ -1222,7 +1222,7 @@ class Analyzer(
                     wf
                   }
                 // We get an aggregate function, we need to wrap it in an AggregateExpression.
-                case agg: AggregateFunction => agg.toAggregateExpression(isDistinct)
+                case agg: AggregateFunction => AggregateExpression(agg, Complete, isDistinct)
                 // This function is not an aggregate function, just return the resolved one.
                 case other =>
                   if (isDistinct) {

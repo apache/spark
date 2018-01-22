@@ -199,7 +199,7 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
   override def prettyName: String = name.unquotedString
   override def toString: String = s"'$name(${children.mkString(", ")})"
 
-  override def eval(input: InternalRow = EmptyRow): TraversableOnce[InternalRow] =
+  override def eval(input: InternalRow = null): TraversableOnce[InternalRow] =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
