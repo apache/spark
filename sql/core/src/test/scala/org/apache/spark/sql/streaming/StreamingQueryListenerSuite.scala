@@ -180,7 +180,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val listeners = (1 to 5).map(_ => new EventCollector)
     try {
       listeners.foreach(listener => spark.streams.addListener(listener))
-      testStream(df, OutputMode.Append, useV2Sink = true)(
+      testStream(df, OutputMode.Append)(
         StartStream(Trigger.Continuous(1000)),
         StopStream,
         AssertOnQuery { query =>

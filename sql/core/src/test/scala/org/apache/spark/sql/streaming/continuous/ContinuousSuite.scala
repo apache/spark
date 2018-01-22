@@ -218,7 +218,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
     }
     spark.sparkContext.addSparkListener(listener)
     try {
-      testStream(df, useV2Sink = true)(
+      testStream(df)(
         StartStream(Trigger.Continuous(100)),
         Execute(waitForRateSourceTriggers(_, 2)),
         Execute { _ =>
