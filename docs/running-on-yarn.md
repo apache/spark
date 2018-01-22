@@ -18,7 +18,9 @@ Spark application's configuration (driver, executors, and the AM when running in
 
 There are two deploy modes that can be used to launch Spark applications on YARN. In `cluster` mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In `client` mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
 
-Unlike [Spark standalone](spark-standalone.html) and [Mesos](running-on-mesos.html) modes, in which the master's address is specified in the `--master` parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration. Thus, the `--master` parameter is `yarn`.
+Unlike other cluster managers supported by Spark in which the master's address is specified in the `--master`
+parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration.
+Thus, the `--master` parameter is `yarn`.
 
 To launch a Spark application in `cluster` mode:
 
@@ -228,24 +230,10 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
- <td><code>spark.yarn.executor.memoryOverhead</code></td>
-  <td>executorMemory * 0.10, with minimum of 384 </td>
-  <td>
-    The amount of off-heap memory (in megabytes) to be allocated per executor. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the executor size (typically 6-10%).
-  </td>
-</tr>
-<tr>
-  <td><code>spark.yarn.driver.memoryOverhead</code></td>
-  <td>driverMemory * 0.10, with minimum of 384 </td>
-  <td>
-    The amount of off-heap memory (in megabytes) to be allocated per driver in cluster mode. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the container size (typically 6-10%).
-  </td>
-</tr>
-<tr>
   <td><code>spark.yarn.am.memoryOverhead</code></td>
   <td>AM memory * 0.10, with minimum of 384 </td>
   <td>
-    Same as <code>spark.yarn.driver.memoryOverhead</code>, but for the YARN Application Master in client mode.
+    Same as <code>spark.driver.memoryOverhead</code>, but for the YARN Application Master in client mode.
   </td>
 </tr>
 <tr>
@@ -457,7 +445,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <code>yarn.nodemanager.log-aggregation.roll-monitoring-interval-seconds</code> should be
   configured in yarn-site.xml.
   This feature can only be used with Hadoop 2.6.4+. The Spark log4j appender needs be changed to use
-  FileAppender or another appender that can handle the files being removed while its running. Based
+  FileAppender or another appender that can handle the files being removed while it is running. Based
   on the file name configured in the log4j configuration (like spark.log), the user should set the
   regex (spark*) to include all the log files that need to be aggregated.
   </td>

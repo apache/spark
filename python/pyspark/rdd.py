@@ -766,7 +766,7 @@ class RDD(object):
 
             def pipe_objs(out):
                 for obj in iterator:
-                    s = str(obj).rstrip('\n') + '\n'
+                    s = unicode(obj).rstrip('\n') + '\n'
                     out.write(s.encode('utf-8'))
                 out.close()
             Thread(target=pipe_objs, args=[pipe.stdin]).start()

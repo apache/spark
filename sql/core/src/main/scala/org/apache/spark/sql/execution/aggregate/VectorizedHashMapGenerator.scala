@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.aggregate
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
-import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnarRow, MutableColumnarRow, OnHeapColumnVector}
+import org.apache.spark.sql.execution.vectorized.{MutableColumnarRow, OnHeapColumnVector}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
  * This is a helper class to generate an append-only vectorized hash map that can act as a 'cache'
@@ -53,7 +55,7 @@ class VectorizedHashMapGenerator(
     val generatedSchema: String =
       s"new org.apache.spark.sql.types.StructType()" +
         (groupingKeySchema ++ bufferSchema).map { key =>
-          val keyName = ctx.addReferenceMinorObj(key.name)
+          val keyName = ctx.addReferenceObj("keyName", key.name)
           key.dataType match {
             case d: DecimalType =>
               s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
@@ -66,7 +68,7 @@ class VectorizedHashMapGenerator(
     val generatedAggBufferSchema: String =
       s"new org.apache.spark.sql.types.StructType()" +
         bufferSchema.map { key =>
-          val keyName = ctx.addReferenceMinorObj(key.name)
+          val keyName = ctx.addReferenceObj("keyName", key.name)
           key.dataType match {
             case d: DecimalType =>
               s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
@@ -92,7 +94,7 @@ class VectorizedHashMapGenerator(
        |
        |  public $generatedClassName() {
        |    vectors = ${classOf[OnHeapColumnVector].getName}.allocateColumns(capacity, schema);
-       |    batch = new ${classOf[ColumnarBatch].getName}(schema, vectors, capacity);
+       |    batch = new ${classOf[ColumnarBatch].getName}(vectors);
        |
        |    // Generates a projection to return the aggregate buffer only.
        |    ${classOf[OnHeapColumnVector].getName}[] aggBufferVectors =
@@ -231,7 +233,7 @@ class VectorizedHashMapGenerator(
 
   protected def generateRowIterator(): String = {
     s"""
-       |public java.util.Iterator<${classOf[ColumnarRow].getName}> rowIterator() {
+       |public java.util.Iterator<${classOf[InternalRow].getName}> rowIterator() {
        |  batch.setNumRows(numRows);
        |  return batch.rowIterator();
        |}

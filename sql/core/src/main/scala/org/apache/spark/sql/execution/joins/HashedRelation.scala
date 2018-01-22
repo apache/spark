@@ -368,7 +368,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   // The minimum key
   private var minKey = Long.MaxValue
 
-  // The maxinum key
+  // The maximum key
   private var maxKey = Long.MinValue
 
   // The array to store the key and offset of UnsafeRow in the page.

@@ -194,9 +194,9 @@ class _ImageSchema(object):
         :return: a :class:`DataFrame` with a single column of "images",
                see ImageSchema for details.
 
-        >>> df = ImageSchema.readImages('python/test_support/image/kittens', recursive=True)
+        >>> df = ImageSchema.readImages('data/mllib/images/kittens', recursive=True)
         >>> df.count()
-        4
+        5
 
         .. versionadded:: 2.3.0
         """
@@ -212,7 +212,29 @@ class _ImageSchema(object):
 ImageSchema = _ImageSchema()
 
 
-# Monkey patch to disallow instantization of this class.
+# Monkey patch to disallow instantiation of this class.
 def _disallow_instance(_):
     raise RuntimeError("Creating instance of _ImageSchema class is disallowed.")
 _ImageSchema.__init__ = _disallow_instance
+
+
+def _test():
+    import doctest
+    import pyspark.ml.image
+    globs = pyspark.ml.image.__dict__.copy()
+    spark = SparkSession.builder\
+        .master("local[2]")\
+        .appName("ml.image tests")\
+        .getOrCreate()
+    globs['spark'] = spark
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.ml.image, globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
+    spark.stop()
+    if failure_count:
+        exit(-1)
+
+
+if __name__ == "__main__":
+    _test()

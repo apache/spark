@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types._
 
 class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -144,5 +145,11 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(caseKeyWhaen.branches ==
       IndexedSeq((Literal(12) === Literal(1), Literal(42)),
         (Literal(12) === Literal(42), Literal(1))))
+  }
+
+  test("SPARK-22705: case when should use less global variables") {
+    val ctx = new CodegenContext()
+    CaseWhen(Seq((Literal.create(false, BooleanType), Literal(1))), Literal(-1)).genCode(ctx)
+    assert(ctx.inlinedMutableStates.size == 1)
   }
 }

@@ -368,6 +368,20 @@ class DataFrame(object):
         jdf = self._jdf.checkpoint(eager)
         return DataFrame(jdf, self.sql_ctx)
 
+    @since(2.3)
+    def localCheckpoint(self, eager=True):
+        """Returns a locally checkpointed version of this Dataset. Checkpointing can be used to
+        truncate the logical plan of this DataFrame, which is especially useful in iterative
+        algorithms where the plan may grow exponentially. Local checkpoints are stored in the
+        executors using the caching subsystem and therefore they are not reliable.
+
+        :param eager: Whether to checkpoint this DataFrame immediately
+
+        .. note:: Experimental
+        """
+        jdf = self._jdf.localCheckpoint(eager)
+        return DataFrame(jdf, self.sql_ctx)
+
     @since(2.1)
     def withWatermark(self, eventTime, delayThreshold):
         """Defines an event time watermark for this :class:`DataFrame`. A watermark tracks a point
@@ -1350,7 +1364,8 @@ class DataFrame(object):
         """ Return a new :class:`DataFrame` containing rows in this frame
         but not in another frame.
 
-        This is equivalent to `EXCEPT` in SQL.
+        This is equivalent to `EXCEPT DISTINCT` in SQL.
+
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
 
@@ -1892,7 +1907,9 @@ class DataFrame(object):
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
                 from pyspark.sql.types import _check_dataframe_localize_timestamps
+                from pyspark.sql.utils import require_minimum_pyarrow_version
                 import pyarrow
+                require_minimum_pyarrow_version()
                 tables = self._collectAsArrow()
                 if tables:
                     table = pyarrow.concat_tables(tables)

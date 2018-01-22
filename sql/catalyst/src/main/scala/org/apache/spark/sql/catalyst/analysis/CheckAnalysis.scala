@@ -608,8 +608,8 @@ trait CheckAnalysis extends PredicateHelper {
       // allows to have correlation under it
       // but must not host any outer references.
       // Note:
-      // Generator with join=false is treated as Category 4.
-      case g: Generate if g.join =>
+      // Generator with requiredChildOutput.isEmpty is treated as Category 4.
+      case g: Generate if g.requiredChildOutput.nonEmpty =>
         failOnInvalidOuterReference(g)
 
       // Category 4: Any other operators not in the above 3 categories

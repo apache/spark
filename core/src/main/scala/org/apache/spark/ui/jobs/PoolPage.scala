@@ -51,7 +51,18 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
     val poolTable = new PoolTable(Map(pool -> uiPool), parent)
     var content = <h4>Summary </h4> ++ poolTable.toNodeSeq
     if (activeStages.nonEmpty) {
-      content ++= <h4>Active Stages ({activeStages.size})</h4> ++ activeStagesTable.toNodeSeq
+      content ++=
+        <span class="collapse-aggregated-poolActiveStages collapse-table"
+            onClick="collapseTable('collapse-aggregated-poolActiveStages',
+            'aggregated-poolActiveStages')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Active Stages ({activeStages.size})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-poolActiveStages collapsible-table">
+          {activeStagesTable.toNodeSeq}
+        </div>
     }
 
     UIUtils.headerSparkPage("Fair Scheduler Pool: " + poolName, content, parent)

@@ -109,28 +109,14 @@ class CodegenContext {
    *
    * Returns the code to access it.
    *
-   * This is for minor objects not to store the object into field but refer it from the references
-   * field at the time of use because number of fields in class is limited so we should reduce it.
+   * This does not to store the object into field but refer it from the references field at the
+   * time of use because number of fields in class is limited so we should reduce it.
    */
-  def addReferenceMinorObj(obj: Any, className: String = null): String = {
+  def addReferenceObj(objName: String, obj: Any, className: String = null): String = {
     val idx = references.length
     references += obj
     val clsName = Option(className).getOrElse(obj.getClass.getName)
-    s"(($clsName) references[$idx])"
-  }
-
-  /**
-   * Add an object to `references`, create a class member to access it.
-   *
-   * Returns the name of class member.
-   */
-  def addReferenceObj(name: String, obj: Any, className: String = null): String = {
-    val term = freshName(name)
-    val idx = references.length
-    references += obj
-    val clsName = Option(className).getOrElse(obj.getClass.getName)
-    addMutableState(clsName, term, s"$term = ($clsName) references[$idx];")
-    term
+    s"(($clsName) references[$idx] /* $objName */)"
   }
 
   /**
@@ -142,7 +128,7 @@ class CodegenContext {
    * `currentVars` to null, or set `currentVars(i)` to null for certain columns, before calling
    * `Expression.genCode`.
    */
-  final var INPUT_ROW = "i"
+  var INPUT_ROW = "i"
 
   /**
    * Holding a list of generated columns as input of current operator, will be used by
@@ -151,22 +137,83 @@ class CodegenContext {
   var currentVars: Seq[ExprCode] = null
 
   /**
-   * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
-   * 3-tuple: java type, variable name, code to init it.
-   * As an example, ("int", "count", "count = 0;") will produce code:
+   * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
+   * 2-tuple: java type, variable name.
+   * As an example, ("int", "count") will produce code:
    * {{{
    *   private int count;
    * }}}
-   * as a member variable, and add
-   * {{{
-   *   count = 0;
-   * }}}
-   * to the constructor.
+   * as a member variable
    *
    * They will be kept as member variables in generated classes like `SpecificProjection`.
+   *
+   * Exposed for tests only.
    */
-  val mutableStates: mutable.ArrayBuffer[(String, String, String)] =
-    mutable.ArrayBuffer.empty[(String, String, String)]
+  private[catalyst] val inlinedMutableStates: mutable.ArrayBuffer[(String, String)] =
+    mutable.ArrayBuffer.empty[(String, String)]
+
+  /**
+   * The mapping between mutable state types and corrseponding compacted arrays.
+   * The keys are java type string. The values are [[MutableStateArrays]] which encapsulates
+   * the compacted arrays for the mutable states with the same java type.
+   *
+   * Exposed for tests only.
+   */
+  private[catalyst] val arrayCompactedMutableStates: mutable.Map[String, MutableStateArrays] =
+    mutable.Map.empty[String, MutableStateArrays]
+
+  // An array holds the code that will initialize each state
+  // Exposed for tests only.
+  private[catalyst] val mutableStateInitCode: mutable.ArrayBuffer[String] =
+    mutable.ArrayBuffer.empty[String]
+
+  // Tracks the names of all the mutable states.
+  private val mutableStateNames: mutable.HashSet[String] = mutable.HashSet.empty
+
+  /**
+   * This class holds a set of names of mutableStateArrays that is used for compacting mutable
+   * states for a certain type, and holds the next available slot of the current compacted array.
+   */
+  class MutableStateArrays {
+    val arrayNames = mutable.ListBuffer.empty[String]
+    createNewArray()
+
+    private[this] var currentIndex = 0
+
+    private def createNewArray() = {
+      val newArrayName = freshName("mutableStateArray")
+      mutableStateNames += newArrayName
+      arrayNames.append(newArrayName)
+    }
+
+    def getCurrentIndex: Int = currentIndex
+
+    /**
+     * Returns the reference of next available slot in current compacted array. The size of each
+     * compacted array is controlled by the constant `CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT`.
+     * Once reaching the threshold, new compacted array is created.
+     */
+    def getNextSlot(): String = {
+      if (currentIndex < CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT) {
+        val res = s"${arrayNames.last}[$currentIndex]"
+        currentIndex += 1
+        res
+      } else {
+        createNewArray()
+        currentIndex = 1
+        s"${arrayNames.last}[0]"
+      }
+    }
+
+  }
+
+  /**
+   * A map containing the mutable states which have been defined so far using
+   * `addImmutableStateIfNotExists`. Each entry contains the name of the mutable state as key and
+   * its Java type and init code as value.
+   */
+  private val immutableStates: mutable.Map[String, (String, String)] =
+    mutable.Map.empty[String, (String, String)]
 
   /**
    * Add a mutable state as a field to the generated class. c.f. the comments above.
@@ -177,11 +224,85 @@ class CodegenContext {
    *                 the list of default imports available.
    *                 Also, generic type arguments are accepted but ignored.
    * @param variableName Name of the field.
-   * @param initCode The statement(s) to put into the init() method to initialize this field.
+   * @param initFunc Function includes statement(s) to put into the init() method to initialize
+   *                 this field. The argument is the name of the mutable state variable.
    *                 If left blank, the field will be default-initialized.
+   * @param forceInline whether the declaration and initialization code may be inlined rather than
+   *                    compacted. Please set `true` into forceInline for one of the followings:
+   *                    1. use the original name of the status
+   *                    2. expect to non-frequently generate the status
+   *                       (e.g. not much sort operators in one stage)
+   * @param useFreshName If this is false and the mutable state ends up inlining in the outer
+   *                     class, the name is not changed
+   * @return the name of the mutable state variable, which is the original name or fresh name if
+   *         the variable is inlined to the outer class, or an array access if the variable is to
+   *         be stored in an array of variables of the same type.
+   *         A variable will be inlined into the outer class when one of the following conditions
+   *         are satisfied:
+   *         1. forceInline is true
+   *         2. its type is primitive type and the total number of the inlined mutable variables
+   *            is less than `CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD`
+   *         3. its type is multi-dimensional array
+   *         When a variable is compacted into an array, the max size of the array for compaction
+   *         is given by `CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT`.
    */
-  def addMutableState(javaType: String, variableName: String, initCode: String = ""): Unit = {
-    mutableStates += ((javaType, variableName, initCode))
+  def addMutableState(
+      javaType: String,
+      variableName: String,
+      initFunc: String => String = _ => "",
+      forceInline: Boolean = false,
+      useFreshName: Boolean = true): String = {
+
+    // want to put a primitive type variable at outerClass for performance
+    val canInlinePrimitive = isPrimitiveType(javaType) &&
+      (inlinedMutableStates.length < CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)
+    if (forceInline || canInlinePrimitive || javaType.contains("[][]")) {
+      val varName = if (useFreshName) freshName(variableName) else variableName
+      val initCode = initFunc(varName)
+      inlinedMutableStates += ((javaType, varName))
+      mutableStateInitCode += initCode
+      mutableStateNames += varName
+      varName
+    } else {
+      val arrays = arrayCompactedMutableStates.getOrElseUpdate(javaType, new MutableStateArrays)
+      val element = arrays.getNextSlot()
+
+      val initCode = initFunc(element)
+      mutableStateInitCode += initCode
+      element
+    }
+  }
+
+  /**
+   * Add an immutable state as a field to the generated class only if it does not exist yet a field
+   * with that name. This helps reducing the number of the generated class' fields, since the same
+   * variable can be reused by many functions.
+   *
+   * Even though the added variables are not declared as final, they should never be reassigned in
+   * the generated code to prevent errors and unexpected behaviors.
+   *
+   * Internally, this method calls `addMutableState`.
+   *
+   * @param javaType Java type of the field.
+   * @param variableName Name of the field.
+   * @param initFunc Function includes statement(s) to put into the init() method to initialize
+   *                 this field. The argument is the name of the mutable state variable.
+   */
+  def addImmutableStateIfNotExists(
+      javaType: String,
+      variableName: String,
+      initFunc: String => String = _ => ""): Unit = {
+    val existingImmutableState = immutableStates.get(variableName)
+    if (existingImmutableState.isEmpty) {
+      addMutableState(javaType, variableName, initFunc, useFreshName = false, forceInline = true)
+      immutableStates(variableName) = (javaType, initFunc(variableName))
+    } else {
+      val (prevJavaType, prevInitCode) = existingImmutableState.get
+      assert(prevJavaType == javaType, s"$variableName has already been defined with type " +
+        s"$prevJavaType and now it is tried to define again with type $javaType.")
+      assert(prevInitCode == initFunc(variableName), s"$variableName has already been defined " +
+        s"with different initialization statements.")
+    }
   }
 
   /**
@@ -190,8 +311,7 @@ class CodegenContext {
    * data types like: UTF8String, ArrayData, MapData & InternalRow.
    */
   def addBufferedState(dataType: DataType, variableName: String, initCode: String): ExprCode = {
-    val value = freshName(variableName)
-    addMutableState(javaType(dataType), value, "")
+    val value = addMutableState(javaType(dataType), variableName)
     val code = dataType match {
       case StringType => s"$value = $initCode.clone();"
       case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
@@ -203,15 +323,37 @@ class CodegenContext {
   def declareMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    mutableStates.distinct.map { case (javaType, variableName, _) =>
+    val inlinedStates = inlinedMutableStates.distinct.map { case (javaType, variableName) =>
       s"private $javaType $variableName;"
-    }.mkString("\n")
+    }
+
+    val arrayStates = arrayCompactedMutableStates.flatMap { case (javaType, mutableStateArrays) =>
+      val numArrays = mutableStateArrays.arrayNames.size
+      mutableStateArrays.arrayNames.zipWithIndex.map { case (arrayName, index) =>
+        val length = if (index + 1 == numArrays) {
+          mutableStateArrays.getCurrentIndex
+        } else {
+          CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT
+        }
+        if (javaType.contains("[]")) {
+          // initializer had an one-dimensional array variable
+          val baseType = javaType.substring(0, javaType.length - 2)
+          s"private $javaType[] $arrayName = new $baseType[$length][];"
+        } else {
+          // initializer had a scalar variable
+          s"private $javaType[] $arrayName = new $javaType[$length];"
+        }
+      }
+    }
+
+    (inlinedStates ++ arrayStates).mkString("\n")
   }
 
   def initMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    val initCodes = mutableStates.distinct.map(_._3 + "\n")
+    val initCodes = mutableStateInitCode.distinct.map(_ + "\n")
+
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.
     splitExpressions(expressions = initCodes, funcName = "init", arguments = Nil)
@@ -841,6 +983,15 @@ class CodegenContext {
       // inline execution if only one block
       blocks.head
     } else {
+      if (Utils.isTesting) {
+        // Passing global variables to the split method is dangerous, as any mutating to it is
+        // ignored and may lead to unexpected behavior.
+        arguments.foreach { case (_, name) =>
+          assert(!mutableStateNames.contains(name),
+            s"split function argument $name cannot be a global variable.")
+        }
+      }
+
       val func = freshName(funcName)
       val argString = arguments.map { case (t, name) => s"$t $name" }.mkString(", ")
       val functions = blocks.zipWithIndex.map { case (body, i) =>
@@ -876,7 +1027,7 @@ class CodegenContext {
    *
    * @param expressions the codes to evaluate expressions.
    */
-  def buildCodeBlocks(expressions: Seq[String]): Seq[String] = {
+  private def buildCodeBlocks(expressions: Seq[String]): Seq[String] = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     var length = 0
@@ -1025,9 +1176,9 @@ class CodegenContext {
     val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
     commonExprs.foreach { e =>
       val expr = e.head
-      val fnName = freshName("evalExpr")
-      val isNull = s"${fnName}IsNull"
-      val value = s"${fnName}Value"
+      val fnName = freshName("subExpr")
+      val isNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
+      val value = addMutableState(javaType(expr.dataType), "subExprValue")
 
       // Generate the code for this expression tree and wrap it in a function.
       val eval = expr.genCode(this)
@@ -1053,9 +1204,6 @@ class CodegenContext {
       //   2. Less code.
       // Currently, we will do this for all non-leaf only expression trees (i.e. expr trees with
       // at least two nodes) as the cost of doing it is expected to be low.
-      addMutableState(JAVA_BOOLEAN, isNull, s"$isNull = false;")
-      addMutableState(javaType(expr.dataType), value,
-        s"$value = ${defaultValue(expr.dataType)};")
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
       val state = SubExprEliminationState(isNull, value)
@@ -1178,6 +1326,15 @@ object CodeGenerator extends Logging {
   // threshold of 1000k bytes to determine when a function should be inlined to a private, inner
   // class.
   val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
+
+  // This is the threshold for the number of global variables, whose types are primitive type or
+  // complex type (e.g. more than one-dimensional array), that will be placed at the outer class
+  val OUTER_CLASS_VARIABLES_THRESHOLD = 10000
+
+  // This is the maximum number of array elements to keep global variables in one Java array
+  // 32767 is the maximum integer value that does not require a constant pool entry in a Java
+  // bytecode instruction
+  val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
 
   /**
    * Compile the Java source code into a Java class, using Janino.

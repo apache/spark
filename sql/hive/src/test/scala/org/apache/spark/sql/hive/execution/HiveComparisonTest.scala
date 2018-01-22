@@ -48,6 +48,8 @@ import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
 abstract class HiveComparisonTest
   extends SparkFunSuite with BeforeAndAfterAll with GivenWhenThen {
 
+  override protected val enableAutoThreadAudit = false
+
   /**
    * Path to the test datasets. We find this by looking up "hive-test-path-helper.txt" file.
    *

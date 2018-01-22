@@ -829,7 +829,18 @@ private[spark] object Utils extends Logging {
   }
 
   private def getOrCreateLocalRootDirsImpl(conf: SparkConf): Array[String] = {
-    getConfiguredLocalDirs(conf).flatMap { root =>
+    val configuredLocalDirs = getConfiguredLocalDirs(conf)
+    val uris = configuredLocalDirs.filter { root =>
+      // Here, we guess if the given value is a URI at its best - check if scheme is set.
+      Try(new URI(root).getScheme != null).getOrElse(false)
+    }
+    if (uris.nonEmpty) {
+      logWarning(
+        "The configured local directories are not expected to be URIs; however, got suspicious " +
+        s"values [${uris.mkString(", ")}]. Please check your configured local directories.")
+    }
+
+    configuredLocalDirs.flatMap { root =>
       try {
         val rootDir = new File(root)
         if (rootDir.exists || rootDir.mkdirs()) {
@@ -2640,14 +2651,28 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
+   * its value is replaced with a dummy text.
+   */
+  def redact(regex: Option[Regex], kvs: Seq[(String, String)]): Seq[(String, String)] = {
+    regex match {
+      case None => kvs
+      case Some(r) => redact(r, kvs)
+    }
+  }
+
+  /**
    * Redact the sensitive information in the given string.
    */
-  def redact(conf: SparkConf, text: String): String = {
-    if (text == null || text.isEmpty || conf == null || !conf.contains(STRING_REDACTION_PATTERN)) {
-      text
-    } else {
-      val regex = conf.get(STRING_REDACTION_PATTERN).get
-      regex.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+  def redact(regex: Option[Regex], text: String): String = {
+    regex match {
+      case None => text
+      case Some(r) =>
+        if (text == null || text.isEmpty) {
+          text
+        } else {
+          r.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+        }
     }
   }
 
@@ -2744,6 +2769,42 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * Check the validity of the given Kubernetes master URL and return the resolved URL. Prefix
+   * "k8s://" is appended to the resolved URL as the prefix is used by KubernetesClusterManager
+   * in canCreate to determine if the KubernetesClusterManager should be used.
+   */
+  def checkAndGetK8sMasterUrl(rawMasterURL: String): String = {
+    require(rawMasterURL.startsWith("k8s://"),
+      "Kubernetes master URL must start with k8s://.")
+    val masterWithoutK8sPrefix = rawMasterURL.substring("k8s://".length)
+
+    // To handle master URLs, e.g., k8s://host:port.
+    if (!masterWithoutK8sPrefix.contains("://")) {
+      val resolvedURL = s"https://$masterWithoutK8sPrefix"
+      logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
+        s"URL is $resolvedURL.")
+      return s"k8s://$resolvedURL"
+    }
+
+    val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
+    val resolvedURL = masterScheme.toLowerCase match {
+      case "https" =>
+        masterWithoutK8sPrefix
+      case "http" =>
+        logWarning("Kubernetes master URL uses HTTP instead of HTTPS.")
+        masterWithoutK8sPrefix
+      case null =>
+        val resolvedURL = s"https://$masterWithoutK8sPrefix"
+        logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
+          s"URL is $resolvedURL.")
+        resolvedURL
+      case _ =>
+        throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme)
+    }
+
+    s"k8s://$resolvedURL"
+  }
 }
 
 private[util] object CallerContext extends Logging {

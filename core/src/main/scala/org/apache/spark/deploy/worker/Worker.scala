@@ -441,7 +441,7 @@ private[deploy] class Worker(
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker
       // rpcEndpoint.
       // Copy ids so that it can be used in the cleanup thread.
-      val appIds = executors.values.map(_.appId).toSet
+      val appIds = (executors.values.map(_.appId) ++ drivers.values.map(_.driverId)).toSet
       val cleanupFuture = concurrent.Future {
         val appDirs = workDir.listFiles()
         if (appDirs == null) {

@@ -237,12 +237,19 @@ class Dataset[T] private[sql](
   private[sql] def showString(
       _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
     val numRows = _numRows.max(0).min(Int.MaxValue - 1)
-    val takeResult = toDF().take(numRows + 1)
+    val newDf = toDF()
+    val castCols = newDf.logicalPlan.output.map { col =>
+      // Since binary types in top-level schema fields have a specific format to print,
+      // so we do not cast them to strings here.
+      if (col.dataType == BinaryType) {
+        Column(col)
+      } else {
+        Column(col).cast(StringType)
+      }
+    }
+    val takeResult = newDf.select(castCols: _*).take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
-
-    lazy val timeZone =
-      DateTimeUtils.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone)
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond `truncate` characters, replace it with the
@@ -252,12 +259,6 @@ class Dataset[T] private[sql](
         val str = cell match {
           case null => "null"
           case binary: Array[Byte] => binary.map("%02X".format(_)).mkString("[", " ", "]")
-          case array: Array[_] => array.mkString("[", ", ", "]")
-          case seq: Seq[_] => seq.mkString("[", ", ", "]")
-          case d: Date =>
-            DateTimeUtils.dateToString(DateTimeUtils.fromJavaDate(d))
-          case ts: Timestamp =>
-            DateTimeUtils.timestampToString(DateTimeUtils.fromJavaTimestamp(ts), timeZone)
           case _ => cell.toString
         }
         if (truncate > 0 && str.length > truncate) {
@@ -401,6 +402,10 @@ class Dataset[T] private[sql](
    * If the schema of the Dataset does not match the desired `U` type, you can use `select`
    * along with `alias` or `as` to rearrange or rename as required.
    *
+   * Note that `as[]` only changes the view of the data that is passed into typed operations,
+   * such as `map()`, and does not eagerly project away any columns that are not present in
+   * the specified class.
+   *
    * @group basic
    * @since 1.6.0
    */
@@ -527,7 +532,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def checkpoint(): Dataset[T] = checkpoint(eager = true)
+  def checkpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = true)
 
   /**
    * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
@@ -540,9 +545,52 @@ class Dataset[T] private[sql](
    */
   @Experimental
   @InterfaceStability.Evolving
-  def checkpoint(eager: Boolean): Dataset[T] = {
+  def checkpoint(eager: Boolean): Dataset[T] = checkpoint(eager = eager, reliableCheckpoint = true)
+
+  /**
+   * Eagerly locally checkpoints a Dataset and return the new Dataset. Checkpointing can be
+   * used to truncate the logical plan of this Dataset, which is especially useful in iterative
+   * algorithms where the plan may grow exponentially. Local checkpoints are written to executor
+   * storage and despite potentially faster they are unreliable and may compromise job completion.
+   *
+   * @group basic
+   * @since 2.3.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def localCheckpoint(): Dataset[T] = checkpoint(eager = true, reliableCheckpoint = false)
+
+  /**
+   * Locally checkpoints a Dataset and return the new Dataset. Checkpointing can be used to truncate
+   * the logical plan of this Dataset, which is especially useful in iterative algorithms where the
+   * plan may grow exponentially. Local checkpoints are written to executor storage and despite
+   * potentially faster they are unreliable and may compromise job completion.
+   *
+   * @group basic
+   * @since 2.3.0
+   */
+  @Experimental
+  @InterfaceStability.Evolving
+  def localCheckpoint(eager: Boolean): Dataset[T] = checkpoint(
+    eager = eager,
+    reliableCheckpoint = false
+  )
+
+  /**
+   * Returns a checkpointed version of this Dataset.
+   *
+   * @param eager Whether to checkpoint this dataframe immediately
+   * @param reliableCheckpoint Whether to create a reliable checkpoint saved to files inside the
+   *                           checkpoint directory. If false creates a local checkpoint using
+   *                           the caching subsystem
+   */
+  private def checkpoint(eager: Boolean, reliableCheckpoint: Boolean): Dataset[T] = {
     val internalRdd = queryExecution.toRdd.map(_.copy())
-    internalRdd.checkpoint()
+    if (reliableCheckpoint) {
+      internalRdd.checkpoint()
+    } else {
+      internalRdd.localCheckpoint()
+    }
 
     if (eager) {
       internalRdd.count()
@@ -1855,7 +1903,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new Dataset containing rows in this Dataset but not in another Dataset.
-   * This is equivalent to `EXCEPT` in SQL.
+   * This is equivalent to `EXCEPT DISTINCT` in SQL.
    *
    * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.
@@ -2048,7 +2096,7 @@ class Dataset[T] private[sql](
     val generator = UserDefinedGenerator(elementSchema, rowFunction, input.map(_.expr))
 
     withPlan {
-      Generate(generator, join = true, outer = false,
+      Generate(generator, unrequiredChildIndex = Nil, outer = false,
         qualifier = None, generatorOutput = Nil, planWithBarrier)
     }
   }
@@ -2089,7 +2137,7 @@ class Dataset[T] private[sql](
     val generator = UserDefinedGenerator(elementSchema, rowFunction, apply(inputColumn).expr :: Nil)
 
     withPlan {
-      Generate(generator, join = true, outer = false,
+      Generate(generator, unrequiredChildIndex = Nil, outer = false,
         qualifier = None, generatorOutput = Nil, planWithBarrier)
     }
   }

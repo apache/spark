@@ -40,10 +40,11 @@ private[sql] object CreateJacksonParser extends Serializable {
   }
 
   def text(jsonFactory: JsonFactory, record: Text): JsonParser = {
-    jsonFactory.createParser(record.getBytes, 0, record.getLength)
+    val bain = new ByteArrayInputStream(record.getBytes, 0, record.getLength)
+    jsonFactory.createParser(new InputStreamReader(bain, "UTF-8"))
   }
 
   def inputStream(jsonFactory: JsonFactory, record: InputStream): JsonParser = {
-    jsonFactory.createParser(record)
+    jsonFactory.createParser(new InputStreamReader(record, "UTF-8"))
   }
 }

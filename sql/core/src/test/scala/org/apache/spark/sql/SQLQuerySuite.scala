@@ -28,8 +28,6 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1519,24 +1517,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("decimal precision with multiply/division") {
-    checkAnswer(sql("select 10.3 * 3.0"), Row(BigDecimal("30.90")))
-    checkAnswer(sql("select 10.3000 * 3.0"), Row(BigDecimal("30.90000")))
-    checkAnswer(sql("select 10.30000 * 30.0"), Row(BigDecimal("309.000000")))
-    checkAnswer(sql("select 10.300000000000000000 * 3.000000000000000000"),
-      Row(BigDecimal("30.900000000000000000000000000000000000", new MathContext(38))))
-    checkAnswer(sql("select 10.300000000000000000 * 3.0000000000000000000"),
-      Row(null))
-
-    checkAnswer(sql("select 10.3 / 3.0"), Row(BigDecimal("3.433333")))
-    checkAnswer(sql("select 10.3000 / 3.0"), Row(BigDecimal("3.4333333")))
-    checkAnswer(sql("select 10.30000 / 30.0"), Row(BigDecimal("0.343333333")))
-    checkAnswer(sql("select 10.300000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.433333333333333333333333333", new MathContext(38))))
-    checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.4333333333333333333333333333", new MathContext(38))))
-  }
-
   test("SPARK-10215 Div of Decimal returns null") {
     val d = Decimal(1.12321).toBigDecimal
     val df = Seq((d, 1)).toDF("a", "b")
@@ -2719,6 +2699,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-23079: constraints should be inferred correctly with aliases") {
+    withTable("t") {
+      spark.range(5).write.saveAsTable("t")
+      val t = spark.read.table("t")
+      val left = t.withColumn("xid", $"id" + lit(1)).as("x")
+      val right = t.withColumnRenamed("id", "xid").as("y")
+      val df = left.join(right, "xid").filter("id = 3").toDF()
+      checkAnswer(df, Row(4, 3))
+    }
+  }
+
   test("SRARK-22266: the same aggregate function was calculated multiple times") {
     val query = "SELECT a, max(b+1), max(b+1) + 1 FROM testData2 GROUP BY a"
     val df = sql(query)
@@ -2756,50 +2747,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         // The DESC TABLE should report same schema as table scan.
         assert(sql("desc t").select("col_name")
           .as[String].collect().mkString(",").contains("i,p,j"))
-      }
-    }
-  }
-
-  // Only New OrcFileFormat supports this
-  Seq(classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName,
-      "parquet").foreach { format =>
-    test(s"SPARK-15474 Write and read back non-emtpy schema with empty dataframe - $format") {
-      withTempPath { file =>
-        val path = file.getCanonicalPath
-        val emptyDf = Seq((true, 1, "str")).toDF.limit(0)
-        emptyDf.write.format(format).save(path)
-
-        val df = spark.read.format(format).load(path)
-        assert(df.schema.sameType(emptyDf.schema))
-        checkAnswer(df, emptyDf)
-      }
-    }
-  }
-
-  test("SPARK-21791 ORC should support column names with dot") {
-    val orc = classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName
-    withTempDir { dir =>
-      val path = new File(dir, "orc").getCanonicalPath
-      Seq(Some(1), None).toDF("col.dots").write.format(orc).save(path)
-      assert(spark.read.format(orc).load(path).collect().length == 2)
-    }
-  }
-
-  test("SPARK-20728 Make ORCFileFormat configurable between sql/hive and sql/core") {
-    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
-      val e = intercept[AnalysisException] {
-        sql("CREATE TABLE spark_20728(a INT) USING ORC")
-      }
-      assert(e.message.contains("Hive built-in ORC data source must be used with Hive support"))
-    }
-
-    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "native") {
-      withTable("spark_20728") {
-        sql("CREATE TABLE spark_20728(a INT) USING ORC")
-        val fileFormat = sql("SELECT * FROM spark_20728").queryExecution.analyzed.collectFirst {
-          case l: LogicalRelation => l.relation.asInstanceOf[HadoopFsRelation].fileFormat.getClass
-        }
-        assert(fileFormat == Some(classOf[OrcFileFormat]))
       }
     }
   }
