@@ -199,7 +199,7 @@ class UDFRegistration(object):
     @ignore_unicode_prefix
     @since("1.3.1")
     def register(self, name, f, returnType=None):
-        """Registers a Python function (including lambda function) or a user-defined function
+        """Register a Python function (including lambda function) or a user-defined function
         as a SQL function.
 
         :param name: name of the user-defined function in SQL statements.
@@ -210,12 +210,12 @@ class UDFRegistration(object):
             be either a :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
         :return: a user-defined function.
 
-        `returnType` can be optionally specified when `f` is a Python function but not
-        when `f` is a user-defined function. Please see below.
-
-        To register a non-deterministic Python function, users need to first build
+        To register a nondeterministic Python function, users need to first build
         a nondeterministic user-defined function for the Python function and then register it
         as a SQL function.
+
+        `returnType` can be optionally specified when `f` is a Python function but not
+        when `f` is a user-defined function. Please see below.
 
         1. When `f` is a Python function:
 
