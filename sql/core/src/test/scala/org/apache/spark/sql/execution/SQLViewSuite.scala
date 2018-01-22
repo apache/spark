@@ -663,7 +663,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         }.getMessage
         assert(e.contains("The depth of view `default`.`view0` exceeds the maximum view " +
           "resolution depth (10). Analysis is aborted to avoid errors. Increase the value " +
-          "of spark.sql.view.maxNestedViewDepth to work aroud this."))
+          "of spark.sql.view.maxNestedViewDepth to work around this."))
       }
 
       val e = intercept[IllegalArgumentException] {
