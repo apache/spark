@@ -445,10 +445,14 @@ private[spark] object JsonProtocol {
   }
 
   def storageLevelToJson(storageLevel: StorageLevel): JValue = {
-    ("Use Disk" -> storageLevel.useDisk) ~
-    ("Use Memory" -> storageLevel.useMemory) ~
-    ("Deserialized" -> storageLevel.deserialized) ~
-    ("Replication" -> storageLevel.replication)
+    storageLevel.name match {
+      case Some(name) => name
+      case None =>
+        ("Use Disk" -> storageLevel.useDisk) ~
+        ("Use Memory" -> storageLevel.useMemory) ~
+        ("Deserialized" -> storageLevel.deserialized) ~
+        ("Replication" -> storageLevel.replication)
+    }
   }
 
   def blockStatusToJson(blockStatus: BlockStatus): JValue = {
@@ -988,12 +992,20 @@ private[spark] object JsonProtocol {
     rddInfo
   }
 
-  def storageLevelFromJson(json: JValue): StorageLevel = {
-    val useDisk = (json \ "Use Disk").extract[Boolean]
-    val useMemory = (json \ "Use Memory").extract[Boolean]
-    val deserialized = (json \ "Deserialized").extract[Boolean]
-    val replication = (json \ "Replication").extract[Int]
-    StorageLevel(useDisk, useMemory, deserialized, replication)
+  def storageLevelFromJson(json: JValue): StorageLevel = json match {
+    case _: JString =>
+      // One of the predefined storage levels, e.g. "DISK_ONLY".
+      StorageLevel.fromString(json.extract[String])
+    case _: JObject =>
+      // Generic case for compatibility with older event logs and for
+      // user-defined storage levels.
+      val useDisk = (json \ "Use Disk").extract[Boolean]
+      val useMemory = (json \ "Use Memory").extract[Boolean]
+      val deserialized = (json \ "Deserialized").extract[Boolean]
+      val replication = (json \ "Replication").extract[Int]
+      StorageLevel(useDisk, useMemory, deserialized, replication)
+    case _ =>
+      throw new IllegalArgumentException(s"unexpected json value $json for storage level")
   }
 
   def blockStatusFromJson(json: JValue): BlockStatus = {
