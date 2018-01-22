@@ -200,7 +200,7 @@ class UDFRegistration(object):
     @since("1.3.1")
     def register(self, name, f, returnType=None):
         """Registers a Python function (including lambda function) or a user-defined function
-        in SQL statements.
+        as a SQL function.
 
         :param name: name of the user-defined function in SQL statements.
         :param f: a Python function, or a user-defined function. The user-defined function can
@@ -212,6 +212,10 @@ class UDFRegistration(object):
 
         `returnType` can be optionally specified when `f` is a Python function but not
         when `f` is a user-defined function. Please see below.
+
+        To register a non-deterministic Python function, users need to first build
+        a nondeterministic user-defined function for the Python function and then register it
+        as a SQL function.
 
         1. When `f` is a Python function:
 
@@ -297,7 +301,7 @@ class UDFRegistration(object):
     @ignore_unicode_prefix
     @since(2.3)
     def registerJavaFunction(self, name, javaClassName, returnType=None):
-        """Register a Java user-defined function so it can be used in SQL statements.
+        """Register a Java user-defined function as a SQL function.
 
         In addition to a name and the function itself, the return type can be optionally specified.
         When the return type is not specified we would infer it via reflection.
@@ -334,7 +338,7 @@ class UDFRegistration(object):
     @ignore_unicode_prefix
     @since(2.3)
     def registerJavaUDAF(self, name, javaClassName):
-        """Register a Java user-defined aggregate function so it can be used in SQL statements.
+        """Register a Java user-defined aggregate function as a SQL function.
 
         :param name: name of the user-defined aggregate function
         :param javaClassName: fully qualified name of java class
