@@ -112,6 +112,7 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
   private[scheduler] def start(sc: SparkContext): Unit = {
     if (started.compareAndSet(false, true)) {
       this.sc = sc
+      lastReportTimestamp = System.currentTimeMillis()
       dispatchThread.start()
     } else {
       throw new IllegalStateException(s"$name already started!")
