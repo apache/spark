@@ -1074,6 +1074,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val DECIMAL_OPERATIONS_NULL_ON_OVERFLOW =
+    buildConf("spark.sql.decimalOperations.nullOnOverflow")
+      .internal()
+      .doc("When true (default), if an overflow on a decimal occurs, then NULL is returned. " +
+        "Spark's older versions and Hive behave in this way. If turned to false, SQL ANSI 2011 " +
+        "specification, will be followed instead: an arithmetic exception is thrown. This is " +
+        "what most of the SQL databases do.")
+      .booleanConf
+      .createWithDefault(true)
+
   val SQL_STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.sql.redaction.string.regex")
       .doc("Regex to decide which parts of strings produced by Spark contain sensitive " +
@@ -1452,6 +1462,8 @@ class SQLConf extends Serializable with Logging {
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
   def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
+
+  def decimalOperationsNullOnOverflow: Boolean = getConf(DECIMAL_OPERATIONS_NULL_ON_OVERFLOW)
 
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 

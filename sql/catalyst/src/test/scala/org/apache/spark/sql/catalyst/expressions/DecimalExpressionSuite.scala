@@ -45,18 +45,27 @@ class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("CheckOverflow") {
     val d1 = Decimal("10.1")
-    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 0)), Decimal("10"))
-    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 1)), d1)
-    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 2)), d1)
-    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 3)), null)
+    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 0), true), Decimal("10"))
+    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 1), true), d1)
+    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 2), true), d1)
+    checkEvaluation(CheckOverflow(Literal(d1), DecimalType(4, 3), true), null)
+    intercept[ArithmeticException](CheckOverflow(Literal(d1), DecimalType(4, 3), false).eval())
+    intercept[ArithmeticException](checkEvaluationWithGeneratedMutableProjection(
+      CheckOverflow(Literal(d1), DecimalType(4, 3), false), null))
 
     val d2 = Decimal(101, 3, 1)
-    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 0)), Decimal("10"))
-    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 1)), d2)
-    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 2)), d2)
-    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 3)), null)
+    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 0), true), Decimal("10"))
+    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 1), true), d2)
+    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 2), true), d2)
+    checkEvaluation(CheckOverflow(Literal(d2), DecimalType(4, 3), true), null)
+    intercept[ArithmeticException](CheckOverflow(Literal(d2), DecimalType(4, 3), false).eval())
+    intercept[ArithmeticException](checkEvaluationWithGeneratedMutableProjection(
+      CheckOverflow(Literal(d2), DecimalType(4, 3), false), null))
 
-    checkEvaluation(CheckOverflow(Literal.create(null, DecimalType(2, 1)), DecimalType(3, 2)), null)
+    checkEvaluation(CheckOverflow(
+      Literal.create(null, DecimalType(2, 1)), DecimalType(3, 2), true), null)
+    checkEvaluation(CheckOverflow(
+      Literal.create(null, DecimalType(2, 1)), DecimalType(3, 2), false), null)
   }
 
 }

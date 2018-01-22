@@ -21,6 +21,7 @@ import java.lang.{Long => JLong}
 import java.math.{BigInteger, MathContext, RoundingMode}
 
 import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 
 /**
@@ -32,7 +33,7 @@ import org.apache.spark.sql.AnalysisException
  * - Otherwise, the decimal value is longVal / (10 ** _scale)
  */
 @InterfaceStability.Unstable
-final class Decimal extends Ordered[Decimal] with Serializable {
+final class Decimal extends Ordered[Decimal] with Serializable with Logging {
   import org.apache.spark.sql.types.Decimal._
 
   private var decimalVal: BigDecimal = null
@@ -237,14 +238,26 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   /**
    * Create new `Decimal` with given precision and scale.
    *
-   * @return a non-null `Decimal` value if successful or `null` if overflow would occur.
+   * @return a non-null `Decimal` value if successful. Otherwise, if `nullOnOverflow` is true, null
+   *         is returned; if `nullOnOverflow` is false, an `ArithmeticException` is thrown.
    */
   private[sql] def toPrecision(
       precision: Int,
       scale: Int,
-      roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP): Decimal = {
+      roundMode: BigDecimal.RoundingMode.Value = ROUND_HALF_UP,
+      nullOnOverflow: Boolean = true): Decimal = {
     val copy = clone()
-    if (copy.changePrecision(precision, scale, roundMode)) copy else null
+    if (copy.changePrecision(precision, scale, roundMode)) {
+      copy
+    } else {
+      val message = s"$toDebugString cannot be represented as Decimal($precision, $scale)."
+      if (nullOnOverflow) {
+        logWarning(s"$message NULL is returned.")
+        null
+      } else {
+        throw new ArithmeticException(message)
+      }
+    }
   }
 
   /**
