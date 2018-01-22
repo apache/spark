@@ -238,6 +238,7 @@ def build_spark_documentation():
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
     else:
         run_cmd([jekyll_bin, "build"])
+
     os.chdir(SPARK_HOME)
 
 
