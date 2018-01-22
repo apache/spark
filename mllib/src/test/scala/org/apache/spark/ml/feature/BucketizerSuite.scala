@@ -134,8 +134,9 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
 
   test("Bucket continuous features, with NULL data but non-NaN splits") {
     val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity)
-    val validData: Array[Double] =
+    val validData: Array[java.lang.Double] =
       Array(-0.9, -0.5, -0.3, 0.0, 0.2, 0.5, 0.9, null, null, null)
+        .asInstanceOf[Array[java.lang.Double]]
     val expectedBuckets = Array(0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 4.0)
     val dataFrame: DataFrame = validData.zip(expectedBuckets).toSeq.toDF("feature", "expected")
 
@@ -167,8 +168,8 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
 
   test("Bucket continuous features, with NULL and NaN data but non-NaN splits") {
     val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity)
-    val validData: Array[Double] =
-      Array(-0.9, -0.5, -0.3, 0.0, 0.2, 0.5, 0.9, null, Double.NaN, null)
+    val validData: Array[java.lang.Double] = Array(-0.9, -0.5, -0.3, 0.0, 0.2, 0.5, 0.9, null, Double.NaN, null)
+        .asInstanceOf[Array[java.lang.Double]]
     val expectedBuckets = Array(0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 4.0)
     val dataFrame: DataFrame = validData.zip(expectedBuckets).toSeq.toDF("feature", "expected")
 
