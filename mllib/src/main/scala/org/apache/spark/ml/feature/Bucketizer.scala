@@ -31,6 +31,8 @@ import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
+import scala.None
+
 /**
  * `Bucketizer` maps a column of continuous features to a column of feature buckets. Since 2.3.0,
  * `Bucketizer` can map multiple columns at once by setting the `inputCols` parameter. Note that
@@ -179,7 +181,9 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
     val bucketizers: Seq[UserDefinedFunction] = seqOfSplits.zipWithIndex.map { case (splits, idx) =>
       udf { (feature: java.lang.Double) =>
-        Bucketizer.binarySearchForBuckets(splits, Option(feature), keepInvalid)
+        Bucketizer.binarySearchForBuckets(splits,
+          if (feature == null) None else Option(feature.toDouble),
+          keepInvalid)
       }.withName(s"bucketizer_$idx")
     }
 
@@ -278,7 +282,7 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
         throw new SparkException("Bucketizer encountered NaN/NULL values. " +
           "To handle or skip NaNs/NULLs, try setting Bucketizer.handleInvalid.")
       }
-    } else if (feature == splits.last) {
+    } else if (feature.get == splits.last) {
       splits.length - 2
     } else {
       val idx = ju.Arrays.binarySearch(splits, feature.get)
@@ -287,7 +291,7 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
       } else {
         val insertPos = -idx - 1
         if (insertPos == 0 || insertPos == splits.length) {
-          throw new SparkException(s"Feature value ${feature} out of Bucketizer bounds" +
+          throw new SparkException(s"Feature value ${feature.get} out of Bucketizer bounds" +
             s" [${splits.head}, ${splits.last}].  Check your features, or loosen " +
             s"the lower/upper bound constraints.")
         } else {
