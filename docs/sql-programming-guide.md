@@ -580,6 +580,9 @@ default local Hive metastore (using Derby) for you. Unlike the `createOrReplaceT
 Hive metastore. Persistent tables will still exist even after your Spark program has restarted, as
 long as you maintain your connection to the same metastore. A DataFrame for a persistent table can
 be created by calling the `table` method on a `SparkSession` with the name of the table.
+Notice that for `DataFrames` is built on Hive table, `insertInto` should be used instead of `saveAsTable`.
+Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based resolution.
+More detailed explanations can be found in API document.
 
 For file-based data source, e.g. text, parquet, json, etc. you can specify a custom table path via the
 `path` option, e.g. `df.write.option("path", "/some/path").saveAsTable("t")`. When the table is dropped,
