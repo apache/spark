@@ -35,8 +35,6 @@ The migration guide for the current Spark version is kept on the [MLlib Guide ma
  `KMeans` returns potentially fewer than k cluster centers in cases where k distinct centroids aren't available or aren't selected.
 * [SPARK-17389](https://issues.apache.org/jira/browse/SPARK-17389):
  `KMeans` reduces the default number of steps from 5 to 2 for the k-means|| initialization mode.
-* [SPARK-19781](https://issues.apache.org/jira/browse/SPARK-19781):
- `Bucketizer` handles NULL values the same way as NaN when handleInvalid is skip or keep.
 
 ## From 1.6 to 2.0
 
