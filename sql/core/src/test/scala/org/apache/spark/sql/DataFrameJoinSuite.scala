@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
@@ -276,16 +277,14 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-23087: don't throw Analysis Exception in CheckCartesianProduct when join condition " +
     "is false or null") {
-    val df = spark.range(10)
-    val dfNull = spark.range(10).select(lit(null).as("b"))
-    val planNull = df.join(dfNull, $"id" === $"b", "left").queryExecution.analyzed
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      val df = spark.range(10)
+      val dfNull = spark.range(10).select(lit(null).as("b"))
+      df.join(dfNull, $"id" === $"b", "left").queryExecution.optimizedPlan
 
-    spark.sessionState.executePlan(planNull).optimizedPlan
-
-    val dfOne = df.select(lit(1).as("a"))
-    val dfTwo = spark.range(10).select(lit(2).as("b"))
-    val planFalse = dfOne.join(dfTwo, $"a" === $"b", "left").queryExecution.analyzed
-
-    spark.sessionState.executePlan(planFalse).optimizedPlan
+      val dfOne = df.select(lit(1).as("a"))
+      val dfTwo = spark.range(10).select(lit(2).as("b"))
+      dfOne.join(dfTwo, $"a" === $"b", "left").queryExecution.optimizedPlan
+    }
   }
 }
