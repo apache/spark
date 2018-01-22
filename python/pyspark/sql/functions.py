@@ -2226,7 +2226,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     3. GROUP_AGG
 
        A group aggregate UDF defines a transformation: One or more `pandas.Series` -> A scalar
-       The `returnType` should be a primitive data type, e.g, :class:`DoubleType`.
+       The `returnType` should be a primitive data type, e.g., :class:`DoubleType`.
        The returned scalar can be either a python primitive type, e.g., `int` or `float`
        or a numpy data type, e.g., `numpy.int64` or `numpy.float64`.
 
