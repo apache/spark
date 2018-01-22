@@ -120,6 +120,12 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         assert(groupByColB.queryExecution.executedPlan.collectFirst {
           case e: ShuffleExchangeExec => e
         }.isDefined)
+
+        val groupByAPlusB = df.groupBy('a + 'b).agg(count("*"))
+        checkAnswer(groupByAPlusB, Seq(Row(5, 2), Row(6, 2), Row(8, 1), Row(9, 1)))
+        assert(groupByAPlusB.queryExecution.executedPlan.collectFirst {
+          case e: ShuffleExchangeExec => e
+        }.isDefined)
       }
     }
   }

@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.sources.v2.reader.{ClusteredDistribution, Partitioning}
 
 /**
- * An adapter from public data source partitioning to catalyst internal partitioning.
+ * An adapter from public data source partitioning to catalyst internal `Partitioning`.
  */
 class DataSourcePartitioning(
     partitioning: Partitioning,
@@ -33,7 +33,7 @@ class DataSourcePartitioning(
   override def satisfies(required: physical.Distribution): Boolean = {
     super.satisfies(required) || {
       required match {
-        case d: physical.ClusteredDistribution if d.clustering.forall(_.isInstanceOf[Attribute]) =>
+        case d: physical.ClusteredDistribution if isCandidate(d.clustering) =>
           val attrs = d.clustering.map(_.asInstanceOf[Attribute])
           partitioning.satisfy(
             new ClusteredDistribution(attrs.map { a =>
@@ -44,6 +44,13 @@ class DataSourcePartitioning(
 
         case _ => false
       }
+    }
+  }
+
+  private def isCandidate(clustering: Seq[Expression]): Boolean = {
+    clustering.forall {
+      case a: Attribute => colNames.contains(a)
+      case _ => false
     }
   }
 }

@@ -20,9 +20,9 @@ package org.apache.spark.sql.sources.v2.reader;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * An interface to represent output data partitioning for a data source, which is returned by
+ * An interface to represent the output data partitioning for a data source, which is returned by
  * {@link SupportsReportPartitioning#outputPartitioning()}. Note that this should work like a
- * snapshot, once created, it should be deterministic and always report same number of partitions
+ * snapshot. Once created, it should be deterministic and always report same number of partitions
  * and same "satisfy" result for a certain distribution.
  */
 @InterfaceStability.Evolving

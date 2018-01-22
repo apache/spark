@@ -26,9 +26,9 @@ import org.apache.spark.annotation.InterfaceStability;
  * the data ordering inside one partition(the output records of a single {@link ReadTask}).
  *
  * The instance of this interface is created and provided by Spark, then consumed by
- * {@link Partitioning#satisfy(Distribution)}. This means users don't need to implement
- * this interface, but need to catch as more concrete implementations of this interface as
- * possible in {@link Partitioning#satisfy(Distribution)}.
+ * {@link Partitioning#satisfy(Distribution)}. This means data source developers don't need to
+ * implement this interface, but need to catch as more concrete implementations of this interface
+ * as possible in {@link Partitioning#satisfy(Distribution)}.
  *
  * Concrete implementations until now:
  * <ul>

@@ -26,7 +26,11 @@ import org.apache.spark.annotation.InterfaceStability;
  */
 @InterfaceStability.Evolving
 public class ClusteredDistribution implements Distribution {
-  public String[] clusteredColumns;
+
+  /**
+   * The names of the clustered columns. Note that they are order insensitive.
+   */
+  public final String[] clusteredColumns;
 
   public ClusteredDistribution(String[] clusteredColumns) {
     this.clusteredColumns = clusteredColumns;
