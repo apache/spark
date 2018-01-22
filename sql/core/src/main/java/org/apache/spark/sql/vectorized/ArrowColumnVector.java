@@ -45,6 +45,7 @@ public final class ArrowColumnVector extends ColumnVector {
         childColumns[i].close();
         childColumns[i] = null;
       }
+      childColumns = null;
     }
     accessor.close();
   }
