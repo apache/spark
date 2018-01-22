@@ -58,7 +58,7 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
-   * Whether this SparkPlan support whole stage codegen or not.
+   * Whether this SparkPlan supports whole stage codegen or not.
    */
   def supportCodegen: Boolean = true
 

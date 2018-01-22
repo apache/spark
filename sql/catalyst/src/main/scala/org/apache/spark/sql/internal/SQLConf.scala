@@ -894,7 +894,7 @@ object SQLConf {
       .internal()
       .doc("The number of bins when generating histograms.")
       .intConf
-      .checkValue(num => num > 1, "The number of bins must be large than 1.")
+      .checkValue(num => num > 1, "The number of bins must be larger than 1.")
       .createWithDefault(254)
 
   val PERCENTILE_ACCURACY =
