@@ -62,7 +62,7 @@ class TPCDSQuerySuite extends BenchmarkQueryTest {
         |`c_first_sales_date_sk` INT, `c_salutation` STRING, `c_first_name` STRING,
         |`c_last_name` STRING, `c_preferred_cust_flag` STRING, `c_birth_day` INT,
         |`c_birth_month` INT, `c_birth_year` INT, `c_birth_country` STRING, `c_login` STRING,
-        |`c_email_address` STRING, `c_last_review_date` STRING)
+        |`c_email_address` STRING, `c_last_review_date` INT)
         |USING parquet
       """.stripMargin)
 
@@ -88,7 +88,7 @@ class TPCDSQuerySuite extends BenchmarkQueryTest {
     sql(
       """
         |CREATE TABLE `date_dim` (
-        |`d_date_sk` INT, `d_date_id` STRING, `d_date` STRING,
+        |`d_date_sk` INT, `d_date_id` STRING, `d_date` DATE,
         |`d_month_seq` INT, `d_week_seq` INT, `d_quarter_seq` INT, `d_year` INT, `d_dow` INT,
         |`d_moy` INT, `d_dom` INT, `d_qoy` INT, `d_fy_year` INT, `d_fy_quarter_seq` INT,
         |`d_fy_week_seq` INT, `d_day_name` STRING, `d_quarter_name` STRING, `d_holiday` STRING,
@@ -115,8 +115,8 @@ class TPCDSQuerySuite extends BenchmarkQueryTest {
 
     sql(
       """
-        |CREATE TABLE `item` (`i_item_sk` INT, `i_item_id` STRING, `i_rec_start_date` STRING,
-        |`i_rec_end_date` STRING, `i_item_desc` STRING, `i_current_price` DECIMAL(7,2),
+        |CREATE TABLE `item` (`i_item_sk` INT, `i_item_id` STRING, `i_rec_start_date` DATE,
+        |`i_rec_end_date` DATE, `i_item_desc` STRING, `i_current_price` DECIMAL(7,2),
         |`i_wholesale_cost` DECIMAL(7,2), `i_brand_id` INT, `i_brand` STRING, `i_class_id` INT,
         |`i_class` STRING, `i_category_id` INT, `i_category` STRING, `i_manufact_id` INT,
         |`i_manufact` STRING, `i_size` STRING, `i_formulation` STRING, `i_color` STRING,
@@ -139,8 +139,8 @@ class TPCDSQuerySuite extends BenchmarkQueryTest {
     sql(
       """
         |CREATE TABLE `store` (
-        |`s_store_sk` INT, `s_store_id` STRING, `s_rec_start_date` STRING,
-        |`s_rec_end_date` STRING, `s_closed_date_sk` INT, `s_store_name` STRING,
+        |`s_store_sk` INT, `s_store_id` STRING, `s_rec_start_date` DATE,
+        |`s_rec_end_date` DATE, `s_closed_date_sk` INT, `s_store_name` STRING,
         |`s_number_employees` INT, `s_floor_space` INT, `s_hours` STRING, `s_manager` STRING,
         |`s_market_id` INT, `s_geography_class` STRING, `s_market_desc` STRING,
         |`s_market_manager` STRING, `s_division_id` INT, `s_division_name` STRING,
@@ -157,7 +157,7 @@ class TPCDSQuerySuite extends BenchmarkQueryTest {
         |`sr_returned_date_sk` BIGINT, `sr_return_time_sk` BIGINT, `sr_item_sk` BIGINT,
         |`sr_customer_sk` BIGINT, `sr_cdemo_sk` BIGINT, `sr_hdemo_sk` BIGINT, `sr_addr_sk` BIGINT,
         |`sr_store_sk` BIGINT, `sr_reason_sk` BIGINT, `sr_ticket_number` BIGINT,
-        |`sr_return_quantity` BIGINT, `sr_return_amt` DECIMAL(7,2), `sr_return_tax` DECIMAL(7,2),
+        |`sr_return_quantity` INT, `sr_return_amt` DECIMAL(7,2), `sr_return_tax` DECIMAL(7,2),
         |`sr_return_amt_inc_tax` DECIMAL(7,2), `sr_fee` DECIMAL(7,2),
         |`sr_return_ship_cost` DECIMAL(7,2), `sr_refunded_cash` DECIMAL(7,2),
         |`sr_reversed_charge` DECIMAL(7,2), `sr_store_credit` DECIMAL(7,2),
@@ -225,7 +225,7 @@ class TPCDSQuerySuite extends BenchmarkQueryTest {
         |`wr_refunded_hdemo_sk` BIGINT, `wr_refunded_addr_sk` BIGINT,
         |`wr_returning_customer_sk` BIGINT, `wr_returning_cdemo_sk` BIGINT,
         |`wr_returning_hdemo_sk` BIGINT, `wr_returning_addr_sk` BIGINT, `wr_web_page_sk` BIGINT,
-        |`wr_reason_sk` BIGINT, `wr_order_number` BIGINT, `wr_return_quantity` BIGINT,
+        |`wr_reason_sk` BIGINT, `wr_order_number` BIGINT, `wr_return_quantity` INT,
         |`wr_return_amt` DECIMAL(7,2), `wr_return_tax` DECIMAL(7,2),
         |`wr_return_amt_inc_tax` DECIMAL(7,2), `wr_fee` DECIMAL(7,2),
         |`wr_return_ship_cost` DECIMAL(7,2), `wr_refunded_cash` DECIMAL(7,2),
@@ -244,7 +244,7 @@ class TPCDSQuerySuite extends BenchmarkQueryTest {
         |`web_company_id` INT, `web_company_name` STRING, `web_street_number` STRING,
         |`web_street_name` STRING, `web_street_type` STRING, `web_suite_number` STRING,
         |`web_city` STRING, `web_county` STRING, `web_state` STRING, `web_zip` STRING,
-        |`web_country` STRING, `web_gmt_offset` STRING, `web_tax_percentage` DECIMAL(5,2))
+        |`web_country` STRING, `web_gmt_offset` DECIMAL(5,2), `web_tax_percentage` DECIMAL(5,2))
         |USING parquet
       """.stripMargin)
 
