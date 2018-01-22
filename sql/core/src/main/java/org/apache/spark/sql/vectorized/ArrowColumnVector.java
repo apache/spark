@@ -247,8 +247,8 @@ public final class ArrowColumnVector extends ColumnVector {
 
       childColumns = new ArrowColumnVector[1];
       childColumns[0] = new ArrowColumnVector(listVector.getDataVector());
-    } else if (vector instanceof MapVector) {
-      MapVector mapVector = (MapVector) vector;
+    } else if (vector instanceof NullableMapVector) {
+      NullableMapVector mapVector = (NullableMapVector) vector;
       accessor = new StructAccessor(mapVector);
 
       childColumns = new ArrowColumnVector[mapVector.size()];
@@ -553,9 +553,17 @@ public final class ArrowColumnVector extends ColumnVector {
     }
   }
 
+  /**
+   * Any call to "get" method will throw UnsupportedOperationException.
+   *
+   * Access struct values in a ArrowColumnVector doesn't use this accessor. Instead, it uses
+   * getStruct() method defined in the parent class. Any call to "get" method in this class is a
+   * bug in the code.
+   *
+   */
   private static class StructAccessor extends ArrowVectorAccessor {
 
-    StructAccessor(MapVector vector) {
+    StructAccessor(NullableMapVector vector) {
       super(vector);
     }
   }

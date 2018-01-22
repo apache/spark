@@ -2103,12 +2103,13 @@ def udf(f=None, returnType=StringType()):
     >>> import random
     >>> random_udf = udf(lambda: int(random.random() * 100), IntegerType()).asNondeterministic()
 
-    .. note:: The user-defined functions do not support conditional expressions or short curcuiting
+    .. note:: The user-defined functions do not support conditional expressions or short circuiting
         in boolean expressions and it ends up with being executed all internally. If the functions
         can fail on special rows, the workaround is to incorporate the condition into the functions.
 
     :param f: python function if used as a standalone function
-    :param returnType: a :class:`pyspark.sql.types.DataType` object
+    :param returnType: the return type of the user-defined function. The value can be either a
+        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
@@ -2148,7 +2149,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     Creates a vectorized user defined function (UDF).
 
     :param f: user-defined function. A python function if used as a standalone function
-    :param returnType: a :class:`pyspark.sql.types.DataType` object
+    :param returnType: the return type of the user-defined function. The value can be either a
+        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
                          Default: SCALAR.
 
@@ -2231,7 +2233,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     ...     return pd.Series(np.random.randn(len(v))
     >>> random = random.asNondeterministic()  # doctest: +SKIP
 
-    .. note:: The user-defined functions do not support conditional expressions or short curcuiting
+    .. note:: The user-defined functions do not support conditional expressions or short circuiting
         in boolean expressions and it ends up with being executed all internally. If the functions
         can fail on special rows, the workaround is to incorporate the condition into the functions.
     """

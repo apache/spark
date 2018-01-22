@@ -708,7 +708,7 @@ messages remaining.
 > messaging function.  These constraints allow additional optimization within GraphX.
 
 The following is the type signature of the [Pregel operator][GraphOps.pregel] as well as a *sketch*
-of its implementation (note: to avoid stackOverflowError due to long lineage chains, pregel support periodcally
+of its implementation (note: to avoid stackOverflowError due to long lineage chains, pregel support periodically
 checkpoint graph and messages by setting "spark.graphx.pregel.checkpointInterval" to a positive number,
 say 10. And set checkpoint directory as well using SparkContext.setCheckpointDir(directory: String)):
 
@@ -928,7 +928,7 @@ switch to 2D-partitioning or other heuristics included in GraphX.
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-Once the edges have be partitioned the key challenge to efficient graph-parallel computation is
+Once the edges have been partitioned the key challenge to efficient graph-parallel computation is
 efficiently joining vertex attributes with the edges.  Because real-world graphs typically have more
 edges than vertices, we move vertex attributes to the edges.  Because not all partitions will
 contain edges adjacent to all vertices we internally maintain a routing table which identifies where

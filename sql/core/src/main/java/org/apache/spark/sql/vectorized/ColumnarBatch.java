@@ -20,7 +20,6 @@ import java.util.*;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow;
-import org.apache.spark.sql.types.StructType;
 
 /**
  * This class wraps multiple ColumnVectors as a row-wise table. It provides a row view of this
@@ -28,10 +27,6 @@ import org.apache.spark.sql.types.StructType;
  * the entire data loading process.
  */
 public final class ColumnarBatch {
-  public static final int DEFAULT_BATCH_SIZE = 4 * 1024;
-
-  private final StructType schema;
-  private final int capacity;
   private int numRows;
   private final ColumnVector[] columns;
 
@@ -82,7 +77,6 @@ public final class ColumnarBatch {
    * Sets the number of rows in this batch.
    */
   public void setNumRows(int numRows) {
-    assert(numRows <= this.capacity);
     this.numRows = numRows;
   }
 
@@ -95,16 +89,6 @@ public final class ColumnarBatch {
    * Returns the number of rows for read, including filtered rows.
    */
   public int numRows() { return numRows; }
-
-  /**
-   * Returns the schema that makes up this batch.
-   */
-  public StructType schema() { return schema; }
-
-  /**
-   * Returns the max capacity (in number of rows) for this batch.
-   */
-  public int capacity() { return capacity; }
 
   /**
    * Returns the column at `ordinal`.
@@ -120,10 +104,8 @@ public final class ColumnarBatch {
     return row;
   }
 
-  public ColumnarBatch(StructType schema, ColumnVector[] columns, int capacity) {
-    this.schema = schema;
+  public ColumnarBatch(ColumnVector[] columns) {
     this.columns = columns;
-    this.capacity = capacity;
     this.row = new MutableColumnarRow(columns);
   }
 }
