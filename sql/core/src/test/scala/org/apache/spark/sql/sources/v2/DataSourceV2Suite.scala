@@ -419,7 +419,7 @@ class PartitionAwareDataSource extends DataSourceV2 with ReadSupport {
   class MyPartitioning extends Partitioning {
     override def numPartitions(): Int = 2
 
-    override def satisfy(d: Distribution): Boolean = d match {
+    override def satisfy(distribution: Distribution): Boolean = distribution match {
       case c: ClusteredDistribution => c.clusteredColumns.contains("a")
       case _ => false
     }

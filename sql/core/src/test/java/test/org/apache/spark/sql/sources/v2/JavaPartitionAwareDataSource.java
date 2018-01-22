@@ -60,9 +60,9 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public boolean satisfy(Distribution d) {
-      if (d instanceof ClusteredDistribution) {
-        String[] clusteredCols = ((ClusteredDistribution) d).clusteredColumns;
+    public boolean satisfy(Distribution distribution) {
+      if (distribution instanceof ClusteredDistribution) {
+        String[] clusteredCols = ((ClusteredDistribution) distribution).clusteredColumns;
         return Arrays.asList(clusteredCols).contains("a");
       }
 
