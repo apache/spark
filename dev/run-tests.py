@@ -238,7 +238,6 @@ def build_spark_documentation():
         sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
     else:
         run_cmd([jekyll_bin, "build"])
-
     os.chdir(SPARK_HOME)
 
 
@@ -576,7 +575,10 @@ def main():
                                 for f in changed_files):
         # run_java_style_checks()
         pass
-    if not changed_files or any(f.endswith(".py") for f in changed_files):
+    if not changed_files or any(f.endswith("lint-python")
+                                or f.endswith("tox.ini")
+                                or f.endswith(".py")
+                                for f in changed_files):
         run_python_style_checks()
     if not changed_files or any(f.endswith(".R") for f in changed_files):
         run_sparkr_style_checks()
