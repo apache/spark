@@ -444,14 +444,14 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasInputCols, HasOu
         """
         return self.getOrDefault(self.splits)
 
-    @since("2.4.0")
+    @since("2.3.0")
     def setSplitsArray(self, value):
         """
         Sets the value of :py:attr:`splitsArray`.
         """
         return self._set(splitsArray=value)
 
-    @since("2.4.0")
+    @since("2.3.0")
     def getSplitsArray(self):
         """
         Gets the array of split points or its default value.
