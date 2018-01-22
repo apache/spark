@@ -93,25 +93,6 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("requires window to be ordered"))
   }
 
-  test("aggregation and rows between") {
-    val df = Seq((1, "1"), (2, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        avg("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 2))),
-      Seq(Row(4.0d / 3.0d), Row(4.0d / 3.0d), Row(3.0d / 2.0d), Row(2.0d), Row(2.0d)))
-  }
-
-  test("aggregation and range between") {
-    val df = Seq((1, "1"), (1, "1"), (3, "1"), (2, "2"), (2, "1"), (2, "2")).toDF("key", "value")
-    df.createOrReplaceTempView("window_table")
-    checkAnswer(
-      df.select(
-        avg("key").over(Window.partitionBy($"value").orderBy($"key").rangeBetween(-1, 1))),
-      Seq(Row(4.0d / 3.0d), Row(4.0d / 3.0d), Row(7.0d / 4.0d), Row(5.0d / 2.0d),
-        Row(2.0d), Row(2.0d)))
-  }
-
   test("corr, covar_pop, stddev_pop functions in specific window") {
     val df = Seq(
       ("a", "p1", 10.0, 20.0),
