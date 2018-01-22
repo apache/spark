@@ -1076,8 +1076,10 @@ abstract class RoundBase(child: Expression, scale: Expression,
     val evaluationCode = dataType match {
       case DecimalType.Fixed(_, s) =>
         s"""
-        ${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s, Decimal.$modeStr());
-        ${ev.isNull} = ${ev.value} == null;"""
+           |${ev.value} = ${ce.value}.toPrecision(${ce.value}.precision(), $s,
+           |  Decimal.$modeStr(), true);
+           |${ev.isNull} = ${ev.value} == null;
+         """.stripMargin
       case ByteType =>
         if (_scale < 0) {
           s"""

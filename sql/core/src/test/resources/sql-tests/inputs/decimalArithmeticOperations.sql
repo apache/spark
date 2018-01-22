@@ -78,9 +78,6 @@ select 123456789123456789.1234567890 * 1.123456789123456789;
 -- throw an exception instead of returning NULL, according to SQL ANSI 2011
 set spark.sql.decimalOperations.nullOnOverflow=false;
 
--- test decimal operations
-select id, a+b, a-b, a*b, a/b from decimals_test order by id;
-
 -- test operations between decimals and constants
 select id, a*10, b/10 from decimals_test order by id;
 

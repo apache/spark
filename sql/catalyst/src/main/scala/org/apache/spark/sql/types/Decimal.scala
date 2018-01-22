@@ -250,9 +250,9 @@ final class Decimal extends Ordered[Decimal] with Serializable with Logging {
     if (copy.changePrecision(precision, scale, roundMode)) {
       copy
     } else {
-      val message = s"$toDebugString cannot be represented as Decimal($precision, $scale)."
+      def message = s"$toDebugString cannot be represented as Decimal($precision, $scale)."
       if (nullOnOverflow) {
-        logWarning(s"$message NULL is returned.")
+        if (log.isDebugEnabled) logDebug(s"$message NULL is returned.")
         null
       } else {
         throw new ArithmeticException(message)
