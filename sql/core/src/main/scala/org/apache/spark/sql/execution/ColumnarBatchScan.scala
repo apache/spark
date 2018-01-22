@@ -50,7 +50,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
       dataType: DataType,
       nullable: Boolean): ExprCode = {
     val javaType = ctx.javaType(dataType)
-    val value = ctx.getValue(columnVar, dataType, ordinal)
+    val value = ctx.getValueFromVector(columnVar, dataType, ordinal)
     val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
     val valueVar = ctx.freshName("value")
     val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"

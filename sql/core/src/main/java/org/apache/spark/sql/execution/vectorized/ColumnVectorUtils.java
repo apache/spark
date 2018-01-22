@@ -85,8 +85,8 @@ public class ColumnVectorUtils {
         }
       } else if (t instanceof CalendarIntervalType) {
         CalendarInterval c = (CalendarInterval)row.get(fieldIdx, t);
-        col.getChildColumn(0).putInts(0, capacity, c.months);
-        col.getChildColumn(1).putLongs(0, capacity, c.microseconds);
+        col.getChild(0).putInts(0, capacity, c.months);
+        col.getChild(1).putLongs(0, capacity, c.microseconds);
       } else if (t instanceof DateType) {
         col.putInts(0, capacity, row.getInt(fieldIdx));
       } else if (t instanceof TimestampType) {
@@ -149,8 +149,8 @@ public class ColumnVectorUtils {
       } else if (t instanceof CalendarIntervalType) {
         CalendarInterval c = (CalendarInterval)o;
         dst.appendStruct(false);
-        dst.getChildColumn(0).appendInt(c.months);
-        dst.getChildColumn(1).appendLong(c.microseconds);
+        dst.getChild(0).appendInt(c.months);
+        dst.getChild(1).appendLong(c.microseconds);
       } else if (t instanceof DateType) {
         dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
       } else {
@@ -179,7 +179,7 @@ public class ColumnVectorUtils {
         dst.appendStruct(false);
         Row c = src.getStruct(fieldIdx);
         for (int i = 0; i < st.fields().length; i++) {
-          appendValue(dst.getChildColumn(i), st.fields()[i].dataType(), c, i);
+          appendValue(dst.getChild(i), st.fields()[i].dataType(), c, i);
         }
       }
     } else {

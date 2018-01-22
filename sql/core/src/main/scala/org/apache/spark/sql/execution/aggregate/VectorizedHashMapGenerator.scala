@@ -127,8 +127,8 @@ class VectorizedHashMapGenerator(
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        s"""(${ctx.genEqual(key.dataType, ctx.getValue(s"vectors[$ordinal]", "buckets[idx]",
-          key.dataType), key.name)})"""
+        val value = ctx.getValueFromVector(s"vectors[$ordinal]", key.dataType, "buckets[idx]")
+        s"(${ctx.genEqual(key.dataType, value, key.name)})"
       }.mkString(" && ")
     }
 
