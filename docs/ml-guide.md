@@ -123,7 +123,7 @@ There are no deprecations.
  We are now setting the default parallelism used in `OneVsRest` to be 1 (i.e. serial), in 2.2 and earlier version,
  the `OneVsRest` parallelism would be parallelism of the default threadpool in scala.
 * [SPARK-19781](https://issues.apache.org/jira/browse/SPARK-19781):
- `Bucketizer` handles NULL values the same way as NaN when handleInvalid is skip or keep.
+ `Bucketizer` now creates an additional bucket for NULL values as well as NaN.
 
 ## From 2.1 to 2.2
 
