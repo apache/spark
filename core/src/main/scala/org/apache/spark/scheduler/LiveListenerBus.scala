@@ -33,6 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Asynchronously passes SparkListenerEvents to registered SparkListeners.
@@ -41,7 +42,7 @@ import org.apache.spark.metrics.source.Source
  * has started will events be actually propagated to all attached listeners. This listener bus
  * is stopped when `stop()` is called, and it will drop further events after stopping.
  */
-private[spark] class LiveListenerBus(conf: SparkConf) {
+private[spark] class LiveListenerBus(conf: SparkConf) extends Logging {
 
   import LiveListenerBus._
 
@@ -54,11 +55,19 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
   // Indicate if `stop()` is called
   private val stopped = new AtomicBoolean(false)
 
-  /** A counter for dropped events. It will be reset every time we log it. */
-  private val droppedEventsCounter = new AtomicLong(0L)
+  private val DROPPED_EVENTS_UPDATE_INTERVAL = 2 * 60 * 1000
+
+  /** A counter for total dropped events from all queues. */
+  private val totalDroppedEvents =
+    metrics.metricRegistry.counter(
+      s"livelistenerbus.totalDroppedEvents")
 
   /** When `droppedEventsCounter` was logged last time in milliseconds. */
   @volatile private var lastReportTimestamp = 0L
+
+  private val droppedEventsUpdateScheduler =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor(
+      "droppedevents-collect-scheduler")
 
   private val queues = new CopyOnWriteArrayList[AsyncEventQueue]()
 
@@ -178,6 +187,24 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
     }
 
     this.sparkContext = sc
+    lastReportTimestamp = System.currentTimeMillis()
+    droppedEventsUpdateScheduler.scheduleWithFixedDelay(new Runnable {
+      override def run(): Unit = {
+        val newTotalDroppedEvents: Long = queues.asScala.map { queue =>
+          val queueName = queue.name
+          metrics.metricRegistry.counter(s"queue.$queueName.numDroppedEvents").getCount
+        }.sum
+        val oldTotalDroppedEvents = totalDroppedEvents.getCount
+        val deltaDroppedEvents: Long = newTotalDroppedEvents - oldTotalDroppedEvents
+        if (deltaDroppedEvents > 0) {
+          totalDroppedEvents.inc(deltaDroppedEvents)
+          val prevLastReportTimestamp = lastReportTimestamp
+          lastReportTimestamp = System.currentTimeMillis()
+          val previous = new java.util.Date(prevLastReportTimestamp)
+          logWarning(s"Dropped $deltaDroppedEvents events from LiveListenerBus since $previous.")
+        }
+      }
+    }, DROPPED_EVENTS_UPDATE_INTERVAL, DROPPED_EVENTS_UPDATE_INTERVAL, TimeUnit.MILLISECONDS)
     queues.asScala.foreach { q =>
       q.start(sc)
       queuedEvents.foreach(q.post)
@@ -218,6 +245,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
     synchronized {
       queues.asScala.foreach(_.stop())
       queues.clear()
+      droppedEventsUpdateScheduler.shutdownNow()
     }
   }
 
@@ -235,7 +263,6 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
   private[scheduler] def activeQueues(): Set[String] = {
     queues.asScala.map(_.name).toSet
   }
-
 }
 
 private[spark] object LiveListenerBus {
