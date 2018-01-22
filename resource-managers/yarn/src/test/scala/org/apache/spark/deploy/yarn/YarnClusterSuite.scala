@@ -381,7 +381,9 @@ private object YarnClusterDriver extends Logging with Matchers {
 
       // Verify that the config archive is correctly placed in the classpath of all containers.
       val confFile = "/" + Client.SPARK_CONF_FILE
-      assert(getClass().getResource(confFile) != null)
+      if (conf.getOption(SparkLauncher.DEPLOY_MODE) == Some("cluster")) {
+        assert(getClass().getResource(confFile) != null)
+      }
       val configFromExecutors = sc.parallelize(1 to 4, 4)
         .map { _ => Option(getClass().getResource(confFile)).map(_.toString).orNull }
         .collect()
