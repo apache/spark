@@ -25,11 +25,9 @@ import scala.collection.JavaConverters._
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer, OffsetOutOfRangeException}
 import org.apache.kafka.common.TopicPartition
 
-import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.kafka010.KafkaSource._
 import org.apache.spark.util.UninterruptibleThread
-
 
 /**
  * Consumer of single topicpartition, intended for cached reuse.
@@ -37,16 +35,15 @@ import org.apache.spark.util.UninterruptibleThread
  * but processing the same topicpartition and group id in multiple threads is usually bad anyway.
  */
 private[kafka010] case class CachedKafkaConsumer private(
-    topicPartition: TopicPartition,
-    kafkaParams: ju.Map[String, Object]) extends Logging {
+    val topicPartition: TopicPartition,
+    kafkaParams: ju.Map[String, Object],
+    val reuseConsumer: Boolean) extends Logging {
   import CachedKafkaConsumer._
 
-  private val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
+  private[kafka010] val groupId =
+    kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
   private var consumer = createConsumer
-
-  /** indicates whether this consumer is in use or not */
-  private var inuse = true
 
   /** Iterator to the already fetch data */
   private var fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
@@ -164,7 +161,7 @@ private[kafka010] case class CachedKafkaConsumer private(
       val warningMessage =
         s"""
           |The current available offset range is $range.
-          | Offset ${offset} is out of range, and records in [$offset, $untilOffset) will be
+          | Offset $offset is out of range, and records in [$offset, $untilOffset) will be
           | skipped ${additionalMessage(failOnDataLoss = false)}
         """.stripMargin
       logWarning(warningMessage)
@@ -189,7 +186,7 @@ private[kafka010] case class CachedKafkaConsumer private(
       val warningMessage =
         s"""
            |The current available offset range is $range.
-           | Offset ${offset} is out of range, and records in [$offset, ${range.earliest}) will be
+           | Offset $offset is out of range, and records in [$offset, ${range.earliest}) will be
            | skipped ${additionalMessage(failOnDataLoss = false)}
         """.stripMargin
       logWarning(warningMessage)
@@ -317,104 +314,9 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
 
   private val UNKNOWN_OFFSET = -2L
 
-  private case class CacheKey(groupId: String, topicPartition: TopicPartition)
-
-  private lazy val cache = {
-    val conf = SparkEnv.get.conf
-    val capacity = conf.getInt("spark.sql.kafkaConsumerCache.capacity", 64)
-    new ju.LinkedHashMap[CacheKey, CachedKafkaConsumer](capacity, 0.75f, true) {
-      override def removeEldestEntry(
-        entry: ju.Map.Entry[CacheKey, CachedKafkaConsumer]): Boolean = {
-        if (entry.getValue.inuse == false && this.size > capacity) {
-          logWarning(s"KafkaConsumer cache hitting max capacity of $capacity, " +
-            s"removing consumer for ${entry.getKey}")
-          try {
-            entry.getValue.close()
-          } catch {
-            case e: SparkException =>
-              logError(s"Error closing earliest Kafka consumer for ${entry.getKey}", e)
-          }
-          true
-        } else {
-          false
-        }
-      }
-    }
-  }
-
-  def releaseKafkaConsumer(
-      topic: String,
-      partition: Int,
-      kafkaParams: ju.Map[String, Object]): Unit = {
-    val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
-    val topicPartition = new TopicPartition(topic, partition)
-    val key = CacheKey(groupId, topicPartition)
-
-    synchronized {
-      val consumer = cache.get(key)
-      if (consumer != null) {
-        consumer.inuse = false
-      } else {
-        logWarning(s"Attempting to release consumer that does not exist")
-      }
-    }
-  }
-
-  /**
-   * Removes (and closes) the Kafka Consumer for the given topic, partition and group id.
-   */
-  def removeKafkaConsumer(
-      topic: String,
-      partition: Int,
-      kafkaParams: ju.Map[String, Object]): Unit = {
-    val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
-    val topicPartition = new TopicPartition(topic, partition)
-    val key = CacheKey(groupId, topicPartition)
-
-    synchronized {
-      val removedConsumer = cache.remove(key)
-      if (removedConsumer != null) {
-        removedConsumer.close()
-      }
-    }
-  }
-
-  /**
-   * Get a cached consumer for groupId, assigned to topic and partition.
-   * If matching consumer doesn't already exist, will be created using kafkaParams.
-   */
-  def getOrCreate(
-      topic: String,
-      partition: Int,
-      kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer = synchronized {
-    val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
-    val topicPartition = new TopicPartition(topic, partition)
-    val key = CacheKey(groupId, topicPartition)
-
-    // If this is reattempt at running the task, then invalidate cache and start with
-    // a new consumer
-    if (TaskContext.get != null && TaskContext.get.attemptNumber >= 1) {
-      removeKafkaConsumer(topic, partition, kafkaParams)
-      val consumer = new CachedKafkaConsumer(topicPartition, kafkaParams)
-      consumer.inuse = true
-      cache.put(key, consumer)
-      consumer
-    } else {
-      if (!cache.containsKey(key)) {
-        cache.put(key, new CachedKafkaConsumer(topicPartition, kafkaParams))
-      }
-      val consumer = cache.get(key)
-      consumer.inuse = true
-      consumer
-    }
-  }
-
-  /** Create an [[CachedKafkaConsumer]] but don't put it into cache. */
-  def createUncached(
-      topic: String,
-      partition: Int,
-      kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer = {
-    new CachedKafkaConsumer(new TopicPartition(topic, partition), kafkaParams)
+  def createConsumer(topic: String, partition: Int,
+    kafkaParams: ju.Map[String, Object], reuse: Boolean = false): CachedKafkaConsumer = {
+    new CachedKafkaConsumer(new TopicPartition(topic, partition), kafkaParams, reuse)
   }
 
   private def reportDataLoss0(

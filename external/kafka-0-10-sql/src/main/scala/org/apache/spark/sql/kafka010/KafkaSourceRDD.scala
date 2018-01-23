@@ -126,14 +126,8 @@ private[kafka010] class KafkaSourceRDD(
     val sourcePartition = thePart.asInstanceOf[KafkaSourceRDDPartition]
     val topic = sourcePartition.offsetRange.topic
     val kafkaPartition = sourcePartition.offsetRange.partition
-    val consumer =
-      if (!reuseKafkaConsumer) {
-        // If we can't reuse CachedKafkaConsumers, creating a new CachedKafkaConsumer. As here we
-        // uses `assign`, we don't need to worry about the "group.id" conflicts.
-        CachedKafkaConsumer.createUncached(topic, kafkaPartition, executorKafkaParams)
-      } else {
-        CachedKafkaConsumer.getOrCreate(topic, kafkaPartition, executorKafkaParams)
-      }
+    val consumer = KafkaConsumerPool.borrowConsumer(topic, kafkaPartition, executorKafkaParams,
+      reuseKafkaConsumer)
     val range = resolveRange(consumer, sourcePartition.offsetRange)
     assert(
       range.fromOffset <= range.untilOffset,
@@ -147,7 +141,6 @@ private[kafka010] class KafkaSourceRDD(
     } else {
       val underlying = new NextIterator[ConsumerRecord[Array[Byte], Array[Byte]]]() {
         var requestOffset = range.fromOffset
-
         override def getNext(): ConsumerRecord[Array[Byte], Array[Byte]] = {
           if (requestOffset >= range.untilOffset) {
             // Processed all offsets in this partition.
@@ -167,13 +160,7 @@ private[kafka010] class KafkaSourceRDD(
         }
 
         override protected def close(): Unit = {
-          if (!reuseKafkaConsumer) {
-            // Don't forget to close non-reuse KafkaConsumers. You may take down your cluster!
-            consumer.close()
-          } else {
-            // Indicate that we're no longer using this consumer
-            CachedKafkaConsumer.releaseKafkaConsumer(topic, kafkaPartition, executorKafkaParams)
-          }
+          KafkaConsumerPool.returnConsumer(consumer)
         }
       }
       // Release consumer, either by removing it or indicating we're no longer using it

@@ -189,7 +189,7 @@ class KafkaContinuousDataReader(
     failOnDataLoss: Boolean) extends ContinuousDataReader[UnsafeRow] {
   private val topic = topicPartition.topic
   private val kafkaPartition = topicPartition.partition
-  private val consumer = CachedKafkaConsumer.createUncached(topic, kafkaPartition, kafkaParams)
+  private val consumer = KafkaConsumerPool.borrowConsumer(topic, kafkaPartition, kafkaParams, true)
 
   private val sharedRow = new UnsafeRow(7)
   private val bufferHolder = new BufferHolder(sharedRow)
@@ -255,6 +255,6 @@ class KafkaContinuousDataReader(
   }
 
   override def close(): Unit = {
-    consumer.close()
+    KafkaConsumerPool.returnConsumer(consumer)
   }
 }

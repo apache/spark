@@ -29,7 +29,7 @@ import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
 import org.apache.kafka.common.TopicPartition
-import org.scalatest.concurrent.Eventually._
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
@@ -46,7 +46,7 @@ import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
 import org.apache.spark.util.Utils
 
-abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
+abstract class KafkaSourceTest extends StreamTest with SharedSQLContext with BeforeAndAfterEach {
 
   protected var testUtils: KafkaTestUtils = _
 
@@ -66,6 +66,10 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
       testUtils = null
     }
     super.afterAll()
+  }
+
+  override def beforeEach(): Unit = {
+    KafkaConsumerPool.close()
   }
 
   protected def makeSureGetOffsetCalled = AssertOnQuery { q =>
