@@ -1291,6 +1291,57 @@ for more details on the API.
 </div>
 </div>
 
+## VectorSizeHint
+
+It can sometimes be useful to explicitly specify the size of the vectors for a column of
+`VectorType`. For example, `VectorAssembler` uses size information from its input columns to
+produce size information and metadata for its output column. While in some cases this information
+can be obtained by inspecting the contents of the column, in a streaming dataframe the contents are
+not available until the stream is started. `VectorSizeHint` allows a user to explicitly specify the
+vector size for a column so that `VectorAssembler`, or other transformers that might
+need to know vector size, can use that column as an input.
+
+To use `VectorSizeHint` a user must set the `inputCol` and `size` parameters. Applying this
+transformer to a dataframe produces a new dataframe with updated metadata for `inputCol` specifying
+the vector size. Downstream operations on the resulting dataframe can get this size using the
+meatadata.
+
+`VectorSizeHint` can also take an optional `handleInvalid` parameter which controls its
+behaviour when the vector column contains nulls or vectors of the wrong size. By default
+`handleInvalid` is set to "error", indicating an exception should be thrown. This parameter can
+also be set to "skip", indicating that rows containing invalid values should be filtered out from
+the resulting dataframe, or "optimistic", indicating that the column should not be checked for
+invalid values and all rows should be kept. Note that the use of "optimistic" can cause the
+resulting dataframe to be in an inconsistent state, me:aning the metadata for the column
+`VectorSizeHint` was applied to does not match the contents of that column. Users should take care
+to avoid this kind of inconsistent state.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [VectorSizeHint Scala docs](api/scala/index.html#org.apache.spark.ml.feature.VectorSizeHint)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/VectorSizeHintExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [VectorSizeHint Java docs](api/java/org/apache/spark/ml/feature/VectorSizeHint.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaVectorSizeHintExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [VectorSizeHint Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorSizeHint)
+for more details on the API.
+
+{% include_example python/ml/vector_size_hint_example.py %}
+</div>
+</div>
+
 ## QuantileDiscretizer
 
 `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
