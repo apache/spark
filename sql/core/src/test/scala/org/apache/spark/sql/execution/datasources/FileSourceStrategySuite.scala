@@ -142,15 +142,16 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
         SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1") {
       checkScan(table.select('c1)) { partitions =>
         // Files should be laid out [(file1), (file2, file3), (file4, file5), (file6)]
-        assert(partitions.size == 4, "when checking partitions")
-        assert(partitions(0).files.size == 1, "when checking partition 1")
+        assert(partitions.size == 3, "when checking partitions")
+        assert(partitions(0).files.size == 2, "when checking partition 1")
         assert(partitions(1).files.size == 2, "when checking partition 2")
         assert(partitions(2).files.size == 2, "when checking partition 3")
-        assert(partitions(3).files.size == 1, "when checking partition 4")
 
         // First partition reads (file1)
         assert(partitions(0).files(0).start == 0)
         assert(partitions(0).files(0).length == 2)
+        assert(partitions(0).files(1).start == 0)
+        assert(partitions(0).files(1).length == 1)
 
         // Second partition reads (file2, file3)
         assert(partitions(1).files(0).start == 0)
@@ -163,10 +164,6 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
         assert(partitions(2).files(0).length == 1)
         assert(partitions(2).files(1).start == 0)
         assert(partitions(2).files(1).length == 1)
-
-        // Final partition reads (file6)
-        assert(partitions(3).files(0).start == 0)
-        assert(partitions(3).files(0).length == 1)
       }
 
       checkPartitionSchema(StructType(Nil))
