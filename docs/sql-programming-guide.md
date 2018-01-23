@@ -1667,9 +1667,9 @@ To use Arrow when executing these calls, it first must be enabled by setting the
 'spark.sql.execution.arrow.enabled' to 'true', this is disabled by default.
 
 <div class="codetabs">
-
 <div data-lang="python"  markdown="1">
 {% highlight python %}
+
 import numpy as np
 import pandas as pd
 
@@ -1683,16 +1683,65 @@ pdf = pd.DataFrame(np.random.rand(100, 3))
 df = spark.createDataFrame(pdf)
 
 # Convert the Spark DataFrame to a local Pandas DataFrame
-selpdf = df.select("*").toPandas()
+selpdf = df.select(" * ").toPandas()
+
 {% endhighlight %}
 </div>
-
 </div>
 
 Using the above optimizations with Arrow will produce the same results as when Arrow is not
-enabled.
+enabled. Not all Spark data types are currently supported and an error will be raised if a column
+has an unsupported type, see [Supported Types](#supported-types).
 
 ## How to Write Vectorized UDFs
+
+A vectorized UDF is similar to a standard UDF in Spark except the inputs and output of the will
+be Pandas Series, which allow the function to be composed with vectorized operations. This function
+can then be run very efficiently in Spark where data is sent in batches to Python and the function
+is executed using Pandas Series as input. The exected output of the function is also a Pandas
+Series of the same length as the inputs. A vectorized UDF is declared using the `pandas_udf`
+keyword, no additional configuration is required.
+
+The following example shows how to create a vectorized UDF that computes the product of 2 columns.
+
+<div class="codetabs">
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+
+import pandas as pd
+from pyspark.sql.functions import col, pandas_udf
+from pyspark.sql.types import LongType
+
+# Declare the function and create the UDF
+def multiply_func(a, b):
+    return a * b
+
+multiply = pandas_udf(multiply_func, returnType=LongType())
+
+# The function for a pandas_udf should be able to execute with local Pandas data
+x = pd.Series([1, 2, 3])
+print(multiply_func(x, x))
+# 0    1
+# 1    4
+# 2    9
+# dtype: int64
+
+# Create a Spark DataFrame
+df = spark.createDataFrame(pd.DataFrame(x, columns=["x"]))
+
+# Execute function as a Spark vectorized UDF
+df.select(multiply(col("x"), col("x"))).show()
+# +-------------------+
+# |multiply_func(x, x)|
+# +-------------------+
+# |                  1|
+# |                  4|
+# |                  9|
+# +-------------------+
+
+{% endhighlight %}
+</div>
+</div>
 
 ## GroupBy-Apply UDFs
 
@@ -1702,6 +1751,14 @@ enabled.
 
 Currently, all Spark SQL data types are supported except `MapType`, `ArrayType` of `TimestampType`, and
 nested `StructType`.
+
+### Setting Arrow Batch Size
+
+Data partitions in Spark are converted into Arrow record batches, which can temporarily lead to
+high memory usage in the JVM. To avoid possible out of memory exceptions, the size of the Arrow
+record batches can be adjusted by setting the conf "spark.sql.execution.arrow.maxRecordsPerBatch"
+to an integer that will determine the maximum number of rows for each batch. Using this limit,
+each data partition will be made into 1 or more record batches for processing.
 
 ### Date and Timestamp Semantics
 
