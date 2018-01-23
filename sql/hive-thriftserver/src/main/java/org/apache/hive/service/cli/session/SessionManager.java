@@ -23,7 +23,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
@@ -76,6 +80,7 @@ public class SessionManager extends CompositeService {
     }
     createBackgroundOperationPool();
     addService(operationManager);
+    super.init(hiveConf);
   }
 
   private void createBackgroundOperationPool() {

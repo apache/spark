@@ -42,7 +42,6 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: 
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "operationManager", sparkSqlOperationManager)
     super.init(hiveConf)
-    initCompositeService(hiveConf)
   }
 
   override def openSession(
