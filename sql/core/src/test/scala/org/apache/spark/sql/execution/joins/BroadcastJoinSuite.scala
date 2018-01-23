@@ -109,6 +109,19 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("broadcast hint is lost") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      val df1 = spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
+      val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value")
+      df2.cache()
+      val df3 = df1.join(broadcast(df2), Seq("key"), "inner")
+      val numBroadCastHashJoin = df3.queryExecution.executedPlan.collect {
+        case b: BroadcastHashJoinExec => b
+      }.size
+      assert(numBroadCastHashJoin === 1)
+    }
+  }
+
   test("broadcast hint isn't propagated after a join") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df1 = spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
