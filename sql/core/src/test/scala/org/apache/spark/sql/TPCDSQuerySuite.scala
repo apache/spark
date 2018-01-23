@@ -340,6 +340,7 @@ class TPCDSQuerySuite extends BenchmarkQueryTest {
     }
   }
 
+  // This list only includes TPCDS v2.7 queries that are different from v1.4 ones
   val tpcdsQueriesV2_7_0 = Seq(
     "q4", "q5a", "q6", "q10a", "q11", "q12", "q14", "q14a", "q18a",
     "q20", "q22", "q22a", "q24_1", "q24_2", "q27a", "q34", "q35", "q35a", "q36a",
