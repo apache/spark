@@ -21,9 +21,11 @@ import java.{util => ju}
 import java.util.{Locale, Optional, UUID}
 
 import scala.collection.JavaConverters._
+
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Offset, Sink, Source}

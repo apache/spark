@@ -336,27 +336,31 @@ class KafkaSinkSuite extends StreamTest with SharedSQLContext {
     } finally {
       writer.stop()
     }
-    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("job aborted"))
+    assert(ex.getCause.getCause.getMessage.toLowerCase(Locale.ROOT).contains("job aborted"))
   }
 
   test("streaming - exception on config serializer") {
     val input = MemoryStream[String]
     var writer: StreamingQuery = null
     var ex: Exception = null
-    ex = intercept[IllegalArgumentException] {
+    ex = intercept[StreamingQueryException] {
       writer = createKafkaWriter(
         input.toDF(),
         withOptions = Map("kafka.key.serializer" -> "foo"))()
+      input.addData("1")
+      writer.processAllAvailable()
     }
-    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
+    assert(ex.getCause.getMessage.toLowerCase(Locale.ROOT).contains(
       "kafka option 'key.serializer' is not supported"))
 
-    ex = intercept[IllegalArgumentException] {
+    ex = intercept[StreamingQueryException] {
       writer = createKafkaWriter(
         input.toDF(),
         withOptions = Map("kafka.value.serializer" -> "foo"))()
+      input.addData("1")
+      writer.processAllAvailable()
     }
-    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(
+    assert(ex.getCause.getMessage.toLowerCase(Locale.ROOT).contains(
       "kafka option 'value.serializer' is not supported"))
   }
 

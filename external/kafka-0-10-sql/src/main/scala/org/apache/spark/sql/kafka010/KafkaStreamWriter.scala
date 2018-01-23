@@ -17,11 +17,8 @@
 
 package org.apache.spark.sql.kafka010
 
-import org.apache.kafka.clients.producer.{Callback, ProducerRecord, RecordMetadata}
-
 import scala.collection.JavaConverters._
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Row, SparkSession}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{kafkaParamsForProducer, TOPIC_OPTION_KEY}
