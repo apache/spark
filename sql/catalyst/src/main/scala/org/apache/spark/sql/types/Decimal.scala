@@ -21,7 +21,6 @@ import java.lang.{Long => JLong}
 import java.math.{BigInteger, MathContext, RoundingMode}
 
 import org.apache.spark.annotation.InterfaceStability
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 
 /**
@@ -33,7 +32,7 @@ import org.apache.spark.sql.AnalysisException
  * - Otherwise, the decimal value is longVal / (10 ** _scale)
  */
 @InterfaceStability.Unstable
-final class Decimal extends Ordered[Decimal] with Serializable with Logging {
+final class Decimal extends Ordered[Decimal] with Serializable {
   import org.apache.spark.sql.types.Decimal._
 
   private var decimalVal: BigDecimal = null
