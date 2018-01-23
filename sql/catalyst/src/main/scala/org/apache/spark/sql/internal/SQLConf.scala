@@ -1079,8 +1079,8 @@ object SQLConf {
       .internal()
       .doc("When true (default), if an overflow on a decimal occurs, then NULL is returned. " +
         "Spark's older versions and Hive behave in this way. If turned to false, SQL ANSI 2011 " +
-        "specification, will be followed instead: an arithmetic exception is thrown. This is " +
-        "what most of the SQL databases do.")
+        "specification will be followed instead: an arithmetic is thrown, as most of the SQL " +
+        "databases do.")
       .booleanConf
       .createWithDefault(true)
 
