@@ -446,7 +446,7 @@ object ParamsSuite extends SparkFunSuite {
     paramsAndValues.foreach { case (paramName, paramValue) =>
       m.set(m.getParam(paramName), paramValue)
     }
-    val e = intercept[IllegalArgumentException] {
+    intercept[IllegalArgumentException] {
       m match {
         case t: Transformer => t.transform(dataset)
         case e: Estimator[_] => e.fit(dataset)

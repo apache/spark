@@ -394,10 +394,20 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val df = Seq((0.5, 0.3), (0.5, -0.4)).toDF("feature1", "feature2")
     ParamsSuite.testExclusiveParams(new Bucketizer, df, ("inputCol", "feature1"),
       ("inputCols", Array("feature1", "feature2")))
-    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("outputCol", "result1"),
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("inputCol", "feature1"),
+      ("outputCol", "result1"), ("splits", Array(-0.5, 0.0, 0.5)),
       ("outputCols", Array("result1", "result2")))
-    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("splits", Array(-0.5, 0.0, 0.5)),
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("inputCol", "feature1"),
+      ("outputCol", "result1"), ("splits", Array(-0.5, 0.0, 0.5)),
       ("splitsArray", Array(Array(-0.5, 0.0, 0.5), Array(-0.5, 0.0, 0.5))))
+
+    // this should fail because at least one of inputCol and inputCols must be set
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("outputCol", "feature1"),
+      ("splits", Array(-0.5, 0.0, 0.5)))
+
+    // the following should fail because not all the params are set
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("inputCol", "feature1"),
+      ("outputCol", "result1"))
   }
 }
 
