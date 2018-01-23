@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 
 /**
  * Extracts all the Python UDFs in logical aggregate, which depends on aggregate expression or
- * grouping key, evaluate them after aggregate.
+ * grouping key, or doesn't depend on any above expressions, evaluate them after aggregate.
  */
 object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
 
