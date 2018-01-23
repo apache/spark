@@ -395,8 +395,9 @@ class ParquetFileFormat
       }
       val taskContext = Option(TaskContext.get())
       val parquetReader = if (enableVectorizedReader) {
+        val capacity = sparkSession.sessionState.conf.parquetVectorizedReaderBatchSize
         val vectorizedReader = new VectorizedParquetRecordReader(
-          convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined)
+          convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)

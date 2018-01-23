@@ -377,6 +377,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARQUET_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.parquet.batchSize")
+    .doc("The number of rows to include in a parquet vectorized reader batch. The number should " +
+      "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
+    .intConf
+    .createWithDefault(4096)
+
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
@@ -399,6 +405,12 @@ object SQLConf {
     .doc("Enables vectorized orc decoding.")
     .booleanConf
     .createWithDefault(true)
+
+  val ORC_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.orc.batchSize")
+    .doc("The number of rows to include in a orc vectorized reader batch. The number should " +
+      "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
+    .intConf
+    .createWithDefault(4096)
 
   val ORC_COPY_BATCH_TO_SPARK = buildConf("spark.sql.orc.copyBatchToSpark")
     .doc("Whether or not to copy the ORC columnar batch to Spark columnar batch in the " +
@@ -1216,9 +1228,13 @@ class SQLConf extends Serializable with Logging {
 
   def orcVectorizedReaderEnabled: Boolean = getConf(ORC_VECTORIZED_READER_ENABLED)
 
+  def orcVectorizedReaderBatchSize: Int = getConf(ORC_VECTORIZED_READER_BATCH_SIZE)
+
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
+
+  def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
