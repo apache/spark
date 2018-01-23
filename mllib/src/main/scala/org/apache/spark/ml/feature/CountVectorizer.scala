@@ -69,6 +69,24 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
   /** @group getParam */
   def getMinDF: Double = $(minDF)
 
+  /**
+    * Specifies the maximum number of different documents a term must appear in to be included
+    * in the vocabulary.
+    * If this is an integer greater than or equal to 1, this specifies the number of documents
+    * the term must appear in; if this is a double in [0,1), then this specifies the fraction of
+    * documents.
+    *
+    * @group param
+    */
+  val maxDF: DoubleParam = new DoubleParam(this, "maxDF", "Specifies the maximum number of" +
+    " different documents a term must appear in to be included in the vocabulary." +
+    " If this is an integer >= 1, this specifies the number of documents the term must" +
+    " appear in; if this is a double in [0,1), then this specifies the fraction of documents.",
+    ParamValidators.gtEq(0.0))
+
+  /** @group getParam */
+  def getMaxDF: Double = $(maxDF)
+
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
     val typeCandidates = List(new ArrayType(StringType, true), new ArrayType(StringType, false))
@@ -143,6 +161,10 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   def setMinDF(value: Double): this.type = set(minDF, value)
 
   /** @group setParam */
+  @Since("2.4.0")
+  def setMaxDF(value: Double): this.type = set(maxDF, value)
+
+  /** @group setParam */
   @Since("1.5.0")
   def setMinTF(value: Double): this.type = set(minTF, value)
 
@@ -160,6 +182,21 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     } else {
       $(minDF) * input.cache().count()
     }
+    val maxDfOpt = if (isSet(maxDF)) {
+      if ($(maxDF) >= 1.0) {
+        Some($(maxDF))
+      } else {
+        Some($(maxDF) * input.cache().count())
+      }
+    } else {
+      None
+    }
+    val filterDf = if (maxDfOpt.isDefined) {
+      val maxDf = maxDfOpt.get
+      (df: Double) => df <= maxDf && df >= minDf
+    } else {
+      (df: Double) => df >= minDf
+    }
     val wordCounts: RDD[(String, Long)] = input.flatMap { case (tokens) =>
       val wc = new OpenHashMap[String, Long]
       tokens.foreach { w =>
@@ -168,9 +205,9 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       wc.map { case (word, count) => (word, (count, 1)) }
     }.reduceByKey { case ((wc1, df1), (wc2, df2)) =>
       (wc1 + wc2, df1 + df2)
-    }.filter { case (word, (wc, df)) =>
-      df >= minDf
-    }.map { case (word, (count, dfCount)) =>
+    }.filter { case (_, (_, df)) =>
+      filterDf(df)
+    }.map { case (word, (count, _)) =>
       (word, count)
     }.cache()
     val fullVocabSize = wordCounts.count()
