@@ -425,7 +425,7 @@ struct<(7 % 2):int,(7 % 0):int,(0 % 2):int,(7 % CAST(NULL AS INT)):int,(CAST(NUL
 -- !query 51
 select BIT_LENGTH('abc')
 -- !query 51 schema
-struct<bitlength(abc):int>
+struct<bit_length(abc):int>
 -- !query 51 output
 24
 
@@ -449,7 +449,7 @@ struct<length(abc):int>
 -- !query 54
 select OCTET_LENGTH('abc')
 -- !query 54 schema
-struct<octetlength(abc):int>
+struct<octet_length(abc):int>
 -- !query 54 output
 3
 
