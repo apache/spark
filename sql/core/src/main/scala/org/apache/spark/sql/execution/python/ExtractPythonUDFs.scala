@@ -43,8 +43,8 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
   }
 
   private def hasPythonUdfOverAggregate(expr: Expression, agg: Aggregate): Boolean = {
-    expr.find {
-      e => e.isInstanceOf[PythonUDF] && e.find(belongAggregate(_, agg)).isDefined
+    expr.find { e => e.isInstanceOf[PythonUDF] &&
+      (e.references.isEmpty || e.find(belongAggregate(_, agg)).isDefined)
     }.isDefined
   }
 
