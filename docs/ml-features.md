@@ -1302,8 +1302,8 @@ meatadata.
 behaviour when the vector column contains nulls or vectors of the wrong size. By default
 `handleInvalid` is set to "error", indicating an exception should be thrown. This parameter can
 also be set to "skip", indicating that rows containing invalid values should be filtered out from
-the resulting dataframe, or `optimistic` indicating that all rows should be kept. When
-`handleInvalid` is set to `optimistic` the user takes responsibility for ensuring that the column
+the resulting dataframe, or "optimistic" indicating that all rows should be kept. When
+`handleInvalid` is set to "optimistic" the user takes responsibility for ensuring that the column
 does not have invalid values, values that don't match the column's metadata, or dealing with those
 invalid values downstream.
 
