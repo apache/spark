@@ -220,4 +220,82 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
     val newInstance = testDefaultReadWrite(instance)
     assert(newInstance.vocabulary === instance.vocabulary)
   }
+
+  test("SPARK-23166: CountVectorizer maxDF") {
+    val df = Seq(
+      (0, split("a b c d"), Vectors.sparse(2, Seq((0, 1.0), (1, 1.0)))),
+      (1, split("a b c"), Vectors.sparse(2, Seq((0, 1.0)))),
+      (2, split("a b"), Vectors.sparse(2, Seq.empty)),
+      (3, split("a"), Vectors.sparse(2, Seq.empty))
+    ).toDF("id", "words", "expected")
+    val cvModel = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .fit(df)
+    assert(cvModel.vocabulary === Array("a", "b", "c", "d"))
+
+    // maxDF: ignore terms with count greater than 2
+    val cvModel2 = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMaxDF(2)
+      .fit(df)
+    assert(cvModel2.vocabulary === Array("c", "d"))
+
+    cvModel2.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+
+    // maxDF: ignore terms with freq > 0.5
+    val cvModel3 = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMaxDF(2.0 / df.count())
+      .fit(df)
+    assert(cvModel3.vocabulary === Array("c", "d"))
+
+    cvModel3.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+  }
+
+  test("SPARK-23166: CountVectorizer maxDF and minDF") {
+    val df = Seq(
+      (0, split("a b c d"), Vectors.sparse(2, Seq((0, 1.0), (1, 1.0)))),
+      (1, split("a b c"), Vectors.sparse(2, Seq((0, 1.0), (1, 1.0)))),
+      (2, split("a b"), Vectors.sparse(2, Seq((0, 1.0)))),
+      (3, split("a"), Vectors.sparse(2, Seq.empty))
+    ).toDF("id", "words", "expected")
+
+    // test with integers
+    val cvModel1 = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMaxDF(3)
+      .setMinDF(2)
+      .fit(df)
+    assert(cvModel1.vocabulary === Array("b", "c"))
+
+    cvModel1.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+
+    // test with doubles
+    val dfSize = df.count()
+    val cvModel2 = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMaxDF(3.0 / dfSize)
+      .setMinDF(2.0 / dfSize)
+      .fit(df)
+    assert(cvModel2.vocabulary === Array("b", "c"))
+
+    cvModel2.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+  }
 }
