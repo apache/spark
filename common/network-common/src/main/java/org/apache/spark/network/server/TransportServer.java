@@ -115,6 +115,10 @@ public class TransportServer implements Closeable {
       bootstrap.childOption(ChannelOption.SO_SNDBUF, conf.sendBuf());
     }
 
+    if (conf.enableTcpKeepAlive()) {
+      bootstrap.childOption(ChannelOption.SO_KEEPALIVE, true);
+    }
+
     bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
       @Override
       protected void initChannel(SocketChannel ch) {
