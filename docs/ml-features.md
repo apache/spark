@@ -1302,10 +1302,11 @@ meatadata.
 behaviour when the vector column contains nulls or vectors of the wrong size. By default
 `handleInvalid` is set to "error", indicating an exception should be thrown. This parameter can
 also be set to "skip", indicating that rows containing invalid values should be filtered out from
-the resulting dataframe, or "optimistic" indicating that all rows should be kept. When
-`handleInvalid` is set to "optimistic" the user takes responsibility for ensuring that the column
-does not have invalid values, values that don't match the column's metadata, or dealing with those
-invalid values downstream.
+the resulting dataframe, or "optimistic", indicating that the column should not be checked for
+invalid values and all rows should be kept. Note that the use of "optimistic" can cause the
+resulting dataframe to be in an inconsistent state, me:aning the metadata for the column
+`VectorSizeHint` was applied to does not match the contents of that column. Users should take care
+to avoid this kind of inconsistent state.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
