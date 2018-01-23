@@ -49,8 +49,9 @@ public class JavaVectorSizeHintExample {
       createStructField("userFeatures", new VectorUDT(), false),
       createStructField("clicked", DoubleType, false)
     });
-    Row row = RowFactory.create(0, 18, 1.0, Vectors.dense(0.0, 10.0, 0.5), 1.0);
-    Dataset<Row> dataset = spark.createDataFrame(Arrays.asList(row), schema);
+    Row row0 = RowFactory.create(0, 18, 1.0, Vectors.dense(0.0, 10.0, 0.5), 1.0);
+    Row row1 = RowFactory.create(0, 18, 1.0, Vectors.dense(0.0, 10.0), 0.0);
+    Dataset<Row> dataset = spark.createDataFrame(Arrays.asList(row0, row1), schema);
 
     VectorSizeHint sizeHint = new VectorSizeHint()
       .setInputCol("userFeatures")
