@@ -1109,7 +1109,7 @@ class SQLTests(ReusedSQLTestCase):
     def test_nonparam_udf_with_aggregate(self):
         import pyspark.sql.functions as f
 
-        df = self.spark.createDataFrame([(1,2), (1,2)])
+        df = self.spark.createDataFrame([(1, 2), (1, 2)])
         f_udf = f.udf(lambda: "const_str")
         rows = df.distinct().withColumn("a", f_udf()).collect()
         self.assertEqual(rows, [Row(_1=1, _2=2, a=u'const_str')])
