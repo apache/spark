@@ -30,8 +30,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Append, Complete, Update}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
-import org.apache.spark.sql.sources.v2.streaming.{ContinuousWriteSupport, MicroBatchWriteSupport}
-import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter
+import org.apache.spark.sql.sources.v2.streaming.StreamWriteSupport
+import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -40,24 +40,13 @@ import org.apache.spark.sql.types.StructType
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
  * tests and does not provide durability.
  */
-class MemorySinkV2 extends DataSourceV2
-  with MicroBatchWriteSupport with ContinuousWriteSupport with Logging {
-
-  override def createMicroBatchWriter(
-      queryId: String,
-      batchId: Long,
-      schema: StructType,
-      mode: OutputMode,
-      options: DataSourceV2Options): java.util.Optional[DataSourceV2Writer] = {
-    java.util.Optional.of(new MemoryWriter(this, batchId, mode))
-  }
-
-  override def createContinuousWriter(
+class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with Logging {
+  override def createStreamWriter(
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceV2Options): java.util.Optional[ContinuousWriter] = {
-    java.util.Optional.of(new ContinuousMemoryWriter(this, mode))
+      options: DataSourceV2Options): java.util.Optional[StreamWriter] = {
+    java.util.Optional.of(new MemoryStreamWriter(this, mode))
   }
 
   private case class AddedData(batchId: Long, data: Array[Row])
@@ -141,8 +130,8 @@ class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
   }
 }
 
-class ContinuousMemoryWriter(val sink: MemorySinkV2, outputMode: OutputMode)
-  extends ContinuousWriter {
+class MemoryStreamWriter(val sink: MemorySinkV2, outputMode: OutputMode)
+  extends StreamWriter {
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 
@@ -153,7 +142,7 @@ class ContinuousMemoryWriter(val sink: MemorySinkV2, outputMode: OutputMode)
     sink.write(epochId, outputMode, newRows)
   }
 
-  override def abort(messages: Array[WriterCommitMessage]): Unit = {
+  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     // Don't accept any of the new input.
   }
 }

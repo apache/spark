@@ -38,7 +38,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, ForeachWriter, Row}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
-import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryWriter
+import org.apache.spark.sql.execution.streaming.sources.MemoryStreamWriter
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest, Trigger}

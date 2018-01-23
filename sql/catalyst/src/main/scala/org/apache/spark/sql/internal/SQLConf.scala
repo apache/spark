@@ -1110,6 +1110,13 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
+  val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
+    .internal()
+    .doc("A comma-separated list of fully qualified data source register class names for which" +
+      " StreamWriteSupport is disabled. Writes to these sources will faill back to the V1 Sink.")
+    .stringConf
+    .createWithDefault("")
+
   object PartitionOverwriteMode extends Enumeration {
     val STATIC, DYNAMIC = Value
   }
@@ -1457,6 +1464,8 @@ class SQLConf extends Serializable with Logging {
 
   def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
+
+  def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 

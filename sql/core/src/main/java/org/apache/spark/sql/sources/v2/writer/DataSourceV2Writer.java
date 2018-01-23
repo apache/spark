@@ -28,9 +28,7 @@ import org.apache.spark.sql.types.StructType;
 /**
  * A data source writer that is returned by
  * {@link WriteSupport#createWriter(String, StructType, SaveMode, DataSourceV2Options)}/
- * {@link org.apache.spark.sql.sources.v2.streaming.MicroBatchWriteSupport#createMicroBatchWriter(
- * String, long, StructType, OutputMode, DataSourceV2Options)}/
- * {@link org.apache.spark.sql.sources.v2.streaming.ContinuousWriteSupport#createContinuousWriter(
+ * {@link org.apache.spark.sql.sources.v2.streaming.StreamWriteSupport#createStreamWriter(
  * String, StructType, OutputMode, DataSourceV2Options)}.
  * It can mix in various writing optimization interfaces to speed up the data saving. The actual
  * writing logic is delegated to {@link DataWriter}.

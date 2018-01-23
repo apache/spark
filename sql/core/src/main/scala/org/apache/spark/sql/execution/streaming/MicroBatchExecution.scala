@@ -28,8 +28,9 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Curre
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
+import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.sources.v2.DataSourceV2Options
-import org.apache.spark.sql.sources.v2.streaming.{MicroBatchReadSupport, MicroBatchWriteSupport}
+import org.apache.spark.sql.sources.v2.streaming.{MicroBatchReadSupport, StreamWriteSupport}
 import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.{Clock, Utils}
@@ -440,15 +441,14 @@ class MicroBatchExecution(
 
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
-      case s: MicroBatchWriteSupport =>
-        val writer = s.createMicroBatchWriter(
+      case s: StreamWriteSupport =>
+        val writer = s.createStreamWriter(
           s"$runId",
-          currentBatchId,
           newAttributePlan.schema,
           outputMode,
           new DataSourceV2Options(extraOptions.asJava))
-        assert(writer.isPresent, "microbatch writer must always be present")
-        WriteToDataSourceV2(writer.get, newAttributePlan)
+        assert(writer.isPresent, "stream writer must always be present")
+        WriteToDataSourceV2(new MicroBatchWriter(currentBatchId, writer.get), newAttributePlan)
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
 
@@ -471,7 +471,7 @@ class MicroBatchExecution(
       SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
         sink match {
           case s: Sink => s.addBatch(currentBatchId, nextBatch)
-          case s: MicroBatchWriteSupport =>
+          case _: StreamWriteSupport =>
             // This doesn't accumulate any data - it just forces execution of the microbatch writer.
             nextBatch.collect()
         }

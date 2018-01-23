@@ -18,15 +18,15 @@
 package org.apache.spark.sql.kafka010
 
 import org.apache.kafka.clients.producer.{Callback, ProducerRecord, RecordMetadata}
-import scala.collection.JavaConverters._
 
+import scala.collection.JavaConverters._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{kafkaParamsForProducer, TOPIC_OPTION_KEY}
 import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
-import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter
+import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{BinaryType, StringType, StructType}
@@ -38,23 +38,24 @@ import org.apache.spark.sql.types.{BinaryType, StringType, StructType}
 case object KafkaWriterCommitMessage extends WriterCommitMessage
 
 /**
- * A [[ContinuousWriter]] for Kafka writing. Responsible for generating the writer factory.
+ * A [[StreamWriter]] for Kafka writing. Responsible for generating the writer factory.
+ *
  * @param topic The topic this writer is responsible for. If None, topic will be inferred from
  *              a `topic` field in the incoming data.
  * @param producerParams Parameters for Kafka producers in each task.
  * @param schema The schema of the input data.
  */
-class KafkaContinuousWriter(
+class KafkaStreamWriter(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
-  extends ContinuousWriter with SupportsWriteInternalRow {
+  extends StreamWriter with SupportsWriteInternalRow {
 
   validateQuery(schema.toAttributes, producerParams.toMap[String, Object].asJava, topic)
 
-  override def createInternalRowWriterFactory(): KafkaContinuousWriterFactory =
-    KafkaContinuousWriterFactory(topic, producerParams, schema)
+  override def createInternalRowWriterFactory(): KafkaStreamWriterFactory =
+    KafkaStreamWriterFactory(topic, producerParams, schema)
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
-  override def abort(messages: Array[WriterCommitMessage]): Unit = {}
+  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 }
 
 /**
@@ -65,12 +66,12 @@ class KafkaContinuousWriter(
  * @param producerParams Parameters for Kafka producers in each task.
  * @param schema The schema of the input data.
  */
-case class KafkaContinuousWriterFactory(
+case class KafkaStreamWriterFactory(
     topic: Option[String], producerParams: Map[String, String], schema: StructType)
   extends DataWriterFactory[InternalRow] {
 
   override def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
-    new KafkaContinuousDataWriter(topic, producerParams, schema.toAttributes)
+    new KafkaStreamDataWriter(topic, producerParams, schema.toAttributes)
   }
 }
 
@@ -83,7 +84,7 @@ case class KafkaContinuousWriterFactory(
  * @param producerParams Parameters to use for the Kafka producer.
  * @param inputSchema The attributes in the input data.
  */
-class KafkaContinuousDataWriter(
+class KafkaStreamDataWriter(
     targetTopic: Option[String], producerParams: Map[String, String], inputSchema: Seq[Attribute])
   extends KafkaRowWriter(inputSchema, targetTopic) with DataWriter[InternalRow] {
   import scala.collection.JavaConverters._

@@ -23,20 +23,20 @@ import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSink;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.DataSourceV2Options;
-import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter;
+import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter;
 import org.apache.spark.sql.sources.v2.writer.DataSourceV2Writer;
 import org.apache.spark.sql.streaming.OutputMode;
 import org.apache.spark.sql.types.StructType;
 
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
- * provide data writing ability for continuous stream processing.
+ * provide data writing ability for structured streaming.
  */
 @InterfaceStability.Evolving
-public interface ContinuousWriteSupport extends BaseStreamingSink {
+public interface StreamWriteSupport extends BaseStreamingSink {
 
     /**
-     * Creates an optional {@link ContinuousWriter} to save the data to this data source. Data
+     * Creates an optional {@link StreamWriter} to save the data to this data source. Data
      * sources can return None if there is no writing needed to be done.
      *
      * @param queryId A unique string for the writing query. It's possible that there are many
@@ -48,7 +48,7 @@ public interface ContinuousWriteSupport extends BaseStreamingSink {
      * @param options the options for the returned data source writer, which is an immutable
      *                case-insensitive string-to-string map.
      */
-    Optional<ContinuousWriter> createContinuousWriter(
+    Optional<StreamWriter> createStreamWriter(
         String queryId,
         StructType schema,
         OutputMode mode,

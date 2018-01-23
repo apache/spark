@@ -21,18 +21,16 @@ import java.{util => ju}
 import java.util.{Locale, Optional, UUID}
 
 import scala.collection.JavaConverters._
-
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.execution.streaming.{Offset, Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
-import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, ContinuousWriteSupport}
-import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter
+import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -46,7 +44,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     with StreamSinkProvider
     with RelationProvider
     with CreatableRelationProvider
-    with ContinuousWriteSupport
+    with StreamWriteSupport
     with ContinuousReadSupport
     with Logging {
   import KafkaSourceProvider._
@@ -223,11 +221,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  override def createContinuousWriter(
+  override def createStreamWriter(
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceV2Options): Optional[ContinuousWriter] = {
+      options: DataSourceV2Options): Optional[StreamWriter] = {
     import scala.collection.JavaConverters._
 
     val spark = SparkSession.getActiveSession.get
@@ -238,7 +236,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     KafkaWriter.validateQuery(
       schema.toAttributes, new java.util.HashMap[String, Object](producerParams.asJava), topic)
 
-    Optional.of(new KafkaContinuousWriter(topic, producerParams, schema))
+    Optional.of(new KafkaStreamWriter(topic, producerParams, schema))
   }
 
   private def strategy(caseInsensitiveParams: Map[String, String]) =
