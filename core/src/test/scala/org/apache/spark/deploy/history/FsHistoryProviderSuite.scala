@@ -716,9 +716,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("SPARK-21571: clean up removes invalid history files") {
-    // TODO: "maxTime" becoming negative in cleanLogs() causes this test to fail, so avoid that
-    // until we figure out what's causing the problem.
-    val clock = new ManualClock(TimeUnit.DAYS.toMillis(120))
+    val clock = new ManualClock()
     val conf = createTestConf().set(MAX_LOG_AGE_S.key, s"2d")
     val provider = new FsHistoryProvider(conf, clock) {
       override def getNewLastScanTime(): Long = clock.getTimeMillis()
