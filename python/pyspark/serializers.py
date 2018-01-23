@@ -68,6 +68,7 @@ else:
     xrange = range
 
 from pyspark import cloudpickle
+from pyspark.util import _exception_message
 
 
 __all__ = ["PickleSerializer", "MarshalSerializer", "UTF8Deserializer"]
@@ -558,7 +559,18 @@ class PickleSerializer(FramedSerializer):
 class CloudPickleSerializer(PickleSerializer):
 
     def dumps(self, obj):
-        return cloudpickle.dumps(obj, 2)
+        try:
+            return cloudpickle.dumps(obj, 2)
+        except pickle.PickleError:
+            raise
+        except Exception as e:
+            emsg = _exception_message(e)
+            if "'i' format requires" in emsg:
+                msg = "Object too large to serialize: %s" % emsg
+            else:
+                msg = "Could not serialize object: %s: %s" % (e.__class__.__name__, emsg)
+            cloudpickle.print_exec(sys.stderr)
+            raise pickle.PicklingError(msg)
 
 
 class MarshalSerializer(FramedSerializer):
