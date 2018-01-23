@@ -109,7 +109,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("broadcast hint is lost") {
+  test("broadcast hint is retained after using the cached data") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df1 = spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
       val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value")
