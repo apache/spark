@@ -200,7 +200,7 @@ class UserDefinedFunction(object):
         """
         Updates :class:`UserDefinedFunction` to non-nullable.
 
-        .. versionadded:: 2.3
+        .. versionadded:: 2.4
         """
         self.nullable = False
         return self
