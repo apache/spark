@@ -688,17 +688,13 @@ class CodegenContext {
   /**
    * Returns the specialized code to access a value from a column vector for a given `DataType`.
    */
-  def getValue(vector: String, rowId: String, dataType: DataType): String = {
-    val jt = javaType(dataType)
-    dataType match {
-      case _ if isPrimitiveType(jt) =>
-        s"$vector.get${primitiveTypeName(jt)}($rowId)"
-      case t: DecimalType =>
-        s"$vector.getDecimal($rowId, ${t.precision}, ${t.scale})"
-      case StringType =>
-        s"$vector.getUTF8String($rowId)"
-      case _ =>
-        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+  def getValueFromVector(vector: String, dataType: DataType, rowId: String): String = {
+    if (dataType.isInstanceOf[StructType]) {
+      // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
+      // `ordinal` parameter.
+      s"$vector.getStruct($rowId)"
+    } else {
+      getValue(vector, dataType, rowId)
     }
   }
 
