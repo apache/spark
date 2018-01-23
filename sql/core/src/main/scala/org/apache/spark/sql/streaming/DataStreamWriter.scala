@@ -281,8 +281,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         trigger = trigger)
     } else {
       val ds = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
+      val disabledSources = df.sparkSession.sqlContext.conf.disabledV2StreamingWriters.split(",")
       val sink = ds.newInstance() match {
-        case w: StreamWriteSupport => w
+        case w: StreamWriteSupport if !disabledSources.contains(w.getClass.getCanonicalName) => w
         case _ =>
           val ds = DataSource(
             df.sparkSession,

@@ -11,3 +11,4 @@ org.apache.spark.sql.streaming.sources.FakeReadBothModes
 org.apache.spark.sql.streaming.sources.FakeReadNeitherMode
 org.apache.spark.sql.streaming.sources.FakeWrite
 org.apache.spark.sql.streaming.sources.FakeNoWrite
+org.apache.spark.sql.streaming.sources.FakeWriteV1Fallback

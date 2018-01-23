@@ -19,11 +19,11 @@ package org.apache.spark.sql.streaming.sources
 
 import java.util.Optional
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SQLContext}
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.streaming.{LongOffset, RateStreamOffset}
+import org.apache.spark.sql.execution.streaming.{LongOffset, RateStreamOffset, Sink, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
-import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
 import org.apache.spark.sql.sources.v2.reader.ReadTask
 import org.apache.spark.sql.sources.v2.streaming._
@@ -98,6 +98,28 @@ class FakeNoWrite extends DataSourceRegister {
   override def shortName(): String = "fake-write-neither-mode"
 }
 
+
+case class FakeWriteV1FallbackException() extends Exception
+
+class FakeSink extends Sink {
+  override def addBatch(batchId: Long, data: DataFrame): Unit = {}
+}
+
+class FakeWriteV1Fallback extends DataSourceRegister
+  with FakeStreamWriteSupport with StreamSinkProvider {
+
+  override def createSink(
+    sqlContext: SQLContext,
+    parameters: Map[String, String],
+    partitionColumns: Seq[String],
+    outputMode: OutputMode): Sink = {
+    new FakeSink()
+  }
+
+  override def shortName(): String = "fake-write-v1-fallback"
+}
+
+
 class StreamingDataSourceV2Suite extends StreamTest {
 
   override def beforeAll(): Unit = {
@@ -128,6 +150,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
       .trigger(trigger)
       .start()
     query.stop()
+    query
   }
 
   private def testNegativeCase(
@@ -158,6 +181,24 @@ class StreamingDataSourceV2Suite extends StreamTest {
       assert(query.exception.isDefined)
       assert(query.exception.get.cause != null)
       assert(query.exception.get.cause.getMessage.contains(errorMsg))
+    }
+  }
+
+  test("disabled v2 write") {
+    // Ensure the V2 path works normally and generates a V2 sink..
+    val v2Query = testPositiveCase(
+      "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once())
+    assert(v2Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
+      .isInstanceOf[FakeWriteV1Fallback])
+
+    // Ensure we create a V1 sink with the config. Note the config is a comma separated
+    // list, including other fake entries.
+    val fullSinkName = "org.apache.spark.sql.streaming.sources.FakeWriteV1Fallback"
+    withSQLConf("spark.sql.streaming.disabledV2Writers" -> s"a,b,c,test,$fullSinkName,d,e") {
+      val v1Query = testPositiveCase(
+        "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once())
+      assert(v1Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink
+        .isInstanceOf[FakeSink])
     }
   }
 
