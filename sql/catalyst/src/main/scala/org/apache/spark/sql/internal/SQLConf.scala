@@ -894,7 +894,7 @@ object SQLConf {
       .internal()
       .doc("The number of bins when generating histograms.")
       .intConf
-      .checkValue(num => num > 1, "The number of bins must be large than 1.")
+      .checkValue(num => num > 1, "The number of bins must be larger than 1.")
       .createWithDefault(254)
 
   val PERCENTILE_ACCURACY =
@@ -1063,6 +1063,16 @@ object SQLConf {
       " condition(s) of the right node.")
     .booleanConf
     .createWithDefault(true)
+
+  val DECIMAL_OPERATIONS_ALLOW_PREC_LOSS =
+    buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
+      .internal()
+      .doc("When true (default), establishing the result type of an arithmetic operation " +
+        "happens according to Hive behavior and SQL ANSI 2011 specification, ie. rounding the " +
+        "decimal part of the result if an exact representation is not possible. Otherwise, NULL " +
+        "is returned in those cases, as previously.")
+      .booleanConf
+      .createWithDefault(true)
 
   val SQL_STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.sql.redaction.string.regex")
@@ -1440,6 +1450,8 @@ class SQLConf extends Serializable with Logging {
   def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
+
+  def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
 
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 

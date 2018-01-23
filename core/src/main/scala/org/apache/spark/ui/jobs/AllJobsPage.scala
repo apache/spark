@@ -36,6 +36,9 @@ import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends WebUIPage("") {
+
+  import ApiHelper._
+
   private val JOBS_LEGEND =
     <div class="legend-area"><svg width="150px" height="85px">
       <rect class="succeeded-job-legend"
@@ -65,10 +68,9 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }.map { job =>
       val jobId = job.jobId
       val status = job.status
-      val jobDescription = store.lastStageAttempt(job.stageIds.max).description
-      val displayJobDescription = jobDescription
-        .map(UIUtils.makeDescription(_, "", plainText = true).text)
-        .getOrElse("")
+      val (_, lastStageDescription) = lastStageNameAndDescription(store, job)
+      val jobDescription = UIUtils.makeDescription(lastStageDescription, "", plainText = true).text
+
       val submissionTime = job.submissionTime.get.getTime()
       val completionTime = job.completionTime.map(_.getTime()).getOrElse(System.currentTimeMillis())
       val classNameByStatus = status match {
@@ -80,7 +82,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
 
       // The timeline library treats contents as HTML, so we have to escape them. We need to add
       // extra layers of escaping in order to embed this in a Javascript string literal.
-      val escapedDesc = Utility.escape(displayJobDescription)
+      val escapedDesc = Utility.escape(jobDescription)
       val jsEscapedDesc = StringEscapeUtils.escapeEcmaScript(escapedDesc)
       val jobEventJsonAsStr =
         s"""
@@ -363,16 +365,43 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       store.executorList(false), startTime)
 
     if (shouldShowActiveJobs) {
-      content ++= <h4 id="active">Active Jobs ({activeJobs.size})</h4> ++
-        activeJobsTable
+      content ++=
+        <span id="active" class="collapse-aggregated-activeJobs collapse-table"
+            onClick="collapseTable('collapse-aggregated-activeJobs','aggregated-activeJobs')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Active Jobs ({activeJobs.size})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-activeJobs collapsible-table">
+          {activeJobsTable}
+        </div>
     }
     if (shouldShowCompletedJobs) {
-      content ++= <h4 id="completed">Completed Jobs ({completedJobNumStr})</h4> ++
-        completedJobsTable
+      content ++=
+        <span id="completed" class="collapse-aggregated-completedJobs collapse-table"
+            onClick="collapseTable('collapse-aggregated-completedJobs','aggregated-completedJobs')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Completed Jobs ({completedJobNumStr})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-completedJobs collapsible-table">
+          {completedJobsTable}
+        </div>
     }
     if (shouldShowFailedJobs) {
-      content ++= <h4 id ="failed">Failed Jobs ({failedJobs.size})</h4> ++
-        failedJobsTable
+      content ++=
+        <span id ="failed" class="collapse-aggregated-failedJobs collapse-table"
+            onClick="collapseTable('collapse-aggregated-failedJobs','aggregated-failedJobs')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Failed Jobs ({failedJobs.size})</a>
+          </h4>
+        </span> ++
+      <div class="aggregated-failedJobs collapsible-table">
+        {failedJobsTable}
+      </div>
     }
 
     val helpText = """A job is triggered by an action, like count() or saveAsTextFile().""" +
@@ -403,6 +432,8 @@ private[ui] class JobDataSource(
     sortColumn: String,
     desc: Boolean) extends PagedDataSource[JobTableRowData](pageSize) {
 
+  import ApiHelper._
+
   // Convert JobUIData to JobTableRowData which contains the final contents to show in the table
   // so that we can avoid creating duplicate contents during sorting the data
   private val data = jobs.map(jobRow).sorted(ordering(sortColumn, desc))
@@ -427,23 +458,21 @@ private[ui] class JobDataSource(
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
     val submissionTime = jobData.submissionTime
     val formattedSubmissionTime = submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
-    val lastStageAttempt = store.lastStageAttempt(jobData.stageIds.max)
-    val lastStageDescription = lastStageAttempt.description.getOrElse("")
+    val (lastStageName, lastStageDescription) = lastStageNameAndDescription(store, jobData)
 
-    val formattedJobDescription =
-      UIUtils.makeDescription(lastStageDescription, basePath, plainText = false)
+    val jobDescription = UIUtils.makeDescription(lastStageDescription, basePath, plainText = false)
 
     val detailUrl = "%s/jobs/job?id=%s".format(basePath, jobData.jobId)
 
     new JobTableRowData(
       jobData,
-      lastStageAttempt.name,
+      lastStageName,
       lastStageDescription,
       duration.getOrElse(-1),
       formattedDuration,
       submissionTime.map(_.getTime()).getOrElse(-1L),
       formattedSubmissionTime,
-      formattedJobDescription,
+      jobDescription,
       detailUrl
     )
   }

@@ -22,7 +22,8 @@ import functools
 from pyspark import SparkContext, since
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_java_column, _to_seq
-from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string
+from pyspark.sql.types import StringType, DataType, ArrayType, StructType, MapType, \
+    _parse_datatype_string
 
 __all__ = ["UDFRegistration"]
 
@@ -36,8 +37,10 @@ def _wrap_function(sc, func, returnType):
 
 def _create_udf(f, returnType, evalType):
 
-    if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF or \
-            evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
+    if evalType in (PythonEvalType.SQL_PANDAS_SCALAR_UDF,
+                    PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF,
+                    PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF):
+
         import inspect
         from pyspark.sql.utils import require_minimum_pyarrow_version
 
@@ -115,6 +118,10 @@ class UserDefinedFunction(object):
                 and not isinstance(self._returnType_placeholder, StructType):
             raise ValueError("Invalid returnType: returnType must be a StructType for "
                              "pandas_udf with function type GROUP_MAP")
+        elif self.evalType == PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF \
+                and isinstance(self._returnType_placeholder, (StructType, ArrayType, MapType)):
+            raise NotImplementedError(
+                "ArrayType, StructType and MapType are not supported with PandasUDFType.GROUP_AGG")
 
         return self._returnType_placeholder
 
@@ -213,15 +220,20 @@ class UDFRegistration(object):
     @ignore_unicode_prefix
     @since("1.3.1")
     def register(self, name, f, returnType=None):
-        """Registers a Python function (including lambda function) or a user-defined function
-        in SQL statements.
+        """Register a Python function (including lambda function) or a user-defined function
+        as a SQL function.
 
         :param name: name of the user-defined function in SQL statements.
         :param f: a Python function, or a user-defined function. The user-defined function can
             be either row-at-a-time or vectorized. See :meth:`pyspark.sql.functions.udf` and
             :meth:`pyspark.sql.functions.pandas_udf`.
-        :param returnType: the return type of the registered user-defined function.
+        :param returnType: the return type of the registered user-defined function. The value can
+            be either a :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
         :return: a user-defined function.
+
+        To register a nondeterministic Python function, users need to first build
+        a nondeterministic user-defined function for the Python function and then register it
+        as a SQL function.
 
         `returnType` can be optionally specified when `f` is a Python function but not
         when `f` is a user-defined function. Please see below.
@@ -311,35 +323,44 @@ class UDFRegistration(object):
     @ignore_unicode_prefix
     @since(2.3)
     def registerJavaFunction(self, name, javaClassName, returnType=None):
-        """Register a Java user-defined function so it can be used in SQL statements.
+        """Register a Java user-defined function as a SQL function.
 
         In addition to a name and the function itself, the return type can be optionally specified.
         When the return type is not specified we would infer it via reflection.
 
         :param name: name of the user-defined function
         :param javaClassName: fully qualified name of java class
-        :param returnType: a :class:`pyspark.sql.types.DataType` object
+        :param returnType: the return type of the registered Java function. The value can be either
+            a :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
         >>> from pyspark.sql.types import IntegerType
         >>> spark.udf.registerJavaFunction(
         ...     "javaStringLength", "test.org.apache.spark.sql.JavaStringLength", IntegerType())
         >>> spark.sql("SELECT javaStringLength('test')").collect()
         [Row(UDF:javaStringLength(test)=4)]
+
         >>> spark.udf.registerJavaFunction(
         ...     "javaStringLength2", "test.org.apache.spark.sql.JavaStringLength")
         >>> spark.sql("SELECT javaStringLength2('test')").collect()
         [Row(UDF:javaStringLength2(test)=4)]
+
+        >>> spark.udf.registerJavaFunction(
+        ...     "javaStringLength3", "test.org.apache.spark.sql.JavaStringLength", "integer")
+        >>> spark.sql("SELECT javaStringLength3('test')").collect()
+        [Row(UDF:javaStringLength3(test)=4)]
         """
 
         jdt = None
         if returnType is not None:
+            if not isinstance(returnType, DataType):
+                returnType = _parse_datatype_string(returnType)
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
         self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
 
     @ignore_unicode_prefix
     @since(2.3)
     def registerJavaUDAF(self, name, javaClassName):
-        """Register a Java user-defined aggregate function so it can be used in SQL statements.
+        """Register a Java user-defined aggregate function as a SQL function.
 
         :param name: name of the user-defined aggregate function
         :param javaClassName: fully qualified name of java class

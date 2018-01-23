@@ -94,7 +94,7 @@ class VectorizedHashMapGenerator(
        |
        |  public $generatedClassName() {
        |    vectors = ${classOf[OnHeapColumnVector].getName}.allocateColumns(capacity, schema);
-       |    batch = new ${classOf[ColumnarBatch].getName}(schema, vectors, capacity);
+       |    batch = new ${classOf[ColumnarBatch].getName}(vectors);
        |
        |    // Generates a projection to return the aggregate buffer only.
        |    ${classOf[OnHeapColumnVector].getName}[] aggBufferVectors =
@@ -127,8 +127,8 @@ class VectorizedHashMapGenerator(
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        s"""(${ctx.genEqual(key.dataType, ctx.getValue(s"vectors[$ordinal]", "buckets[idx]",
-          key.dataType), key.name)})"""
+        val value = ctx.getValueFromVector(s"vectors[$ordinal]", key.dataType, "buckets[idx]")
+        s"(${ctx.genEqual(key.dataType, value, key.name)})"
       }.mkString(" && ")
     }
 

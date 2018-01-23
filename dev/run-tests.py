@@ -578,7 +578,10 @@ def main():
         pass
     if not changed_files or any(f.endswith(".py") for f in changed_files):
         run_python_style_checks()
-    if not changed_files or any(f.endswith(".R") for f in changed_files):
+    if not changed_files or any(f.endswith(".R")
+                                or f.endswith("lint-r")
+                                or f.endswith(".lintr")
+                                for f in changed_files):
         run_sparkr_style_checks()
 
     # determine if docs were changed and if we're inside the amplab environment

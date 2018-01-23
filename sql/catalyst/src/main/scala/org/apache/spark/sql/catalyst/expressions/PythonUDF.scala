@@ -15,11 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.python
+package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.api.python.PythonFunction
-import org.apache.spark.sql.catalyst.expressions.{Expression, NonSQLExpression, Unevaluable, UserDefinedExpression}
+import org.apache.spark.api.python.{PythonEvalType, PythonFunction}
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types.DataType
+
+/**
+ * Helper functions for [[PythonUDF]]
+ */
+object PythonUDF {
+  private[this] val SCALAR_TYPES = Set(
+    PythonEvalType.SQL_BATCHED_UDF,
+    PythonEvalType.SQL_PANDAS_SCALAR_UDF
+  )
+
+  def isScalarPythonUDF(e: Expression): Boolean = {
+    e.isInstanceOf[PythonUDF] && SCALAR_TYPES.contains(e.asInstanceOf[PythonUDF].evalType)
+  }
+
+  def isGroupAggPandasUDF(e: Expression): Boolean = {
+    e.isInstanceOf[PythonUDF] &&
+      e.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF
+  }
+}
 
 /**
  * A serialized version of a Python lambda function.
@@ -31,10 +50,16 @@ case class PythonUDF(
     children: Seq[Expression],
     evalType: Int,
     udfDeterministic: Boolean,
-    nullable: Boolean = true)
+    udfNullable: Boolean = true,
+    resultId: ExprId = NamedExpression.newExprId)
   extends Expression with Unevaluable with NonSQLExpression with UserDefinedExpression {
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
+  override def nullable: Boolean = udfNullable
+
   override def toString: String = s"$name(${children.mkString(", ")})"
+
+  lazy val resultAttribute: Attribute = AttributeReference(toPrettySQL(this), dataType, nullable)(
+    exprId = resultId)
 }

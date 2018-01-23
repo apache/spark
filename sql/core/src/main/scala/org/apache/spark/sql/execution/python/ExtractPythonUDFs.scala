@@ -39,12 +39,13 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
    */
   private def belongAggregate(e: Expression, agg: Aggregate): Boolean = {
     e.isInstanceOf[AggregateExpression] ||
+      PythonUDF.isGroupAggPandasUDF(e) ||
       agg.groupingExpressions.exists(_.semanticEquals(e))
   }
 
   private def hasPythonUdfOverAggregate(expr: Expression, agg: Aggregate): Boolean = {
     expr.find {
-      e => e.isInstanceOf[PythonUDF] && e.find(belongAggregate(_, agg)).isDefined
+      e => PythonUDF.isScalarPythonUDF(e) && e.find(belongAggregate(_, agg)).isDefined
     }.isDefined
   }
 
@@ -93,7 +94,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
 object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
   private def hasPythonUDF(e: Expression): Boolean = {
-    e.find(_.isInstanceOf[PythonUDF]).isDefined
+    e.find(PythonUDF.isScalarPythonUDF).isDefined
   }
 
   private def canEvaluateInPython(e: PythonUDF): Boolean = {
@@ -106,12 +107,12 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
   }
 
   private def collectEvaluatableUDF(expr: Expression): Seq[PythonUDF] = expr match {
-    case udf: PythonUDF if canEvaluateInPython(udf) => Seq(udf)
+    case udf: PythonUDF if PythonUDF.isScalarPythonUDF(udf) && canEvaluateInPython(udf) => Seq(udf)
     case e => e.children.flatMap(collectEvaluatableUDF)
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan transformUp {
-    // FlatMapGroupsInPandas can be evaluated directly in python worker
+    // AggregateInPandasExec and FlatMapGroupsInPandas can be evaluated directly in python worker
     // Therefore we don't need to extract the UDFs
     case plan: FlatMapGroupsInPandasExec => plan
     case plan: SparkPlan => extract(plan)
@@ -149,10 +150,9 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           udf.references.subsetOf(child.outputSet)
         }
         if (validUdfs.nonEmpty) {
-          require(validUdfs.forall(udf =>
-            udf.evalType == PythonEvalType.SQL_BATCHED_UDF ||
-            udf.evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF
-          ), "Can only extract scalar vectorized udf or sql batch udf")
+          require(
+            validUdfs.forall(PythonUDF.isScalarPythonUDF),
+            "Can only extract scalar vectorized udf or sql batch udf")
 
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()

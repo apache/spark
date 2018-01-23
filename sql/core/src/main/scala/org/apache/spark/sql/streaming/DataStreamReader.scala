@@ -118,7 +118,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * to be used to parse timestamps in the JSON/CSV data sources or partition values.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -129,12 +129,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
-   * Adds input options for the underlying data source.
+   * (Java-specific) Adds input options for the underlying data source.
    *
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * to be used to parse timestamps in the JSON/CSV data sources or partition values.</li>
    * </ul>
    *
    * @since 2.0.0

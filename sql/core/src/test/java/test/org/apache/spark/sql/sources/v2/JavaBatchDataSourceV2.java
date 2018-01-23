@@ -69,7 +69,7 @@ public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
       ColumnVector[] vectors = new ColumnVector[2];
       vectors[0] = i;
       vectors[1] = j;
-      this.batch = new ColumnarBatch(new StructType().add("i", "int").add("j", "int"), vectors, BATCH_SIZE);
+      this.batch = new ColumnarBatch(vectors);
       return this;
     }
 
