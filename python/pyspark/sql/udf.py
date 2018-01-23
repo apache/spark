@@ -22,7 +22,8 @@ import functools
 from pyspark import SparkContext, since
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_java_column, _to_seq
-from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string
+from pyspark.sql.types import StringType, DataType, ArrayType, StructType, MapType, \
+    _parse_datatype_string
 
 __all__ = ["UDFRegistration"]
 
@@ -36,8 +37,10 @@ def _wrap_function(sc, func, returnType):
 
 def _create_udf(f, returnType, evalType):
 
-    if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF or \
-            evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
+    if evalType in (PythonEvalType.SQL_PANDAS_SCALAR_UDF,
+                    PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF,
+                    PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF):
+
         import inspect
         from pyspark.sql.utils import require_minimum_pyarrow_version
 
@@ -113,6 +116,10 @@ class UserDefinedFunction(object):
                 and not isinstance(self._returnType_placeholder, StructType):
             raise ValueError("Invalid returnType: returnType must be a StructType for "
                              "pandas_udf with function type GROUP_MAP")
+        elif self.evalType == PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF \
+                and isinstance(self._returnType_placeholder, (StructType, ArrayType, MapType)):
+            raise NotImplementedError(
+                "ArrayType, StructType and MapType are not supported with PandasUDFType.GROUP_AGG")
 
         return self._returnType_placeholder
 
