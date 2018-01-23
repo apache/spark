@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
+import java.util.concurrent.Callable
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
@@ -44,7 +45,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * The main class responsible for representing a pluggable Data Source in Spark SQL. In addition to
@@ -154,8 +155,7 @@ case class DataSource(
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(hadoopConf)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        val serializableConfiguration = new SerializableConfiguration(hadoopConf)
-        DataSource.getGlobbedPaths(sparkSession, fs, serializableConfiguration, qualified)
+        DataSource.getGlobbedPaths(sparkSession, fs, hadoopConf, qualified)
       }.toArray
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None, fileStatusCache)
     }
@@ -675,8 +675,7 @@ object DataSource extends Logging {
     val hdfsPath = new Path(path)
     val fs = hdfsPath.getFileSystem(hadoopConf)
     val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    val serializableConfiguration = new SerializableConfiguration(hadoopConf)
-    val globPath = getGlobbedPaths(sparkSession, fs, serializableConfiguration, qualified)
+    val globPath = getGlobbedPaths(sparkSession, fs, hadoopConf, qualified)
 
     if (globPath.isEmpty) {
       throw new AnalysisException(s"Path does not exist: $qualified")
@@ -691,28 +690,33 @@ object DataSource extends Logging {
 
   /**
    * Return all paths represented by the wildcard string.
-   * Follow [[InMemoryFileIndex]].bulkListLeafFile and reuse the conf.
+   * Use a local thread pool to do this while there's too many paths.
    */
   private def getGlobbedPaths(
       sparkSession: SparkSession,
       fs: FileSystem,
-      hadoopConf: SerializableConfiguration,
+      hadoopConf: Configuration,
       qualified: Path): Seq[Path] = {
     val paths = SparkHadoopUtil.get.expandGlobPath(fs, qualified)
-    if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
+    if (paths.size < sparkSession.sessionState.conf.parallelGetGlobbedPathParallelism) {
       SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
     } else {
-      val parallelPartitionDiscoveryParallelism =
-        sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism
-      val numParallelism = Math.min(paths.size, parallelPartitionDiscoveryParallelism)
-      val expanded = sparkSession.sparkContext
-        .parallelize(paths, numParallelism)
-        .map { pathString =>
-          val path = new Path(pathString)
-          val fs = path.getFileSystem(hadoopConf.value)
-          SparkHadoopUtil.get.globPathIfNecessary(fs, path).map(_.toString)
-        }.collect()
-      expanded.flatMap(paths => paths.map(new Path(_))).toSeq
+      val parallelGetGlobbedPathParallelism =
+        sparkSession.sessionState.conf.parallelGetGlobbedPathParallelism
+      val numParallelism = Math.min(paths.size, parallelGetGlobbedPathParallelism * 2)
+      val threadPool = ThreadUtils.newDaemonCachedThreadPool(
+        "parallel-get-globbed-paths-thread-pool", numParallelism)
+      val result = paths.map { pathStr =>
+        threadPool.submit(new Callable[Seq[Path]] {
+          override def call(): Seq[Path] = {
+            val path = new Path(pathStr)
+            val fs = path.getFileSystem(hadoopConf)
+            SparkHadoopUtil.get.globPathIfNecessary(fs, path)
+          }
+        })
+      }.flatMap(_.get)
+      threadPool.shutdownNow()
+      result
     }
   }
 }

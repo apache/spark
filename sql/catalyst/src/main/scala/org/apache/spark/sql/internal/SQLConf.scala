@@ -596,6 +596,15 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val PARALLEL_GET_GLOBBED_PATH_PARALLELISM =
+    buildConf("spark.sql.sources.parallelGetGlobbedPath.parallelism")
+      .doc("The number of threads to get a collection of path in parallel. Set the " +
+        "number to avoid generating too many threads.")
+      .intConf
+      .checkValue(parallel => parallel >= 0, "The maximum number of threads allowed for getting " +
+        "globbed paths at driver side must not be negative")
+      .createWithDefault(32)
+
   // Whether to automatically resolve ambiguity in join conditions for self-joins.
   // See SPARK-6231.
   val DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY =
@@ -1350,6 +1359,9 @@ class SQLConf extends Serializable with Logging {
 
   def parallelPartitionDiscoveryParallelism: Int =
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM)
+
+  def parallelGetGlobbedPathParallelism: Int =
+    getConf(SQLConf.PARALLEL_GET_GLOBBED_PATH_PARALLELISM)
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
 
