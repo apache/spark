@@ -35,7 +35,7 @@ compile_status="${PIPESTATUS[0]}"
 
 # Get pep8 at runtime so that we don't rely on it being installed on the build server.
 #+ See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
-# Updated to latest official version for pep8.pep8 is formally renamed to pycodestyle.
+# Updated to latest official version for pep8. pep8 is formally renamed to pycodestyle.
 PEP8_VERSION="2.3.1"
 PEP8_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pep8-$PEP8_VERSION.py"
 PEP8_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/PyCQA/pycodestyle/$PEP8_VERSION/pycodestyle.py"
