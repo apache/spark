@@ -69,7 +69,9 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
       new SimpleCSVDataWriterFactory(path, jobId, new SerializableConfiguration(conf))
     }
 
-    override def commit(messages: Array[WriterCommitMessage]): Unit = {
+    override def add(message: WriterCommitMessage): Unit = {}
+
+    override def commit(): Unit = {
       val finalPath = new Path(path)
       val jobPath = new Path(new Path(finalPath, "_temporary"), jobId)
       val fs = jobPath.getFileSystem(conf)
@@ -85,7 +87,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
       }
     }
 
-    override def abort(messages: Array[WriterCommitMessage]): Unit = {
+    override def abort(): Unit = {
       val jobPath = new Path(new Path(path, "_temporary"), jobId)
       val fs = jobPath.getFileSystem(conf)
       fs.delete(jobPath, true)

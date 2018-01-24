@@ -118,14 +118,21 @@ class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 
-  def commit(messages: Array[WriterCommitMessage]): Unit = {
-    val newRows = messages.flatMap {
-      case message: MemoryWriterCommitMessage => message.data
-    }
-    sink.write(batchId, outputMode, newRows)
+  private val messages = new ArrayBuffer[WriterCommitMessage]()
+
+  override def add(message: WriterCommitMessage): Unit = synchronized {
+    messages += message
   }
 
-  override def abort(messages: Array[WriterCommitMessage]): Unit = {
+  def commit(): Unit = synchronized {
+    val newRows = messages.flatMap {
+      case message: MemoryWriterCommitMessage => message.data
+    }.toArray
+    sink.write(batchId, outputMode, newRows)
+    messages.clear()
+  }
+
+  override def abort(): Unit = {
     // Don't accept any of the new input.
   }
 }
@@ -135,14 +142,21 @@ class MemoryStreamWriter(val sink: MemorySinkV2, outputMode: OutputMode)
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 
-  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    val newRows = messages.flatMap {
-      case message: MemoryWriterCommitMessage => message.data
-    }
-    sink.write(epochId, outputMode, newRows)
+  private val messages = new ArrayBuffer[WriterCommitMessage]()
+
+  override def add(message: WriterCommitMessage): Unit = synchronized {
+    messages += message
   }
 
-  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+  override def commit(epochId: Long): Unit = synchronized {
+    val newRows = messages.flatMap {
+      case message: MemoryWriterCommitMessage => message.data
+    }.toArray
+    sink.write(epochId, outputMode, newRows)
+    messages.clear()
+  }
+
+  override def abort(epochId: Long): Unit = {
     // Don't accept any of the new input.
   }
 }

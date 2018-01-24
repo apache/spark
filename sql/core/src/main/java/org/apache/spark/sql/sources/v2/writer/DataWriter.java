@@ -33,11 +33,11 @@ import org.apache.spark.annotation.InterfaceStability;
  *
  * If this data writer succeeds(all records are successfully written and {@link #commit()}
  * succeeds), a {@link WriterCommitMessage} will be sent to the driver side and pass to
- * {@link DataSourceWriter#commit(WriterCommitMessage[])} with commit messages from other data
+ * {@link DataSourceWriter#commit()} with commit messages from other data
  * writers. If this data writer fails(one record fails to write or {@link #commit()} fails), an
  * exception will be sent to the driver side, and Spark will retry this writing task for some times,
  * each time {@link DataWriterFactory#createDataWriter(int, int)} gets a different `attemptNumber`,
- * and finally call {@link DataSourceWriter#abort(WriterCommitMessage[])} if all retry fail.
+ * and finally call {@link DataSourceWriter#abort()} if all retry fail.
  *
  * Besides the retry mechanism, Spark may launch speculative tasks if the existing writing task
  * takes too long to finish. Different from retried tasks, which are launched one by one after the
@@ -69,10 +69,10 @@ public interface DataWriter<T> {
   /**
    * Commits this writer after all records are written successfully, returns a commit message which
    * will be sent back to driver side and passed to
-   * {@link DataSourceWriter#commit(WriterCommitMessage[])}.
+   * {@link DataSourceWriter#commit()}.
    *
    * The written data should only be visible to data source readers after
-   * {@link DataSourceWriter#commit(WriterCommitMessage[])} succeeds, which means this method
+   * {@link DataSourceWriter#commit()} succeeds, which means this method
    * should still "hide" the written data and ask the {@link DataSourceWriter} at driver side to
    * do the final commit via {@link WriterCommitMessage}.
    *
@@ -91,7 +91,7 @@ public interface DataWriter<T> {
    * failed.
    *
    * If this method fails(by throwing an exception), the underlying data source may have garbage
-   * that need to be cleaned by {@link DataSourceWriter#abort(WriterCommitMessage[])} or manually,
+   * that need to be cleaned by {@link DataSourceWriter#abort()} or manually,
    * but these garbage should not be visible to data source readers.
    *
    * @throws IOException if failure happens during disk/network IO like writing files.

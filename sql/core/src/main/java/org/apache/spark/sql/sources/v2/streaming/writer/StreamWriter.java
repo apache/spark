@@ -37,18 +37,18 @@ public interface StreamWriter extends DataSourceWriter {
    * {@link DataWriter#commit()}.
    *
    * If this method fails (by throwing an exception), this writing job is considered to have been
-   * failed, and the execution engine will attempt to call {@link #abort(WriterCommitMessage[])}.
+   * failed, and the execution engine will attempt to call {@link #abort()}.
    *
    * To support exactly-once processing, writer implementations should ensure that this method is
    * idempotent. The execution engine may call commit() multiple times for the same epoch
    * in some circumstances.
    */
-  void commit(long epochId, WriterCommitMessage[] messages);
+  void commit(long epochId);
 
   /**
-   * Aborts this writing job because some data writers are failed and keep failing when retry, or
-   * the Spark job fails with some unknown reasons, or {@link #commit(WriterCommitMessage[])} fails.
-   *
+   * Aborts this writing job because some data writers are failed and keep failing when retry,
+   * or the Spark job fails with some unknown reasons,
+   * or {@link #commit()} /{@link #add(WriterCommitMessage)} fails
    * If this method fails (by throwing an exception), the underlying data source may require manual
    * cleanup.
    *
@@ -58,14 +58,14 @@ public interface StreamWriter extends DataSourceWriter {
    * driver when the abort is triggered. So this is just a "best effort" for data sources to
    * clean up the data left by data writers.
    */
-  void abort(long epochId, WriterCommitMessage[] messages);
+  void abort(long epochId);
 
-  default void commit(WriterCommitMessage[] messages) {
+  default void commit() {
     throw new UnsupportedOperationException(
         "Commit without epoch should not be called with StreamWriter");
   }
 
-  default void abort(WriterCommitMessage[] messages) {
+  default void abort() {
     throw new UnsupportedOperationException(
         "Abort without epoch should not be called with StreamWriter");
   }
