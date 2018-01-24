@@ -454,6 +454,8 @@ case class FileSourceScanExec(
     var backIndex = splitFiles.length - 1
 
     while (frontIndex <= backIndex) {
+        addFile(splitFiles(frontIndex))
+        frontIndex += 1
         while (frontIndex <= backIndex && currentSize + splitFiles(frontIndex).length <= maxSplitBytes) {
             addFile(splitFiles(frontIndex))
             frontIndex += 1
