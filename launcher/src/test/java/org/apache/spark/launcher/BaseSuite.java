@@ -18,7 +18,6 @@
 package org.apache.spark.launcher;
 
 import java.time.Duration;
-import java.util.concurrent.TimeUnit;
 
 import org.junit.After;
 import org.slf4j.bridge.SLF4JBridgeHandler;
