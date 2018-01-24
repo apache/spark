@@ -1365,8 +1365,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         }
       }
 
-      val transConf: TransportConf =
-        SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 0)
+      val transConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numUsableCores = 0)
       val transCtx = new TransportContext(transConf, handler, true)
       (transCtx.createServer(port, Seq.empty[TransportServerBootstrap].asJava), port)
     }
