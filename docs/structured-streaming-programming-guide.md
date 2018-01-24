@@ -10,7 +10,7 @@ title: Structured Streaming Programming Guide
 # Overview
 Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. You can express your streaming computation the same way you would express a batch computation on static data. The Spark SQL engine will take care of running it incrementally and continuously and updating the final result as streaming data continues to arrive. You can use the [Dataset/DataFrame API](sql-programming-guide.html) in Scala, Java, Python or R to express streaming aggregations, event-time windows, stream-to-batch joins, etc. The computation is executed on the same optimized Spark SQL engine. Finally, the system ensures end-to-end exactly-once fault-tolerance guarantees through checkpointing and Write Ahead Logs. In short, *Structured Streaming provides fast, scalable, fault-tolerant, end-to-end exactly-once stream processing without the user having to reason about streaming.*
 
-Internally, by default, Structured Streaming queries are processed using a *micro-batch processing* engine, which processes data streams as a series of small batch jobs thereby achieving end-to-end latencies as low as 100 milliseconds and exactly-once fault-tolerance guarantees. However, since Spark 2.3, we have introduced a new low-latency processing mode called **Continuous Processing**, which can achieve end-to-end latencies as low as 1 millisecond with at-least-once guarantees. Without changing the Dataset/DataFrame operations in your queries, you will be able choose the mode based on your application requirements. 
+Internally, by default, Structured Streaming queries are processed using a *micro-batch processing* engine, which processes data streams as a series of small batch jobs thereby achieving end-to-end latencies as low as 100 milliseconds and exactly-once fault-tolerance guarantees. However, since Spark 2.3, we have introduced a new low-latency processing mode called **Continuous Processing**, which can achieve end-to-end latencies as low as 1 millisecond with at-least-once guarantees. Without changing the Dataset/DataFrame operations in your queries, you will be able to choose the mode based on your application requirements. 
 
 In this guide, we are going to walk you through the programming model and the APIs. We are going to explain the concepts mostly using the default micro-batch processing model, and then [later](#continuous-processing-experimental) discuss Continuous Processing model. First, let's start with a simple example of a Structured Streaming query - a streaming word count.
 
@@ -1101,6 +1101,21 @@ streamingDf.join(staticDf, "type", "right_join")  # right outer join with a stat
 {% endhighlight %}
 
 </div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+staticDf <- read.df(...)
+streamingDf <- read.stream(...)
+joined <- merge(streamingDf, staticDf, sort = FALSE)  # inner equi-join with a static DF
+joined <- join(
+            staticDf,
+            streamingDf, 
+            streamingDf$value == staticDf$value,
+            "right_outer")  # right outer join with a static DF
+{% endhighlight %}
+
+</div>
 </div>
 
 Note that stream-static joins are not stateful, so no state management is necessary.
@@ -1121,7 +1136,7 @@ Let’s discuss the different types of supported stream-stream joins and how to 
 ##### Inner Joins with optional Watermarking
 Inner joins on any kind of columns along with any kind of join conditions are supported.
 However, as the stream runs, the size of streaming state will keep growing indefinitely as
-*all* past input must be saved as the any new input can match with any input from the past.
+*all* past input must be saved as any new input can match with any input from the past.
 To avoid unbounded state, you have to define additional join conditions such that indefinitely
 old inputs cannot match with future inputs and therefore can be cleared from the state.
 In other words, you will have to do the following additional steps in the join.
@@ -1228,6 +1243,30 @@ impressionsWithWatermark.join(
 {% endhighlight %}
 
 </div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+impressions <- read.stream(...)
+clicks <- read.stream(...)
+
+# Apply watermarks on event-time columns
+impressionsWithWatermark <- withWatermark(impressions, "impressionTime", "2 hours")
+clicksWithWatermark <- withWatermark(clicks, "clickTime", "3 hours")
+
+# Join with event-time constraints
+joined <- join(
+  impressionsWithWatermark,
+  clicksWithWatermark,
+  expr(
+    paste(
+      "clickAdId = impressionAdId AND",
+      "clickTime >= impressionTime AND",
+      "clickTime <= impressionTime + interval 1 hour"
+)))
+
+{% endhighlight %}
+
+</div>
 </div>
 
 ##### Outer Joins with Watermarking
@@ -1284,6 +1323,23 @@ impressionsWithWatermark.join(
     """),
   "leftOuter"                 # can be "inner", "leftOuter", "rightOuter"
 )
+
+{% endhighlight %}
+
+</div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+joined <- join(
+  impressionsWithWatermark,
+  clicksWithWatermark,
+  expr(
+    paste(
+      "clickAdId = impressionAdId AND",
+      "clickTime >= impressionTime AND",
+      "clickTime <= impressionTime + interval 1 hour"),
+  "left_outer"                 # can be "inner", "left_outer", "right_outer"
+))
 
 {% endhighlight %}
 
@@ -1441,13 +1497,27 @@ streamingDf
 {% highlight python %}
 streamingDf = spark.readStream. ...
 
-// Without watermark using guid column
+# Without watermark using guid column
 streamingDf.dropDuplicates("guid")
 
-// With watermark using guid and eventTime columns
+# With watermark using guid and eventTime columns
 streamingDf \
   .withWatermark("eventTime", "10 seconds") \
   .dropDuplicates("guid", "eventTime")
+{% endhighlight %}
+
+</div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+streamingDf <- read.stream(...)
+
+# Without watermark using guid column
+streamingDf <- dropDuplicates(streamingDf, "guid")
+
+# With watermark using guid and eventTime columns
+streamingDf <- withWatermark(streamingDf, "eventTime", "10 seconds")
+streamingDf <- dropDuplicates(streamingDf, "guid", "eventTime")
 {% endhighlight %}
 
 </div>
@@ -1839,7 +1909,7 @@ aggDF \
     .format("console") \
     .start()
 
-# Have all the aggregates in an in memory table. The query name will be the table name
+# Have all the aggregates in an in-memory table. The query name will be the table name
 aggDF \
     .writeStream \
     .queryName("aggregates") \

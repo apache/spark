@@ -307,7 +307,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
       throw new IllegalArgumentException(
         s"Kafka option '${ConsumerConfig.GROUP_ID_CONFIG}' is not supported as " +
-          s"user-specified consumer groups is not used to track offsets.")
+          s"user-specified consumer groups are not used to track offsets.")
     }
 
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG}")) {
@@ -335,7 +335,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     {
       throw new IllegalArgumentException(
         s"Kafka option '${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG}' is not supported as "
-          + "value are deserialized as byte arrays with ByteArrayDeserializer. Use DataFrame "
+          + "values are deserialized as byte arrays with ByteArrayDeserializer. Use DataFrame "
           + "operations to explicitly deserialize the values.")
     }
 

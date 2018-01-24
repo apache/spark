@@ -32,7 +32,7 @@ import org.apache.spark.sql.internal.SQLConf.{SHUFFLE_PARTITIONS, STATE_STORE_PR
 case class OffsetSeq(offsets: Seq[Option[Offset]], metadata: Option[OffsetSeqMetadata] = None) {
 
   /**
-   * Unpacks an offset into [[StreamProgress]] by associating each offset with the order list of
+   * Unpacks an offset into [[StreamProgress]] by associating each offset with the ordered list of
    * sources.
    *
    * This method is typically used to associate a serialized offset with actual sources (which

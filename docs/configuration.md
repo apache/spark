@@ -79,7 +79,7 @@ Then, you can supply configuration values at runtime:
 {% endhighlight %}
 
 The Spark shell and [`spark-submit`](submitting-applications.html)
-tool support two ways to load configurations dynamically. The first are command line options,
+tool support two ways to load configurations dynamically. The first is command line options,
 such as `--master`, as shown above. `spark-submit` can accept any Spark property using the `--conf`
 flag, but uses special flags for properties that play a part in launching the Spark application.
 Running `./bin/spark-submit --help` will show the entire list of these options.
@@ -413,7 +413,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Enable profiling in Python worker, the profile result will show up by <code>sc.show_profiles()</code>,
-    or it will be displayed before the driver exiting. It also can be dumped into disk by
+    or it will be displayed before the driver exits. It also can be dumped into disk by
     <code>sc.dump_profiles(path)</code>. If some of the profile results had been displayed manually,
     they will not be displayed automatically before driver exiting.
 
@@ -446,7 +446,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>true</td>
   <td>
     Reuse Python worker or not. If yes, it will use a fixed number of Python workers,
-    does not need to fork() a Python process for every tasks. It will be very useful
+    does not need to fork() a Python process for every task. It will be very useful
     if there is large broadcast, then the broadcast will not be needed to transferred
     from JVM to Python worker for every task.
   </td>
@@ -1294,7 +1294,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.files.openCostInBytes</code></td>
   <td>4194304 (4 MB)</td>
   <td>
-    The estimated cost to open a file, measured by the number of bytes could be scanned in the same
+    The estimated cost to open a file, measured by the number of bytes could be scanned at the same
     time. This is used when putting multiple files into a partition. It is better to over estimate,
     then the partitions with small files will be faster than partitions with bigger files.
   </td>
@@ -1855,8 +1855,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.user.groups.mapping</code></td>
   <td><code>org.apache.spark.security.ShellBasedGroupsMappingProvider</code></td>
   <td>
-    The list of groups for a user are determined by a group mapping service defined by the trait
-    org.apache.spark.security.GroupMappingServiceProvider which can configured by this property.
+    The list of groups for a user is determined by a group mapping service defined by the trait
+    org.apache.spark.security.GroupMappingServiceProvider which can be configured by this property.
     A default unix shell based implementation is provided <code>org.apache.spark.security.ShellBasedGroupsMappingProvider</code>
     which can be specified to resolve a list of groups for a user.
     <em>Note:</em> This implementation supports only a Unix/Linux based environment. Windows environment is
@@ -2465,7 +2465,7 @@ should be included on Spark's classpath:
 
 The location of these configuration files varies across Hadoop versions, but
 a common location is inside of `/etc/hadoop/conf`. Some tools create
-configurations on-the-fly, but offer a mechanisms to download copies of them.
+configurations on-the-fly, but offer a mechanism to download copies of them.
 
 To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/conf/spark-env.sh`
 to a location containing the configuration files.

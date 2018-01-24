@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -199,7 +200,7 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
 object PhysicalAggregation {
   // groupingExpressions, aggregateExpressions, resultExpressions, child
   type ReturnType =
-    (Seq[NamedExpression], Seq[AggregateExpression], Seq[NamedExpression], LogicalPlan)
+    (Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
     case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
@@ -213,7 +214,10 @@ object PhysicalAggregation {
         expr.collect {
           // addExpr() always returns false for non-deterministic expressions and do not add them.
           case agg: AggregateExpression
-            if (!equivalentAggregateExpressions.addExpr(agg)) => agg
+            if !equivalentAggregateExpressions.addExpr(agg) => agg
+          case udf: PythonUDF
+            if PythonUDF.isGroupAggPandasUDF(udf) &&
+              !equivalentAggregateExpressions.addExpr(udf) => udf
         }
       }
 
@@ -241,6 +245,10 @@ object PhysicalAggregation {
             // so replace each aggregate expression by its corresponding attribute in the set:
             equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
               .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
+            // Similar to AggregateExpression
+          case ue: PythonUDF if PythonUDF.isGroupAggPandasUDF(ue) =>
+            equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
+              .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
           case expression =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key
             // columns, we need to replace grouping key expressions with their corresponding

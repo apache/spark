@@ -146,8 +146,8 @@ public final class MutableColumnarRow extends InternalRow {
   @Override
   public CalendarInterval getInterval(int ordinal) {
     if (columns[ordinal].isNullAt(rowId)) return null;
-    final int months = columns[ordinal].getChildColumn(0).getInt(rowId);
-    final long microseconds = columns[ordinal].getChildColumn(1).getLong(rowId);
+    final int months = columns[ordinal].getChild(0).getInt(rowId);
+    final long microseconds = columns[ordinal].getChild(1).getLong(rowId);
     return new CalendarInterval(months, microseconds);
   }
 
