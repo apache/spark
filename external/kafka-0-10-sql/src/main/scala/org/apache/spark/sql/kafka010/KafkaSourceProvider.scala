@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.{Locale, UUID}
+import java.util.{Locale, Optional, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -27,9 +27,12 @@ import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySerializer}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SQLContext}
-import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.execution.streaming.{Offset, Sink, Source}
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
+import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, ContinuousWriteSupport}
+import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -43,6 +46,8 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     with StreamSinkProvider
     with RelationProvider
     with CreatableRelationProvider
+    with ContinuousWriteSupport
+    with ContinuousReadSupport
     with Logging {
   import KafkaSourceProvider._
 
@@ -93,6 +98,43 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
 
     new KafkaSource(
       sqlContext,
+      kafkaOffsetReader,
+      kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
+      parameters,
+      metadataPath,
+      startingStreamOffsets,
+      failOnDataLoss(caseInsensitiveParams))
+  }
+
+  override def createContinuousReader(
+      schema: Optional[StructType],
+      metadataPath: String,
+      options: DataSourceV2Options): KafkaContinuousReader = {
+    val parameters = options.asMap().asScala.toMap
+    validateStreamOptions(parameters)
+    // Each running query should use its own group id. Otherwise, the query may be only assigned
+    // partial data since Kafka will assign partitions to multiple consumers having the same group
+    // id. Hence, we should generate a unique id for each query.
+    val uniqueGroupId = s"spark-kafka-source-${UUID.randomUUID}-${metadataPath.hashCode}"
+
+    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
+    val specifiedKafkaParams =
+      parameters
+        .keySet
+        .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
+        .map { k => k.drop(6).toString -> parameters(k) }
+        .toMap
+
+    val startingStreamOffsets = KafkaSourceProvider.getKafkaOffsetRangeLimit(caseInsensitiveParams,
+      STARTING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
+
+    val kafkaOffsetReader = new KafkaOffsetReader(
+      strategy(caseInsensitiveParams),
+      kafkaParamsForDriver(specifiedKafkaParams),
+      parameters,
+      driverGroupIdPrefix = s"$uniqueGroupId-driver")
+
+    new KafkaContinuousReader(
       kafkaOffsetReader,
       kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
       parameters,
@@ -181,26 +223,22 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  private def kafkaParamsForProducer(parameters: Map[String, String]): Map[String, String] = {
-    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
-    if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG}")) {
-      throw new IllegalArgumentException(
-        s"Kafka option '${ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG}' is not supported as keys "
-          + "are serialized with ByteArraySerializer.")
-    }
+  override def createContinuousWriter(
+      queryId: String,
+      schema: StructType,
+      mode: OutputMode,
+      options: DataSourceV2Options): Optional[ContinuousWriter] = {
+    import scala.collection.JavaConverters._
 
-    if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}"))
-    {
-      throw new IllegalArgumentException(
-        s"Kafka option '${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}' is not supported as "
-          + "value are serialized with ByteArraySerializer.")
-    }
-    parameters
-      .keySet
-      .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
-      .map { k => k.drop(6).toString -> parameters(k) }
-      .toMap + (ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName,
-        ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName)
+    val spark = SparkSession.getActiveSession.get
+    val topic = Option(options.get(TOPIC_OPTION_KEY).orElse(null)).map(_.trim)
+    // We convert the options argument from V2 -> Java map -> scala mutable -> scala immutable.
+    val producerParams = kafkaParamsForProducer(options.asMap.asScala.toMap)
+
+    KafkaWriter.validateQuery(
+      schema.toAttributes, new java.util.HashMap[String, Object](producerParams.asJava), topic)
+
+    Optional.of(new KafkaContinuousWriter(topic, producerParams, schema))
   }
 
   private def strategy(caseInsensitiveParams: Map[String, String]) =
@@ -269,7 +307,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
       throw new IllegalArgumentException(
         s"Kafka option '${ConsumerConfig.GROUP_ID_CONFIG}' is not supported as " +
-          s"user-specified consumer groups is not used to track offsets.")
+          s"user-specified consumer groups are not used to track offsets.")
     }
 
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG}")) {
@@ -297,7 +335,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     {
       throw new IllegalArgumentException(
         s"Kafka option '${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG}' is not supported as "
-          + "value are deserialized as byte arrays with ByteArrayDeserializer. Use DataFrame "
+          + "values are deserialized as byte arrays with ByteArrayDeserializer. Use DataFrame "
           + "operations to explicitly deserialize the values.")
     }
 
@@ -449,5 +487,28 @@ private[kafka010] object KafkaSourceProvider extends Logging {
     }
 
     def build(): ju.Map[String, Object] = map
+  }
+
+  private[kafka010] def kafkaParamsForProducer(
+      parameters: Map[String, String]): Map[String, String] = {
+    val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
+    if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG}")) {
+      throw new IllegalArgumentException(
+        s"Kafka option '${ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG}' is not supported as keys "
+          + "are serialized with ByteArraySerializer.")
+    }
+
+    if (caseInsensitiveParams.contains(s"kafka.${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}"))
+    {
+      throw new IllegalArgumentException(
+        s"Kafka option '${ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG}' is not supported as "
+          + "value are serialized with ByteArraySerializer.")
+    }
+    parameters
+      .keySet
+      .filter(_.toLowerCase(Locale.ROOT).startsWith("kafka."))
+      .map { k => k.drop(6).toString -> parameters(k) }
+      .toMap + (ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName,
+      ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName)
   }
 }

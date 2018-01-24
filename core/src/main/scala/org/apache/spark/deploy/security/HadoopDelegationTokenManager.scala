@@ -109,13 +109,15 @@ private[spark] class HadoopDelegationTokenManager(
    * Writes delegation tokens to creds.  Delegation tokens are fetched from all registered
    * providers.
    *
+   * @param hadoopConf hadoop Configuration
+   * @param creds Credentials that will be updated in place (overwritten)
    * @return Time after which the fetched delegation tokens should be renewed.
    */
   def obtainDelegationTokens(
       hadoopConf: Configuration,
       creds: Credentials): Long = {
     delegationTokenProviders.values.flatMap { provider =>
-      if (provider.delegationTokensRequired(hadoopConf)) {
+      if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
         provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
       } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +
@@ -125,3 +127,4 @@ private[spark] class HadoopDelegationTokenManager(
     }.foldLeft(Long.MaxValue)(math.min)
   }
 }
+

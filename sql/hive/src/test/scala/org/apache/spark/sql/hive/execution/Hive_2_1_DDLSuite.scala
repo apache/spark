@@ -74,7 +74,11 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with Before
   }
 
   override def afterAll(): Unit = {
-    catalog = null
+    try {
+      catalog = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("SPARK-21617: ALTER TABLE for non-compatible DataSource tables") {
@@ -117,7 +121,7 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with Before
     spark.sql(createTableStmt)
     val oldTable = spark.sessionState.catalog.externalCatalog.getTable("default", tableName)
     catalog.createTable(oldTable, true)
-    catalog.alterTableSchema("default", tableName, updatedSchema)
+    catalog.alterTableDataSchema("default", tableName, updatedSchema)
 
     val updatedTable = catalog.getTable("default", tableName)
     assert(updatedTable.schema.fieldNames === updatedSchema.fieldNames)

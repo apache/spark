@@ -58,7 +58,7 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public DataReader<Row> createReader() {
+    public DataReader<Row> createDataReader() {
       return new JavaSimpleReadTask(start - 1, end);
     }
 

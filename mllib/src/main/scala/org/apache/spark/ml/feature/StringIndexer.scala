@@ -261,7 +261,7 @@ class StringIndexerModel (
             s"set Param handleInvalid to ${StringIndexer.KEEP_INVALID}.")
         }
       }
-    }
+    }.asNondeterministic()
 
     filteredDataset.select(col("*"),
       indexer(dataset($(inputCol)).cast(StringType)).as($(outputCol), metadata))

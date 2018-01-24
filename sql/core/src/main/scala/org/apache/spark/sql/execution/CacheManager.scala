@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.storage.StorageLevel
@@ -94,14 +94,13 @@ class CacheManager extends Logging {
       logWarning("Asked to cache already cached data.")
     } else {
       val sparkSession = query.sparkSession
-      cachedData.add(CachedData(
-        planToCache,
-        InMemoryRelation(
-          sparkSession.sessionState.conf.useCompression,
-          sparkSession.sessionState.conf.columnBatchSize,
-          storageLevel,
-          sparkSession.sessionState.executePlan(planToCache).executedPlan,
-          tableName)))
+      val inMemoryRelation = InMemoryRelation(
+        sparkSession.sessionState.conf.useCompression,
+        sparkSession.sessionState.conf.columnBatchSize, storageLevel,
+        sparkSession.sessionState.executePlan(planToCache).executedPlan,
+        tableName,
+        planToCache.stats)
+      cachedData.add(CachedData(planToCache, inMemoryRelation))
     }
   }
 
@@ -148,7 +147,8 @@ class CacheManager extends Logging {
           batchSize = cd.cachedRepresentation.batchSize,
           storageLevel = cd.cachedRepresentation.storageLevel,
           child = spark.sessionState.executePlan(cd.plan).executedPlan,
-          tableName = cd.cachedRepresentation.tableName)
+          tableName = cd.cachedRepresentation.tableName,
+          statsOfPlanToCache = cd.plan.stats)
         needToRecache += cd.copy(cachedRepresentation = newCache)
       }
     }
@@ -170,9 +170,13 @@ class CacheManager extends Logging {
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
     val newPlan = plan transformDown {
       case currentFragment =>
-        lookupCachedData(currentFragment)
-          .map(_.cachedRepresentation.withOutput(currentFragment.output))
-          .getOrElse(currentFragment)
+        lookupCachedData(currentFragment).map { cached =>
+          val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
+          currentFragment match {
+            case hint: ResolvedHint => ResolvedHint(cachedPlan, hint.hints)
+            case _ => cachedPlan
+          }
+        }.getOrElse(currentFragment)
     }
 
     newPlan transformAllExpressions {

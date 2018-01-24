@@ -58,7 +58,7 @@ class ConfigBehaviorSuite extends QueryTest with SharedSQLContext {
       withSQLConf(SQLConf.RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION.key -> "1") {
         // If we only sample one point, the range boundaries will be pretty bad and the
         // chi-sq value would be very high.
-        assert(computeChiSquareTest() > 1000)
+        assert(computeChiSquareTest() > 300)
       }
     }
   }

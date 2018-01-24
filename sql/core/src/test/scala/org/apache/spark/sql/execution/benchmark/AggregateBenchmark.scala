@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import java.util.HashMap
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.config._
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
@@ -107,14 +108,14 @@ class AggregateBenchmark extends BenchmarkBase {
 
     benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enable", "false")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enabled", "false")
       sparkSession.conf.set("spark.sql.codegen.aggregate.map.vectorized.enable", "false")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enable", "true")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enabled", "true")
       sparkSession.conf.set("spark.sql.codegen.aggregate.map.vectorized.enable", "true")
       f()
     }
@@ -149,14 +150,14 @@ class AggregateBenchmark extends BenchmarkBase {
 
     benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", value = true)
-      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enable", "false")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enabled", "false")
       sparkSession.conf.set("spark.sql.codegen.aggregate.map.vectorized.enable", "false")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", value = true)
-      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enable", "true")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enabled", "true")
       sparkSession.conf.set("spark.sql.codegen.aggregate.map.vectorized.enable", "true")
       f()
     }
@@ -189,14 +190,14 @@ class AggregateBenchmark extends BenchmarkBase {
 
     benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enable", "false")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enabled", "false")
       sparkSession.conf.set("spark.sql.codegen.aggregate.map.vectorized.enable", "false")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enable", "true")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enabled", "true")
       sparkSession.conf.set("spark.sql.codegen.aggregate.map.vectorized.enable", "true")
       f()
     }
@@ -228,14 +229,14 @@ class AggregateBenchmark extends BenchmarkBase {
 
     benchmark.addCase(s"codegen = T hashmap = F") { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enable", "false")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enabled", "false")
       sparkSession.conf.set("spark.sql.codegen.aggregate.map.vectorized.enable", "false")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T") { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enable", "true")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enabled", "true")
       sparkSession.conf.set("spark.sql.codegen.aggregate.map.vectorized.enable", "true")
       f()
     }
@@ -277,14 +278,14 @@ class AggregateBenchmark extends BenchmarkBase {
 
     benchmark.addCase(s"codegen = T hashmap = F") { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enable", "false")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enabled", "false")
       sparkSession.conf.set("spark.sql.codegen.aggregate.map.vectorized.enable", "false")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T") { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enable", "true")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.twolevel.enabled", "true")
       sparkSession.conf.set("spark.sql.codegen.aggregate.map.vectorized.enable", "true")
       f()
     }
@@ -538,7 +539,7 @@ class AggregateBenchmark extends BenchmarkBase {
         value.setInt(0, 555)
         val taskMemoryManager = new TaskMemoryManager(
           new StaticMemoryManager(
-            new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+            new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, "false"),
             Long.MaxValue,
             Long.MaxValue,
             1),
@@ -569,8 +570,8 @@ class AggregateBenchmark extends BenchmarkBase {
       benchmark.addCase(s"BytesToBytesMap ($heap Heap)") { iter =>
         val taskMemoryManager = new TaskMemoryManager(
           new StaticMemoryManager(
-            new SparkConf().set("spark.memory.offHeap.enabled", s"${heap == "off"}")
-              .set("spark.memory.offHeap.size", "102400000"),
+            new SparkConf().set(MEMORY_OFFHEAP_ENABLED.key, s"${heap == "off"}")
+              .set(MEMORY_OFFHEAP_SIZE.key, "102400000"),
             Long.MaxValue,
             Long.MaxValue,
             1),

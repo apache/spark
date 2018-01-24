@@ -53,6 +53,21 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("percentile_approx, the first element satisfies small percentages") {
+    withTempView(table) {
+      (1 to 10).toDF("col").createOrReplaceTempView(table)
+      checkAnswer(
+        spark.sql(
+          s"""
+             |SELECT
+             |  percentile_approx(col, array(0.01, 0.1, 0.11))
+             |FROM $table
+           """.stripMargin),
+        Row(Seq(1, 1, 2))
+      )
+    }
+  }
+
   test("percentile_approx, array of percentile value") {
     withTempView(table) {
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
@@ -130,7 +145,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
       (1 to 1000).toDF("col").createOrReplaceTempView(table)
       checkAnswer(
         spark.sql(s"SELECT percentile_approx(col, array(0.25 + 0.25D), 200 + 800D) FROM $table"),
-        Row(Seq(500D))
+        Row(Seq(499))
       )
     }
   }

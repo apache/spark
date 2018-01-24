@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
@@ -24,6 +25,7 @@ import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
+import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.serializer.KryoSerializer
@@ -370,7 +372,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
-    Option(settings.get(key)).orElse(getDeprecatedConfig(key, this))
+    Option(settings.get(key)).orElse(getDeprecatedConfig(key, settings))
   }
 
   /** Get an optional value, applying variable substitution. */
@@ -562,6 +564,14 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     val encryptionEnabled = get(NETWORK_ENCRYPTION_ENABLED) || get(SASL_ENCRYPTION_ENABLED)
     require(!encryptionEnabled || get(NETWORK_AUTH_ENABLED),
       s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
+
+    val executorTimeoutThreshold = getTimeAsSeconds("spark.network.timeout", "120s")
+    val executorHeartbeatInterval = getTimeAsSeconds("spark.executor.heartbeatInterval", "10s")
+    // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
+    // it will almost always cause ExecutorLostFailure. See SPARK-22754.
+    require(executorTimeoutThreshold > executorHeartbeatInterval, "The value of " +
+      s"spark.network.timeout=${executorTimeoutThreshold}s must be no less than the value of " +
+      s"spark.executor.heartbeatInterval=${executorHeartbeatInterval}s.")
   }
 
   /**
@@ -622,7 +632,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.history.updateInterval", "1.3")),
     "spark.history.fs.cleaner.interval" -> Seq(
       AlternateConfig("spark.history.fs.cleaner.interval.seconds", "1.4")),
-    "spark.history.fs.cleaner.maxAge" -> Seq(
+    MAX_LOG_AGE_S.key -> Seq(
       AlternateConfig("spark.history.fs.cleaner.maxAge.seconds", "1.4")),
     "spark.yarn.am.waitTime" -> Seq(
       AlternateConfig("spark.yarn.applicationMaster.waitTries", "1.3",
@@ -630,9 +640,9 @@ private[spark] object SparkConf extends Logging {
         translation = s => s"${s.toLong * 10}s")),
     "spark.reducer.maxSizeInFlight" -> Seq(
       AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
-    "spark.kryoserializer.buffer" ->
-        Seq(AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
-          translation = s => s"${(s.toDouble * 1000).toInt}k")),
+    "spark.kryoserializer.buffer" -> Seq(
+      AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
+        translation = s => s"${(s.toDouble * 1000).toInt}k")),
     "spark.kryoserializer.buffer.max" -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
     "spark.shuffle.file.buffer" -> Seq(
@@ -655,14 +665,22 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.streaming.minRememberDuration", "1.5")),
     "spark.yarn.max.executor.failures" -> Seq(
       AlternateConfig("spark.yarn.max.worker.failures", "1.5")),
-    "spark.memory.offHeap.enabled" -> Seq(
+    MEMORY_OFFHEAP_ENABLED.key -> Seq(
       AlternateConfig("spark.unsafe.offHeap", "1.6")),
     "spark.rpc.message.maxSize" -> Seq(
       AlternateConfig("spark.akka.frameSize", "1.6")),
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),
     "spark.yarn.access.hadoopFileSystems" -> Seq(
-      AlternateConfig("spark.yarn.access.namenodes", "2.2"))
+      AlternateConfig("spark.yarn.access.namenodes", "2.2")),
+    MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
+      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3")),
+    LISTENER_BUS_EVENT_QUEUE_CAPACITY.key -> Seq(
+      AlternateConfig("spark.scheduler.listenerbus.eventqueue.size", "2.3")),
+    DRIVER_MEMORY_OVERHEAD.key -> Seq(
+      AlternateConfig("spark.yarn.driver.memoryOverhead", "2.3")),
+    EXECUTOR_MEMORY_OVERHEAD.key -> Seq(
+      AlternateConfig("spark.yarn.executor.memoryOverhead", "2.3"))
   )
 
   /**
@@ -702,9 +720,9 @@ private[spark] object SparkConf extends Logging {
    * Looks for available deprecated keys for the given config option, and return the first
    * value available.
    */
-  def getDeprecatedConfig(key: String, conf: SparkConf): Option[String] = {
+  def getDeprecatedConfig(key: String, conf: JMap[String, String]): Option[String] = {
     configsWithAlternatives.get(key).flatMap { alts =>
-      alts.collectFirst { case alt if conf.contains(alt.key) =>
+      alts.collectFirst { case alt if conf.containsKey(alt.key) =>
         val value = conf.get(alt.key)
         if (alt.translation != null) alt.translation(value) else value
       }

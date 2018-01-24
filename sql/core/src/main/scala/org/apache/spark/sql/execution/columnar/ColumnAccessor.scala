@@ -63,9 +63,6 @@ private[columnar] abstract class BasicColumnAccessor[JvmType](
   }
 
   protected def underlyingBuffer = buffer
-
-  def getByteBuffer: ByteBuffer =
-    buffer.duplicate.order(ByteOrder.nativeOrder())
 }
 
 private[columnar] class NullColumnAccessor(buffer: ByteBuffer)
@@ -162,5 +159,13 @@ private[sql] object ColumnAccessor {
     } else {
       throw new RuntimeException("Not support non-primitive type now")
     }
+  }
+
+  def decompress(
+      array: Array[Byte], columnVector: WritableColumnVector, dataType: DataType, numRows: Int):
+      Unit = {
+    val byteBuffer = ByteBuffer.wrap(array)
+    val columnAccessor = ColumnAccessor(dataType, byteBuffer)
+    decompress(columnAccessor, columnVector, numRows)
   }
 }

@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.collection.mutable
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.execution.QueryExecution
 
 
@@ -68,11 +71,11 @@ case class AnalyzeColumnCommand(
       tableIdent: TableIdentifier,
       columnNames: Seq[String]): (Long, Map[String, ColumnStat]) = {
 
+    val conf = sparkSession.sessionState.conf
     val relation = sparkSession.table(tableIdent).logicalPlan
     // Resolve the column names and dedup using AttributeSet
-    val resolver = sparkSession.sessionState.conf.resolver
     val attributesToAnalyze = columnNames.map { col =>
-      val exprOption = relation.output.find(attr => resolver(attr.name, col))
+      val exprOption = relation.output.find(attr => conf.resolver(attr.name, col))
       exprOption.getOrElse(throw new AnalysisException(s"Column $col does not exist."))
     }
 
@@ -86,12 +89,21 @@ case class AnalyzeColumnCommand(
     }
 
     // Collect statistics per column.
+    // If no histogram is required, we run a job to compute basic column stats such as
+    // min, max, ndv, etc. Otherwise, besides basic column stats, histogram will also be
+    // generated. Currently we only support equi-height histogram.
+    // To generate an equi-height histogram, we need two jobs:
+    // 1. compute percentiles p(0), p(1/n) ... p((n-1)/n), p(1).
+    // 2. use the percentiles as value intervals of bins, e.g. [p(0), p(1/n)],
+    // [p(1/n), p(2/n)], ..., [p((n-1)/n), p(1)], and then count ndv in each bin.
+    // Basic column stats will be computed together in the second job.
+    val attributePercentiles = computePercentiles(attributesToAnalyze, sparkSession, relation)
+
     // The first element in the result will be the overall row count, the following elements
     // will be structs containing all column stats.
     // The layout of each struct follows the layout of the ColumnStats.
-    val ndvMaxErr = sparkSession.sessionState.conf.ndvMaxError
     val expressions = Count(Literal(1)).toAggregateExpression() +:
-      attributesToAnalyze.map(ColumnStat.statExprs(_, ndvMaxErr))
+      attributesToAnalyze.map(ColumnStat.statExprs(_, conf, attributePercentiles))
 
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
     val statsRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExpressions, relation))
@@ -99,9 +111,47 @@ case class AnalyzeColumnCommand(
 
     val rowCount = statsRow.getLong(0)
     val columnStats = attributesToAnalyze.zipWithIndex.map { case (attr, i) =>
-      // according to `ColumnStat.statExprs`, the stats struct always have 6 fields.
-      (attr.name, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1, 6), attr))
+      // according to `ColumnStat.statExprs`, the stats struct always have 7 fields.
+      (attr.name, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1, 7), attr, rowCount,
+        attributePercentiles.get(attr)))
     }.toMap
     (rowCount, columnStats)
   }
+
+  /** Computes percentiles for each attribute. */
+  private def computePercentiles(
+      attributesToAnalyze: Seq[Attribute],
+      sparkSession: SparkSession,
+      relation: LogicalPlan): AttributeMap[ArrayData] = {
+    val attrsToGenHistogram = if (conf.histogramEnabled) {
+      attributesToAnalyze.filter(a => ColumnStat.supportsHistogram(a.dataType))
+    } else {
+      Nil
+    }
+    val attributePercentiles = mutable.HashMap[Attribute, ArrayData]()
+    if (attrsToGenHistogram.nonEmpty) {
+      val percentiles = (0 to conf.histogramNumBins)
+        .map(i => i.toDouble / conf.histogramNumBins).toArray
+
+      val namedExprs = attrsToGenHistogram.map { attr =>
+        val aggFunc =
+          new ApproximatePercentile(attr, Literal(percentiles), Literal(conf.percentileAccuracy))
+        val expr = aggFunc.toAggregateExpression()
+        Alias(expr, expr.toString)()
+      }
+
+      val percentilesRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExprs, relation))
+        .executedPlan.executeTake(1).head
+      attrsToGenHistogram.zipWithIndex.foreach { case (attr, i) =>
+        val percentiles = percentilesRow.getArray(i)
+        // When there is no non-null value, `percentiles` is null. In such case, there is no
+        // need to generate histogram.
+        if (percentiles != null) {
+          attributePercentiles += attr -> percentiles
+        }
+      }
+    }
+    AttributeMap(attributePercentiles.toSeq)
+  }
+
 }

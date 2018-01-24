@@ -89,6 +89,16 @@ object SubqueryExpression {
       case _ => false
     }.isDefined
   }
+
+  /**
+   * Returns true when an expression contains a subquery
+   */
+  def hasSubquery(e: Expression): Boolean = {
+    e.find {
+      case _: SubqueryExpression => true
+      case _ => false
+    }.isDefined
+  }
 }
 
 object SubExprUtils extends PredicateHelper {

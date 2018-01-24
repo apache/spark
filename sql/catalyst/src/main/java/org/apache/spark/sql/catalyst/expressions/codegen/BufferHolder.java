@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen;
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.ByteArrayMethods;
 
 /**
  * A helper class to manage the data buffer for an unsafe row.  The data buffer can grow and
@@ -36,9 +37,7 @@ import org.apache.spark.unsafe.Platform;
  */
 public class BufferHolder {
 
-  // Some JVMs can't allocate arrays of length Integer.MAX_VALUE; actual max is somewhat
-  // smaller. Be conservative and lower the cap a little.
-  private static final int ARRAY_MAX = Integer.MAX_VALUE - 8;
+  private static final int ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
 
   public byte[] buffer;
   public int cursor = Platform.BYTE_ARRAY_OFFSET;
@@ -51,7 +50,7 @@ public class BufferHolder {
 
   public BufferHolder(UnsafeRow row, int initialSize) {
     int bitsetWidthInBytes = UnsafeRow.calculateBitSetWidthInBytes(row.numFields());
-    if (row.numFields() > (Integer.MAX_VALUE - initialSize - bitsetWidthInBytes) / 8) {
+    if (row.numFields() > (ARRAY_MAX - initialSize - bitsetWidthInBytes) / 8) {
       throw new UnsupportedOperationException(
         "Cannot create BufferHolder for input UnsafeRow because there are " +
           "too many fields (number of fields: " + row.numFields() + ")");

@@ -105,6 +105,7 @@ private[spark] class LocalSchedulerBackend(
   private val userClassPath = getUserClasspath(conf)
   private val listenerBus = scheduler.sc.listenerBus
   private val launcherBackend = new LauncherBackend() {
+    override def conf: SparkConf = LocalSchedulerBackend.this.conf
     override def onStopRequest(): Unit = stop(SparkAppHandle.State.KILLED)
   }
 

@@ -95,7 +95,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         "spark.executor.cores" -> "1",
         "spark.executor.memory" -> "512m",
         "spark.executor.instances" -> "2",
-        // Sending some senstive information, which we'll make sure gets redacted
+        // Sending some sensitive information, which we'll make sure gets redacted
         "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD,
         "spark.yarn.appMasterEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD
       ))
@@ -115,8 +115,13 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       ))
   }
 
-  test("run Spark in yarn-cluster mode with using SparkHadoopUtil.conf") {
-    testYarnAppUseSparkHadoopUtilConf()
+  test("yarn-cluster should respect conf overrides in SparkHadoopUtil (SPARK-16414)") {
+    val result = File.createTempFile("result", null, tempDir)
+    val finalState = runSpark(false,
+      mainClassName(YarnClusterDriverUseSparkHadoopUtilConf.getClass),
+      appArgs = Seq("key=value", result.getAbsolutePath()),
+      extraConf = Map("spark.hadoop.key" -> "value"))
+    checkResult(finalState, result)
   }
 
   test("run Spark in yarn-client mode with additional jar") {
@@ -213,15 +218,6 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     val finalState = runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
       appArgs = Seq(result.getAbsolutePath()),
       extraConf = conf)
-    checkResult(finalState, result)
-  }
-
-  private def testYarnAppUseSparkHadoopUtilConf(): Unit = {
-    val result = File.createTempFile("result", null, tempDir)
-    val finalState = runSpark(false,
-      mainClassName(YarnClusterDriverUseSparkHadoopUtilConf.getClass),
-      appArgs = Seq("key=value", result.getAbsolutePath()),
-      extraConf = Map("spark.hadoop.key" -> "value"))
     checkResult(finalState, result)
   }
 
@@ -385,7 +381,9 @@ private object YarnClusterDriver extends Logging with Matchers {
 
       // Verify that the config archive is correctly placed in the classpath of all containers.
       val confFile = "/" + Client.SPARK_CONF_FILE
-      assert(getClass().getResource(confFile) != null)
+      if (conf.getOption(SparkLauncher.DEPLOY_MODE) == Some("cluster")) {
+        assert(getClass().getResource(confFile) != null)
+      }
       val configFromExecutors = sc.parallelize(1 to 4, 4)
         .map { _ => Option(getClass().getResource(confFile)).map(_.toString).orNull }
         .collect()
@@ -424,7 +422,7 @@ private object YarnClusterDriver extends Logging with Matchers {
             s"Driver logs contain sensitive info (${SECRET_PASSWORD}): \n${log} "
           )
         }
-        val containerId = YarnSparkHadoopUtil.get.getContainerId
+        val containerId = YarnSparkHadoopUtil.getContainerId
         val user = Utils.getCurrentUserName()
         assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=-4096"))
       }

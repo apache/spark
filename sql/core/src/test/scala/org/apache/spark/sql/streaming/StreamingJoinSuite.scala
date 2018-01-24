@@ -330,7 +330,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       val queryId = UUID.randomUUID
       val opId = 0
       val path = Utils.createDirectory(tempDir.getAbsolutePath, Random.nextString(10)).toString
-      val stateInfo = StatefulOperatorStateInfo(path, queryId, opId, 0L)
+      val stateInfo = StatefulOperatorStateInfo(path, queryId, opId, 0L, 5)
 
       implicit val sqlContext = spark.sqlContext
       val coordinatorRef = sqlContext.streams.stateStoreCoordinator
@@ -364,6 +364,24 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
         assert(rdd.preferredLocations(rdd.partitions(partIndex)).toSet === expectedLocations)
       }
     }
+  }
+
+  test("join between three streams") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+    val input3 = MemoryStream[Int]
+
+    val df1 = input1.toDF.select('value as "leftKey", ('value * 2) as "leftValue")
+    val df2 = input2.toDF.select('value as "middleKey", ('value * 3) as "middleValue")
+    val df3 = input3.toDF.select('value as "rightKey", ('value * 5) as "rightValue")
+
+    val joined = df1.join(df2, expr("leftKey = middleKey")).join(df3, expr("rightKey = middleKey"))
+
+    testStream(joined)(
+      AddData(input1, 1, 5),
+      AddData(input2, 1, 5, 10),
+      AddData(input3, 5, 10),
+      CheckLastBatch((5, 10, 5, 15, 5, 25)))
   }
 }
 
@@ -403,6 +421,130 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       .select('key, $"window.end".cast("long"), 'leftValue, 'rightValue)
 
     (input1, input2, joined)
+  }
+
+  test("left outer early state exclusion on left") {
+    val (leftInput, df1) = setupStream("left", 2)
+    val (rightInput, df2) = setupStream("right", 3)
+    // Use different schemas to ensure the null row is being generated from the correct side.
+    val left = df1.select('key, window('leftTime, "10 second"), 'leftValue)
+    val right = df2.select('key, window('rightTime, "10 second"), 'rightValue.cast("string"))
+
+    val joined = left.join(
+        right,
+        left("key") === right("key")
+          && left("window") === right("window")
+          && 'leftValue > 4,
+        "left_outer")
+        .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
+
+    testStream(joined)(
+      AddData(leftInput, 1, 2, 3),
+      AddData(rightInput, 3, 4, 5),
+      // The left rows with leftValue <= 4 should generate their outer join row now and
+      // not get added to the state.
+      CheckLastBatch(Row(3, 10, 6, "9"), Row(1, 10, 2, null), Row(2, 10, 4, null)),
+      assertNumStateRows(total = 4, updated = 4),
+      // We shouldn't get more outer join rows when the watermark advances.
+      AddData(leftInput, 20),
+      AddData(rightInput, 21),
+      CheckLastBatch(),
+      AddData(rightInput, 20),
+      CheckLastBatch((20, 30, 40, "60"))
+    )
+  }
+
+  test("left outer early state exclusion on right") {
+    val (leftInput, df1) = setupStream("left", 2)
+    val (rightInput, df2) = setupStream("right", 3)
+    // Use different schemas to ensure the null row is being generated from the correct side.
+    val left = df1.select('key, window('leftTime, "10 second"), 'leftValue)
+    val right = df2.select('key, window('rightTime, "10 second"), 'rightValue.cast("string"))
+
+    val joined = left.join(
+      right,
+      left("key") === right("key")
+        && left("window") === right("window")
+        && 'rightValue.cast("int") > 7,
+      "left_outer")
+      .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
+
+    testStream(joined)(
+      AddData(leftInput, 3, 4, 5),
+      AddData(rightInput, 1, 2, 3),
+      // The right rows with value <= 7 should never be added to the state.
+      CheckLastBatch(Row(3, 10, 6, "9")),
+      assertNumStateRows(total = 4, updated = 4),
+      // When the watermark advances, we get the outer join rows just as we would if they
+      // were added but didn't match the full join condition.
+      AddData(leftInput, 20),
+      AddData(rightInput, 21),
+      CheckLastBatch(),
+      AddData(rightInput, 20),
+      CheckLastBatch(Row(20, 30, 40, "60"), Row(4, 10, 8, null), Row(5, 10, 10, null))
+    )
+  }
+
+  test("right outer early state exclusion on left") {
+    val (leftInput, df1) = setupStream("left", 2)
+    val (rightInput, df2) = setupStream("right", 3)
+    // Use different schemas to ensure the null row is being generated from the correct side.
+    val left = df1.select('key, window('leftTime, "10 second"), 'leftValue)
+    val right = df2.select('key, window('rightTime, "10 second"), 'rightValue.cast("string"))
+
+    val joined = left.join(
+      right,
+      left("key") === right("key")
+        && left("window") === right("window")
+        && 'leftValue > 4,
+      "right_outer")
+      .select(right("key"), right("window.end").cast("long"), 'leftValue, 'rightValue)
+
+    testStream(joined)(
+      AddData(leftInput, 1, 2, 3),
+      AddData(rightInput, 3, 4, 5),
+      // The left rows with value <= 4 should never be added to the state.
+      CheckLastBatch(Row(3, 10, 6, "9")),
+      assertNumStateRows(total = 4, updated = 4),
+      // When the watermark advances, we get the outer join rows just as we would if they
+      // were added but didn't match the full join condition.
+      AddData(leftInput, 20),
+      AddData(rightInput, 21),
+      CheckLastBatch(),
+      AddData(rightInput, 20),
+      CheckLastBatch(Row(20, 30, 40, "60"), Row(4, 10, null, "12"), Row(5, 10, null, "15"))
+    )
+  }
+
+  test("right outer early state exclusion on right") {
+    val (leftInput, df1) = setupStream("left", 2)
+    val (rightInput, df2) = setupStream("right", 3)
+    // Use different schemas to ensure the null row is being generated from the correct side.
+    val left = df1.select('key, window('leftTime, "10 second"), 'leftValue)
+    val right = df2.select('key, window('rightTime, "10 second"), 'rightValue.cast("string"))
+
+    val joined = left.join(
+      right,
+      left("key") === right("key")
+        && left("window") === right("window")
+        && 'rightValue.cast("int") > 7,
+      "right_outer")
+      .select(right("key"), right("window.end").cast("long"), 'leftValue, 'rightValue)
+
+    testStream(joined)(
+      AddData(leftInput, 3, 4, 5),
+      AddData(rightInput, 1, 2, 3),
+      // The right rows with rightValue <= 7 should generate their outer join row now and
+      // not get added to the state.
+      CheckLastBatch(Row(3, 10, 6, "9"), Row(1, 10, null, "3"), Row(2, 10, null, "6")),
+      assertNumStateRows(total = 4, updated = 4),
+      // We shouldn't get more outer join rows when the watermark advances.
+      AddData(leftInput, 20),
+      AddData(rightInput, 21),
+      CheckLastBatch(),
+      AddData(rightInput, 20),
+      CheckLastBatch((20, 30, 40, "60"))
+    )
   }
 
   test("windowed left outer join") {
@@ -495,7 +637,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
 
   // When the join condition isn't true, the outer null rows must be generated, even if the join
   // keys themselves have a match.
-  test("left outer join with non-key condition violated on left") {
+  test("left outer join with non-key condition violated") {
     val (leftInput, simpleLeftDf) = setupStream("left", 2)
     val (rightInput, simpleRightDf) = setupStream("right", 3)
 
@@ -513,14 +655,14 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       // leftValue <= 10 should generate outer join rows even though it matches right keys
       AddData(leftInput, 1, 2, 3),
       AddData(rightInput, 1, 2, 3),
-      CheckLastBatch(),
+      CheckLastBatch(Row(1, 10, 2, null), Row(2, 10, 4, null), Row(3, 10, 6, null)),
       AddData(leftInput, 20),
       AddData(rightInput, 21),
       CheckLastBatch(),
-      assertNumStateRows(total = 8, updated = 2),
+      assertNumStateRows(total = 5, updated = 2),
       AddData(rightInput, 20),
       CheckLastBatch(
-        Row(20, 30, 40, 60), Row(1, 10, 2, null), Row(2, 10, 4, null), Row(3, 10, 6, null)),
+        Row(20, 30, 40, 60)),
       assertNumStateRows(total = 3, updated = 1),
       // leftValue and rightValue both satisfying condition should not generate outer join rows
       AddData(leftInput, 40, 41),

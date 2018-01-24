@@ -32,14 +32,14 @@ import org.apache.spark.sql.types.{AtomicType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
- * Try to replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
+ * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
  */
 class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
     sparkSession.sessionState.conf.runSQLonFile && u.tableIdentifier.database.isDefined
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case u: UnresolvedRelation if maybeSQLFile(u) =>
       try {
         val dataSource = DataSource(
@@ -108,8 +108,9 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       }
 
       // Check if the specified data source match the data source of the existing table.
-      val existingProvider = DataSource.lookupDataSource(existingTable.provider.get)
-      val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get)
+      val conf = sparkSession.sessionState.conf
+      val existingProvider = DataSource.lookupDataSource(existingTable.provider.get, conf)
+      val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get, conf)
       // TODO: Check that options from the resolved relation match the relation that we are
       // inserting into (i.e. using the same compression).
       if (existingProvider != specifiedProvider) {
@@ -404,6 +405,9 @@ object HiveOnlyCheck extends (LogicalPlan => Unit) {
     plan.foreach {
       case CreateTable(tableDesc, _, _) if DDLUtils.isHiveTable(tableDesc) =>
         throw new AnalysisException("Hive support is required to CREATE Hive TABLE (AS SELECT)")
+      case i: InsertIntoDir if DDLUtils.isHiveTable(i.provider) =>
+        throw new AnalysisException(
+          "Hive support is required to INSERT OVERWRITE DIRECTORY with the Hive format")
       case _ => // OK
     }
   }

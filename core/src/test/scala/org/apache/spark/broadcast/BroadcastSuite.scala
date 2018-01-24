@@ -153,6 +153,40 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
     assert(broadcast.value.sum === 10)
   }
 
+  test("One broadcast value instance per executor") {
+    val conf = new SparkConf()
+      .setMaster("local[4]")
+      .setAppName("test")
+
+    sc = new SparkContext(conf)
+    val list = List[Int](1, 2, 3, 4)
+    val broadcast = sc.broadcast(list)
+    val instances = sc.parallelize(1 to 10)
+      .map(x => System.identityHashCode(broadcast.value))
+      .collect()
+      .toSet
+
+    assert(instances.size === 1)
+  }
+
+  test("One broadcast value instance per executor when memory is constrained") {
+    val conf = new SparkConf()
+      .setMaster("local[4]")
+      .setAppName("test")
+      .set("spark.memory.useLegacyMode", "true")
+      .set("spark.storage.memoryFraction", "0.0")
+
+    sc = new SparkContext(conf)
+    val list = List[Int](1, 2, 3, 4)
+    val broadcast = sc.broadcast(list)
+    val instances = sc.parallelize(1 to 10)
+      .map(x => System.identityHashCode(broadcast.value))
+      .collect()
+      .toSet
+
+    assert(instances.size === 1)
+  }
+
   /**
    * Verify the persistence of state associated with a TorrentBroadcast in a local-cluster.
    *
@@ -224,7 +258,7 @@ class BroadcastSuite extends SparkFunSuite with LocalSparkContext with Encryptio
         new SparkContext("local-cluster[%d, 1, 1024]".format(numSlaves), "test")
       // Wait until all salves are up
       try {
-        _sc.jobProgressListener.waitUntilExecutorsUp(numSlaves, 60000)
+        TestUtils.waitUntilExecutorsUp(_sc, numSlaves, 60000)
         _sc
       } catch {
         case e: Throwable =>

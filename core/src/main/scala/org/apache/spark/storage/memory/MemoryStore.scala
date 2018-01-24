@@ -388,7 +388,13 @@ private[spark] class MemoryStore(
     // perform one final call to attempt to allocate additional memory if necessary.
     if (keepUnrolling) {
       serializationStream.close()
-      reserveAdditionalMemoryIfNecessary()
+      if (bbos.size > unrollMemoryUsedByThisBlock) {
+        val amountToRequest = bbos.size - unrollMemoryUsedByThisBlock
+        keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
+        if (keepUnrolling) {
+          unrollMemoryUsedByThisBlock += amountToRequest
+        }
+      }
     }
 
     if (keepUnrolling) {

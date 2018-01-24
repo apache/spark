@@ -73,18 +73,22 @@ statement
     | ALTER DATABASE identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
     | DROP DATABASE (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
     | createTableHeader ('(' colTypeList ')')? tableProvider
-        (OPTIONS options=tablePropertyList)?
-        (PARTITIONED BY partitionColumnNames=identifierList)?
-        bucketSpec? locationSpec?
-        (COMMENT comment=STRING)?
-        (TBLPROPERTIES tableProps=tablePropertyList)?
+        ((OPTIONS options=tablePropertyList) |
+        (PARTITIONED BY partitionColumnNames=identifierList) |
+        bucketSpec |
+        locationSpec |
+        (COMMENT comment=STRING) |
+        (TBLPROPERTIES tableProps=tablePropertyList))*
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
-        (COMMENT comment=STRING)?
-        (PARTITIONED BY '(' partitionColumns=colTypeList ')')?
-        bucketSpec? skewSpec?
-        rowFormat?  createFileFormat? locationSpec?
-        (TBLPROPERTIES tablePropertyList)?
+        ((COMMENT comment=STRING) |
+        (PARTITIONED BY '(' partitionColumns=colTypeList ')') |
+        bucketSpec |
+        skewSpec |
+        rowFormat |
+        createFileFormat |
+        locationSpec |
+        (TBLPROPERTIES tableProps=tablePropertyList))*
         (AS? query)?                                                   #createHiveTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier locationSpec?                      #createTableLike
@@ -137,7 +141,7 @@ statement
         (LIKE? pattern=STRING)?                                        #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) db=identifier)?
         LIKE pattern=STRING partitionSpec?                             #showTable
-    | SHOW DATABASES (LIKE pattern=STRING)?                            #showDatabases
+    | SHOW DATABASES (LIKE? pattern=STRING)?                           #showDatabases
     | SHOW TBLPROPERTIES table=tableIdentifier
         ('(' key=tablePropertyKey ')')?                                #showTblProperties
     | SHOW COLUMNS (FROM | IN) tableIdentifier
@@ -564,8 +568,7 @@ valueExpression
     ;
 
 primaryExpression
-    : name=(CURRENT_DATE | CURRENT_TIMESTAMP)                                                  #timeFunctionCall
-    | CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
+    : CASE whenClause+ (ELSE elseExpression=expression)? END                                   #searchedCase
     | CASE value=expression whenClause+ (ELSE elseExpression=expression)? END                  #simpleCase
     | CAST '(' expression AS dataType ')'                                                      #cast
     | STRUCT '(' (argument+=namedExpression (',' argument+=namedExpression)*)? ')'             #struct
@@ -747,7 +750,7 @@ nonReserved
     | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
     | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
     | UNBOUNDED | WHEN
-    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT | CURRENT_DATE | CURRENT_TIMESTAMP
+    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
     | DIRECTORY
     | BOTH | LEADING | TRAILING
     ;
@@ -983,8 +986,6 @@ OPTION: 'OPTION';
 ANTI: 'ANTI';
 LOCAL: 'LOCAL';
 INPATH: 'INPATH';
-CURRENT_DATE: 'CURRENT_DATE';
-CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

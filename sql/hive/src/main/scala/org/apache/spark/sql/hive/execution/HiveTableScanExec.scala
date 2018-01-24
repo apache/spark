@@ -162,21 +162,19 @@ case class HiveTableScanExec(
 
   // exposed for tests
   @transient lazy val rawPartitions = {
-    val prunedPartitions = if (sparkSession.sessionState.conf.metastorePartitionPruning) {
-      // Retrieve the original attributes based on expression ID so that capitalization matches.
-      val normalizedFilters = partitionPruningPred.map(_.transform {
-        case a: AttributeReference => originalAttributes(a)
-      })
-      sparkSession.sharedState.externalCatalog.listPartitionsByFilter(
-        relation.tableMeta.database,
-        relation.tableMeta.identifier.table,
-        normalizedFilters,
-        sparkSession.sessionState.conf.sessionLocalTimeZone)
-    } else {
-      sparkSession.sharedState.externalCatalog.listPartitions(
-        relation.tableMeta.database,
-        relation.tableMeta.identifier.table)
-    }
+    val prunedPartitions =
+      if (sparkSession.sessionState.conf.metastorePartitionPruning &&
+          partitionPruningPred.size > 0) {
+        // Retrieve the original attributes based on expression ID so that capitalization matches.
+        val normalizedFilters = partitionPruningPred.map(_.transform {
+          case a: AttributeReference => originalAttributes(a)
+        })
+        sparkSession.sessionState.catalog.listPartitionsByFilter(
+          relation.tableMeta.identifier,
+          normalizedFilters)
+      } else {
+        sparkSession.sessionState.catalog.listPartitions(relation.tableMeta.identifier)
+      }
     prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
   }
 
@@ -205,11 +203,11 @@ case class HiveTableScanExec(
     }
   }
 
-  override lazy val canonicalized: HiveTableScanExec = {
+  override def doCanonicalize(): HiveTableScanExec = {
     val input: AttributeSeq = relation.output
     HiveTableScanExec(
       requestedAttributes.map(QueryPlan.normalizeExprId(_, input)),
-      relation.canonicalized,
+      relation.canonicalized.asInstanceOf[HiveTableRelation],
       QueryPlan.normalizePredicates(partitionPruningPred, input))(sparkSession)
   }
 

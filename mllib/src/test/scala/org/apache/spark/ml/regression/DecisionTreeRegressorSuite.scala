@@ -21,19 +21,18 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
   DecisionTreeSuite => OldDecisionTreeSuite}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
-class DecisionTreeRegressorSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
 
   import DecisionTreeRegressorSuite.compareAPIs
+  import testImplicits._
 
   private var categoricalDataPointsRDD: RDD[LabeledPoint] = _
 
@@ -89,14 +88,11 @@ class DecisionTreeRegressorSuite
     val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
     val model = dt.fit(df)
 
-    val predictions = model.transform(df)
-      .select(model.getFeaturesCol, model.getVarianceCol)
-      .collect()
-
-    predictions.foreach { case Row(features: Vector, variance: Double) =>
-      val expectedVariance = model.rootNode.predictImpl(features).impurityStats.calculate()
-      assert(variance === expectedVariance,
-        s"Expected variance $expectedVariance but got $variance.")
+    testTransformer[(Vector, Double)](df, model, "features", "variance") {
+      case Row(features: Vector, variance: Double) =>
+        val expectedVariance = model.rootNode.predictImpl(features).impurityStats.calculate()
+        assert(variance === expectedVariance,
+          s"Expected variance $expectedVariance but got $variance.")
     }
 
     val varianceData: RDD[LabeledPoint] = TreeTests.varianceData(sc)
@@ -104,18 +100,19 @@ class DecisionTreeRegressorSuite
     dt.setMaxDepth(1)
       .setMaxBins(6)
       .setSeed(0)
-    val transformVarDF = dt.fit(varianceDF).transform(varianceDF)
-    val calculatedVariances = transformVarDF.select(dt.getVarianceCol).collect().map {
-      case Row(variance: Double) => variance
-    }
 
-    // Since max depth is set to 1, the best split point is that which splits the data
-    // into (0.0, 1.0, 2.0) and (10.0, 12.0, 14.0). The predicted variance for each
-    // data point in the left node is 0.667 and for each data point in the right node
-    // is 2.667
-    val expectedVariances = Array(0.667, 0.667, 0.667, 2.667, 2.667, 2.667)
-    calculatedVariances.zip(expectedVariances).foreach { case (actual, expected) =>
-      assert(actual ~== expected absTol 1e-3)
+    testTransformerByGlobalCheckFunc[(Vector, Double)](varianceDF, dt.fit(varianceDF),
+      "variance") { case rows: Seq[Row] =>
+      val calculatedVariances = rows.map(_.getDouble(0))
+
+      // Since max depth is set to 1, the best split point is that which splits the data
+      // into (0.0, 1.0, 2.0) and (10.0, 12.0, 14.0). The predicted variance for each
+      // data point in the left node is 0.667 and for each data point in the right node
+      // is 2.667
+      val expectedVariances = Array(0.667, 0.667, 0.667, 2.667, 2.667, 2.667)
+      calculatedVariances.zip(expectedVariances).foreach { case (actual, expected) =>
+        assert(actual ~== expected absTol 1e-3)
+      }
     }
   }
 

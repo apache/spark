@@ -202,6 +202,42 @@ class MiscBenchmark extends BenchmarkBase {
     generate inline array wholestage off          6901 / 6928          2.4         411.3       1.0X
     generate inline array wholestage on           1001 / 1010         16.8          59.7       6.9X
      */
+
+    val M = 60000
+    runBenchmark("generate big struct array", M) {
+      import sparkSession.implicits._
+      val df = sparkSession.sparkContext.parallelize(Seq(("1",
+        Array.fill(M)({
+          val i = math.random
+          (i.toString, (i + 1).toString, (i + 2).toString, (i + 3).toString)
+        })))).toDF("col", "arr")
+
+      df.selectExpr("*", "expode(arr) as arr_col")
+        .select("col", "arr_col.*").count
+    }
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+    test the impact of adding the optimization of Generate.unrequiredChildIndex,
+    we can see enormous improvement of x250 in this case! and it grows O(n^2).
+
+    with Optimization ON:
+
+    generate big struct array:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate big struct array wholestage off       331 /  378          0.2        5524.9       1.0X
+    generate big struct array wholestage on        205 /  232          0.3        3413.1       1.6X
+
+    with Optimization OFF:
+
+    generate big struct array:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate big struct array wholestage off    49697 / 51496          0.0      828277.7       1.0X
+    generate big struct array wholestage on     50558 / 51434          0.0      842641.6       1.0X
+     */
+
   }
 
   ignore("generate regular generator") {
@@ -227,4 +263,5 @@ class MiscBenchmark extends BenchmarkBase {
     generate stack wholestage on                   836 /  847         20.1          49.8      15.5X
      */
   }
+
 }

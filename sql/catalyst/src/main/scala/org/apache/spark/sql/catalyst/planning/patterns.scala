@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -199,20 +200,26 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
 object PhysicalAggregation {
   // groupingExpressions, aggregateExpressions, resultExpressions, child
   type ReturnType =
-    (Seq[NamedExpression], Seq[AggregateExpression], Seq[NamedExpression], LogicalPlan)
+    (Seq[NamedExpression], Seq[Expression], Seq[NamedExpression], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
     case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
       // A single aggregate expression might appear multiple times in resultExpressions.
       // In order to avoid evaluating an individual aggregate function multiple times, we'll
-      // build a set of the distinct aggregate expressions and build a function which can
-      // be used to re-write expressions so that they reference the single copy of the
-      // aggregate function which actually gets computed.
+      // build a set of semantically distinct aggregate expressions and re-write expressions so
+      // that they reference the single copy of the aggregate function which actually gets computed.
+      // Non-deterministic aggregate expressions are not deduplicated.
+      val equivalentAggregateExpressions = new EquivalentExpressions
       val aggregateExpressions = resultExpressions.flatMap { expr =>
         expr.collect {
-          case agg: AggregateExpression => agg
+          // addExpr() always returns false for non-deterministic expressions and do not add them.
+          case agg: AggregateExpression
+            if !equivalentAggregateExpressions.addExpr(agg) => agg
+          case udf: PythonUDF
+            if PythonUDF.isGroupAggPandasUDF(udf) &&
+              !equivalentAggregateExpressions.addExpr(udf) => udf
         }
-      }.distinct
+      }
 
       val namedGroupingExpressions = groupingExpressions.map {
         case ne: NamedExpression => ne -> ne
@@ -236,7 +243,12 @@ object PhysicalAggregation {
           case ae: AggregateExpression =>
             // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
             // so replace each aggregate expression by its corresponding attribute in the set:
-            ae.resultAttribute
+            equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
+              .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
+            // Similar to AggregateExpression
+          case ue: PythonUDF if PythonUDF.isGroupAggPandasUDF(ue) =>
+            equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
+              .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
           case expression =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key
             // columns, we need to replace grouping key expressions with their corresponding

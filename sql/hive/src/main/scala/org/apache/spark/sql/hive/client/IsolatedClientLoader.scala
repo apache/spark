@@ -26,6 +26,7 @@ import scala.util.Try
 
 import org.apache.commons.io.{FileUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkSubmitUtils
@@ -48,11 +49,12 @@ private[hive] object IsolatedClientLoader extends Logging {
       config: Map[String, String] = Map.empty,
       ivyPath: Option[String] = None,
       sharedPrefixes: Seq[String] = Seq.empty,
-      barrierPrefixes: Seq[String] = Seq.empty): IsolatedClientLoader = synchronized {
+      barrierPrefixes: Seq[String] = Seq.empty,
+      sharesHadoopClasses: Boolean = true): IsolatedClientLoader = synchronized {
     val resolvedVersion = hiveVersion(hiveMetastoreVersion)
     // We will first try to share Hadoop classes. If we cannot resolve the Hadoop artifact
     // with the given version, we will use Hadoop 2.6 and then will not share Hadoop classes.
-    var sharesHadoopClasses = true
+    var _sharesHadoopClasses = sharesHadoopClasses
     val files = if (resolvedVersions.contains((resolvedVersion, hadoopVersion))) {
       resolvedVersions((resolvedVersion, hadoopVersion))
     } else {
@@ -68,7 +70,7 @@ private[hive] object IsolatedClientLoader extends Logging {
               "Hadoop classes will not be shared between Spark and Hive metastore client. " +
               "It is recommended to set jars used by Hive metastore client through " +
               "spark.sql.hive.metastore.jars in the production environment.")
-            sharesHadoopClasses = false
+            _sharesHadoopClasses = false
             (downloadVersion(resolvedVersion, "2.6.5", ivyPath), "2.6.5")
         }
       resolvedVersions.put((resolvedVersion, actualHadoopVersion), downloadedFiles)
@@ -81,7 +83,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       execJars = files,
       hadoopConf = hadoopConf,
       config = config,
-      sharesHadoopClasses = sharesHadoopClasses,
+      sharesHadoopClasses = _sharesHadoopClasses,
       sharedPrefixes = sharedPrefixes,
       barrierPrefixes = barrierPrefixes)
   }
@@ -248,9 +250,11 @@ private[hive] class IsolatedClientLoader(
   }
 
   /** The isolated client interface to Hive. */
-  private[hive] def createClient(): HiveClient = {
+  private[hive] def createClient(): HiveClient = synchronized {
+    val warehouseDir = Option(hadoopConf.get(ConfVars.METASTOREWAREHOUSE.varname))
     if (!isolationOn) {
-      return new HiveClientImpl(version, sparkConf, hadoopConf, config, baseClassLoader, this)
+      return new HiveClientImpl(version, warehouseDir, sparkConf, hadoopConf, config,
+        baseClassLoader, this)
     }
     // Pre-reflective instantiation setup.
     logDebug("Initializing the logger to avoid disaster...")
@@ -261,7 +265,7 @@ private[hive] class IsolatedClientLoader(
       classLoader
         .loadClass(classOf[HiveClientImpl].getName)
         .getConstructors.head
-        .newInstance(version, sparkConf, hadoopConf, config, classLoader, this)
+        .newInstance(version, warehouseDir, sparkConf, hadoopConf, config, classLoader, this)
         .asInstanceOf[HiveClient]
     } catch {
       case e: InvocationTargetException =>

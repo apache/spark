@@ -24,7 +24,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, MonotonicallyIncreasingID, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{FlatMapGroupsWithState, _}
@@ -613,6 +613,14 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   testOutputMode(Append, shouldSupportAggregation = false, shouldSupportNonAggregation = true)
   testOutputMode(Update, shouldSupportAggregation = true, shouldSupportNonAggregation = true)
   testOutputMode(Complete, shouldSupportAggregation = true, shouldSupportNonAggregation = false)
+
+  // Unsupported expressions in streaming plan
+  assertNotSupportedInStreamingPlan(
+    "MonotonicallyIncreasingID",
+    streamRelation.select(MonotonicallyIncreasingID()),
+    outputMode = Append,
+    expectedMsgs = Seq("monotonically_increasing_id"))
+
 
   /*
     =======================================================================================

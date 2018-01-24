@@ -22,13 +22,12 @@ import java.util.Date
 
 import scala.collection.mutable
 
-import com.google.common.base.Objects
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.StructType
@@ -368,10 +367,17 @@ case class CatalogStatistics(
    * Convert [[CatalogStatistics]] to [[Statistics]], and match column stats to attributes based
    * on column names.
    */
-  def toPlanStats(planOutput: Seq[Attribute]): Statistics = {
-    val matched = planOutput.flatMap(a => colStats.get(a.name).map(a -> _))
-    Statistics(sizeInBytes = sizeInBytes, rowCount = rowCount,
-      attributeStats = AttributeMap(matched))
+  def toPlanStats(planOutput: Seq[Attribute], cboEnabled: Boolean): Statistics = {
+    if (cboEnabled && rowCount.isDefined) {
+      val attrStats = AttributeMap(planOutput.flatMap(a => colStats.get(a.name).map(a -> _)))
+      // Estimate size as number of rows * row size.
+      val size = EstimationUtils.getOutputSize(planOutput, rowCount.get, attrStats)
+      Statistics(sizeInBytes = size, rowCount = rowCount, attributeStats = attrStats)
+    } else {
+      // When CBO is disabled or the table doesn't have other statistics, we apply the size-only
+      // estimation strategy and only propagate sizeInBytes in statistics.
+      Statistics(sizeInBytes = sizeInBytes)
+    }
   }
 
   /** Readable string representation for the CatalogStatistics. */
@@ -405,6 +411,11 @@ object CatalogTypes {
    * Specifications of a table partition. Mapping column name to column value.
    */
   type TablePartitionSpec = Map[String, String]
+
+  /**
+   * Initialize an empty spec.
+   */
+  lazy val emptyTablePartitionSpec: TablePartitionSpec = Map.empty[String, String]
 }
 
 /**
@@ -435,16 +446,7 @@ case class HiveTableRelation(
 
   def isPartitioned: Boolean = partitionCols.nonEmpty
 
-  override def equals(relation: Any): Boolean = relation match {
-    case other: HiveTableRelation => tableMeta == other.tableMeta && output == other.output
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    Objects.hashCode(tableMeta.identifier, output)
-  }
-
-  override lazy val canonicalized: HiveTableRelation = copy(
+  override def doCanonicalize(): HiveTableRelation = copy(
     tableMeta = tableMeta.copy(
       storage = CatalogStorageFormat.empty,
       createTime = -1
@@ -454,10 +456,11 @@ case class HiveTableRelation(
     },
     partitionCols = partitionCols.zipWithIndex.map {
       case (attr, index) => attr.withExprId(ExprId(index + dataCols.length))
-    })
+    }
+  )
 
   override def computeStats(): Statistics = {
-    tableMeta.stats.map(_.toPlanStats(output)).getOrElse {
+    tableMeta.stats.map(_.toPlanStats(output, conf.cboEnabled)).getOrElse {
       throw new IllegalStateException("table stats must be specified.")
     }
   }

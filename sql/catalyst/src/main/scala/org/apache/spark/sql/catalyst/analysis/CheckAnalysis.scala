@@ -78,8 +78,6 @@ trait CheckAnalysis extends PredicateHelper {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
-      case p if p.analyzed => // Skip already analyzed sub-plans
-
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
@@ -155,11 +153,19 @@ trait CheckAnalysis extends PredicateHelper {
                 s"of type ${condition.dataType.simpleString} is not a boolean.")
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
+            def isAggregateExpression(expr: Expression) = {
+              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupAggPandasUDF(expr)
+            }
+
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case aggExpr: AggregateExpression =>
-                aggExpr.aggregateFunction.children.foreach { child =>
+              case expr: Expression if isAggregateExpression(expr) =>
+                val aggFunction = expr match {
+                  case agg: AggregateExpression => agg.aggregateFunction
+                  case udf: PythonUDF => udf
+                }
+                aggFunction.children.foreach { child =>
                   child.foreach {
-                    case agg: AggregateExpression =>
+                    case expr: Expression if isAggregateExpression(expr) =>
                       failAnalysis(
                         s"It is not allowed to use an aggregate function in the argument of " +
                           s"another aggregate function. Please use the inner aggregate function " +
@@ -272,10 +278,23 @@ trait CheckAnalysis extends PredicateHelper {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
             val missingAttributes = o.missingInput.mkString(",")
             val input = o.inputSet.mkString(",")
+            val msgForMissingAttributes = s"Resolved attribute(s) $missingAttributes missing " +
+              s"from $input in operator ${operator.simpleString}."
 
-            failAnalysis(
-              s"resolved attribute(s) $missingAttributes missing from $input " +
-                s"in operator ${operator.simpleString}")
+            val resolver = plan.conf.resolver
+            val attrsWithSameName = o.missingInput.filter { missing =>
+              o.inputSet.exists(input => resolver(missing.name, input.name))
+            }
+
+            val msg = if (attrsWithSameName.nonEmpty) {
+              val sameNames = attrsWithSameName.map(_.name).mkString(",")
+              s"$msgForMissingAttributes Attribute(s) with the same name appear in the " +
+                s"operation: $sameNames. Please check if the right attribute(s) are used."
+            } else {
+              msgForMissingAttributes
+            }
+
+            failAnalysis(msg)
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(
@@ -340,8 +359,6 @@ trait CheckAnalysis extends PredicateHelper {
       case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
       case _ =>
     }
-
-    plan.foreach(_.setAnalyzed())
   }
 
   /**
@@ -599,8 +616,8 @@ trait CheckAnalysis extends PredicateHelper {
       // allows to have correlation under it
       // but must not host any outer references.
       // Note:
-      // Generator with join=false is treated as Category 4.
-      case g: Generate if g.join =>
+      // Generator with requiredChildOutput.isEmpty is treated as Category 4.
+      case g: Generate if g.requiredChildOutput.nonEmpty =>
         failOnInvalidOuterReference(g)
 
       // Category 4: Any other operators not in the above 3 categories

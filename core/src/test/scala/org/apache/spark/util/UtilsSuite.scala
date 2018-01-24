@@ -38,9 +38,10 @@ import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.scheduler.SparkListener
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
@@ -1110,4 +1111,78 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     Utils.tryWithSafeFinallyAndFailureCallbacks {}(catchBlock = {}, finallyBlock = {})
     TaskContext.unset
   }
+
+  test("load extensions") {
+    val extensions = Seq(
+      classOf[SimpleExtension],
+      classOf[ExtensionWithConf],
+      classOf[UnregisterableExtension]).map(_.getName())
+
+    val conf = new SparkConf(false)
+    val instances = Utils.loadExtensions(classOf[Object], extensions, conf)
+    assert(instances.size === 2)
+    assert(instances.count(_.isInstanceOf[SimpleExtension]) === 1)
+
+    val extWithConf = instances.find(_.isInstanceOf[ExtensionWithConf])
+      .map(_.asInstanceOf[ExtensionWithConf])
+      .get
+    assert(extWithConf.conf eq conf)
+
+    class NestedExtension { }
+
+    val invalid = Seq(classOf[NestedExtension].getName())
+    intercept[SparkException] {
+      Utils.loadExtensions(classOf[Object], invalid, conf)
+    }
+
+    val error = Seq(classOf[ExtensionWithError].getName())
+    intercept[IllegalArgumentException] {
+      Utils.loadExtensions(classOf[Object], error, conf)
+    }
+
+    val wrongType = Seq(classOf[ListenerImpl].getName())
+    intercept[IllegalArgumentException] {
+      Utils.loadExtensions(classOf[Seq[_]], wrongType, conf)
+    }
+  }
+
+  test("check Kubernetes master URL") {
+    val k8sMasterURLHttps = Utils.checkAndGetK8sMasterUrl("k8s://https://host:port")
+    assert(k8sMasterURLHttps === "k8s://https://host:port")
+
+    val k8sMasterURLHttp = Utils.checkAndGetK8sMasterUrl("k8s://http://host:port")
+    assert(k8sMasterURLHttp === "k8s://http://host:port")
+
+    val k8sMasterURLWithoutScheme = Utils.checkAndGetK8sMasterUrl("k8s://127.0.0.1:8443")
+    assert(k8sMasterURLWithoutScheme === "k8s://https://127.0.0.1:8443")
+
+    val k8sMasterURLWithoutScheme2 = Utils.checkAndGetK8sMasterUrl("k8s://127.0.0.1")
+    assert(k8sMasterURLWithoutScheme2 === "k8s://https://127.0.0.1")
+
+    intercept[IllegalArgumentException] {
+      Utils.checkAndGetK8sMasterUrl("k8s:https://host:port")
+    }
+
+    intercept[IllegalArgumentException] {
+      Utils.checkAndGetK8sMasterUrl("k8s://foo://host:port")
+    }
+  }
 }
+
+private class SimpleExtension
+
+private class ExtensionWithConf(val conf: SparkConf)
+
+private class UnregisterableExtension {
+
+  throw new UnsupportedOperationException()
+
+}
+
+private class ExtensionWithError {
+
+  throw new IllegalArgumentException()
+
+}
+
+private class ListenerImpl extends SparkListener

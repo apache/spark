@@ -29,7 +29,7 @@ import org.scalatest.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
-import org.apache.spark.sql.execution.{FilterExec, QueryExecution}
+import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
@@ -358,6 +358,63 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData.select('key).collect().toSeq)
   }
 
+  test("repartition with SortOrder") {
+    // passing SortOrder expressions to .repartition() should result in an informative error
+
+    def checkSortOrderErrorMsg[T](data: => Dataset[T]): Unit = {
+      val ex = intercept[IllegalArgumentException](data)
+      assert(ex.getMessage.contains("repartitionByRange"))
+    }
+
+    checkSortOrderErrorMsg {
+      Seq(0).toDF("a").repartition(2, $"a".asc)
+    }
+
+    checkSortOrderErrorMsg {
+      Seq((0, 0)).toDF("a", "b").repartition(2, $"a".asc, $"b")
+    }
+  }
+
+  test("repartitionByRange") {
+    val data1d = Random.shuffle(0.to(9))
+    val data2d = data1d.map(i => (i, data1d.size - i))
+
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, $"val".asc)
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(i, i)))
+
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, $"val".desc)
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(i, data1d.size - 1 - i)))
+
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, lit(42))
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(0, i)))
+
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, lit(null), $"val".asc, rand())
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(i, i)))
+
+    // .repartitionByRange() assumes .asc by default if no explicit sort order is specified
+    checkAnswer(
+      data2d.toDF("a", "b").repartitionByRange(data2d.size, $"a".desc, $"b")
+        .select(spark_partition_id().as("id"), $"a", $"b"),
+      data2d.toDF("a", "b").repartitionByRange(data2d.size, $"a".desc, $"b".asc)
+        .select(spark_partition_id().as("id"), $"a", $"b"))
+
+    // at least one partition-by expression must be specified
+    intercept[IllegalArgumentException] {
+      data1d.toDF("val").repartitionByRange(data1d.size)
+    }
+    intercept[IllegalArgumentException] {
+      data1d.toDF("val").repartitionByRange(data1d.size, Seq.empty: _*)
+    }
+  }
+
   test("coalesce") {
     intercept[IllegalArgumentException] {
       testData.select('key).coalesce(0)
@@ -368,6 +425,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData.select('key).coalesce(1).select('key),
       testData.select('key).collect().toSeq)
+
+    assert(spark.emptyDataFrame.coalesce(1).rdd.partitions.size === 1)
   }
 
   test("convert $\"attribute name\" into unresolved attribute") {
@@ -684,6 +743,34 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("withColumns: given metadata") {
+    def buildMetadata(num: Int): Seq[Metadata] = {
+      (0 until num).map { n =>
+        val builder = new MetadataBuilder
+        builder.putLong("key", n.toLong)
+        builder.build()
+      }
+    }
+
+    val df = testData.toDF().withColumns(
+      Seq("newCol1", "newCol2"),
+      Seq(col("key") + 1, col("key") + 2),
+      buildMetadata(2))
+
+    df.select("newCol1", "newCol2").schema.zipWithIndex.foreach { case (col, idx) =>
+      assert(col.metadata.getLong("key").toInt === idx)
+    }
+
+    val err = intercept[IllegalArgumentException] {
+      testData.toDF().withColumns(
+        Seq("newCol1", "newCol2"),
+        Seq(col("key") + 1, col("key") + 2),
+        buildMetadata(1))
+    }
+    assert(err.getMessage.contains(
+      "The size of column names: 2 isn't equal to the size of metadata elements: 1"))
+  }
+
   test("replace column using withColumn") {
     val df2 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
     val df3 = df2.withColumn("x", df2("x") + 1)
@@ -855,7 +942,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row("mean", null, "33.0", "178.0"),
       Row("stddev", null, "19.148542155126762", "11.547005383792516"),
       Row("min", "Alice", "16", "164"),
-      Row("25%", null, "24", "176"),
+      Row("25%", null, "16", "164"),
       Row("50%", null, "24", "176"),
       Row("75%", null, "32", "180"),
       Row("max", "David", "60", "192"))
@@ -1166,6 +1253,34 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                          " value | 1   \n" +
                          "only showing top 1 row\n"
     assert(testData.select($"*").showString(1, vertical = true) === expectedAnswer)
+  }
+
+  test("SPARK-23023 Cast rows to strings in showString") {
+    val df1 = Seq(Seq(1, 2, 3, 4)).toDF("a")
+    assert(df1.showString(10) ===
+      s"""+------------+
+         ||           a|
+         |+------------+
+         ||[1, 2, 3, 4]|
+         |+------------+
+         |""".stripMargin)
+    val df2 = Seq(Map(1 -> "a", 2 -> "b")).toDF("a")
+    assert(df2.showString(10) ===
+      s"""+----------------+
+         ||               a|
+         |+----------------+
+         ||[1 -> a, 2 -> b]|
+         |+----------------+
+         |""".stripMargin)
+    val df3 = Seq(((1, "a"), 0), ((2, "b"), 0)).toDF("a", "b")
+    assert(df3.showString(10) ===
+      s"""+------+---+
+         ||     a|  b|
+         |+------+---+
+         ||[1, a]|  0|
+         ||[2, b]|  0|
+         |+------+---+
+         |""".stripMargin)
   }
 
   test("SPARK-7327 show with empty dataFrame") {
@@ -2067,7 +2182,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .count
   }
 
-  testQuietly("SPARK-19372: Filter can be executed w/o generated code due to JVM code size limit") {
+  // The fix of SPARK-21720 avoid an exception regarding JVM code size limit
+  // TODO: When we make a threshold of splitting statements (1024) configurable,
+  // we will re-enable this with max threshold to cause an exception
+  // See https://github.com/apache/spark/pull/18972/files#r150223463
+  ignore("SPARK-19372: Filter can be executed w/o generated code due to JVM code size limit") {
     val N = 400
     val rows = Seq(Row.fromSeq(Seq.fill(N)("string")))
     val schema = StructType(Seq.tabulate(N)(i => StructField(s"_c$i", StringType)))
@@ -2102,5 +2221,39 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       testData2.select(lit(7), 'a, 'b).orderBy(lit(1), lit(2), lit(3)),
       Seq(Row(7, 1, 1), Row(7, 1, 2), Row(7, 2, 1), Row(7, 2, 2), Row(7, 3, 1), Row(7, 3, 2)))
+  }
+
+  test("SPARK-22226: splitExpressions should not generate codes beyond 64KB") {
+    val colNumber = 10000
+    val input = spark.range(2).rdd.map(_ => Row(1 to colNumber: _*))
+    val df = sqlContext.createDataFrame(input, StructType(
+      (1 to colNumber).map(colIndex => StructField(s"_$colIndex", IntegerType, false))))
+    val newCols = (1 to colNumber).flatMap { colIndex =>
+      Seq(expr(s"if(1000 < _$colIndex, 1000, _$colIndex)"),
+        expr(s"sqrt(_$colIndex)"))
+    }
+    df.select(newCols: _*).collect()
+  }
+
+  test("SPARK-22271: mean overflows and returns null for some decimal variables") {
+    val d = 0.034567890
+    val df = Seq(d, d, d, d, d, d, d, d, d, d).toDF("DecimalCol")
+    val result = df.select('DecimalCol cast DecimalType(38, 33))
+      .select(col("DecimalCol")).describe()
+    val mean = result.select("DecimalCol").where($"summary" === "mean")
+    assert(mean.collect().toSet === Set(Row("0.0345678900000000000000000000000000000")))
+  }
+
+  test("SPARK-22520: support code generation for large CaseWhen") {
+    val N = 30
+    var expr1 = when($"id" === lit(0), 0)
+    var expr2 = when($"id" === lit(0), 10)
+    (1 to N).foreach { i =>
+      expr1 = expr1.when($"id" === lit(i), -i)
+      expr2 = expr2.when($"id" === lit(i + 10), i)
+    }
+    val df = spark.range(1).select(expr1, expr2.otherwise(0))
+    checkAnswer(df, Row(0, 10) :: Nil)
+    assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
   }
 }

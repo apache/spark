@@ -19,14 +19,17 @@ package org.apache.spark.sql
 
 import scala.util.Random
 
+import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.DecimalData
-import org.apache.spark.sql.types.{Decimal, DecimalType}
+import org.apache.spark.sql.types.DecimalType
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
@@ -455,7 +458,6 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("null moments") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
-
     checkAnswer(
       emptyTableData.agg(variance('a), var_samp('a), var_pop('a), skewness('a), kurtosis('a)),
       Row(null, null, null, null, null))
@@ -635,5 +637,53 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       spark.sql("SELECT 3 AS c, 4 AS d, SUM(b) FROM testData2 GROUP BY c, d"),
       Seq(Row(3, 4, 9)))
+  }
+
+  test("SPARK-22223: ObjectHashAggregate should not introduce unnecessary shuffle") {
+    withSQLConf(SQLConf.USE_OBJECT_HASH_AGG.key -> "true") {
+      val df = Seq(("1", "2", 1), ("1", "2", 2), ("2", "3", 3), ("2", "3", 4)).toDF("a", "b", "c")
+        .repartition(col("a"))
+
+      val objHashAggDF = df
+        .withColumn("d", expr("(a, b, c)"))
+        .groupBy("a", "b").agg(collect_list("d").as("e"))
+        .withColumn("f", expr("(b, e)"))
+        .groupBy("a").agg(collect_list("f").as("g"))
+      val aggPlan = objHashAggDF.queryExecution.executedPlan
+
+      val sortAggPlans = aggPlan.collect {
+        case sortAgg: SortAggregateExec => sortAgg
+      }
+      assert(sortAggPlans.isEmpty)
+
+      val objHashAggPlans = aggPlan.collect {
+        case objHashAgg: ObjectHashAggregateExec => objHashAgg
+      }
+      assert(objHashAggPlans.nonEmpty)
+
+      val exchangePlans = aggPlan.collect {
+        case shuffle: ShuffleExchangeExec => shuffle
+      }
+      assert(exchangePlans.length == 1)
+    }
+  }
+
+  Seq(true, false).foreach { codegen =>
+    test("SPARK-22951: dropDuplicates on empty dataFrames should produce correct aggregate " +
+      s"results when codegen is enabled: $codegen") {
+      withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, codegen.toString)) {
+        // explicit global aggregations
+        val emptyAgg = Map.empty[String, String]
+        checkAnswer(spark.emptyDataFrame.agg(emptyAgg), Seq(Row()))
+        checkAnswer(spark.emptyDataFrame.groupBy().agg(emptyAgg), Seq(Row()))
+        checkAnswer(spark.emptyDataFrame.groupBy().agg(count("*")), Seq(Row(0)))
+        checkAnswer(spark.emptyDataFrame.dropDuplicates().agg(emptyAgg), Seq(Row()))
+        checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(emptyAgg), Seq(Row()))
+        checkAnswer(spark.emptyDataFrame.dropDuplicates().groupBy().agg(count("*")), Seq(Row(0)))
+
+        // global aggregation is converted to grouping aggregation:
+        assert(spark.emptyDataFrame.dropDuplicates().count() == 0)
+      }
+    }
   }
 }
