@@ -22,7 +22,6 @@ import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Transformer}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.param.shared.{HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util.MyParams
 import org.apache.spark.sql.Dataset
 

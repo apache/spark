@@ -408,6 +408,9 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     // the following should fail because not all the params are set
     ParamsSuite.testExclusiveParams(new Bucketizer, df, ("inputCol", "feature1"),
       ("outputCol", "result1"))
+    ParamsSuite.testExclusiveParams(new Bucketizer, df,
+      ("inputCols", Array("feature1", "feature2")),
+      ("outputCols", Array("result1", "result2")))
   }
 }
 
