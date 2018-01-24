@@ -120,7 +120,7 @@ if [ "$lint_status" -ne 0 ]; then
     echo "pydocstyle checks failed."
     cat "$PYDOCSTYLE_REPORT_PATH"
     rm "$PYDOCSTYLE_REPORT_PATH"
-    # As there are too many doc failures currently, we want to verify but do not want to fail python lint check based on it now.
+    # As there are doc failures currently, we want to verify but do not want to fail python lint check based on it now.
     #exit "$lint_status"
 else
     echo "pydocstyle checks passed."
