@@ -1100,6 +1100,14 @@ class SQLTests(ReusedSQLTestCase):
         rows = [r[0] for r in df.selectExpr("udf(id)").take(2)]
         self.assertEqual(rows, [None, PythonOnlyPoint(1, 1)])
 
+    def test_nonparam_udf_with_aggregate(self):
+        import pyspark.sql.functions as f
+
+        df = self.spark.createDataFrame([(1, 2), (1, 2)])
+        f_udf = f.udf(lambda: "const_str")
+        rows = df.distinct().withColumn("a", f_udf()).collect()
+        self.assertEqual(rows, [Row(_1=1, _2=2, a=u'const_str')])
+
     def test_infer_schema_with_udt(self):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
         row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
