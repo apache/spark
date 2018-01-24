@@ -70,8 +70,8 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   private def testBroadcastJoin[T: ClassTag](
       joinType: String,
       forceBroadcast: Boolean = false): SparkPlan = {
-    val df1 = spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
-    val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value")
+    val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
+    val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
 
     // Comparison at the end is for broadcast left semi join
     val joinExpression = df1("key") === df2("key") && df1("value") > df2("value")
@@ -99,37 +99,61 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
 
   test("broadcast hint isn't bothered by authBroadcastJoinThreshold set to low values") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
-      testBroadcastJoin[BroadcastHashJoinExec]("inner", true)
+      testBroadcastJoin[BroadcastHashJoinExec]("inner", forceBroadcast = true)
     }
   }
 
   test("broadcast hint isn't bothered by a disabled authBroadcastJoinThreshold") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      testBroadcastJoin[BroadcastHashJoinExec]("inner", true)
+      testBroadcastJoin[BroadcastHashJoinExec]("inner", forceBroadcast = true)
     }
   }
 
   test("broadcast hint is retained after using the cached data") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      val df1 = spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
-      val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value")
-      df2.cache()
-      val df3 = df1.join(broadcast(df2), Seq("key"), "inner")
-      val numBroadCastHashJoin = df3.queryExecution.executedPlan.collect {
-        case b: BroadcastHashJoinExec => b
-      }.size
-      assert(numBroadCastHashJoin === 1)
+    try {
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+        val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
+        val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+        df2.cache()
+        val df3 = df1.join(broadcast(df2), Seq("key"))
+        val numBroadCastHashJoin = df3.queryExecution.executedPlan.collect {
+          case b: BroadcastHashJoinExec => b
+        }.size
+        assert(numBroadCastHashJoin === 1)
+      }
+    } finally {
+      spark.catalog.clearCache()
+    }
+  }
+
+  test("broadcast hint is retained in a cached plan") {
+    Seq(true, false).foreach { materialized =>
+      try {
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
+          val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+          broadcast(df2).cache()
+          if (materialized) df2.collect()
+          val df3 = df1.join(df2, Seq("key"))
+          val numBroadCastHashJoin = df3.queryExecution.executedPlan.collect {
+            case b: BroadcastHashJoinExec => b
+          }.size
+          assert(numBroadCastHashJoin === 1)
+        }
+      } finally {
+        spark.catalog.clearCache()
+      }
     }
   }
 
   test("broadcast hint isn't propagated after a join") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      val df1 = spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
-      val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"))).toDF("key", "value")
-      val df3 = df1.join(broadcast(df2), Seq("key"), "inner").drop(df2("key"))
+      val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
+      val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+      val df3 = df1.join(broadcast(df2), Seq("key")).drop(df2("key"))
 
       val df4 = spark.createDataFrame(Seq((1, "5"), (2, "5"))).toDF("key", "value")
-      val df5 = df4.join(df3, Seq("key"), "inner")
+      val df5 = df4.join(df3, Seq("key"))
 
       val plan =
         EnsureRequirements(spark.sessionState.conf).apply(df5.queryExecution.sparkPlan)
@@ -141,7 +165,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
 
   private def assertBroadcastJoin(df : Dataset[Row]) : Unit = {
     val df1 = spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value")
-    val joined = df1.join(df, Seq("key"), "inner")
+    val joined = df1.join(df, Seq("key"))
 
     val plan =
       EnsureRequirements(spark.sessionState.conf).apply(joined.queryExecution.sparkPlan)
@@ -151,19 +175,20 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
 
   test("broadcast hint programming API") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
-      val df2 = spark.createDataFrame(Seq((1, "1"), (2, "2"), (3, "2"))).toDF("key", "value")
+      val df2 = Seq((1, "1"), (2, "2"), (3, "2")).toDF("key", "value")
       val broadcasted = broadcast(df2)
-      val df3 = spark.createDataFrame(Seq((2, "2"), (3, "3"))).toDF("key", "value")
+      val df3 = Seq((2, "2"), (3, "3")).toDF("key", "value")
 
-      val cases = Seq(broadcasted.limit(2),
-                      broadcasted.filter("value < 10"),
-                      broadcasted.sample(true, 0.5),
-                      broadcasted.distinct(),
-                      broadcasted.groupBy("value").agg(min($"key").as("key")),
-                      // except and intersect are semi/anti-joins which won't return more data then
-                      // their left argument, so the broadcast hint should be propagated here
-                      broadcasted.except(df3),
-                      broadcasted.intersect(df3))
+      val cases =
+        Seq(broadcasted.limit(2),
+          broadcasted.filter("value < 10"),
+          broadcasted.sample(withReplacement = true, 0.5),
+          broadcasted.distinct(),
+          broadcasted.groupBy("value").agg(min($"key").as("key")),
+          // except and intersect are semi/anti-joins which won't return more data then
+          // their left argument, so the broadcast hint should be propagated here
+          broadcasted.except(df3),
+          broadcasted.intersect(df3))
 
       cases.foreach(assertBroadcastJoin)
     }
@@ -240,9 +265,8 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   test("Shouldn't change broadcast join buildSide if user clearly specified") {
 
     withTempView("t1", "t2") {
-      spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value").createTempView("t1")
-      spark.createDataFrame(Seq((1, "1"), (2, "12.3"), (2, "123"))).toDF("key", "value")
-        .createTempView("t2")
+      Seq((1, "4"), (2, "2")).toDF("key", "value").createTempView("t1")
+      Seq((1, "1"), (2, "12.3"), (2, "123")).toDF("key", "value").createTempView("t2")
 
       val t1Size = spark.table("t1").queryExecution.analyzed.children.head.stats.sizeInBytes
       val t2Size = spark.table("t2").queryExecution.analyzed.children.head.stats.sizeInBytes
@@ -292,9 +316,8 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   test("Shouldn't bias towards build right if user didn't specify") {
 
     withTempView("t1", "t2") {
-      spark.createDataFrame(Seq((1, "4"), (2, "2"))).toDF("key", "value").createTempView("t1")
-      spark.createDataFrame(Seq((1, "1"), (2, "12.3"), (2, "123"))).toDF("key", "value")
-        .createTempView("t2")
+      Seq((1, "4"), (2, "2")).toDF("key", "value").createTempView("t1")
+      Seq((1, "1"), (2, "12.3"), (2, "123")).toDF("key", "value").createTempView("t2")
 
       val t1Size = spark.table("t1").queryExecution.analyzed.children.head.stats.sizeInBytes
       val t2Size = spark.table("t2").queryExecution.analyzed.children.head.stats.sizeInBytes
