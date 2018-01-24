@@ -279,11 +279,24 @@ function(object, path, overwrite = FALSE) {
 #' savedModel <- read.ml(path)
 #' summary(savedModel)
 #'
-#' # multinomial logistic regression
+#' # binary logistic regression against two classes with
+#' # upperBoundsOnCoefficients and upperBoundsOnIntercepts
+#' ubc <- matrix(c(1.0, 0.0, 1.0, 0.0), nrow = 1, ncol = 4)
+#' model <- spark.logit(training, Species ~ .,
+#'                       upperBoundsOnCoefficients = ubc,
+#'                       upperBoundsOnIntercepts = 1.0)
 #'
+#' # multinomial logistic regression
 #' model <- spark.logit(training, Class ~ ., regParam = 0.5)
 #' summary <- summary(model)
 #'
+#' # multinomial logistic regression with
+#' # lowerBoundsOnCoefficients and lowerBoundsOnIntercepts
+#' lbc <- matrix(c(0.0, -1.0, 0.0, -1.0, 0.0, -1.0, 0.0, -1.0), nrow = 2, ncol = 4)
+#' lbi <- as.array(c(0.0, 0.0))
+#' model <- spark.logit(training, Species ~ ., family = "multinomial",
+#'                      lowerBoundsOnCoefficients = lbc,
+#'                      lowerBoundsOnIntercepts = lbi)
 #' }
 #' @note spark.logit since 2.1.0
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
