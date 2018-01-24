@@ -1329,29 +1329,29 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 object CodeGenerator extends Logging {
 
   // This is the value of HugeMethodLimit in the OpenJDK JVM settings
-  val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
+  final val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
 
   // The max valid length of method parameters in JVM.
-  val MAX_JVM_METHOD_PARAMS_LENGTH = 255
+  final val MAX_JVM_METHOD_PARAMS_LENGTH = 255
 
   // This is the threshold over which the methods in an inner class are grouped in a single
   // method which is going to be called by the outer class instead of the many small ones
-  val MERGE_SPLIT_METHODS_THRESHOLD = 3
+  final val MERGE_SPLIT_METHODS_THRESHOLD = 3
 
   // The number of named constants that can exist in the class is limited by the Constant Pool
   // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a
   // threshold of 1000k bytes to determine when a function should be inlined to a private, inner
   // class.
-  val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
+  final val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
 
   // This is the threshold for the number of global variables, whose types are primitive type or
   // complex type (e.g. more than one-dimensional array), that will be placed at the outer class
-  val OUTER_CLASS_VARIABLES_THRESHOLD = 10000
+  final val OUTER_CLASS_VARIABLES_THRESHOLD = 10000
 
   // This is the maximum number of array elements to keep global variables in one Java array
   // 32767 is the maximum integer value that does not require a constant pool entry in a Java
   // bytecode instruction
-  val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
+  final val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
 
   /**
    * Compile the Java source code into a Java class, using Janino.
