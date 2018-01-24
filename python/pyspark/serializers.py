@@ -283,7 +283,6 @@ class ArrowStreamPandasSerializer(Serializer):
         reader = pa.open_stream(stream)
 
         for batch in reader:
-            # NOTE: changed from pa.Columns.to_pandas, timezone issue in conversion fixed in 0.7.1
             yield [self.arrow_to_pandas(c, c.type)
                    for c in pa.Table.from_batches([batch]).itercolumns()]
 
