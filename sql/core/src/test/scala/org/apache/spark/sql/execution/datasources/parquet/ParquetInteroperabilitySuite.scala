@@ -21,10 +21,10 @@ import java.io.File
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+import org.apache.parquet.CorruptStatistics
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
-
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -191,7 +191,8 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
 
                 // Note: This is not true in palantir/parquet-mr and statistics are always returned
                 // and they are always unsigned.
-                assert(!columnStats.isEmpty)
+                assert(!(oneFooter.getFileMetaData.getCreatedBy.contains("impala") ^
+                  columnStats.isEmpty))
               }
 
               // These queries should return the entire dataset with the conversion applied,
