@@ -576,7 +576,10 @@ def main():
                                 for f in changed_files):
         # run_java_style_checks()
         pass
-    if not changed_files or any(f.endswith(".py") for f in changed_files):
+    if not changed_files or any(f.endswith("lint-python")
+                                or f.endswith("tox.ini")
+                                or f.endswith(".py")
+                                for f in changed_files):
         run_python_style_checks()
     if not changed_files or any(f.endswith(".R")
                                 or f.endswith("lint-r")
