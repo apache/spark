@@ -83,7 +83,6 @@ import org.apache.spark.util.{CircularBuffer, Utils}
  */
 private[hive] class HiveClientImpl(
     override val version: HiveVersion,
-    warehouseDir: Option[String],
     sparkConf: SparkConf,
     hadoopConf: JIterable[JMap.Entry[String, String]],
     extraConfig: Map[String, String],
@@ -132,7 +131,8 @@ private[hive] class HiveClientImpl(
       if (ret != null) {
         // hive.metastore.warehouse.dir is determined in SharedState after the CliSessionState
         // instance constructed, we need to follow that change here.
-        warehouseDir.foreach { dir =>
+        val conf = hadoopConf.asInstanceOf[Configuration]
+        Option(conf.get(ConfVars.METASTOREWAREHOUSE.varname)).foreach { dir =>
           ret.getConf.setVar(ConfVars.METASTOREWAREHOUSE, dir)
         }
         ret
