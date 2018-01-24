@@ -599,17 +599,13 @@ public abstract class WritableColumnVector extends ColumnVector {
     return elementsAppended;
   }
 
-  /**
-   * Returns the data for the underlying array.
-   */
+  // `WritableColumnVector` puts the data of array in the first child column vector, and puts the
+  // array offsets and lengths in the current column vector.
   @Override
   public WritableColumnVector arrayData() { return childColumns[0]; }
 
-  /**
-   * Returns the ordinal's child data column.
-   */
   @Override
-  public WritableColumnVector getChildColumn(int ordinal) { return childColumns[ordinal]; }
+  public WritableColumnVector getChild(int ordinal) { return childColumns[ordinal]; }
 
   /**
    * Returns the elements appended.

@@ -291,7 +291,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
-    RuleExecutor.resetTime()
+    RuleExecutor.resetMetrics()
   }
 
   override def afterAll(): Unit = {

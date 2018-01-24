@@ -19,13 +19,15 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.io.ByteArrayOutputStream
 
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.sql.execution.streaming.MemoryStream
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 
 class ConsoleWriterSuite extends StreamTest {
   import testImplicits._
 
-  test("console") {
+  test("microbatch - default") {
     val input = MemoryStream[Int]
 
     val captured = new ByteArrayOutputStream()
@@ -77,7 +79,7 @@ class ConsoleWriterSuite extends StreamTest {
         |""".stripMargin)
   }
 
-  test("console with numRows") {
+  test("microbatch - with numRows") {
     val input = MemoryStream[Int]
 
     val captured = new ByteArrayOutputStream()
@@ -106,7 +108,7 @@ class ConsoleWriterSuite extends StreamTest {
         |""".stripMargin)
   }
 
-  test("console with truncation") {
+  test("microbatch - truncation") {
     val input = MemoryStream[String]
 
     val captured = new ByteArrayOutputStream()
@@ -131,5 +133,21 @@ class ConsoleWriterSuite extends StreamTest {
         |+--------------------+
         |
         |""".stripMargin)
+  }
+
+  test("continuous - default") {
+    val captured = new ByteArrayOutputStream()
+    Console.withOut(captured) {
+      val input = spark.readStream
+        .format("rate")
+        .option("numPartitions", "1")
+        .option("rowsPerSecond", "5")
+        .load()
+        .select('value)
+
+      val query = input.writeStream.format("console").trigger(Trigger.Continuous(200)).start()
+      assert(query.isActive)
+      query.stop()
+    }
   }
 }

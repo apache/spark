@@ -110,6 +110,17 @@ def wrap_pandas_group_map_udf(f, return_type):
     return wrapped
 
 
+def wrap_pandas_group_agg_udf(f, return_type):
+    arrow_return_type = to_arrow_type(return_type)
+
+    def wrapped(*series):
+        import pandas as pd
+        result = f(*series)
+        return pd.Series(result)
+
+    return lambda *a: (wrapped(*a), arrow_return_type)
+
+
 def read_single_udf(pickleSer, infile, eval_type):
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for i in range(num_arg)]
@@ -126,8 +137,12 @@ def read_single_udf(pickleSer, infile, eval_type):
         return arg_offsets, wrap_pandas_scalar_udf(row_func, return_type)
     elif eval_type == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
         return arg_offsets, wrap_pandas_group_map_udf(row_func, return_type)
-    else:
+    elif eval_type == PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF:
+        return arg_offsets, wrap_pandas_group_agg_udf(row_func, return_type)
+    elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         return arg_offsets, wrap_udf(row_func, return_type)
+    else:
+        raise ValueError("Unknown eval type: {}".format(eval_type))
 
 
 def read_udfs(pickleSer, infile, eval_type):
@@ -148,8 +163,9 @@ def read_udfs(pickleSer, infile, eval_type):
 
     func = lambda _, it: map(mapper, it)
 
-    if eval_type == PythonEvalType.SQL_PANDAS_SCALAR_UDF \
-       or eval_type == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
+    if eval_type in (PythonEvalType.SQL_PANDAS_SCALAR_UDF,
+                     PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF,
+                     PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF):
         timezone = utf8_deserializer.loads(infile)
         ser = ArrowStreamPandasSerializer(timezone)
     else:

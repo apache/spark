@@ -894,15 +894,19 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val dropped = stages.drop(1).head
 
     // Cache some quantiles by calling AppStatusStore.taskSummary(). For quantiles to be
-    // calculcated, we need at least one finished task.
+    // calculated, we need at least one finished task. The code in AppStatusStore uses
+    // `executorRunTime` to detect valid tasks, so that metric needs to be updated in the
+    // task end event.
     time += 1
     val task = createTasks(1, Array("1")).head
     listener.onTaskStart(SparkListenerTaskStart(dropped.stageId, dropped.attemptId, task))
 
     time += 1
     task.markFinished(TaskState.FINISHED, time)
+    val metrics = TaskMetrics.empty
+    metrics.setExecutorRunTime(42L)
     listener.onTaskEnd(SparkListenerTaskEnd(dropped.stageId, dropped.attemptId,
-      "taskType", Success, task, null))
+      "taskType", Success, task, metrics))
 
     new AppStatusStore(store)
       .taskSummary(dropped.stageId, dropped.attemptId, Array(0.25d, 0.50d, 0.75d))

@@ -408,8 +408,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assertExpressionType(sum(Divide(1.0, 2.0)), DoubleType)
     assertExpressionType(sum(Divide(1, 2.0f)), DoubleType)
     assertExpressionType(sum(Divide(1.0f, 2)), DoubleType)
-    assertExpressionType(sum(Divide(1, Decimal(2))), DecimalType(31, 11))
-    assertExpressionType(sum(Divide(Decimal(1), 2)), DecimalType(31, 11))
+    assertExpressionType(sum(Divide(1, Decimal(2))), DecimalType(22, 11))
+    assertExpressionType(sum(Divide(Decimal(1), 2)), DecimalType(26, 6))
     assertExpressionType(sum(Divide(Decimal(1), 2.0)), DoubleType)
     assertExpressionType(sum(Divide(1.0, Decimal(2.0))), DoubleType)
   }

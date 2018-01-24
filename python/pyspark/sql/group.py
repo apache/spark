@@ -65,12 +65,26 @@ class GroupedData(object):
     def agg(self, *exprs):
         """Compute aggregates and returns the result as a :class:`DataFrame`.
 
-        The available aggregate functions are `avg`, `max`, `min`, `sum`, `count`.
+        The available aggregate functions can be:
+
+        1. built-in aggregation functions, such as `avg`, `max`, `min`, `sum`, `count`
+
+        2. group aggregate pandas UDFs, created with :func:`pyspark.sql.functions.pandas_udf`
+
+           .. note:: There is no partial aggregation with group aggregate UDFs, i.e.,
+               a full shuffle is required. Also, all the data of a group will be loaded into
+               memory, so the user should be aware of the potential OOM risk if data is skewed
+               and certain groups are too large to fit in memory.
+
+           .. seealso:: :func:`pyspark.sql.functions.pandas_udf`
 
         If ``exprs`` is a single :class:`dict` mapping from string to string, then the key
         is the column to perform aggregation on, and the value is the aggregate function.
 
         Alternatively, ``exprs`` can also be a list of aggregate :class:`Column` expressions.
+
+        .. note:: Built-in aggregation functions and group aggregate pandas UDFs cannot be mixed
+            in a single call to this function.
 
         :param exprs: a dict mapping from column name (string) to aggregate functions (string),
             or a list of :class:`Column`.
@@ -82,6 +96,13 @@ class GroupedData(object):
         >>> from pyspark.sql import functions as F
         >>> sorted(gdf.agg(F.min(df.age)).collect())
         [Row(name=u'Alice', min(age)=2), Row(name=u'Bob', min(age)=5)]
+
+        >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+        >>> @pandas_udf('int', PandasUDFType.GROUP_AGG)  # doctest: +SKIP
+        ... def min_udf(v):
+        ...     return v.min()
+        >>> sorted(gdf.agg(min_udf(df.age)).collect())  # doctest: +SKIP
+        [Row(name=u'Alice', min_udf(age)=2), Row(name=u'Bob', min_udf(age)=5)]
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
@@ -204,16 +225,18 @@ class GroupedData(object):
 
         The user-defined function should take a `pandas.DataFrame` and return another
         `pandas.DataFrame`. For each group, all columns are passed together as a `pandas.DataFrame`
-        to the user-function and the returned `pandas.DataFrame`s are combined as a
+        to the user-function and the returned `pandas.DataFrame` are combined as a
         :class:`DataFrame`.
+
         The returned `pandas.DataFrame` can be of arbitrary length and its schema must match the
         returnType of the pandas udf.
 
-        This function does not support partial aggregation, and requires shuffling all the data in
-        the :class:`DataFrame`.
+        .. note:: This function requires a full shuffle. all the data of a group will be loaded
+            into memory, so the user should be aware of the potential OOM risk if data is skewed
+            and certain groups are too large to fit in memory.
 
         :param udf: a group map user-defined function returned by
-            :meth:`pyspark.sql.functions.pandas_udf`.
+            :func:`pyspark.sql.functions.pandas_udf`.
 
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
         >>> df = spark.createDataFrame(

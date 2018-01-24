@@ -42,7 +42,7 @@ shift 1
 
 SPARK_CLASSPATH="$SPARK_CLASSPATH:${SPARK_HOME}/jars/*"
 env | grep SPARK_JAVA_OPT_ | sed 's/[^=]*=\(.*\)/\1/g' > /tmp/java_opts.txt
-readarray -t SPARK_DRIVER_JAVA_OPTS < /tmp/java_opts.txt
+readarray -t SPARK_JAVA_OPTS < /tmp/java_opts.txt
 if [ -n "$SPARK_MOUNTED_CLASSPATH" ]; then
   SPARK_CLASSPATH="$SPARK_CLASSPATH:$SPARK_MOUNTED_CLASSPATH"
 fi
@@ -54,7 +54,7 @@ case "$SPARK_K8S_CMD" in
   driver)
     CMD=(
       ${JAVA_HOME}/bin/java
-      "${SPARK_DRIVER_JAVA_OPTS[@]}"
+      "${SPARK_JAVA_OPTS[@]}"
       -cp "$SPARK_CLASSPATH"
       -Xms$SPARK_DRIVER_MEMORY
       -Xmx$SPARK_DRIVER_MEMORY
@@ -67,7 +67,7 @@ case "$SPARK_K8S_CMD" in
   executor)
     CMD=(
       ${JAVA_HOME}/bin/java
-      "${SPARK_EXECUTOR_JAVA_OPTS[@]}"
+      "${SPARK_JAVA_OPTS[@]}"
       -Xms$SPARK_EXECUTOR_MEMORY
       -Xmx$SPARK_EXECUTOR_MEMORY
       -cp "$SPARK_CLASSPATH"

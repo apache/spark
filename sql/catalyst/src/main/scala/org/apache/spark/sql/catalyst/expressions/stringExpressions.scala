@@ -1708,6 +1708,8 @@ case class BitLength(child: Expression) extends UnaryExpression with ImplicitCas
       case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length * 8")
     }
   }
+
+  override def prettyName: String = "bit_length"
 }
 
 /**
@@ -1735,6 +1737,8 @@ case class OctetLength(child: Expression) extends UnaryExpression with ImplicitC
       case BinaryType => defineCodeGen(ctx, ev, c => s"($c).length")
     }
   }
+
+  override def prettyName: String = "octet_length"
 }
 
 /**

@@ -1517,24 +1517,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("decimal precision with multiply/division") {
-    checkAnswer(sql("select 10.3 * 3.0"), Row(BigDecimal("30.90")))
-    checkAnswer(sql("select 10.3000 * 3.0"), Row(BigDecimal("30.90000")))
-    checkAnswer(sql("select 10.30000 * 30.0"), Row(BigDecimal("309.000000")))
-    checkAnswer(sql("select 10.300000000000000000 * 3.000000000000000000"),
-      Row(BigDecimal("30.900000000000000000000000000000000000", new MathContext(38))))
-    checkAnswer(sql("select 10.300000000000000000 * 3.0000000000000000000"),
-      Row(null))
-
-    checkAnswer(sql("select 10.3 / 3.0"), Row(BigDecimal("3.433333")))
-    checkAnswer(sql("select 10.3000 / 3.0"), Row(BigDecimal("3.4333333")))
-    checkAnswer(sql("select 10.30000 / 30.0"), Row(BigDecimal("0.343333333")))
-    checkAnswer(sql("select 10.300000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.433333333333333333333333333", new MathContext(38))))
-    checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.4333333333333333333333333333", new MathContext(38))))
-  }
-
   test("SPARK-10215 Div of Decimal returns null") {
     val d = Decimal(1.12321).toBigDecimal
     val df = Seq((d, 1)).toDF("a", "b")
@@ -1914,12 +1896,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       var e = intercept[AnalysisException] {
         sql("SELECT a.* FROM temp_table_no_cols a")
       }.getMessage
-      assert(e.contains("cannot resolve 'a.*' give input columns ''"))
+      assert(e.contains("cannot resolve 'a.*' given input columns ''"))
 
       e = intercept[AnalysisException] {
         dfNoCols.select($"b.*")
       }.getMessage
-      assert(e.contains("cannot resolve 'b.*' give input columns ''"))
+      assert(e.contains("cannot resolve 'b.*' given input columns ''"))
     }
   }
 

@@ -62,7 +62,7 @@ component-specific configuration namespaces used to override the default setting
   </tr>
 </table>
 
-The full breakdown of available SSL options  can be found on the [configuration page](configuration.html).
+The full breakdown of available SSL options can be found on the [configuration page](configuration.html).
 SSL must be configured on each node and configured for each component involved in communication using the particular protocol.
 
 ### YARN mode
