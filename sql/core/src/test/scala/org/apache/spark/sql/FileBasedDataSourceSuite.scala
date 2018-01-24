@@ -23,6 +23,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   private val allFileBasedDataSources = Seq("orc", "parquet", "csv", "json", "text")
+  private val nameWithSpecialChars = s"sp&cial%c hars"
 
   allFileBasedDataSources.foreach { format =>
     test(s"Writing empty datasets should not fail - $format") {
@@ -67,10 +68,22 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  allFileBasedDataSources.foreach { format =>
-    test(s"SPARK-22146 / SPARK-23148 read files containing special characters using $format") {
-      val nameWithSpecialChars = s"sp&cial%c hars"
-      Seq(true, false).foreach { multiline =>
+  Seq("orc", "parquet").foreach { format =>
+    test(s"SPARK-22146 read files containing special characters using $format") {
+      withTempDir { dir =>
+        val tmpFile = s"$dir/$nameWithSpecialChars"
+        spark.createDataset(Seq("a", "b")).write.format(format).save(tmpFile)
+        val fileContent = spark.read.format(format).load(tmpFile)
+        checkAnswer(fileContent, Seq(Row("a"), Row("b")))
+      }
+    }
+  }
+
+  // Separate test case for text-based formats that support multiLine as an option.
+  Seq("json", "csv", "text").foreach { format =>
+    Seq(true, false).foreach { multiline =>
+      test("SPARK-22146 / SPARK-23148 read files containing special characters " +
+        s"using $format multiline: $multiline") {
         withTempDir { dir =>
           val tmpFile = s"$dir/$nameWithSpecialChars"
           spark.createDataset(Seq("a", "b")).write.format(format).save(tmpFile)
