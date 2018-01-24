@@ -53,11 +53,11 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(df.count === 1)
 
     df = readImages(imagePath, null, true, -1, false, 1.0, 0)
-    assert(df.count === 9)
+    assert(df.count === 10)
 
     df = readImages(imagePath, null, true, -1, true, 1.0, 0)
     val countTotal = df.count
-    assert(countTotal === 7)
+    assert(countTotal === 8)
 
     df = readImages(imagePath, null, true, -1, true, 0.5, 0)
     // Random number about half of the size of the original dataset
@@ -108,5 +108,4 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
       Array[Byte](-128, -128, -8, 60, -128, -128, -8, 60, -128,
         -128, -8, 60, 127, 127, -9, 60, 127, 127, -9, 60)))
   )
-
 }
