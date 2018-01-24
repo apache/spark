@@ -197,16 +197,11 @@ trait CodegenSupport extends SparkPlan {
     val colExprs = output.zipWithIndex.map { case (attr, i) =>
       BoundReference(i, attr.dataType, attr.nullable)
     }
-    val varsForRow = inputVarsInFunc.map(_.copy())
-    val evaluateInputs = evaluateVariables(varsForRow)
+    // Don't need to copy the variables because they're already evaluated before entering function.
     ctx.INPUT_ROW = null
-    ctx.currentVars = varsForRow
+    ctx.currentVars = inputVarsInFunc
     val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
-    val code = s"""
-          |$evaluateInputs
-          |${ev.code.trim}
-         """.stripMargin.trim
-    val rowVar = ExprCode(code, "false", ev.value)
+    val rowVar = ExprCode(ev.code.trim, "false", ev.value)
 
     val doConsume = ctx.freshName("doConsume")
     ctx.currentVars = inputVarsInFunc
