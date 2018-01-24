@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
@@ -75,30 +76,66 @@ case class FlatMapGroupsInPandasExec(
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
-    /*
-    Use argOffsets[0] as a split index between grouping column and actual data column, i.e.,
-    column 0, 1, .., groupingAttributes.length - 1 are grouping columns
-    column groupingAttributes.length ... child.output.length - 1 are data columns
-    If a grouping column is a data column, then the column will be sent twice.
-     */
-    val argOffsets = Array((groupingAttributes.length until child.output.length).toArray)
-    val schema = child.schema
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
+
+    // Deduplicate the grouping attributes.
+    // If a grouping attribute also appears in data attributes, then we don't need to send the
+    // grouping attribute to Python worker. If a grouping attribute is not in data attributes,
+    // then we need to send this grouping attribute to python worker.
+    //
+    // We use argOffsets to distinguish grouping attributes and data attributes as following:
+    //
+    // argOffsets[0] is the length of grouping attributes
+    // argOffsets[1 .. argOffsets[0]+1] is the arg offsets for grouping attributes
+    // argOffsets[argOffsets[0]+1 .. ] is the arg offsets for data attributes
+
+    val dupGroupingIndices = new ArrayBuffer[Int]
+    val groupingArgOffsets = new ArrayBuffer[Int]
+    val extraGroupingAttributes = new ArrayBuffer[Attribute]
+
+    val dataAttributes = child.output.drop(groupingAttributes.length)
+    groupingAttributes.foreach { attribute =>
+      val index = dataAttributes.indexWhere(
+        childAttribute => attribute.semanticEquals(childAttribute))
+      dupGroupingIndices += index
+    }
+
+    val extraGroupingSize = dupGroupingIndices.count(_ == -1)
+    (groupingAttributes zip dupGroupingIndices).foreach {
+      case (attribute, index) =>
+        if (index == -1) {
+          groupingArgOffsets += extraGroupingAttributes.length
+          extraGroupingAttributes += attribute
+        } else {
+          groupingArgOffsets += index + extraGroupingSize
+        }
+    }
+
+    val dataArgOffsets = extraGroupingAttributes.length until
+      (extraGroupingAttributes.length + dataAttributes.length)
+
+    val argOffsets = Array(Array(groupingAttributes.length) ++ groupingArgOffsets ++ dataArgOffsets)
+
+    val dedupAttributes = extraGroupingAttributes ++ dataAttributes
+    val dedupSchema = StructType.fromAttributes(dedupAttributes)
 
     inputRDD.mapPartitionsInternal { iter =>
       val grouped = if (groupingAttributes.isEmpty) {
         Iterator(iter)
       } else {
         val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
-        groupedIter.map(_._2)
+        val dedupProj = UnsafeProjection.create(dedupAttributes, child.output)
+        groupedIter.map {
+          case (_, groupedRowIter) => groupedRowIter.map(dedupProj)
+        }
       }
 
       val context = TaskContext.get()
 
       val columnarBatchIter = new ArrowPythonRunner(
         chainedFunc, bufferSize, reuseWorker,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF, argOffsets, schema,
+        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF, argOffsets, dedupSchema,
         sessionLocalTimeZone, pandasRespectSessionTimeZone)
           .compute(grouped, context.partitionId(), context)
 

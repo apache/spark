@@ -159,13 +159,13 @@ def read_udfs(pickleSer, infile, eval_type):
     mapper_str = ""
     if eval_type == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
         # Create function like this:
-        #   lambda a: f([a[0]], [a[1], a[2]])
+        #   lambda a: f([a[0]], [a[0], a[1]])
         assert num_udfs == 1
         arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type)
         udfs['f'] = udf
-        split_offset = arg_offsets[0]
-        arg0 = ["a[%d]" % o for o in range(0, split_offset)]
-        arg1 = ["a[%d]" % o for o in arg_offsets]
+        split_offset = arg_offsets[0] + 1
+        arg0 = ["a[%d]" % o for o in arg_offsets[1: split_offset]]
+        arg1 = ["a[%d]" % o for o in arg_offsets[split_offset:]]
         mapper_str = ("lambda a: f([%s], [%s])" % (", ".join(arg0), ", ".join(arg1)))
     else:
         # Create function like this:
