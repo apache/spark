@@ -21,7 +21,7 @@ SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 # Exclude auto-generated configuration file.
 PATHS_TO_CHECK="$( cd "$SPARK_ROOT_DIR" && find . -name "*.py" )"
-PEP8_REPORT_PATH="$SPARK_ROOT_DIR/dev/pep8-report.txt"
+PYCODESTYLE_REPORT_PATH="$SPARK_ROOT_DIR/dev/pycodestyle-report.txt"
 PYLINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/pylint-report.txt"
 PYLINT_INSTALL_INFO="$SPARK_ROOT_DIR/dev/pylint-info.txt"
 SPHINXBUILD=${SPHINXBUILD:=sphinx-build}
@@ -30,22 +30,22 @@ SPHINX_REPORT_PATH="$SPARK_ROOT_DIR/dev/sphinx-report.txt"
 cd "$SPARK_ROOT_DIR"
 
 # compileall: https://docs.python.org/2/library/compileall.html
-python -B -m compileall -q -l $PATHS_TO_CHECK > "$PEP8_REPORT_PATH"
+python -B -m compileall -q -l $PATHS_TO_CHECK > "$PYCODESTYLE_REPORT_PATH"
 compile_status="${PIPESTATUS[0]}"
 
-# Get pep8 at runtime so that we don't rely on it being installed on the build server.
+# Get pycodestyle at runtime so that we don't rely on it being installed on the build server.
 #+ See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
 # Updated to latest official version for pep8. pep8 is formally renamed to pycodestyle.
-PEP8_VERSION="2.3.1"
-PEP8_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pep8-$PEP8_VERSION.py"
-PEP8_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/PyCQA/pycodestyle/$PEP8_VERSION/pycodestyle.py"
+PYCODESTYLE_VERSION="2.3.1"
+PYCODESTYLE_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pycodestyle-$PYCODESTYLE_VERSION.py"
+PYCODESTYLE_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/PyCQA/pycodestyle/$PYCODESTYLE_VERSION/pycodestyle.py"
 
-if [ ! -e "$PEP8_SCRIPT_PATH" ]; then
-    curl --silent -o "$PEP8_SCRIPT_PATH" "$PEP8_SCRIPT_REMOTE_PATH"    
+if [ ! -e "$PYCODESTYLE_SCRIPT_PATH" ]; then
+    curl --silent -o "$PYCODESTYLE_SCRIPT_PATH" "$PYCODESTYLE_SCRIPT_REMOTE_PATH"
     curl_status="$?"
 
     if [ "$curl_status" -ne 0 ]; then
-        echo "Failed to download pep8.py from \"$PEP8_SCRIPT_REMOTE_PATH\"."
+        echo "Failed to download pycodestyle.py from \"$PYCODESTYLE_SCRIPT_REMOTE_PATH\"."
         exit "$curl_status"
     fi
 fi
@@ -63,23 +63,23 @@ export "PATH=$PYTHONPATH:$PATH"
 #+ first, but we do so so that the check status can
 #+ be output before the report, like with the
 #+ scalastyle and RAT checks.
-python "$PEP8_SCRIPT_PATH" --config=dev/tox.ini $PATHS_TO_CHECK >> "$PEP8_REPORT_PATH"
-pep8_status="${PIPESTATUS[0]}"
+python "$PYCODESTYLE_SCRIPT_PATH" --config=dev/tox.ini $PATHS_TO_CHECK >> "$PYCODESTYLE_REPORT_PATH"
+pycodestyle_status="${PIPESTATUS[0]}"
 
-if [ "$compile_status" -eq 0 -a "$pep8_status" -eq 0 ]; then
+if [ "$compile_status" -eq 0 -a "$pycodestyle_status" -eq 0 ]; then
     lint_status=0
 else
     lint_status=1
 fi
 
 if [ "$lint_status" -ne 0 ]; then
-    echo "PEP8 checks failed."
-    cat "$PEP8_REPORT_PATH"
-    rm "$PEP8_REPORT_PATH"
+    echo "PYCODESTYLE checks failed."
+    cat "$PYCODESTYLE_REPORT_PATH"
+    rm "$PYCODESTYLE_REPORT_PATH"
     exit "$lint_status"
 else
-    echo "PEP8 checks passed."
-    rm "$PEP8_REPORT_PATH"
+    echo "pycodestyle checks passed."
+    rm "$PYCODESTYLE_REPORT_PATH"
 fi
 
 # Check that the documentation builds acceptably, skip check if sphinx is not installed.
