@@ -1646,18 +1646,18 @@ options.
 
 Apache Arrow is an in-memory columnar data format that is used in Spark to efficiently transfer
 data between JVM and Python processes. This currently is most beneficial to Python users that
-work with Pandas/NumPy data. It's usage is not automatic and might require some minor
+work with Pandas/NumPy data. Its usage is not automatic and might require some minor
 changes to configuration or code to take full advantage and ensure compatibility. This guide will
 give a high-level description of how to use Arrow in Spark and highlight any differences when
 working with Arrow-enabled data.
 
 ## Ensure pyarrow Installed
 
-If you have installed pyspark using pip, then pyarrow will automatically be brought in as a dependency.
-Otherwise, you must ensure that pyarrow is installed and available on all cluster node Python
-environments. The current supported version is 0.8.0. You can install using pip or conda from the
-conda-forge channel. See pyarrow [installation](https://arrow.apache.org/docs/python/install.html)
-for details.
+If you install pyspark using pip, then pyarrow can be brought in as an extra dependency of the sql
+module with the command "pip install pyspark[sql]". Otherwise, you must ensure that pyarrow is
+installed and available on all cluster node Python environments. The current supported version is
+0.8.0. You can install using pip or conda from the conda-forge channel. See pyarrow
+[installation](https://arrow.apache.org/docs/python/install.html) for details.
 
 ## How to Enable for Conversion to/from Pandas
 
@@ -1695,10 +1695,10 @@ has an unsupported type, see [Supported Types](#supported-types).
 
 ## How to Write Vectorized UDFs
 
-A vectorized UDF is similar to a standard UDF in Spark except the inputs and output of the will
-be Pandas Series, which allow the function to be composed with vectorized operations. This function
-can then be run very efficiently in Spark where data is sent in batches to Python and the function
-is executed using Pandas Series as input. The exected output of the function is also a Pandas
+A vectorized UDF is similar to a standard UDF in Spark except the inputs and output will be
+Pandas Series, which allow the function to be composed with vectorized operations. This function
+can then be run very efficiently in Spark where data is sent in batches to Python and then
+is executed using Pandas Series as the inputs. The exected output of the function is also a Pandas
 Series of the same length as the inputs. A vectorized UDF is declared using the `pandas_udf`
 keyword, no additional configuration is required.
 
@@ -1726,7 +1726,7 @@ print(multiply_func(x, x))
 # 2    9
 # dtype: int64
 
-# Create a Spark DataFrame
+# Create a Spark DataFrame, 'spark' is an existing SparkSession
 df = spark.createDataFrame(pd.DataFrame(x, columns=["x"]))
 
 # Execute function as a Spark vectorized UDF
@@ -1757,18 +1757,25 @@ nested `StructType`.
 Data partitions in Spark are converted into Arrow record batches, which can temporarily lead to
 high memory usage in the JVM. To avoid possible out of memory exceptions, the size of the Arrow
 record batches can be adjusted by setting the conf "spark.sql.execution.arrow.maxRecordsPerBatch"
-to an integer that will determine the maximum number of rows for each batch. Using this limit,
-each data partition will be made into 1 or more record batches for processing.
+to an integer that will determine the maximum number of rows for each batch. The default value is
+10,000 records per batch and does not take into account the number of columns, so it should be
+adjusted accordingly. Using this limit, each data partition will be made into 1 or more record
+batches for processing.
 
-### Date and Timestamp Semantics
+### Timestamp with Time Zone Semantics
 
-Spark internally stores timestamps as UTC values and timestamp data that is brought in without 
-a specified time zone, it is converted as local time to UTC with microsecond resolution. Pandas uses
-a `datetime64` type with nanosecond resolution, `datetime64[ns]` with optional time zone.
+Spark internally stores timestamps as UTC values, and timestamp data that is brought in without
+a specified time zone is converted as local time to UTC with microsecond resolution. When timestamp
+data is exported or displayed in Spark, the session time zone is used to localize the timestamp
+values. The session time zone is set with the conf 'spark.sql.session.timeZone' and will default
+to the JVM system local time zone if not set. Pandas uses a `datetime64` type with nanosecond
+resolution, `datetime64[ns]`, and optional time zone that can be applied on a per-column basis.
 
 When timestamp data is transferred from Spark to Pandas it will be converted to nanoseconds
-and made time zone aware using the Spark session time zone, if set, or local Python system time
-zone. This will occur when calling `toPandas()` or `pandas_udf` with a timestamp column.
+and each column will be made time zone aware using the Spark session time zone. This will occur
+when calling `toPandas()` or `pandas_udf` with a timestamp column. For example if the session time
+zone is 'America/Los_Angeles' then the Pandas timestamp column will be of type
+`datetime64[ns, America/Los_Angeles]`.
 
 When timestamp data is transferred from Pandas to Spark, it will be converted to UTC microseconds. This
 occurs when calling `createDataFrame` with a Pandas DataFrame or when returning a timestamp from a
@@ -1776,9 +1783,9 @@ occurs when calling `createDataFrame` with a Pandas DataFrame or when returning 
 expected format, so it is not necessary to do any of these conversions yourself. Any nanosecond
 values will be truncated.
 
-Note that a standard udf (non-Pandas) will load timestamp data as Python datetime objects, which is
+Note that a standard UDF (non-Pandas) will load timestamp data as Python datetime objects, which is
 different than a Pandas timestamp. It is recommended to use Pandas time series functionality when
-working with timestamps in with `pandas_udf` to get the best performance, see 
+working with timestamps in `pandas_udf`s to get the best performance, see
 [here](https://pandas.pydata.org/pandas-docs/stable/timeseries.html) for details. 
 
 # Migration Guide
