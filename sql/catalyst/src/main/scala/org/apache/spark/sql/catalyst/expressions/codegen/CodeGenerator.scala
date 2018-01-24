@@ -942,6 +942,23 @@ class CodegenContext {
       ""
     }
   }
+
+  /**
+   * In Java, a method descriptor is valid only if it represents method parameters with a total
+   * length of 255 or less. `this` contributes one unit and a parameter of type long or double
+   * contributes two units. Besides, for nullable parameters, we also need to pass a boolean
+   * for the null status.
+   */
+  def isValidParamLength(params: Seq[Expression]): Boolean = {
+    def calculateParamLength(input: Expression): Int = {
+      (if (input.nullable) 1 else 0) + javaType(input.dataType) match {
+        case JAVA_LONG | JAVA_DOUBLE => 2
+        case _ => 1
+      }
+    }
+    // Initial value is 1 for `this`.
+    1 + params.map(calculateParamLength(_)).sum <= CodeGenerator.MAX_JVM_METHOD_PARAMS_LENGTH
+  }
 }
 
 /**
@@ -1009,6 +1026,9 @@ object CodeGenerator extends Logging {
 
   // This is the value of HugeMethodLimit in the OpenJDK JVM settings
   val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
+
+  // The max valid length of method parameters in JVM.
+  val MAX_JVM_METHOD_PARAMS_LENGTH = 255
 
   /**
    * Compile the Java source code into a Java class, using Janino.

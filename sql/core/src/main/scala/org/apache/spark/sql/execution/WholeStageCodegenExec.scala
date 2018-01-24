@@ -153,16 +153,18 @@ trait CodegenSupport extends SparkPlan {
     // Under certain conditions, we can put the logic to consume the rows of this operator into
     // another function. So we can prevent a generated function too long to be optimized by JIT.
     // The conditions:
-    // 1. The parent uses all variables in output. we can't defer variable evaluation when consume
+    // 1. The config "SQLConf.DECOUPLE_OPERATOR_CONSUME_FUNCTIONS" is enabled.
+    // 2. The parent uses all variables in output. we can't defer variable evaluation when consume
     //    in another function.
-    // 2. The output variables are not empty. If it's empty, we don't bother to do that.
-    // 3. We don't use row variable. The construction of row uses deferred variable evaluation. We
+    // 3. The output variables are not empty. If it's empty, we don't bother to do that.
+    // 4. We don't use row variable. The construction of row uses deferred variable evaluation. We
     //    can't do it.
-    // 4. The number of output variables must less than maximum number of parameters in Java method
+    // 5. The number of output variables must less than maximum number of parameters in Java method
     //    declaration.
     val requireAllOutput = output.forall(parent.usedInputs.contains(_))
     val consumeFunc =
-      if (row == null && outputVars.nonEmpty && requireAllOutput && isValidParamLength(ctx)) {
+      if (SQLConf.get.decoupleOperatorConsumeFuncs && row == null && outputVars.nonEmpty &&
+          requireAllOutput && ctx.isValidParamLength(output)) {
         constructDoConsumeFunction(ctx, inputVars)
       } else {
         parent.doConsume(ctx, inputVars, rowVar)
@@ -172,24 +174,6 @@ trait CodegenSupport extends SparkPlan {
        |$evaluated
        |$consumeFunc
      """.stripMargin
-  }
-
-  /**
-   * In Java, a method descriptor is valid only if it represents method parameters with a total
-   * length of 255 or less. `this` contributes one unit and a parameter of type long or double
-   * contributes two units. Besides, for nullable parameters, we also need to pass a boolean
-   * for the null status.
-   */
-  private def isValidParamLength(ctx: CodegenContext): Boolean = {
-    // Start value is 1 for `this`.
-    output.foldLeft(1) { case (curLength, attr) =>
-      ctx.javaType(attr.dataType) match {
-        case (ctx.JAVA_LONG | ctx.JAVA_DOUBLE) if !attr.nullable => curLength + 2
-        case ctx.JAVA_LONG | ctx.JAVA_DOUBLE => curLength + 3
-        case _ if !attr.nullable => curLength + 1
-        case _ => curLength + 2
-      }
-    } <= 255
   }
 
   /**
@@ -238,9 +222,7 @@ trait CodegenSupport extends SparkPlan {
       }
       (callingParam, funcParams, ExprCode("", arguIsNull, arguName))
     }.unzip3
-    (params._1.mkString(", "),
-      params._2.mkString(", "),
-      params._3)
+    (params._1.mkString(", "), params._2.mkString(", "), params._3)
   }
 
   /**

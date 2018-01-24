@@ -586,6 +586,14 @@ object SQLConf {
     .intConf
     .createWithDefault(CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT)
 
+  val DECOUPLE_OPERATOR_CONSUME_FUNCTIONS = buildConf("spark.sql.codegen.decoupleOperatorConsume")
+    .internal()
+    .doc("When true, whole stage codegen would put the logic of consuming rows of each physical " +
+      "operator into individual methods, instead of a single big method. This can be used to " +
+      "avoid oversized function that can miss the opportunity of JIT optimization.")
+    .booleanConf
+    .createWithDefault(true)
+
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
@@ -1060,6 +1068,8 @@ class SQLConf extends Serializable with Logging {
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
+
+  def decoupleOperatorConsumeFuncs: Boolean = getConf(DECOUPLE_OPERATOR_CONSUME_FUNCTIONS)
 
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
