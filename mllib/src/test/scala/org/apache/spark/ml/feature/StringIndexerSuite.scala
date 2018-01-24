@@ -52,16 +52,19 @@ class StringIndexerSuite
     assert(inOutCols2._1 === Array("in1", "in2"))
     assert(inOutCols2._2 === Array("out1", "out2"))
 
+
+    val df = Seq((0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")).toDF("id", "label")
+
     intercept[IllegalArgumentException] {
-      new StringIndexer().setInputCol("in").setOutputCols(Array("out1", "out2")).getInOutCols()
+      new StringIndexer().setInputCol("in").setOutputCols(Array("out1", "out2")).fit(df)
     }
     intercept[IllegalArgumentException] {
-      new StringIndexer().setInputCols(Array("in1", "in2")).setOutputCol("out1").getInOutCols()
+      new StringIndexer().setInputCols(Array("in1", "in2")).setOutputCol("out1").fit(df)
     }
     intercept[IllegalArgumentException] {
       new StringIndexer().setInputCols(Array("in1", "in2"))
         .setOutputCols(Array("out1", "out2", "out3"))
-        .getInOutCols()
+        .fit(df)
     }
   }
 
@@ -332,6 +335,27 @@ class StringIndexerSuite
 
     var idx = 0
     for (orderType <- StringIndexer.supportedStringOrderType) {
+      val transformed = indexer.setStringOrderType(orderType).fit(df).transform(df)
+      val output = transformed.select("id", "labelIndex").rdd.map { r =>
+        (r.getInt(0), r.getDouble(1))
+      }.collect().toSet
+      assert(output === expected(idx))
+      idx += 1
+    }
+  }
+
+  test("StringIndexer order types: secondary sort by alphabets when frequency equal") {
+    val data = Seq((0, "a"), (1, "a"), (2, "b"), (3, "b"), (4, "c"), (5, "d"))
+    val df = data.toDF("id", "label")
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+
+    val expected = Seq(Set((0, 0.0), (1, 0.0), (2, 1.0), (3, 1.0), (4, 2.0), (5, 3.0)),
+      Set((0, 2.0), (1, 2.0), (2, 3.0), (3, 3.0), (4, 0.0), (5, 1.0)))
+
+    var idx = 0
+    for (orderType <- Seq("frequencyDesc", "frequencyAsc")) {
       val transformed = indexer.setStringOrderType(orderType).fit(df).transform(df)
       val output = transformed.select("id", "labelIndex").rdd.map { r =>
         (r.getInt(0), r.getDouble(1))
