@@ -173,11 +173,14 @@ private[spark] class MemoryStore(
    * @param blockId The block id.
    * @param values The values which need be stored.
    * @param classTag the [[ClassTag]] for the block.
-   * @param memoryMode The values saved mode.
+   * @param memoryMode The values saved memory mode(ON_HEAP or OFF_HEAP).
    * @param valuesHolder A holder that supports storing record of values into memory store as
    *        values or bytes.
    * @return if the block is stored successfully, return the stored data size. Else return the
-   *         memory has used for unroll the block.
+   *         memory has reserved for unrolling the block (There are two reasons for store failed:
+   *         First, the block is partially-unrolled; second, the block is entirely unrolled and
+   *         the actual stored data size is larger than reserved, but we can't request extra
+   *         memory).
    */
   private def putIterator[T](
       blockId: BlockId,
@@ -218,7 +221,7 @@ private[spark] class MemoryStore(
       valuesHolder.storeValue(values.next())
       if (elementsUnrolled % memoryCheckPeriod == 0) {
         // For performance reason, just get the rough value
-        val currentSize = valuesHolder.esitimatedSize(true)
+        val currentSize = valuesHolder.estimatedSize(true)
         // If our vector's size has exceeded the threshold, request more memory
         if (currentSize >= memoryThreshold) {
           val amountToRequest = (currentSize * memoryGrowthFactor - memoryThreshold).toLong
@@ -236,7 +239,7 @@ private[spark] class MemoryStore(
 
     if (keepUnrolling) {
       // We need more precise value
-      val size = valuesHolder.esitimatedSize(false)
+      val size = valuesHolder.estimatedSize(false)
       def transferUnrollToStorage(amount: Long): Unit = {
         // Synchronize so that transfer is atomic
         memoryManager.synchronized {
@@ -339,7 +342,6 @@ private[spark] class MemoryStore(
 
     // Initial per-task memory to request for unrolling blocks (bytes).
     val initialMemoryThreshold = unrollMemoryThreshold
-    val redirectableStream = new RedirectableOutputStream
     val chunkSize = if (initialMemoryThreshold > Int.MaxValue) {
       logWarning(s"Initial memory threshold of ${Utils.bytesToString(initialMemoryThreshold)} " +
         s"is too large to be set as chunk size. Chunk size has been capped to " +
@@ -645,7 +647,7 @@ private[spark] class MemoryStore(
 
 private trait ValuesHolder[T] {
   def storeValue(value: T): Unit
-  def esitimatedSize(roughly: Boolean): Long
+  def estimatedSize(roughly: Boolean): Long
   def buildEntry(): MemoryEntry[T]
 }
 
@@ -662,7 +664,7 @@ private class DeserializedValuesHolder[T] (classTag: ClassTag[T]) extends Values
     vector += value
   }
 
-  override def esitimatedSize(roughly: Boolean): Long = {
+  override def estimatedSize(roughly: Boolean): Long = {
     if (!roughly) {
       // We only need the more precise size after all values unrolled.
       arrayValues = vector.toArray
@@ -708,7 +710,7 @@ private class SerializedValuesHolder[T](
     serializationStream.writeObject(value)(classTag)
   }
 
-  override def esitimatedSize(roughly: Boolean): Long = {
+  override def estimatedSize(roughly: Boolean): Long = {
     if (!roughly) {
       serializationStream.close()
     }
