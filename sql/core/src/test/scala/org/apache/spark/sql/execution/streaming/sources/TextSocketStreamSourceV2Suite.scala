@@ -36,7 +36,8 @@ import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
-class TextSocketStreamSourceSuite extends StreamTest with SharedSQLContext with BeforeAndAfterEach {
+class TextSocketStreamSourceV2Suite extends StreamTest
+  with SharedSQLContext with BeforeAndAfterEach {
 
   override def afterEach() {
     sqlContext.streams.active.foreach(_.stop())
