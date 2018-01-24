@@ -154,6 +154,43 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
     }
   }
 
+  test("CountVectorizer using both minDF and maxDF") {
+    // Ignore terms with count more than 3 AND less than 2
+    val df = Seq(
+      (0, split("a b c d"), Vectors.sparse(2, Seq((0, 1.0), (1, 1.0)))),
+      (1, split("a b c"), Vectors.sparse(2, Seq((0, 1.0), (1, 1.0)))),
+      (2, split("a b"), Vectors.sparse(2, Seq((0, 1.0)))),
+      (3, split("a"), Vectors.sparse(2, Seq()))
+    ).toDF("id", "words", "expected")
+
+    val cvModel = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMinDF(2)
+      .setMaxDF(3)
+      .fit(df)
+    assert(cvModel.vocabulary === Array("b", "c"))
+
+    cvModel.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+
+    // Ignore terms with frequency higher than 0.75 AND less than 0.5
+    val cvModel2 = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMinDF(0.5)
+      .setMaxDF(0.75)
+      .fit(df)
+    assert(cvModel2.vocabulary === Array("b", "c"))
+
+    cvModel2.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+  }
+
   test("CountVectorizer throws exception when vocab is empty") {
     intercept[IllegalArgumentException] {
       val df = Seq(
