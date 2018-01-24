@@ -63,7 +63,7 @@ case class InMemoryRelation(
     tableName: Option[String])(
     @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
     val batchStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator,
-    statsOfPlanToCache: Statistics = null)
+    statsOfPlanToCache: Statistics)
   extends logical.LeafNode with MultiInstanceRelation {
 
   override protected def innerChildren: Seq[SparkPlan] = Seq(child)
@@ -77,7 +77,7 @@ case class InMemoryRelation(
       // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache
       statsOfPlanToCache
     } else {
-      Statistics(sizeInBytes = batchStats.value.longValue)
+      Statistics(sizeInBytes = batchStats.value.longValue, hints = statsOfPlanToCache.hints)
     }
   }
 
