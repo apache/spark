@@ -454,17 +454,19 @@ case class FileSourceScanExec(
     var backIndex = splitFiles.length - 1
 
     while (frontIndex <= backIndex) {
+      addFile(splitFiles(frontIndex))
+      frontIndex += 1
+      while (frontIndex <= backIndex &&
+             currentSize + splitFiles(frontIndex).length <= maxSplitBytes) {
         addFile(splitFiles(frontIndex))
         frontIndex += 1
-        while (frontIndex <= backIndex && currentSize + splitFiles(frontIndex).length <= maxSplitBytes) {
-            addFile(splitFiles(frontIndex))
-            frontIndex += 1
-        }
-        while (backIndex > frontIndex && currentSize + splitFiles(backIndex).length <= maxSplitBytes) {
-            addFile(splitFiles(backIndex))
-            backIndex -= 1
-        }
-        closePartition()
+      }
+      while (backIndex > frontIndex &&
+             currentSize + splitFiles(backIndex).length <= maxSplitBytes) {
+        addFile(splitFiles(backIndex))
+        backIndex -= 1
+      }
+      closePartition()
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
