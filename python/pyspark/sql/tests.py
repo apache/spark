@@ -3843,7 +3843,7 @@ class PandasUDFTests(ReusedSQLTestCase):
                     return df
             with self.assertRaisesRegexp(ValueError, 'Invalid function'):
                 @pandas_udf(returnType='k int, v double', functionType=PandasUDFType.GROUPED_MAP)
-                def foo(k, v):
+                def foo(k, v, w):
                     return k
 
 
@@ -4449,9 +4449,9 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         result3 = df.groupby('id').apply(udf3).sort('id').toPandas()
         expected3 = expected1
 
-        self.assertFramesEqual(expected1, result1)
-        self.assertFramesEqual(expected2, result2)
-        self.assertFramesEqual(expected3, result3)
+        self.assertPandasEqual(expected1, result1)
+        self.assertPandasEqual(expected2, result2)
+        self.assertPandasEqual(expected3, result3)
 
     def test_register_grouped_map_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
@@ -4663,26 +4663,26 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         expected1 = pdf.groupby('id')\
             .apply(lambda x: udf1.func((x.id.iloc[0],), x))\
             .sort_values(['id', 'v']).reset_index(drop=True)
-        self.assertFramesEqual(expected1, result1)
+        self.assertPandasEqual(expected1, result1)
 
         # Test groupby expression
         result2 = df.groupby(df.id % 2).apply(udf1).sort('id', 'v').toPandas()
         expected2 = pdf.groupby(pdf.id % 2)\
             .apply(lambda x: udf1.func((x.id.iloc[0] % 2,), x))\
             .sort_values(['id', 'v']).reset_index(drop=True)
-        self.assertFramesEqual(expected2, result2)
+        self.assertPandasEqual(expected2, result2)
 
         # Test complex groupby
         result3 = df.groupby(df.id, df.v % 2).apply(udf2).sort('id', 'v').toPandas()
         expected3 = pdf.groupby([pdf.id, pdf.v % 2])\
             .apply(lambda x: udf2.func((x.id.iloc[0], (x.v % 2).iloc[0],), x))\
             .sort_values(['id', 'v']).reset_index(drop=True)
-        self.assertFramesEqual(expected3, result3)
+        self.assertPandasEqual(expected3, result3)
 
         # Test empty groupby
         result4 = df.groupby().apply(udf3).sort('id', 'v').toPandas()
         expected4 = udf3.func((), pdf)
-        self.assertFramesEqual(expected4, result4)
+        self.assertPandasEqual(expected4, result4)
 
 
 @unittest.skipIf(
