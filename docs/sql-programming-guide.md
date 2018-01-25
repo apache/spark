@@ -1640,7 +1640,7 @@ Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` a
 You may run `./bin/spark-sql --help` for a complete list of all available
 options.
 
-# Usage Guide for Pandas with Arrow
+# PySpark Usage Guide for Pandas with Arrow
 
 ## Arrow in Spark
 
@@ -1651,19 +1651,19 @@ changes to configuration or code to take full advantage and ensure compatibility
 give a high-level description of how to use Arrow in Spark and highlight any differences when
 working with Arrow-enabled data.
 
-## Ensure pyarrow Installed
+### Ensure PyArrow Installed
 
-If you install pyspark using pip, then pyarrow can be brought in as an extra dependency of the sql
-module with the command "pip install pyspark[sql]". Otherwise, you must ensure that pyarrow is
-installed and available on all cluster node Python environments. The current supported version is
-0.8.0. You can install using pip or conda from the conda-forge channel. See pyarrow
+If you install PySpark using pip, then PyArrow can be brought in as an extra dependency of the
+SQL module with the command `pip install pyspark[sql]`. Otherwise, you must ensure that PyArrow
+is installed and available on all cluster nodes. The current supported version is 0.8.0.
+You can install using pip or conda from the conda-forge channel. See PyArrow
 [installation](https://arrow.apache.org/docs/python/install.html) for details.
 
-## How to Enable for Conversion to/from Pandas
+## Enabling for Conversion to/from Pandas
 
 Arrow is available as an optimization when converting a Spark DataFrame to Pandas using the call
 `toPandas()` and when creating a Spark DataFrame from Pandas with `createDataFrame(pandas_df)`.
-To use Arrow when executing these calls, it first must be enabled by setting the Spark conf
+To use Arrow when executing these calls, it first must be enabled by setting the Spark configuration
 'spark.sql.execution.arrow.enabled' to 'true', this is disabled by default.
 
 <div class="codetabs">
@@ -1683,7 +1683,7 @@ pdf = pd.DataFrame(np.random.rand(100, 3))
 df = spark.createDataFrame(pdf)
 
 # Convert the Spark DataFrame to a local Pandas DataFrame
-selpdf = df.select(" * ").toPandas()
+selpdf = df.select("*").toPandas()
 
 {% endhighlight %}
 </div>
@@ -1751,13 +1751,14 @@ GroupBy-Apply implements the "split-apply-combine" pattern. Split-apply-combine 
   input data contains all the rows and columns for each group.
 * Combine the results into a new `DataFrame`.
 
-To use GroupBy-Apply, user needs to define:
-* A python function that defines the computation for each group
-* A `StructType` object or a string that defines the output schema of the output `DataFrame`
+To use GroupBy-Apply, define the following:
+
+* A Python function that defines the computation for each group.
+* A `StructType` object or a string that defines the schema of the output `DataFrame`.
 
 Examples:
 
-The first example shows a simple use case: subtracting mean from each value in the group.
+The first example shows a simple use case: subtracting the mean from each value in the group.
 
 <div class="codetabs">
 <div data-lang="python"  markdown="1">
@@ -1864,15 +1865,14 @@ batches for processing.
 Spark internally stores timestamps as UTC values, and timestamp data that is brought in without
 a specified time zone is converted as local time to UTC with microsecond resolution. When timestamp
 data is exported or displayed in Spark, the session time zone is used to localize the timestamp
-values. The session time zone is set with the conf 'spark.sql.session.timeZone' and will default
-to the JVM system local time zone if not set. Pandas uses a `datetime64` type with nanosecond
-resolution, `datetime64[ns]`, and optional time zone that can be applied on a per-column basis.
+values. The session time zone is set with the configuration 'spark.sql.session.timeZone' and will
+default to the JVM system local time zone if not set. Pandas uses a `datetime64` type with nanosecond
+resolution, `datetime64[ns]`, with optional time zone on a per-column basis.
 
 When timestamp data is transferred from Spark to Pandas it will be converted to nanoseconds
-and each column will be made time zone aware using the Spark session time zone. This will occur
-when calling `toPandas()` or `pandas_udf` with a timestamp column. For example if the session time
-zone is 'America/Los_Angeles' then the Pandas timestamp column will be of type
-`datetime64[ns, America/Los_Angeles]`.
+and each column will be converted to the Spark session time zone then localized to that time
+zone, which removes the time zone and displays values as local time. This will occur
+when calling `toPandas()` or `pandas_udf` with timestamp columns.
 
 When timestamp data is transferred from Pandas to Spark, it will be converted to UTC microseconds. This
 occurs when calling `createDataFrame` with a Pandas DataFrame or when returning a timestamp from a
