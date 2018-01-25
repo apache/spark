@@ -62,6 +62,8 @@ case class WriteToDataSourceV2Exec(writer: DataSourceV2Writer, query: SparkPlan)
 
     try {
       val runTask = writer match {
+        // This case means that we're doing continuous processing. In microbatch streaming, the
+        // StreamWriter is wrapped in a MicroBatchWriter, which is executed as a normal batch.
         case w: StreamWriter =>
           EpochCoordinatorRef.get(
             sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
