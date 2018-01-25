@@ -819,6 +819,29 @@ class DataFrame(object):
         """
         return [f.name for f in self.schema.fields]
 
+    @since(2.4)
+    def colRegex(self, colName):
+        """
+        Selects column based on the column name specified as a regex and return it
+        as :class:`Column`.
+
+        :param colName: string, column name specified as a regex.
+
+        >>> df = spark.createDataFrame([("a", 1), ("b", 2), ("c",  3)])
+        >>> df.select(df.colRegex("`(_1)?+.+`")).show()
+        +---+
+        | _2|
+        +---+
+        |  1|
+        |  2|
+        |  3|
+        +---+
+        """
+        if not isinstance(colName, basestring):
+            raise ValueError("colName should be provided as string")
+        jc = self._jdf.colRegex(colName)
+        return Column(jc)
+
     @ignore_unicode_prefix
     @since(1.3)
     def alias(self, alias):
@@ -1880,28 +1903,6 @@ class DataFrame(object):
         """
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
-
-    @since(2.4)
-    def colRegex(self, colName):
-        """
-        Selects column based on the column name specified as a regex and return it
-        as :class:`Column`.
-
-        :param colName: string, column name specified as a regex.
-
-        >>> df = spark.createDataFrame([("a", 1), ("b", 2), ("c",  3)])
-        >>> df.select(df.colRegex("`(_1)?+.+`")).show()
-        +---+
-        | _2|
-        +---+
-        |  1|
-        |  2|
-        |  3|
-        +---+
-        """
-        assert isinstance(colName, basestring), "colName should be a string"
-        jc = self._jdf.colRegex(colName)
-        return Column(jc)
 
     @since(1.3)
     def toPandas(self):
