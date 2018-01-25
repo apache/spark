@@ -303,7 +303,7 @@ object PageRank extends Logging {
     val src: VertexId = srcId.getOrElse(-1L)
 
     // Initialize the pagerankGraph with each edge attribute
-    // having weight 1/outDegree and each vertex with attribute 1.0.
+    // having weight 1/outDegree and each vertex with attribute 0.
     val pagerankGraph: Graph[(Double, Double), Double] = graph
       // Associate the degree with each vertex
       .outerJoinVertices(graph.outDegrees) {

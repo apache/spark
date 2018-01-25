@@ -30,7 +30,8 @@ import org.apache.spark.sql.types._
 class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
   import testImplicits._
 
-  override val dataSourceName: String = classOf[OrcFileFormat].getCanonicalName
+  override val dataSourceName: String =
+    classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName
 
   // ORC does not play well with NullType and UDT.
   override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
@@ -115,4 +116,9 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       assert("SNAPPY" === expectedCompressionKind.name())
     }
   }
+}
+
+class HiveOrcHadoopFsRelationSuite extends OrcHadoopFsRelationSuite {
+  override val dataSourceName: String =
+    classOf[org.apache.spark.sql.hive.orc.OrcFileFormat].getCanonicalName
 }

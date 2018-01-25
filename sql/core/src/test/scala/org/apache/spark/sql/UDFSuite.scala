@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.command.ExplainCommand
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
-import org.apache.spark.sql.types.DataTypes
+import org.apache.spark.sql.types.{DataTypes, DoubleType}
 
 private case class FunctionResult(f1: String, f2: String)
 
@@ -128,6 +129,13 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     val df2 = testData.select(bar())
     assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
     assert(df2.head().getDouble(0) >= 0.0)
+
+    val javaUdf = udf(new UDF0[Double] {
+      override def call(): Double = Math.random()
+    }, DoubleType).asNondeterministic()
+    val df3 = testData.select(javaUdf())
+    assert(df3.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+    assert(df3.head().getDouble(0) >= 0.0)
   }
 
   test("TwoArgument UDF") {

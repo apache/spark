@@ -359,6 +359,63 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData.select('key).collect().toSeq)
   }
 
+  test("repartition with SortOrder") {
+    // passing SortOrder expressions to .repartition() should result in an informative error
+
+    def checkSortOrderErrorMsg[T](data: => Dataset[T]): Unit = {
+      val ex = intercept[IllegalArgumentException](data)
+      assert(ex.getMessage.contains("repartitionByRange"))
+    }
+
+    checkSortOrderErrorMsg {
+      Seq(0).toDF("a").repartition(2, $"a".asc)
+    }
+
+    checkSortOrderErrorMsg {
+      Seq((0, 0)).toDF("a", "b").repartition(2, $"a".asc, $"b")
+    }
+  }
+
+  test("repartitionByRange") {
+    val data1d = Random.shuffle(0.to(9))
+    val data2d = data1d.map(i => (i, data1d.size - i))
+
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, $"val".asc)
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(i, i)))
+
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, $"val".desc)
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(i, data1d.size - 1 - i)))
+
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, lit(42))
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(0, i)))
+
+    checkAnswer(
+      data1d.toDF("val").repartitionByRange(data1d.size, lit(null), $"val".asc, rand())
+        .select(spark_partition_id().as("id"), $"val"),
+      data1d.map(i => Row(i, i)))
+
+    // .repartitionByRange() assumes .asc by default if no explicit sort order is specified
+    checkAnswer(
+      data2d.toDF("a", "b").repartitionByRange(data2d.size, $"a".desc, $"b")
+        .select(spark_partition_id().as("id"), $"a", $"b"),
+      data2d.toDF("a", "b").repartitionByRange(data2d.size, $"a".desc, $"b".asc)
+        .select(spark_partition_id().as("id"), $"a", $"b"))
+
+    // at least one partition-by expression must be specified
+    intercept[IllegalArgumentException] {
+      data1d.toDF("val").repartitionByRange(data1d.size)
+    }
+    intercept[IllegalArgumentException] {
+      data1d.toDF("val").repartitionByRange(data1d.size, Seq.empty: _*)
+    }
+  }
+
   test("coalesce") {
     intercept[IllegalArgumentException] {
       testData.select('key).coalesce(0)
@@ -1197,6 +1254,34 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                          " value | 1   \n" +
                          "only showing top 1 row\n"
     assert(testData.select($"*").showString(1, vertical = true) === expectedAnswer)
+  }
+
+  test("SPARK-23023 Cast rows to strings in showString") {
+    val df1 = Seq(Seq(1, 2, 3, 4)).toDF("a")
+    assert(df1.showString(10) ===
+      s"""+------------+
+         ||           a|
+         |+------------+
+         ||[1, 2, 3, 4]|
+         |+------------+
+         |""".stripMargin)
+    val df2 = Seq(Map(1 -> "a", 2 -> "b")).toDF("a")
+    assert(df2.showString(10) ===
+      s"""+----------------+
+         ||               a|
+         |+----------------+
+         ||[1 -> a, 2 -> b]|
+         |+----------------+
+         |""".stripMargin)
+    val df3 = Seq(((1, "a"), 0), ((2, "b"), 0)).toDF("a", "b")
+    assert(df3.showString(10) ===
+      s"""+------+---+
+         ||     a|  b|
+         |+------+---+
+         ||[1, a]|  0|
+         ||[2, b]|  0|
+         |+------+---+
+         |""".stripMargin)
   }
 
   test("SPARK-7327 show with empty dataFrame") {

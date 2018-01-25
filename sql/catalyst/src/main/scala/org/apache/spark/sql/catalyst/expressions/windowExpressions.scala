@@ -70,9 +70,9 @@ case class WindowSpecDefinition(
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
           !isValidFrameType(f.valueBoundary.head.dataType) =>
         TypeCheckFailure(
-          s"The data type '${orderSpec.head.dataType}' used in the order specification does " +
-            s"not match the data type '${f.valueBoundary.head.dataType}' which is used in the " +
-            "range frame.")
+          s"The data type '${orderSpec.head.dataType.simpleString}' used in the order " +
+            "specification does not match the data type " +
+            s"'${f.valueBoundary.head.dataType.simpleString}' which is used in the range frame.")
       case _ => TypeCheckSuccess
     }
   }
@@ -251,8 +251,8 @@ case class SpecifiedWindowFrame(
       TypeCheckFailure(s"Window frame $location bound '$e' is not a literal.")
     case e: Expression if !frameType.inputType.acceptsType(e.dataType) =>
       TypeCheckFailure(
-        s"The data type of the $location bound '${e.dataType} does not match " +
-          s"the expected data type '${frameType.inputType}'.")
+        s"The data type of the $location bound '${e.dataType.simpleString}' does not match " +
+          s"the expected data type '${frameType.inputType.simpleString}'.")
     case _ => TypeCheckSuccess
   }
 

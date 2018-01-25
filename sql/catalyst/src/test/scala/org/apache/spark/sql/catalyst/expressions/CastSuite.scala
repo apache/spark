@@ -23,6 +23,7 @@ import java.util.{Calendar, Locale, TimeZone}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneGMT
@@ -844,5 +845,81 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
     val inputOuter = Row.fromSeq((1 to N).map(_ => inputInner))
     val outputOuter = Row.fromSeq((1 to N).map(_ => outputInner))
     checkEvaluation(cast(Literal.create(inputOuter, fromOuter), toOuter), outputOuter)
+  }
+
+  test("SPARK-22570: Cast should not create a lot of global variables") {
+    val ctx = new CodegenContext
+    cast("1", IntegerType).genCode(ctx)
+    cast("2", LongType).genCode(ctx)
+    assert(ctx.inlinedMutableStates.length == 0)
+  }
+
+  test("SPARK-22825 Cast array to string") {
+    val ret1 = cast(Literal.create(Array(1, 2, 3, 4, 5)), StringType)
+    checkEvaluation(ret1, "[1, 2, 3, 4, 5]")
+    val ret2 = cast(Literal.create(Array("ab", "cde", "f")), StringType)
+    checkEvaluation(ret2, "[ab, cde, f]")
+    val ret3 = cast(Literal.create(Array("ab", null, "c")), StringType)
+    checkEvaluation(ret3, "[ab,, c]")
+    val ret4 = cast(Literal.create(Array("ab".getBytes, "cde".getBytes, "f".getBytes)), StringType)
+    checkEvaluation(ret4, "[ab, cde, f]")
+    val ret5 = cast(
+      Literal.create(Array("2014-12-03", "2014-12-04", "2014-12-06").map(Date.valueOf)),
+      StringType)
+    checkEvaluation(ret5, "[2014-12-03, 2014-12-04, 2014-12-06]")
+    val ret6 = cast(
+      Literal.create(Array("2014-12-03 13:01:00", "2014-12-04 15:05:00").map(Timestamp.valueOf)),
+      StringType)
+    checkEvaluation(ret6, "[2014-12-03 13:01:00, 2014-12-04 15:05:00]")
+    val ret7 = cast(Literal.create(Array(Array(1, 2, 3), Array(4, 5))), StringType)
+    checkEvaluation(ret7, "[[1, 2, 3], [4, 5]]")
+    val ret8 = cast(
+      Literal.create(Array(Array(Array("a"), Array("b", "c")), Array(Array("d")))),
+      StringType)
+    checkEvaluation(ret8, "[[[a], [b, c]], [[d]]]")
+  }
+
+  test("SPARK-22973 Cast map to string") {
+    val ret1 = cast(Literal.create(Map(1 -> "a", 2 -> "b", 3 -> "c")), StringType)
+    checkEvaluation(ret1, "[1 -> a, 2 -> b, 3 -> c]")
+    val ret2 = cast(
+      Literal.create(Map("1" -> "a".getBytes, "2" -> null, "3" -> "c".getBytes)),
+      StringType)
+    checkEvaluation(ret2, "[1 -> a, 2 ->, 3 -> c]")
+    val ret3 = cast(
+      Literal.create(Map(
+        1 -> Date.valueOf("2014-12-03"),
+        2 -> Date.valueOf("2014-12-04"),
+        3 -> Date.valueOf("2014-12-05"))),
+      StringType)
+    checkEvaluation(ret3, "[1 -> 2014-12-03, 2 -> 2014-12-04, 3 -> 2014-12-05]")
+    val ret4 = cast(
+      Literal.create(Map(
+        1 -> Timestamp.valueOf("2014-12-03 13:01:00"),
+        2 -> Timestamp.valueOf("2014-12-04 15:05:00"))),
+      StringType)
+    checkEvaluation(ret4, "[1 -> 2014-12-03 13:01:00, 2 -> 2014-12-04 15:05:00]")
+    val ret5 = cast(
+      Literal.create(Map(
+        1 -> Array(1, 2, 3),
+        2 -> Array(4, 5, 6))),
+      StringType)
+    checkEvaluation(ret5, "[1 -> [1, 2, 3], 2 -> [4, 5, 6]]")
+  }
+
+  test("SPARK-22981 Cast struct to string") {
+    val ret1 = cast(Literal.create((1, "a", 0.1)), StringType)
+    checkEvaluation(ret1, "[1, a, 0.1]")
+    val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)
+    checkEvaluation(ret2, "[1,, a]")
+    val ret3 = cast(Literal.create(
+      (Date.valueOf("2014-12-03"), Timestamp.valueOf("2014-12-03 15:05:00"))), StringType)
+    checkEvaluation(ret3, "[2014-12-03, 2014-12-03 15:05:00]")
+    val ret4 = cast(Literal.create(((1, "a"), 5, 0.1)), StringType)
+    checkEvaluation(ret4, "[[1, a], 5, 0.1]")
+    val ret5 = cast(Literal.create((Seq(1, 2, 3), "a", 0.1)), StringType)
+    checkEvaluation(ret5, "[[1, 2, 3], a, 0.1]")
+    val ret6 = cast(Literal.create((1, Map(1 -> "a", 2 -> "b", 3 -> "c"))), StringType)
+    checkEvaluation(ret6, "[1, [1 -> a, 2 -> b, 3 -> c]]")
   }
 }

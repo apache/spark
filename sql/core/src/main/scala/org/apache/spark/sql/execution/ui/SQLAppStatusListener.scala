@@ -27,17 +27,14 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric._
-import org.apache.spark.status.LiveEntity
+import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.status.{ElementTrackingStore, KVUtils, LiveEntity}
 import org.apache.spark.status.config._
-import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.kvstore.KVStore
 
-private[sql] class SQLAppStatusListener(
+class SQLAppStatusListener(
     conf: SparkConf,
-    kvstore: KVStore,
-    live: Boolean,
-    ui: Option[SparkUI] = None)
-  extends SparkListener with Logging {
+    kvstore: ElementTrackingStore,
+    live: Boolean) extends SparkListener with Logging {
 
   // How often to flush intermediate state of a live execution to the store. When replaying logs,
   // never flush (only do the very last write).
@@ -49,7 +46,27 @@ private[sql] class SQLAppStatusListener(
   private val liveExecutions = new ConcurrentHashMap[Long, LiveExecutionData]()
   private val stageMetrics = new ConcurrentHashMap[Int, LiveStageMetrics]()
 
-  private var uiInitialized = false
+  // Returns true if this listener has no live data. Exposed for tests only.
+  private[sql] def noLiveData(): Boolean = {
+    liveExecutions.isEmpty && stageMetrics.isEmpty
+  }
+
+  kvstore.addTrigger(classOf[SQLExecutionUIData], conf.get(UI_RETAINED_EXECUTIONS)) { count =>
+    cleanupExecutions(count)
+  }
+
+  kvstore.onFlush {
+    if (!live) {
+      val now = System.nanoTime()
+      liveExecutions.values.asScala.foreach { exec =>
+        // This saves the partial aggregated metrics to the store; this works currently because
+        // when the SHS sees an updated event log, all old data for the application is thrown
+        // away.
+        exec.metricsValues = aggregateMetrics(exec)
+        exec.write(kvstore, now)
+      }
+    }
+  }
 
   override def onJobStart(event: SparkListenerJobStart): Unit = {
     val executionIdString = event.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
@@ -70,7 +87,7 @@ private[sql] class SQLAppStatusListener(
     }
 
     exec.jobs = exec.jobs + (jobId -> JobExecutionStatus.RUNNING)
-    exec.stages = event.stageIds.toSet
+    exec.stages ++= event.stageIds.toSet
     update(exec)
   }
 
@@ -82,7 +99,7 @@ private[sql] class SQLAppStatusListener(
     // Reset the metrics tracking object for the new attempt.
     Option(stageMetrics.get(event.stageInfo.stageId)).foreach { metrics =>
       metrics.taskMetrics.clear()
-      metrics.attemptId = event.stageInfo.attemptId
+      metrics.attemptId = event.stageInfo.attemptNumber
     }
   }
 
@@ -158,7 +175,7 @@ private[sql] class SQLAppStatusListener(
 
     // Check the execution again for whether the aggregated metrics data has been calculated.
     // This can happen if the UI is requesting this data, and the onExecutionEnd handler is
-    // running at the same time. The metrics calculcated for the UI can be innacurate in that
+    // running at the same time. The metrics calculated for the UI can be innacurate in that
     // case, since the onExecutionEnd handler will clean up tracked stage metrics.
     if (exec.metricsValues != null) {
       exec.metricsValues
@@ -212,14 +229,6 @@ private[sql] class SQLAppStatusListener(
   }
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
-    // Install the SQL tab in a live app if it hasn't been initialized yet.
-    if (!uiInitialized) {
-      ui.foreach { _ui =>
-        new SQLTab(new SQLAppStatusStore(kvstore, Some(this)), _ui)
-      }
-      uiInitialized = true
-    }
-
     val SparkListenerSQLExecutionStart(executionId, description, details,
       physicalPlanDescription, sparkPlanInfo, time) = event
 
@@ -317,6 +326,17 @@ private[sql] class SQLAppStatusListener(
     }
   }
 
+  private def cleanupExecutions(count: Long): Unit = {
+    val countToDelete = count - conf.get(UI_RETAINED_EXECUTIONS)
+    if (countToDelete <= 0) {
+      return
+    }
+
+    val toDelete = KVUtils.viewToSeq(kvstore.view(classOf[SQLExecutionUIData]),
+        countToDelete.toInt) { e => e.completionTime.isDefined }
+    toDelete.foreach { e => kvstore.delete(e.getClass(), e.executionId) }
+  }
+
 }
 
 private class LiveExecutionData(val executionId: Long) extends LiveEntity {
@@ -360,7 +380,7 @@ private class LiveStageMetrics(
     val accumulatorIds: Array[Long],
     val taskMetrics: ConcurrentHashMap[Long, LiveTaskMetrics])
 
-private[sql] class LiveTaskMetrics(
+private class LiveTaskMetrics(
     val ids: Array[Long],
     val values: Array[Long],
     val succeeded: Boolean)

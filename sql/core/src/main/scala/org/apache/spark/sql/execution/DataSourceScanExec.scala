@@ -69,7 +69,7 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
    * Shorthand for calling redactString() without specifying redacting rules
    */
   private def redact(text: String): String = {
-    Utils.redact(SparkSession.getActiveSession.map(_.sparkContext.conf).orNull, text)
+    Utils.redact(sqlContext.sessionState.conf.stringRedationPattern, text)
   }
 }
 
@@ -110,8 +110,7 @@ case class RowDataSourceScanExec(
   override protected def doProduce(ctx: CodegenContext): String = {
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     // PhysicalRDD always just has one input
-    val input = ctx.freshName("input")
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];")
     val exprRows = output.zipWithIndex.map{ case (a, i) =>
       BoundReference(i, a.dataType, a.nullable)
     }
@@ -353,8 +352,7 @@ case class FileSourceScanExec(
     }
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     // PhysicalRDD always just has one input
-    val input = ctx.freshName("input")
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];")
     val row = ctx.freshName("row")
 
     ctx.INPUT_ROW = row

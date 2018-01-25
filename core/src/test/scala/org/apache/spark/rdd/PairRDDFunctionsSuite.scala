@@ -30,6 +30,7 @@ import org.apache.hadoop.mapreduce.{Job => NewJob, JobContext => NewJobContext,
   OutputCommitter => NewOutputCommitter, OutputFormat => NewOutputFormat,
   RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttempContext}
 import org.apache.hadoop.util.Progressable
+import org.scalatest.Assertions
 
 import org.apache.spark._
 import org.apache.spark.Partitioner
@@ -309,6 +310,28 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(joined.size > 0)
   }
 
+  // See SPARK-22465
+  test("cogroup between multiple RDD " +
+    "with an order of magnitude difference in number of partitions") {
+    val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 1000)
+    val rdd2 = sc
+      .parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+      .partitionBy(new HashPartitioner(10))
+    val joined = rdd1.cogroup(rdd2)
+    assert(joined.getNumPartitions == rdd1.getNumPartitions)
+  }
+
+  // See SPARK-22465
+  test("cogroup between multiple RDD" +
+    " with number of partitions similar in order of magnitude") {
+    val rdd1 = sc.parallelize((1 to 1000).map(x => (x, x)), 20)
+    val rdd2 = sc
+      .parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+      .partitionBy(new HashPartitioner(10))
+    val joined = rdd1.cogroup(rdd2)
+    assert(joined.getNumPartitions == rdd2.getNumPartitions)
+  }
+
   test("rightOuterJoin") {
     val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
@@ -522,6 +545,15 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
      * Assertion is in ConfigTestFormat.getRecordWriter.
      */
     pairs.saveAsNewAPIHadoopFile[ConfigTestFormat]("ignored")
+  }
+
+  test("The JobId on the driver and executors should be the same during the commit") {
+    // Create more than one rdd to mimic stageId not equal to rddId
+    val pairs = sc.parallelize(Array((1, 2), (2, 3)), 2)
+      .map { p => (new Integer(p._1 + 1), new Integer(p._2 + 1)) }
+      .filter { p => p._1 > 0 }
+    pairs.saveAsNewAPIHadoopFile[YetAnotherFakeFormat]("ignored")
+    assert(JobID.jobid != -1)
   }
 
   test("saveAsHadoopFile should respect configured output committers") {
@@ -906,6 +938,40 @@ class NewFakeFormatWithCallback() extends NewFakeFormat {
   override def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
     new NewFakeWriterWithCallback()
   }
+}
+
+class YetAnotherFakeCommitter extends NewOutputCommitter with Assertions {
+  def setupJob(j: NewJobContext): Unit = {
+    JobID.jobid = j.getJobID().getId
+  }
+
+  def needsTaskCommit(t: NewTaskAttempContext): Boolean = false
+
+  def setupTask(t: NewTaskAttempContext): Unit = {
+    val jobId = t.getTaskAttemptID().getJobID().getId
+    assert(jobId === JobID.jobid)
+  }
+
+  def commitTask(t: NewTaskAttempContext): Unit = {}
+
+  def abortTask(t: NewTaskAttempContext): Unit = {}
+}
+
+class YetAnotherFakeFormat() extends NewOutputFormat[Integer, Integer]() {
+
+  def checkOutputSpecs(j: NewJobContext): Unit = {}
+
+  def getRecordWriter(t: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
+    new NewFakeWriter()
+  }
+
+  def getOutputCommitter(t: NewTaskAttempContext): NewOutputCommitter = {
+    new YetAnotherFakeCommitter()
+  }
+}
+
+object JobID {
+  var jobid = -1
 }
 
 class ConfigTestFormat() extends NewFakeFormat() with Configurable {

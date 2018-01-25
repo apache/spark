@@ -25,17 +25,17 @@ import javax.annotation.Nullable;
 import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.FileRegion;
-import io.netty.util.AbstractReferenceCounted;
 import io.netty.util.ReferenceCountUtil;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.util.AbstractFileRegion;
 
 /**
  * A wrapper message that holds two separate pieces (a header and a body).
  *
  * The header must be a ByteBuf, while the body can be a ByteBuf or a FileRegion.
  */
-class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
+class MessageWithHeader extends AbstractFileRegion {
 
   @Nullable private final ManagedBuffer managedBuffer;
   private final ByteBuf header;
@@ -47,7 +47,7 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
   /**
    * When the write buffer size is larger than this limit, I/O will be done in chunks of this size.
    * The size should not be too large as it will waste underlying memory copy. e.g. If network
-   * avaliable buffer is smaller than this limit, the data cannot be sent within one single write
+   * available buffer is smaller than this limit, the data cannot be sent within one single write
    * operation while it still will make memory copy with this size.
    */
   private static final int NIO_BUFFER_LIMIT = 256 * 1024;
@@ -91,7 +91,7 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
   }
 
   @Override
-  public long transfered() {
+  public long transferred() {
     return totalBytesTransferred;
   }
 
@@ -100,7 +100,7 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
    * transferTo invocations in order to transfer a single MessageWithHeader to avoid busy waiting.
    *
    * The contract is that the caller will ensure position is properly set to the total number
-   * of bytes transferred so far (i.e. value returned by transfered()).
+   * of bytes transferred so far (i.e. value returned by transferred()).
    */
   @Override
   public long transferTo(final WritableByteChannel target, final long position) throws IOException {
@@ -159,5 +159,38 @@ class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
     }
 
     return ret;
+  }
+
+  @Override
+  public MessageWithHeader touch(Object o) {
+    super.touch(o);
+    header.touch(o);
+    ReferenceCountUtil.touch(body, o);
+    return this;
+  }
+
+  @Override
+  public MessageWithHeader retain(int increment) {
+    super.retain(increment);
+    header.retain(increment);
+    ReferenceCountUtil.retain(body, increment);
+    if (managedBuffer != null) {
+      for (int i = 0; i < increment; i++) {
+        managedBuffer.retain();
+      }
+    }
+    return this;
+  }
+
+  @Override
+  public boolean release(int decrement) {
+    header.release(decrement);
+    ReferenceCountUtil.release(body, decrement);
+    if (managedBuffer != null) {
+      for (int i = 0; i < decrement; i++) {
+        managedBuffer.release();
+      }
+    }
+    return super.release(decrement);
   }
 }

@@ -87,7 +87,9 @@ private[ui] class ExecutorTable(stage: StageData, store: AppStatusStore) {
   }
 
   private def createExecutorTable(stage: StageData) : Seq[Node] = {
-    stage.executorSummary.getOrElse(Map.empty).toSeq.sortBy(_._1).map { case (k, v) =>
+    val executorSummary = store.executorSummary(stage.stageId, stage.attemptId)
+
+    executorSummary.toSeq.sortBy(_._1).map { case (k, v) =>
       val executor = store.asOption(store.executorSummary(k))
       <tr>
         <td>

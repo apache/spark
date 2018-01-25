@@ -37,11 +37,6 @@ function makeIdNumeric(id) {
   return resl;
 }
 
-function formatDate(date) {
-  if (date <= 0) return "-";
-  else return date.split(".")[0].replace("T", " ");
-}
-
 function getParameterByName(name, searchString) {
   var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
   results = regex.exec(searchString);
@@ -129,9 +124,9 @@ $(document).ready(function() {
         var num = app["attempts"].length;
         for (j in app["attempts"]) {
           var attempt = app["attempts"][j];
-          attempt["startTime"] = formatDate(attempt["startTime"]);
-          attempt["endTime"] = formatDate(attempt["endTime"]);
-          attempt["lastUpdated"] = formatDate(attempt["lastUpdated"]);
+          attempt["startTime"] = formatTimeMillis(attempt["startTimeEpoch"]);
+          attempt["endTime"] = formatTimeMillis(attempt["endTimeEpoch"]);
+          attempt["lastUpdated"] = formatTimeMillis(attempt["lastUpdatedEpoch"]);
           attempt["log"] = uiRoot + "/api/v1/applications/" + id + "/" +
             (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
           attempt["durationMillisec"] = attempt["duration"];

@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCommandExec, ShowTablesCommand}
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
-import org.apache.spark.sql.execution.joins.ReorderJoinPredicates
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
 import org.apache.spark.util.Utils
 
@@ -104,7 +103,6 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   protected def preparations: Seq[Rule[SparkPlan]] = Seq(
     python.ExtractPythonUDFs,
     PlanSubqueries(sparkSession),
-    new ReorderJoinPredicates,
     EnsureRequirements(sparkSession.sessionState.conf),
     CollapseCodegenStages(sparkSession.sessionState.conf),
     ReuseExchange(sparkSession.sessionState.conf),
@@ -196,13 +194,13 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     }
   }
 
-  def simpleString: String = {
+  def simpleString: String = withRedaction {
     s"""== Physical Plan ==
        |${stringOrError(executedPlan.treeString(verbose = false))}
       """.stripMargin.trim
   }
 
-  override def toString: String = {
+  override def toString: String = withRedaction {
     def output = Utils.truncatedString(
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ")
     val analyzedPlan = Seq(
@@ -221,7 +219,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     """.stripMargin.trim
   }
 
-  def stringWithStats: String = {
+  def stringWithStats: String = withRedaction {
     // trigger to compute stats for logical plans
     optimizedPlan.stats
 
@@ -231,6 +229,13 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
         |== Physical Plan ==
         |${stringOrError(executedPlan.treeString(verbose = true))}
     """.stripMargin.trim
+  }
+
+  /**
+   * Redact the sensitive information in the given string.
+   */
+  private def withRedaction(message: String): String = {
+    Utils.redact(sparkSession.sessionState.conf.stringRedationPattern, message)
   }
 
   /** A special namespace for commands that can be used to debug query execution. */

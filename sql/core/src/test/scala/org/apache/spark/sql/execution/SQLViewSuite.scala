@@ -69,21 +69,25 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   }
 
   test("create a permanent view on a temp view") {
-    withView("jtv1", "temp_jtv1", "global_temp_jtv1") {
-      sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jt WHERE id > 3")
-      var e = intercept[AnalysisException] {
-        sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
-      }.getMessage
-      assert(e.contains("Not allowed to create a permanent view `jtv1` by " +
-        "referencing a temporary view `temp_jtv1`"))
+    withView("jtv1") {
+      withTempView("temp_jtv1") {
+        withGlobalTempView("global_temp_jtv1") {
+          sql("CREATE TEMPORARY VIEW temp_jtv1 AS SELECT * FROM jt WHERE id > 3")
+          var e = intercept[AnalysisException] {
+            sql("CREATE VIEW jtv1 AS SELECT * FROM temp_jtv1 WHERE id < 6")
+          }.getMessage
+          assert(e.contains("Not allowed to create a permanent view `jtv1` by " +
+            "referencing a temporary view `temp_jtv1`"))
 
-      val globalTempDB = spark.sharedState.globalTempViewManager.database
-      sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
-      e = intercept[AnalysisException] {
-        sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
-      }.getMessage
-      assert(e.contains(s"Not allowed to create a permanent view `jtv1` by referencing " +
-        s"a temporary view `global_temp`.`global_temp_jtv1`"))
+          val globalTempDB = spark.sharedState.globalTempViewManager.database
+          sql("CREATE GLOBAL TEMP VIEW global_temp_jtv1 AS SELECT * FROM jt WHERE id > 0")
+          e = intercept[AnalysisException] {
+            sql(s"CREATE VIEW jtv1 AS SELECT * FROM $globalTempDB.global_temp_jtv1 WHERE id < 6")
+          }.getMessage
+          assert(e.contains(s"Not allowed to create a permanent view `jtv1` by referencing " +
+            s"a temporary view `global_temp`.`global_temp_jtv1`"))
+        }
+      }
     }
   }
 
@@ -289,7 +293,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
       }
 
-      assert(e.message.contains("Temporary table") && e.message.contains("already exists"))
+      assert(e.message.contains("Temporary view") && e.message.contains("already exists"))
     }
   }
 

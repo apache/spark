@@ -290,7 +290,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case FloatType =>
           val v = value.asInstanceOf[Float]
           if (v.isNaN || v.isInfinite) {
-            val boxedValue = ctx.addReferenceMinorObj(v)
+            val boxedValue = ctx.addReferenceObj("boxedValue", v)
             val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
             ev.copy(code = code)
           } else {
@@ -299,7 +299,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         case DoubleType =>
           val v = value.asInstanceOf[Double]
           if (v.isNaN || v.isInfinite) {
-            val boxedValue = ctx.addReferenceMinorObj(v)
+            val boxedValue = ctx.addReferenceObj("boxedValue", v)
             val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
             ev.copy(code = code)
           } else {
@@ -309,8 +309,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           ev.copy(code = "", value = s"($javaType)$value")
         case TimestampType | LongType =>
           ev.copy(code = "", value = s"${value}L")
-        case other =>
-          ev.copy(code = "", value = ctx.addReferenceMinorObj(value, ctx.javaType(dataType)))
+        case _ =>
+          ev.copy(code = "", value = ctx.addReferenceObj("literal", value,
+            ctx.javaType(dataType)))
       }
     }
   }

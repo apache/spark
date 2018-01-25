@@ -31,16 +31,13 @@ import org.apache.spark.util.Utils
 
 
 trait SQLMetricsTestUtils extends SQLTestUtils {
-
   import testImplicits._
 
-  private def statusStore: SQLAppStatusStore = {
-    new SQLAppStatusStore(sparkContext.statusStore.store)
-  }
-
-  private def currentExecutionIds(): Set[Long] = {
+  protected def currentExecutionIds(): Set[Long] = {
     statusStore.executionsList.map(_.executionId).toSet
   }
+
+  protected def statusStore: SQLAppStatusStore = spark.sharedState.statusStore
 
   /**
    * Get execution metrics for the SQL execution and verify metrics values.
@@ -57,7 +54,6 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
     assert(executionIds.size == 1)
     val executionId = executionIds.head
 
-    val executionData = statusStore.execution(executionId).get
     val executedNode = statusStore.planGraph(executionId).nodes.head
 
     val metricsNames = Seq(

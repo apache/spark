@@ -265,7 +265,11 @@ class ExecutorAllocationManagerSuite
 
     val task2Info = createTaskInfo(1, 0, "executor-1")
     post(sc.listenerBus, SparkListenerTaskStart(2, 0, task2Info))
+
+    task1Info.markFinished(TaskState.FINISHED, System.currentTimeMillis())
     post(sc.listenerBus, SparkListenerTaskEnd(2, 0, null, Success, task1Info, null))
+
+    task2Info.markFinished(TaskState.FINISHED, System.currentTimeMillis())
     post(sc.listenerBus, SparkListenerTaskEnd(2, 0, null, Success, task2Info, null))
 
     assert(adjustRequestedExecutors(manager) === -1)
@@ -1063,6 +1067,9 @@ class ExecutorAllocationManagerSuite
         s"${sustainedSchedulerBacklogTimeout.toString}s")
       .set("spark.dynamicAllocation.executorIdleTimeout", s"${executorIdleTimeout.toString}s")
       .set("spark.dynamicAllocation.testing", "true")
+      // SPARK-22864: effectively disable the allocation schedule by setting the period to a
+      // really long value.
+      .set(TESTING_SCHEDULE_INTERVAL_KEY, "10000")
     val sc = new SparkContext(conf)
     contexts += sc
     sc
@@ -1250,28 +1257,19 @@ private class DummyLocalExternalClusterManager extends ExternalClusterManager {
 private class DummyLocalSchedulerBackend (sc: SparkContext, sb: SchedulerBackend)
   extends SchedulerBackend with ExecutorAllocationClient {
 
-  override private[spark] def getExecutorIds(): Seq[String] = sc.getExecutorIds()
+  override private[spark] def getExecutorIds(): Seq[String] = Nil
 
   override private[spark] def requestTotalExecutors(
       numExecutors: Int,
       localityAwareTasks: Int,
-      hostToLocalTaskCount: Map[String, Int]): Boolean =
-    sc.requestTotalExecutors(numExecutors, localityAwareTasks, hostToLocalTaskCount)
+      hostToLocalTaskCount: Map[String, Int]): Boolean = true
 
-  override def requestExecutors(numAdditionalExecutors: Int): Boolean =
-    sc.requestExecutors(numAdditionalExecutors)
+  override def requestExecutors(numAdditionalExecutors: Int): Boolean = true
 
   override def killExecutors(
       executorIds: Seq[String],
       replace: Boolean,
-      force: Boolean): Seq[String] = {
-    val response = sc.killExecutors(executorIds)
-    if (response) {
-      executorIds
-    } else {
-      Seq.empty[String]
-    }
-  }
+      force: Boolean): Seq[String] = executorIds
 
   override def start(): Unit = sb.start()
 

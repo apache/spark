@@ -23,30 +23,8 @@ import java.util.zip.ZipOutputStream
 import scala.xml.Node
 
 import org.apache.spark.SparkException
+import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.ui.SparkUI
-
-private[spark] case class ApplicationAttemptInfo(
-    attemptId: Option[String],
-    startTime: Long,
-    endTime: Long,
-    lastUpdated: Long,
-    sparkUser: String,
-    completed: Boolean = false,
-    appSparkVersion: String)
-
-private[spark] case class ApplicationHistoryInfo(
-    id: String,
-    name: String,
-    attempts: List[ApplicationAttemptInfo]) {
-
-  /**
-   * Has this application completed?
-   * @return true if the most recent attempt has completed
-   */
-  def completed: Boolean = {
-    attempts.nonEmpty && attempts.head.completed
-  }
-}
 
 /**
  * A loaded UI for a Spark application.
@@ -119,7 +97,7 @@ private[history] abstract class ApplicationHistoryProvider {
    *
    * @return List of all know applications.
    */
-  def getListing(): Iterator[ApplicationHistoryInfo]
+  def getListing(): Iterator[ApplicationInfo]
 
   /**
    * Returns the Spark UI for a specific application.
@@ -152,9 +130,9 @@ private[history] abstract class ApplicationHistoryProvider {
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
 
   /**
-   * @return the [[ApplicationHistoryInfo]] for the appId if it exists.
+   * @return the [[ApplicationInfo]] for the appId if it exists.
    */
-  def getApplicationInfo(appId: String): Option[ApplicationHistoryInfo]
+  def getApplicationInfo(appId: String): Option[ApplicationInfo]
 
   /**
    * @return html text to display when the application list is empty

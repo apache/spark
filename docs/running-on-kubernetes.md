@@ -415,9 +415,10 @@ from the other deployment modes. See the [configuration page](configuration.html
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.batch.delay</code></td>
-  <td><code>1</code></td>
+  <td><code>1s</code></td>
   <td>
-    Number of seconds to wait between each round of executor pod allocation.
+    Time to wait between each round of executor pod allocation. Specifying values less than 1 second may lead to
+    excessive CPU usage on the spark driver.
   </td>
 </tr>
 <tr>
@@ -489,7 +490,7 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td><code>spark.kubernetes.authenticate.driver.oauthToken</code></td>
   <td>(none)</td>
   <td>
-    OAuth token to use when authenticating against the against the Kubernetes API server from the driver pod when
+    OAuth token to use when authenticating against the Kubernetes API server from the driver pod when
     requesting executors. Note that unlike the other authentication options, this must be the exact string value of
     the token to use for the authentication. This token value is uploaded to the driver pod. If this is specified, it is
     highly recommended to set up TLS for the driver submission server, as this value is sensitive information that would
@@ -773,24 +774,18 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td><code>spark.kubernetes.driver.secrets.[SecretName]</code></td>
   <td>(none)</td>
   <td>
-    Mounts the Kubernetes secret named <code>SecretName</code> onto the path specified by the value
-    in the driver Pod. The user can specify multiple instances of this for multiple secrets.
+   Add the <a href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes Secret</a> named <code>SecretName</code> to the driver pod on the path specified in the value. For example,
+   <code>spark.kubernetes.driver.secrets.spark-secret=/etc/secrets</code>. Note that if an init-container is used,
+   the secret will also be added to the init-container in the driver pod.
   </td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.secrets.[SecretName]</code></td>
   <td>(none)</td>
   <td>
-    Mounts the Kubernetes secret named <code>SecretName</code> onto the path specified by the value
-    in the executor Pods. The user can specify multiple instances of this for multiple secrets.
+   Add the <a href="https://kubernetes.io/docs/concepts/configuration/secret/">Kubernetes Secret</a> named <code>SecretName</code> to the executor pod on the path specified in the value. For example,
+   <code>spark.kubernetes.executor.secrets.spark-secret=/etc/secrets</code>. Note that if an init-container is used,
+   the secret will also be added to the init-container in the executor pod.
   </td>
 </tr>
 </table>
-
-
-## Current Limitations
-
-Running Spark on Kubernetes is currently an experimental feature. Some restrictions on the current implementation that
-should be lifted in the future include:
-* Applications can only run in cluster mode.
-* Only Scala and Java applications can be run.

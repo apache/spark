@@ -48,7 +48,7 @@ object MulticlassLogisticRegressionWithElasticNetExample {
 
     // Print the coefficients and intercept for multinomial logistic regression
     println(s"Coefficients: \n${lrModel.coefficientMatrix}")
-    println(s"Intercepts: ${lrModel.interceptVector}")
+    println(s"Intercepts: \n${lrModel.interceptVector}")
     // $example off$
 
     spark.stop()

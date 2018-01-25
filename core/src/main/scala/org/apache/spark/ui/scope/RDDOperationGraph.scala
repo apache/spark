@@ -116,7 +116,7 @@ private[spark] object RDDOperationGraph extends Logging {
     // Use a special prefix here to differentiate this cluster from other operation clusters
     val stageClusterId = STAGE_CLUSTER_PREFIX + stage.stageId
     val stageClusterName = s"Stage ${stage.stageId}" +
-      { if (stage.attemptId == 0) "" else s" (attempt ${stage.attemptId})" }
+      { if (stage.attemptNumber == 0) "" else s" (attempt ${stage.attemptNumber})" }
     val rootCluster = new RDDOperationCluster(stageClusterId, stageClusterName)
 
     var rootNodeCount = 0

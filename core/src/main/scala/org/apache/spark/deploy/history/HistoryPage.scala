@@ -21,6 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.apache.spark.status.api.v1.ApplicationInfo
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
@@ -30,7 +31,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
     val requestedIncomplete =
       Option(UIUtils.stripXSS(request.getParameter("showIncomplete"))).getOrElse("false").toBoolean
 
-    val allAppsSize = parent.getApplicationList().count(_.completed != requestedIncomplete)
+    val allAppsSize = parent.getApplicationList()
+      .count(isApplicationCompleted(_) != requestedIncomplete)
     val eventLogsUnderProcessCount = parent.getEventLogsUnderProcess()
     val lastUpdatedTime = parent.getLastUpdatedTime()
     val providerConfig = parent.getProviderConfig()
@@ -53,6 +55,10 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
             if (lastUpdatedTime > 0) {
               <p>Last updated: <span id="last-updated">{lastUpdatedTime}</span></p>
             }
+            }
+
+            {
+            <p>Client local time zone: <span id="time-zone"></span></p>
             }
 
             {
@@ -87,5 +93,9 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
 
   private def makePageLink(showIncomplete: Boolean): String = {
     UIUtils.prependBaseUri("/?" + "showIncomplete=" + showIncomplete)
+  }
+
+  private def isApplicationCompleted(appInfo: ApplicationInfo): Boolean = {
+    appInfo.attempts.nonEmpty && appInfo.attempts.head.completed
   }
 }

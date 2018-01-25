@@ -94,19 +94,15 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("combine redundant deterministic filters") {
+  test("do not combine non-deterministic filters even if they are identical") {
     val originalQuery =
       testRelation
         .where(Rand(0) > 0.1 && 'a === 1)
-        .where(Rand(0) > 0.1 && 'a === 1)
+        .where(Rand(0) > 0.1 && 'a === 1).analyze
 
-    val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer =
-      testRelation
-        .where(Rand(0) > 0.1 && 'a === 1 && Rand(0) > 0.1)
-        .analyze
+    val optimized = Optimize.execute(originalQuery)
 
-    comparePlans(optimized, correctAnswer)
+    comparePlans(optimized, originalQuery)
   }
 
   test("SPARK-16164: Filter pushdown should keep the ordering in the logical plan") {
@@ -508,7 +504,7 @@ class FilterPushdownSuite extends PlanTest {
     }
     val optimized = Optimize.execute(originalQuery.analyze)
 
-    comparePlans(analysis.EliminateSubqueryAliases(originalQuery.analyze), optimized)
+    comparePlans(originalQuery.analyze, optimized)
   }
 
   test("joins: conjunctive predicates") {
@@ -527,7 +523,7 @@ class FilterPushdownSuite extends PlanTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   test("joins: conjunctive predicates #2") {
@@ -546,7 +542,7 @@ class FilterPushdownSuite extends PlanTest {
       left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   test("joins: conjunctive predicates #3") {
@@ -570,7 +566,7 @@ class FilterPushdownSuite extends PlanTest {
           condition = Some("z.a".attr === "x.b".attr))
         .analyze
 
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   test("joins: push down where clause into left anti join") {
@@ -585,7 +581,7 @@ class FilterPushdownSuite extends PlanTest {
       x.where("x.a".attr > 10)
         .join(y, LeftAnti, Some("x.b".attr === "y.b".attr))
         .analyze
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   test("joins: only push down join conditions to the right of a left anti join") {
@@ -602,7 +598,7 @@ class FilterPushdownSuite extends PlanTest {
         LeftAnti,
         Some("x.b".attr === "y.b".attr && "x.a".attr > 10))
         .analyze
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   test("joins: only push down join conditions to the right of an existence join") {
@@ -620,7 +616,7 @@ class FilterPushdownSuite extends PlanTest {
         ExistenceJoin(fillerVal),
         Some("x.a".attr > 1))
       .analyze
-    comparePlans(optimized, analysis.EliminateSubqueryAliases(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   val testRelationWithArrayType = LocalRelation('a.int, 'b.int, 'c_arr.array(IntegerType))
@@ -628,14 +624,14 @@ class FilterPushdownSuite extends PlanTest {
   test("generate: predicate referenced no generated column") {
     val originalQuery = {
       testRelationWithArrayType
-        .generate(Explode('c_arr), true, false, Some("arr"))
+        .generate(Explode('c_arr), alias = Some("arr"))
         .where(('b >= 5) && ('a > 6))
     }
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = {
       testRelationWithArrayType
         .where(('b >= 5) && ('a > 6))
-        .generate(Explode('c_arr), true, false, Some("arr")).analyze
+        .generate(Explode('c_arr), alias = Some("arr")).analyze
     }
 
     comparePlans(optimized, correctAnswer)
@@ -644,14 +640,14 @@ class FilterPushdownSuite extends PlanTest {
   test("generate: non-deterministic predicate referenced no generated column") {
     val originalQuery = {
       testRelationWithArrayType
-        .generate(Explode('c_arr), true, false, Some("arr"))
+        .generate(Explode('c_arr), alias = Some("arr"))
         .where(('b >= 5) && ('a + Rand(10).as("rnd") > 6) && ('col > 6))
     }
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = {
       testRelationWithArrayType
         .where('b >= 5)
-        .generate(Explode('c_arr), true, false, Some("arr"))
+        .generate(Explode('c_arr), alias = Some("arr"))
         .where('a + Rand(10).as("rnd") > 6 && 'col > 6)
         .analyze
     }
@@ -663,14 +659,14 @@ class FilterPushdownSuite extends PlanTest {
     val generator = Explode('c_arr)
     val originalQuery = {
       testRelationWithArrayType
-        .generate(generator, true, false, Some("arr"))
+        .generate(generator, alias = Some("arr"))
         .where(('b >= 5) && ('c > 6))
     }
     val optimized = Optimize.execute(originalQuery.analyze)
     val referenceResult = {
       testRelationWithArrayType
         .where('b >= 5)
-        .generate(generator, true, false, Some("arr"))
+        .generate(generator, alias = Some("arr"))
         .where('c > 6).analyze
     }
 
@@ -691,7 +687,7 @@ class FilterPushdownSuite extends PlanTest {
   test("generate: all conjuncts referenced generated column") {
     val originalQuery = {
       testRelationWithArrayType
-        .generate(Explode('c_arr), true, false, Some("arr"))
+        .generate(Explode('c_arr), alias = Some("arr"))
         .where(('col > 6) || ('b > 5)).analyze
     }
     val optimized = Optimize.execute(originalQuery)
@@ -813,6 +809,19 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("aggregate: don't push filters if the aggregate has no grouping expressions") {
+    val originalQuery = LocalRelation.apply(testRelation.output, Seq.empty)
+      .select('a, 'b)
+      .groupBy()(count(1))
+      .where(false)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = originalQuery.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("broadcast hint") {
     val originalQuery = ResolvedHint(testRelation)
       .where('a === 2L && 'b + Rand(10).as("rnd") === 3)
@@ -835,9 +844,9 @@ class FilterPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
 
     val correctAnswer = Union(Seq(
-      testRelation.where('a === 2L),
-      testRelation2.where('d === 2L)))
-      .where('b + Rand(10).as("rnd") === 3 && 'c > 5L)
+      testRelation.where('a === 2L && 'c > 5L),
+      testRelation2.where('d === 2L && 'f > 5L)))
+      .where('b + Rand(10).as("rnd") === 3)
       .analyze
 
     comparePlans(optimized, correctAnswer)
@@ -1138,12 +1147,13 @@ class FilterPushdownSuite extends PlanTest {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
 
-    // Verify that all conditions preceding the first non-deterministic condition are pushed down
+    // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
     val originalQuery = x.join(y, condition = Some("x.a".attr === 5 && "y.a".attr === 5 &&
       "x.a".attr === Rand(10) && "y.b".attr === 5))
-    val correctAnswer = x.where("x.a".attr === 5).join(y.where("y.a".attr === 5),
-        condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
+    val correctAnswer =
+      x.where("x.a".attr === 5).join(y.where("y.a".attr === 5 && "y.b".attr === 5),
+        condition = Some("x.a".attr === Rand(10)))
 
     // CheckAnalysis will ensure nondeterministic expressions not appear in join condition.
     // TODO support nondeterministic expressions in join condition.
@@ -1151,16 +1161,16 @@ class FilterPushdownSuite extends PlanTest {
       checkAnalysis = false)
   }
 
-  test("watermark pushdown: no pushdown on watermark attribute") {
+  test("watermark pushdown: no pushdown on watermark attribute #1") {
     val interval = new CalendarInterval(2, 2000L)
 
-    // Verify that all conditions preceding the first watermark touching condition are pushed down
+    // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
     val originalQuery = EventTimeWatermark('b, interval, testRelation)
       .where('a === 5 && 'b === 10 && 'c === 5)
     val correctAnswer = EventTimeWatermark(
-      'b, interval, testRelation.where('a === 5))
-      .where('b === 10 && 'c === 5)
+      'b, interval, testRelation.where('a === 5 && 'c === 5))
+      .where('b === 10)
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
       checkAnalysis = false)
@@ -1169,7 +1179,7 @@ class FilterPushdownSuite extends PlanTest {
   test("watermark pushdown: no pushdown for nondeterministic filter") {
     val interval = new CalendarInterval(2, 2000L)
 
-    // Verify that all conditions preceding the first watermark touching condition are pushed down
+    // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
     val originalQuery = EventTimeWatermark('c, interval, testRelation)
       .where('a === 5 && 'b === Rand(10) && 'c === 5)
@@ -1184,7 +1194,7 @@ class FilterPushdownSuite extends PlanTest {
   test("watermark pushdown: full pushdown") {
     val interval = new CalendarInterval(2, 2000L)
 
-    // Verify that all conditions preceding the first watermark touching condition are pushed down
+    // Verify that all conditions except the watermark touching condition are pushed down
     // by the optimizer and others are not.
     val originalQuery = EventTimeWatermark('c, interval, testRelation)
       .where('a === 5 && 'b === 10)
@@ -1195,15 +1205,15 @@ class FilterPushdownSuite extends PlanTest {
       checkAnalysis = false)
   }
 
-  test("watermark pushdown: empty pushdown") {
+  test("watermark pushdown: no pushdown on watermark attribute #2") {
     val interval = new CalendarInterval(2, 2000L)
 
-    // Verify that all conditions preceding the first watermark touching condition are pushed down
-    // by the optimizer and others are not.
     val originalQuery = EventTimeWatermark('a, interval, testRelation)
       .where('a === 5 && 'b === 10)
+    val correctAnswer = EventTimeWatermark(
+      'a, interval, testRelation.where('b === 10)).where('a === 5)
 
-    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze,
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
       checkAnalysis = false)
   }
 }

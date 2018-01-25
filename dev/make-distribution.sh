@@ -183,10 +183,16 @@ mkdir -p "$DISTDIR/dockerfiles"
 DOCKERFILES_SRC="$SPARK_HOME/resource-managers/kubernetes/docker-minimal-bundle/src/main/docker"
 cp -R "$DOCKERFILES_SRC/." "$DISTDIR/dockerfiles/."
 
-# Only create the yarn directory if the yarn artifacts were build.
+# Only create the yarn directory if the yarn artifacts were built.
 if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then
   mkdir "$DISTDIR/yarn"
   cp "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/yarn"
+fi
+
+# Only create and copy the dockerfiles directory if the kubernetes artifacts were built.
+if [ -d "$SPARK_HOME"/resource-managers/kubernetes/core/target/ ]; then
+  mkdir -p "$DISTDIR/kubernetes/"
+  cp -a "$SPARK_HOME"/resource-managers/kubernetes/docker/src/main/dockerfiles "$DISTDIR/kubernetes/"
 fi
 
 # Copy examples and dependencies

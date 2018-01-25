@@ -43,13 +43,13 @@ dependencies:
         # Copy contents into current build directory
         rsync --info=stats2,misc1,flist0 -a build_classes/ .
       fi
-    - ./build/mvn -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install
+    - set -o pipefail && ./build/mvn -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install | tee -a "$CIRCLE_ARTIFACTS/mvn-install.log"
       # Copy all of */target/scala_2.11/classes to build_classes/
     - >
       rsync --info=stats2,misc1,flist0 -a --delete-excluded --prune-empty-dirs --exclude build_classes/ --exclude 'target/streams' --exclude 'assembly/target' --exclude 'common/network-yarn/target' --exclude 'examples/target' --exclude '***/*.jar' --include 'target/***' --include '**/' --exclude '*' . build_classes/
     - |
       # Make sbt fetch all the external deps to ~/.ivy2 so it gets cached
-      ./build/sbt -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr externalDependencyClasspath
+      set -o pipefail && ./build/sbt -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr externalDependencyClasspath | tee -a "$CIRCLE_ARTIFACTS/sbt-classpath.log"
   cache_directories:
     - "build_classes"
     - "build"

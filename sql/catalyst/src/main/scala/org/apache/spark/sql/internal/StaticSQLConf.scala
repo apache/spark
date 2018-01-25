@@ -99,4 +99,11 @@ object StaticSQLConf {
     .stringConf
     .toSequence
     .createOptional
+
+  val UI_RETAINED_EXECUTIONS =
+    buildStaticConf("spark.sql.ui.retainedExecutions")
+      .doc("Number of executions to retain in the Spark UI.")
+      .intConf
+      .createWithDefault(1000)
+
 }

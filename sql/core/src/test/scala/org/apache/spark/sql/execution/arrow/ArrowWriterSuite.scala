@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.arrow
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.execution.vectorized.ArrowColumnVector
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.ArrowColumnVector
 import org.apache.spark.unsafe.types.UTF8String
 
 class ArrowWriterSuite extends SparkFunSuite {
@@ -49,6 +49,7 @@ class ArrowWriterSuite extends SparkFunSuite {
             case LongType => reader.getLong(rowId)
             case FloatType => reader.getFloat(rowId)
             case DoubleType => reader.getDouble(rowId)
+            case DecimalType.Fixed(precision, scale) => reader.getDecimal(rowId, precision, scale)
             case StringType => reader.getUTF8String(rowId)
             case BinaryType => reader.getBinary(rowId)
             case DateType => reader.getInt(rowId)
@@ -66,6 +67,7 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(LongType, Seq(1L, 2L, null, 4L))
     check(FloatType, Seq(1.0f, 2.0f, null, 4.0f))
     check(DoubleType, Seq(1.0d, 2.0d, null, 4.0d))
+    check(DecimalType.SYSTEM_DEFAULT, Seq(Decimal(1), Decimal(2), null, Decimal(4)))
     check(StringType, Seq("a", "b", null, "d").map(UTF8String.fromString))
     check(BinaryType, Seq("a".getBytes(), "b".getBytes(), null, "d".getBytes()))
     check(DateType, Seq(0, 1, 2, null, 4))

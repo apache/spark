@@ -98,7 +98,7 @@ trait QueryPlanConstraints { self: LogicalPlan =>
   // we may avoid producing recursive constraints.
   private lazy val aliasMap: AttributeMap[Expression] = AttributeMap(
     expressions.collect {
-      case a: Alias => (a.toAttribute, a.child)
+      case a: Alias if !a.child.isInstanceOf[Literal] => (a.toAttribute, a.child)
     } ++ children.flatMap(_.asInstanceOf[QueryPlanConstraints].aliasMap))
     // Note: the explicit cast is necessary, since Scala compiler fails to infer the type.
 

@@ -40,7 +40,8 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def checkInputDataTypes(): TypeCheckResult = {
     if (predicate.dataType != BooleanType) {
       TypeCheckResult.TypeCheckFailure(
-        s"type of predicate expression in If should be boolean, not ${predicate.dataType}")
+        "type of predicate expression in If should be boolean, " +
+          s"not ${predicate.dataType.simpleString}")
     } else if (!trueValue.dataType.sameType(falseValue.dataType)) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
         s"(${trueValue.dataType.simpleString} and ${falseValue.dataType.simpleString}).")
@@ -180,13 +181,17 @@ case class CaseWhen(
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // This variable represents whether the first successful condition is met or not.
-    // It is initialized to `false` and it is set to `true` when the first condition which
-    // evaluates to `true` is met and therefore is not needed to go on anymore on the computation
-    // of the following conditions.
-    val conditionMet = ctx.freshName("caseWhenConditionMet")
-    ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull)
-    ctx.addMutableState(ctx.javaType(dataType), ev.value)
+    // This variable holds the state of the result:
+    // -1 means the condition is not met yet and the result is unknown.
+    val NOT_MATCHED = -1
+    // 0 means the condition is met and result is not null.
+    val HAS_NONNULL = 0
+    // 1 means the condition is met and result is null.
+    val HAS_NULL = 1
+    // It is initialized to `NOT_MATCHED`, and if it's set to `HAS_NULL` or `HAS_NONNULL`,
+    // We won't go on anymore on the computation.
+    val resultState = ctx.freshName("caseWhenResultState")
+    ev.value = ctx.addMutableState(ctx.javaType(dataType), ev.value)
 
     // these blocks are meant to be inside a
     // do {
@@ -200,9 +205,8 @@ case class CaseWhen(
          |${cond.code}
          |if (!${cond.isNull} && ${cond.value}) {
          |  ${res.code}
-         |  ${ev.isNull} = ${res.isNull};
+         |  $resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
          |  ${ev.value} = ${res.value};
-         |  $conditionMet = true;
          |  continue;
          |}
        """.stripMargin
@@ -212,65 +216,61 @@ case class CaseWhen(
       val res = elseExpr.genCode(ctx)
       s"""
          |${res.code}
-         |${ev.isNull} = ${res.isNull};
+         |$resultState = (byte)(${res.isNull} ? $HAS_NULL : $HAS_NONNULL);
          |${ev.value} = ${res.value};
        """.stripMargin
     }
 
     val allConditions = cases ++ elseCode
 
-    val code = if (ctx.INPUT_ROW == null || ctx.currentVars != null) {
-        allConditions.mkString("\n")
-      } else {
-        // This generates code like:
-        //   conditionMet = caseWhen_1(i);
-        //   if(conditionMet) {
-        //     continue;
-        //   }
-        //   conditionMet = caseWhen_2(i);
-        //   if(conditionMet) {
-        //     continue;
-        //   }
-        //   ...
-        // and the declared methods are:
-        //   private boolean caseWhen_1234() {
-        //     boolean conditionMet = false;
-        //     do {
-        //       // here the evaluation of the conditions
-        //     } while (false);
-        //     return conditionMet;
-        //   }
-        ctx.splitExpressions(allConditions, "caseWhen",
-          ("InternalRow", ctx.INPUT_ROW) :: Nil,
-          returnType = ctx.JAVA_BOOLEAN,
-          makeSplitFunction = {
-            func =>
-              s"""
-                ${ctx.JAVA_BOOLEAN} $conditionMet = false;
-                do {
-                  $func
-                } while (false);
-                return $conditionMet;
-              """
-          },
-          foldFunctions = { funcCalls =>
-            funcCalls.map { funcCall =>
-              s"""
-                $conditionMet = $funcCall;
-                if ($conditionMet) {
-                  continue;
-                }"""
-            }.mkString
-          })
-      }
+    // This generates code like:
+    //   caseWhenResultState = caseWhen_1(i);
+    //   if(caseWhenResultState != -1) {
+    //     continue;
+    //   }
+    //   caseWhenResultState = caseWhen_2(i);
+    //   if(caseWhenResultState != -1) {
+    //     continue;
+    //   }
+    //   ...
+    // and the declared methods are:
+    //   private byte caseWhen_1234() {
+    //     byte caseWhenResultState = -1;
+    //     do {
+    //       // here the evaluation of the conditions
+    //     } while (false);
+    //     return caseWhenResultState;
+    //   }
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = allConditions,
+      funcName = "caseWhen",
+      returnType = ctx.JAVA_BYTE,
+      makeSplitFunction = func =>
+        s"""
+           |${ctx.JAVA_BYTE} $resultState = $NOT_MATCHED;
+           |do {
+           |  $func
+           |} while (false);
+           |return $resultState;
+         """.stripMargin,
+      foldFunctions = _.map { funcCall =>
+        s"""
+           |$resultState = $funcCall;
+           |if ($resultState != $NOT_MATCHED) {
+           |  continue;
+           |}
+         """.stripMargin
+      }.mkString)
 
-    ev.copy(code = s"""
-      ${ev.isNull} = true;
-      ${ev.value} = ${ctx.defaultValue(dataType)};
-      ${ctx.JAVA_BOOLEAN} $conditionMet = false;
-      do {
-        $code
-      } while (false);""")
+    ev.copy(code =
+      s"""
+         |${ctx.JAVA_BYTE} $resultState = $NOT_MATCHED;
+         |do {
+         |  $codes
+         |} while (false);
+         |// TRUE if any condition is met and the result is null, or no any condition is met.
+         |final boolean ${ev.isNull} = ($resultState != $HAS_NONNULL);
+       """.stripMargin)
   }
 }
 

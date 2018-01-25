@@ -66,6 +66,7 @@ case class UserDefinedFunction protected[sql] (
    *
    * @since 1.3.0
    */
+  @scala.annotation.varargs
   def apply(exprs: Column*): Column = {
     Column(ScalaUDF(
       f,

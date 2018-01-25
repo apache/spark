@@ -40,6 +40,7 @@ import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.Utils
@@ -190,7 +191,7 @@ case class AlterTableAddColumnsCommand(
     colsToAdd: Seq[StructField]) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
-    val catalogTable = verifyAlterTableAddColumn(catalog, table)
+    val catalogTable = verifyAlterTableAddColumn(sparkSession.sessionState.conf, catalog, table)
 
     try {
       sparkSession.catalog.uncacheTable(table.quotedString)
@@ -216,6 +217,7 @@ case class AlterTableAddColumnsCommand(
    * For datasource table, it currently only supports parquet, json, csv.
    */
   private def verifyAlterTableAddColumn(
+      conf: SQLConf,
       catalog: SessionCatalog,
       table: TableIdentifier): CatalogTable = {
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
@@ -229,7 +231,7 @@ case class AlterTableAddColumnsCommand(
     }
 
     if (DDLUtils.isDatasourceTable(catalogTable)) {
-      DataSource.lookupDataSource(catalogTable.provider.get).newInstance() match {
+      DataSource.lookupDataSource(catalogTable.provider.get, conf).newInstance() match {
         // For datasource table, this command can only support the following File format.
         // TextFileFormat only default to one column "value"
         // Hive type is already considered as hive serde table, so the logic will not
@@ -340,7 +342,7 @@ case class LoadDataCommand(
         uri
       } else {
         val uri = new URI(path)
-        if (uri.getScheme() != null && uri.getAuthority() != null) {
+        val hdfsUri = if (uri.getScheme() != null && uri.getAuthority() != null) {
           uri
         } else {
           // Follow Hive's behavior:
@@ -380,6 +382,13 @@ case class LoadDataCommand(
           }
           new URI(scheme, authority, absolutePath, uri.getQuery(), uri.getFragment())
         }
+        val hadoopConf = sparkSession.sessionState.newHadoopConf()
+        val srcPath = new Path(hdfsUri)
+        val fs = srcPath.getFileSystem(hadoopConf)
+        if (!fs.exists(srcPath)) {
+          throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
+        }
+        hdfsUri
       }
 
     if (partition.nonEmpty) {

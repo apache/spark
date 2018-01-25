@@ -18,11 +18,11 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
-import java.nio.file.Files;
 import java.util.Arrays;
 
 import org.slf4j.Logger;
@@ -165,7 +165,7 @@ public class OneForOneBlockFetcher {
 
     DownloadCallback(int chunkIndex) throws IOException {
       this.targetFile = tempFileManager.createTempFile();
-      this.channel = Channels.newChannel(Files.newOutputStream(targetFile.toPath()));
+      this.channel = Channels.newChannel(new FileOutputStream(targetFile));
       this.chunkIndex = chunkIndex;
     }
 
