@@ -642,9 +642,12 @@ private trait ValuesBuilder[T] {
 private trait ValuesHolder[T] {
   def storeValue(value: T): Unit
   def estimatedSize(): Long
-  // Return a ValuesBuilder which is used to build a memory entry and get the stored data size.
-  // Note: After this method is called, the ValuesHolder is invalid, we can't store data and
-  // get estimate size again.
+
+  /**
+   * Note: After this method is called, the ValuesHolder is invalid, we can't store data and
+   * get estimate size again.
+   * @return a ValuesBuilder which is used to build a memory entry and get the stored data size.
+   */
   def getBuilder(): ValuesBuilder[T]
 }
 
