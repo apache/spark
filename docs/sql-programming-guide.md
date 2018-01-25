@@ -1667,25 +1667,8 @@ To use Arrow when executing these calls, users need to first set the Spark confi
 'spark.sql.execution.arrow.enabled' to 'true'. This is disabled by default.
 
 <div class="codetabs">
-<div data-lang="python"  markdown="1">
-{% highlight python %}
-
-import numpy as np
-import pandas as pd
-
-# Enable Arrow-based columnar data transfers
-spark.conf.set("spark.sql.execution.arrow.enabled", "true")
-
-# Generate a Pandas DataFrame
-pdf = pd.DataFrame(np.random.rand(100, 3))
-
-# Create a Spark DataFrame from a Pandas DataFrame using Arrow
-df = spark.createDataFrame(pdf)
-
-# Convert the Spark DataFrame back to a Pandas DataFrame using Arrow
-result_pdf = df.select("*").toPandas()
-
-{% endhighlight %}
+<div data-lang="python" markdown="1">
+{% include_example dataframe_with_arrow python/sql/arrow.py %}
 </div>
 </div>
 
@@ -1710,41 +1693,8 @@ and concat the results together to be a new column.
 The following example shows how to create a scalar pandas UDF that computes the product of 2 columns.
 
 <div class="codetabs">
-<div data-lang="python"  markdown="1">
-{% highlight python %}
-
-import pandas as pd
-from pyspark.sql.functions import col, pandas_udf
-from pyspark.sql.types import LongType
-
-# Declare the function and create the UDF
-def multiply_func(a, b):
-    return a * b
-
-multiply = pandas_udf(multiply_func, returnType=LongType())
-
-# The function for a pandas_udf should be able to execute with local Pandas data
-x = pd.Series([1, 2, 3])
-print(multiply_func(x, x))
-# 0    1
-# 1    4
-# 2    9
-# dtype: int64
-
-# Create a Spark DataFrame, 'spark' is an existing SparkSession
-df = spark.createDataFrame(pd.DataFrame(x, columns=["x"]))
-
-# Execute function as a Spark vectorized UDF
-df.select(multiply(col("x"), col("x"))).show()
-# +-------------------+
-# |multiply_func(x, x)|
-# +-------------------+
-# |                  1|
-# |                  4|
-# |                  9|
-# +-------------------+
-
-{% endhighlight %}
+<div data-lang="python" markdown="1">
+{% include_example scalar_pandas_udf python/sql/arrow.py %}
 </div>
 </div>
 
@@ -1763,33 +1713,8 @@ To use groupby apply, the user needs to define the following:
 The following example shows how to use groupby apply to subtract the mean from each value in the group.
 
 <div class="codetabs">
-<div data-lang="python"  markdown="1">
-{% highlight python %}
-
-from pyspark.sql.functions import pandas_udf, PandasUDFType
-
-df = spark.createDataFrame(
-    [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
-    ("id", "v"))
-
-@pandas_udf("id long, v double", PandasUDFType.GROUP_MAP)
-def substract_mean(pdf):
-    # pdf is a pandas.DataFrame
-    v = pdf.v
-    return pdf.assign(v=v - v.mean())
-
-df.groupby("id").apply(substract_mean).show()
-# +---+----+
-# | id|   v|
-# +---+----+
-# |  1|-0.5|
-# |  1| 0.5|
-# |  2|-3.0|
-# |  2|-1.0|
-# |  2| 4.0|
-# +---+----+
-
-{% endhighlight %}
+<div data-lang="python" markdown="1">
+{% include_example group_map_pandas_udf python/sql/arrow.py %}
 </div>
 </div>
 
