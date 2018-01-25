@@ -236,17 +236,12 @@ private[spark] class MemoryStore(
       elementsUnrolled += 1
     }
 
-    val valuesBuilder = if (keepUnrolling) {
-      Some(valuesHolder.getBuilder())
-    } else {
-      None
-    }
-
     // Make sure that we have enough memory to store the block. By this point, it is possible that
     // the block's actual memory usage has exceeded the unroll memory by a small amount, so we
     // perform one final call to attempt to allocate additional memory if necessary.
     if (keepUnrolling) {
-      val size = valuesBuilder.get.preciseSize
+      val valuesBuilder = valuesHolder.getBuilder()
+      val size = valuesBuilder.preciseSize
       if (size > unrollMemoryUsedByThisBlock) {
         val amountToRequest = size - unrollMemoryUsedByThisBlock
         keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
@@ -254,33 +249,31 @@ private[spark] class MemoryStore(
           unrollMemoryUsedByThisBlock += amountToRequest
         }
       }
-    }
 
-    if (keepUnrolling) {
-      val entry = valuesBuilder.get.build()
-      // Synchronize so that transfer is atomic
-      memoryManager.synchronized {
-        releaseUnrollMemoryForThisTask(memoryMode, unrollMemoryUsedByThisBlock)
-        val success = memoryManager.acquireStorageMemory(blockId, entry.size, memoryMode)
-        assert(success, "transferring unroll memory to storage memory failed")
+      if (keepUnrolling) {
+        val entry = valuesBuilder.build()
+        // Synchronize so that transfer is atomic
+        memoryManager.synchronized {
+          releaseUnrollMemoryForThisTask(memoryMode, unrollMemoryUsedByThisBlock)
+          val success = memoryManager.acquireStorageMemory(blockId, entry.size, memoryMode)
+          assert(success, "transferring unroll memory to storage memory failed")
+        }
+
+        entries.synchronized {
+          entries.put(blockId, entry)
+        }
+
+        logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(blockId,
+          Utils.bytesToString(entry.size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
+        Right(entry.size)
+      } else {
+        // We ran out of space while unrolling the values for this block
+        logUnrollFailureMessage(blockId, valuesBuilder.preciseSize)
+        Left(unrollMemoryUsedByThisBlock)
       }
-
-      entries.synchronized {
-        entries.put(blockId, entry)
-      }
-
-      logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(blockId,
-        Utils.bytesToString(entry.size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
-      Right(entry.size)
     } else {
       // We ran out of space while unrolling the values for this block
-      val actualSize = if (valuesBuilder.isEmpty) {
-        valuesHolder.estimatedSize()
-      } else {
-        valuesBuilder.get.preciseSize
-      }
-
-      logUnrollFailureMessage(blockId, actualSize)
+      logUnrollFailureMessage(blockId, valuesHolder.estimatedSize())
       Left(unrollMemoryUsedByThisBlock)
     }
   }
@@ -649,6 +642,9 @@ private trait ValuesBuilder[T] {
 private trait ValuesHolder[T] {
   def storeValue(value: T): Unit
   def estimatedSize(): Long
+  // Return a ValuesBuilder which is used to build a memory entry and get the stored data size.
+  // Note: After this method is called, the ValuesHolder is invalid, we can't store data and
+  // get estimate size again.
   def getBuilder(): ValuesBuilder[T]
 }
 
@@ -715,7 +711,7 @@ private class SerializedValuesHolder[T](
     // We successfully unrolled the entirety of this block
     serializationStream.close()
 
-    override val preciseSize: Long = bbos.size
+    override def preciseSize(): Long = bbos.size
 
     override def build(): MemoryEntry[T] =
       SerializedMemoryEntry[T](bbos.toChunkedByteBuffer, memoryMode, classTag)
