@@ -89,7 +89,7 @@ class KafkaContinuousReader(
     KafkaSourceOffset(JsonUtils.partitionOffsets(json))
   }
 
-  override def createUnsafeRowReadTasks(): ju.List[ReadTask[UnsafeRow]] = {
+  override def createUnsafeRowReaderFactories(): ju.List[DataReaderFactory[UnsafeRow]] = {
     import scala.collection.JavaConverters._
 
     val oldStartPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(offset)
@@ -109,9 +109,9 @@ class KafkaContinuousReader(
 
     startOffsets.toSeq.map {
       case (topicPartition, start) =>
-        KafkaContinuousReadTask(
+        KafkaContinuousDataReaderFactory(
           topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss)
-          .asInstanceOf[ReadTask[UnsafeRow]]
+          .asInstanceOf[DataReaderFactory[UnsafeRow]]
     }.asJava
   }
 
@@ -159,12 +159,12 @@ class KafkaContinuousReader(
  * @param failOnDataLoss Flag indicating whether data reader should fail if some offsets
  *                       are skipped.
  */
-case class KafkaContinuousReadTask(
+case class KafkaContinuousDataReaderFactory(
     topicPartition: TopicPartition,
     startOffset: Long,
     kafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends ReadTask[UnsafeRow] {
+    failOnDataLoss: Boolean) extends DataReaderFactory[UnsafeRow] {
   override def createDataReader(): KafkaContinuousDataReader = {
     new KafkaContinuousDataReader(
       topicPartition, startOffset, kafkaParams, pollTimeoutMs, failOnDataLoss)

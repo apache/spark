@@ -22,16 +22,16 @@ import java.io.Serializable;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A read task returned by {@link DataSourceV2Reader#createReadTasks()} and is responsible for
- * creating the actual data reader. The relationship between {@link ReadTask} and {@link DataReader}
+ * A read task returned by {@link DataSourceV2Reader#createReaderFactory()} and is responsible for
+ * creating the actual data reader. The relationship between {@link DataReaderFactory} and {@link DataReader}
  * is similar to the relationship between {@link Iterable} and {@link java.util.Iterator}.
  *
  * Note that, the read task will be serialized and sent to executors, then the data reader will be
- * created on executors and do the actual reading. So {@link ReadTask} must be serializable and
+ * created on executors and do the actual reading. So {@link DataReaderFactory} must be serializable and
  * {@link DataReader} doesn't need to be.
  */
 @InterfaceStability.Evolving
-public interface ReadTask<T> extends Serializable {
+public interface DataReaderFactory<T> extends Serializable {
 
   /**
    * The preferred locations where this read task can run faster, but Spark does not guarantee that
