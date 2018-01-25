@@ -42,8 +42,8 @@ class ConsoleSinkProvider extends DataSourceV2
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceV2Options): Optional[StreamWriter] = {
-    Optional.of(new ConsoleWriter(schema, options))
+      options: DataSourceV2Options): StreamWriter = {
+    new ConsoleWriter(schema, options)
   }
 
   def createRelation(

@@ -448,12 +448,11 @@ class MicroBatchExecution(
           newAttributePlan.schema,
           outputMode,
           new DataSourceV2Options(extraOptions.asJava))
-        assert(writer.isPresent, "stream writer must always be present")
-        if (writer.get.isInstanceOf[SupportsWriteInternalRow]) {
+        if (writer.isInstanceOf[SupportsWriteInternalRow]) {
           WriteToDataSourceV2(
-            new InternalRowMicroBatchWriter(currentBatchId, writer.get), newAttributePlan)
+            new InternalRowMicroBatchWriter(currentBatchId, writer), newAttributePlan)
         } else {
-          WriteToDataSourceV2(new MicroBatchWriter(currentBatchId, writer.get), newAttributePlan)
+          WriteToDataSourceV2(new MicroBatchWriter(currentBatchId, writer), newAttributePlan)
         }
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }

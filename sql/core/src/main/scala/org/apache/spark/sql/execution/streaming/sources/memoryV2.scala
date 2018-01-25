@@ -45,8 +45,8 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with Logging {
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceV2Options): java.util.Optional[StreamWriter] = {
-    java.util.Optional.of(new MemoryStreamWriter(this, mode))
+      options: DataSourceV2Options): StreamWriter = {
+    new MemoryStreamWriter(this, mode)
   }
 
   private case class AddedData(batchId: Long, data: Array[Row])

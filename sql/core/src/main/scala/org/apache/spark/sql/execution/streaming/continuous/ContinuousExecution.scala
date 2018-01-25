@@ -200,7 +200,7 @@ class ContinuousExecution(
       triggerLogicalPlan.schema,
       outputMode,
       new DataSourceV2Options(extraOptions.asJava))
-    val withSink = WriteToDataSourceV2(writer.get(), triggerLogicalPlan)
+    val withSink = WriteToDataSourceV2(writer, triggerLogicalPlan)
 
     val reader = withSink.collect {
       case DataSourceV2Relation(_, r: ContinuousReader) => r
@@ -230,7 +230,7 @@ class ContinuousExecution(
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
     val epochEndpoint =
       EpochCoordinatorRef.create(
-        writer.get(), reader, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
+        writer, reader, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
     val epochUpdateThread = new Thread(new Runnable {
       override def run: Unit = {
         try {

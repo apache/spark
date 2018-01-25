@@ -227,7 +227,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceV2Options): Optional[StreamWriter] = {
+      options: DataSourceV2Options): StreamWriter = {
     import scala.collection.JavaConverters._
 
     val spark = SparkSession.getActiveSession.get
@@ -238,7 +238,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     KafkaWriter.validateQuery(
       schema.toAttributes, new java.util.HashMap[String, Object](producerParams.asJava), topic)
 
-    Optional.of(new KafkaStreamWriter(topic, producerParams, schema))
+    new KafkaStreamWriter(topic, producerParams, schema)
   }
 
   private def strategy(caseInsensitiveParams: Map[String, String]) =

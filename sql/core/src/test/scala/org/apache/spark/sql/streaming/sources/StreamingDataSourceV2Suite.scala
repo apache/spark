@@ -68,7 +68,7 @@ trait FakeStreamWriteSupport extends StreamWriteSupport {
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceV2Options): Optional[StreamWriter] = {
+      options: DataSourceV2Options): StreamWriter = {
     throw new IllegalStateException("fake sink - cannot actually write")
   }
 }

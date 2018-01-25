@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.sources.v2.streaming;
 
-import java.util.Optional;
-
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSink;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
@@ -48,7 +46,7 @@ public interface StreamWriteSupport extends BaseStreamingSink {
      * @param options the options for the returned data source writer, which is an immutable
      *                case-insensitive string-to-string map.
      */
-    Optional<StreamWriter> createStreamWriter(
+    StreamWriter createStreamWriter(
         String queryId,
         StructType schema,
         OutputMode mode,
