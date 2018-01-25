@@ -101,9 +101,8 @@ abstract class AbstractAppHandle implements SparkAppHandle {
   synchronized void dispose() {
     if (!isDisposed()) {
       server.unregister(this);
-      if (!getState().isFinal()) {
-        setState(State.LOST);
-      }
+      // Set state to LOST if not yet final.
+      setState(State.LOST, false);
       this.disposed = true;
     }
   }
