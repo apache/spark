@@ -141,7 +141,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     try {
       Thread.currentThread().setContextClassLoader(noHive)
       val test = noHive.loadClass(NoHiveTest.getClass.getName().stripSuffix("$"))
-      test.getMethod("main", classOf[Array[String]]).invoke(null, Array[String]())
+      test.getMethod("runTest").invoke(null)
     } finally {
       Thread.currentThread().setContextClassLoader(currentLoader)
     }
@@ -155,7 +155,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
 /** Test code for SPARK-23209 to avoid using too much reflection above. */
 private object NoHiveTest extends Matchers {
 
-  def main(args: Array[String]): Unit = {
+  def runTest(): Unit = {
     try {
       val manager = new HadoopDelegationTokenManager(new SparkConf(), new Configuration(),
         _ => Set())
