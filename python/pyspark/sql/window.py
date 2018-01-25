@@ -129,7 +129,7 @@ class Window(object):
                       any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
                     The frame is unbounded if this is ``Window.unboundedFollowing``,
-                     org.apache.spark.sql.catalyst.expressions.UnboundedPFollowing, or
+                    ``org.apache.spark.sql.catalyst.expressions.UnboundedPFollowing``, or
                     any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
         if isinstance(start, long) and isinstance(end, long):
