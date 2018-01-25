@@ -362,7 +362,7 @@ class KafkaContinuousSinkSuite extends KafkaContinuousTest {
     } finally {
       writer.stop()
     }
-    assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("job aborted"))
+    assert(ex.getCause.getCause.getMessage.toLowerCase(Locale.ROOT).contains("job aborted"))
   }
 
   test("streaming - exception on config serializer") {
