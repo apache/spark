@@ -1824,7 +1824,7 @@ def ols(pdf):
     group_key = pdf[group_column].iloc[0]
     y = pdf[y_column]
     x = pdf[x_columns]
-    x = sm.add_constant(X)
+    x = sm.add_constant(x)
     model = sm.OLS(y, x).fit()
 
     return pd.DataFrame([[group_key] + [model.params[i] for i in x_columns]])
