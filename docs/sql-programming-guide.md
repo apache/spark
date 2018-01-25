@@ -1703,7 +1703,7 @@ and `pandas.DataFrame` with Spark. Currently, there are two types of pandas UDF:
 
 Scalar pandas UDFs are used for vectorizing scalar operations. They can used with functions such as `select`
 and `withColumn`. To define a scalar pandas UDF, use `pandas_udf` to annotate a Python function. The Python
-should takes `pandas.Series` and returns a `pandas.Series` of the same size. Internally, Spark will
+should takes `pandas.Series` and returns a `pandas.Series` of the same length. Internally, Spark will
 split a column into multiple `pandas.Series` and invoke the Python function with each `pandas.Series`, and
 concat the results together to be a new column.
 
@@ -1714,7 +1714,7 @@ The following example shows how to create a scalar pandas UDF that computes the 
 {% highlight python %}
 
 import pandas as pd
-from pyspark.sql.functions import pandas_udf, PandasUDFTypr
+from pyspark.sql.functions import pandas_udf, PandasUDFType
 
 df = spark.createDataFrame(
     [(1,), (2,), (3,)],
@@ -1739,9 +1739,9 @@ df.select(multiply_udf(df.v, df.v)).show()
 </div>
 </div>
 
-Note that there are two important requirement when using scalar pandas UDFs:
-* The input and output series must have the same size.
-* How a column is splitted into multiple `pandas.Series` is internal to Spark, and therefore the result
+Note that there are two important requirements when using scalar pandas UDFs:
+* The input and output series must have the same length.
+* How a column is split into multiple `pandas.Series` is internal to Spark, and therefore the result
   of user-defined function must be independent of the splitting.
 
 ### Group Map
