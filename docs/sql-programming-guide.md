@@ -1693,7 +1693,7 @@ Using the above optimizations with Arrow will produce the same results as when A
 enabled. Not all Spark data types are currently supported and an error will be raised if a column
 has an unsupported type, see [Supported Types](#supported-types).
 
-## Pandas UDFs (a.k.a Vectorized UDFs)
+## Pandas UDFs (a.k.a. Vectorized UDFs)
 
 With Arrow, we introduce a new type of UDF - pandas UDF. Pandas UDF is defined with a new function
 `pyspark.sql.functions.pandas_udf` and allows user to use functions that operate on `pandas.Series`
@@ -1714,35 +1714,39 @@ The following example shows how to create a scalar pandas UDF that computes the 
 {% highlight python %}
 
 import pandas as pd
-from pyspark.sql.functions import pandas_udf, PandasUDFType
-
-df = spark.createDataFrame(
-    [(1,), (2,), (3,)],
-    ['v'])
+from pyspark.sql.functions import col, pandas_udf
+from pyspark.sql.types import LongType
 
 # Declare the function and create the UDF
-@pandas_udf('long', PandasUDFType.SCALAR)
-def multiply_udf(a, b):
-    # a and b are both pandas.Series
+def multiply_func(a, b):
     return a * b
 
-df.select(multiply_udf(df.v, df.v)).show()
-# +------------------+
-# |multiply_udf(v, v)|
-# +------------------+
-# |                 1|
-# |                 4|
-# |                 9|
-# +------------------+
+multiply = pandas_udf(multiply_func, returnType=LongType())
+
+# The function for a pandas_udf should be able to execute with local Pandas data
+x = pd.Series([1, 2, 3])
+print(multiply_func(x, x))
+# 0    1
+# 1    4
+# 2    9
+# dtype: int64
+
+# Create a Spark DataFrame, 'spark' is an existing SparkSession
+df = spark.createDataFrame(pd.DataFrame(x, columns=["x"]))
+
+# Execute function as a Spark vectorized UDF
+df.select(multiply(col("x"), col("x"))).show()
+# +-------------------+
+# |multiply_func(x, x)|
+# +-------------------+
+# |                  1|
+# |                  4|
+# |                  9|
+# +-------------------+
 
 {% endhighlight %}
 </div>
 </div>
-
-Note that there are two important requirements when using scalar pandas UDFs:
-* The input and output series must have the same length.
-* How a column is split into multiple `pandas.Series` is internal to Spark, and therefore the result
-  of user-defined function must be independent of the splitting.
 
 ### Group Map
 Group map pandas UDFs are used with `groupBy().apply()` which implements the "split-apply-combine" pattern.
@@ -1818,10 +1822,10 @@ schema = df.select(group_column, *x_columns).schema
 # Input/output are both a pandas.DataFrame
 def ols(pdf):
     group_key = pdf[group_column].iloc[0]
-    Y = pdf[y_column]
-    X = pdf[x_columns]
-    X = sm.add_constant(X)
-    model = sm.OLS(Y, X).fit()
+    y = pdf[y_column]
+    x = pdf[x_columns]
+    x = sm.add_constant(X)
+    model = sm.OLS(y, x).fit()
 
     return pd.DataFrame([[group_key] + [model.params[i] for i in x_columns]])
 
