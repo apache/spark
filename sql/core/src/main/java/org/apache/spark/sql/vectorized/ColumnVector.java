@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.vectorized;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
@@ -29,11 +30,14 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Most of the APIs take the rowId as a parameter. This is the batch local 0-based row id for values
  * in this ColumnVector.
  *
+ * Spark only calls specific `get` method according to the data type of this {@link ColumnVector},
+ * e.g. if it's int type, Spark is guaranteed to only call {@link #getInt(int)} or
+ * {@link #getInts(int, int)}.
+ *
  * ColumnVector supports all the data types including nested types. To handle nested types,
- * ColumnVector can have children and is a tree structure. For struct type, it stores the actual
- * data of each field in the corresponding child ColumnVector, and only stores null information in
- * the parent ColumnVector. For array type, it stores the actual array elements in the child
- * ColumnVector, and stores null information, array offsets and lengths in the parent ColumnVector.
+ * ColumnVector can have children and is a tree structure. Please refer to {@link #getStruct(int)},
+ * {@link #getArray(int)} and {@link #getMap(int)} for the details about how to implement nested
+ * types.
  *
  * ColumnVector is expected to be reused during the entire data loading process, to avoid allocating
  * memory again and again.
@@ -43,6 +47,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * format. Since it is expected to reuse the ColumnVector instance while loading data, the storage
  * footprint is negligible.
  */
+@InterfaceStability.Evolving
 public abstract class ColumnVector implements AutoCloseable {
 
   /**
@@ -70,12 +75,12 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract boolean isNullAt(int rowId);
 
   /**
-   * Returns the value for rowId.
+   * Returns the boolean type value for rowId.
    */
   public abstract boolean getBoolean(int rowId);
 
   /**
-   * Gets values from [rowId, rowId + count)
+   * Gets boolean type values from [rowId, rowId + count)
    */
   public boolean[] getBooleans(int rowId, int count) {
     boolean[] res = new boolean[count];
@@ -86,12 +91,12 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the value for rowId.
+   * Returns the byte type value for rowId.
    */
   public abstract byte getByte(int rowId);
 
   /**
-   * Gets values from [rowId, rowId + count)
+   * Gets byte type values from [rowId, rowId + count)
    */
   public byte[] getBytes(int rowId, int count) {
     byte[] res = new byte[count];
@@ -102,12 +107,12 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the value for rowId.
+   * Returns the short type value for rowId.
    */
   public abstract short getShort(int rowId);
 
   /**
-   * Gets values from [rowId, rowId + count)
+   * Gets short type values from [rowId, rowId + count)
    */
   public short[] getShorts(int rowId, int count) {
     short[] res = new short[count];
@@ -118,12 +123,12 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the value for rowId.
+   * Returns the int type value for rowId.
    */
   public abstract int getInt(int rowId);
 
   /**
-   * Gets values from [rowId, rowId + count)
+   * Gets int type values from [rowId, rowId + count)
    */
   public int[] getInts(int rowId, int count) {
     int[] res = new int[count];
@@ -134,12 +139,12 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the value for rowId.
+   * Returns the long type value for rowId.
    */
   public abstract long getLong(int rowId);
 
   /**
-   * Gets values from [rowId, rowId + count)
+   * Gets long type values from [rowId, rowId + count)
    */
   public long[] getLongs(int rowId, int count) {
     long[] res = new long[count];
@@ -150,12 +155,12 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the value for rowId.
+   * Returns the float type value for rowId.
    */
   public abstract float getFloat(int rowId);
 
   /**
-   * Gets values from [rowId, rowId + count)
+   * Gets float type values from [rowId, rowId + count)
    */
   public float[] getFloats(int rowId, int count) {
     float[] res = new float[count];
@@ -166,12 +171,12 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the value for rowId.
+   * Returns the double type value for rowId.
    */
   public abstract double getDouble(int rowId);
 
   /**
-   * Gets values from [rowId, rowId + count)
+   * Gets double type values from [rowId, rowId + count)
    */
   public double[] getDoubles(int rowId, int count) {
     double[] res = new double[count];
@@ -182,56 +187,53 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the length of the array for rowId.
-   */
-  public abstract int getArrayLength(int rowId);
-
-  /**
-   * Returns the offset of the array for rowId.
-   */
-  public abstract int getArrayOffset(int rowId);
-
-  /**
-   * Returns the struct for rowId.
+   * Returns the struct type value for rowId.
+   *
+   * To support struct type, implementations must implement {@link #getChild(int)} and make this
+   * vector a tree structure. The number of child vectors must be same as the number of fields of
+   * the struct type, and each child vector is responsible to store the data for its corresponding
+   * struct field.
    */
   public final ColumnarRow getStruct(int rowId) {
     return new ColumnarRow(this, rowId);
   }
 
   /**
-   * Returns the array for rowId.
+   * Returns the array type value for rowId.
+   *
+   * To support array type, implementations must construct an {@link ColumnarArray} and return it in
+   * this method. {@link ColumnarArray} requires a {@link ColumnVector} that stores the data of all
+   * the elements of all the arrays in this vector, and an offset and length which points to a range
+   * in that {@link ColumnVector}, and the range represents the array for rowId. Implementations
+   * are free to decide where to put the data vector and offsets and lengths. For example, we can
+   * use the first child vector as the data vector, and store offsets and lengths in 2 int arrays in
+   * this vector.
    */
-  public final ColumnarArray getArray(int rowId) {
-    return new ColumnarArray(arrayData(), getArrayOffset(rowId), getArrayLength(rowId));
-  }
+  public abstract ColumnarArray getArray(int rowId);
 
   /**
-   * Returns the map for rowId.
+   * Returns the map type value for rowId.
    */
   public MapData getMap(int ordinal) {
     throw new UnsupportedOperationException();
   }
 
   /**
-   * Returns the decimal for rowId.
+   * Returns the decimal type value for rowId.
    */
   public abstract Decimal getDecimal(int rowId, int precision, int scale);
 
   /**
-   * Returns the UTF8String for rowId. Note that the returned UTF8String may point to the data of
-   * this column vector, please copy it if you want to keep it after this column vector is freed.
+   * Returns the string type value for rowId. Note that the returned UTF8String may point to the
+   * data of this column vector, please copy it if you want to keep it after this column vector is
+   * freed.
    */
   public abstract UTF8String getUTF8String(int rowId);
 
   /**
-   * Returns the byte array for rowId.
+   * Returns the binary type value for rowId.
    */
   public abstract byte[] getBinary(int rowId);
-
-  /**
-   * Returns the data for the underlying array.
-   */
-  public abstract ColumnVector arrayData();
 
   /**
    * Returns the ordinal's child column vector.

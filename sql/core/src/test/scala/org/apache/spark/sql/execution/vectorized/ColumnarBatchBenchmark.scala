@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution.datasources.parquet
+package org.apache.spark.sql.execution.vectorized
 
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
@@ -23,8 +23,6 @@ import scala.util.Random
 
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types.{ArrayType, BinaryType, IntegerType}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Benchmark
@@ -434,7 +432,6 @@ object ColumnarBatchBenchmark {
     }
 
     def readArrays(onHeap: Boolean): Unit = {
-      System.gc()
       val vector = if (onHeap) onHeapVector else offHeapVector
 
       var sum = 0L
@@ -448,7 +445,6 @@ object ColumnarBatchBenchmark {
     }
 
     def readArrayElements(onHeap: Boolean): Unit = {
-      System.gc()
       val vector = if (onHeap) onHeapVector else offHeapVector
 
       var sum = 0L
@@ -479,10 +475,10 @@ object ColumnarBatchBenchmark {
 
     Array Vector Read:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    On Heap Read Size Only                         416 /  423        393.5           2.5       1.0X
-    Off Heap Read Size Only                        396 /  404        413.6           2.4       1.1X
-    On Heap Read Elements                         2569 / 2590         63.8          15.7       0.2X
-    Off Heap Read Elements                        3302 / 3333         49.6          20.2       0.1X
+    On Heap Read Size Only                         426 /  437        384.9           2.6       1.0X
+    Off Heap Read Size Only                        406 /  421        404.0           2.5       1.0X
+    On Heap Read Elements                         2636 / 2642         62.2          16.1       0.2X
+    Off Heap Read Elements                        3770 / 3774         43.5          23.0       0.1X
     */
     benchmark.run
   }

@@ -24,6 +24,7 @@ import com.google.common.annotations.VisibleForTesting;
 import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
+import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -602,7 +603,17 @@ public abstract class WritableColumnVector extends ColumnVector {
   // `WritableColumnVector` puts the data of array in the first child column vector, and puts the
   // array offsets and lengths in the current column vector.
   @Override
-  public WritableColumnVector arrayData() { return childColumns[0]; }
+  public final ColumnarArray getArray(int rowId) {
+    return new ColumnarArray(arrayData(), getArrayOffset(rowId), getArrayLength(rowId));
+  }
+
+  public WritableColumnVector arrayData() {
+    return childColumns[0];
+  }
+
+  public abstract int getArrayLength(int rowId);
+
+  public abstract int getArrayOffset(int rowId);
 
   @Override
   public WritableColumnVector getChild(int ordinal) { return childColumns[ordinal]; }
