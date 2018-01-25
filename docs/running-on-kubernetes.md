@@ -6,21 +6,12 @@ title: Running Spark on Kubernetes
 Support for running on [Kubernetes](https://kubernetes.io/docs/whatisk8s/) is available in experimental status. The
 feature set is currently limited and not well-tested. This should not be used in production environments.
 
-<<<<<<< HEAD
 ## Prerequisites
-=======
-**The Kubernetes scheduler is currently experimental.
-In future versions, there may be behavioral changes around configuration,
-container images and entrypoints.**
-
-# Prerequisites
->>>>>>> master
 
 * You must have a running Kubernetes cluster with access configured to it
 using [kubectl](https://kubernetes.io/docs/user-guide/prereqs/). If you do not already have a working Kubernetes
 cluster, you may setup a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
-<<<<<<< HEAD
   * We recommend that minikube be updated to the most recent version (0.19.0 at the time of this documentation), as some
   earlier versions may not start up the kubernetes cluster with all the necessary components.
 * You must have appropriate permissions to create and list [pods](https://kubernetes.io/docs/user-guide/pods/),
@@ -37,42 +28,6 @@ should give you a list of pods and configmaps (if any) respectively.
 your cluster.
 
 ## Driver & Executor Images
-=======
-  * We recommend using the latest release of minikube with the DNS addon enabled.
-  * Be aware that the default minikube configuration is not enough for running Spark applications.
-  We recommend 3 CPUs and 4g of memory to be able to start a simple Spark application with a single
-  executor.
-* You must have appropriate permissions to list, create, edit and delete
-[pods](https://kubernetes.io/docs/user-guide/pods/) in your cluster. You can verify that you can list these resources
-by running `kubectl auth can-i <list|create|edit|delete> pods`.
-  * The service account credentials used by the driver pods must be allowed to create pods, services and configmaps.
-* You must have [Kubernetes DNS](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/) configured in your cluster.
-
-# How it works
-
-<p style="text-align: center;">
-  <img src="img/k8s-cluster-mode.png" title="Spark cluster components" alt="Spark cluster components" />
-</p>
-
-<code>spark-submit</code> can be directly used to submit a Spark application to a Kubernetes cluster.
-The submission mechanism works as follows:
-
-* Spark creates a Spark driver running within a [Kubernetes pod](https://kubernetes.io/docs/concepts/workloads/pods/pod/).
-* The driver creates executors which are also running within Kubernetes pods and connects to them, and executes application code.
-* When the application completes, the executor pods terminate and are cleaned up, but the driver pod persists
-logs and remains in "completed" state in the Kubernetes API until it's eventually garbage collected or manually cleaned up.
-
-Note that in the completed state, the driver pod does *not* use any computational or memory resources.
-
-The driver and executor pod scheduling is handled by Kubernetes. It is possible to schedule the
-driver and executor pods on a subset of available nodes through a [node selector](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector)
-using the configuration property for it. It will be possible to use more advanced
-scheduling hints like [node/pod affinities](https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity) in a future release.
-
-# Submitting Applications to Kubernetes
-
-## Docker Images
->>>>>>> master
 
 Kubernetes requires users to supply images that can be deployed into containers within pods. The images are built to
 be run in a container runtime environment that Kubernetes supports. Docker is a container runtime environment that is
@@ -97,18 +52,11 @@ If you wish to use pre-built docker images, you may use the images published in
 </tr>
 </table>
 
-<<<<<<< HEAD
 You may also build these docker images from sources, or customize them as required. Spark distributions include the
 Docker files for the base-image, driver, executor, and init-container at `dockerfiles/spark-base/Dockerfile`, `dockerfiles/driver/Dockerfile`,
 `dockerfiles/executor/Dockerfile`, and `dockerfiles/init-container/Dockerfile` respectively. Use these Docker files to
 build the Docker images, and then tag them with the registry that the images should be sent to. Finally, push the images
 to the registry.
-=======
-```bash
-$ ./bin/docker-image-tool.sh -r <repo> -t my-tag build
-$ ./bin/docker-image-tool.sh -r <repo> -t my-tag push
-```
->>>>>>> master
 
 For example, if the registry host is `registry-host` and the registry is listening on port 5000:
 
@@ -150,85 +98,14 @@ connect without TLS on a different port, the master would be set to `k8s://http:
 
 If you have a Kubernetes cluster setup, one way to discover the apiserver URL is by executing `kubectl cluster-info`.
 
-<<<<<<< HEAD
     > kubectl cluster-info
     Kubernetes master is running at http://127.0.0.1:8080
-=======
-```bash
-$ kubectl cluster-info
-Kubernetes master is running at http://127.0.0.1:6443
-```
-
-In the above example, the specific Kubernetes cluster can be used with <code>spark-submit</code> by specifying
-`--master k8s://http://127.0.0.1:6443` as an argument to spark-submit. Additionally, it is also possible to use the
-authenticating proxy, `kubectl proxy` to communicate to the Kubernetes API.
->>>>>>> master
 
 In the above example, the specific Kubernetes cluster can be used with spark submit by specifying
 `--master k8s://http://127.0.0.1:8080` as an argument to spark-submit.
 
-<<<<<<< HEAD
 Note that applications can currently only be executed in cluster mode, where the driver and its executors are running on
 the cluster.
-=======
-```bash
-$ kubectl proxy
-```
-
-If the local proxy is running at localhost:8001, `--master k8s://http://127.0.0.1:8001` can be used as the argument to
-spark-submit. Finally, notice that in the above example we specify a jar with a specific URI with a scheme of `local://`.
-This URI is the location of the example jar that is already in the Docker image.
-
-## Dependency Management
-
-If your application's dependencies are all hosted in remote locations like HDFS or HTTP servers, they may be referred to
-by their appropriate remote URIs. Also, application dependencies can be pre-mounted into custom-built Docker images.
-Those dependencies can be added to the classpath by referencing them with `local://` URIs and/or setting the
-`SPARK_EXTRA_CLASSPATH` environment variable in your Dockerfiles. The `local://` scheme is also required when referring to
-dependencies in custom-built Docker images in `spark-submit`. Note that using application dependencies from the submission
-client's local file system is currently not yet supported.
-
-
-### Using Remote Dependencies
-When there are application dependencies hosted in remote locations like HDFS or HTTP servers, the driver and executor pods
-need a Kubernetes [init-container](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/) for downloading
-the dependencies so the driver and executor containers can use them locally.
-
-The init-container handles remote dependencies specified in `spark.jars` (or the `--jars` option of `spark-submit`) and
-`spark.files` (or the `--files` option of `spark-submit`). It also handles remotely hosted main application resources, e.g.,
-the main application jar. The following shows an example of using remote dependencies with the `spark-submit` command:
-
-```bash
-$ bin/spark-submit \
-    --master k8s://https://<k8s-apiserver-host>:<k8s-apiserver-port> \
-    --deploy-mode cluster \
-    --name spark-pi \
-    --class org.apache.spark.examples.SparkPi \
-    --jars https://path/to/dependency1.jar,https://path/to/dependency2.jar
-    --files hdfs://host:port/path/to/file1,hdfs://host:port/path/to/file2
-    --conf spark.executor.instances=5 \
-    --conf spark.kubernetes.container.image=<spark-image> \
-    https://path/to/examples.jar
-```
-
-## Secret Management
-Kubernetes [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/) can be used to provide credentials for a
-Spark application to access secured services. To mount a user-specified secret into the driver container, users can use
-the configuration property of the form `spark.kubernetes.driver.secrets.[SecretName]=<mount path>`. Similarly, the
-configuration property of the form `spark.kubernetes.executor.secrets.[SecretName]=<mount path>` can be used to mount a
-user-specified secret into the executor containers. Note that it is assumed that the secret to be mounted is in the same
-namespace as that of the driver and executor pods. For example, to mount a secret named `spark-secret` onto the path
-`/etc/secrets` in both the driver and executor containers, add the following options to the `spark-submit` command:
-
-```
---conf spark.kubernetes.driver.secrets.spark-secret=/etc/secrets
---conf spark.kubernetes.executor.secrets.spark-secret=/etc/secrets
-```
-
-Note that if an init-container is used, any secret mounted into the driver container will also be mounted into the
-init-container of the driver. Similarly, any secret mounted into an executor container will also be mounted into the
-init-container of the executor.
->>>>>>> master
 
 Finally, notice that in the above example we specify a jar with a specific URI with a scheme of `local://`. This URI is
 the location of the example jar that is already in the Docker image. Using dependencies that are on your machine's local
@@ -246,17 +123,7 @@ the necessary privilege. For example:
 With this, one can add `--conf spark.kubernetes.authenticate.driver.serviceAccountName=spark` to
 the spark-submit command line above to specify the service account to use.
 
-<<<<<<< HEAD
 ## Dependency Management
-=======
-```bash
-$ kubectl -n=<namespace> logs -f <driver-pod-name>
-```
-
-The same logs can also be accessed through the
-[Kubernetes dashboard](https://kubernetes.io/docs/tasks/access-application-cluster/web-ui-dashboard/) if installed on
-the cluster.
->>>>>>> master
 
 Application dependencies that are being submitted from your machine need to be sent to a **resource staging server**
 that the driver and executor can then communicate with to retrieve those dependencies. A YAML file denoting a minimal
@@ -267,13 +134,7 @@ YAML file requires you to have permissions to create Deployments, Services, and 
 
 To run the resource staging server with default configurations, the Kubernetes resources can be created:
 
-<<<<<<< HEAD
     kubectl create -f conf/kubernetes-resource-staging-server.yaml
-=======
-```bash
-$ kubectl port-forward <driver-pod-name> 4040:4040
-```
->>>>>>> master
 
 and then you can compute the value of Pi as follows:
 
@@ -298,13 +159,7 @@ available on any of the nodes of your cluster, you should remove the NodePort fi
 and allow the Kubernetes cluster to determine the NodePort itself. Be sure to provide the correct port in the resource
 staging server URI when submitting your application, in accordance to the NodePort chosen by the Kubernetes cluster.
 
-<<<<<<< HEAD
 ### Dependency Management Without The Resource Staging Server
-=======
-```bash
-$ kubectl describe pod <spark-driver-pod>
-```
->>>>>>> master
 
 Note that this resource staging server is only required for submitting local dependencies. If your application's
 dependencies are all hosted in remote locations like HDFS or http servers, they may be referred to by their appropriate
@@ -312,13 +167,7 @@ remote URIs. Also, application dependencies can be pre-mounted into custom-built
 can be added to the classpath by referencing them with `local://` URIs and/or setting the `SPARK_EXTRA_CLASSPATH`
 environment variable in your Dockerfiles.
 
-<<<<<<< HEAD
 ### Accessing Kubernetes Clusters
-=======
-```bash
-$ kubectl logs <spark-driver-pod>
-```
->>>>>>> master
 
 For details about running on public cloud environments, such as Google Container Engine (GKE), refer to [running Spark in the cloud with Kubernetes](running-on-kubernetes-cloud.md).
 
@@ -357,7 +206,6 @@ Python files can be distributed by including, in the conf, `--py-files`
 Below is an example submission: 
 
 
-<<<<<<< HEAD
 ```
     bin/spark-submit \
       --deploy-mode cluster \
@@ -374,19 +222,6 @@ Below is an example submission:
       --conf spark.kubernetes.initcontainer.docker.image=spark-init:latest \
       --py-files local:///opt/spark/examples/src/main/python/sort.py \
       local:///opt/spark/examples/src/main/python/pi.py 100
-=======
-```bash
-$ kubectl create serviceaccount spark
-```
-
-To grant a service account a `Role` or `ClusterRole`, a `RoleBinding` or `ClusterRoleBinding` is needed. To create
-a `RoleBinding` or `ClusterRoleBinding`, a user can use the `kubectl create rolebinding` (or `clusterrolebinding`
-for `ClusterRoleBinding`) command. For example, the following command creates an `edit` `ClusterRole` in the `default`
-namespace and grants it to the `spark` service account created above:
-
-```bash
-$ kubectl create clusterrolebinding spark-role --clusterrole=edit --serviceaccount=default:spark --namespace=default
->>>>>>> master
 ```
 
 ## Dynamic Allocation in Kubernetes
@@ -774,7 +609,6 @@ from the other deployment modes. See the [configuration page](configuration.html
   </td>
 </tr>
 <tr>
-<<<<<<< HEAD
   <td><code>spark.kubernetes.executor.annotation.[annotationKey]</code></td>
   <td>(none)</td>
   <td>
@@ -787,10 +621,6 @@ from the other deployment modes. See the [configuration page](configuration.html
 <tr>
   <td><code>spark.kubernetes.driver.pod.name</code></td>
   <td>(none)</td>
-=======
-  <td><code>spark.kubernetes.executor.lostCheck.maxAttempts</code></td>
-  <td><code>10</code></td>
->>>>>>> master
   <td>
     Name of the driver pod. If not set, the driver pod name is set to "spark.app.name" suffixed by the current timestamp
     to avoid name conflicts.
