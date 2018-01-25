@@ -1194,7 +1194,7 @@ class Dataset[T] private[sql](
   def orderBy(sortExprs: Column*): Dataset[T] = sort(sortExprs : _*)
 
   /**
-   * Selects column based on the column name and return it as a [[Column]].
+   * Selects column based on the column name and returns it as a [[Column]].
    *
    * @note The column name can also reference to a nested column like `a.b`.
    *
@@ -1220,7 +1220,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Selects column based on the column name and return it as a [[Column]].
+   * Selects column based on the column name and returns it as a [[Column]].
    *
    * @note The column name can also reference to a nested column like `a.b`.
    *
@@ -1240,7 +1240,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Selects column based on the column name specified as a regex and return it as [[Column]].
+   * Selects column based on the column name specified as a regex and returns it as [[Column]].
    * @group untypedrel
    * @since 2.3.0
    */
@@ -2729,7 +2729,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Return an iterator that contains all rows in this Dataset.
+   * Returns an iterator that contains all rows in this Dataset.
    *
    * The iterator will consume as much memory as the largest partition in this Dataset.
    *
