@@ -25,9 +25,13 @@ function getThreadDumpEnabled() {
     return threadDumpEnabled;
 }
 
-function formatStatus(status, type) {
+function formatStatus(status, type, row) {
     if (status) {
-        return "Active"
+        if (row.blacklistedInStages.length == 0) {
+            return "Active"
+        } else {
+            return "Blacklisted in Stages: [" + row.blacklistedInStages.join(", ") + "]";
+        }
     } else {
         return "Dead"
     }
@@ -417,7 +421,7 @@ $(document).ready(function () {
                         {data: 'hostPort'},
                         {data: 'isActive', render: function (data, type, row) {
                             if (row.isBlacklisted) return "Blacklisted";
-                            else return formatStatus (data, type);
+                            else return formatStatus (data, type, row);
                             }
                         },
                         {data: 'rddBlocks'},

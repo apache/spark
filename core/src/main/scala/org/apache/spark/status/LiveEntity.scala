@@ -20,6 +20,7 @@ package org.apache.spark.status
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.immutable.TreeSet
 import scala.collection.mutable.HashMap
 
 import com.google.common.collect.Interners
@@ -254,6 +255,7 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
   var totalShuffleRead = 0L
   var totalShuffleWrite = 0L
   var isBlacklisted = false
+  var blacklistedInStages: Set[Int] = TreeSet()
 
   var executorLogs = Map[String, String]()
 
@@ -299,7 +301,8 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
       Option(removeTime),
       Option(removeReason),
       executorLogs,
-      memoryMetrics)
+      memoryMetrics,
+      blacklistedInStages)
     new ExecutorSummaryWrapper(info)
   }
 
