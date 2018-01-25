@@ -298,9 +298,13 @@ class LauncherServer implements Closeable {
     }
 
     @Override
-    protected void handle(Message msg) throws IOException {
+    public void run() {
       this.connectionThread = Thread.currentThread();
+      super.run();
+    }
 
+    @Override
+    protected void handle(Message msg) throws IOException {
       try {
         if (msg instanceof Hello) {
           timeout.cancel();
