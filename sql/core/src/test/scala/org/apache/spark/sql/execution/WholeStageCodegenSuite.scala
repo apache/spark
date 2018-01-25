@@ -228,4 +228,49 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("Control splitting consume function by operators with config") {
+    import testImplicits._
+    val df = spark.range(10).select(Seq.tabulate(2) {i => ('id + i).as(s"c$i")} : _*)
+
+    Seq(true, false).foreach { config =>
+      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> s"$config") {
+        val plan = df.queryExecution.executedPlan
+        val wholeStageCodeGenExec = plan.find(p => p match {
+          case wp: WholeStageCodegenExec => true
+          case _ => false
+        })
+        assert(wholeStageCodeGenExec.isDefined)
+        val code = wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()._2
+        assert(code.body.contains("project_doConsume") == config)
+      }
+    }
+  }
+
+  test("Skip splitting consume function when parameter number exceeds JVM limit") {
+    import testImplicits._
+
+    Seq((255, false), (254, true)).foreach { case (columnNum, hasSplit) =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(10).select(Seq.tabulate(columnNum) {i => ('id + i).as(s"c$i")} : _*)
+          .write.mode(SaveMode.Overwrite).parquet(path)
+
+        withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "255",
+            SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "true") {
+          val projection = Seq.tabulate(columnNum)(i => s"c$i + c$i as newC$i")
+          val df = spark.read.parquet(path).selectExpr(projection: _*)
+
+          val plan = df.queryExecution.executedPlan
+          val wholeStageCodeGenExec = plan.find(p => p match {
+            case wp: WholeStageCodegenExec => true
+            case _ => false
+          })
+          assert(wholeStageCodeGenExec.isDefined)
+          val code = wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()._2
+          assert(code.body.contains("project_doConsume") == hasSplit)
+        }
+      }
+    }
+  }
 }
