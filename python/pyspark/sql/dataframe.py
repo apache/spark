@@ -827,15 +827,15 @@ class DataFrame(object):
 
         :param colName: string, column name specified as a regex.
 
-        >>> df = spark.createDataFrame([("a", 1), ("b", 2), ("c",  3)])
-        >>> df.select(df.colRegex("`(_1)?+.+`")).show()
-        +---+
-        | _2|
-        +---+
-        |  1|
-        |  2|
-        |  3|
-        +---+
+        >>> df = spark.createDataFrame([("a", 1), ("b", 2), ("c",  3)], ["Col1", "Col2"])
+        >>> df.select(df.colRegex("`(Col1)?+.+`")).show()
+        +----+
+        |Col2|
+        +----+
+        |   1|
+        |   2|
+        |   3|
+        +----+
         """
         if not isinstance(colName, basestring):
             raise ValueError("colName should be provided as string")
