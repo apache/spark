@@ -1115,6 +1115,7 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
       }
     }
 
+    query.processAllAvailable()
     query.stop()
     query.awaitTermination()
     // `failOnDataLoss` is `false`, we should not fail the query

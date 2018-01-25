@@ -87,6 +87,12 @@ class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
 
 class KafkaContinuousSourceStressForDontFailOnDataLossSuite
     extends KafkaSourceStressForDontFailOnDataLossSuite {
+
+  override def createSparkSession(): TestSparkSession = {
+    // Set maxRetries to 3 to handle NPE from `poll` when deleting a topic
+    new TestSparkSession(new SparkContext("local[10,3]", "test-sql-context", sparkConf))
+  }
+
   override protected def startStream(ds: Dataset[Int]) = {
     ds.writeStream
       .format("memory")
