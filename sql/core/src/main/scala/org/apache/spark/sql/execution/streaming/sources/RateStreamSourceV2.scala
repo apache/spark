@@ -123,7 +123,7 @@ class RateStreamMicroBatchReader(options: DataSourceV2Options)
     RateStreamOffset(Serialization.read[Map[Int, ValueRunTimeMsPair]](json))
   }
 
-  override def createReaderFactory(): java.util.List[DataReaderFactory[Row]] = {
+  override def createDataReaderFactories(): java.util.List[DataReaderFactory[Row]] = {
     val startMap = start.partitionToValueAndRunTimeMs
     val endMap = end.partitionToValueAndRunTimeMs
     endMap.keys.toSeq.map { part =>

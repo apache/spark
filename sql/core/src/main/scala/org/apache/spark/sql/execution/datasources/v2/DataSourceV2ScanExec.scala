@@ -54,7 +54,7 @@ case class DataSourceV2ScanExec(
   private lazy val readerFactories: java.util.List[DataReaderFactory[UnsafeRow]] = reader match {
     case r: SupportsScanUnsafeRow => r.createUnsafeRowReaderFactories()
     case _ =>
-      reader.createReaderFactory().asScala.map {
+      reader.createDataReaderFactories().asScala.map {
         new RowToUnsafeRowDataReaderFactory(_, reader.readSchema()): DataReaderFactory[UnsafeRow]
       }.asJava
   }
@@ -63,7 +63,8 @@ case class DataSourceV2ScanExec(
     case r: SupportsScanColumnarBatch if r.enableBatchRead() =>
       assert(!reader.isInstanceOf[ContinuousReader],
         "continuous stream reader does not support columnar read yet.")
-      new DataSourceRDD(sparkContext, r.createReaderFactories()).asInstanceOf[RDD[InternalRow]]
+      new DataSourceRDD(sparkContext, r.createBatchDataReaderFactories())
+        .asInstanceOf[RDD[InternalRow]]
 
     case _: ContinuousReader =>
       EpochCoordinatorRef.get(

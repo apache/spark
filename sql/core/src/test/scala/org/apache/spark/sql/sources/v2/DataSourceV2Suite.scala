@@ -204,7 +204,7 @@ class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
   class Reader extends DataSourceV2Reader {
     override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
 
-    override def createReaderFactory(): JList[DataReaderFactory[Row]] = {
+    override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
       java.util.Arrays.asList(new SimpleDataReaderFactory(0, 5), new SimpleDataReaderFactory(5, 10))
     }
   }
@@ -254,7 +254,7 @@ class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
       requiredSchema
     }
 
-    override def createReaderFactory(): JList[DataReaderFactory[Row]] = {
+    override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
       val lowerBound = filters.collect {
         case GreaterThan("i", v: Int) => v
       }.headOption
@@ -344,7 +344,7 @@ class UnsafeRowDataReaderFactory(start: Int, end: Int)
 class SchemaRequiredDataSource extends DataSourceV2 with ReadSupportWithSchema {
 
   class Reader(val readSchema: StructType) extends DataSourceV2Reader {
-    override def createReaderFactory(): JList[DataReaderFactory[Row]] =
+    override def createDataReaderFactories(): JList[DataReaderFactory[Row]] =
       java.util.Collections.emptyList()
   }
 
@@ -357,7 +357,7 @@ class BatchDataSourceV2 extends DataSourceV2 with ReadSupport {
   class Reader extends DataSourceV2Reader with SupportsScanColumnarBatch {
     override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
 
-    override def createReaderFactories(): JList[DataReaderFactory[ColumnarBatch]] = {
+    override def createBatchDataReaderFactories(): JList[DataReaderFactory[ColumnarBatch]] = {
       java.util.Arrays.asList(new BatchDataReaderFactory(0, 50), new BatchDataReaderFactory(50, 90))
     }
   }
@@ -409,7 +409,7 @@ class PartitionAwareDataSource extends DataSourceV2 with ReadSupport {
   class Reader extends DataSourceV2Reader with SupportsReportPartitioning {
     override def readSchema(): StructType = new StructType().add("a", "int").add("b", "int")
 
-    override def createReaderFactory(): JList[DataReaderFactory[Row]] = {
+    override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
       // Note that we don't have same value of column `a` across partitions.
       java.util.Arrays.asList(
         new SpecificDataReaderFactory(Array(1, 1, 3), Array(4, 4, 6)),

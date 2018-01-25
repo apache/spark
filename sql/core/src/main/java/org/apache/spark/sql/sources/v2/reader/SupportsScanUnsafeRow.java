@@ -33,13 +33,13 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 public interface SupportsScanUnsafeRow extends DataSourceV2Reader {
 
   @Override
-  default List<DataReaderFactory<Row>> createReaderFactory() {
+  default List<DataReaderFactory<Row>> createDataReaderFactories() {
     throw new IllegalStateException(
-      "createReaderFactory not supported by default within SupportsScanUnsafeRow");
+      "createDataReaderFactories not supported by default within SupportsScanUnsafeRow");
   }
 
   /**
-   * Similar to {@link DataSourceV2Reader#createReaderFactory()}, but returns data in unsafe row format.
+   * Similar to {@link DataSourceV2Reader#createDataReaderFactories()}, but returns data in unsafe row format.
    */
   List<DataReaderFactory<UnsafeRow>> createUnsafeRowReaderFactories();
 }

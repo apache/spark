@@ -41,7 +41,7 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<DataReaderFactory<Row>> createReaderFactory() {
+    public List<DataReaderFactory<Row>> createDataReaderFactories() {
       return java.util.Arrays.asList(
         new JavaSimpleDataReaderFactory(0, 5),
         new JavaSimpleDataReaderFactory(5, 10));

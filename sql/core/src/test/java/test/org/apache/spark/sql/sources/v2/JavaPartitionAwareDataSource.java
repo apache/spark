@@ -40,7 +40,7 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<DataReaderFactory<Row>> createReaderFactory() {
+    public List<DataReaderFactory<Row>> createDataReaderFactories() {
       return java.util.Arrays.asList(
         new SpecificDataReaderFactory(new int[]{1, 1, 3}, new int[]{4, 4, 6}),
         new SpecificDataReaderFactory(new int[]{2, 4, 4}, new int[]{6, 2, 2}));

@@ -68,7 +68,7 @@ class RateStreamContinuousReader(options: DataSourceV2Options)
 
   override def getStartOffset(): Offset = offset
 
-  override def createReaderFactory(): java.util.List[DataReaderFactory[Row]] = {
+  override def createDataReaderFactories(): java.util.List[DataReaderFactory[Row]] = {
     val partitionStartMap = offset match {
       case off: RateStreamOffset => off.partitionToValueAndRunTimeMs
       case off =>

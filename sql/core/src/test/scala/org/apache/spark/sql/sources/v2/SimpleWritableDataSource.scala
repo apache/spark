@@ -45,7 +45,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
   class Reader(path: String, conf: Configuration) extends DataSourceV2Reader {
     override def readSchema(): StructType = schema
 
-    override def createReaderFactory(): JList[DataReaderFactory[Row]] = {
+    override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
       val dataPath = new Path(path)
       val fs = dataPath.getFileSystem(conf)
       if (fs.exists(dataPath)) {

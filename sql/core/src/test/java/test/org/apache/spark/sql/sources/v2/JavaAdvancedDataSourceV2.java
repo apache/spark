@@ -60,7 +60,7 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<DataReaderFactory<Row>> createReaderFactory() {
+    public List<DataReaderFactory<Row>> createDataReaderFactories() {
       List<DataReaderFactory<Row>> res = new ArrayList<>();
 
       Integer lowerBound = null;

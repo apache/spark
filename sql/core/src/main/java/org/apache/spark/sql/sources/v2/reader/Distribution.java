@@ -22,7 +22,7 @@ import org.apache.spark.annotation.InterfaceStability;
 /**
  * An interface to represent data distribution requirement, which specifies how the records should
  * be distributed among the {@link DataReaderFactory}s that are returned by
- * {@link DataSourceV2Reader#createReaderFactory()}. Note that this interface has nothing to do with
+ * {@link DataSourceV2Reader#createDataReaderFactories()}. Note that this interface has nothing to do with
  * the data ordering inside one partition(the output records of a single {@link DataReaderFactory}).
  *
  * The instance of this interface is created and provided by Spark, then consumed by
