@@ -282,7 +282,6 @@ private[spark] class MemoryStore(
 
       logUnrollFailureMessage(blockId, actualSize)
       Left(unrollMemoryUsedByThisBlock)
-
     }
   }
 
