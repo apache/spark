@@ -171,14 +171,14 @@ trait CodegenSupport extends SparkPlan {
     //    all variables in output (see `requireAllOutput`).
     // 3. The number of output variables must less than maximum number of parameters in Java method
     //    declaration.
+    val confEnabled = SQLConf.get.wholeStageSplitConsumeFuncByOperator
     val requireAllOutput = output.forall(parent.usedInputs.contains(_))
-    val consumeFunc =
-      if (SQLConf.get.wholeStageSplitConsumeFuncByOperator && requireAllOutput &&
-          ctx.isValidParamLength(output)) {
-        constructDoConsumeFunction(ctx, inputVars, row)
-      } else {
-        parent.doConsume(ctx, inputVars, rowVar)
-      }
+    val paramLength = ctx.calculateParamLength(output) + (if (row != null) 1 else 0)
+    val consumeFunc = if (confEnabled && requireAllOutput && ctx.isValidParamLength(paramLength)) {
+      constructDoConsumeFunction(ctx, inputVars, row)
+    } else {
+      parent.doConsume(ctx, inputVars, rowVar)
+    }
     s"""
        |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}
        |$evaluated

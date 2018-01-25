@@ -1247,13 +1247,12 @@ class CodegenContext {
   }
 
   /**
-   * In Java, a method descriptor is valid only if it represents method parameters with a total
-   * length of 255 or less. `this` contributes one unit and a parameter of type long or double
-   * contributes two units. Besides, for nullable parameters, we also need to pass a boolean
-   * for the null status.
+   * Returns the length of parameters for a Java method descriptor. `this` contributes one unit
+   * and a parameter of type long or double contributes two units. Besides, for nullable parameter,
+   * we also need to pass a boolean parameter for the null status.
    */
-  def isValidParamLength(params: Seq[Expression]): Boolean = {
-    def calculateParamLength(input: Expression): Int = {
+  def calculateParamLength(params: Seq[Expression]): Int = {
+    def paramLengthForExpr(input: Expression): Int = {
       // For a nullable expression, we need to pass in an extra boolean parameter.
       (if (input.nullable) 1 else 0) + javaType(input.dataType) match {
         case JAVA_LONG | JAVA_DOUBLE => 2
@@ -1261,7 +1260,15 @@ class CodegenContext {
       }
     }
     // Initial value is 1 for `this`.
-    1 + params.map(calculateParamLength(_)).sum <= CodeGenerator.MAX_JVM_METHOD_PARAMS_LENGTH
+    1 + params.map(paramLengthForExpr(_)).sum
+  }
+
+  /**
+   * In Java, a method descriptor is valid only if it represents method parameters with a total
+   * length less than a pre-defined constant.
+   */
+  def isValidParamLength(paramLength: Int): Boolean = {
+    paramLength <= CodeGenerator.MAX_JVM_METHOD_PARAMS_LENGTH
   }
 }
 
