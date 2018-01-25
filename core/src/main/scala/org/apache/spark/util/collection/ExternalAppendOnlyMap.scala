@@ -540,14 +540,10 @@ class ExternalAppendOnlyMap[K, V, C](
     }
 
     override def next(): (K, C) = {
-      if (deserializeStream == null) {
-        // In case of deserializeStream has not been initialized when call next() directly
-        deserializeStream = nextBatchStream()
-      }
-      val item = if (nextItem == null) readNextItem() else nextItem
-      if (item == null) {
+      if (!hasNext) {
         throw new NoSuchElementException
       }
+      val item = nextItem
       nextItem = null
       item
     }
