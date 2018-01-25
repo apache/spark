@@ -124,16 +124,19 @@ class Window(object):
         values directly.
 
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
+                      The frame is unbounded if this is ``Window.unboundedPreceding``,
+                      ``org.apache.spark.sql.catalyst.expressions.UnboundedPreceding``, or
                       any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
+                    The frame is unbounded if this is ``Window.unboundedFollowing``,
+                     org.apache.spark.sql.catalyst.expressions.UnboundedPFollowing, or
                     any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if start <= Window._PRECEDING_THRESHOLD:
-            start = Window.unboundedPreceding
-        if end >= Window._FOLLOWING_THRESHOLD:
-            end = Window.unboundedFollowing
+        if isinstance(start, long) and isinstance(end, long):
+            if start <= Window._PRECEDING_THRESHOLD:
+                start = Window.unboundedPreceding
+            if end >= Window._FOLLOWING_THRESHOLD:
+                end = Window.unboundedFollowing
         sc = SparkContext._active_spark_context
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
         return WindowSpec(jspec)
@@ -212,16 +215,19 @@ class WindowSpec(object):
         values directly.
 
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
+                      The frame is unbounded if this is ``Window.unboundedPreceding``,
+                      ``org.apache.spark.sql.catalyst.expressions.UnboundedPreceding``, or
                       any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
+                    The frame is unbounded if this is ``Window.unboundedFollowing``,
+                    ``org.apache.spark.sql.catalyst.expressions.UnboundedFollowing``, or
                     any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if start <= Window._PRECEDING_THRESHOLD:
-            start = Window.unboundedPreceding
-        if end >= Window._FOLLOWING_THRESHOLD:
-            end = Window.unboundedFollowing
+        if isinstance(start, long) and isinstance(end, long):
+            if start <= Window._PRECEDING_THRESHOLD:
+                start = Window.unboundedPreceding
+            if end >= Window._FOLLOWING_THRESHOLD:
+                end = Window.unboundedFollowing
         return WindowSpec(self._jspec.rangeBetween(start, end))
 
 
