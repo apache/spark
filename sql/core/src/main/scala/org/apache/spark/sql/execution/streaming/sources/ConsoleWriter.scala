@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.sources.v2.DataSourceOptions
@@ -39,13 +41,20 @@ class ConsoleWriter(schema: StructType, options: DataSourceOptions)
 
   def createWriterFactory(): DataWriterFactory[Row] = PackedRowWriterFactory
 
-  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    // We have to print a "Batch" label for the epoch for compatibility with the pre-data source V2
-    // behavior.
-    printRows(messages, schema, s"Batch: $epochId")
+  private val messages = new ArrayBuffer[WriterCommitMessage]()
+
+  override def add(message: WriterCommitMessage): Unit = synchronized {
+    messages += message
   }
 
-  def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  override def commit(epochId: Long): Unit = synchronized {
+    // We have to print a "Batch" label for the epoch for compatibility with the pre-data source V2
+    // behavior.
+    printRows(messages.toArray, schema, s"Batch: $epochId")
+    messages.clear()
+  }
+
+  def abort(epochId: Long): Unit = {}
 
   protected def printRows(
       commitMessages: Array[WriterCommitMessage],
