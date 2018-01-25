@@ -176,11 +176,14 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
           Optional.ofNullable(userSpecifiedSchema.orNull),
           Utils.createTempDir(namePrefix = s"temporaryReader").getCanonicalPath,
           options)
+        val schema = tempReader.readSchema()
+        // Stop tempReader to avoid side-affect thing
+        tempReader.stop()
         Dataset.ofRows(
           sparkSession,
           StreamingRelationV2(
             s, source, extraOptions.toMap,
-            tempReader.readSchema().toAttributes, v1Relation)(sparkSession))
+            schema.toAttributes, v1Relation)(sparkSession))
       case s: ContinuousReadSupport =>
         val tempReader = s.createContinuousReader(
           Optional.ofNullable(userSpecifiedSchema.orNull),
