@@ -316,6 +316,7 @@ private class LiveExecutorStageSummary(
   var succeededTasks = 0
   var failedTasks = 0
   var killedTasks = 0
+  var isBlacklisted = false
 
   var metrics = createMetrics(default = 0L)
 
@@ -334,7 +335,8 @@ private class LiveExecutorStageSummary(
       metrics.shuffleWriteMetrics.bytesWritten,
       metrics.shuffleWriteMetrics.recordsWritten,
       metrics.memoryBytesSpilled,
-      metrics.diskBytesSpilled)
+      metrics.diskBytesSpilled,
+      isBlacklisted)
     new ExecutorStageSummaryWrapper(stageId, attemptId, executorId, info)
   }
 

@@ -1903,7 +1903,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new Dataset containing rows in this Dataset but not in another Dataset.
-   * This is equivalent to `EXCEPT` in SQL.
+   * This is equivalent to `EXCEPT DISTINCT` in SQL.
    *
    * @note Equality checking is performed directly on the encoded representation of the data
    * and thus is not affected by a custom `equals` function defined on `T`.

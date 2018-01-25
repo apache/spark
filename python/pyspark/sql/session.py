@@ -29,7 +29,6 @@ else:
 
 from pyspark import since
 from pyspark.rdd import RDD, ignore_unicode_prefix
-from pyspark.sql.catalog import Catalog
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
@@ -280,6 +279,7 @@ class SparkSession(object):
 
         :return: :class:`Catalog`
         """
+        from pyspark.sql.catalog import Catalog
         if not hasattr(self, "_catalog"):
             self._catalog = Catalog(self)
         return self._catalog
@@ -291,8 +291,8 @@ class SparkSession(object):
 
         :return: :class:`UDFRegistration`
         """
-        from pyspark.sql.context import UDFRegistration
-        return UDFRegistration(self._wrapped)
+        from pyspark.sql.udf import UDFRegistration
+        return UDFRegistration(self)
 
     @since(2.0)
     def range(self, start, end=None, step=1, numPartitions=None):

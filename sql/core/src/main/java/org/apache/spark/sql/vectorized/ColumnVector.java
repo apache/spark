@@ -51,12 +51,16 @@ public abstract class ColumnVector implements AutoCloseable {
   public final DataType dataType() { return type; }
 
   /**
-   * Cleans up memory for this column. The column is not usable after this.
+   * Cleans up memory for this column vector. The column vector is not usable after this.
+   *
+   * This overwrites `AutoCloseable.close` to remove the `throws` clause, as column vector is
+   * in-memory and we don't expect any exception to happen during closing.
    */
+  @Override
   public abstract void close();
 
   /**
-   * Returns the number of nulls in this column.
+   * Returns the number of nulls in this column vector.
    */
   public abstract int numNulls();
 
@@ -73,7 +77,13 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Gets values from [rowId, rowId + count)
    */
-  public abstract boolean[] getBooleans(int rowId, int count);
+  public boolean[] getBooleans(int rowId, int count) {
+    boolean[] res = new boolean[count];
+    for (int i = 0; i < count; i++) {
+      res[i] = getBoolean(rowId + i);
+    }
+    return res;
+  }
 
   /**
    * Returns the value for rowId.
@@ -83,7 +93,13 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Gets values from [rowId, rowId + count)
    */
-  public abstract byte[] getBytes(int rowId, int count);
+  public byte[] getBytes(int rowId, int count) {
+    byte[] res = new byte[count];
+    for (int i = 0; i < count; i++) {
+      res[i] = getByte(rowId + i);
+    }
+    return res;
+  }
 
   /**
    * Returns the value for rowId.
@@ -93,7 +109,13 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Gets values from [rowId, rowId + count)
    */
-  public abstract short[] getShorts(int rowId, int count);
+  public short[] getShorts(int rowId, int count) {
+    short[] res = new short[count];
+    for (int i = 0; i < count; i++) {
+      res[i] = getShort(rowId + i);
+    }
+    return res;
+  }
 
   /**
    * Returns the value for rowId.
@@ -103,7 +125,13 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Gets values from [rowId, rowId + count)
    */
-  public abstract int[] getInts(int rowId, int count);
+  public int[] getInts(int rowId, int count) {
+    int[] res = new int[count];
+    for (int i = 0; i < count; i++) {
+      res[i] = getInt(rowId + i);
+    }
+    return res;
+  }
 
   /**
    * Returns the value for rowId.
@@ -113,7 +141,13 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Gets values from [rowId, rowId + count)
    */
-  public abstract long[] getLongs(int rowId, int count);
+  public long[] getLongs(int rowId, int count) {
+    long[] res = new long[count];
+    for (int i = 0; i < count; i++) {
+      res[i] = getLong(rowId + i);
+    }
+    return res;
+  }
 
   /**
    * Returns the value for rowId.
@@ -123,7 +157,13 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Gets values from [rowId, rowId + count)
    */
-  public abstract float[] getFloats(int rowId, int count);
+  public float[] getFloats(int rowId, int count) {
+    float[] res = new float[count];
+    for (int i = 0; i < count; i++) {
+      res[i] = getFloat(rowId + i);
+    }
+    return res;
+  }
 
   /**
    * Returns the value for rowId.
@@ -133,7 +173,13 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Gets values from [rowId, rowId + count)
    */
-  public abstract double[] getDoubles(int rowId, int count);
+  public double[] getDoubles(int rowId, int count) {
+    double[] res = new double[count];
+    for (int i = 0; i < count; i++) {
+      res[i] = getDouble(rowId + i);
+    }
+    return res;
+  }
 
   /**
    * Returns the length of the array for rowId.
@@ -150,14 +196,6 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   public final ColumnarRow getStruct(int rowId) {
     return new ColumnarRow(this, rowId);
-  }
-
-  /**
-   * A special version of {@link #getStruct(int)}, which is only used as an adapter for Spark
-   * codegen framework, the second parameter is totally ignored.
-   */
-  public final ColumnarRow getStruct(int rowId, int size) {
-    return getStruct(rowId);
   }
 
   /**
@@ -196,9 +234,9 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract ColumnVector arrayData();
 
   /**
-   * Returns the ordinal's child data column.
+   * Returns the ordinal's child column vector.
    */
-  public abstract ColumnVector getChildColumn(int ordinal);
+  public abstract ColumnVector getChild(int ordinal);
 
   /**
    * Data type for this column.
@@ -206,8 +244,7 @@ public abstract class ColumnVector implements AutoCloseable {
   protected DataType type;
 
   /**
-   * Sets up the common state and also handles creating the child columns if this is a nested
-   * type.
+   * Sets up the data type of this column vector.
    */
   protected ColumnVector(DataType type) {
     this.type = type;

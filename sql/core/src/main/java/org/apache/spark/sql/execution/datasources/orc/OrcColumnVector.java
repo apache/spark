@@ -111,26 +111,8 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   }
 
   @Override
-  public boolean[] getBooleans(int rowId, int count) {
-    boolean[] res = new boolean[count];
-    for (int i = 0; i < count; i++) {
-      res[i] = getBoolean(rowId + i);
-    }
-    return res;
-  }
-
-  @Override
   public byte getByte(int rowId) {
     return (byte) longData.vector[getRowIndex(rowId)];
-  }
-
-  @Override
-  public byte[] getBytes(int rowId, int count) {
-    byte[] res = new byte[count];
-    for (int i = 0; i < count; i++) {
-      res[i] = getByte(rowId + i);
-    }
-    return res;
   }
 
   @Override
@@ -139,26 +121,8 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   }
 
   @Override
-  public short[] getShorts(int rowId, int count) {
-    short[] res = new short[count];
-    for (int i = 0; i < count; i++) {
-      res[i] = getShort(rowId + i);
-    }
-    return res;
-  }
-
-  @Override
   public int getInt(int rowId) {
     return (int) longData.vector[getRowIndex(rowId)];
-  }
-
-  @Override
-  public int[] getInts(int rowId, int count) {
-    int[] res = new int[count];
-    for (int i = 0; i < count; i++) {
-      res[i] = getInt(rowId + i);
-    }
-    return res;
   }
 
   @Override
@@ -172,40 +136,13 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   }
 
   @Override
-  public long[] getLongs(int rowId, int count) {
-    long[] res = new long[count];
-    for (int i = 0; i < count; i++) {
-      res[i] = getLong(rowId + i);
-    }
-    return res;
-  }
-
-  @Override
   public float getFloat(int rowId) {
     return (float) doubleData.vector[getRowIndex(rowId)];
   }
 
   @Override
-  public float[] getFloats(int rowId, int count) {
-    float[] res = new float[count];
-    for (int i = 0; i < count; i++) {
-      res[i] = getFloat(rowId + i);
-    }
-    return res;
-  }
-
-  @Override
   public double getDouble(int rowId) {
     return doubleData.vector[getRowIndex(rowId)];
-  }
-
-  @Override
-  public double[] getDoubles(int rowId, int count) {
-    double[] res = new double[count];
-    for (int i = 0; i < count; i++) {
-      res[i] = getDouble(rowId + i);
-    }
-    return res;
   }
 
   @Override
@@ -245,7 +182,7 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   }
 
   @Override
-  public org.apache.spark.sql.vectorized.ColumnVector getChildColumn(int ordinal) {
+  public org.apache.spark.sql.vectorized.ColumnVector getChild(int ordinal) {
     throw new UnsupportedOperationException();
   }
 }

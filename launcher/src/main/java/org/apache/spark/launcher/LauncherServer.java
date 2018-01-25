@@ -217,6 +217,33 @@ class LauncherServer implements Closeable {
         break;
       }
     }
+
+    // If there is a live connection for this handle, we need to wait for it to finish before
+    // returning, otherwise there might be a race between the connection thread processing
+    // buffered data and the handle cleaning up after itself, leading to potentially the wrong
+    // state being reported for the handle.
+    ServerConnection conn = null;
+    synchronized (clients) {
+      for (ServerConnection c : clients) {
+        if (c.handle == handle) {
+          conn = c;
+          break;
+        }
+      }
+    }
+
+    if (conn != null) {
+      synchronized (conn) {
+        if (conn.isOpen()) {
+          try {
+            conn.wait();
+          } catch (InterruptedException ie) {
+            // Ignore.
+          }
+        }
+      }
+    }
+
     unref();
   }
 
@@ -288,7 +315,7 @@ class LauncherServer implements Closeable {
   private class ServerConnection extends LauncherConnection {
 
     private TimerTask timeout;
-    private AbstractAppHandle handle;
+    volatile AbstractAppHandle handle;
 
     ServerConnection(Socket socket, TimerTask timeout) throws IOException {
       super(socket);
@@ -313,7 +340,7 @@ class LauncherServer implements Closeable {
         } else {
           if (handle == null) {
             throw new IllegalArgumentException("Expected hello, got: " +
-            msg != null ? msg.getClass().getName() : null);
+              msg != null ? msg.getClass().getName() : null);
           }
           if (msg instanceof SetAppId) {
             SetAppId set = (SetAppId) msg;
@@ -331,6 +358,9 @@ class LauncherServer implements Closeable {
           timeout.cancel();
         }
         close();
+        if (handle != null) {
+          handle.dispose();
+        }
       } finally {
         timeoutTimer.purge();
       }
@@ -338,16 +368,17 @@ class LauncherServer implements Closeable {
 
     @Override
     public void close() throws IOException {
+      if (!isOpen()) {
+        return;
+      }
+
       synchronized (clients) {
         clients.remove(this);
       }
-      super.close();
-      if (handle != null) {
-        if (!handle.getState().isFinal()) {
-          LOG.log(Level.WARNING, "Lost connection to spark application.");
-          handle.setState(SparkAppHandle.State.LOST);
-        }
-        handle.disconnect();
+
+      synchronized (this) {
+        super.close();
+        notifyAll();
       }
     }
 

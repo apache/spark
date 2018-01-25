@@ -138,7 +138,7 @@ class ArrowPythonRunner(
           if (reader != null && batchLoaded) {
             batchLoaded = reader.loadNextBatch()
             if (batchLoaded) {
-              val batch = new ColumnarBatch(schema, vectors, root.getRowCount)
+              val batch = new ColumnarBatch(vectors)
               batch.setNumRows(root.getRowCount)
               batch
             } else {

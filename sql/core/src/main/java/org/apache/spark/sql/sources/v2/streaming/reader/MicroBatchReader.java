@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.streaming.reader;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
 
@@ -25,7 +26,11 @@ import java.util.Optional;
 /**
  * A mix-in interface for {@link DataSourceV2Reader}. Data source readers can implement this
  * interface to indicate they allow micro-batch streaming reads.
+ *
+ * Note: This class currently extends {@link BaseStreamingSource} to maintain compatibility with
+ * DataSource V1 APIs. This extension will be removed once we get rid of V1 completely.
  */
+@InterfaceStability.Evolving
 public interface MicroBatchReader extends DataSourceV2Reader, BaseStreamingSource {
     /**
      * Set the desired offset range for read tasks created from this reader. Read tasks will

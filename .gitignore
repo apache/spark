@@ -62,6 +62,8 @@ project/plugins/src_managed/
 project/plugins/target/
 python/lib/pyspark.zip
 python/deps
+python/test_coverage/coverage_data
+python/test_coverage/htmlcov
 python/pyspark/python
 reports/
 scalastyle-on-compile.generated.xml

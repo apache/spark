@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import java.util.Locale
 
+import scala.collection.mutable
+
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -58,7 +60,7 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
-   * Whether this SparkPlan support whole stage codegen or not.
+   * Whether this SparkPlan supports whole stage codegen or not.
    */
   def supportCodegen: Boolean = true
 
@@ -106,6 +108,31 @@ trait CodegenSupport extends SparkPlan {
    */
   protected def doProduce(ctx: CodegenContext): String
 
+  private def prepareRowVar(ctx: CodegenContext, row: String, colVars: Seq[ExprCode]): ExprCode = {
+    if (row != null) {
+      ExprCode("", "false", row)
+    } else {
+      if (colVars.nonEmpty) {
+        val colExprs = output.zipWithIndex.map { case (attr, i) =>
+          BoundReference(i, attr.dataType, attr.nullable)
+        }
+        val evaluateInputs = evaluateVariables(colVars)
+        // generate the code to create a UnsafeRow
+        ctx.INPUT_ROW = row
+        ctx.currentVars = colVars
+        val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
+        val code = s"""
+          |$evaluateInputs
+          |${ev.code.trim}
+         """.stripMargin.trim
+        ExprCode(code, "false", ev.value)
+      } else {
+        // There is no columns
+        ExprCode("", "false", "unsafeRow")
+      }
+    }
+  }
+
   /**
    * Consume the generated columns or row from current SparkPlan, call its parent's `doConsume()`.
    *
@@ -126,28 +153,7 @@ trait CodegenSupport extends SparkPlan {
         }
       }
 
-    val rowVar = if (row != null) {
-      ExprCode("", "false", row)
-    } else {
-      if (outputVars.nonEmpty) {
-        val colExprs = output.zipWithIndex.map { case (attr, i) =>
-          BoundReference(i, attr.dataType, attr.nullable)
-        }
-        val evaluateInputs = evaluateVariables(outputVars)
-        // generate the code to create a UnsafeRow
-        ctx.INPUT_ROW = row
-        ctx.currentVars = outputVars
-        val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
-        val code = s"""
-          |$evaluateInputs
-          |${ev.code.trim}
-         """.stripMargin.trim
-        ExprCode(code, "false", ev.value)
-      } else {
-        // There is no columns
-        ExprCode("", "false", "unsafeRow")
-      }
-    }
+    val rowVar = prepareRowVar(ctx, row, outputVars)
 
     // Set up the `currentVars` in the codegen context, as we generate the code of `inputVars`
     // before calling `parent.doConsume`. We can't set up `INPUT_ROW`, because parent needs to
@@ -156,11 +162,94 @@ trait CodegenSupport extends SparkPlan {
     ctx.INPUT_ROW = null
     ctx.freshNamePrefix = parent.variablePrefix
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
+
+    // Under certain conditions, we can put the logic to consume the rows of this operator into
+    // another function. So we can prevent a generated function too long to be optimized by JIT.
+    // The conditions:
+    // 1. The config "spark.sql.codegen.splitConsumeFuncByOperator" is enabled.
+    // 2. `inputVars` are all materialized. That is guaranteed to be true if the parent plan uses
+    //    all variables in output (see `requireAllOutput`).
+    // 3. The number of output variables must less than maximum number of parameters in Java method
+    //    declaration.
+    val confEnabled = SQLConf.get.wholeStageSplitConsumeFuncByOperator
+    val requireAllOutput = output.forall(parent.usedInputs.contains(_))
+    val paramLength = ctx.calculateParamLength(output) + (if (row != null) 1 else 0)
+    val consumeFunc = if (confEnabled && requireAllOutput && ctx.isValidParamLength(paramLength)) {
+      constructDoConsumeFunction(ctx, inputVars, row)
+    } else {
+      parent.doConsume(ctx, inputVars, rowVar)
+    }
     s"""
        |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}
        |$evaluated
-       |${parent.doConsume(ctx, inputVars, rowVar)}
+       |$consumeFunc
      """.stripMargin
+  }
+
+  /**
+   * To prevent concatenated function growing too long to be optimized by JIT. We can separate the
+   * parent's `doConsume` codes of a `CodegenSupport` operator into a function to call.
+   */
+  private def constructDoConsumeFunction(
+      ctx: CodegenContext,
+      inputVars: Seq[ExprCode],
+      row: String): String = {
+    val (args, params, inputVarsInFunc) = constructConsumeParameters(ctx, output, inputVars, row)
+    val rowVar = prepareRowVar(ctx, row, inputVarsInFunc)
+
+    val doConsume = ctx.freshName("doConsume")
+    ctx.currentVars = inputVarsInFunc
+    ctx.INPUT_ROW = null
+
+    val doConsumeFuncName = ctx.addNewFunction(doConsume,
+      s"""
+         | private void $doConsume(${params.mkString(", ")}) throws java.io.IOException {
+         |   ${parent.doConsume(ctx, inputVarsInFunc, rowVar)}
+         | }
+       """.stripMargin)
+
+    s"""
+       | $doConsumeFuncName(${args.mkString(", ")});
+     """.stripMargin
+  }
+
+  /**
+   * Returns arguments for calling method and method definition parameters of the consume function.
+   * And also returns the list of `ExprCode` for the parameters.
+   */
+  private def constructConsumeParameters(
+      ctx: CodegenContext,
+      attributes: Seq[Attribute],
+      variables: Seq[ExprCode],
+      row: String): (Seq[String], Seq[String], Seq[ExprCode]) = {
+    val arguments = mutable.ArrayBuffer[String]()
+    val parameters = mutable.ArrayBuffer[String]()
+    val paramVars = mutable.ArrayBuffer[ExprCode]()
+
+    if (row != null) {
+      arguments += row
+      parameters += s"InternalRow $row"
+    }
+
+    variables.zipWithIndex.foreach { case (ev, i) =>
+      val paramName = ctx.freshName(s"expr_$i")
+      val paramType = ctx.javaType(attributes(i).dataType)
+
+      arguments += ev.value
+      parameters += s"$paramType $paramName"
+      val paramIsNull = if (!attributes(i).nullable) {
+        // Use constant `false` without passing `isNull` for non-nullable variable.
+        "false"
+      } else {
+        val isNull = ctx.freshName(s"exprIsNull_$i")
+        arguments += ev.isNull
+        parameters += s"boolean $isNull"
+        isNull
+      }
+
+      paramVars += ExprCode("", paramIsNull, paramName)
+    }
+    (arguments, parameters, paramVars)
   }
 
   /**

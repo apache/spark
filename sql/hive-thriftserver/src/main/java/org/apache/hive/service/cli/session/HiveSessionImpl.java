@@ -223,6 +223,18 @@ public class HiveSessionImpl implements HiveSession {
 
   @Override
   public void setOperationLogSessionDir(File operationLogRootDir) {
+    if (!operationLogRootDir.exists()) {
+      LOG.warn("The operation log root directory is removed, recreating: " +
+          operationLogRootDir.getAbsolutePath());
+      if (!operationLogRootDir.mkdirs()) {
+        LOG.warn("Unable to create operation log root directory: " +
+            operationLogRootDir.getAbsolutePath());
+      }
+    }
+    if (!operationLogRootDir.canWrite()) {
+      LOG.warn("The operation log root directory is not writable: " +
+          operationLogRootDir.getAbsolutePath());
+    }
     sessionLogDir = new File(operationLogRootDir, sessionHandle.getHandleIdentifier().toString());
     isOperationLogEnabled = true;
     if (!sessionLogDir.exists()) {

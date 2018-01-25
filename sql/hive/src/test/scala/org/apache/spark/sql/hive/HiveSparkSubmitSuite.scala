@@ -44,6 +44,8 @@ class HiveSparkSubmitSuite
   with BeforeAndAfterEach
   with ResetSystemProperties {
 
+  override protected val enableAutoThreadAudit = false
+
   // TODO: rewrite these or mark them as slow tests to be run sparingly
 
   override def beforeEach() {

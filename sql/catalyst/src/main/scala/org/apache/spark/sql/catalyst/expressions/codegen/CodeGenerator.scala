@@ -688,17 +688,13 @@ class CodegenContext {
   /**
    * Returns the specialized code to access a value from a column vector for a given `DataType`.
    */
-  def getValue(vector: String, rowId: String, dataType: DataType): String = {
-    val jt = javaType(dataType)
-    dataType match {
-      case _ if isPrimitiveType(jt) =>
-        s"$vector.get${primitiveTypeName(jt)}($rowId)"
-      case t: DecimalType =>
-        s"$vector.getDecimal($rowId, ${t.precision}, ${t.scale})"
-      case StringType =>
-        s"$vector.getUTF8String($rowId)"
-      case _ =>
-        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+  def getValueFromVector(vector: String, dataType: DataType, rowId: String): String = {
+    if (dataType.isInstanceOf[StructType]) {
+      // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
+      // `ordinal` parameter.
+      s"$vector.getStruct($rowId)"
+    } else {
+      getValue(vector, dataType, rowId)
     }
   }
 
@@ -1249,6 +1245,31 @@ class CodegenContext {
       ""
     }
   }
+
+  /**
+   * Returns the length of parameters for a Java method descriptor. `this` contributes one unit
+   * and a parameter of type long or double contributes two units. Besides, for nullable parameter,
+   * we also need to pass a boolean parameter for the null status.
+   */
+  def calculateParamLength(params: Seq[Expression]): Int = {
+    def paramLengthForExpr(input: Expression): Int = {
+      // For a nullable expression, we need to pass in an extra boolean parameter.
+      (if (input.nullable) 1 else 0) + javaType(input.dataType) match {
+        case JAVA_LONG | JAVA_DOUBLE => 2
+        case _ => 1
+      }
+    }
+    // Initial value is 1 for `this`.
+    1 + params.map(paramLengthForExpr(_)).sum
+  }
+
+  /**
+   * In Java, a method descriptor is valid only if it represents method parameters with a total
+   * length less than a pre-defined constant.
+   */
+  def isValidParamLength(paramLength: Int): Boolean = {
+    paramLength <= CodeGenerator.MAX_JVM_METHOD_PARAMS_LENGTH
+  }
 }
 
 /**
@@ -1315,26 +1336,29 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 object CodeGenerator extends Logging {
 
   // This is the value of HugeMethodLimit in the OpenJDK JVM settings
-  val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
+  final val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
+
+  // The max valid length of method parameters in JVM.
+  final val MAX_JVM_METHOD_PARAMS_LENGTH = 255
 
   // This is the threshold over which the methods in an inner class are grouped in a single
   // method which is going to be called by the outer class instead of the many small ones
-  val MERGE_SPLIT_METHODS_THRESHOLD = 3
+  final val MERGE_SPLIT_METHODS_THRESHOLD = 3
 
   // The number of named constants that can exist in the class is limited by the Constant Pool
   // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a
   // threshold of 1000k bytes to determine when a function should be inlined to a private, inner
   // class.
-  val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
+  final val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
 
   // This is the threshold for the number of global variables, whose types are primitive type or
   // complex type (e.g. more than one-dimensional array), that will be placed at the outer class
-  val OUTER_CLASS_VARIABLES_THRESHOLD = 10000
+  final val OUTER_CLASS_VARIABLES_THRESHOLD = 10000
 
   // This is the maximum number of array elements to keep global variables in one Java array
   // 32767 is the maximum integer value that does not require a constant pool entry in a Java
   // bytecode instruction
-  val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
+  final val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
 
   /**
    * Compile the Java source code into a Java class, using Janino.

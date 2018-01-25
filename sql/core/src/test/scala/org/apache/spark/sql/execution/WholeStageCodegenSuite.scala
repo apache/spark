@@ -121,31 +121,23 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
   test("cache for primitive type should be in WholeStageCodegen with InMemoryTableScanExec") {
     import testImplicits._
 
-    val dsInt = spark.range(3).cache
-    dsInt.count
+    val dsInt = spark.range(3).cache()
+    dsInt.count()
     val dsIntFilter = dsInt.filter(_ > 0)
     val planInt = dsIntFilter.queryExecution.executedPlan
-    assert(planInt.find(p =>
-      p.isInstanceOf[WholeStageCodegenExec] &&
-      p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[FilterExec] &&
-      p.asInstanceOf[WholeStageCodegenExec].child.asInstanceOf[FilterExec].child
-        .isInstanceOf[InMemoryTableScanExec] &&
-      p.asInstanceOf[WholeStageCodegenExec].child.asInstanceOf[FilterExec].child
-        .asInstanceOf[InMemoryTableScanExec].supportCodegen).isDefined
-    )
+    assert(planInt.collect {
+      case WholeStageCodegenExec(FilterExec(_, i: InMemoryTableScanExec)) if i.supportsBatch => ()
+    }.length == 1)
     assert(dsIntFilter.collect() === Array(1, 2))
 
     // cache for string type is not supported for InMemoryTableScanExec
-    val dsString = spark.range(3).map(_.toString).cache
-    dsString.count
+    val dsString = spark.range(3).map(_.toString).cache()
+    dsString.count()
     val dsStringFilter = dsString.filter(_ == "1")
     val planString = dsStringFilter.queryExecution.executedPlan
-    assert(planString.find(p =>
-      p.isInstanceOf[WholeStageCodegenExec] &&
-      p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[FilterExec] &&
-      !p.asInstanceOf[WholeStageCodegenExec].child.asInstanceOf[FilterExec].child
-        .isInstanceOf[InMemoryTableScanExec]).isDefined
-    )
+    assert(planString.collect {
+      case WholeStageCodegenExec(FilterExec(_, i: InMemoryTableScanExec)) if !i.supportsBatch => ()
+    }.length == 1)
     assert(dsStringFilter.collect() === Array("1"))
   }
 
@@ -213,7 +205,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     val codeWithShortFunctions = genGroupByCode(3)
     val (_, maxCodeSize1) = CodeGenerator.compile(codeWithShortFunctions)
     assert(maxCodeSize1 < SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
-    val codeWithLongFunctions = genGroupByCode(20)
+    val codeWithLongFunctions = genGroupByCode(50)
     val (_, maxCodeSize2) = CodeGenerator.compile(codeWithLongFunctions)
     assert(maxCodeSize2 > SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
   }
@@ -233,6 +225,51 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
         val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
         assert(fileScan2.asInstanceOf[FileSourceScanExec].supportsBatch)
         checkAnswer(df2, df)
+      }
+    }
+  }
+
+  test("Control splitting consume function by operators with config") {
+    import testImplicits._
+    val df = spark.range(10).select(Seq.tabulate(2) {i => ('id + i).as(s"c$i")} : _*)
+
+    Seq(true, false).foreach { config =>
+      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> s"$config") {
+        val plan = df.queryExecution.executedPlan
+        val wholeStageCodeGenExec = plan.find(p => p match {
+          case wp: WholeStageCodegenExec => true
+          case _ => false
+        })
+        assert(wholeStageCodeGenExec.isDefined)
+        val code = wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()._2
+        assert(code.body.contains("project_doConsume") == config)
+      }
+    }
+  }
+
+  test("Skip splitting consume function when parameter number exceeds JVM limit") {
+    import testImplicits._
+
+    Seq((255, false), (254, true)).foreach { case (columnNum, hasSplit) =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(10).select(Seq.tabulate(columnNum) {i => ('id + i).as(s"c$i")} : _*)
+          .write.mode(SaveMode.Overwrite).parquet(path)
+
+        withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "255",
+            SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "true") {
+          val projection = Seq.tabulate(columnNum)(i => s"c$i + c$i as newC$i")
+          val df = spark.read.parquet(path).selectExpr(projection: _*)
+
+          val plan = df.queryExecution.executedPlan
+          val wholeStageCodeGenExec = plan.find(p => p match {
+            case wp: WholeStageCodegenExec => true
+            case _ => false
+          })
+          assert(wholeStageCodeGenExec.isDefined)
+          val code = wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()._2
+          assert(code.body.contains("project_doConsume") == hasSplit)
+        }
       }
     }
   }
