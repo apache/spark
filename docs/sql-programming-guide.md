@@ -1693,70 +1693,70 @@ Using the above optimizations with Arrow will produce the same results as when A
 enabled. Not all Spark data types are currently supported and an error will be raised if a column
 has an unsupported type, see [Supported Types](#supported-types).
 
-## How to Write Vectorized UDFs
+## Pandas UDFs (a.k.a Vectorized UDFs)
 
-A vectorized UDF is similar to a standard UDF in Spark except the inputs and output will be
-Pandas Series, which allow the function to be composed with vectorized operations. This function
-can then be run very efficiently in Spark where data is sent in batches to Python and then
-is executed using Pandas Series as the inputs. The exected output of the function is also a Pandas
-Series of the same length as the inputs. A vectorized UDF is declared using the `pandas_udf`
-keyword, no additional configuration is required.
+With Arrow, we introduce a new type of UDF - pandas UDF. Pandas UDF is defined with a new function
+`pyspark.sql.functions.pandas_udf` and allows user to use functions that operate on `pandas.Series`
+and `pandas.DataFrame` with Spark. Currently, there are two types of pandas UDF: Scalar and Group Map.
 
-The following example shows how to create a vectorized UDF that computes the product of 2 columns.
+### Scalar
+
+Scalar pandas UDFs are used for vectorizing scalar operations. They can used with functions such as `select`
+and `withColumn`. To define a scalar pandas UDF, use `pandas_udf` to annotate a Python function. The Python
+should takes `pandas.Series` and returns a `pandas.Series` of the same size. Internally, Spark will
+split a column into multiple `pandas.Series` and invoke the Python function with each `pandas.Series`, and
+concat the results together to be a new column.
+
+The following example shows how to create a scalar pandas UDF that computes the product of 2 columns.
 
 <div class="codetabs">
 <div data-lang="python"  markdown="1">
 {% highlight python %}
 
 import pandas as pd
-from pyspark.sql.functions import col, pandas_udf
-from pyspark.sql.types import LongType
+from pyspark.sql.functions import pandas_udf, PandasUDFTypr
+
+df = spark.createDataFrame(
+    [(1,), (2,), (3,)],
+    ['v'])
 
 # Declare the function and create the UDF
-def multiply_func(a, b):
+@pandas_udf('long', PandasUDFType.SCALAR)
+def multiply_udf(a, b):
+    # a and b are both pandas.Series
     return a * b
 
-multiply = pandas_udf(multiply_func, returnType=LongType())
-
-# The function for a pandas_udf should be able to execute with local Pandas data
-x = pd.Series([1, 2, 3])
-print(multiply_func(x, x))
-# 0    1
-# 1    4
-# 2    9
-# dtype: int64
-
-# Create a Spark DataFrame, 'spark' is an existing SparkSession
-df = spark.createDataFrame(pd.DataFrame(x, columns=["x"]))
-
-# Execute function as a Spark vectorized UDF
-df.select(multiply(col("x"), col("x"))).show()
-# +-------------------+
-# |multiply_func(x, x)|
-# +-------------------+
-# |                  1|
-# |                  4|
-# |                  9|
-# +-------------------+
+df.select(multiply_udf(df.v, df.v)).show()
+# +------------------+
+# |multiply_udf(v, v)|
+# +------------------+
+# |                 1|
+# |                 4|
+# |                 9|
+# +------------------+
 
 {% endhighlight %}
 </div>
 </div>
 
-## GroupBy-Apply
-GroupBy-Apply implements the "split-apply-combine" pattern. Split-apply-combine consists of three steps:
+Note that there are two important requirement when using scalar pandas UDFs:
+* The input and output series must have the same size.
+* How a column is splitted into multiple `pandas.Series` is internal to Spark, and therefore the result
+  of user-defined function must be independent of the splitting.
 
+### Group Map
+Group map pandas UDFs are used with `groupBy().apply()` which implements the "split-apply-combine" pattern.
+Split-apply-combine consists of three steps:
 * Split the data into groups by using `DataFrame.groupBy`.
 * Apply a function on each group. The input and output of the function are both `pandas.DataFrame`. The
   input data contains all the rows and columns for each group.
 * Combine the results into a new `DataFrame`.
 
-To use GroupBy-Apply, define the following:
-
+To use groupby apply, user needs to define the following:
 * A Python function that defines the computation for each group.
 * A `StructType` object or a string that defines the schema of the output `DataFrame`.
 
-Examples:
+Here we show two examples of using group map pandas UDFs.
 
 The first example shows a simple use case: subtracting the mean from each value in the group.
 
@@ -1772,19 +1772,20 @@ df = spark.createDataFrame(
 
 @pandas_udf("id long, v double", PandasUDFType.GROUP_MAP)
 def substract_mean(pdf):
+    # pdf is a pandas.DataFrame
     v = pdf.v
     return pdf.assign(v=v - v.mean())
 
 df.groupby("id").apply(substract_mean).show()
-+---+----+
-| id|   v|
-+---+----+
-|  1|-0.5|
-|  1| 0.5|
-|  2|-3.0|
-|  2|-1.0|
-|  2| 4.0|
-+---+----+
+# +---+----+
+# | id|   v|
+# +---+----+
+# |  1|-0.5|
+# |  1| 0.5|
+# |  2|-3.0|
+# |  2|-1.0|
+# |  2| 4.0|
+# +---+----+
 
 {% endhighlight %}
 </div>
@@ -1822,19 +1823,17 @@ def ols(pdf):
     X = sm.add_constant(X)
     model = sm.OLS(Y, X).fit()
 
-    print(model.params)
-    print(model.summary())
     return pd.DataFrame([[group_key] + [model.params[i] for i in x_columns]])
 
 beta = df.groupby(group_column).apply(ols)
 
 beta.show()
-+---+-------------------+--------------------+
-| id|                 x1|                  x2|
-+---+-------------------+--------------------+
-|  1|0.10000000000000003| -0.3000000000000001|
-|  2|0.24999999999999997|-0.24999999999999997|
-+---+-------------------+--------------------+
+# +---+-------------------+--------------------+
+# | id|                 x1|                  x2|
+# +---+-------------------+--------------------+
+# |  1|0.10000000000000003| -0.3000000000000001|
+# |  2|0.24999999999999997|-0.24999999999999997|
+# +---+-------------------+--------------------+
 
 {% endhighlight %}
 </div>
