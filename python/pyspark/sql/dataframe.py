@@ -819,10 +819,10 @@ class DataFrame(object):
         """
         return [f.name for f in self.schema.fields]
 
-    @since(2.4)
+    @since(2.3)
     def colRegex(self, colName):
         """
-        Selects column based on the column name specified as a regex and return it
+        Selects column based on the column name specified as a regex and returns it
         as :class:`Column`.
 
         :param colName: string, column name specified as a regex.
