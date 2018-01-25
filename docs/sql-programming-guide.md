@@ -1760,9 +1760,7 @@ To use groupby apply, user needs to define the following:
 * A Python function that defines the computation for each group.
 * A `StructType` object or a string that defines the schema of the output `DataFrame`.
 
-Here we show two examples of using group map pandas UDFs.
-
-The first example shows a simple use case: subtracting the mean from each value in the group.
+The following example shows how to use groupby apply to subtract the mean from each value in the group.
 
 <div class="codetabs">
 <div data-lang="python"  markdown="1">
@@ -1790,54 +1788,6 @@ df.groupby("id").apply(substract_mean).show()
 # |  2|-1.0|
 # |  2| 4.0|
 # +---+----+
-
-{% endhighlight %}
-</div>
-</div>
-
-The second example is a more complicated example. It shows how to run a OLS linear regression
-for each group using statsmodels. For each group, we calculate beta b = (b1, b2) for X = (x1, x2)
-according to statistical model Y = bX + c.
-
-<div class="codetabs">
-<div data-lang="python"  markdown="1">
-{% highlight python %}
-import pandas as pd
-import statsmodels.api as sm
-
-df = spark.createDataFrame(
-    [(1, 1.0, 1.0, -3.0),
-     (1, 2.0, 2.0, -6.0),
-     (2, 3.0, 6.0, -6.0),
-     (2, 5.0, 10.0, -10.0),
-     (2, 10.0, 20.0, -20.0)],
-    ("id", "y", 'x1', 'x2'))
-
-group_column = 'id'
-y_column = 'y'
-x_columns = ['x1', 'x2']
-schema = df.select(group_column, *x_columns).schema
-
-@pandas_udf(schema, PandasUDFType.GROUP_MAP)
-# Input/output are both a pandas.DataFrame
-def ols(pdf):
-    group_key = pdf[group_column].iloc[0]
-    y = pdf[y_column]
-    x = pdf[x_columns]
-    x = sm.add_constant(x)
-    model = sm.OLS(y, x).fit()
-
-    return pd.DataFrame([[group_key] + [model.params[i] for i in x_columns]])
-
-beta = df.groupby(group_column).apply(ols)
-
-beta.show()
-# +---+-------------------+--------------------+
-# | id|                 x1|                  x2|
-# +---+-------------------+--------------------+
-# |  1|0.10000000000000003| -0.3000000000000001|
-# |  2|0.24999999999999997|-0.24999999999999997|
-# +---+-------------------+--------------------+
 
 {% endhighlight %}
 </div>
