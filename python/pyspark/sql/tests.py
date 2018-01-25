@@ -2855,6 +2855,10 @@ class SQLTests(ReusedSQLTestCase):
             with self.assertRaisesRegexp(ImportError, 'Pandas >= .* must be installed'):
                 self.spark.createDataFrame(pdf)
 
+    def test_colRegex(self):
+        df = self.spark.createDataFrame([("a", 1), ("b", 2), ("c",  3)])
+        self.assertEqual(df.select(df.colRegex("`(_1)?+.+`")).collect(), df.select("_2").collect())
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 

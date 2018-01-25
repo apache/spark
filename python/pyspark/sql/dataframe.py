@@ -1881,6 +1881,15 @@ class DataFrame(object):
         jdf = self._jdf.toDF(self._jseq(cols))
         return DataFrame(jdf, self.sql_ctx)
 
+    @since(2.3)
+    def colRegex(self, colName):
+        """
+        Selects column based on the column name specified as a regex and return it
+        as :class:`Column`.
+        """
+        jc = self._jdf.colRegex(colName)
+        return Column(jc)
+
     @since(1.3)
     def toPandas(self):
         """
