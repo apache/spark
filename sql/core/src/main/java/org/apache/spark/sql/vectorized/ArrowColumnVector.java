@@ -418,13 +418,11 @@ public final class ArrowColumnVector extends ColumnVector {
   private static class ArrayAccessor extends ArrowVectorAccessor {
 
     private final ListVector accessor;
-    private final ArrowBuf offsets;
     private final ArrowColumnVector arrayData;
 
     ArrayAccessor(ListVector vector) {
       super(vector);
       this.accessor = vector;
-      this.offsets = vector.getOffsetBuffer();
       this.arrayData = new ArrowColumnVector(vector.getDataVector());
     }
 
@@ -440,6 +438,7 @@ public final class ArrowColumnVector extends ColumnVector {
 
     @Override
     final ColumnarArray getArray(int rowId) {
+      ArrowBuf offsets = accessor.getOffsetBuffer();
       int index = rowId * accessor.OFFSET_WIDTH;
       int start = offsets.getInt(index);
       int end = offsets.getInt(index + accessor.OFFSET_WIDTH);
