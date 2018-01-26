@@ -132,7 +132,7 @@ class Window(object):
                     ``org.apache.spark.sql.catalyst.expressions.UnboundedPFollowing``, or
                     any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if isinstance(start, long) and isinstance(end, long):
+        if isinstance(start, int) and isinstance(end, int):
             if start <= Window._PRECEDING_THRESHOLD:
                 start = Window.unboundedPreceding
             if end >= Window._FOLLOWING_THRESHOLD:
@@ -223,7 +223,7 @@ class WindowSpec(object):
                     ``org.apache.spark.sql.catalyst.expressions.UnboundedFollowing``, or
                     any value greater than or equal to min(sys.maxsize, 9223372036854775807).
         """
-        if isinstance(start, long) and isinstance(end, long):
+        if isinstance(start, int) and isinstance(end, int):
             if start <= Window._PRECEDING_THRESHOLD:
                 start = Window.unboundedPreceding
             if end >= Window._FOLLOWING_THRESHOLD:
