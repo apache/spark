@@ -262,6 +262,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
 
       case logical.Join(left, right, joinType, condition) =>
+        if (!SQLConf.get.allowNestedJoinFallback) {
+          throw new AnalysisException("The only JOIN strategy available for this plan is " +
+            s"BroadcastNestedLoopJoin, but `${SQLConf.ALLOW_NESTEDJOIN_FALLBACK}` is `false`.")
+        }
         val buildSide = broadcastSide(
           left.stats.hints.broadcast, right.stats.hints.broadcast, left, right)
         // This join could be very slow or OOM

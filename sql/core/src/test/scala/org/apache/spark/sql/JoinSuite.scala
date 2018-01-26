@@ -882,4 +882,23 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       checkAnswer(df, Row(3, 8, 7, 2) :: Row(3, 8, 4, 2) :: Nil)
     }
   }
+
+  test("SPARK-23124: allow to disable fallback to BroadcastNestedLoopJoin") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true",
+      SQLConf.ALLOW_NESTEDJOIN_FALLBACK.key -> "false") {
+
+      assert(statisticSizeInByte(spark.table("testData2")) >
+        spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+
+      assert(statisticSizeInByte(spark.table("testData")) >
+        spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+      val df = sql("SELECT * FROM testData LEFT JOIN testData2 on (key * a != key + a)")
+      val e = intercept[AnalysisException](
+        spark.sessionState.planner.JoinSelection(df.queryExecution.optimizedPlan))
+      assert(e.getMessage.contains(SQLConf.ALLOW_NESTEDJOIN_FALLBACK.key))
+    }
+
+  }
 }
