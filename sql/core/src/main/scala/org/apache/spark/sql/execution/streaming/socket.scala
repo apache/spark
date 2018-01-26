@@ -103,7 +103,8 @@ class TextSocketMicroBatchReader(options: DataSourceV2Options)
 
   override def setOffsetRange(start: Optional[V2Offset], end: Optional[V2Offset]): Unit = {
     startOffset = start.orElse(TextSocketOffset(-1L)).asInstanceOf[TextSocketOffset]
-    endOffset = end.orElse(TextSocketOffset(currentOffset)).asInstanceOf[TextSocketOffset]
+    endOffset = end.orElse(
+      TextSocketOffset(getOffsetInternal.getOrElse(-1L))).asInstanceOf[TextSocketOffset]
   }
 
   override def getStartOffset(): V2Offset = {
