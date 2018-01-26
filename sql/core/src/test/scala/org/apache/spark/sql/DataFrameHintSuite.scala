@@ -35,27 +35,23 @@ class DataFrameHintSuite extends AnalysisTest with SharedSQLContext {
   test("various hint parameters") {
     check(
       df.hint("hint1"),
-      UnresolvedHint("hint1", Seq(),
-        df.logicalPlan
-      )
+      UnresolvedHint("hint1", Seq(), df.planWithBarrier)
     )
 
     check(
       df.hint("hint1", 1, "a"),
-      UnresolvedHint("hint1", Seq(1, "a"), df.logicalPlan)
+      UnresolvedHint("hint1", Seq(1, "a"), df.planWithBarrier)
     )
 
     check(
       df.hint("hint1", 1, $"a"),
-      UnresolvedHint("hint1", Seq(1, $"a"),
-        df.logicalPlan
-      )
+      UnresolvedHint("hint1", Seq(1, $"a"), df.planWithBarrier)
     )
 
     check(
       df.hint("hint1", Seq(1, 2, 3), Seq($"a", $"b", $"c")),
       UnresolvedHint("hint1", Seq(Seq(1, 2, 3), Seq($"a", $"b", $"c")),
-        df.logicalPlan
+        df.planWithBarrier
       )
     )
   }

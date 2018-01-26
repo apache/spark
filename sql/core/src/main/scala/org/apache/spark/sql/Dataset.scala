@@ -192,7 +192,7 @@ class Dataset[T] private[sql](
   }
 
   // Wraps analyzed logical plans with an analysis barrier so we won't traverse/resolve it again.
-  @transient private val planWithBarrier = AnalysisBarrier(logicalPlan)
+  @transient private[sql] val planWithBarrier = AnalysisBarrier(logicalPlan)
 
   /**
    * Currently [[ExpressionEncoder]] is the only implementation of [[Encoder]], here we turn the
@@ -1216,7 +1216,7 @@ class Dataset[T] private[sql](
    */
   @scala.annotation.varargs
   def hint(name: String, parameters: Any*): Dataset[T] = withTypedPlan {
-    UnresolvedHint(name, parameters, logicalPlan)
+    UnresolvedHint(name, parameters, planWithBarrier)
   }
 
   /**
