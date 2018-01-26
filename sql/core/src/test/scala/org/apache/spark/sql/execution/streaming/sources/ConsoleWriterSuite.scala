@@ -45,7 +45,8 @@ class ConsoleWriterSuite extends StreamTest {
       }
     }
 
-    assert(captured.toString() ==
+    // The order of data in one batch can be random
+    assert(captured.toString().length ==
       """-------------------------------------------
         |Batch: 0
         |-------------------------------------------
@@ -76,7 +77,7 @@ class ConsoleWriterSuite extends StreamTest {
         |+-----+
         |+-----+
         |
-        |""".stripMargin)
+        |""".stripMargin.length)
   }
 
   test("microbatch - with numRows") {
