@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
+import org.apache.spark.sql.catalyst.analysis.{EliminateBarriers, UnsupportedOperationChecker}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, ContinuousTrigger}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
@@ -228,7 +228,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
       }
     }
 
-    val analyzedPlan = df.queryExecution.analyzed
+    val analyzedPlan = EliminateBarriers(df.queryExecution.analyzed)
     df.queryExecution.assertAnalyzed()
 
     if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
