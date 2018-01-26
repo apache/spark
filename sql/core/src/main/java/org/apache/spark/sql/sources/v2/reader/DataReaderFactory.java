@@ -22,11 +22,11 @@ import java.io.Serializable;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A read task returned by {@link DataSourceV2Reader#createDataReaderFactories()} and is responsible for
+ * A reader factory returned by {@link DataSourceV2Reader#createDataReaderFactories()} and is responsible for
  * creating the actual data reader. The relationship between {@link DataReaderFactory} and {@link DataReader}
  * is similar to the relationship between {@link Iterable} and {@link java.util.Iterator}.
  *
- * Note that, the read task will be serialized and sent to executors, then the data reader will be
+ * Note that, the reader factory will be serialized and sent to executors, then the data reader will be
  * created on executors and do the actual reading. So {@link DataReaderFactory} must be serializable and
  * {@link DataReader} doesn't need to be.
  */
@@ -34,7 +34,7 @@ import org.apache.spark.annotation.InterfaceStability;
 public interface DataReaderFactory<T> extends Serializable {
 
   /**
-   * The preferred locations where this read task can run faster, but Spark does not guarantee that
+   * The preferred locations where this data reader factory can run faster, but Spark does not guarantee that
    * this task will always run on these locations. The implementations should make sure that it can
    * be run on any location. The location is a string representing the host name.
    *
@@ -50,7 +50,7 @@ public interface DataReaderFactory<T> extends Serializable {
   }
 
   /**
-   * Returns a data reader to do the actual reading work for this read task.
+   * Returns a data reader to do the actual reading work for this data reader factory.
    *
    * If this method fails (by throwing an exception), the corresponding Spark task would fail and
    * get retried until hitting the maximum retry times.
