@@ -240,8 +240,8 @@ private[spark] class MemoryStore(
     // the block's actual memory usage has exceeded the unroll memory by a small amount, so we
     // perform one final call to attempt to allocate additional memory if necessary.
     if (keepUnrolling) {
-      val valuesBuilder = valuesHolder.getBuilder()
-      val size = valuesBuilder.preciseSize
+      val entryBuilder = valuesHolder.getBuilder()
+      val size = entryBuilder.preciseSize
       if (size > unrollMemoryUsedByThisBlock) {
         val amountToRequest = size - unrollMemoryUsedByThisBlock
         keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
@@ -251,7 +251,7 @@ private[spark] class MemoryStore(
       }
 
       if (keepUnrolling) {
-        val entry = valuesBuilder.build()
+        val entry = entryBuilder.build()
         // Synchronize so that transfer is atomic
         memoryManager.synchronized {
           releaseUnrollMemoryForThisTask(memoryMode, unrollMemoryUsedByThisBlock)
@@ -268,7 +268,7 @@ private[spark] class MemoryStore(
         Right(entry.size)
       } else {
         // We ran out of space while unrolling the values for this block
-        logUnrollFailureMessage(blockId, valuesBuilder.preciseSize)
+        logUnrollFailureMessage(blockId, entryBuilder.preciseSize)
         Left(unrollMemoryUsedByThisBlock)
       }
     } else {
@@ -634,7 +634,7 @@ private[spark] class MemoryStore(
   }
 }
 
-private trait ValuesBuilder[T] {
+private trait MemoryEntryBuilder[T] {
   def preciseSize: Long
   def build(): MemoryEntry[T]
 }
@@ -646,9 +646,10 @@ private trait ValuesHolder[T] {
   /**
    * Note: After this method is called, the ValuesHolder is invalid, we can't store data and
    * get estimate size again.
-   * @return a ValuesBuilder which is used to build a memory entry and get the stored data size.
+   * @return a MemoryEntryBuilder which is used to build a memory entry and get the stored data
+   *         size.
    */
-  def getBuilder(): ValuesBuilder[T]
+  def getBuilder(): MemoryEntryBuilder[T]
 }
 
 /**
@@ -667,7 +668,7 @@ private class DeserializedValuesHolder[T] (classTag: ClassTag[T]) extends Values
     vector.estimateSize()
   }
 
-  override def getBuilder(): ValuesBuilder[T] = new ValuesBuilder[T] {
+  override def getBuilder(): MemoryEntryBuilder[T] = new MemoryEntryBuilder[T] {
     // We successfully unrolled the entirety of this block
     arrayValues = vector.toArray
     vector = null
@@ -710,7 +711,7 @@ private class SerializedValuesHolder[T](
     bbos.size
   }
 
-  override def getBuilder(): ValuesBuilder[T] = new ValuesBuilder[T] {
+  override def getBuilder(): MemoryEntryBuilder[T] = new MemoryEntryBuilder[T] {
     // We successfully unrolled the entirety of this block
     serializationStream.close()
 
