@@ -26,10 +26,6 @@ import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 class ConsoleWriterSuite extends StreamTest {
   import testImplicits._
 
-  override def sparkConf: SparkConf = {
-    super.sparkConf.set("spark.default.parallelism", "1")
-  }
-
   test("microbatch - default") {
     val input = MemoryStream[Int]
 
@@ -37,9 +33,9 @@ class ConsoleWriterSuite extends StreamTest {
     Console.withOut(captured) {
       val query = input.toDF().writeStream.format("console").start()
       try {
-        input.addData(1, 2, 3)
+        input.addData(1, 1, 1)
         query.processAllAvailable()
-        input.addData(4, 5, 6)
+        input.addData(2, 2, 2)
         query.processAllAvailable()
         input.addData()
         query.processAllAvailable()
@@ -56,8 +52,8 @@ class ConsoleWriterSuite extends StreamTest {
         ||value|
         |+-----+
         ||    1|
-        ||    2|
-        ||    3|
+        ||    1|
+        ||    1|
         |+-----+
         |
         |-------------------------------------------
@@ -66,9 +62,9 @@ class ConsoleWriterSuite extends StreamTest {
         |+-----+
         ||value|
         |+-----+
-        ||    4|
-        ||    5|
-        ||    6|
+        ||    2|
+        ||    2|
+        ||    2|
         |+-----+
         |
         |-------------------------------------------
@@ -89,7 +85,7 @@ class ConsoleWriterSuite extends StreamTest {
     Console.withOut(captured) {
       val query = input.toDF().writeStream.format("console").option("NUMROWS", 2).start()
       try {
-        input.addData(1, 2, 3)
+        input.addData(1, 1, 1)
         query.processAllAvailable()
       } finally {
         query.stop()
@@ -104,7 +100,7 @@ class ConsoleWriterSuite extends StreamTest {
         ||value|
         |+-----+
         ||    1|
-        ||    2|
+        ||    1|
         |+-----+
         |only showing top 2 rows
         |
