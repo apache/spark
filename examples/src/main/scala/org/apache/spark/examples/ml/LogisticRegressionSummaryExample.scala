@@ -57,7 +57,7 @@ object LogisticRegressionSummaryExample {
     // Obtain the metrics useful to judge performance on test data.
     // We cast the summary to a BinaryLogisticRegressionSummary since the problem is a
     // binary classification problem.
-    val binarySummary = trainingSummary.asInstanceOf[BinaryLogisticRegressionSummary]
+    val binarySummary = trainingSummary.asBinary
 
     // Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
     val roc = binarySummary.roc
