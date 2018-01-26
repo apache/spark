@@ -661,7 +661,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
             val v = (row.getInt(0), row.getString(1))
             result += v
           }
-          assert(data == result)
+          assert(data.toSet == result.toSet)
         } finally {
           reader.close()
         }
@@ -677,7 +677,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
             val row = reader.getCurrentValue.asInstanceOf[InternalRow]
             result += row.getString(0)
           }
-          assert(data.map(_._2) == result)
+          assert(data.map(_._2).toSet == result.toSet)
         } finally {
           reader.close()
         }
@@ -694,7 +694,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
             val v = (row.getString(0), row.getInt(1))
             result += v
           }
-          assert(data.map { x => (x._2, x._1) } == result)
+          assert(data.map { x => (x._2, x._1) }.toSet == result.toSet)
         } finally {
           reader.close()
         }

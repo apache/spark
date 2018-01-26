@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.Row
+import scala.util.Random
+
+import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
 class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
@@ -100,5 +103,26 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     assert(!exchange3.sameResult(exchange4))
     assert(exchange4.sameResult(exchange5))
     assert(exchange5 sameResult exchange4)
+  }
+
+  test("SPARK-23207: Make repartition() generate consistent output") {
+    def assertConsistency(ds: Dataset[java.lang.Long]): Unit = {
+      ds.persist()
+
+      val exchange = ds.mapPartitions { iter =>
+        Random.shuffle(iter)
+      }.repartition(111)
+      val exchange2 = ds.repartition(111)
+
+      assert(exchange.rdd.collectPartitions() === exchange2.rdd.collectPartitions())
+    }
+
+    withSQLConf(SQLConf.SORT_BEFORE_REPARTITION.key -> "true") {
+      // repartition() should generate consistent output.
+      assertConsistency(spark.range(10000))
+
+      // case when input contains duplicated rows.
+      assertConsistency(spark.range(10000).map(i => Random.nextInt(1000).toLong))
+    }
   }
 }
