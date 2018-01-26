@@ -24,6 +24,7 @@ import org.apache.orc.storage.ql.exec.vector.*;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.TimestampType;
+import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -146,16 +147,6 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   }
 
   @Override
-  public int getArrayLength(int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public int getArrayOffset(int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
     BigDecimal data = decimalData.vector[getRowIndex(rowId)].getHiveDecimal().bigDecimalValue();
     return Decimal.apply(data, precision, scale);
@@ -177,7 +168,7 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   }
 
   @Override
-  public org.apache.spark.sql.vectorized.ColumnVector arrayData() {
+  public ColumnarArray getArray(int rowId) {
     throw new UnsupportedOperationException();
   }
 
