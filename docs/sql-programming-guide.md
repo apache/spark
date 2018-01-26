@@ -1640,9 +1640,9 @@ Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` a
 You may run `./bin/spark-sql --help` for a complete list of all available
 options.
 
-# PySpark Usage Guide for Pandas with Arrow
+# PySpark Usage Guide for Pandas with Apache Arrow
 
-## Arrow in Spark
+## Apache Arrow in Spark
 
 Apache Arrow is an in-memory columnar data format that is used in Spark to efficiently transfer
 data between JVM and Python processes. This currently is most beneficial to Python users that
@@ -1673,24 +1673,28 @@ To use Arrow when executing these calls, users need to first set the Spark confi
 </div>
 
 Using the above optimizations with Arrow will produce the same results as when Arrow is not
-enabled. Not all Spark data types are currently supported and an error will be raised if a column
-has an unsupported type, see [Supported Types](#supported-types).
+enabled. Note that even with Arrow, `toPandas()` results in the collection of all records in the
+DataFrame to the driver program and should be done on a small subset of the data. Not all Spark
+data types are currently supported and an error can be raised if a column has an unsupported type,
+see [Supported Types](#supported-sql-arrow-types). If an error occurs during `createDataFrame()`,
+Spark will fall back to create the DataFrame without Arrow.
 
 ## Pandas UDFs (a.k.a. Vectorized UDFs)
 
-With Arrow, we introduce a new type of UDF - pandas UDF. Pandas UDF is defined with a new function
-`pyspark.sql.functions.pandas_udf` and allows users to use functions that operate on `pandas.Series`
-and `pandas.DataFrame` with Spark. Currently, there are two types of pandas UDF: Scalar and Group Map.
+Pandas UDFs are user defined functions that are executed by Spark using Arrow to transfer data and
+Pandas to work with the data. A Pandas UDF is defined using the keyword `pandas_udf` as a decorator
+or to wrap the function, no additional configuration is required. Currently, there are two types of
+Pandas UDF: Scalar and Group Map.
 
 ### Scalar
 
-Scalar pandas UDFs are used for vectorizing scalar operations. They can be used with functions such as `select`
-and `withColumn`. To define a scalar pandas UDF, use `pandas_udf` to annotate a Python function. The Python
-function should take `pandas.Series` as inputs and return a `pandas.Series` of the same length. Internally, 
-Spark will split a column into multiple `pandas.Series` and invoke the Python function with each `pandas.Series`,
-and concat the results together to be a new column.
+Scalar Pandas UDFs are used for vectorizing scalar operations. They can be used with functions such
+as `select` and `withColumn`. The Python function should take `pandas.Series` as inputs and return
+a `pandas.Series` of the same length. Internally, Spark will execute a Pandas UDF by splitting
+columns into batches and calling the function for each batch as a subset of the data, then
+concatenating the results together.
 
-The following example shows how to create a scalar pandas UDF that computes the product of 2 columns.
+The following example shows how to create a scalar Pandas UDF that computes the product of 2 columns.
 
 <div class="codetabs">
 <div data-lang="python" markdown="1">
@@ -1699,7 +1703,7 @@ The following example shows how to create a scalar pandas UDF that computes the 
 </div>
 
 ### Group Map
-Group map pandas UDFs are used with `groupBy().apply()` which implements the "split-apply-combine" pattern.
+Group map Pandas UDFs are used with `groupBy().apply()` which implements the "split-apply-combine" pattern.
 Split-apply-combine consists of three steps:
 * Split the data into groups by using `DataFrame.groupBy`.
 * Apply a function on each group. The input and output of the function are both `pandas.DataFrame`. The
@@ -1710,7 +1714,7 @@ To use groupby apply, the user needs to define the following:
 * A Python function that defines the computation for each group.
 * A `StructType` object or a string that defines the schema of the output `DataFrame`.
 
-The following example shows how to use groupby apply to subtract the mean from each value in the group.
+The following example shows how to use `groupby().apply()` to subtract the mean from each value in the group.
 
 <div class="codetabs">
 <div data-lang="python" markdown="1">
@@ -1718,12 +1722,12 @@ The following example shows how to use groupby apply to subtract the mean from e
 </div>
 </div>
 
-For detailed usage, please see `pyspark.sql.functions.pandas_udf` and
-`pyspark.sql.GroupedData.apply`.
+For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/pyspark.sql.html#pyspark.sql.functions.pandas_udf) and
+[`pyspark.sql.GroupedData.apply`](api/python/pyspark.sql.html#pyspark.sql.GroupedData.apply).
 
 ## Usage Notes
 
-### Supported types
+### Supported SQL-Arrow Types
 
 Currently, all Spark SQL data types are supported except `MapType`, `ArrayType` of `TimestampType`, and
 nested `StructType`.
