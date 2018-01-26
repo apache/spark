@@ -47,6 +47,7 @@ def dataframe_with_arrow_example(spark):
     # Convert the Spark DataFrame back to a Pandas DataFrame using Arrow
     result_pdf = df.select("*").toPandas()
     # $example off:dataframe_with_arrow$
+    print("Pandas DataFrame result statistics:\n%s\n" % str(result_pdf.describe()))
 
 
 def scalar_pandas_udf_example(spark):
@@ -118,8 +119,11 @@ if __name__ == "__main__":
         .appName("Python Arrow-in-Spark example") \
         .getOrCreate()
 
+    print("Running Pandas to/from conversion example")
     dataframe_with_arrow_example(spark)
+    print("Running pandas_udf scalar example")
     scalar_pandas_udf_example(spark)
+    print("Running pandas_udf group map example")
     group_map_pandas_udf_example(spark)
 
     spark.stop()
