@@ -20,13 +20,11 @@ package org.apache.spark.sql.kafka010
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, UnsafeProjection}
-import org.apache.spark.sql.kafka010.KafkaSourceProvider.{kafkaParamsForProducer, TOPIC_OPTION_KEY}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.kafka010.KafkaWriter.validateQuery
 import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{BinaryType, StringType, StructType}
+import org.apache.spark.sql.types.StructType
 
 /**
  * Dummy commit message. The DataSourceV2 framework requires a commit message implementation but we

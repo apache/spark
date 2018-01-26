@@ -17,15 +17,12 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
-import java.util.concurrent.atomic.AtomicLong
-
 import scala.collection.mutable
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
 import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousReader, PartitionOffset}
 import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
