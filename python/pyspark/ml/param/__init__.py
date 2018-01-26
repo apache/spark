@@ -135,16 +135,6 @@ class TypeConverters(object):
         raise TypeError("Could not convert %s to list of floats" % value)
 
     @staticmethod
-    def toListListFloat(value):
-        """
-        Convert a value to list of list of floats, if possible.
-        """
-        if TypeConverters._can_convert_to_list(value):
-            value = TypeConverters.toList(value)
-            return [TypeConverters.toListFloat(v) for v in value]
-        raise TypeError("Could not convert %s to list of list of floats" % value)
-
-    @staticmethod
     def toListInt(value):
         """
         Convert a value to list of ints, if possible.
