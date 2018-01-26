@@ -129,7 +129,7 @@ object ClusteringEvaluator
 }
 
 
-private[evaluation] class Silhouette {
+private[evaluation] abstract class Silhouette {
 
   /**
    * It computes the Silhouette coefficient for a point.
@@ -143,16 +143,9 @@ private[evaluation] class Silhouette {
     // point is not a member.
     // The cluster with the lowest average dissimilarity - i.e. the nearest cluster to the current
     // point - s said to be the "neighboring cluster".
-    var neighboringClusterDissimilarity = Double.MaxValue
-    clusterIds.foreach {
-      c =>
-        if (c != pointClusterId) {
-          val dissimilarity = averageDistanceToCluster(c)
-          if(dissimilarity < neighboringClusterDissimilarity) {
-            neighboringClusterDissimilarity = dissimilarity
-          }
-        }
-    }
+    val otherClusterIds = clusterIds.filter(_ != pointClusterId)
+    val neighboringClusterDissimilarity = otherClusterIds.map(averageDistanceToCluster).min
+
     // adjustment for excluding the node itself from the computation of the average dissimilarity
     val currentClusterDissimilarity = if (pointClusterNumOfPoints == 1) {
       0
