@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.{QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -271,6 +272,39 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
           assert(code.body.contains("project_doConsume") == hasSplit)
         }
       }
+    }
+  }
+
+  test("codegen stage IDs should be preserved in transformations after CollapseCodegenStages") {
+    // test case adapted from DataFrameSuite to trigger ReuseExchange
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "2") {
+      val df = spark.range(100)
+      val join = df.join(df, "id")
+      val plan = join.queryExecution.executedPlan
+      assert(!plan.find(p =>
+        p.isInstanceOf[WholeStageCodegenExec] &&
+          p.asInstanceOf[WholeStageCodegenExec].codegenStageId == 0).isDefined,
+        "codegen stage IDs should be preserved through ReuseExchange")
+      checkAnswer(join, df.toDF)
+    }
+  }
+
+  test("including codegen stage ID in generated class name should not regress codegen caching") {
+    import testImplicits._
+
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME.key -> "true") {
+      val bytecodeSizeHisto = CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE
+
+      // the same query run twice should hit the codegen cache
+      spark.range(3).select('id + 2).collect
+      val after1 = bytecodeSizeHisto.getCount
+      spark.range(3).select('id + 2).collect
+      val after2 = bytecodeSizeHisto.getCount // same query shape as above, deliberately
+      // bytecodeSizeHisto's count is always monotonically increasing if new compilation to
+      // bytecode had occurred. If the count stayed the same that means we've got a cache hit.
+      assert(after1 == after2, "Should hit codegen cache. No new compilation to bytecode expected")
+
+      // a different query can result in codegen cache miss, that's by design
     }
   }
 }
