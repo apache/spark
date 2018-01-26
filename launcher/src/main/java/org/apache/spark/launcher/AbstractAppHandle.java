@@ -20,6 +20,7 @@ package org.apache.spark.launcher;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -29,15 +30,15 @@ abstract class AbstractAppHandle implements SparkAppHandle {
 
   private final LauncherServer server;
 
-  private LauncherConnection connection;
+  private LauncherServer.ServerConnection connection;
   private List<Listener> listeners;
-  private State state;
+  private AtomicReference<State> state;
   private String appId;
   private volatile boolean disposed;
 
   protected AbstractAppHandle(LauncherServer server) {
     this.server = server;
-    this.state = State.UNKNOWN;
+    this.state = new AtomicReference<>(State.UNKNOWN);
   }
 
   @Override
@@ -50,7 +51,7 @@ abstract class AbstractAppHandle implements SparkAppHandle {
 
   @Override
   public State getState() {
-    return state;
+    return state.get();
   }
 
   @Override
@@ -73,7 +74,7 @@ abstract class AbstractAppHandle implements SparkAppHandle {
     if (!isDisposed()) {
       if (connection != null) {
         try {
-          connection.close();
+          connection.closeAndWait();
         } catch (IOException ioe) {
           // no-op.
         }
@@ -82,7 +83,7 @@ abstract class AbstractAppHandle implements SparkAppHandle {
     }
   }
 
-  void setConnection(LauncherConnection connection) {
+  void setConnection(LauncherServer.ServerConnection connection) {
     this.connection = connection;
   }
 
@@ -99,12 +100,9 @@ abstract class AbstractAppHandle implements SparkAppHandle {
    */
   synchronized void dispose() {
     if (!isDisposed()) {
-      // Unregister first to make sure that the connection with the app has been really
-      // terminated.
       server.unregister(this);
-      if (!getState().isFinal()) {
-        setState(State.LOST);
-      }
+      // Set state to LOST if not yet final.
+      setState(State.LOST, false);
       this.disposed = true;
     }
   }
@@ -113,14 +111,24 @@ abstract class AbstractAppHandle implements SparkAppHandle {
     setState(s, false);
   }
 
-  synchronized void setState(State s, boolean force) {
-    if (force || !state.isFinal()) {
-      state = s;
+  void setState(State s, boolean force) {
+    if (force) {
+      state.set(s);
       fireEvent(false);
-    } else {
-      LOG.log(Level.WARNING, "Backend requested transition from final state {0} to {1}.",
-        new Object[] { state, s });
+      return;
     }
+
+    State current = state.get();
+    while (!current.isFinal()) {
+      if (state.compareAndSet(current, s)) {
+        fireEvent(false);
+        return;
+      }
+      current = state.get();
+    }
+
+    LOG.log(Level.WARNING, "Backend requested transition from final state {0} to {1}.",
+      new Object[] { current, s });
   }
 
   synchronized void setAppId(String appId) {

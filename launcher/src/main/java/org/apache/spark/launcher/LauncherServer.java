@@ -218,32 +218,6 @@ class LauncherServer implements Closeable {
       }
     }
 
-    // If there is a live connection for this handle, we need to wait for it to finish before
-    // returning, otherwise there might be a race between the connection thread processing
-    // buffered data and the handle cleaning up after itself, leading to potentially the wrong
-    // state being reported for the handle.
-    ServerConnection conn = null;
-    synchronized (clients) {
-      for (ServerConnection c : clients) {
-        if (c.handle == handle) {
-          conn = c;
-          break;
-        }
-      }
-    }
-
-    if (conn != null) {
-      synchronized (conn) {
-        if (conn.isOpen()) {
-          try {
-            conn.wait();
-          } catch (InterruptedException ie) {
-            // Ignore.
-          }
-        }
-      }
-    }
-
     unref();
   }
 
@@ -312,14 +286,21 @@ class LauncherServer implements Closeable {
     }
   }
 
-  private class ServerConnection extends LauncherConnection {
+  class ServerConnection extends LauncherConnection {
 
     private TimerTask timeout;
+    private volatile Thread connectionThread;
     volatile AbstractAppHandle handle;
 
     ServerConnection(Socket socket, TimerTask timeout) throws IOException {
       super(socket);
       this.timeout = timeout;
+    }
+
+    @Override
+    public void run() {
+      this.connectionThread = Thread.currentThread();
+      super.run();
     }
 
     @Override
@@ -376,9 +357,23 @@ class LauncherServer implements Closeable {
         clients.remove(this);
       }
 
-      synchronized (this) {
-        super.close();
-        notifyAll();
+      super.close();
+    }
+
+    /**
+     * Close the connection and wait for any buffered data to be processed before returning.
+     * This ensures any changes reported by the child application take effect.
+     */
+    public void closeAndWait() throws IOException {
+      close();
+
+      Thread connThread = this.connectionThread;
+      if (Thread.currentThread() != connThread) {
+        try {
+          connThread.join();
+        } catch (InterruptedException ie) {
+          // Ignore.
+        }
       }
     }
 
