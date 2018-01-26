@@ -155,7 +155,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
     val listener = new SparkListener {
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
         eventually(timeout(10.seconds)) {
-          assert(DataFrameRangeSuite.stageToKill > 0)
+          assert(DataFrameRangeSuite.stageToKill >= 0)
         }
         sparkContext.cancelStage(DataFrameRangeSuite.stageToKill)
       }
