@@ -629,6 +629,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME =
+    buildConf("spark.sql.codegen.useIdInClassName")
+    .internal()
+    .doc("When true, embed the (whole-stage) codegen stage ID into " +
+      "the class name of the generated class as a suffix")
+    .booleanConf
+    .createWithDefault(true)
+
   val WHOLESTAGE_MAX_NUM_FIELDS = buildConf("spark.sql.codegen.maxFields")
     .internal()
     .doc("The maximum number of fields (including nested fields) that will be supported before" +
@@ -1263,6 +1271,8 @@ class SQLConf extends Serializable with Logging {
   def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
+
+  def wholeStageUseIdInClassName: Boolean = getConf(WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME)
 
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 

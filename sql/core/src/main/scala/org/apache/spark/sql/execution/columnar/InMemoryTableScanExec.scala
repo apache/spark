@@ -274,7 +274,7 @@ case class InMemoryTableScanExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {
-      WholeStageCodegenExec(this).execute()
+      WholeStageCodegenExec(this)(codegenStageId = 0).execute()
     } else {
       inputRDD
     }
