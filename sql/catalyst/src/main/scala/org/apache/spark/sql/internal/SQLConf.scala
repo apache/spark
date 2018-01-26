@@ -1113,7 +1113,7 @@ object SQLConf {
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .internal()
     .doc("A comma-separated list of fully qualified data source register class names for which" +
-      " StreamWriteSupport is disabled. Writes to these sources will faill back to the V1 Sink.")
+      " StreamWriteSupport is disabled. Writes to these sources will fail back to the V1 Sink.")
     .stringConf
     .createWithDefault("")
 

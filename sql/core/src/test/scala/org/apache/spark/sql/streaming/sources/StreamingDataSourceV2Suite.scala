@@ -23,6 +23,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SQLContext}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{LongOffset, RateStreamOffset, Sink, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
 import org.apache.spark.sql.sources.v2.reader.ReadTask
@@ -194,7 +195,7 @@ class StreamingDataSourceV2Suite extends StreamTest {
     // Ensure we create a V1 sink with the config. Note the config is a comma separated
     // list, including other fake entries.
     val fullSinkName = "org.apache.spark.sql.streaming.sources.FakeWriteV1Fallback"
-    withSQLConf("spark.sql.streaming.disabledV2Writers" -> s"a,b,c,test,$fullSinkName,d,e") {
+    withSQLConf(SQLConf.DISABLED_V2_STREAMING_WRITERS.key -> s"a,b,c,test,$fullSinkName,d,e") {
       val v1Query = testPositiveCase(
         "fake-read-microbatch-continuous", "fake-write-v1-fallback", Trigger.Once())
       assert(v1Query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sink

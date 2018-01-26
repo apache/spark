@@ -58,7 +58,7 @@ public interface StreamWriter extends DataSourceV2Writer {
 
   default void commit(WriterCommitMessage[] messages) {
     throw new UnsupportedOperationException(
-       "Commit without epoch should not be called with StreamWriter");
+        "Commit without epoch should not be called with StreamWriter");
   }
 
   default void abort(WriterCommitMessage[] messages) {
