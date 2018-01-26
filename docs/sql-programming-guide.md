@@ -1710,7 +1710,7 @@ Split-apply-combine consists of three steps:
   input data contains all the rows and columns for each group.
 * Combine the results into a new `DataFrame`.
 
-To use groupby apply, the user needs to define the following:
+To use `groupBy().apply()`, the user needs to define the following:
 * A Python function that defines the computation for each group.
 * A `StructType` object or a string that defines the schema of the output `DataFrame`.
 
