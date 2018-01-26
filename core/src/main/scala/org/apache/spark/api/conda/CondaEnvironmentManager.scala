@@ -180,6 +180,8 @@ final class CondaEnvironmentManager(condaBinaryPath: String,
       })))
     val exitCode = command.run(collectErrOutToBuffer).exitValue()
     if (exitCode != 0) {
+      logError(s"Attempt to $description exited with code: "
+        + f"$exitCode%nCommand was: $command%nStdout was:%n$out%nStderr was:%n$err")
       throw new SparkException(s"Attempt to $description exited with code: "
       + f"$exitCode%nCommand was: $command%nStdout was:%n$out%nStderr was:%n$err")
     }
