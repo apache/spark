@@ -34,7 +34,7 @@ class DataSourceRDD[T: ClassTag](
 
   override protected def getPartitions: Array[Partition] = {
     readerFactories.asScala.zipWithIndex.map {
-      case (readTask, index) => new DataSourceRDDPartition(index, readTask)
+      case (readerFactory, index) => new DataSourceRDDPartition(index, readerFactory)
     }.toArray
   }
 
