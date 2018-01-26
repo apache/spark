@@ -19,13 +19,16 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.io.ByteArrayOutputStream
 
-import org.scalatest.time.SpanSugar._
-
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 
 class ConsoleWriterSuite extends StreamTest {
   import testImplicits._
+
+  override def sparkConf: SparkConf = {
+    super.sparkConf.set("spark.default.parallelism", "1")
+  }
 
   test("microbatch - default") {
     val input = MemoryStream[Int]
@@ -45,8 +48,7 @@ class ConsoleWriterSuite extends StreamTest {
       }
     }
 
-    // The order of data in one batch can be random
-    assert(captured.toString().length ==
+    assert(captured.toString() ==
       """-------------------------------------------
         |Batch: 0
         |-------------------------------------------
@@ -77,7 +79,7 @@ class ConsoleWriterSuite extends StreamTest {
         |+-----+
         |+-----+
         |
-        |""".stripMargin.length)
+        |""".stripMargin)
   }
 
   test("microbatch - with numRows") {
