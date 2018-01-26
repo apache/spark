@@ -192,7 +192,7 @@ class Dataset[T] private[sql](
   }
 
   // Wraps analyzed logical plans with an analysis barrier so we won't traverse/resolve it again.
-  @transient private val planWithBarrier = AnalysisBarrier(logicalPlan)
+  @transient private val planWithBarrier = AnalysisBarrier(EliminateBarriers(logicalPlan))
 
   /**
    * Currently [[ExpressionEncoder]] is the only implementation of [[Encoder]], here we turn the
@@ -204,7 +204,7 @@ class Dataset[T] private[sql](
 
   // The deserializer expression which can be used to build a projection and turn rows to objects
   // of type T, after collecting rows to the driver side.
-  private val deserializer =
+  private lazy val deserializer =
     exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer).deserializer
 
   private implicit def classTag = exprEnc.clsTag

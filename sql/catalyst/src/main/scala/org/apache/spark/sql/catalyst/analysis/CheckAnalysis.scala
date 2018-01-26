@@ -74,10 +74,36 @@ trait CheckAnalysis extends PredicateHelper {
     }
   }
 
+  /**
+   * Check if analysis for the plan tree has yielded a valid plan, throw an exception otherwise.
+   */
   def checkAnalysis(plan: LogicalPlan): Unit = {
-    // We transform up and order the rules so as to catch the first possible failure instead
-    // of the result of cascading resolution failures.
+    checkPlanUp(plan)
+    extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
+      case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
+      case _ =>
+    }
+  }
+
+  /**
+   * Check the plan for rule violation in a recursive bottom to top (children first) way.
+   */
+  private def checkPlanUp(plan: LogicalPlan): Unit = plan match {
+    case _: AnalysisBarrier =>
+    // Skip already analyzed sub-plans
+    case _ =>
+      // We transform up and order the rules so as to catch the first possible failure instead
+      // of the result of cascading resolution failures.
+      plan.children.foreach(checkPlanUp)
+      checkPlan(plan)
+  }
+
+  /**
+   * Check the current plan for rule violations.
+   */
+  private def checkPlan(plan: LogicalPlan): Unit = {
+    plan match {
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
@@ -353,11 +379,6 @@ trait CheckAnalysis extends PredicateHelper {
 
           case _ => // Analysis successful!
         }
-    }
-    extendedCheckRules.foreach(_(plan))
-    plan.foreachUp {
-      case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
-      case _ =>
     }
   }
 
