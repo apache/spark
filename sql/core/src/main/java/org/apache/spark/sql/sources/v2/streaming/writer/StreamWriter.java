@@ -40,7 +40,8 @@ public interface StreamWriter extends DataSourceV2Writer {
    * failed, and the execution engine will attempt to call {@link #abort(WriterCommitMessage[])}.
    *
    * To support exactly-once processing, writer implementations should ensure that this method is
-   * idempotent, and won't duplicate data if the same epoch ID is committed multiple times.
+   * idempotent. The execution engine may call commit() multiple times for the same epoch
+   * in some circumstances.
    */
   void commit(long epochId, WriterCommitMessage[] messages);
 
