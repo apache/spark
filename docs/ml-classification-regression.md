@@ -97,6 +97,9 @@ only available on the driver.
 [`LogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionTrainingSummary)
 provides a summary for a
 [`LogisticRegressionModel`](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegressionModel).
+In the case of binary classification, certain additional metrics are
+available, e.g. ROC curve. The binary summary can be accessed via the
+`binarySummary` method. See [`BinaryLogisticRegressionTrainingSummary`](api/scala/index.html#org.apache.spark.ml.classification.BinaryLogisticRegressionTrainingSummary).
 
 Continuing the earlier example:
 
@@ -107,6 +110,9 @@ Continuing the earlier example:
 [`LogisticRegressionTrainingSummary`](api/java/org/apache/spark/ml/classification/LogisticRegressionTrainingSummary.html)
 provides a summary for a
 [`LogisticRegressionModel`](api/java/org/apache/spark/ml/classification/LogisticRegressionModel.html).
+In the case of binary classification, certain additional metrics are
+available, e.g. ROC curve. The binary summary can be accessed via the
+`binarySummary` method. See [`BinaryLogisticRegressionTrainingSummary`](api/java/org/apache/spark/ml/classification/BinaryLogisticRegressionTrainingSummary.html).
 
 Continuing the earlier example:
 
@@ -117,6 +123,8 @@ Continuing the earlier example:
 [`LogisticRegressionTrainingSummary`](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegressionSummary)
 provides a summary for a
 [`LogisticRegressionModel`](api/python/pyspark.ml.html#pyspark.ml.classification.LogisticRegressionModel).
+In the case of binary classification, certain additional metrics are
+available, e.g. ROC curve. See [`BinaryLogisticRegressionTrainingSummary`](api/python/pyspark.ml.html#pyspark.ml.classification.BinaryLogisticRegressionTrainingSummary).
 
 Continuing the earlier example:
 
@@ -153,7 +161,8 @@ For a detailed derivation please see [here](https://en.wikipedia.org/wiki/Multin
 **Examples**
 
 The following example shows how to train a multiclass logistic regression 
-model with elastic net regularization.
+model with elastic net regularization, as well as extract the multiclass
+training summary for evaluating the model.
 
 <div class="codetabs">
 

@@ -52,6 +52,7 @@ if __name__ == "__main__":
     for objective in objectiveHistory:
         print(objective)
 
+    # for multiclass, we can inspect metrics on a per-label basis
     print("False positive rate by label:")
     for i, rate in enumerate(trainingSummary.falsePositiveRateByLabel):
         print("label %d: %s" % (i, rate))
