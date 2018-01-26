@@ -1045,9 +1045,10 @@ object SQLConf {
     buildConf("spark.sql.execution.arrow.enabled")
       .internal()
       .doc("Make use of Apache Arrow for columnar data transfers. Currently available " +
-        "for use with pyspark.sql.DataFrame.toPandas with the following data types: " +
-        "StringType, BinaryType, BooleanType, DoubleType, FloatType, ByteType, IntegerType, " +
-        "LongType, ShortType")
+        "for use with pyspark.sql.DataFrame.toPandas, and " +
+        "pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame. " +
+        "The following data types are unsupported: " +
+        "MapType, ArrayType of TimestampType, and nested StructType.")
       .booleanConf
       .createWithDefault(false)
 
