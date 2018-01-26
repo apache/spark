@@ -1043,8 +1043,7 @@ object SQLConf {
 
   val ARROW_EXECUTION_ENABLE =
     buildConf("spark.sql.execution.arrow.enabled")
-      .internal()
-      .doc("Make use of Apache Arrow for columnar data transfers. Currently available " +
+      .doc("When true, make use of Apache Arrow for columnar data transfers. Currently available " +
         "for use with pyspark.sql.DataFrame.toPandas, and " +
         "pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame. " +
         "The following data types are unsupported: " +
