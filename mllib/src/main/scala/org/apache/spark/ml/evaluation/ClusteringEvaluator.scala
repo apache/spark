@@ -88,9 +88,10 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
    */
   @Since("2.4.0")
   val distanceMeasure: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("squaredEuclidean", "cosine"))
+    val availableValues = Array("squaredEuclidean", "cosine")
+    val allowedParams = ParamValidators.inArray(availableValues)
     new Param(this, "distanceMeasure", "distance measure in evaluation. Supported options: " +
-      "'squaredEuclidean' and 'cosine'", allowedParams)
+      availableValues.mkString("'", "', '", "'"), allowedParams)
   }
 
   /** @group getParam */
@@ -154,10 +155,12 @@ private[evaluation] abstract class Silhouette {
         (pointClusterNumOfPoints - 1)
     }
 
-    (currentClusterDissimilarity compare neighboringClusterDissimilarity).signum match {
-      case -1 => 1 - (currentClusterDissimilarity / neighboringClusterDissimilarity)
-      case 1 => (neighboringClusterDissimilarity / currentClusterDissimilarity) - 1
-      case 0 => 0.0
+    if (currentClusterDissimilarity < neighboringClusterDissimilarity) {
+      1 - (currentClusterDissimilarity / neighboringClusterDissimilarity)
+    } else if (currentClusterDissimilarity > neighboringClusterDissimilarity) {
+      (neighboringClusterDissimilarity / currentClusterDissimilarity) - 1
+    } else {
+      0.0
     }
   }
 
