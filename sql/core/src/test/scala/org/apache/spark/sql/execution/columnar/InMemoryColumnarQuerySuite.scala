@@ -477,7 +477,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
         assert(planBeforeFilter.head.isInstanceOf[InMemoryTableScanExec])
 
         val execPlan = if (enabled == "true") {
-          WholeStageCodegenExec(planBeforeFilter.head)
+          WholeStageCodegenExec(planBeforeFilter.head)(codegenStageId = 0)
         } else {
           planBeforeFilter.head
         }
