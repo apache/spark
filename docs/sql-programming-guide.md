@@ -1663,8 +1663,8 @@ You can install using pip or conda from the conda-forge channel. See PyArrow
 
 Arrow is available as an optimization when converting a Spark DataFrame to Pandas using the call
 `toPandas()` and when creating a Spark DataFrame from Pandas with `createDataFrame(pandas_df)`.
-To use Arrow when executing these calls, it first must be enabled by setting the Spark configuration
-'spark.sql.execution.arrow.enabled' to 'true', this is disabled by default.
+To use Arrow when executing these calls, users need to first set the Spark configuration
+'spark.sql.execution.arrow.enabled' to 'true'. This is disabled by default.
 
 <div class="codetabs">
 <div data-lang="python"  markdown="1">
@@ -1673,17 +1673,17 @@ To use Arrow when executing these calls, it first must be enabled by setting the
 import numpy as np
 import pandas as pd
 
-# Enable Arrow, 'spark' is an existing SparkSession
+# Enable Arrow-based columnar data transfers
 spark.conf.set("spark.sql.execution.arrow.enabled", "true")
 
-# Generate sample data
+# Generate a Pandas DataFrame
 pdf = pd.DataFrame(np.random.rand(100, 3))
 
-# Create a Spark DataFrame from Pandas data using Arrow
+# Create a Spark DataFrame from a Pandas DataFrame using Arrow
 df = spark.createDataFrame(pdf)
 
-# Convert the Spark DataFrame to a local Pandas DataFrame
-selpdf = df.select("*").toPandas()
+# Convert the Spark DataFrame back to a Pandas DataFrame using Arrow
+result_pdf = df.select("*").toPandas()
 
 {% endhighlight %}
 </div>
@@ -1696,16 +1696,16 @@ has an unsupported type, see [Supported Types](#supported-types).
 ## Pandas UDFs (a.k.a. Vectorized UDFs)
 
 With Arrow, we introduce a new type of UDF - pandas UDF. Pandas UDF is defined with a new function
-`pyspark.sql.functions.pandas_udf` and allows user to use functions that operate on `pandas.Series`
+`pyspark.sql.functions.pandas_udf` and allows users to use functions that operate on `pandas.Series`
 and `pandas.DataFrame` with Spark. Currently, there are two types of pandas UDF: Scalar and Group Map.
 
 ### Scalar
 
-Scalar pandas UDFs are used for vectorizing scalar operations. They can used with functions such as `select`
+Scalar pandas UDFs are used for vectorizing scalar operations. They can be used with functions such as `select`
 and `withColumn`. To define a scalar pandas UDF, use `pandas_udf` to annotate a Python function. The Python
-should takes `pandas.Series` and returns a `pandas.Series` of the same length. Internally, Spark will
-split a column into multiple `pandas.Series` and invoke the Python function with each `pandas.Series`, and
-concat the results together to be a new column.
+function should take `pandas.Series` as inputs and return a `pandas.Series` of the same length. Internally, 
+Spark will split a column into multiple `pandas.Series` and invoke the Python function with each `pandas.Series`,
+and concat the results together to be a new column.
 
 The following example shows how to create a scalar pandas UDF that computes the product of 2 columns.
 
@@ -1756,7 +1756,7 @@ Split-apply-combine consists of three steps:
   input data contains all the rows and columns for each group.
 * Combine the results into a new `DataFrame`.
 
-To use groupby apply, user needs to define the following:
+To use groupby apply, the user needs to define the following:
 * A Python function that defines the computation for each group.
 * A `StructType` object or a string that defines the schema of the output `DataFrame`.
 
