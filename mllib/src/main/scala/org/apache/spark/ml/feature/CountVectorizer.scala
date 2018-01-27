@@ -182,8 +182,8 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     transformSchema(dataset.schema, logging = true)
     val vocSize = $(vocabSize)
     val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
-    val filteringRequired = isSet(minDF) || isSet(maxDF)
-    val maybeInputSize = if (filteringRequired) {
+    val countingRequired = $(minDF) < 1.0 || $(maxDF) < 1.0
+    val maybeInputSize = if (countingRequired) {
       Some(input.cache().count())
     } else {
       None
@@ -191,12 +191,12 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     val minDf = if ($(minDF) >= 1.0) {
       $(minDF)
     } else {
-      $(minDF) * maybeInputSize.getOrElse(1L)
+      $(minDF) * maybeInputSize.get
     }
     val maxDf = if ($(maxDF) >= 1.0) {
       $(maxDF)
     } else {
-      $(maxDF) * maybeInputSize.getOrElse(1L)
+      $(maxDF) * maybeInputSize.get
     }
     require(maxDf >= minDf, "maxDF must be >= minDF.")
     val allWordCounts = input.flatMap { case (tokens) =>
@@ -209,17 +209,18 @@ class CountVectorizer @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       (wc1 + wc2, df1 + df2)
     }
 
+    val filteringRequired = isSet(minDF) || isSet(maxDF)
     val maybeFilteredWordCounts = if (filteringRequired) {
-      allWordCounts.filter { case (word, (wc, df)) => (df >= minDf) && (df <= maxDf) }
+      allWordCounts.filter { case (_, (_, df)) => df >= minDf && df <= maxDf }
     } else {
       allWordCounts
     }
 
     val wordCounts = maybeFilteredWordCounts
-      .map { case (word, (count, dfCount)) => (word, count) }
+      .map { case (word, (count, _)) => (word, count) }
       .cache()
 
-    if (filteringRequired) {
+    if (countingRequired) {
       input.unpersist()
     }
 
