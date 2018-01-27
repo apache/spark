@@ -24,6 +24,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.reader._
@@ -42,6 +43,14 @@ case class DataSourceV2ScanExec(
 
   override def producedAttributes: AttributeSet = AttributeSet(fullOutput)
 
+  override def outputPartitioning: physical.Partitioning = reader match {
+    case s: SupportsReportPartitioning =>
+      new DataSourcePartitioning(
+        s.outputPartitioning(), AttributeMap(output.map(a => a -> a.name)))
+
+    case _ => super.outputPartitioning
+  }
+
   private lazy val readTasks: java.util.List[ReadTask[UnsafeRow]] = reader match {
     case r: SupportsScanUnsafeRow => r.createUnsafeRowReadTasks()
     case _ =>
@@ -58,7 +67,8 @@ case class DataSourceV2ScanExec(
 
     case _: ContinuousReader =>
       EpochCoordinatorRef.get(
-        sparkContext.getLocalProperty(ContinuousExecution.RUN_ID_KEY), sparkContext.env)
+          sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
+          sparkContext.env)
         .askSync[Unit](SetReaderPartitions(readTasks.size()))
       new ContinuousDataSourceRDD(sparkContext, sqlContext, readTasks)
         .asInstanceOf[RDD[InternalRow]]
@@ -78,7 +88,7 @@ case class DataSourceV2ScanExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {
-      WholeStageCodegenExec(this).execute()
+      WholeStageCodegenExec(this)(codegenStageId = 0).execute()
     } else {
       val numOutputRows = longMetric("numOutputRows")
       inputRDD.map { r =>

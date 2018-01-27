@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources.v2.streaming;
 
 import java.util.Optional;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.DataSourceV2Options;
 import org.apache.spark.sql.sources.v2.streaming.reader.ContinuousReader;
@@ -28,6 +29,7 @@ import org.apache.spark.sql.types.StructType;
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
  * provide data reading ability for continuous stream processing.
  */
+@InterfaceStability.Evolving
 public interface ContinuousReadSupport extends DataSourceV2 {
   /**
    * Creates a {@link ContinuousReader} to scan the data from this data source.

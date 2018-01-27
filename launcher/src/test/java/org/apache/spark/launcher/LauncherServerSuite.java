@@ -145,7 +145,8 @@ public class LauncherServerSuite extends BaseSuite {
       assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
       // Make sure the server matched the client to the handle.
       assertNotNull(handle.getConnection());
-      close(client);
+      client.close();
+      handle.dispose();
       assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
       assertEquals(SparkAppHandle.State.LOST, handle.getState());
     } finally {

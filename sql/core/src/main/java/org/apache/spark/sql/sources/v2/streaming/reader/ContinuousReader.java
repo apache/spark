@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.sources.v2.streaming.reader;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
 import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
 
@@ -27,11 +28,15 @@ import java.util.Optional;
  * interface to allow reading in a continuous processing mode stream.
  *
  * Implementations must ensure each read task output is a {@link ContinuousDataReader}.
+ *
+ * Note: This class currently extends {@link BaseStreamingSource} to maintain compatibility with
+ * DataSource V1 APIs. This extension will be removed once we get rid of V1 completely.
  */
+@InterfaceStability.Evolving
 public interface ContinuousReader extends BaseStreamingSource, DataSourceV2Reader {
     /**
-     * Merge offsets coming from {@link ContinuousDataReader} instances in each partition to
-     * a single global offset.
+     * Merge partitioned offsets coming from {@link ContinuousDataReader} instances for each
+     * partition to a single global offset.
      */
     Offset mergeOffsets(PartitionOffset[] offsets);
 

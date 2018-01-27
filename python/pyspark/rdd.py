@@ -70,6 +70,7 @@ class PythonEvalType(object):
 
     SQL_PANDAS_SCALAR_UDF = 200
     SQL_PANDAS_GROUP_MAP_UDF = 201
+    SQL_PANDAS_GROUP_AGG_UDF = 202
 
 
 def portable_hash(x):
@@ -766,7 +767,7 @@ class RDD(object):
 
             def pipe_objs(out):
                 for obj in iterator:
-                    s = str(obj).rstrip('\n') + '\n'
+                    s = unicode(obj).rstrip('\n') + '\n'
                     out.write(s.encode('utf-8'))
                 out.close()
             Thread(target=pipe_objs, args=[pipe.stdin]).start()

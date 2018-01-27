@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.vectorized;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
@@ -25,6 +26,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * Array abstraction in {@link ColumnVector}.
  */
+@InterfaceStability.Evolving
 public final class ColumnarArray extends ArrayData {
   // The data for this array. This array contains elements from
   // data[offset] to data[offset + length).
@@ -133,8 +135,8 @@ public final class ColumnarArray extends ArrayData {
 
   @Override
   public CalendarInterval getInterval(int ordinal) {
-    int month = data.getChildColumn(0).getInt(offset + ordinal);
-    long microseconds = data.getChildColumn(1).getLong(offset + ordinal);
+    int month = data.getChild(0).getInt(offset + ordinal);
+    long microseconds = data.getChild(1).getLong(offset + ordinal);
     return new CalendarInterval(month, microseconds);
   }
 

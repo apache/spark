@@ -94,54 +94,21 @@ trait QueryPlanConstraints { self: LogicalPlan =>
     case _ => Seq.empty[Attribute]
   }
 
-  // Collect aliases from expressions of the whole tree rooted by the current QueryPlan node, so
-  // we may avoid producing recursive constraints.
-  private lazy val aliasMap: AttributeMap[Expression] = AttributeMap(
-    expressions.collect {
-      case a: Alias if !a.child.isInstanceOf[Literal] => (a.toAttribute, a.child)
-    } ++ children.flatMap(_.asInstanceOf[QueryPlanConstraints].aliasMap))
-    // Note: the explicit cast is necessary, since Scala compiler fails to infer the type.
-
   /**
    * Infers an additional set of constraints from a given set of equality constraints.
    * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
    * additional constraint of the form `b = 5`.
    */
   private def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
-    val aliasedConstraints = eliminateAliasedExpressionInConstraints(constraints)
     var inferredConstraints = Set.empty[Expression]
-    aliasedConstraints.foreach {
+    constraints.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        val candidateConstraints = aliasedConstraints - eq
+        val candidateConstraints = constraints - eq
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
       case _ => // No inference
     }
     inferredConstraints -- constraints
-  }
-
-  /**
-   * Replace the aliased expression in [[Alias]] with the alias name if both exist in constraints.
-   * Thus non-converging inference can be prevented.
-   * E.g. `Alias(b, f(a)), a = b` infers `f(a) = f(f(a))` without eliminating aliased expressions.
-   * Also, the size of constraints is reduced without losing any information.
-   * When the inferred filters are pushed down the operators that generate the alias,
-   * the alias names used in filters are replaced by the aliased expressions.
-   */
-  private def eliminateAliasedExpressionInConstraints(constraints: Set[Expression])
-    : Set[Expression] = {
-    val attributesInEqualTo = constraints.flatMap {
-      case EqualTo(l: Attribute, r: Attribute) => l :: r :: Nil
-      case _ => Nil
-    }
-    var aliasedConstraints = constraints
-    attributesInEqualTo.foreach { a =>
-      if (aliasMap.contains(a)) {
-        val child = aliasMap.get(a).get
-        aliasedConstraints = replaceConstraints(aliasedConstraints, child, a)
-      }
-    }
-    aliasedConstraints
   }
 
   private def replaceConstraints(

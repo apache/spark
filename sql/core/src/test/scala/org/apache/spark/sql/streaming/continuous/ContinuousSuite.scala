@@ -17,36 +17,18 @@
 
 package org.apache.spark.sql.streaming.continuous
 
-import java.io.{File, InterruptedIOException, IOException, UncheckedIOException}
-import java.nio.channels.ClosedByInterruptException
-import java.util.concurrent.{CountDownLatch, ExecutionException, TimeoutException, TimeUnit}
+import java.util.UUID
 
-import scala.reflect.ClassTag
-import scala.util.control.ControlThrowable
-
-import com.google.common.util.concurrent.UncheckedExecutionException
-import org.apache.commons.io.FileUtils
-import org.apache.hadoop.conf.Configuration
-
-import org.apache.spark.{SparkContext, SparkEnv}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.{SparkContext, SparkEnv, SparkException}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskStart}
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.plans.logical.Range
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
-import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
-import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.TestSparkSession
-import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 class ContinuousSuiteBase extends StreamTest {
   // We need more than the default local[2] to be able to schedule all partitions simultaneously.
@@ -219,6 +201,41 @@ class ContinuousSuite extends ContinuousSuiteBase {
       StopStream)
   }
 
+  test("task failure kills the query") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "5")
+      .load()
+      .select('value)
+
+    // Get an arbitrary task from this query to kill. It doesn't matter which one.
+    var taskId: Long = -1
+    val listener = new SparkListener() {
+      override def onTaskStart(start: SparkListenerTaskStart): Unit = {
+        taskId = start.taskInfo.taskId
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+    try {
+      testStream(df, useV2Sink = true)(
+        StartStream(Trigger.Continuous(100)),
+        Execute(waitForRateSourceTriggers(_, 2)),
+        Execute { _ =>
+          // Wait until a task is started, then kill its first attempt.
+          eventually(timeout(streamingTimeout)) {
+            assert(taskId != -1)
+          }
+          spark.sparkContext.killTaskAttempt(taskId)
+        },
+        ExpectFailure[SparkException] { e =>
+          e.getCause != null && e.getCause.getCause.isInstanceOf[ContinuousTaskRetryException]
+        })
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
   test("query without test harness") {
     val df = spark.readStream
       .format("rate")
@@ -258,13 +275,9 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 201)),
       IncrementEpoch(),
-      Execute { query =>
-        val data = query.sink.asInstanceOf[MemorySinkV2].allData
-        val vals = data.map(_.getLong(0)).toSet
-        assert(scala.Range(0, 25000).forall { i =>
-          vals.contains(i)
-        })
-      })
+      StopStream,
+      CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_)))
+    )
   }
 
   test("automatic epoch advancement") {
@@ -280,6 +293,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 201)),
       IncrementEpoch(),
+      StopStream,
       CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_))))
   }
 
@@ -311,6 +325,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       StopStream,
       StartStream(Trigger.Continuous(2012)),
       AwaitEpoch(50),
+      StopStream,
       CheckAnswerRowsContains(scala.Range(0, 25000).map(Row(_))))
   }
 }

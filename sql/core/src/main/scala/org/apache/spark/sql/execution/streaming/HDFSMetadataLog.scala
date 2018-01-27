@@ -330,7 +330,7 @@ object HDFSMetadataLog {
   /** A simple trait to abstract out the file management operations needed by HDFSMetadataLog. */
   trait FileManager {
 
-    /** List the files in a path that matches a filter. */
+    /** List the files in a path that match a filter. */
     def list(path: Path, filter: PathFilter): Array[FileStatus]
 
     /** Make directory at the give path and all its parent directories as needed. */

@@ -2089,6 +2089,8 @@ class PandasUDFType(object):
 
     GROUP_MAP = PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF
 
+    GROUP_AGG = PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF
+
 
 @since(1.3)
 def udf(f=None, returnType=StringType()):
@@ -2103,12 +2105,13 @@ def udf(f=None, returnType=StringType()):
     >>> import random
     >>> random_udf = udf(lambda: int(random.random() * 100), IntegerType()).asNondeterministic()
 
-    .. note:: The user-defined functions do not support conditional expressions or short curcuiting
+    .. note:: The user-defined functions do not support conditional expressions or short circuiting
         in boolean expressions and it ends up with being executed all internally. If the functions
         can fail on special rows, the workaround is to incorporate the condition into the functions.
 
     :param f: python function if used as a standalone function
-    :param returnType: a :class:`pyspark.sql.types.DataType` object
+    :param returnType: the return type of the user-defined function. The value can be either a
+        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
 
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
@@ -2148,7 +2151,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     Creates a vectorized user defined function (UDF).
 
     :param f: user-defined function. A python function if used as a standalone function
-    :param returnType: a :class:`pyspark.sql.types.DataType` object
+    :param returnType: the return type of the user-defined function. The value can be either a
+        :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
     :param functionType: an enum value in :class:`pyspark.sql.functions.PandasUDFType`.
                          Default: SCALAR.
 
@@ -2157,7 +2161,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     1. SCALAR
 
        A scalar UDF defines a transformation: One or more `pandas.Series` -> A `pandas.Series`.
-       The returnType should be a primitive data type, e.g., `DoubleType()`.
+       The returnType should be a primitive data type, e.g., :class:`DoubleType`.
        The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
 
        Scalar UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
@@ -2219,6 +2223,35 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
 
+    3. GROUP_AGG
+
+       A group aggregate UDF defines a transformation: One or more `pandas.Series` -> A scalar
+       The `returnType` should be a primitive data type, e.g., :class:`DoubleType`.
+       The returned scalar can be either a python primitive type, e.g., `int` or `float`
+       or a numpy data type, e.g., `numpy.int64` or `numpy.float64`.
+
+       :class:`ArrayType`, :class:`MapType` and :class:`StructType` are currently not supported as
+       output types.
+
+       Group aggregate UDFs are used with :meth:`pyspark.sql.GroupedData.agg`
+
+       >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
+       >>> df = spark.createDataFrame(
+       ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+       ...     ("id", "v"))
+       >>> @pandas_udf("double", PandasUDFType.GROUP_AGG)  # doctest: +SKIP
+       ... def mean_udf(v):
+       ...     return v.mean()
+       >>> df.groupby("id").agg(mean_udf(df['v'])).show()  # doctest: +SKIP
+       +---+-----------+
+       | id|mean_udf(v)|
+       +---+-----------+
+       |  1|        1.5|
+       |  2|        6.0|
+       +---+-----------+
+
+       .. seealso:: :meth:`pyspark.sql.GroupedData.agg`
+
     .. note:: The user-defined functions are considered deterministic by default. Due to
         optimization, duplicate invocations may be eliminated or the function may even be invoked
         more times than it is present in the query. If your function is not deterministic, call
@@ -2231,7 +2264,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     ...     return pd.Series(np.random.randn(len(v))
     >>> random = random.asNondeterministic()  # doctest: +SKIP
 
-    .. note:: The user-defined functions do not support conditional expressions or short curcuiting
+    .. note:: The user-defined functions do not support conditional expressions or short circuiting
         in boolean expressions and it ends up with being executed all internally. If the functions
         can fail on special rows, the workaround is to incorporate the condition into the functions.
     """
@@ -2265,7 +2298,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         raise ValueError("Invalid returnType: returnType can not be None")
 
     if eval_type not in [PythonEvalType.SQL_PANDAS_SCALAR_UDF,
-                         PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF]:
+                         PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF,
+                         PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF]:
         raise ValueError("Invalid functionType: "
                          "functionType must be one the values from PandasUDFType")
 

@@ -38,7 +38,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../de
 
 
 from sparktestsupport import SPARK_HOME  # noqa (suppress pep8 warnings)
-from sparktestsupport.shellutils import which, subprocess_check_output  # noqa
+from sparktestsupport.shellutils import which, subprocess_check_output, run_cmd  # noqa
 from sparktestsupport.modules import all_modules  # noqa
 
 
@@ -175,6 +175,9 @@ def main():
 
     task_queue = Queue.PriorityQueue()
     for python_exec in python_execs:
+        if "COVERAGE_PROCESS_START" in os.environ:
+            # Make sure if coverage is installed.
+            run_cmd([python_exec, "-c", "import coverage"])
         python_implementation = subprocess_check_output(
             [python_exec, "-c", "import platform; print(platform.python_implementation())"],
             universal_newlines=True).strip()

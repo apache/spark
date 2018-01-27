@@ -322,6 +322,42 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     allocator.close()
   }
 
+  test("non nullable struct") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("struct", 0, Long.MaxValue)
+    val schema = new StructType().add("int", IntegerType).add("long", LongType)
+    val vector = ArrowUtils.toArrowField("struct", schema, nullable = false, null)
+      .createVector(allocator).asInstanceOf[NullableMapVector]
+
+    vector.allocateNew()
+    val intVector = vector.getChildByOrdinal(0).asInstanceOf[IntVector]
+    val longVector = vector.getChildByOrdinal(1).asInstanceOf[BigIntVector]
+
+    vector.setIndexDefined(0)
+    intVector.setSafe(0, 1)
+    longVector.setSafe(0, 1L)
+
+    vector.setIndexDefined(1)
+    intVector.setSafe(1, 2)
+    longVector.setNull(1)
+
+    vector.setValueCount(2)
+
+    val columnVector = new ArrowColumnVector(vector)
+    assert(columnVector.dataType === schema)
+    assert(columnVector.numNulls === 0)
+
+    val row0 = columnVector.getStruct(0)
+    assert(row0.getInt(0) === 1)
+    assert(row0.getLong(1) === 1L)
+
+    val row1 = columnVector.getStruct(1)
+    assert(row1.getInt(0) === 2)
+    assert(row1.isNullAt(1))
+
+    columnVector.close()
+    allocator.close()
+  }
+
   test("struct") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("struct", 0, Long.MaxValue)
     val schema = new StructType().add("int", IntegerType).add("long", LongType)
@@ -362,21 +398,21 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
     assert(columnVector.dataType === schema)
     assert(columnVector.numNulls === 1)
 
-    val row0 = columnVector.getStruct(0, 2)
+    val row0 = columnVector.getStruct(0)
     assert(row0.getInt(0) === 1)
     assert(row0.getLong(1) === 1L)
 
-    val row1 = columnVector.getStruct(1, 2)
+    val row1 = columnVector.getStruct(1)
     assert(row1.getInt(0) === 2)
     assert(row1.isNullAt(1))
 
-    val row2 = columnVector.getStruct(2, 2)
+    val row2 = columnVector.getStruct(2)
     assert(row2.isNullAt(0))
     assert(row2.getLong(1) === 3L)
 
     assert(columnVector.isNullAt(3))
 
-    val row4 = columnVector.getStruct(4, 2)
+    val row4 = columnVector.getStruct(4)
     assert(row4.getInt(0) === 5)
     assert(row4.getLong(1) === 5L)
 

@@ -336,7 +336,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(cached, expectedAnswer)
 
     // Check that the right size was calculated.
-    assert(cached.batchStats.value === expectedAnswer.size * INT.defaultSize)
+    assert(cached.sizeInBytesStats.value === expectedAnswer.size * INT.defaultSize)
   }
 
   test("access primitive-type columns in CachedBatch without whole stage codegen") {
@@ -477,7 +477,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
         assert(planBeforeFilter.head.isInstanceOf[InMemoryTableScanExec])
 
         val execPlan = if (enabled == "true") {
-          WholeStageCodegenExec(planBeforeFilter.head)
+          WholeStageCodegenExec(planBeforeFilter.head)(codegenStageId = 0)
         } else {
           planBeforeFilter.head
         }

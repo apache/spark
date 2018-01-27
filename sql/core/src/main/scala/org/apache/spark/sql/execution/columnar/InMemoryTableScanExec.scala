@@ -78,11 +78,10 @@ case class InMemoryTableScanExec(
     } else {
       OffHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
     }
-    val columnarBatch = new ColumnarBatch(
-      columnarBatchSchema, columnVectors.asInstanceOf[Array[ColumnVector]], rowCount)
+    val columnarBatch = new ColumnarBatch(columnVectors.asInstanceOf[Array[ColumnVector]])
     columnarBatch.setNumRows(rowCount)
 
-    for (i <- 0 until attributes.length) {
+    for (i <- attributes.indices) {
       ColumnAccessor.decompress(
         cachedColumnarBatch.buffers(columnIndices(i)),
         columnarBatch.column(i).asInstanceOf[WritableColumnVector],
@@ -275,7 +274,7 @@ case class InMemoryTableScanExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {
-      WholeStageCodegenExec(this).execute()
+      WholeStageCodegenExec(this)(codegenStageId = 0).execute()
     } else {
       inputRDD
     }
