@@ -251,6 +251,49 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       }
     }
 
+    // Blacklisting executor for stage
+    time += 1
+    listener.onExecutorBlacklistedForStage(SparkListenerExecutorBlacklistedForStage(
+      time = time,
+      executorId = execIds.head,
+      taskFailures = 2,
+      stageId = stages.head.stageId,
+      stageAttemptId = stages.head.attemptId))
+
+    val executorStageSummaryWrappers =
+      store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
+        .first(key(stages.head))
+        .last(key(stages.head))
+        .asScala.toSeq
+
+    assert(executorStageSummaryWrappers.nonEmpty)
+    executorStageSummaryWrappers.foreach { exec =>
+      // only the first executor is expected to be blacklisted
+      val expectedBlacklistedFlag = exec.executorId == execIds.head
+      assert(exec.info.isBlacklistedForStage === expectedBlacklistedFlag)
+    }
+
+    // Blacklisting node for stage
+    time += 1
+    listener.onNodeBlacklistedForStage(SparkListenerNodeBlacklistedForStage(
+      time = time,
+      hostId = "2.example.com", // this is where the second executor is hosted
+      executorFailures = 1,
+      stageId = stages.head.stageId,
+      stageAttemptId = stages.head.attemptId))
+
+    val executorStageSummaryWrappersForNode =
+      store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
+        .first(key(stages.head))
+        .last(key(stages.head))
+        .asScala.toSeq
+
+    assert(executorStageSummaryWrappersForNode.nonEmpty)
+    executorStageSummaryWrappersForNode.foreach { exec =>
+      // both executor is expected to be blacklisted
+      assert(exec.info.isBlacklistedForStage === true)
+    }
+
     // Fail one of the tasks, re-start it.
     time += 1
     s1Tasks.head.markFinished(TaskState.FAILED, time)
@@ -894,15 +937,19 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     val dropped = stages.drop(1).head
 
     // Cache some quantiles by calling AppStatusStore.taskSummary(). For quantiles to be
-    // calculcated, we need at least one finished task.
+    // calculated, we need at least one finished task. The code in AppStatusStore uses
+    // `executorRunTime` to detect valid tasks, so that metric needs to be updated in the
+    // task end event.
     time += 1
     val task = createTasks(1, Array("1")).head
     listener.onTaskStart(SparkListenerTaskStart(dropped.stageId, dropped.attemptId, task))
 
     time += 1
     task.markFinished(TaskState.FINISHED, time)
+    val metrics = TaskMetrics.empty
+    metrics.setExecutorRunTime(42L)
     listener.onTaskEnd(SparkListenerTaskEnd(dropped.stageId, dropped.attemptId,
-      "taskType", Success, task, null))
+      "taskType", Success, task, metrics))
 
     new AppStatusStore(store)
       .taskSummary(dropped.stageId, dropped.attemptId, Array(0.25d, 0.50d, 0.75d))

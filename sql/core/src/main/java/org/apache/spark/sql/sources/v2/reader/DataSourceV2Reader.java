@@ -38,7 +38,10 @@ import org.apache.spark.sql.types.StructType;
  *   2. Information Reporting. E.g., statistics reporting, ordering reporting, etc.
  *      Names of these interfaces start with `SupportsReporting`.
  *   3. Special scans. E.g, columnar scan, unsafe row scan, etc.
- *      Names of these interfaces start with `SupportsScan`.
+ *      Names of these interfaces start with `SupportsScan`. Note that a reader should only
+ *      implement at most one of the special scans, if more than one special scans are implemented,
+ *      only one of them would be respected, according to the priority list from high to low:
+ *      {@link SupportsScanColumnarBatch}, {@link SupportsScanUnsafeRow}.
  *
  * If an exception was throw when applying any of these query optimizations, the action would fail
  * and no Spark job was submitted.

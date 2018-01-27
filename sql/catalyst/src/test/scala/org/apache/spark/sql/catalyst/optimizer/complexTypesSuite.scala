@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
 /**
@@ -31,7 +32,7 @@ import org.apache.spark.sql.types._
 * i.e. {{{create_named_struct(square, `x` * `x`).square}}} can be simplified to {{{`x` * `x`}}}.
 * sam applies to create_array and create_map
 */
-class ComplexTypesSuite extends PlanTest{
+class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -169,6 +170,11 @@ class ComplexTypesSuite extends PlanTest{
     val ctx = new CodegenContext
     CreateArray(Seq(Literal(1))).genCode(ctx)
     assert(ctx.inlinedMutableStates.length == 0)
+  }
+
+  test("SPARK-23208: Test code splitting for create array related methods") {
+    val inputs = (1 to 2500).map(x => Literal(s"l_$x"))
+    checkEvaluation(CreateArray(inputs), new GenericArrayData(inputs.map(_.eval())))
   }
 
   test("simplify map ops") {

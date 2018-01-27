@@ -82,10 +82,7 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
 
   /** Returns the input and output column names corresponding in pair. */
   private[feature] def getInOutCols(): (Array[String], Array[String]) = {
-    ParamValidators.checkExclusiveParams(this, "inputCol", "inputCols")
-    ParamValidators.checkExclusiveParams(this, "inputCol", "outputCols")
-    ParamValidators.checkExclusiveParams(this, "outputCol", "outputCols")
-    ParamValidators.checkExclusiveParams(this, "inputCols", "outputCol")
+    ParamValidators.checkSingleVsMultiColumnParams(this, Seq(outputCol), Seq(outputCols))
 
     if (isSet(inputCol)) {
       (Array($(inputCol)), Array($(outputCol)))

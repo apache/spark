@@ -34,6 +34,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         PushDownPredicate,
         InferFiltersFromConstraints,
         CombineFilters,
+        SimplifyBinaryComparison,
         BooleanSimplification) :: Nil
   }
 
@@ -155,64 +156,6 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .select('a, 'b.as('d)).as("t")
       .join(t2.where(IsNotNull('a)), Inner,
         Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
-      .analyze
-    val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("inner join with alias: don't generate constraints for recursive functions") {
-    val t1 = testRelation.subquery('t1)
-    val t2 = testRelation.subquery('t2)
-
-    // We should prevent `Coalese(a, b)` from recursively creating complicated constraints through
-    // the constraint inference procedure.
-    val originalQuery = t1.select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col))
-      // We hide an `Alias` inside the child's child's expressions, to cover the situation reported
-      // in [SPARK-20700].
-      .select('int_col, 'd, 'a).as("t")
-      .join(t2, Inner,
-        Some("t.a".attr === "t2.a".attr
-          && "t.d".attr === "t2.a".attr
-          && "t.int_col".attr === "t2.a".attr))
-      .analyze
-    val correctAnswer = t1
-      .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a)))  && IsNotNull(Coalesce(Seq('b, 'a)))
-        && IsNotNull('b) && IsNotNull(Coalesce(Seq('b, 'b))) && IsNotNull(Coalesce(Seq('a, 'b)))
-        && 'a === 'b && 'a === Coalesce(Seq('a, 'a)) && 'a === Coalesce(Seq('a, 'b))
-        && 'a === Coalesce(Seq('b, 'a)) && 'b === Coalesce(Seq('a, 'b))
-        && 'b === Coalesce(Seq('b, 'a)) && 'b === Coalesce(Seq('b, 'b)))
-      .select('a, 'b.as('d), Coalesce(Seq('a, 'b)).as('int_col))
-      .select('int_col, 'd, 'a).as("t")
-      .join(
-        t2.where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'a))) &&
-          'a === Coalesce(Seq('a, 'a))),
-        Inner,
-        Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr
-          && "t.int_col".attr === "t2.a".attr))
-      .analyze
-    val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("inner join with EqualTo expressions containing part of each other: don't generate " +
-    "constraints for recursive functions") {
-    val t1 = testRelation.subquery('t1)
-    val t2 = testRelation.subquery('t2)
-
-    // We should prevent `c = Coalese(a, b)` and `a = Coalese(b, c)` from recursively creating
-    // complicated constraints through the constraint inference procedure.
-    val originalQuery = t1
-      .select('a, 'b, 'c, Coalesce(Seq('b, 'c)).as('d), Coalesce(Seq('a, 'b)).as('e))
-      .where('a === 'd && 'c === 'e)
-      .join(t2, Inner, Some("t1.a".attr === "t2.a".attr && "t1.c".attr === "t2.c".attr))
-      .analyze
-    val correctAnswer = t1
-      .where(IsNotNull('a) && IsNotNull('c) && 'a === Coalesce(Seq('b, 'c)) &&
-        'c === Coalesce(Seq('a, 'b)))
-      .select('a, 'b, 'c, Coalesce(Seq('b, 'c)).as('d), Coalesce(Seq('a, 'b)).as('e))
-      .join(t2.where(IsNotNull('a) && IsNotNull('c)),
-        Inner,
-        Some("t1.a".attr === "t2.a".attr && "t1.c".attr === "t2.c".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)

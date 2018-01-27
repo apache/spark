@@ -170,7 +170,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
    * Returns the list of files at 'path' recursively. This skips files that are ignored normally
    * by MapReduce.
    */
-  public static List<String> listDirectory(File path) throws IOException {
+  public static List<String> listDirectory(File path) {
     List<String> result = new ArrayList<>();
     if (path.isDirectory()) {
       for (File f: path.listFiles()) {
@@ -231,7 +231,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
   }
 
   @Override
-  public Void getCurrentKey() throws IOException, InterruptedException {
+  public Void getCurrentKey() {
     return null;
   }
 
@@ -259,7 +259,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     }
 
     @Override
-    int nextInt() throws IOException {
+    int nextInt() {
       return delegate.readInteger();
     }
   }
@@ -279,15 +279,15 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
   protected static final class NullIntIterator extends IntIterator {
     @Override
-    int nextInt() throws IOException { return 0; }
+    int nextInt() { return 0; }
   }
 
   /**
    * Creates a reader for definition and repetition levels, returning an optimized one if
    * the levels are not needed.
    */
-  protected static IntIterator createRLEIterator(int maxLevel, BytesInput bytes,
-                                              ColumnDescriptor descriptor) throws IOException {
+  protected static IntIterator createRLEIterator(
+      int maxLevel, BytesInput bytes, ColumnDescriptor descriptor) throws IOException {
     try {
       if (maxLevel == 0) return new NullIntIterator();
       return new RLEIntIterator(
