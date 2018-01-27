@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+"""
+A simple example demonstrating basic Spark SQL features.
+Run with:
+  ./bin/spark-submit examples/src/main/python/sql/basic.py
+"""
 from __future__ import print_function
 
 # $example on:init_session$
@@ -29,12 +34,6 @@ from pyspark.sql import Row
 # Import data types
 from pyspark.sql.types import *
 # $example off:programmatic_schema$
-
-"""
-A simple example demonstrating basic Spark SQL features.
-Run with:
-  ./bin/spark-submit examples/src/main/python/sql/basic.py
-"""
 
 
 def basic_df_example(spark):
