@@ -441,6 +441,19 @@ class SQLTests(ReusedSQLTestCase):
         pydoc.render_doc(random_udf1)
         pydoc.render_doc(udf(lambda x: x).asNondeterministic)
 
+    def test_nondeterministic_udf3(self):
+        # regression test for SPARK-23233
+        from pyspark.sql.functions import udf
+        f = udf(lambda x: x)
+        # Here we cache the JVM UDF instance.
+        self.spark.range(1).select(f("id"))
+        # This should reset the cache to set the deterministic status correctly.
+        f = f.asNondeterministic()
+        # Check the deterministic status of udf.
+        df = self.spark.range(1).select(f("id"))
+        deterministic = df._jdf.logicalPlan().projectList().head().deterministic()
+        self.assertFalse(deterministic)
+
     def test_nondeterministic_udf_in_aggregate(self):
         from pyspark.sql.functions import udf, sum
         import random

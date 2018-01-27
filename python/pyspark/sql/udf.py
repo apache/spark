@@ -188,6 +188,9 @@ class UserDefinedFunction(object):
 
         .. versionadded:: 2.3
         """
+        # Here, we explicitly clean the cache to create a JVM UDF instance
+        # with 'deterministic' updated. See SPARK-23233.
+        self._judf_placeholder = None
         self.deterministic = False
         return self
 
