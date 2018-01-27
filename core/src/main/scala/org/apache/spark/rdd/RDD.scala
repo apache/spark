@@ -447,20 +447,21 @@ abstract class RDD[T: ClassTag](
       : RDD[T] = withScope {
     require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
     if (shuffle) {
-      /** Distributes elements evenly across output partitions, starting from a random partition. */
-      val distributePartition = (index: Int, items: Iterator[T]) => {
-        var position = new Random(hashing.byteswap32(index)).nextInt(numPartitions)
+      // Distributes elements by their hashes across output partitions, starting from a random
+      // partition.
+      // TODO distribute elements evenly after resolved the falling case described in SPARK-23243
+      val distributePartition = (items: Iterator[T]) => {
         items.map { t =>
+          val hash = if (t == null) 0 else t.hashCode()
           // Note that the hash code of the key will just be the key itself. The HashPartitioner
           // will mod it with the number of total partitions.
-          position = position + 1
-          (position, t)
-        }
-      } : Iterator[(Int, T)]
+          (hash, t)
+        } : Iterator[(Int, T)]
+      }
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[Int, T, T](mapPartitionsWithIndex(distributePartition),
+        new ShuffledRDD[Int, T, T](mapPartitions(distributePartition),
         new HashPartitioner(numPartitions)),
         numPartitions,
         partitionCoalescer).values

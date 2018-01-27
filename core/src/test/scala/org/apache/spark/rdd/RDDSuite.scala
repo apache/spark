@@ -22,6 +22,7 @@ import java.io.{File, IOException, ObjectInputStream, ObjectOutputStream}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.reflect.ClassTag
+import scala.util.Random
 
 import com.esotericsoftware.kryo.KryoException
 import org.apache.hadoop.io.{LongWritable, Text}
@@ -326,7 +327,10 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(repartitioned2.collect().toSet === (1 to 1000).toSet)
   }
 
-  test("repartitioned RDDs perform load balancing") {
+  // Ignore the test case since round-robin partitioning can cause incorrect result under some
+  // cases discussed in SPARK-23207 and SPARK-23243. Will re-enable this after we resolved the
+  // issue.
+  ignore("repartitioned RDDs perform load balancing") {
     // Coalesce partitions
     val input = Array.fill(1000)(1)
     val initialPartitions = 10
@@ -359,6 +363,30 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     testSplitPartitions(Array.fill(100)(1), 10, 20)
     testSplitPartitions(Array.fill(10000)(1) ++ Array.fill(10000)(2), 20, 100)
     testSplitPartitions(Array.fill(1000)(1), 250, 128)
+  }
+
+  test("SPARK-23243: Make repartition() generate consistent output") {
+    def assertConsistency(rdd: RDD[Any]): Unit = {
+      rdd.persist()
+
+      val partitions1 = rdd.mapPartitions { iter =>
+        Random.shuffle(iter)
+      }.repartition(111).collectPartitions()
+      val partitions2 = rdd.repartition(111).collectPartitions()
+      assert(partitions1.size === partitions2.size)
+      assert(partitions1.zip(partitions2).forall { pair =>
+        pair._1.toSet === pair._2.toSet
+      })
+    }
+
+    // repartition() should generate consistent output.
+    assertConsistency(sc.parallelize(1 to 10000, 10))
+
+    // case when input contains duplicated values.
+    assertConsistency(sc.parallelize(1 to 10000, 10).map(i => Random.nextInt(1000)))
+
+    // case when input contains null values.
+    assertConsistency(sc.parallelize(1 to 100, 10).map(i => if (i % 2 == 0) null else i))
   }
 
   test("coalesced RDDs") {
