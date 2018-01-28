@@ -345,23 +345,7 @@ private[spark] class MesosClusterScheduler(
       this.masterInfo = Some(masterInfo)
       this.schedulerDriver = driver
 
-      if (!pendingRecover.isEmpty) {
-        // Start task reconciliation if we need to recover.
-        val statuses = pendingRecover.collect {
-          case (taskId, slaveId) =>
-            val newStatus = TaskStatus.newBuilder()
-              .setTaskId(TaskID.newBuilder().setValue(taskId).build())
-              .setSlaveId(slaveId)
-              .setState(MesosTaskState.TASK_STAGING)
-              .build()
-            launchedDrivers.get(getSubmissionIdFromTaskId(taskId))
-              .map(_.mesosTaskStatus.getOrElse(newStatus))
-              .getOrElse(newStatus)
-        }
-        // TODO: Page the status updates to avoid trying to reconcile
-        // a large amount of tasks at once.
-        driver.reconcileTasks(statuses.toSeq.asJava)
-      }
+      tasksReconciliation(driver, pendingRecover)
     }
   }
 
@@ -711,7 +695,36 @@ private[spark] class MesosClusterScheduler(
   override def disconnected(driver: SchedulerDriver): Unit = {}
   override def reregistered(driver: SchedulerDriver, masterInfo: MasterInfo): Unit = {
     logInfo(s"Framework re-registered with master ${masterInfo.getId}")
+    stateLock.synchronized {
+      this.masterInfo = Some(masterInfo)
+      this.schedulerDriver = driver
+
+      tasksReconciliation(driver, pendingRecover)
+    }
   }
+
+  private def tasksReconciliation(
+      driver: SchedulerDriver,
+      pendingRecover: mutable.HashMap[String, SlaveID]) = {
+    if (!pendingRecover.isEmpty) {
+      // Start task reconciliation if we need to recover.
+      val statuses = pendingRecover.collect {
+        case (taskId, slaveId) =>
+          val newStatus = TaskStatus.newBuilder()
+            .setTaskId(TaskID.newBuilder().setValue(taskId).build())
+            .setSlaveId(slaveId)
+            .setState(MesosTaskState.TASK_STAGING)
+            .build()
+          launchedDrivers.get(getSubmissionIdFromTaskId(taskId))
+            .map(_.mesosTaskStatus.getOrElse(newStatus))
+            .getOrElse(newStatus)
+      }
+      // TODO: Page the status updates to avoid trying to reconcile
+      // a large amount of tasks at once.
+      driver.reconcileTasks(statuses.toSeq.asJava)
+    }
+  }
+
   override def slaveLost(driver: SchedulerDriver, slaveId: SlaveID): Unit = {}
   override def error(driver: SchedulerDriver, error: String): Unit = {
     logError("Error received: " + error)
