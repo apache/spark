@@ -174,7 +174,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * predicates on the partitioned columns. In order for partitioning to work well, the number
    * of distinct values in each column should typically be less than tens of thousands.
    *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
+   * 2.1.0.
    *
    * @since 1.4.0
    */
@@ -188,7 +189,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Buckets the output by the given columns. If specified, the output is laid out on the file
    * system similar to Hive's bucketing scheme.
    *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
+   * 2.1.0.
    *
    * @since 2.0
    */
@@ -202,7 +204,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Sorts the output in each bucket by the given columns.
    *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
+   * 2.1.0.
    *
    * @since 2.0
    */
