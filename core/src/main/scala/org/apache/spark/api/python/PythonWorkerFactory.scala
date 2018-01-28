@@ -17,8 +17,8 @@
 
 package org.apache.spark.api.python
 
-import java.io.{DataInputStream, DataOutputStream, InputStream, OutputStreamWriter}
-import java.net.{InetAddress, ServerSocket, Socket, SocketException}
+import java.io._
+import java.net._
 import java.nio.charset.StandardCharsets
 import java.util.Arrays
 
@@ -191,7 +191,20 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         daemon = pb.start()
 
         val in = new DataInputStream(daemon.getInputStream)
-        daemonPort = in.readInt()
+        try {
+          daemonPort = in.readInt()
+        } catch {
+          case exc: EOFException =>
+            throw new IOException(s"No port number in $daemonModule's stdout")
+        }
+
+        // test that the returned port number is within a valid range.
+        // note: this does not cover the case where the port number
+        // is arbitrary data but is also coincidentally within range
+        if (daemonPort < 1 || daemonPort > 0xffff) {
+          throw new IOException(s"Bad port number in $daemonModule's stdout: " +
+            f"0x$daemonPort%08x")
+        }
 
         // Redirect daemon stdout and stderr
         redirectStreamsToStderr(in, daemon.getErrorStream)
