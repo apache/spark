@@ -62,7 +62,11 @@ import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
-    new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
+    val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
+    // Eagerly bind the encoder so we verify that the encoder matches the underlying
+    // schema. The user will get an error if this is not the case.
+    dataset.deserializer
+    dataset
   }
 
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame = {
