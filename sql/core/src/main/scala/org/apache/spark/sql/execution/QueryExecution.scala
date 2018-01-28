@@ -54,16 +54,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   lazy val analyzed: LogicalPlan = {
     SparkSession.setActiveSession(sparkSession)
-    val plan = sparkSession.sessionState.analyzer.execute(logical)
-    try {
-      sparkSession.sessionState.analyzer.checkAnalysis(plan)
-      EliminateBarriers(plan)
-    } catch {
-      case e: AnalysisException =>
-        val ae = new AnalysisException(e.message, e.line, e.startPosition, Option(plan))
-        ae.setStackTrace(e.getStackTrace)
-        throw ae
-    }
+    sparkSession.sessionState.analyzer.executeAndCheck(logical)
   }
 
   lazy val withCachedData: LogicalPlan = {
