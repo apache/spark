@@ -63,7 +63,7 @@ class KafkaContinuousReader(
 
   private val pollTimeoutMs = sourceOptions.getOrElse("kafkaConsumer.pollTimeoutMs", "512").toLong
 
-  // Initialized when creating read tasks. If this diverges from the partitions at the latest
+  // Initialized when creating reader factories. If this diverges from the partitions at the latest
   // offsets, we need to reconfigure.
   // Exposed outside this object only for unit tests.
   private[sql] var knownPartitions: Set[TopicPartition] = _
@@ -149,8 +149,8 @@ class KafkaContinuousReader(
 }
 
 /**
- * A read task for continuous Kafka processing. This will be serialized and transformed into a
- * full reader on executors.
+ * A data reader factory for continuous Kafka processing. This will be serialized and transformed
+ * into a full reader on executors.
  *
  * @param topicPartition The (topic, partition) pair this task is responsible for.
  * @param startOffset The offset to start reading from within the partition.

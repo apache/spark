@@ -63,7 +63,7 @@ public interface DataSourceV2Reader {
   StructType readSchema();
 
   /**
-   * Returns a list of read tasks. Each task is responsible for outputting data for one RDD
+   * Returns a list of reader factories. Each task is responsible for outputting data for one RDD
    * partition. That means the number of tasks returned here is same as the number of RDD
    * partitions this scan outputs.
    *
