@@ -33,9 +33,9 @@ import java.util.Optional;
 @InterfaceStability.Evolving
 public interface MicroBatchReader extends DataSourceV2Reader, BaseStreamingSource {
     /**
-     * Set the desired offset range for read tasks created from this reader. Read tasks will
-     * generate only data within (`start`, `end`]; that is, from the first record after `start` to
-     * the record with offset `end`.
+     * Set the desired offset range for reader factories created from this reader. Reader factories
+     * will generate only data within (`start`, `end`]; that is, from the first record after `start`
+     * to the record with offset `end`.
      *
      * @param start The initial offset to scan from. If not specified, scan from an
      *              implementation-specified start point, such as the earliest available record.

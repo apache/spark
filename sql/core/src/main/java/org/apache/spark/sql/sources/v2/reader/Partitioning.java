@@ -29,7 +29,7 @@ import org.apache.spark.annotation.InterfaceStability;
 public interface Partitioning {
 
   /**
-   * Returns the number of partitions(i.e., {@link ReadTask}s) the data source outputs.
+   * Returns the number of partitions(i.e., {@link DataReaderFactory}s) the data source outputs.
    */
   int numPartitions();
 

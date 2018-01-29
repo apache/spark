@@ -26,7 +26,7 @@ import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.DataSourceV2Options;
 import org.apache.spark.sql.sources.v2.ReadSupport;
 import org.apache.spark.sql.sources.v2.reader.DataReader;
-import org.apache.spark.sql.sources.v2.reader.ReadTask;
+import org.apache.spark.sql.sources.v2.reader.DataReaderFactory;
 import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
 import org.apache.spark.sql.types.StructType;
 
@@ -41,25 +41,25 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<ReadTask<Row>> createReadTasks() {
+    public List<DataReaderFactory<Row>> createDataReaderFactories() {
       return java.util.Arrays.asList(
-        new JavaSimpleReadTask(0, 5),
-        new JavaSimpleReadTask(5, 10));
+        new JavaSimpleDataReaderFactory(0, 5),
+        new JavaSimpleDataReaderFactory(5, 10));
     }
   }
 
-  static class JavaSimpleReadTask implements ReadTask<Row>, DataReader<Row> {
+  static class JavaSimpleDataReaderFactory implements DataReaderFactory<Row>, DataReader<Row> {
     private int start;
     private int end;
 
-    JavaSimpleReadTask(int start, int end) {
+    JavaSimpleDataReaderFactory(int start, int end) {
       this.start = start;
       this.end = end;
     }
 
     @Override
     public DataReader<Row> createDataReader() {
-      return new JavaSimpleReadTask(start - 1, end);
+      return new JavaSimpleDataReaderFactory(start - 1, end);
     }
 
     @Override
