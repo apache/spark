@@ -766,7 +766,6 @@ class SparkSession(object):
         """Stop the underlying :class:`SparkContext`.
         """
         self._sc.stop()
-        self._jvm.SparkSession.clearDefaultSession()
         SparkSession._instantiatedSession = None
 
     @since(2.0)
