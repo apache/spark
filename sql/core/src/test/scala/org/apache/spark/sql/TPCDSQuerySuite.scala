@@ -342,10 +342,10 @@ class TPCDSQuerySuite extends BenchmarkQueryTest {
 
   // This list only includes TPCDS v2.7 queries that are different from v1.4 ones
   val tpcdsQueriesV2_7_0 = Seq(
-    "q4", "q5a", "q6", "q10a", "q11", "q12", "q14", "q14a", "q18a",
-    "q20", "q22", "q22a", "q24_1", "q24_2", "q27a", "q34", "q35", "q35a", "q36a",
-    "q44", "q47", "q49", "q51a", "q57", "q61", "q64", "q67a", "q69",
-    "q70a", "q72", "q74", "q75", "q77", "q77a", "q78", "q80a", "q86a", "q98")
+    "q5a", "q6", "q10a", "q11", "q12", "q14", "q14a", "q18a",
+    "q20", "q22", "q22a", "q24", "q27a", "q34", "q35", "q35a", "q36a", "q47", "q49",
+    "q51a", "q57", "q64", "q67a", "q70a", "q72", "q74", "q75", "q77a", "q78",
+    "q80a", "q86a", "q98")
 
   tpcdsQueriesV2_7_0.foreach { name =>
     val queryString = resourceToString(s"tpcds-v2.7.0/$name.sql",

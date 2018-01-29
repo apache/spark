@@ -1,17 +1,15 @@
-select  i_product_name
-             ,i_brand
-             ,i_class
-             ,i_category
-             ,avg(inv_quantity_on_hand) qoh
-       from inventory
-           ,date_dim
-           ,item
-       where inv_date_sk=d_date_sk
-              and inv_item_sk=i_item_sk
-              and d_month_seq between 1212 and 1212 + 11
-       group by rollup(i_product_name
-                       ,i_brand
-                       ,i_class
-                       ,i_category)
-order by qoh, i_product_name, i_brand, i_class, i_category
-limit 100
+SELECT
+  i_product_name,
+  i_brand,
+  i_class,
+  i_category,
+  avg(inv_quantity_on_hand) qoh
+FROM inventory, date_dim, item, warehouse
+WHERE inv_date_sk = d_date_sk
+  AND inv_item_sk = i_item_sk
+  -- q22 in TPCDS v1.4 had a condition below:
+  -- AND inv_warehouse_sk = w_warehouse_sk
+  AND d_month_seq BETWEEN 1200 AND 1200 + 11
+GROUP BY ROLLUP (i_product_name, i_brand, i_class, i_category)
+ORDER BY qoh, i_product_name, i_brand, i_class, i_category
+LIMIT 100

@@ -1,31 +1,23 @@
-select  i_item_id
-      ,i_item_desc 
-      ,i_category 
-      ,i_class 
-      ,i_current_price
-      ,sum(ws_ext_sales_price) as itemrevenue 
-      ,sum(ws_ext_sales_price)*100/sum(sum(ws_ext_sales_price)) over
-          (partition by i_class) as revenueratio
-from	
-	web_sales
-    	,item 
-    	,date_dim
-where 
-	ws_item_sk = i_item_sk 
-  	and i_category in ('Jewelry', 'Sports', 'Books')
-  	and ws_sold_date_sk = d_date_sk
-	and d_date between cast('2001-01-12' as date) 
-				and (cast('2001-01-12' as date) + interval 30 days)
-group by 
-	i_item_id
-        ,i_item_desc 
-        ,i_category
-        ,i_class
-        ,i_current_price
-order by 
-	i_category
-        ,i_class
-        ,i_item_id
-        ,i_item_desc
-        ,revenueratio
-limit 100
+SELECT
+  i_item_id, -- This column did not exist in TPCDS v1.4
+  i_item_desc,
+  i_category,
+  i_class,
+  i_current_price,
+  sum(ws_ext_sales_price) AS itemrevenue,
+  sum(ws_ext_sales_price) * 100 / sum(sum(ws_ext_sales_price))
+  OVER
+  (PARTITION BY i_class) AS revenueratio
+FROM
+  web_sales, item, date_dim
+WHERE
+  ws_item_sk = i_item_sk
+    AND i_category IN ('Sports', 'Books', 'Home')
+    AND ws_sold_date_sk = d_date_sk
+    AND d_date BETWEEN cast('1999-02-22' AS DATE)
+  AND (cast('1999-02-22' AS DATE) + INTERVAL 30 days)
+GROUP BY
+  i_item_id, i_item_desc, i_category, i_class, i_current_price
+ORDER BY
+  i_category, i_class, i_item_id, i_item_desc, revenueratio
+LIMIT 100
