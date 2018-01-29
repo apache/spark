@@ -35,8 +35,8 @@ import org.apache.spark.annotation.InterfaceStability;
 public interface DataReaderFactory<T> extends Serializable {
 
   /**
-   * The preferred locations where this data reader returned by this reader factory can run faster,
-   * but Spark does not guarantee that this task will always run on these locations.
+   * The preferred locations where the data reader returned by this reader factory can run faster,
+   * but Spark does not guarantee to run the data reader on these locations.
    * The implementations should make sure that it can be run on any location.
    * The location is a string representing the host name.
    *
