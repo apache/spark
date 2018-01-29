@@ -27,6 +27,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
+import org.apache.hadoop.hive.ql.session.OperationLog
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
@@ -177,6 +178,8 @@ private[hive] class SparkExecuteStatementOperation(
                 case e: HiveSQLException =>
                   setOperationException(e)
                   log.error("Error running hive query: ", e)
+              } finally {
+                unregisterOperationLog()
               }
             }
           }
@@ -270,6 +273,19 @@ private[hive] class SparkExecuteStatementOperation(
     }
     setState(OperationState.FINISHED)
     HiveThriftServer2.listener.onStatementFinish(statementId)
+  }
+
+  private def registerCurrentOperationLog(): Unit = {
+    if (isOperationLogEnabled) {
+      if (operationLog == null) {
+        logWarning("Failed to get current OperationLog object of Operation: " +
+          getHandle().getHandleIdentifier())
+        isOperationLogEnabled = false
+      } else {
+        OperationLog.setCurrentOperationLog(operationLog)
+      }
+    }
+
   }
 
   override def cancel(): Unit = {
