@@ -22,13 +22,14 @@ import java.io.Serializable;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A reader factory returned by {@link DataSourceV2Reader#createDataReaderFactories()} and is responsible for
- * creating the actual data reader. The relationship between {@link DataReaderFactory} and {@link DataReader}
+ * A reader factory returned by {@link DataSourceV2Reader#createDataReaderFactories()} and is
+ * responsible for creating the actual data reader. The relationship between
+ * {@link DataReaderFactory} and {@link DataReader}
  * is similar to the relationship between {@link Iterable} and {@link java.util.Iterator}.
  *
- * Note that, the reader factory will be serialized and sent to executors, then the data reader will be
- * created on executors and do the actual reading. So {@link DataReaderFactory} must be serializable and
- * {@link DataReader} doesn't need to be.
+ * Note that, the reader factory will be serialized and sent to executors, then the data reader
+ * will be created on executors and do the actual reading. So {@link DataReaderFactory} must be
+ * serializable and {@link DataReader} doesn't need to be.
  */
 @InterfaceStability.Evolving
 public interface DataReaderFactory<T> extends Serializable {

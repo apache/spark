@@ -36,7 +36,8 @@ public interface SupportsScanColumnarBatch extends DataSourceV2Reader {
   }
 
   /**
-   * Similar to {@link DataSourceV2Reader#createDataReaderFactories()}, but returns columnar data in batches.
+   * Similar to {@link DataSourceV2Reader#createDataReaderFactories()}, but returns columnar data
+   * in batches.
    */
   List<DataReaderFactory<ColumnarBatch>> createBatchDataReaderFactories();
 

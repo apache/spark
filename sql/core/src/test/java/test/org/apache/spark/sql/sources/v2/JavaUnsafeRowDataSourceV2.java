@@ -45,7 +45,8 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
     }
   }
 
-  static class JavaUnsafeRowDataReaderFactory implements DataReaderFactory<UnsafeRow>, DataReader<UnsafeRow> {
+  static class JavaUnsafeRowDataReaderFactory
+      implements DataReaderFactory<UnsafeRow>, DataReader<UnsafeRow> {
     private int start;
     private int end;
     private UnsafeRow row;

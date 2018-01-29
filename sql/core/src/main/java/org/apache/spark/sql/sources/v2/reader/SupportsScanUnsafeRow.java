@@ -39,7 +39,8 @@ public interface SupportsScanUnsafeRow extends DataSourceV2Reader {
   }
 
   /**
-   * Similar to {@link DataSourceV2Reader#createDataReaderFactories()}, but returns data in unsafe row format.
+   * Similar to {@link DataSourceV2Reader#createDataReaderFactories()},
+   * but returns data in unsafe row format.
    */
   List<DataReaderFactory<UnsafeRow>> createUnsafeRowReaderFactories();
 }
