@@ -78,7 +78,7 @@ class RateSourceV2Suite extends StreamTest {
     val reader = new RateStreamMicroBatchReader(
       new DataSourceV2Options(Map("numPartitions" -> "11", "rowsPerSecond" -> "33").asJava))
     reader.setOffsetRange(Optional.empty(), Optional.empty())
-    val tasks = reader.createReadTasks()
+    val tasks = reader.createDataReaderFactories()
     assert(tasks.size == 11)
   }
 
@@ -118,7 +118,7 @@ class RateSourceV2Suite extends StreamTest {
     val startOffset = RateStreamOffset(Map((0, ValueRunTimeMsPair(0, 1000))))
     val endOffset = RateStreamOffset(Map((0, ValueRunTimeMsPair(20, 2000))))
     reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
-    val tasks = reader.createReadTasks()
+    val tasks = reader.createDataReaderFactories()
     assert(tasks.size == 1)
     assert(tasks.get(0).asInstanceOf[RateStreamBatchTask].vals.size == 20)
   }
@@ -133,7 +133,7 @@ class RateSourceV2Suite extends StreamTest {
     }.toMap)
 
     reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
-    val tasks = reader.createReadTasks()
+    val tasks = reader.createDataReaderFactories()
     assert(tasks.size == 11)
 
     val readData = tasks.asScala
@@ -161,12 +161,12 @@ class RateSourceV2Suite extends StreamTest {
     val reader = new RateStreamContinuousReader(
       new DataSourceV2Options(Map("numPartitions" -> "2", "rowsPerSecond" -> "20").asJava))
     reader.setOffset(Optional.empty())
-    val tasks = reader.createReadTasks()
+    val tasks = reader.createDataReaderFactories()
     assert(tasks.size == 2)
 
     val data = scala.collection.mutable.ListBuffer[Row]()
     tasks.asScala.foreach {
-      case t: RateStreamContinuousReadTask =>
+      case t: RateStreamContinuousDataReaderFactory =>
         val startTimeMs = reader.getStartOffset()
           .asInstanceOf[RateStreamOffset]
           .partitionToValueAndRunTimeMs(t.partitionIndex)

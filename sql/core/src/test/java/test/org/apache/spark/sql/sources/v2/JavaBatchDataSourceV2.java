@@ -42,12 +42,14 @@ public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<ReadTask<ColumnarBatch>> createBatchReadTasks() {
-      return java.util.Arrays.asList(new JavaBatchReadTask(0, 50), new JavaBatchReadTask(50, 90));
+    public List<DataReaderFactory<ColumnarBatch>> createBatchDataReaderFactories() {
+      return java.util.Arrays.asList(
+               new JavaBatchDataReaderFactory(0, 50), new JavaBatchDataReaderFactory(50, 90));
     }
   }
 
-  static class JavaBatchReadTask implements ReadTask<ColumnarBatch>, DataReader<ColumnarBatch> {
+  static class JavaBatchDataReaderFactory
+      implements DataReaderFactory<ColumnarBatch>, DataReader<ColumnarBatch> {
     private int start;
     private int end;
 
@@ -57,7 +59,7 @@ public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
     private OnHeapColumnVector j;
     private ColumnarBatch batch;
 
-    JavaBatchReadTask(int start, int end) {
+    JavaBatchDataReaderFactory(int start, int end) {
       this.start = start;
       this.end = end;
     }

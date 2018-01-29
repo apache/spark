@@ -40,10 +40,10 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<ReadTask<Row>> createReadTasks() {
+    public List<DataReaderFactory<Row>> createDataReaderFactories() {
       return java.util.Arrays.asList(
-        new SpecificReadTask(new int[]{1, 1, 3}, new int[]{4, 4, 6}),
-        new SpecificReadTask(new int[]{2, 4, 4}, new int[]{6, 2, 2}));
+        new SpecificDataReaderFactory(new int[]{1, 1, 3}, new int[]{4, 4, 6}),
+        new SpecificDataReaderFactory(new int[]{2, 4, 4}, new int[]{6, 2, 2}));
     }
 
     @Override
@@ -70,12 +70,12 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
     }
   }
 
-  static class SpecificReadTask implements ReadTask<Row>, DataReader<Row> {
+  static class SpecificDataReaderFactory implements DataReaderFactory<Row>, DataReader<Row> {
     private int[] i;
     private int[] j;
     private int current = -1;
 
-    SpecificReadTask(int[] i, int[] j) {
+    SpecificDataReaderFactory(int[] i, int[] j) {
       assert i.length == j.length;
       this.i = i;
       this.j = j;
