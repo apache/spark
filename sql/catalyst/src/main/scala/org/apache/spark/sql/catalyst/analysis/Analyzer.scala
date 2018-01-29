@@ -98,6 +98,19 @@ class Analyzer(
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
+  def executeAndCheck(plan: LogicalPlan): LogicalPlan = {
+    val analyzed = execute(plan)
+    try {
+      checkAnalysis(analyzed)
+      EliminateBarriers(analyzed)
+    } catch {
+      case e: AnalysisException =>
+        val ae = new AnalysisException(e.message, e.line, e.startPosition, Option(analyzed))
+        ae.setStackTrace(e.getStackTrace)
+        throw ae
+    }
+  }
+
   override def execute(plan: LogicalPlan): LogicalPlan = {
     AnalysisContext.reset()
     try {
@@ -178,8 +191,7 @@ class Analyzer(
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
-      CleanupAliases,
-      EliminateBarriers)
+      CleanupAliases)
   )
 
   /**
