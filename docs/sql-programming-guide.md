@@ -1661,10 +1661,10 @@ You can install using pip or conda from the conda-forge channel. See PyArrow
 
 ## Enabling for Conversion to/from Pandas
 
-Arrow is available as an optimization when converting a Spark DataFrame to Pandas using the call
-`toPandas()` and when creating a Spark DataFrame from Pandas with `createDataFrame(pandas_df)`.
-To use Arrow when executing these calls, users need to first set the Spark configuration
-'spark.sql.execution.arrow.enabled' to 'true'. This is disabled by default.
+Arrow is available as an optimization when converting a Spark DataFrame to a Pandas DataFrame
+using the call `toPandas()` and when creating a Spark DataFrame from a Pandas DataFrame with
+`createDataFrame(pandas_df)`. To use Arrow when executing these calls, users need to first set
+the Spark configuration 'spark.sql.execution.arrow.enabled' to 'true'. This is disabled by default.
 
 <div class="codetabs">
 <div data-lang="python" markdown="1">
@@ -1714,6 +1714,11 @@ To use `groupBy().apply()`, the user needs to define the following:
 * A Python function that defines the computation for each group.
 * A `StructType` object or a string that defines the schema of the output `DataFrame`.
 
+Note that all data for a group will be loaded into memory before the function is applied. This can
+lead to out of memory exceptons, especially if the group sizes are skewed. The configuration for
+[maxRecordsPerBatch](#setting-arrow-batch-size) is not applied on groups and it is up to the user
+to ensure that the grouped data will fit into the available memory.
+
 The following example shows how to use `groupby().apply()` to subtract the mean from each value in the group.
 
 <div class="codetabs">
@@ -1727,10 +1732,10 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 
 ## Usage Notes
 
-### Supported SQL-Arrow Types
+### Supported SQL Types
 
-Currently, all Spark SQL data types are supported except `MapType`, `ArrayType` of `TimestampType`, and
-nested `StructType`.
+Currently, all Spark SQL data types are supported by Arrow-based conversion except `MapType`,
+`ArrayType` of `TimestampType`, and nested `StructType`.
 
 ### Setting Arrow Batch Size
 
@@ -1738,9 +1743,9 @@ Data partitions in Spark are converted into Arrow record batches, which can temp
 high memory usage in the JVM. To avoid possible out of memory exceptions, the size of the Arrow
 record batches can be adjusted by setting the conf "spark.sql.execution.arrow.maxRecordsPerBatch"
 to an integer that will determine the maximum number of rows for each batch. The default value is
-10,000 records per batch and does not take into account the number of columns, so it should be
-adjusted accordingly. Using this limit, each data partition will be made into 1 or more record
-batches for processing.
+10,000 records per batch. If the number of columns is large, the value should be adjusted
+accordingly. Using this limit, each data partition will be made into 1 or more record batches for
+processing.
 
 ### Timestamp with Time Zone Semantics
 
