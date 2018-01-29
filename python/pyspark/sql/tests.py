@@ -204,6 +204,48 @@ class ReusedSQLTestCase(ReusedPySparkTestCase):
         self.assertTrue(expected.equals(result), msg=msg)
 
 
+class PySparkSessionTests(unittest.TestCase):
+
+    def test_set_jvm_default_session(self):
+        spark = None
+        sc = None
+        try:
+            sc = SparkContext('local[4]', "test_spark_session")
+            spark = SparkSession(sc)
+            self.assertTrue(spark._jvm.SparkSession.getDefaultSession().isDefined())
+        finally:
+            if spark is not None:
+                spark.stop()
+                self.assertTrue(spark._jvm.SparkSession.getDefaultSession().isEmpty())
+                spark = None
+                sc = None
+
+            if sc is not None:
+                sc.stop()
+                sc = None
+
+    def test_jvm_default_session_already_set(self):
+        spark = None
+        sc = None
+        try:
+            sc = SparkContext('local[4]', "test_spark_session")
+            jsession = sc._jvm.SparkSession(sc._jsc.sc())
+            sc._jvm.SparkSession.setDefaultSession(jsession)
+
+            spark = SparkSession(sc, jsession)
+            self.assertTrue(spark._jvm.SparkSession.getDefaultSession().isDefined())
+            self.assertTrue(jsession.equals(spark._jvm.SparkSession.getDefaultSession().get()))
+        finally:
+            if spark is not None:
+                spark.stop()
+                spark = None
+                sc = None
+
+            if sc is not None:
+                sc.stop()
+                sc = None
+
+
 class DataTypeTests(unittest.TestCase):
     # regression test for SPARK-6055
     def test_data_type_eq(self):

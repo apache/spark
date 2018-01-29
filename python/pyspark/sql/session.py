@@ -213,7 +213,10 @@ class SparkSession(object):
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
         if jsparkSession is None:
-            jsparkSession = self._jvm.SparkSession(self._jsc.sc())
+            if self._jvm.SparkSession.getDefaultSession().isDefined():
+                jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
+            else:
+                jsparkSession = self._jvm.SparkSession(self._jsc.sc())
         self._jsparkSession = jsparkSession
         self._jwrapped = self._jsparkSession.sqlContext()
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)
@@ -225,7 +228,8 @@ class SparkSession(object):
         if SparkSession._instantiatedSession is None \
                 or SparkSession._instantiatedSession._sc._jsc is None:
             SparkSession._instantiatedSession = self
-            self._jvm.org.apache.spark.sql.SparkSession.setDefaultSession(self._jsparkSession)
+            if self._jvm.SparkSession.getDefaultSession().isEmpty():
+                self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
 
     def _repr_html_(self):
         return """
@@ -760,6 +764,7 @@ class SparkSession(object):
         """Stop the underlying :class:`SparkContext`.
         """
         self._sc.stop()
+        self._jvm.SparkSession.clearDefaultSession()
         SparkSession._instantiatedSession = None
 
     @since(2.0)
