@@ -62,7 +62,7 @@ general:
 
 test:
   override:
-    - set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "$CIRCLE_ARTIFACTS/run-tests.log"
+    - set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "$CIRCLE_ARTIFACTS/run-tests.log":
         parallel: true
         timeout: 1800
         max-runtime: 14400
