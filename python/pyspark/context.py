@@ -400,8 +400,6 @@ class SparkContext(object):
         """
         if getattr(self, "_jsc", None):
             try:
-                # We should clean the default session up. See SPARK-23228.
-                self._jvm.SparkSession.clearDefaultSession()
                 self._jsc.stop()
             except Py4JError:
                 # Case: SPARK-18523
