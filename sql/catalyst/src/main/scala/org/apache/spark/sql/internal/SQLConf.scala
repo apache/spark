@@ -629,6 +629,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME =
+    buildConf("spark.sql.codegen.useIdInClassName")
+    .internal()
+    .doc("When true, embed the (whole-stage) codegen stage ID into " +
+      "the class name of the generated class as a suffix")
+    .booleanConf
+    .createWithDefault(true)
+
   val WHOLESTAGE_MAX_NUM_FIELDS = buildConf("spark.sql.codegen.maxFields")
     .internal()
     .doc("The maximum number of fields (including nested fields) that will be supported before" +
@@ -660,6 +668,15 @@ object SQLConf {
       "this is a limit in the OpenJDK JVM implementation.")
     .intConf
     .createWithDefault(CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT)
+
+  val WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR =
+    buildConf("spark.sql.codegen.splitConsumeFuncByOperator")
+      .internal()
+      .doc("When true, whole stage codegen would put the logic of consuming rows of each " +
+        "physical operator into individual methods, instead of a single big method. This can be " +
+        "used to avoid oversized function that can miss the opportunity of JIT optimization.")
+      .booleanConf
+      .createWithDefault(true)
 
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
@@ -1110,6 +1127,13 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
+  val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
+    .internal()
+    .doc("A comma-separated list of fully qualified data source register class names for which" +
+      " StreamWriteSupport is disabled. Writes to these sources will fail back to the V1 Sink.")
+    .stringConf
+    .createWithDefault("")
+
   object PartitionOverwriteMode extends Enumeration {
     val STATIC, DYNAMIC = Value
   }
@@ -1127,6 +1151,18 @@ object SQLConf {
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(PartitionOverwriteMode.values.map(_.toString))
       .createWithDefault(PartitionOverwriteMode.STATIC.toString)
+
+  val SORT_BEFORE_REPARTITION =
+    buildConf("spark.sql.execution.sortBeforeRepartition")
+      .internal()
+      .doc("When perform a repartition following a shuffle, the output row ordering would be " +
+        "nondeterministic. If some downstream stages fail and some tasks of the repartition " +
+        "stage retry, these tasks may generate different data, and that can lead to correctness " +
+        "issues. Turn on this config to insert a local sort before actually doing repartition " +
+        "to generate consistent repartition results. The performance of repartition() may go " +
+        "down since we insert extra local sort before it.")
+      .booleanConf
+      .createWithDefault(true)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -1255,6 +1291,8 @@ class SQLConf extends Serializable with Logging {
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 
+  def wholeStageUseIdInClassName: Boolean = getConf(WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME)
+
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
@@ -1262,6 +1300,9 @@ class SQLConf extends Serializable with Logging {
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
+
+  def wholeStageSplitConsumeFuncByOperator: Boolean =
+    getConf(WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR)
 
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
@@ -1277,6 +1318,8 @@ class SQLConf extends Serializable with Logging {
   def fileCompressionFactor: Double = getConf(FILE_COMRESSION_FACTOR)
 
   def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
+
+  def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -1457,6 +1500,8 @@ class SQLConf extends Serializable with Logging {
 
   def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
+
+  def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 

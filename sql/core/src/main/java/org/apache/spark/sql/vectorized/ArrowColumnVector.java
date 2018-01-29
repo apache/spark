@@ -17,17 +17,21 @@
 
 package org.apache.spark.sql.vectorized;
 
+import io.netty.buffer.ArrowBuf;
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.arrow.ArrowUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A column vector backed by Apache Arrow.
+ * A column vector backed by Apache Arrow. Currently time interval type and map type are not
+ * supported.
  */
+@InterfaceStability.Evolving
 public final class ArrowColumnVector extends ColumnVector {
 
   private final ArrowVectorAccessor accessor;
@@ -91,16 +95,6 @@ public final class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
-  public int getArrayLength(int rowId) {
-    return accessor.getArrayLength(rowId);
-  }
-
-  @Override
-  public int getArrayOffset(int rowId) {
-    return accessor.getArrayOffset(rowId);
-  }
-
-  @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
     return accessor.getDecimal(rowId, precision, scale);
   }
@@ -116,7 +110,9 @@ public final class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
-  public ArrowColumnVector arrayData() { return childColumns[0]; }
+  public ColumnarArray getArray(int rowId) {
+    return accessor.getArray(rowId);
+  }
 
   @Override
   public ArrowColumnVector getChild(int ordinal) { return childColumns[ordinal]; }
@@ -151,9 +147,6 @@ public final class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof ListVector) {
       ListVector listVector = (ListVector) vector;
       accessor = new ArrayAccessor(listVector);
-
-      childColumns = new ArrowColumnVector[1];
-      childColumns[0] = new ArrowColumnVector(listVector.getDataVector());
     } else if (vector instanceof NullableMapVector) {
       NullableMapVector mapVector = (NullableMapVector) vector;
       accessor = new StructAccessor(mapVector);
@@ -178,10 +171,6 @@ public final class ArrowColumnVector extends ColumnVector {
     // TODO: should be final after removing ArrayAccessor workaround
     boolean isNullAt(int rowId) {
       return vector.isNull(rowId);
-    }
-
-    final int getValueCount() {
-      return vector.getValueCount();
     }
 
     final int getNullCount() {
@@ -232,11 +221,7 @@ public final class ArrowColumnVector extends ColumnVector {
       throw new UnsupportedOperationException();
     }
 
-    int getArrayLength(int rowId) {
-      throw new UnsupportedOperationException();
-    }
-
-    int getArrayOffset(int rowId) {
+    ColumnarArray getArray(int rowId) {
       throw new UnsupportedOperationException();
     }
   }
@@ -433,10 +418,12 @@ public final class ArrowColumnVector extends ColumnVector {
   private static class ArrayAccessor extends ArrowVectorAccessor {
 
     private final ListVector accessor;
+    private final ArrowColumnVector arrayData;
 
     ArrayAccessor(ListVector vector) {
       super(vector);
       this.accessor = vector;
+      this.arrayData = new ArrowColumnVector(vector.getDataVector());
     }
 
     @Override
@@ -450,13 +437,12 @@ public final class ArrowColumnVector extends ColumnVector {
     }
 
     @Override
-    final int getArrayLength(int rowId) {
-      return accessor.getInnerValueCountAt(rowId);
-    }
-
-    @Override
-    final int getArrayOffset(int rowId) {
-      return accessor.getOffsetBuffer().getInt(rowId * accessor.OFFSET_WIDTH);
+    final ColumnarArray getArray(int rowId) {
+      ArrowBuf offsets = accessor.getOffsetBuffer();
+      int index = rowId * accessor.OFFSET_WIDTH;
+      int start = offsets.getInt(index);
+      int end = offsets.getInt(index + accessor.OFFSET_WIDTH);
+      return new ColumnarArray(arrayData, start, end - start);
     }
   }
 

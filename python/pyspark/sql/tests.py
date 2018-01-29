@@ -441,6 +441,19 @@ class SQLTests(ReusedSQLTestCase):
         pydoc.render_doc(random_udf1)
         pydoc.render_doc(udf(lambda x: x).asNondeterministic)
 
+    def test_nondeterministic_udf3(self):
+        # regression test for SPARK-23233
+        from pyspark.sql.functions import udf
+        f = udf(lambda x: x)
+        # Here we cache the JVM UDF instance.
+        self.spark.range(1).select(f("id"))
+        # This should reset the cache to set the deterministic status correctly.
+        f = f.asNondeterministic()
+        # Check the deterministic status of udf.
+        df = self.spark.range(1).select(f("id"))
+        deterministic = df._jdf.logicalPlan().projectList().head().deterministic()
+        self.assertFalse(deterministic)
+
     def test_nondeterministic_udf_in_aggregate(self):
         from pyspark.sql.functions import udf, sum
         import random
@@ -1105,6 +1118,14 @@ class SQLTests(ReusedSQLTestCase):
         self.spark.catalog.registerFunction("udf", myudf, PythonOnlyUDT())
         rows = [r[0] for r in df.selectExpr("udf(id)").take(2)]
         self.assertEqual(rows, [None, PythonOnlyPoint(1, 1)])
+
+    def test_nonparam_udf_with_aggregate(self):
+        import pyspark.sql.functions as f
+
+        df = self.spark.createDataFrame([(1, 2), (1, 2)])
+        f_udf = f.udf(lambda: "const_str")
+        rows = df.distinct().withColumn("a", f_udf()).collect()
+        self.assertEqual(rows, [Row(_1=1, _2=2, a=u'const_str')])
 
     def test_infer_schema_with_udt(self):
         from pyspark.sql.tests import ExamplePoint, ExamplePointUDT
