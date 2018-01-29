@@ -620,12 +620,16 @@ class CloudPickler(Pickler):
         The name of this method is somewhat misleading: all types get
         dispatched here.
         """
+        if obj.__module__ == "__main__":
+            return self.save_dynamic_class(obj)
+
         try:
             return Pickler.save_global(self, obj, name=name)
         except Exception:
             if obj.__module__ == "__builtin__" or obj.__module__ == "builtins":
                 if obj in _BUILTIN_TYPE_NAMES:
-                    return self.save_reduce(_builtin_type, (_BUILTIN_TYPE_NAMES[obj],), obj=obj)
+                    return self.save_reduce(
+                        _builtin_type, (_BUILTIN_TYPE_NAMES[obj],), obj=obj)
 
             typ = type(obj)
             if typ is not obj and isinstance(obj, (type, types.ClassType)):
