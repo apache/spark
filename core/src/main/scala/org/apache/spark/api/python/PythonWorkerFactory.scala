@@ -18,7 +18,7 @@
 package org.apache.spark.api.python
 
 import java.io._
-import java.net._
+import java.net.{InetAddress, ServerSocket, Socket, SocketException}
 import java.nio.charset.StandardCharsets
 import java.util.Arrays
 
