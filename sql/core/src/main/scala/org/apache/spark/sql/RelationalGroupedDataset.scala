@@ -449,8 +449,8 @@ class RelationalGroupedDataset protected[sql](
    * workers.
    */
   private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
-    require(expr.evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF,
-      "Must pass a group map udf")
+    require(expr.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+      "Must pass a grouped map udf")
     require(expr.dataType.isInstanceOf[StructType],
       "The returnType of the udf must be a StructType")
 
