@@ -329,7 +329,13 @@ class CloudPickler(Pickler):
         Determines what kind of function obj is (e.g. lambda, defined at
         interactive prompt, etc) and handles the pickling appropriately.
         """
-        if obj in _BUILTIN_TYPE_CONSTRUCTORS:
+        try:
+            should_special_case = obj in _BUILTIN_TYPE_CONSTRUCTORS
+        except TypeError:
+            # Methods of builtin types aren't hashable in python 2.
+            should_special_case = False
+
+        if should_special_case:
             # We keep a special-cased cache of built-in type constructors at
             # global scope, because these functions are structured very
             # differently in different python versions and implementations (for
