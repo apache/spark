@@ -45,8 +45,7 @@ import org.apache.spark.util.Utils
 
 /**
  * Integration tests for YARN; these tests use a mini Yarn cluster to run Spark-on-YARN
- * applications, and require the Spark assembly to be built before they can be successfully
- * run.
+ * applications.
  */
 @ExtendedYarnTest
 class YarnClusterSuite extends BaseYarnClusterSuite {
@@ -152,7 +151,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Python application in yarn-cluster mode using " +
-    " spark.yarn.appMasterEnv to override local envvar") {
+    "spark.yarn.appMasterEnv to override local envvar") {
     testPySpark(
       clientMode = false,
       extraConf = Map(

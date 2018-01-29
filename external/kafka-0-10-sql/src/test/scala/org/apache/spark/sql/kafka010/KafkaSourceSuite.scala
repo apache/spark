@@ -544,7 +544,7 @@ class KafkaMicroBatchSourceSuite extends KafkaSourceSuiteBase {
   }
 }
 
-class KafkaSourceSuiteBase extends KafkaSourceTest {
+abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
 
   import testImplicits._
 
