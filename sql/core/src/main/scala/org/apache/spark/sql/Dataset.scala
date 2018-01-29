@@ -62,7 +62,11 @@ import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
-    new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
+    val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
+    // Eagerly bind the encoder so we verify that the encoder matches the underlying
+    // schema. The user will get an error if this is not the case.
+    dataset.deserializer
+    dataset
   }
 
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame = {
@@ -204,7 +208,7 @@ class Dataset[T] private[sql](
 
   // The deserializer expression which can be used to build a projection and turn rows to objects
   // of type T, after collecting rows to the driver side.
-  private val deserializer =
+  private lazy val deserializer =
     exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer).deserializer
 
   private implicit def classTag = exprEnc.clsTag
