@@ -34,9 +34,10 @@ import org.apache.spark.annotation.InterfaceStability;
 public interface DataReaderFactory<T> extends Serializable {
 
   /**
-   * The preferred locations where this data reader factory can run faster, but Spark does not guarantee that
-   * this task will always run on these locations. The implementations should make sure that it can
-   * be run on any location. The location is a string representing the host name.
+   * The preferred locations where this data reader returned by this reader factory can run faster,
+   * but Spark does not guarantee that this task will always run on these locations.
+   * The implementations should make sure that it can be run on any location.
+   * The location is a string representing the host name.
    *
    * Note that if a host name cannot be recognized by Spark, it will be ignored as it was not in
    * the returned locations. By default this method returns empty string array, which means this
@@ -50,7 +51,7 @@ public interface DataReaderFactory<T> extends Serializable {
   }
 
   /**
-   * Returns a data reader to do the actual reading work for this data reader factory.
+   * Returns a data reader to do the actual reading work.
    *
    * If this method fails (by throwing an exception), the corresponding Spark task would fail and
    * get retried until hitting the maximum retry times.
