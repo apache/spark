@@ -1051,7 +1051,6 @@ object SQLConf {
 
   val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
-      .internal()
       .doc("When using Apache Arrow, limit the maximum number of records that can be written " +
         "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit.")
       .intConf
