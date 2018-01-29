@@ -215,7 +215,7 @@ class SparkSession(object):
         if jsparkSession is None:
             if self._jvm.SparkSession.getDefaultSession().isDefined() \
                     and not self._jvm.SparkSession.getDefaultSession().get() \
-                            .sparkContext().isStopped():
+                        .sparkContext().isStopped():
                 jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
             else:
                 jsparkSession = self._jvm.SparkSession(self._jsc.sc())
