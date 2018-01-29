@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.streaming.continuous.ContinuousTrigger
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 import org.apache.spark.sql.sources.v2.DataSourceV2Options
-import org.apache.spark.sql.sources.v2.reader.ReadTask
+import org.apache.spark.sql.sources.v2.reader.DataReaderFactory
 import org.apache.spark.sql.sources.v2.streaming._
 import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousReader, MicroBatchReader, Offset, PartitionOffset}
 import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter
@@ -45,7 +45,7 @@ case class FakeReader() extends MicroBatchReader with ContinuousReader {
   def mergeOffsets(offsets: Array[PartitionOffset]): Offset = RateStreamOffset(Map())
   def setOffset(start: Optional[Offset]): Unit = {}
 
-  def createReadTasks(): java.util.ArrayList[ReadTask[Row]] = {
+  def createDataReaderFactories(): java.util.ArrayList[DataReaderFactory[Row]] = {
     throw new IllegalStateException("fake source - cannot actually read")
   }
 }
