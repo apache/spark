@@ -230,9 +230,7 @@ class SparkSession(object):
         if SparkSession._instantiatedSession is None \
                 or SparkSession._instantiatedSession._sc._jsc is None:
             SparkSession._instantiatedSession = self
-            if self._jvm.SparkSession.getDefaultSession().isEmpty() \
-                    or not jsparkSession.equals(self._jvm.SparkSession.getDefaultSession().get()):
-                self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
+            self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
 
     def _repr_html_(self):
         return """
