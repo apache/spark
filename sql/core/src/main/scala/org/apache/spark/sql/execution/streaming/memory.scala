@@ -69,7 +69,10 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   @GuardedBy("this")
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
+  @GuardedBy("this")
   private var startOffset = new LongOffset(-1)
+
+  @GuardedBy("this")
   private var endOffset = new LongOffset(-1)
 
   /**
@@ -106,21 +109,25 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   override def toString: String = s"MemoryStream[${Utils.truncatedString(output, ",")}]"
 
   override def setOffsetRange(start: Optional[OffsetV2], end: Optional[OffsetV2]): Unit = {
-    if (start.isPresent) {
-      startOffset = start.get().asInstanceOf[LongOffset]
+    synchronized {
+      startOffset = start.orElse(LongOffset(-1)).asInstanceOf[LongOffset]
+      endOffset = end.orElse(currentOffset).asInstanceOf[LongOffset]
     }
-    endOffset = end.orElse(currentOffset).asInstanceOf[LongOffset]
   }
 
   override def readSchema(): StructType = encoder.schema
 
   override def deserializeOffset(json: String): OffsetV2 = LongOffset(json.toLong)
 
-  override def getStartOffset: OffsetV2 = if (startOffset.offset == -1) null else startOffset
+  override def getStartOffset: OffsetV2 = synchronized {
+    if (startOffset.offset == -1) null else startOffset
+  }
 
-  override def getEndOffset: OffsetV2 = if (endOffset.offset == -1) null else endOffset
+  override def getEndOffset: OffsetV2 = synchronized {
+    if (endOffset.offset == -1) null else endOffset
+  }
 
-  override def createReadTasks(): ju.List[ReadTask[Row]] = {
+  override def createReadTasks(): ju.List[ReadTask[Row]] = synchronized {
     // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
     val startOrdinal = startOffset.offset.toInt + 1
     val endOrdinal = endOffset.offset.toInt + 1
@@ -179,6 +186,8 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   def reset(): Unit = synchronized {
     batches.clear()
+    startOffset = LongOffset(-1)
+    endOffset = LongOffset(-1)
     currentOffset = new LongOffset(-1)
     lastOffsetCommitted = new LongOffset(-1)
   }
