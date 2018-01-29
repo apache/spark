@@ -214,7 +214,8 @@ class SparkSession(object):
         self._jvm = self._sc._jvm
         if jsparkSession is None:
             if self._jvm.SparkSession.getDefaultSession().isDefined() \
-                and not self._jvm.SparkSession.getDefaultSession().get().sparkContext().isStopped():
+                    and not self._jvm.SparkSession.getDefaultSession().get() \
+                            .sparkContext().isStopped():
                 jsparkSession = self._jvm.SparkSession.getDefaultSession().get()
             else:
                 jsparkSession = self._jvm.SparkSession(self._jsc.sc())
@@ -230,7 +231,7 @@ class SparkSession(object):
                 or SparkSession._instantiatedSession._sc._jsc is None:
             SparkSession._instantiatedSession = self
             if self._jvm.SparkSession.getDefaultSession().isEmpty() \
-                or not jsparkSession.equals(self._jvm.SparkSession.getDefaultSession().get()):
+                    or not jsparkSession.equals(self._jvm.SparkSession.getDefaultSession().get()):
                 self._jvm.SparkSession.setDefaultSession(self._jsparkSession)
 
     def _repr_html_(self):
