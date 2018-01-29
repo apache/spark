@@ -346,15 +346,19 @@ private[hive] class HiveClientImpl(
     client.getDatabasesByPattern(pattern).asScala
   }
 
+  private def getRawTableOption(dbName: String, tableName: String): Option[HiveTable] = {
+    Option(client.getTable(dbName, tableName, false /* do not throw exception */))
+  }
+
   override def tableExists(dbName: String, tableName: String): Boolean = withHiveState {
-    Option(client.getTable(dbName, tableName, false /* do not throw exception */)).nonEmpty
+    getRawTableOption(dbName, tableName).nonEmpty
   }
 
   override def getTableOption(
       dbName: String,
       tableName: String): Option[CatalogTable] = withHiveState {
     logDebug(s"Looking up $dbName.$tableName")
-    Option(client.getTable(dbName, tableName, false)).map { h =>
+    getRawTableOption(dbName, tableName).map { h =>
       // Note: Hive separates partition columns and the schema, but for us the
       // partition columns are part of the schema
       val cols = h.getCols.asScala.map(fromHiveColumn)
@@ -817,7 +821,6 @@ private[hive] class HiveClientImpl(
       uri.toURL
     }
     clientLoader.addJar(jarURL)
-    runSqlHive(s"ADD JAR $path")
   }
 
   def newSession(): HiveClientImpl = {
