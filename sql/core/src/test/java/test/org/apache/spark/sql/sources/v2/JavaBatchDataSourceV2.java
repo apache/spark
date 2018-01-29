@@ -33,7 +33,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
 
-  class Reader implements DataSourceV2Reader, SupportsScanColumnarBatch {
+  class Reader implements DataSourceReader, SupportsScanColumnarBatch {
     private final StructType schema = new StructType().add("i", "int").add("j", "int");
 
     @Override
@@ -108,7 +108,7 @@ public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
 
 
   @Override
-  public DataSourceV2Reader createReader(DataSourceV2Options options) {
+  public DataSourceReader createReader(DataSourceV2Options options) {
     return new Reader();
   }
 }

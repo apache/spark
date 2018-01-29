@@ -23,13 +23,13 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.DataSourceV2Options;
 import org.apache.spark.sql.sources.v2.ReadSupportWithSchema;
-import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
+import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
 import org.apache.spark.sql.sources.v2.reader.DataReaderFactory;
 import org.apache.spark.sql.types.StructType;
 
 public class JavaSchemaRequiredDataSource implements DataSourceV2, ReadSupportWithSchema {
 
-  class Reader implements DataSourceV2Reader {
+  class Reader implements DataSourceReader {
     private final StructType schema;
 
     Reader(StructType schema) {
@@ -48,7 +48,7 @@ public class JavaSchemaRequiredDataSource implements DataSourceV2, ReadSupportWi
   }
 
   @Override
-  public DataSourceV2Reader createReader(StructType schema, DataSourceV2Options options) {
+  public DataSourceReader createReader(StructType schema, DataSourceV2Options options) {
     return new Reader(schema);
   }
 }

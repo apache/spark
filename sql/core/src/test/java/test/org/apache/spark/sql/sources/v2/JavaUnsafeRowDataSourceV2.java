@@ -29,7 +29,7 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
 
-  class Reader implements DataSourceV2Reader, SupportsScanUnsafeRow {
+  class Reader implements DataSourceReader, SupportsScanUnsafeRow {
     private final StructType schema = new StructType().add("i", "int").add("j", "int");
 
     @Override
@@ -83,7 +83,7 @@ public class JavaUnsafeRowDataSourceV2 implements DataSourceV2, ReadSupport {
   }
 
   @Override
-  public DataSourceV2Reader createReader(DataSourceV2Options options) {
+  public DataSourceReader createReader(DataSourceV2Options options) {
     return new Reader();
   }
 }

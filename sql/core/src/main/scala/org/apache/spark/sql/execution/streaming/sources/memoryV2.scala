@@ -114,7 +114,7 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with Logging {
 case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row]) extends WriterCommitMessage {}
 
 class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
-  extends DataSourceV2Writer with Logging {
+  extends DataSourceWriter with Logging {
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 

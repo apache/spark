@@ -52,7 +52,7 @@ import org.apache.spark.sql.types.StructType;
  * issues the scan request and does the actual data reading.
  */
 @InterfaceStability.Evolving
-public interface DataSourceV2Reader {
+public interface DataSourceReader {
 
   /**
    * Returns the actual schema of this data source reader, which may be different from the physical

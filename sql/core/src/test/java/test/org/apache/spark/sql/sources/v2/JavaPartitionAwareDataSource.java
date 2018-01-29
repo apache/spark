@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
 
-  class Reader implements DataSourceV2Reader, SupportsReportPartitioning {
+  class Reader implements DataSourceReader, SupportsReportPartitioning {
     private final StructType schema = new StructType().add("a", "int").add("b", "int");
 
     @Override
@@ -104,7 +104,7 @@ public class JavaPartitionAwareDataSource implements DataSourceV2, ReadSupport {
   }
 
   @Override
-  public DataSourceV2Reader createReader(DataSourceV2Options options) {
+  public DataSourceReader createReader(DataSourceV2Options options) {
     return new Reader();
   }
 }

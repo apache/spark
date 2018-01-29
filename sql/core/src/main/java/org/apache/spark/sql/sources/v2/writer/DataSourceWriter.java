@@ -52,7 +52,7 @@ import org.apache.spark.sql.types.StructType;
  * Please refer to the documentation of commit/abort methods for detailed specifications.
  */
 @InterfaceStability.Evolving
-public interface DataSourceV2Writer {
+public interface DataSourceWriter {
 
   /**
    * Creates a writer factory which will be serialized and sent to executors.
