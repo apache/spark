@@ -113,7 +113,8 @@ and better accommodate the addition of the multi-class summary. This is a breaki
 code that casts a `LogisticRegressionTrainingSummary` to a
 ` BinaryLogisticRegressionTrainingSummary`. Users should instead use the `model.binarySummary`
 method. See [SPARK-17139](https://issues.apache.org/jira/browse/SPARK-17139) for more detail 
-(_note_ this is an `Experimental` API).
+(_note_ this is an `Experimental` API). This _does not_ affect the Python `summary` method, which
+will still work correctly for both multinomial and binary cases.
 
 ### Deprecations and changes of behavior
 
