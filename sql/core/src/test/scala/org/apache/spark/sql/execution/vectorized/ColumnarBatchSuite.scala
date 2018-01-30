@@ -620,6 +620,39 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.arrayData().elementsAppended == 0)
   }
 
+  testVector("CalendarInterval APIs", 4, CalendarIntervalType) {
+    column =>
+      val reference = mutable.ArrayBuffer.empty[CalendarInterval]
+
+      val months = column.getChild(0)
+      val microseconds = column.getChild(1)
+      assert(months.dataType() == IntegerType)
+      assert(microseconds.dataType() == LongType)
+
+      months.putInt(0, 1)
+      microseconds.putLong(0, 100)
+      reference += new CalendarInterval(1, 100)
+
+      months.putInt(1, 0)
+      microseconds.putLong(1, 2000)
+      reference += new CalendarInterval(0, 2000)
+
+      column.putNull(2)
+      reference += null
+
+      months.putInt(3, 20)
+      microseconds.putLong(3, 0)
+      reference += new CalendarInterval(20, 0)
+
+      reference.zipWithIndex.foreach { case (v, i) =>
+        val errMsg = "VectorType=" + column.getClass.getSimpleName
+        assert(v == column.getInterval(i), errMsg)
+        if (v == null) assert(column.isNullAt(i), errMsg)
+      }
+
+      column.close()
+  }
+
   testVector("Int Array", 10, new ArrayType(IntegerType, true)) {
     column =>
 
@@ -739,14 +772,20 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       c1.putInt(0, 123)
       c2.putDouble(0, 3.45)
-      c1.putInt(1, 456)
-      c2.putDouble(1, 5.67)
+
+      column.putNull(1)
+
+      c1.putInt(2, 456)
+      c2.putDouble(2, 5.67)
 
       val s = column.getStruct(0)
       assert(s.getInt(0) == 123)
       assert(s.getDouble(1) == 3.45)
 
-      val s2 = column.getStruct(1)
+      assert(column.isNullAt(1))
+      assert(column.getStruct(1) == null)
+
+      val s2 = column.getStruct(2)
       assert(s2.getInt(0) == 456)
       assert(s2.getDouble(1) == 5.67)
   }
