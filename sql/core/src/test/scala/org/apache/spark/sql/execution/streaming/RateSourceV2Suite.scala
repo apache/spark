@@ -26,7 +26,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamBatchTask, RateStreamMicroBatchReader, RateStreamSourceV2}
-import org.apache.spark.sql.sources.v2.DataSourceV2Options
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.util.ManualClock
@@ -49,7 +49,7 @@ class RateSourceV2Suite extends StreamTest {
   test("microbatch in registry") {
     DataSource.lookupDataSource("ratev2", spark.sqlContext.conf).newInstance() match {
       case ds: MicroBatchReadSupport =>
-        val reader = ds.createMicroBatchReader(Optional.empty(), "", DataSourceV2Options.empty())
+        val reader = ds.createMicroBatchReader(Optional.empty(), "", DataSourceOptions.empty())
         assert(reader.isInstanceOf[RateStreamMicroBatchReader])
       case _ =>
         throw new IllegalStateException("Could not find v2 read support for rate")
@@ -76,14 +76,14 @@ class RateSourceV2Suite extends StreamTest {
 
   test("microbatch - numPartitions propagated") {
     val reader = new RateStreamMicroBatchReader(
-      new DataSourceV2Options(Map("numPartitions" -> "11", "rowsPerSecond" -> "33").asJava))
+      new DataSourceOptions(Map("numPartitions" -> "11", "rowsPerSecond" -> "33").asJava))
     reader.setOffsetRange(Optional.empty(), Optional.empty())
     val tasks = reader.createDataReaderFactories()
     assert(tasks.size == 11)
   }
 
   test("microbatch - set offset") {
-    val reader = new RateStreamMicroBatchReader(DataSourceV2Options.empty())
+    val reader = new RateStreamMicroBatchReader(DataSourceOptions.empty())
     val startOffset = RateStreamOffset(Map((0, ValueRunTimeMsPair(0, 1000))))
     val endOffset = RateStreamOffset(Map((0, ValueRunTimeMsPair(0, 2000))))
     reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
@@ -93,7 +93,7 @@ class RateSourceV2Suite extends StreamTest {
 
   test("microbatch - infer offsets") {
     val reader = new RateStreamMicroBatchReader(
-      new DataSourceV2Options(Map("numPartitions" -> "1", "rowsPerSecond" -> "100").asJava))
+      new DataSourceOptions(Map("numPartitions" -> "1", "rowsPerSecond" -> "100").asJava))
     reader.clock.waitTillTime(reader.clock.getTimeMillis() + 100)
     reader.setOffsetRange(Optional.empty(), Optional.empty())
     reader.getStartOffset() match {
@@ -114,7 +114,7 @@ class RateSourceV2Suite extends StreamTest {
 
   test("microbatch - predetermined batch size") {
     val reader = new RateStreamMicroBatchReader(
-      new DataSourceV2Options(Map("numPartitions" -> "1", "rowsPerSecond" -> "20").asJava))
+      new DataSourceOptions(Map("numPartitions" -> "1", "rowsPerSecond" -> "20").asJava))
     val startOffset = RateStreamOffset(Map((0, ValueRunTimeMsPair(0, 1000))))
     val endOffset = RateStreamOffset(Map((0, ValueRunTimeMsPair(20, 2000))))
     reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
@@ -125,7 +125,7 @@ class RateSourceV2Suite extends StreamTest {
 
   test("microbatch - data read") {
     val reader = new RateStreamMicroBatchReader(
-      new DataSourceV2Options(Map("numPartitions" -> "11", "rowsPerSecond" -> "33").asJava))
+      new DataSourceOptions(Map("numPartitions" -> "11", "rowsPerSecond" -> "33").asJava))
     val startOffset = RateStreamSourceV2.createInitialOffset(11, reader.creationTimeMs)
     val endOffset = RateStreamOffset(startOffset.partitionToValueAndRunTimeMs.toSeq.map {
       case (part, ValueRunTimeMsPair(currentVal, currentReadTime)) =>
@@ -150,7 +150,7 @@ class RateSourceV2Suite extends StreamTest {
   test("continuous in registry") {
     DataSource.lookupDataSource("rate", spark.sqlContext.conf).newInstance() match {
       case ds: ContinuousReadSupport =>
-        val reader = ds.createContinuousReader(Optional.empty(), "", DataSourceV2Options.empty())
+        val reader = ds.createContinuousReader(Optional.empty(), "", DataSourceOptions.empty())
         assert(reader.isInstanceOf[RateStreamContinuousReader])
       case _ =>
         throw new IllegalStateException("Could not find v2 read support for rate")
@@ -159,7 +159,7 @@ class RateSourceV2Suite extends StreamTest {
 
   test("continuous data") {
     val reader = new RateStreamContinuousReader(
-      new DataSourceV2Options(Map("numPartitions" -> "2", "rowsPerSecond" -> "20").asJava))
+      new DataSourceOptions(Map("numPartitions" -> "2", "rowsPerSecond" -> "20").asJava))
     reader.setOffset(Optional.empty())
     val tasks = reader.createDataReaderFactories()
     assert(tasks.size == 2)

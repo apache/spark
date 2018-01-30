@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, WriteToDataSourceV2}
 import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingRelationV2, _}
-import org.apache.spark.sql.sources.v2.DataSourceV2Options
+import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, StreamWriteSupport}
 import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousReader, PartitionOffset}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
@@ -160,7 +160,7 @@ class ContinuousExecution(
         dataSource.createContinuousReader(
           java.util.Optional.empty[StructType](),
           metadataPath,
-          new DataSourceV2Options(extraReaderOptions.asJava))
+          new DataSourceOptions(extraReaderOptions.asJava))
     }
     uniqueSources = continuousSources.distinct
 
@@ -198,7 +198,7 @@ class ContinuousExecution(
       s"$runId",
       triggerLogicalPlan.schema,
       outputMode,
-      new DataSourceV2Options(extraOptions.asJava))
+      new DataSourceOptions(extraOptions.asJava))
     val withSink = WriteToDataSourceV2(writer, triggerLogicalPlan)
 
     val reader = withSink.collect {

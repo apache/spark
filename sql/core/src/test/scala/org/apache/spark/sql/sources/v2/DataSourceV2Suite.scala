@@ -201,7 +201,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
 
 class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
 
-  class Reader extends DataSourceV2Reader {
+  class Reader extends DataSourceReader {
     override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
 
     override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
@@ -209,7 +209,7 @@ class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceV2Reader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class SimpleDataReaderFactory(start: Int, end: Int)
@@ -233,7 +233,7 @@ class SimpleDataReaderFactory(start: Int, end: Int)
 
 class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
 
-  class Reader extends DataSourceV2Reader
+  class Reader extends DataSourceReader
     with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
 
     var requiredSchema = new StructType().add("i", "int").add("j", "int")
@@ -275,7 +275,7 @@ class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceV2Reader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class AdvancedDataReaderFactory(start: Int, end: Int, requiredSchema: StructType)
@@ -306,7 +306,7 @@ class AdvancedDataReaderFactory(start: Int, end: Int, requiredSchema: StructType
 
 class UnsafeRowDataSourceV2 extends DataSourceV2 with ReadSupport {
 
-  class Reader extends DataSourceV2Reader with SupportsScanUnsafeRow {
+  class Reader extends DataSourceReader with SupportsScanUnsafeRow {
     override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
 
     override def createUnsafeRowReaderFactories(): JList[DataReaderFactory[UnsafeRow]] = {
@@ -315,7 +315,7 @@ class UnsafeRowDataSourceV2 extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceV2Reader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class UnsafeRowDataReaderFactory(start: Int, end: Int)
@@ -343,18 +343,18 @@ class UnsafeRowDataReaderFactory(start: Int, end: Int)
 
 class SchemaRequiredDataSource extends DataSourceV2 with ReadSupportWithSchema {
 
-  class Reader(val readSchema: StructType) extends DataSourceV2Reader {
+  class Reader(val readSchema: StructType) extends DataSourceReader {
     override def createDataReaderFactories(): JList[DataReaderFactory[Row]] =
       java.util.Collections.emptyList()
   }
 
-  override def createReader(schema: StructType, options: DataSourceV2Options): DataSourceV2Reader =
+  override def createReader(schema: StructType, options: DataSourceOptions): DataSourceReader =
     new Reader(schema)
 }
 
 class BatchDataSourceV2 extends DataSourceV2 with ReadSupport {
 
-  class Reader extends DataSourceV2Reader with SupportsScanColumnarBatch {
+  class Reader extends DataSourceReader with SupportsScanColumnarBatch {
     override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
 
     override def createBatchDataReaderFactories(): JList[DataReaderFactory[ColumnarBatch]] = {
@@ -362,7 +362,7 @@ class BatchDataSourceV2 extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceV2Reader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class BatchDataReaderFactory(start: Int, end: Int)
@@ -406,7 +406,7 @@ class BatchDataReaderFactory(start: Int, end: Int)
 
 class PartitionAwareDataSource extends DataSourceV2 with ReadSupport {
 
-  class Reader extends DataSourceV2Reader with SupportsReportPartitioning {
+  class Reader extends DataSourceReader with SupportsReportPartitioning {
     override def readSchema(): StructType = new StructType().add("a", "int").add("b", "int")
 
     override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
@@ -428,7 +428,7 @@ class PartitionAwareDataSource extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceV2Reader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class SpecificDataReaderFactory(i: Array[Int], j: Array[Int])

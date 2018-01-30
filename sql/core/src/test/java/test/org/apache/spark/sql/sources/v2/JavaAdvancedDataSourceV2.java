@@ -24,15 +24,15 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.sources.GreaterThan;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
 import org.apache.spark.sql.sources.v2.ReadSupport;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.StructType;
 
 public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
 
-  class Reader implements DataSourceV2Reader, SupportsPushDownRequiredColumns,
+  class Reader implements DataSourceReader, SupportsPushDownRequiredColumns,
       SupportsPushDownFilters {
 
     private StructType requiredSchema = new StructType().add("i", "int").add("j", "int");
@@ -131,7 +131,7 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
 
 
   @Override
-  public DataSourceV2Reader createReader(DataSourceV2Options options) {
+  public DataSourceReader createReader(DataSourceOptions options) {
     return new Reader();
   }
 }

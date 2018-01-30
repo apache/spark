@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Append, Complete, Update}
 import org.apache.spark.sql.execution.streaming.Sink
-import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2}
 import org.apache.spark.sql.sources.v2.streaming.StreamWriteSupport
 import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter
 import org.apache.spark.sql.sources.v2.writer._
@@ -45,7 +45,7 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with Logging {
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceV2Options): StreamWriter = {
+      options: DataSourceOptions): StreamWriter = {
     new MemoryStreamWriter(this, mode)
   }
 
@@ -114,7 +114,7 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with Logging {
 case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row]) extends WriterCommitMessage {}
 
 class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
-  extends DataSourceV2Writer with Logging {
+  extends DataSourceWriter with Logging {
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
 

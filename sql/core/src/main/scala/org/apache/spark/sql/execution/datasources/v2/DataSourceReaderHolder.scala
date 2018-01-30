@@ -35,7 +35,7 @@ trait DataSourceReaderHolder {
   /**
    * The held data source reader.
    */
-  def reader: DataSourceV2Reader
+  def reader: DataSourceReader
 
   /**
    * The metadata of this data source reader that can be used for equality test.
