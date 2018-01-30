@@ -55,6 +55,9 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
 
     val rdd = query.execute()
 
+    logInfo(s"Start processing data source writer: $writer. " +
+      s"The input RDD has ${rdd.partitions.length} partitions.")
+
     try {
       val runTask = writer match {
         // This case means that we're doing continuous processing. In microbatch streaming, the

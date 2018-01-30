@@ -43,18 +43,20 @@ class ConsoleWriter(schema: StructType, options: DataSourceOptions)
 
   private val messages = new ArrayBuffer[WriterCommitMessage]()
 
-  override def add(message: WriterCommitMessage): Unit = synchronized {
+  override def add(message: WriterCommitMessage): Unit = {
     messages += message
   }
 
-  override def commit(epochId: Long): Unit = synchronized {
+  override def commit(epochId: Long): Unit = {
     // We have to print a "Batch" label for the epoch for compatibility with the pre-data source V2
     // behavior.
     printRows(messages.toArray, schema, s"Batch: $epochId")
     messages.clear()
   }
 
-  def abort(epochId: Long): Unit = {}
+  def abort(epochId: Long): Unit = {
+    messages.clear()
+  }
 
   protected def printRows(
       commitMessages: Array[WriterCommitMessage],

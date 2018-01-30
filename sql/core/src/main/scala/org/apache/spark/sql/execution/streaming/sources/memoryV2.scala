@@ -120,11 +120,11 @@ class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
 
   private val messages = new ArrayBuffer[WriterCommitMessage]()
 
-  override def add(message: WriterCommitMessage): Unit = synchronized {
+  override def add(message: WriterCommitMessage): Unit = {
     messages += message
   }
 
-  def commit(): Unit = synchronized {
+  def commit(): Unit = {
     val newRows = messages.flatMap {
       case message: MemoryWriterCommitMessage => message.data
     }.toArray
@@ -134,6 +134,7 @@ class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
 
   override def abort(): Unit = {
     // Don't accept any of the new input.
+    messages.clear()
   }
 }
 
@@ -144,11 +145,11 @@ class MemoryStreamWriter(val sink: MemorySinkV2, outputMode: OutputMode)
 
   private val messages = new ArrayBuffer[WriterCommitMessage]()
 
-  override def add(message: WriterCommitMessage): Unit = synchronized {
+  override def add(message: WriterCommitMessage): Unit = {
     messages += message
   }
 
-  override def commit(epochId: Long): Unit = synchronized {
+  override def commit(epochId: Long): Unit = {
     val newRows = messages.flatMap {
       case message: MemoryWriterCommitMessage => message.data
     }.toArray
@@ -158,6 +159,7 @@ class MemoryStreamWriter(val sink: MemorySinkV2, outputMode: OutputMode)
 
   override def abort(epochId: Long): Unit = {
     // Don't accept any of the new input.
+    messages.clear()
   }
 }
 
