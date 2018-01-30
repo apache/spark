@@ -216,7 +216,8 @@ private[ui] class JobPage(parent: JobsTab, store: AppStatusStore) extends WebUIP
           Nil,
           None,
           None,
-          Map())
+          Map(),
+          Set())
       }
     }
 

@@ -217,6 +217,8 @@ private[spark] class AppStatusListener(
 
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
       setStageBlackListStatus(stage, event.executorId, now)
+      stage.blackListedExecutors += event.executorId
+      maybeUpdate(stage, now)
     }
     liveExecutors.get(event.executorId).foreach { exec =>
       addBlackListedStageTo(exec, event.stageId, now)
@@ -228,9 +230,12 @@ private[spark] class AppStatusListener(
 
     // Implicitly blacklist every available executor for the stage associated with this node
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
-      liveExecutors.values.filter(_.host == event.hostId).foreach { exec =>
-        setStageBlackListStatus(stage, exec.executorId, now)
+      val executorIds = liveExecutors.values.filter(_.host == event.hostId).map(_.executorId)
+      executorIds.foreach { executorId =>
+        setStageBlackListStatus(stage, executorId, now)
       }
+      stage.blackListedExecutors ++= executorIds
+      maybeUpdate(stage, now)
     }
     liveExecutors.values.filter(_.hostname == event.hostId).foreach { exec =>
       addBlackListedStageTo(exec, event.stageId, now)
@@ -607,7 +612,7 @@ private[spark] class AppStatusListener(
       stage.executorSummaries.values.foreach(update(_, now))
       update(stage, now, last = true)
 
-      val executorIdsForStage = stage.executorSummaries.keySet
+      val executorIdsForStage = stage.blackListedExecutors
       executorIdsForStage.foreach { executorId =>
         liveExecutors.get(executorId).foreach { exec =>
           removeBlackListedStageFrom(exec, event.stageInfo.stageId, now)

@@ -20,7 +20,7 @@ package org.apache.spark.status
 import java.util.Date
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.immutable.TreeSet
+import scala.collection.immutable.{HashSet, TreeSet}
 import scala.collection.mutable.HashMap
 
 import com.google.common.collect.Interners
@@ -374,6 +374,8 @@ private class LiveStage extends LiveEntity {
 
   val executorSummaries = new HashMap[String, LiveExecutorStageSummary]()
 
+  var blackListedExecutors = new HashSet[String]()
+
   // Used for cleanup of tasks after they reach the configured limit. Not written to the store.
   @volatile var cleaning = false
   var savedTasks = new AtomicInteger(0)
@@ -423,7 +425,8 @@ private class LiveStage extends LiveEntity {
       newAccumulatorInfos(info.accumulables.values),
       None,
       None,
-      killedSummary)
+      killedSummary,
+      blackListedExecutors)
   }
 
   override protected def doUpdate(): Any = {
