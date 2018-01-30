@@ -21,14 +21,15 @@ import java.util.List;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
+import org.apache.spark.sql.sources.v2.ReadSupport;
+import org.apache.spark.sql.sources.v2.ReadSupportWithSchema;
 import org.apache.spark.sql.types.StructType;
 
 /**
  * A data source reader that is returned by
- * {@link org.apache.spark.sql.sources.v2.ReadSupport#createReader(
- * org.apache.spark.sql.sources.v2.DataSourceV2Options)} or
- * {@link org.apache.spark.sql.sources.v2.ReadSupportWithSchema#createReader(
- * StructType, org.apache.spark.sql.sources.v2.DataSourceV2Options)}.
+ * {@link ReadSupport#createReader(DataSourceOptions)} or
+ * {@link ReadSupportWithSchema#createReader(StructType, DataSourceOptions)}.
  * It can mix in various query optimization interfaces to speed up the data scan. The actual scan
  * logic is delegated to {@link DataReaderFactory}s that are returned by
  * {@link #createDataReaderFactories()}.
@@ -52,7 +53,7 @@ import org.apache.spark.sql.types.StructType;
  * issues the scan request and does the actual data reading.
  */
 @InterfaceStability.Evolving
-public interface DataSourceV2Reader {
+public interface DataSourceReader {
 
   /**
    * Returns the actual schema of this data source reader, which may be different from the physical

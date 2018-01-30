@@ -19,10 +19,10 @@ package org.apache.spark.sql.sources.v2.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSink;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
 import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter;
-import org.apache.spark.sql.sources.v2.writer.DataSourceV2Writer;
+import org.apache.spark.sql.sources.v2.writer.DataSourceWriter;
 import org.apache.spark.sql.streaming.OutputMode;
 import org.apache.spark.sql.types.StructType;
 
@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.StructType;
  * provide data writing ability for structured streaming.
  */
 @InterfaceStability.Evolving
-public interface StreamWriteSupport extends BaseStreamingSink {
+public interface StreamWriteSupport extends DataSourceV2, BaseStreamingSink {
 
     /**
      * Creates an optional {@link StreamWriter} to save the data to this data source. Data
@@ -39,7 +39,7 @@ public interface StreamWriteSupport extends BaseStreamingSink {
      *
      * @param queryId A unique string for the writing query. It's possible that there are many
      *                writing queries running at the same time, and the returned
-     *                {@link DataSourceV2Writer} can use this id to distinguish itself from others.
+     *                {@link DataSourceWriter} can use this id to distinguish itself from others.
      * @param schema the schema of the data to be written.
      * @param mode the output mode which determines what successive epoch output means to this
      *             sink, please refer to {@link OutputMode} for more details.
@@ -50,5 +50,5 @@ public interface StreamWriteSupport extends BaseStreamingSink {
         String queryId,
         StructType schema,
         OutputMode mode,
-        DataSourceV2Options options);
+        DataSourceOptions options);
 }
