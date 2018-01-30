@@ -32,12 +32,14 @@ import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage;
 @InterfaceStability.Evolving
 public interface StreamWriter extends DataSourceWriter {
   /**
-   * Commits this writing job for the specified epoch with a list of commit messages. The commit
-   * messages are collected from successful data writers and are produced by
-   * {@link DataWriter#commit()}.
+   * Commits this writing job for the specified epoch.
    *
-   * If this method fails (by throwing an exception), this writing job is considered to have been
-   * failed, and the execution engine will attempt to call {@link #abort()}.
+   * When this method is called, the number of commit messages added by
+   * {@link #add(WriterCommitMessage)} equals to the number of input data partitions.
+   *
+   * If this method fails (by throwing an exception), this writing job is considered to to have been
+   * failed, and {@link #abort()} would be called. The state of the destination
+   * is undefined and @{@link #abort()} may not be able to deal with it.
    *
    * To support exactly-once processing, writer implementations should ensure that this method is
    * idempotent. The execution engine may call commit() multiple times for the same epoch
@@ -48,15 +50,17 @@ public interface StreamWriter extends DataSourceWriter {
   /**
    * Aborts this writing job because some data writers are failed and keep failing when retry,
    * or the Spark job fails with some unknown reasons,
-   * or {@link #commit()} /{@link #add(WriterCommitMessage)} fails
+   * or {@link #commit()} / {@link #add(WriterCommitMessage)} fails
+   *
    * If this method fails (by throwing an exception), the underlying data source may require manual
    * cleanup.
    *
-   * Unless the abort is triggered by the failure of commit, the given messages should have some
-   * null slots as there maybe only a few data writers that are committed before the abort
-   * happens, or some data writers were committed but their commit messages haven't reached the
-   * driver when the abort is triggered. So this is just a "best effort" for data sources to
-   * clean up the data left by data writers.
+   * Unless the abort is triggered by the failure of commit, the number of commit
+   * messages added by {@link #add(WriterCommitMessage)} should be smaller than the number
+   * of input data partitions, as there may be only a few data writers that are committed
+   * before the abort happens, or some data writers were committed but their commit messages
+   * haven't reached the driver when the abort is triggered. So this is just a "best effort"
+   * for data sources to clean up the data left by data writers.
    */
   void abort(long epochId);
 

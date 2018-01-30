@@ -51,7 +51,7 @@ import org.apache.spark.sql.types.StructType;
  * While Spark will retry failed writing tasks, Spark won't retry failed writing jobs. Users should
  * do it manually in their Spark applications if they want to retry.
  *
- * All these methods are guaranteed to be called in a single thread.
+ * All these methods are guaranteed to be called in a single thread on driver side.
  * No concurrency control is needed.
  *
  * Please refer to the documentation of add/commit/abort methods for detailed specifications.
@@ -68,7 +68,7 @@ public interface DataSourceWriter {
   DataWriterFactory<Row> createWriterFactory();
 
   /**
-   * Handles a commit message which is collected from a successful data writer in the executor side.
+   * Handles a commit message which is collected from a successful data writer.
    *
    * Note that, implementations might need to cache all commit messages before calling
    * {@link #commit()} or {@link #abort()}.
@@ -81,6 +81,8 @@ public interface DataSourceWriter {
 
   /**
    * Commits this writing job.
+   * When this method is called, the number of commit messages added by
+   * {@link #add(WriterCommitMessage)} equals to the number of input data partitions.
    *
    * If this method fails (by throwing an exception), this writing job is considered to to have been
    * failed, and {@link #abort()} would be called. The state of the destination
@@ -91,10 +93,17 @@ public interface DataSourceWriter {
   /**
    * Aborts this writing job because some data writers are failed and keep failing when retry,
    * or the Spark job fails with some unknown reasons,
-   * or {@link #commit()} /{@link #add(WriterCommitMessage)} fails.
+   * or {@link #commit()} / {@link #add(WriterCommitMessage)} fails.
    *
    * If this method fails (by throwing an exception), the underlying data source may require manual
    * cleanup.
+   *
+   * Unless the abort is triggered by the failure of {@link #commit()}, the number of commit
+   * messages added by {@link #add(WriterCommitMessage)} should be smaller than the number
+   * of input data partitions, as there may be only a few data writers that are committed
+   * before the abort happens, or some data writers were committed but their commit messages
+   * haven't reached the driver when the abort is triggered. So this is just a "best effort"
+   * for data sources to clean up the data left by data writers.
    */
   void abort();
 }
