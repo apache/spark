@@ -246,8 +246,13 @@ public class ReadAheadInputStream extends InputStream {
 
   @Override
   public int read() throws IOException {
-    byte[] oneByteArray = oneByte.get();
-    return read(oneByteArray, 0, 1) == -1 ? -1 : oneByteArray[0] & 0xFF;
+    if (activeBuffer.remaining() > readAheadThresholdInBytes) {
+      // short path - just get one byte.
+      return activeBuffer.get() & 0xFF;
+    } else {
+      byte[] oneByteArray = oneByte.get();
+      return read(oneByteArray, 0, 1) == -1 ? -1 : oneByteArray[0] & 0xFF;
+    }
   }
 
   @Override
@@ -258,12 +263,43 @@ public class ReadAheadInputStream extends InputStream {
     if (len == 0) {
       return 0;
     }
-    stateChangeLock.lock();
-    try {
-      return readInternal(b, offset, len);
-    } finally {
-      stateChangeLock.unlock();
+
+    if (!activeBuffer.hasRemaining()) {
+      // No remaining in active buffer - lock and switch to write ahead buffer.
+      stateChangeLock.lock();
+      try {
+        waitForAsyncReadComplete();
+        if (readAheadBuffer.hasRemaining()) {
+          swapBuffers();
+        } else {
+          // The first read or activeBuffer is skipped.
+          readAsync();
+          waitForAsyncReadComplete();
+          if (isEndOfStream()) {
+            return -1;
+          }
+          swapBuffers();
+        }
+      } finally {
+        stateChangeLock.unlock();
+      }
     }
+    len = Math.min(len, activeBuffer.remaining());
+    activeBuffer.get(b, offset, len);
+
+    if (activeBuffer.remaining() <= readAheadThresholdInBytes) {
+      // low remaining in active buffer - trigger async read ahead.
+      stateChangeLock.lock();
+      try {
+        if (!readAheadBuffer.hasRemaining()) {
+          readAsync();
+        }
+      } finally {
+        stateChangeLock.unlock();
+      }
+    }
+
+    return len;
   }
 
   /**
@@ -273,37 +309,6 @@ public class ReadAheadInputStream extends InputStream {
     ByteBuffer temp = activeBuffer;
     activeBuffer = readAheadBuffer;
     readAheadBuffer = temp;
-  }
-
-  /**
-   * Internal read function which should be called only from read() api. The assumption is that
-   * the stateChangeLock is already acquired in the caller before calling this function.
-   */
-  private int readInternal(byte[] b, int offset, int len) throws IOException {
-    assert (stateChangeLock.isLocked());
-    if (!activeBuffer.hasRemaining()) {
-      waitForAsyncReadComplete();
-      if (readAheadBuffer.hasRemaining()) {
-        swapBuffers();
-      } else {
-        // The first read or activeBuffer is skipped.
-        readAsync();
-        waitForAsyncReadComplete();
-        if (isEndOfStream()) {
-          return -1;
-        }
-        swapBuffers();
-      }
-    } else {
-      checkReadException();
-    }
-    len = Math.min(len, activeBuffer.remaining());
-    activeBuffer.get(b, offset, len);
-
-    if (activeBuffer.remaining() <= readAheadThresholdInBytes && !readAheadBuffer.hasRemaining()) {
-      readAsync();
-    }
-    return len;
   }
 
   @Override
