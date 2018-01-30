@@ -34,7 +34,7 @@ function formatStatus(status, type, row) {
         if (row.blacklistedInStages.length == 0) {
             return "Active"
         }
-        return "Blacklisted in Stages: [" + row.blacklistedInStages.join(", ") + "]";
+        return "Active (Blacklisted in Stages: [" + row.blacklistedInStages.join(", ") + "])";
     }
     return "Dead"
 }
