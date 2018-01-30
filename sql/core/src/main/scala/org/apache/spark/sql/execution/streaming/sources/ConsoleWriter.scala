@@ -20,14 +20,13 @@ package org.apache.spark.sql.execution.streaming.sources
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.sources.v2.DataSourceV2Options
-import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter
-import org.apache.spark.sql.sources.v2.writer.{DataSourceV2Writer, DataWriterFactory, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter
+import org.apache.spark.sql.sources.v2.writer.{DataWriterFactory, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
 
 /** Common methods used to create writes for the the console sink */
-trait ConsoleWriter extends Logging {
-
-  def options: DataSourceV2Options
+class ConsoleWriter(schema: StructType, options: DataSourceV2Options)
+    extends StreamWriter with Logging {
 
   // Number of rows to display, by default 20 rows
   protected val numRowsToShow = options.getInt("numRows", 20)
@@ -40,14 +39,20 @@ trait ConsoleWriter extends Logging {
 
   def createWriterFactory(): DataWriterFactory[Row] = PackedRowWriterFactory
 
-  def abort(messages: Array[WriterCommitMessage]): Unit = {}
+  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
+    // We have to print a "Batch" label for the epoch for compatibility with the pre-data source V2
+    // behavior.
+    printRows(messages, schema, s"Batch: $epochId")
+  }
+
+  def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 
   protected def printRows(
       commitMessages: Array[WriterCommitMessage],
       schema: StructType,
       printMessage: String): Unit = {
     val rows = commitMessages.collect {
-      case PackedRowCommitMessage(rows) => rows
+      case PackedRowCommitMessage(rs) => rs
     }.flatten
 
     // scalastyle:off println
@@ -59,46 +64,8 @@ trait ConsoleWriter extends Logging {
       .createDataFrame(spark.sparkContext.parallelize(rows), schema)
       .show(numRowsToShow, isTruncated)
   }
-}
-
-
-/**
- * A [[DataSourceV2Writer]] that collects results from a micro-batch query to the driver and
- * prints them in the console. Created by
- * [[org.apache.spark.sql.execution.streaming.ConsoleSinkProvider]].
- *
- * This sink should not be used for production, as it requires sending all rows to the driver
- * and does not support recovery.
- */
-class ConsoleMicroBatchWriter(batchId: Long, schema: StructType, val options: DataSourceV2Options)
-  extends DataSourceV2Writer with ConsoleWriter {
-
-  override def commit(messages: Array[WriterCommitMessage]): Unit = {
-    printRows(messages, schema, s"Batch: $batchId")
-  }
 
   override def toString(): String = {
-    s"ConsoleMicroBatchWriter[numRows=$numRowsToShow, truncate=$isTruncated]"
-  }
-}
-
-
-/**
- * A [[DataSourceV2Writer]] that collects results from a continuous query to the driver and
- * prints them in the console. Created by
- * [[org.apache.spark.sql.execution.streaming.ConsoleSinkProvider]].
- *
- * This sink should not be used for production, as it requires sending all rows to the driver
- * and does not support recovery.
- */
-class ConsoleContinuousWriter(schema: StructType, val options: DataSourceV2Options)
-  extends ContinuousWriter with ConsoleWriter {
-
-  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    printRows(messages, schema, s"Continuous processing epoch $epochId")
-  }
-
-  override def toString(): String = {
-    s"ConsoleContinuousWriter[numRows=$numRowsToShow, truncate=$isTruncated]"
+    s"ConsoleWriter[numRows=$numRowsToShow, truncate=$isTruncated]"
   }
 }

@@ -30,7 +30,8 @@ import org.apache.spark.sql.types.StructType;
  * {@link org.apache.spark.sql.sources.v2.ReadSupportWithSchema#createReader(
  * StructType, org.apache.spark.sql.sources.v2.DataSourceV2Options)}.
  * It can mix in various query optimization interfaces to speed up the data scan. The actual scan
- * logic is delegated to {@link ReadTask}s that are returned by {@link #createReadTasks()}.
+ * logic is delegated to {@link DataReaderFactory}s that are returned by
+ * {@link #createDataReaderFactories()}.
  *
  * There are mainly 3 kinds of query optimizations:
  *   1. Operators push-down. E.g., filter push-down, required columns push-down(aka column
@@ -63,9 +64,9 @@ public interface DataSourceV2Reader {
   StructType readSchema();
 
   /**
-   * Returns a list of read tasks. Each task is responsible for outputting data for one RDD
-   * partition. That means the number of tasks returned here is same as the number of RDD
-   * partitions this scan outputs.
+   * Returns a list of reader factories. Each factory is responsible for creating a data reader to
+   * output data for one RDD partition. That means the number of factories returned here is same as
+   * the number of RDD partitions this scan outputs.
    *
    * Note that, this may not be a full scan if the data source reader mixes in other optimization
    * interfaces like column pruning, filter push-down, etc. These optimizations are applied before
@@ -74,5 +75,5 @@ public interface DataSourceV2Reader {
    * If this method fails (by throwing an exception), the action would fail and no Spark job was
    * submitted.
    */
-  List<ReadTask<Row>> createReadTasks();
+  List<DataReaderFactory<Row>> createDataReaderFactories();
 }
