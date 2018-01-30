@@ -19,6 +19,9 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql._
 
 class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
@@ -414,22 +417,6 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     assert(readDiscretizer.hasDefault(readDiscretizer.outputCol))
   }
 
-  test("Multiple Columns: Both inputCol and inputCols are set") {
-    val spark = this.spark
-    import spark.implicits._
-    val discretizer = new QuantileDiscretizer()
-      .setInputCol("input")
-      .setOutputCol("result")
-      .setNumBuckets(3)
-      .setInputCols(Array("input1", "input2"))
-    val df = sc.parallelize(Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
-      .map(Tuple1.apply).toDF("input")
-    // When both inputCol and inputCols are set, we throw Exception.
-    intercept[IllegalArgumentException] {
-      discretizer.fit(df)
-    }
-  }
-
   test("Multiple Columns: Mismatched sizes of inputCols / outputCols") {
     val spark = this.spark
     import spark.implicits._
@@ -442,5 +429,17 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     intercept[IllegalArgumentException] {
       discretizer.fit(df)
     }
+  }
+
+  test("Assert exception is thrown if both multi-column and single-column params are set") {
+    val spark = this.spark
+    import spark.implicits._
+    val df = Seq((0.5, 0.3), (0.5, -0.4)).toDF("feature1", "feature2")
+    ParamsSuite.testExclusiveParams(new QuantileDiscretizer, df, ("inputCol", "feature1"),
+      ("inputCols", Array("feature1", "feature2")))
+    ParamsSuite.testExclusiveParams(new QuantileDiscretizer, df, ("inputCol", "feature1"),
+      ("outputCol", "result1"), ("outputCols", Array("result1", "result2")))
+    // this should fail because at least one of inputCol and inputCols must be set
+    ParamsSuite.testExclusiveParams(new QuantileDiscretizer, df, ("outputCol", "feature1"))
   }
 }

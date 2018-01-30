@@ -171,25 +171,24 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
   @Since("2.3.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  private[feature] def getInOutCols: (Array[String], Array[String]) = {
-    require((isSet(inputCol) && isSet(outputCol) && !isSet(inputCols) && !isSet(outputCols)) ||
-      (!isSet(inputCol) && !isSet(outputCol) && isSet(inputCols) && isSet(outputCols)),
-      "QuantileDiscretizer only supports setting either inputCol/outputCol or" +
-        "inputCols/outputCols."
-    )
-
-    if (isSet(inputCol)) {
-      (Array($(inputCol)), Array($(outputCol)))
-    } else {
-      require($(inputCols).length == $(outputCols).length,
-        "inputCols number do not match outputCols")
-      ($(inputCols), $(outputCols))
-    }
-  }
-
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    val (inputColNames, outputColNames) = getInOutCols
+    ParamValidators.checkSingleVsMultiColumnParams(this, Seq(outputCol),
+      Seq(outputCols))
+
+    if (isSet(inputCols)) {
+      require(getInputCols.length == getOutputCols.length,
+        s"QuantileDiscretizer $this has mismatched Params " +
+          s"for multi-column transform.  Params (inputCols, outputCols) should have " +
+          s"equal lengths, but they have different lengths: " +
+          s"(${getInputCols.length}, ${getOutputCols.length}).")
+    }
+
+    val (inputColNames, outputColNames) = if (isSet(inputCols)) {
+      ($(inputCols).toSeq, $(outputCols).toSeq)
+    } else {
+      (Seq($(inputCol)), Seq($(outputCol)))
+    }
     val existingFields = schema.fields
     var outputFields = existingFields
     inputColNames.zip(outputColNames).foreach { case (inputColName, outputColName) =>
