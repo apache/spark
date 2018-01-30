@@ -16,6 +16,8 @@
 #
 
 import sys
+if sys.version >= '3':
+    long = int
 
 from pyspark import since, SparkContext
 from pyspark.sql.column import _to_seq, _to_java_column
@@ -129,10 +131,11 @@ class Window(object):
                       any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
                     The frame is unbounded if this is ``Window.unboundedFollowing``,
-                    ``org.apache.spark.sql.catalyst.expressions.UnboundedPFollowing``, or
+                    ``org.apache.spark.sql.catalyst.expressions.UnboundedFollowing``, or
                     any value greater than or equal to min(sys.maxsize, 9223372036854775807).
+                    any value greater than or equal to 9223372036854775807.
         """
-        if isinstance(start, int) and isinstance(end, int):
+        if isinstance(start, (int, long)) and isinstance(end, (int, long)):
             if start <= Window._PRECEDING_THRESHOLD:
                 start = Window.unboundedPreceding
             if end >= Window._FOLLOWING_THRESHOLD:
@@ -222,8 +225,9 @@ class WindowSpec(object):
                     The frame is unbounded if this is ``Window.unboundedFollowing``,
                     ``org.apache.spark.sql.catalyst.expressions.UnboundedFollowing``, or
                     any value greater than or equal to min(sys.maxsize, 9223372036854775807).
+
         """
-        if isinstance(start, int) and isinstance(end, int):
+        if isinstance(start, (int, long)) and isinstance(end, (int, long)):
             if start <= Window._PRECEDING_THRESHOLD:
                 start = Window.unboundedPreceding
             if end >= Window._FOLLOWING_THRESHOLD:
