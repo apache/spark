@@ -25,7 +25,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Map => MutableMap}
 
 import org.apache.spark.SparkEnv
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -35,7 +34,6 @@ import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, St
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.ContinuousReadSupport
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, PartitionOffset}
-import org.apache.spark.sql.sources.v2.streaming.reader.PartitionOffset
 import org.apache.spark.sql.sources.v2.writer.StreamWriteSupport
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.sql.types.StructType
