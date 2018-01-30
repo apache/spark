@@ -87,7 +87,7 @@ public final class CalendarInterval implements Serializable {
     }
   }
 
-  private static long toLongWithRange(String fieldName,
+  public static long toLongWithRange(String fieldName,
       String s, long minValue, long maxValue) throws IllegalArgumentException {
     long result = 0;
     if (s != null) {
@@ -235,7 +235,7 @@ public final class CalendarInterval implements Serializable {
   /**
    * Parse second_nano string in ss.nnnnnnnnn format to microseconds
    */
-  private static long parseSecondNano(String secondNano) throws IllegalArgumentException {
+  public static long parseSecondNano(String secondNano) throws IllegalArgumentException {
     String[] parts = secondNano.split("\\.");
     if (parts.length == 1) {
       return toLongWithRange("second", parts[0], Long.MIN_VALUE / MICROS_PER_SECOND,

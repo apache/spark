@@ -242,11 +242,11 @@ public abstract class ColumnVector implements AutoCloseable {
    *
    * In Spark, calendar interval type value is basically an integer value representing the number of
    * months in this interval, and a long value representing the number of microseconds in this
-   * interval. A interval type vector is same as a struct type vector with 2 fields: `months` and
-   * `microseconds`.
+   * interval. An interval type vector is the same as a struct type vector with 2 fields: `months`
+   * and `microseconds`.
    *
    * To support interval type, implementations must implement {@link #getChild(int)} and define 2
-   * child vectors: the first child vector is a int type vector, containing all the month values of
+   * child vectors: the first child vector is an int type vector, containing all the month values of
    * all the interval values in this vector. The second child vector is a long type vector,
    * containing all the microsecond values of all the interval values in this vector.
    */
@@ -258,7 +258,7 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the ordinal's child column vector.
+   * @return child [[ColumnVector]] at the given ordinal.
    */
   protected abstract ColumnVector getChild(int ordinal);
 
