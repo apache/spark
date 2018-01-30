@@ -148,7 +148,6 @@ private[continuous] class EpochCoordinator(
       logDebug(s"Epoch $epoch has received commits from all partitions. Committing globally.")
       // Sequencing is important here. We must commit to the writer before recording the commit
       // in the query, or we will end up dropping the commit if we restart in the middle.
-      thisEpochCommits.foreach(writer.add(_))
       writer.commit(epoch)
       query.commit(epoch)
 
@@ -171,6 +170,7 @@ private[continuous] class EpochCoordinator(
       logDebug(s"Got commit from partition $partitionId at epoch $epoch: $message")
       if (!partitionCommits.isDefinedAt((epoch, partitionId))) {
         partitionCommits.put((epoch, partitionId), message)
+        writer.add(message)
         resolveCommitsAtEpoch(epoch)
       }
 

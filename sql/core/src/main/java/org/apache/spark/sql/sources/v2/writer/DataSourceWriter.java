@@ -40,13 +40,13 @@ import org.apache.spark.sql.types.StructType;
  *   1. Create a writer factory by {@link #createWriterFactory()}, serialize and send it to all the
  *      partitions of the input data(RDD).
  *   2. For each partition, create the data writer, and write the data of the partition with this
- *      writer. If all the data are written successfully, call {@link DataWriter#commit()}.
- *      On a writer being successfully committed, call {@link #add(WriterCommitMessage)} to
- *      handle its commit message.
+ *      writer. If one data writer finishes successfully, the commit message will be sent back to
+ *      the driver side and Spark will call {@link #add(WriterCommitMessage)}.
  *      If exception happens during the writing, call {@link DataWriter#abort()}.
- *   3. If all writers are successfully committed, call {@link #commit()}. If
- *      some writers are aborted, or the job failed with an unknown reason, call
- *      {@link #abort()}.
+ *   3. If all the data writers finish successfully, and {@link #add(WriterCommitMessage)} is
+ *      successfully called for all the commit messages, Spark will call {@link #commit()}.
+ *      If any of the data writers failed, or any of the {@link #add(WriterCommitMessage)}
+ *      calls failed, or the job failed with an unknown reason, call {@link #abort()}.
  *
  * While Spark will retry failed writing tasks, Spark won't retry failed writing jobs. Users should
  * do it manually in their Spark applications if they want to retry.
@@ -65,7 +65,10 @@ public interface DataSourceWriter {
   DataWriterFactory<Row> createWriterFactory();
 
   /**
-   * Handles a commit message produced by {@link DataWriter#commit()}.
+   * Handles a commit message which is collected from a successful data writer in the executor side.
+   *
+   * Note that, implementations might need to cache all commit messages before calling
+   * {@link #commit()} or {@link #abort()}.
    *
    * If this method fails (by throwing an exception), this writing job is considered to to have been
    * failed, and {@link #abort()} would be called. The state of the destination
