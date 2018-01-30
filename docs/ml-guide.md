@@ -128,8 +128,11 @@ new [`OneHotEncoderEstimator`](ml-features.html#onehotencoderestimator)
 **Changes of behavior**
 
 * [SPARK-21027](https://issues.apache.org/jira/browse/SPARK-21027):
- We are now setting the default parallelism used in `OneVsRest` to be 1 (i.e. serial). In 2.2 and
+ The default parallelism used in `OneVsRest` is now set to 1 (i.e. serial). In `2.2` and
  earlier versions, the level of parallelism was set to the default threadpool size in Scala.
+* [SPARK-22156](https://issues.apache.org/jira/browse/SPARK-22156):
+ The learning rate update for `Word2Vec` was incorrect when `numIterations` was set greater than
+ `1`. This will cause training results to be different between `2.3` and earlier versions.
   
 ## Previous Spark versions
 
