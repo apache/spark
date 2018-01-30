@@ -157,7 +157,7 @@ def read_udfs(pickleSer, infile, eval_type):
     udfs = {}
     call_udf = []
     mapper_str = ""
-    if eval_type == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
+    if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         # Create function like this:
         #   lambda a: f([a[0]], [a[0], a[1]])
         assert num_udfs == 1

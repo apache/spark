@@ -4646,17 +4646,17 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         udf1 = pandas_udf(
             foo1,
             'id long, v int, v1 long, v2 int, v3 long, v4 double',
-            PandasUDFType.GROUP_MAP)
+            PandasUDFType.GROUPED_MAP)
 
         udf2 = pandas_udf(
             foo2,
             'id long, v int, v1 long, v2 int, v3 int, v4 int',
-            PandasUDFType.GROUP_MAP)
+            PandasUDFType.GROUPED_MAP)
 
         udf3 = pandas_udf(
             foo3,
             'id long, v int, v1 long',
-            PandasUDFType.GROUP_MAP)
+            PandasUDFType.GROUPED_MAP)
 
         # Test groupby column
         result1 = df.groupby('id').apply(udf1).sort('id', 'v').toPandas()
