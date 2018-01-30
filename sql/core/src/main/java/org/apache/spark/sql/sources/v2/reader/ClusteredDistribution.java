@@ -15,27 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.python
+package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.api.python.PythonFunction
-import org.apache.spark.sql.catalyst.expressions.{Expression, NonSQLExpression, Unevaluable, UserDefinedExpression}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A serialized version of a Python lambda function.
+ * A concrete implementation of {@link Distribution}. Represents a distribution where records that
+ * share the same values for the {@link #clusteredColumns} will be produced by the same
+ * {@link DataReader}.
  */
-case class PythonUDF(
-    name: String,
-    func: PythonFunction,
-    dataType: DataType,
-    children: Seq[Expression],
-    evalType: Int,
-    udfDeterministic: Boolean)
-  extends Expression with Unevaluable with NonSQLExpression with UserDefinedExpression {
+@InterfaceStability.Evolving
+public class ClusteredDistribution implements Distribution {
 
-  override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
+  /**
+   * The names of the clustered columns. Note that they are order insensitive.
+   */
+  public final String[] clusteredColumns;
 
-  override def toString: String = s"$name(${children.mkString(", ")})"
-
-  override def nullable: Boolean = true
+  public ClusteredDistribution(String[] clusteredColumns) {
+    this.clusteredColumns = clusteredColumns;
+  }
 }

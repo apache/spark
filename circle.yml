@@ -7,7 +7,7 @@ machine:
     - gpg -a --export E084DAB9 | sudo apt-key add -
     - sudo apt-get update
     - sudo apt-get --assume-yes install r-base r-base-dev qpdf
-    - sudo chmod 777 /usr/local/lib/R/site-library 
+    - sudo chmod 777 /usr/local/lib/R/site-library
     - /usr/lib/R/bin/R -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival', 'devtools', 'roxygen2', 'lintr'), repos='http://cran.us.r-project.org', lib='/usr/local/lib/R/site-library')"
     - |
       if [[ ! -d ${CONDA_ROOT} ]]; then
@@ -62,7 +62,7 @@ general:
 
 test:
   override:
-    - set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "$CIRCLE_ARTIFACTS/run-tests.log" | grep -v -i info:
+    - set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "$CIRCLE_ARTIFACTS/run-tests.log":
         parallel: true
         timeout: 1800
         max-runtime: 14400

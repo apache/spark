@@ -50,6 +50,8 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
 @ExtendedHiveTest
 class VersionsSuite extends SparkFunSuite with Logging {
 
+  override protected val enableAutoThreadAudit = false
+
   import HiveClientBuilder.buildClient
 
   /**

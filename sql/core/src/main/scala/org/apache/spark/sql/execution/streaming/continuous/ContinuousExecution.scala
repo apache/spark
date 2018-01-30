@@ -17,22 +17,23 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
+import java.util.UUID
 import java.util.concurrent.TimeUnit
+import java.util.function.UnaryOperator
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Map => MutableMap}
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, WriteToDataSourceV2}
 import org.apache.spark.sql.execution.streaming.{ContinuousExecutionRelation, StreamingRelationV2, _}
 import org.apache.spark.sql.sources.v2.DataSourceV2Options
-import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, ContinuousWriteSupport}
-import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousReader, Offset, PartitionOffset}
-import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter
+import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousReader, PartitionOffset}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Clock, Utils}
@@ -42,7 +43,7 @@ class ContinuousExecution(
     name: String,
     checkpointRoot: String,
     analyzedPlan: LogicalPlan,
-    sink: ContinuousWriteSupport,
+    sink: StreamWriteSupport,
     trigger: Trigger,
     triggerClock: Clock,
     outputMode: OutputMode,
@@ -52,13 +53,13 @@ class ContinuousExecution(
     sparkSession, name, checkpointRoot, analyzedPlan, sink,
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
-  @volatile protected var continuousSources: Seq[ContinuousReader] = Seq.empty
+  @volatile protected var continuousSources: Seq[ContinuousReader] = Seq()
   override protected def sources: Seq[BaseStreamingSource] = continuousSources
 
-  override lazy val logicalPlan: LogicalPlan = {
-    assert(queryExecutionThread eq Thread.currentThread,
-      "logicalPlan must be initialized in StreamExecutionThread " +
-        s"but the current thread was ${Thread.currentThread}")
+  // For use only in test harnesses.
+  private[sql] var currentEpochCoordinatorId: String = _
+
+  override val logicalPlan: LogicalPlan = {
     val toExecutionRelationMap = MutableMap[StreamingRelationV2, ContinuousExecutionRelation]()
     analyzedPlan.transform {
       case r @ StreamingRelationV2(
@@ -67,7 +68,7 @@ class ContinuousExecution(
           ContinuousExecutionRelation(source, extraReaderOptions, output)(sparkSession)
         })
       case StreamingRelationV2(_, sourceName, _, _, _) =>
-        throw new AnalysisException(
+        throw new UnsupportedOperationException(
           s"Data source $sourceName does not support continuous processing.")
     }
   }
@@ -78,15 +79,17 @@ class ContinuousExecution(
   }
 
   override protected def runActivatedStream(sparkSessionForStream: SparkSession): Unit = {
-    do {
-      try {
-        runContinuous(sparkSessionForStream)
-      } catch {
-        case _: InterruptedException if state.get().equals(RECONFIGURING) =>
-          // swallow exception and run again
-          state.set(ACTIVE)
+    val stateUpdate = new UnaryOperator[State] {
+      override def apply(s: State) = s match {
+        // If we ended the query to reconfigure, reset the state to active.
+        case RECONFIGURING => ACTIVE
+        case _ => s
       }
-    } while (state.get() == ACTIVE)
+    }
+
+    do {
+      runContinuous(sparkSessionForStream)
+    } while (state.updateAndGet(stateUpdate) == ACTIVE)
   }
 
   /**
@@ -120,12 +123,16 @@ class ContinuousExecution(
         }
         committedOffsets = nextOffsets.toStreamProgress(sources)
 
-        // Forcibly align commit and offset logs by slicing off any spurious offset logs from
-        // a previous run. We can't allow commits to an epoch that a previous run reached but
-        // this run has not.
-        offsetLog.purgeAfter(latestEpochId)
+        // Get to an epoch ID that has definitely never been sent to a sink before. Since sink
+        // commit happens between offset log write and commit log write, this means an epoch ID
+        // which is not in the offset log.
+        val (latestOffsetEpoch, _) = offsetLog.getLatest().getOrElse {
+          throw new IllegalStateException(
+            s"Offset log had no latest element. This shouldn't be possible because nextOffsets is" +
+              s"an element.")
+        }
+        currentBatchId = latestOffsetEpoch + 1
 
-        currentBatchId = latestEpochId + 1
         logDebug(s"Resuming at epoch $currentBatchId with committed offsets $committedOffsets")
         nextOffsets
       case None =>
@@ -187,12 +194,12 @@ class ContinuousExecution(
           "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
     }
 
-    val writer = sink.createContinuousWriter(
+    val writer = sink.createStreamWriter(
       s"$runId",
       triggerLogicalPlan.schema,
       outputMode,
       new DataSourceV2Options(extraOptions.asJava))
-    val withSink = WriteToDataSourceV2(writer.get(), triggerLogicalPlan)
+    val withSink = WriteToDataSourceV2(writer, triggerLogicalPlan)
 
     val reader = withSink.collect {
       case DataSourceV2Relation(_, r: ContinuousReader) => r
@@ -210,28 +217,30 @@ class ContinuousExecution(
       lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
-    sparkSession.sparkContext.setLocalProperty(
+    sparkSessionForQuery.sparkContext.setLocalProperty(
       ContinuousExecution.START_EPOCH_KEY, currentBatchId.toString)
-    sparkSession.sparkContext.setLocalProperty(
-      ContinuousExecution.RUN_ID_KEY, runId.toString)
+    // Add another random ID on top of the run ID, to distinguish epoch coordinators across
+    // reconfigurations.
+    val epochCoordinatorId = s"$runId--${UUID.randomUUID}"
+    currentEpochCoordinatorId = epochCoordinatorId
+    sparkSessionForQuery.sparkContext.setLocalProperty(
+      ContinuousExecution.EPOCH_COORDINATOR_ID_KEY, epochCoordinatorId)
 
     // Use the parent Spark session for the endpoint since it's where this query ID is registered.
     val epochEndpoint =
       EpochCoordinatorRef.create(
-        writer.get(), reader, this, currentBatchId, sparkSession, SparkEnv.get)
+        writer, reader, this, epochCoordinatorId, currentBatchId, sparkSession, SparkEnv.get)
     val epochUpdateThread = new Thread(new Runnable {
       override def run: Unit = {
         try {
           triggerExecutor.execute(() => {
             startTrigger()
 
-            if (reader.needsReconfiguration()) {
-              state.set(RECONFIGURING)
+            if (reader.needsReconfiguration() && state.compareAndSet(ACTIVE, RECONFIGURING)) {
               stopSources()
               if (queryExecutionThread.isAlive) {
                 sparkSession.sparkContext.cancelJobGroup(runId.toString)
                 queryExecutionThread.interrupt()
-                // No need to join - this thread is about to end anyway.
               }
               false
             } else if (isActive) {
@@ -259,6 +268,7 @@ class ContinuousExecution(
           sparkSessionForQuery, lastExecution)(lastExecution.toRdd)
       }
     } finally {
+      epochEndpoint.askSync[Unit](StopContinuousExecutionWrites)
       SparkEnv.get.rpcEnv.stop(epochEndpoint)
 
       epochUpdateThread.interrupt()
@@ -273,17 +283,22 @@ class ContinuousExecution(
       epoch: Long, reader: ContinuousReader, partitionOffsets: Seq[PartitionOffset]): Unit = {
     assert(continuousSources.length == 1, "only one continuous source supported currently")
 
-    if (partitionOffsets.contains(null)) {
-      // If any offset is null, that means the corresponding partition hasn't seen any data yet, so
-      // there's nothing meaningful to add to the offset log.
-    }
     val globalOffset = reader.mergeOffsets(partitionOffsets.toArray)
-    synchronized {
-      if (queryExecutionThread.isAlive) {
-        offsetLog.add(epoch, OffsetSeq.fill(globalOffset))
-      } else {
-        return
-      }
+    val oldOffset = synchronized {
+      offsetLog.add(epoch, OffsetSeq.fill(globalOffset))
+      offsetLog.get(epoch - 1)
+    }
+
+    // If offset hasn't changed since last epoch, there's been no new data.
+    if (oldOffset.contains(OffsetSeq.fill(globalOffset))) {
+      noNewData = true
+    }
+
+    awaitProgressLock.lock()
+    try {
+      awaitProgressLockCondition.signalAll()
+    } finally {
+      awaitProgressLock.unlock()
     }
   }
 
@@ -346,5 +361,5 @@ class ContinuousExecution(
 
 object ContinuousExecution {
   val START_EPOCH_KEY = "__continuous_start_epoch"
-  val RUN_ID_KEY = "__run_id"
+  val EPOCH_COORDINATOR_ID_KEY = "__epoch_coordinator_id"
 }

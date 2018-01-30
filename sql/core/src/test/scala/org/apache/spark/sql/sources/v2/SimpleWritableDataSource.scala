@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.{FileSystem, FSDataInputStream, Path}
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.reader.{DataReader, DataSourceV2Reader, ReadTask}
+import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory, DataSourceV2Reader}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -45,7 +45,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
   class Reader(path: String, conf: Configuration) extends DataSourceV2Reader {
     override def readSchema(): StructType = schema
 
-    override def createReadTasks(): JList[ReadTask[Row]] = {
+    override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
       val dataPath = new Path(path)
       val fs = dataPath.getFileSystem(conf)
       if (fs.exists(dataPath)) {
@@ -54,7 +54,9 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
           name.startsWith("_") || name.startsWith(".")
         }.map { f =>
           val serializableConf = new SerializableConfiguration(conf)
-          new SimpleCSVReadTask(f.getPath.toUri.toString, serializableConf): ReadTask[Row]
+          new SimpleCSVDataReaderFactory(
+            f.getPath.toUri.toString,
+            serializableConf): DataReaderFactory[Row]
         }.toList.asJava
       } else {
         Collections.emptyList()
@@ -149,8 +151,8 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
   }
 }
 
-class SimpleCSVReadTask(path: String, conf: SerializableConfiguration)
-  extends ReadTask[Row] with DataReader[Row] {
+class SimpleCSVDataReaderFactory(path: String, conf: SerializableConfiguration)
+  extends DataReaderFactory[Row] with DataReader[Row] {
 
   @transient private var lines: Iterator[String] = _
   @transient private var currentLine: String = _

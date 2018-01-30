@@ -74,8 +74,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
 
-    val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex
-      .map { case (attr, i) => attr.withName(s"_$i") })
+    val outputTypes = output.drop(child.output.length).map(_.dataType)
 
     // DO NOT use iter.grouped(). See BatchIterator.
     val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
@@ -90,8 +89,9 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
       private var currentIter = if (columnarBatchIter.hasNext) {
         val batch = columnarBatchIter.next()
-        assert(schemaOut.equals(batch.schema),
-          s"Invalid schema from pandas_udf: expected $schemaOut, got ${batch.schema}")
+        val actualDataTypes = (0 until batch.numCols()).map(i => batch.column(i).dataType())
+        assert(outputTypes == actualDataTypes, "Invalid schema from pandas_udf: " +
+          s"expected ${outputTypes.mkString(", ")}, got ${actualDataTypes.mkString(", ")}")
         batch.rowIterator.asScala
       } else {
         Iterator.empty

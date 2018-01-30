@@ -23,7 +23,7 @@ import java.io.IOException;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A data reader returned by {@link ReadTask#createDataReader()} and is responsible for
+ * A data reader returned by {@link DataReaderFactory#createDataReader()} and is responsible for
  * outputting data for a RDD partition.
  *
  * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.Row} for normal data

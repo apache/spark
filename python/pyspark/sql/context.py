@@ -29,9 +29,10 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
 from pyspark.sql.streaming import DataStreamReader
 from pyspark.sql.types import IntegerType, Row, StringType
+from pyspark.sql.udf import UDFRegistration
 from pyspark.sql.utils import install_exception_handler
 
-__all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
+__all__ = ["SQLContext", "HiveContext"]
 
 
 class SQLContext(object):
@@ -147,7 +148,7 @@ class SQLContext(object):
 
         :return: :class:`UDFRegistration`
         """
-        return UDFRegistration(self)
+        return self.sparkSession.udf
 
     @since(1.4)
     def range(self, start, end=None, step=1, numPartitions=None):
@@ -172,92 +173,29 @@ class SQLContext(object):
         """
         return self.sparkSession.range(start, end, step, numPartitions)
 
-    @ignore_unicode_prefix
     @since(1.2)
-    def registerFunction(self, name, f, returnType=StringType()):
-        """Registers a Python function (including lambda function) or a :class:`UserDefinedFunction`
-        as a UDF. The registered UDF can be used in SQL statement.
+    def registerFunction(self, name, f, returnType=None):
+        """An alias for :func:`spark.udf.register`.
+        See :meth:`pyspark.sql.UDFRegistration.register`.
 
-        In addition to a name and the function itself, the return type can be optionally specified.
-        When the return type is not given it default to a string and conversion will automatically
-        be done.  For any other return type, the produced object must match the specified type.
-
-        :param name: name of the UDF
-        :param f: a Python function, or a wrapped/native UserDefinedFunction
-        :param returnType: a :class:`pyspark.sql.types.DataType` object
-        :return: a wrapped :class:`UserDefinedFunction`
-
-        >>> strlen = sqlContext.registerFunction("stringLengthString", lambda x: len(x))
-        >>> sqlContext.sql("SELECT stringLengthString('test')").collect()
-        [Row(stringLengthString(test)=u'4')]
-
-        >>> sqlContext.sql("SELECT 'foo' AS text").select(strlen("text")).collect()
-        [Row(stringLengthString(text)=u'3')]
-
-        >>> from pyspark.sql.types import IntegerType
-        >>> _ = sqlContext.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
-        >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt(test)=4)]
-
-        >>> from pyspark.sql.types import IntegerType
-        >>> _ = sqlContext.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
-        >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
-        [Row(stringLengthInt(test)=4)]
-
-        >>> import random
-        >>> from pyspark.sql.functions import udf
-        >>> from pyspark.sql.types import IntegerType, StringType
-        >>> random_udf = udf(lambda: random.randint(0, 100), IntegerType()).asNondeterministic()
-        >>> newRandom_udf = sqlContext.registerFunction("random_udf", random_udf, StringType())
-        >>> sqlContext.sql("SELECT random_udf()").collect()  # doctest: +SKIP
-        [Row(random_udf()=u'82')]
-        >>> sqlContext.range(1).select(newRandom_udf()).collect()  # doctest: +SKIP
-        [Row(random_udf()=u'62')]
+        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.register` instead.
         """
-        return self.sparkSession.catalog.registerFunction(name, f, returnType)
+        warnings.warn(
+            "Deprecated in 2.3.0. Use spark.udf.register instead.",
+            DeprecationWarning)
+        return self.sparkSession.udf.register(name, f, returnType)
 
-    @ignore_unicode_prefix
     @since(2.1)
     def registerJavaFunction(self, name, javaClassName, returnType=None):
-        """Register a java UDF so it can be used in SQL statements.
+        """An alias for :func:`spark.udf.registerJavaFunction`.
+        See :meth:`pyspark.sql.UDFRegistration.registerJavaFunction`.
 
-        In addition to a name and the function itself, the return type can be optionally specified.
-        When the return type is not specified we would infer it via reflection.
-        :param name:  name of the UDF
-        :param javaClassName: fully qualified name of java class
-        :param returnType: a :class:`pyspark.sql.types.DataType` object
-
-        >>> sqlContext.registerJavaFunction("javaStringLength",
-        ...   "test.org.apache.spark.sql.JavaStringLength", IntegerType())
-        >>> sqlContext.sql("SELECT javaStringLength('test')").collect()
-        [Row(UDF:javaStringLength(test)=4)]
-        >>> sqlContext.registerJavaFunction("javaStringLength2",
-        ...   "test.org.apache.spark.sql.JavaStringLength")
-        >>> sqlContext.sql("SELECT javaStringLength2('test')").collect()
-        [Row(UDF:javaStringLength2(test)=4)]
-
+        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.registerJavaFunction` instead.
         """
-        jdt = None
-        if returnType is not None:
-            jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
-        self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
-
-    @ignore_unicode_prefix
-    @since(2.3)
-    def registerJavaUDAF(self, name, javaClassName):
-        """Register a java UDAF so it can be used in SQL statements.
-
-        :param name:  name of the UDAF
-        :param javaClassName: fully qualified name of java class
-
-        >>> sqlContext.registerJavaUDAF("javaUDAF",
-        ...   "test.org.apache.spark.sql.MyDoubleAvg")
-        >>> df = sqlContext.createDataFrame([(1, "a"),(2, "b"), (3, "a")],["id", "name"])
-        >>> df.registerTempTable("df")
-        >>> sqlContext.sql("SELECT name, javaUDAF(id) as avg from df group by name").collect()
-        [Row(name=u'b', avg=102.0), Row(name=u'a', avg=102.0)]
-        """
-        self.sparkSession._jsparkSession.udf().registerJavaUDAF(name, javaClassName)
+        warnings.warn(
+            "Deprecated in 2.3.0. Use spark.udf.registerJavaFunction instead.",
+            DeprecationWarning)
+        return self.sparkSession.udf.registerJavaFunction(name, javaClassName, returnType)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):
@@ -567,24 +505,6 @@ class HiveContext(SQLContext):
         call this function to invalidate the cache.
         """
         self._ssql_ctx.refreshTable(tableName)
-
-
-class UDFRegistration(object):
-    """Wrapper for user-defined function registration."""
-
-    def __init__(self, sqlContext):
-        self.sqlContext = sqlContext
-
-    def register(self, name, f, returnType=StringType()):
-        return self.sqlContext.registerFunction(name, f, returnType)
-
-    def registerJavaFunction(self, name, javaClassName, returnType=None):
-        self.sqlContext.registerJavaFunction(name, javaClassName, returnType)
-
-    def registerJavaUDAF(self, name, javaClassName):
-        self.sqlContext.registerJavaUDAF(name, javaClassName)
-
-    register.__doc__ = SQLContext.registerFunction.__doc__
 
 
 def _test():

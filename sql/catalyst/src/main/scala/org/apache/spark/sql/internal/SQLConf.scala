@@ -123,14 +123,12 @@ object SQLConf {
       .createWithDefault(10)
 
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
-    .internal()
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
     .booleanConf
     .createWithDefault(true)
 
   val COLUMN_BATCH_SIZE = buildConf("spark.sql.inMemoryColumnarStorage.batchSize")
-    .internal()
     .doc("Controls the size of batches for columnar caching.  Larger batch sizes can improve " +
       "memory utilization and compression, but risk OOMs when caching data.")
     .intConf
@@ -421,7 +419,7 @@ object SQLConf {
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
@@ -640,6 +638,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME =
+    buildConf("spark.sql.codegen.useIdInClassName")
+    .internal()
+    .doc("When true, embed the (whole-stage) codegen stage ID into " +
+      "the class name of the generated class as a suffix")
+    .booleanConf
+    .createWithDefault(true)
+
   val WHOLESTAGE_MAX_NUM_FIELDS = buildConf("spark.sql.codegen.maxFields")
     .internal()
     .doc("The maximum number of fields (including nested fields) that will be supported before" +
@@ -671,6 +677,15 @@ object SQLConf {
       "this is a limit in the OpenJDK JVM implementation.")
     .intConf
     .createWithDefault(CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT)
+
+  val WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR =
+    buildConf("spark.sql.codegen.splitConsumeFuncByOperator")
+      .internal()
+      .doc("When true, whole stage codegen would put the logic of consuming rows of each " +
+        "physical operator into individual methods, instead of a single big method. This can be " +
+        "used to avoid oversized function that can miss the opportunity of JIT optimization.")
+      .booleanConf
+      .createWithDefault(true)
 
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
@@ -905,7 +920,7 @@ object SQLConf {
       .internal()
       .doc("The number of bins when generating histograms.")
       .intConf
-      .checkValue(num => num > 1, "The number of bins must be large than 1.")
+      .checkValue(num => num > 1, "The number of bins must be larger than 1.")
       .createWithDefault(254)
 
   val PERCENTILE_ACCURACY =
@@ -1037,17 +1052,16 @@ object SQLConf {
 
   val ARROW_EXECUTION_ENABLE =
     buildConf("spark.sql.execution.arrow.enabled")
-      .internal()
-      .doc("Make use of Apache Arrow for columnar data transfers. Currently available " +
-        "for use with pyspark.sql.DataFrame.toPandas with the following data types: " +
-        "StringType, BinaryType, BooleanType, DoubleType, FloatType, ByteType, IntegerType, " +
-        "LongType, ShortType")
+      .doc("When true, make use of Apache Arrow for columnar data transfers. Currently available " +
+        "for use with pyspark.sql.DataFrame.toPandas, and " +
+        "pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame. " +
+        "The following data types are unsupported: " +
+        "MapType, ArrayType of TimestampType, and nested StructType.")
       .booleanConf
       .createWithDefault(false)
 
   val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
-      .internal()
       .doc("When using Apache Arrow, limit the maximum number of records that can be written " +
         "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit.")
       .intConf
@@ -1074,6 +1088,16 @@ object SQLConf {
       " condition(s) of the right node.")
     .booleanConf
     .createWithDefault(true)
+
+  val DECIMAL_OPERATIONS_ALLOW_PREC_LOSS =
+    buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
+      .internal()
+      .doc("When true (default), establishing the result type of an arithmetic operation " +
+        "happens according to Hive behavior and SQL ANSI 2011 specification, ie. rounding the " +
+        "decimal part of the result if an exact representation is not possible. Otherwise, NULL " +
+        "is returned in those cases, as previously.")
+      .booleanConf
+      .createWithDefault(true)
 
   val SQL_STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.sql.redaction.string.regex")
@@ -1111,6 +1135,13 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
+  val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
+    .internal()
+    .doc("A comma-separated list of fully qualified data source register class names for which" +
+      " StreamWriteSupport is disabled. Writes to these sources will fail back to the V1 Sink.")
+    .stringConf
+    .createWithDefault("")
+
   object PartitionOverwriteMode extends Enumeration {
     val STATIC, DYNAMIC = Value
   }
@@ -1128,6 +1159,18 @@ object SQLConf {
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(PartitionOverwriteMode.values.map(_.toString))
       .createWithDefault(PartitionOverwriteMode.STATIC.toString)
+
+  val SORT_BEFORE_REPARTITION =
+    buildConf("spark.sql.execution.sortBeforeRepartition")
+      .internal()
+      .doc("When perform a repartition following a shuffle, the output row ordering would be " +
+        "nondeterministic. If some downstream stages fail and some tasks of the repartition " +
+        "stage retry, these tasks may generate different data, and that can lead to correctness " +
+        "issues. Turn on this config to insert a local sort before actually doing repartition " +
+        "to generate consistent repartition results. The performance of repartition() may go " +
+        "down since we insert extra local sort before it.")
+      .booleanConf
+      .createWithDefault(true)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -1258,6 +1301,8 @@ class SQLConf extends Serializable with Logging {
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 
+  def wholeStageUseIdInClassName: Boolean = getConf(WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME)
+
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
@@ -1265,6 +1310,9 @@ class SQLConf extends Serializable with Logging {
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
+
+  def wholeStageSplitConsumeFuncByOperator: Boolean =
+    getConf(WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR)
 
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
@@ -1280,6 +1328,8 @@ class SQLConf extends Serializable with Logging {
   def fileCompressionFactor: Double = getConf(FILE_COMRESSION_FACTOR)
 
   def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
+
+  def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -1464,10 +1514,14 @@ class SQLConf extends Serializable with Logging {
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
 
+  def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
+
   def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
 
   def continuousStreamingExecutorPollIntervalMs: Long =
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
+
+  def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
 
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 

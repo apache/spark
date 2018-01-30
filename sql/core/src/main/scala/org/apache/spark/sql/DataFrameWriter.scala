@@ -174,7 +174,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * predicates on the partitioned columns. In order for partitioning to work well, the number
    * of distinct values in each column should typically be less than tens of thousands.
    *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
+   * 2.1.0.
    *
    * @since 1.4.0
    */
@@ -188,7 +189,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Buckets the output by the given columns. If specified, the output is laid out on the file
    * system similar to Hive's bucketing scheme.
    *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
+   * 2.1.0.
    *
    * @since 2.0
    */
@@ -202,7 +204,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * Sorts the output in each bucket by the given columns.
    *
-   * This is applicable for all file-based data sources (e.g. Parquet, JSON) staring Spark 2.1.0.
+   * This is applicable for all file-based data sources (e.g. Parquet, JSON) starting with Spark
+   * 2.1.0.
    *
    * @since 2.0
    */
@@ -255,17 +258,24 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             }
           }
 
-        case _ => throw new AnalysisException(s"$cls does not support data writing.")
+        // Streaming also uses the data source V2 API. So it may be that the data source implements
+        // v2, but has no v2 implementation for batch writes. In that case, we fall back to saving
+        // as though it's a V1 source.
+        case _ => saveToV1Source()
       }
     } else {
-      // Code path for data source v1.
-      runCommand(df.sparkSession, "save") {
-        DataSource(
-          sparkSession = df.sparkSession,
-          className = source,
-          partitionColumns = partitioningColumns.getOrElse(Nil),
-          options = extraOptions.toMap).planForWriting(mode, AnalysisBarrier(df.logicalPlan))
-      }
+      saveToV1Source()
+    }
+  }
+
+  private def saveToV1Source(): Unit = {
+    // Code path for data source v1.
+    runCommand(df.sparkSession, "save") {
+      DataSource(
+        sparkSession = df.sparkSession,
+        className = source,
+        partitionColumns = partitioningColumns.getOrElse(Nil),
+        options = extraOptions.toMap).planForWriting(mode, AnalysisBarrier(df.logicalPlan))
     }
   }
 
@@ -304,7 +314,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     if (partitioningColumns.isDefined) {
       throw new AnalysisException(
         "insertInto() can't be used together with partitionBy(). " +
-          "Partition columns have already be defined for the table. " +
+          "Partition columns have already been defined for the table. " +
           "It is not necessary to use partitionBy()."
       )
     }

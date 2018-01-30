@@ -2090,7 +2090,8 @@ setMethod("selectExpr",
 #'
 #' @param x a SparkDataFrame.
 #' @param colName a column name.
-#' @param col a Column expression, or an atomic vector in the length of 1 as literal value.
+#' @param col a Column expression (which must refer only to this DataFrame), or an atomic vector in
+#' the length of 1 as literal value.
 #' @return A SparkDataFrame with the new column added or the existing column replaced.
 #' @family SparkDataFrame functions
 #' @aliases withColumn,SparkDataFrame,character-method
@@ -2853,7 +2854,7 @@ setMethod("intersect",
 #' except
 #'
 #' Return a new SparkDataFrame containing rows in this SparkDataFrame
-#' but not in another SparkDataFrame. This is equivalent to \code{EXCEPT} in SQL.
+#' but not in another SparkDataFrame. This is equivalent to \code{EXCEPT DISTINCT} in SQL.
 #'
 #' @param x a SparkDataFrame.
 #' @param y a SparkDataFrame.

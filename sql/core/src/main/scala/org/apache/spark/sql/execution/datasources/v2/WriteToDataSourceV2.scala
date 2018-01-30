@@ -26,9 +26,8 @@ import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.streaming.continuous.{CommitPartitionEpoch, ContinuousExecution, EpochCoordinatorRef, SetWriterPartitions}
-import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter
+import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
@@ -62,9 +61,12 @@ case class WriteToDataSourceV2Exec(writer: DataSourceV2Writer, query: SparkPlan)
 
     try {
       val runTask = writer match {
-        case w: ContinuousWriter =>
+        // This case means that we're doing continuous processing. In microbatch streaming, the
+        // StreamWriter is wrapped in a MicroBatchWriter, which is executed as a normal batch.
+        case w: StreamWriter =>
           EpochCoordinatorRef.get(
-            sparkContext.getLocalProperty(ContinuousExecution.RUN_ID_KEY), sparkContext.env)
+            sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
+            sparkContext.env)
             .askSync[Unit](SetWriterPartitions(rdd.getNumPartitions))
 
           (context: TaskContext, iter: Iterator[InternalRow]) =>
@@ -81,11 +83,13 @@ case class WriteToDataSourceV2Exec(writer: DataSourceV2Writer, query: SparkPlan)
         (index, message: WriterCommitMessage) => messages(index) = message
       )
 
-      logInfo(s"Data source writer $writer is committing.")
-      writer.commit(messages)
-      logInfo(s"Data source writer $writer committed.")
+      if (!writer.isInstanceOf[StreamWriter]) {
+        logInfo(s"Data source writer $writer is committing.")
+        writer.commit(messages)
+        logInfo(s"Data source writer $writer committed.")
+      }
     } catch {
-      case _: InterruptedException if writer.isInstanceOf[ContinuousWriter] =>
+      case _: InterruptedException if writer.isInstanceOf[StreamWriter] =>
         // Interruption is how continuous queries are ended, so accept and ignore the exception.
       case cause: Throwable =>
         logError(s"Data source writer $writer is aborting.")
@@ -133,7 +137,7 @@ object DataWritingSparkTask extends Logging {
       iter: Iterator[InternalRow]): WriterCommitMessage = {
     val dataWriter = writeTask.createDataWriter(context.partitionId(), context.attemptNumber())
     val epochCoordinator = EpochCoordinatorRef.get(
-      context.getLocalProperty(ContinuousExecution.RUN_ID_KEY),
+      context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       SparkEnv.get)
     val currentMsg: WriterCommitMessage = null
     var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong

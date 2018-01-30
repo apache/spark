@@ -217,6 +217,7 @@ class LauncherServer implements Closeable {
         break;
       }
     }
+
     unref();
   }
 
@@ -285,14 +286,21 @@ class LauncherServer implements Closeable {
     }
   }
 
-  private class ServerConnection extends LauncherConnection {
+  class ServerConnection extends LauncherConnection {
 
     private TimerTask timeout;
-    private AbstractAppHandle handle;
+    private volatile Thread connectionThread;
+    volatile AbstractAppHandle handle;
 
     ServerConnection(Socket socket, TimerTask timeout) throws IOException {
       super(socket);
       this.timeout = timeout;
+    }
+
+    @Override
+    public void run() {
+      this.connectionThread = Thread.currentThread();
+      super.run();
     }
 
     @Override
@@ -313,7 +321,7 @@ class LauncherServer implements Closeable {
         } else {
           if (handle == null) {
             throw new IllegalArgumentException("Expected hello, got: " +
-            msg != null ? msg.getClass().getName() : null);
+              msg != null ? msg.getClass().getName() : null);
           }
           if (msg instanceof SetAppId) {
             SetAppId set = (SetAppId) msg;
@@ -331,6 +339,9 @@ class LauncherServer implements Closeable {
           timeout.cancel();
         }
         close();
+        if (handle != null) {
+          handle.dispose();
+        }
       } finally {
         timeoutTimer.purge();
       }
@@ -338,16 +349,31 @@ class LauncherServer implements Closeable {
 
     @Override
     public void close() throws IOException {
+      if (!isOpen()) {
+        return;
+      }
+
       synchronized (clients) {
         clients.remove(this);
       }
+
       super.close();
-      if (handle != null) {
-        if (!handle.getState().isFinal()) {
-          LOG.log(Level.WARNING, "Lost connection to spark application.");
-          handle.setState(SparkAppHandle.State.LOST);
+    }
+
+    /**
+     * Close the connection and wait for any buffered data to be processed before returning.
+     * This ensures any changes reported by the child application take effect.
+     */
+    public void closeAndWait() throws IOException {
+      close();
+
+      Thread connThread = this.connectionThread;
+      if (Thread.currentThread() != connThread) {
+        try {
+          connThread.join();
+        } catch (InterruptedException ie) {
+          // Ignore.
         }
-        handle.disconnect();
       }
     }
 

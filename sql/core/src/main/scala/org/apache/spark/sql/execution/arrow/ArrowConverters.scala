@@ -175,7 +175,7 @@ private[sql] object ArrowConverters {
           new ArrowColumnVector(vector).asInstanceOf[ColumnVector]
         }.toArray
 
-        val batch = new ColumnarBatch(schemaRead, columns, root.getRowCount)
+        val batch = new ColumnarBatch(columns)
         batch.setNumRows(root.getRowCount)
         batch.rowIterator().asScala
       }

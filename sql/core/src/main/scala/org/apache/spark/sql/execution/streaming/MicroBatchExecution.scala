@@ -28,9 +28,11 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Curre
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
+import org.apache.spark.sql.execution.streaming.sources.{InternalRowMicroBatchWriter, MicroBatchWriter}
 import org.apache.spark.sql.sources.v2.DataSourceV2Options
-import org.apache.spark.sql.sources.v2.streaming.{MicroBatchReadSupport, MicroBatchWriteSupport}
+import org.apache.spark.sql.sources.v2.streaming.{MicroBatchReadSupport, StreamWriteSupport}
 import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset => OffsetV2}
+import org.apache.spark.sql.sources.v2.writer.SupportsWriteInternalRow
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.{Clock, Utils}
 
@@ -91,11 +93,14 @@ class MicroBatchExecution(
           nextSourceId += 1
           StreamingExecutionRelation(reader, output)(sparkSession)
         })
-      case s @ StreamingRelationV2(_, _, _, output, v1Relation) =>
+      case s @ StreamingRelationV2(_, sourceName, _, output, v1Relation) =>
         v2ToExecutionRelationMap.getOrElseUpdate(s, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-          assert(v1Relation.isDefined, "v2 execution didn't match but v1 was unavailable")
+          if (v1Relation.isEmpty) {
+            throw new UnsupportedOperationException(
+              s"Data source $sourceName does not support microbatch processing.")
+          }
           val source = v1Relation.get.dataSource.createSource(metadataPath)
           nextSourceId += 1
           StreamingExecutionRelation(source, output)(sparkSession)
@@ -208,10 +213,8 @@ class MicroBatchExecution(
                * batch will be executed before getOffset is called again. */
               availableOffsets.foreach {
                 case (source: Source, end: Offset) =>
-                  if (committedOffsets.get(source).map(_ != end).getOrElse(true)) {
-                    val start = committedOffsets.get(source)
-                    source.getBatch(start, end)
-                  }
+                  val start = committedOffsets.get(source)
+                  source.getBatch(start, end)
                 case nonV1Tuple =>
                   // The V2 API does not have the same edge case requiring getBatch to be called
                   // here, so we do nothing here.
@@ -439,15 +442,18 @@ class MicroBatchExecution(
 
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
-      case s: MicroBatchWriteSupport =>
-        val writer = s.createMicroBatchWriter(
+      case s: StreamWriteSupport =>
+        val writer = s.createStreamWriter(
           s"$runId",
-          currentBatchId,
           newAttributePlan.schema,
           outputMode,
           new DataSourceV2Options(extraOptions.asJava))
-        assert(writer.isPresent, "microbatch writer must always be present")
-        WriteToDataSourceV2(writer.get, newAttributePlan)
+        if (writer.isInstanceOf[SupportsWriteInternalRow]) {
+          WriteToDataSourceV2(
+            new InternalRowMicroBatchWriter(currentBatchId, writer), newAttributePlan)
+        } else {
+          WriteToDataSourceV2(new MicroBatchWriter(currentBatchId, writer), newAttributePlan)
+        }
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
 
@@ -470,7 +476,7 @@ class MicroBatchExecution(
       SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
         sink match {
           case s: Sink => s.addBatch(currentBatchId, nextBatch)
-          case s: MicroBatchWriteSupport =>
+          case _: StreamWriteSupport =>
             // This doesn't accumulate any data - it just forces execution of the microbatch writer.
             nextBatch.collect()
         }

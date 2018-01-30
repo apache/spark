@@ -68,7 +68,7 @@ class RateStreamContinuousReader(options: DataSourceV2Options)
 
   override def getStartOffset(): Offset = offset
 
-  override def createReadTasks(): java.util.List[ReadTask[Row]] = {
+  override def createDataReaderFactories(): java.util.List[DataReaderFactory[Row]] = {
     val partitionStartMap = offset match {
       case off: RateStreamOffset => off.partitionToValueAndRunTimeMs
       case off =>
@@ -86,13 +86,13 @@ class RateStreamContinuousReader(options: DataSourceV2Options)
       val start = partitionStartMap(i)
       // Have each partition advance by numPartitions each row, with starting points staggered
       // by their partition index.
-      RateStreamContinuousReadTask(
+      RateStreamContinuousDataReaderFactory(
         start.value,
         start.runTimeMs,
         i,
         numPartitions,
         perPartitionRate)
-        .asInstanceOf[ReadTask[Row]]
+        .asInstanceOf[DataReaderFactory[Row]]
     }.asJava
   }
 
@@ -101,13 +101,13 @@ class RateStreamContinuousReader(options: DataSourceV2Options)
 
 }
 
-case class RateStreamContinuousReadTask(
+case class RateStreamContinuousDataReaderFactory(
     startValue: Long,
     startTimeMs: Long,
     partitionIndex: Int,
     increment: Long,
     rowsPerSecond: Double)
-  extends ReadTask[Row] {
+  extends DataReaderFactory[Row] {
   override def createDataReader(): DataReader[Row] =
     new RateStreamContinuousDataReader(
       startValue, startTimeMs, partitionIndex, increment, rowsPerSecond)
