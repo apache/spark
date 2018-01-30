@@ -655,16 +655,22 @@ booleanValue
     ;
 
 interval
-    : INTERVAL intervalField*
+    : {ansi}? INTERVAL? intervalField+
+    | {!ansi}? INTERVAL intervalField*
     ;
 
 intervalField
-    : value=intervalValue unit=identifier (TO to=identifier)?
+    : value=intervalValue unit=intervalUnit (TO to=intervalUnit)?
     ;
 
 intervalValue
     : (PLUS | MINUS)? (INTEGER_VALUE | DECIMAL_VALUE)
     | STRING
+    ;
+
+intervalUnit
+    : YEAR | YEARS | MONTH | MONTHS | WEEK | WEEKS | DAY | DAYS | HOUR | HOURS | MINUTE | MINUTES | SECOND | SECONDS
+    | MILLISECOND | MILLISECONDS | MICROSECOND | MICROSECONDS
     ;
 
 colPosition
@@ -795,6 +801,7 @@ ansiNonReserved
     | DATA
     | DATABASE
     | DATABASES
+    | DAYS
     | DBPROPERTIES
     | DEFINED
     | DELETE
@@ -825,6 +832,7 @@ ansiNonReserved
     | FUNCTIONS
     | GLOBAL
     | GROUPING
+    | HOURS
     | IF
     | IGNORE
     | IMPORT
@@ -851,6 +859,12 @@ ansiNonReserved
     | LOGICAL
     | MACRO
     | MAP
+    | MICROSECOND
+    | MICROSECONDS
+    | MILLISECOND
+    | MILLISECONDS
+    | MINUTES
+    | MONTHS
     | MSCK
     | NO
     | NULLS
@@ -891,6 +905,7 @@ ansiNonReserved
     | ROW
     | ROWS
     | SCHEMA
+    | SECONDS
     | SEPARATED
     | SERDE
     | SERDEPROPERTIES
@@ -924,7 +939,10 @@ ansiNonReserved
     | USE
     | VALUES
     | VIEW
+    | WEEK
+    | WEEKS
     | WINDOW
+    | YEARS
     ;
 
 defaultReserved
@@ -996,6 +1014,8 @@ nonReserved
     | DATA
     | DATABASE
     | DATABASES
+    | DAY
+    | DAYS
     | DBPROPERTIES
     | DEFINED
     | DELETE
@@ -1037,6 +1057,8 @@ nonReserved
     | GROUP
     | GROUPING
     | HAVING
+    | HOUR
+    | HOURS
     | IF
     | IGNORE
     | IMPORT
@@ -1067,6 +1089,14 @@ nonReserved
     | LOGICAL
     | MACRO
     | MAP
+    | MICROSECOND
+    | MICROSECONDS
+    | MILLISECOND
+    | MILLISECONDS
+    | MINUTE
+    | MINUTES
+    | MONTH
+    | MONTHS
     | MSCK
     | NO
     | NOT
@@ -1115,6 +1145,8 @@ nonReserved
     | ROLLUP
     | ROW
     | ROWS
+    | SECOND
+    | SECONDS
     | SELECT
     | SEPARATED
     | SERDE
@@ -1157,10 +1189,14 @@ nonReserved
     | USER
     | VALUES
     | VIEW
+    | WEEK
+    | WEEKS
     | WHEN
     | WHERE
     | WINDOW
     | WITH
+    | YEAR
+    | YEARS
     ;
 
 SELECT: 'SELECT';
@@ -1199,6 +1235,24 @@ ASC: 'ASC';
 DESC: 'DESC';
 FOR: 'FOR';
 INTERVAL: 'INTERVAL';
+YEAR: 'YEAR';
+YEARS: 'YEARS';
+MONTH: 'MONTH';
+MONTHS: 'MONTHS';
+WEEK: 'WEEK';
+WEEKS: 'WEEKS';
+DAY: 'DAY';
+DAYS: 'DAYS';
+HOUR: 'HOUR';
+HOURS: 'HOURS';
+MINUTE: 'MINUTE';
+MINUTES: 'MINUTES';
+SECOND: 'SECOND';
+SECONDS: 'SECONDS';
+MILLISECOND: 'MILLISECOND';
+MILLISECONDS: 'MILLISECONDS';
+MICROSECOND: 'MICROSECOND';
+MICROSECONDS: 'MICROSECONDS';
 CASE: 'CASE';
 WHEN: 'WHEN';
 THEN: 'THEN';
