@@ -24,11 +24,11 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 /**
- * A mix-in interface for {@link DataSourceV2Reader}. Data source readers can implement this
+ * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
  * interface to output {@link ColumnarBatch} and make the scan faster.
  */
 @InterfaceStability.Evolving
-public interface SupportsScanColumnarBatch extends DataSourceV2Reader {
+public interface SupportsScanColumnarBatch extends DataSourceReader {
   @Override
   default List<DataReaderFactory<Row>> createDataReaderFactories() {
     throw new IllegalStateException(
@@ -36,7 +36,7 @@ public interface SupportsScanColumnarBatch extends DataSourceV2Reader {
   }
 
   /**
-   * Similar to {@link DataSourceV2Reader#createDataReaderFactories()}, but returns columnar data
+   * Similar to {@link DataSourceReader#createDataReaderFactories()}, but returns columnar data
    * in batches.
    */
   List<DataReaderFactory<ColumnarBatch>> createBatchDataReaderFactories();

@@ -20,11 +20,11 @@ package org.apache.spark.sql.sources.v2.reader;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A mix in interface for {@link DataSourceV2Reader}. Data source readers can implement this
+ * A mix in interface for {@link DataSourceReader}. Data source readers can implement this
  * interface to report data partitioning and try to avoid shuffle at Spark side.
  */
 @InterfaceStability.Evolving
-public interface SupportsReportPartitioning {
+public interface SupportsReportPartitioning extends DataSourceReader {
 
   /**
    * Returns the output data partitioning that this reader guarantees.

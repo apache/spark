@@ -20,16 +20,16 @@ package org.apache.spark.sql.sources.v2.writer;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SaveMode;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.WriteSupport;
 import org.apache.spark.sql.streaming.OutputMode;
 import org.apache.spark.sql.types.StructType;
 
 /**
  * A data source writer that is returned by
- * {@link WriteSupport#createWriter(String, StructType, SaveMode, DataSourceV2Options)}/
+ * {@link WriteSupport#createWriter(String, StructType, SaveMode, DataSourceOptions)}/
  * {@link org.apache.spark.sql.sources.v2.streaming.StreamWriteSupport#createStreamWriter(
- * String, StructType, OutputMode, DataSourceV2Options)}.
+ * String, StructType, OutputMode, DataSourceOptions)}.
  * It can mix in various writing optimization interfaces to speed up the data saving. The actual
  * writing logic is delegated to {@link DataWriter}.
  *
@@ -52,7 +52,7 @@ import org.apache.spark.sql.types.StructType;
  * Please refer to the documentation of commit/abort methods for detailed specifications.
  */
 @InterfaceStability.Evolving
-public interface DataSourceV2Writer {
+public interface DataSourceWriter {
 
   /**
    * Creates a writer factory which will be serialized and sent to executors.

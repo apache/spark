@@ -21,8 +21,8 @@ import java.io.IOException;
 import java.util.List;
 
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
 import org.apache.spark.sql.sources.v2.ReadSupport;
 import org.apache.spark.sql.sources.v2.reader.*;
 import org.apache.spark.sql.types.DataTypes;
@@ -33,7 +33,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
 
-  class Reader implements DataSourceV2Reader, SupportsScanColumnarBatch {
+  class Reader implements DataSourceReader, SupportsScanColumnarBatch {
     private final StructType schema = new StructType().add("i", "int").add("j", "int");
 
     @Override
@@ -108,7 +108,7 @@ public class JavaBatchDataSourceV2 implements DataSourceV2, ReadSupport {
 
 
   @Override
-  public DataSourceV2Reader createReader(DataSourceV2Options options) {
+  public DataSourceReader createReader(DataSourceOptions options) {
     return new Reader();
   }
 }
