@@ -36,7 +36,7 @@ object PythonUDF {
 
   def isGroupAggPandasUDF(e: Expression): Boolean = {
     e.isInstanceOf[PythonUDF] &&
-      e.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_PANDAS_UDAF
+      e.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
   }
 }
 

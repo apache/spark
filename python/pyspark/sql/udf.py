@@ -39,7 +39,7 @@ def _create_udf(f, returnType, evalType):
 
     if evalType in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                    PythonEvalType.SQL_PANDAS_UDAF):
+                    PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
 
         import inspect
         from pyspark.sql.utils import require_minimum_pyarrow_version
@@ -116,10 +116,10 @@ class UserDefinedFunction(object):
                 and not isinstance(self._returnType_placeholder, StructType):
             raise ValueError("Invalid returnType: returnType must be a StructType for "
                              "pandas_udf with function type GROUPED_MAP")
-        elif self.evalType == PythonEvalType.SQL_PANDAS_UDAF \
+        elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF \
                 and isinstance(self._returnType_placeholder, (StructType, ArrayType, MapType)):
             raise NotImplementedError(
-                "ArrayType, StructType and MapType are not supported with PandasUDFType.UDAF")
+                "ArrayType, StructType and MapType are not supported with PandasUDFType.GROUPED_AGG")
 
         return self._returnType_placeholder
 

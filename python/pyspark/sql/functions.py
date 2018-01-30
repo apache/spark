@@ -2089,7 +2089,7 @@ class PandasUDFType(object):
 
     GROUPED_MAP = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
 
-    UDAF = PythonEvalType.SQL_PANDAS_UDAF
+    GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
 
 @since(1.3)
@@ -2223,9 +2223,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
 
-    3. UDAF
+    3. GROUPED_AGG
 
-       A group aggregate UDF defines a transformation: One or more `pandas.Series` -> A scalar
+       A grouped aggregate UDF defines a transformation: One or more `pandas.Series` -> A scalar
        The `returnType` should be a primitive data type, e.g., :class:`DoubleType`.
        The returned scalar can be either a python primitive type, e.g., `int` or `float`
        or a numpy data type, e.g., `numpy.int64` or `numpy.float64`.
@@ -2239,7 +2239,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
        >>> df = spark.createDataFrame(
        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
        ...     ("id", "v"))
-       >>> @pandas_udf("double", PandasUDFType.UDAF)  # doctest: +SKIP
+       >>> @pandas_udf("double", PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
        ... def mean_udf(v):
        ...     return v.mean()
        >>> df.groupby("id").agg(mean_udf(df['v'])).show()  # doctest: +SKIP
@@ -2299,7 +2299,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
 
     if eval_type not in [PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                          PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                         PythonEvalType.SQL_PANDAS_UDAF]:
+                         PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF]:
         raise ValueError("Invalid functionType: "
                          "functionType must be one the values from PandasUDFType")
 

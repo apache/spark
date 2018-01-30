@@ -4422,7 +4422,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
     def pandas_agg_mean_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        @pandas_udf('double', PandasUDFType.UDAF)
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
         def avg(v):
             return v.mean()
         return avg
@@ -4431,7 +4431,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
     def pandas_agg_sum_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        @pandas_udf('double', PandasUDFType.UDAF)
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
         def sum(v):
             return v.sum()
         return sum
@@ -4441,7 +4441,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         import numpy as np
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        @pandas_udf('double', PandasUDFType.UDAF)
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
         def weighted_mean(v, w):
             return np.average(v, weights=w)
         return weighted_mean
@@ -4505,19 +4505,19 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
 
         with QuietTest(self.sc):
             with self.assertRaisesRegex(NotImplementedError, 'not supported'):
-                @pandas_udf(ArrayType(DoubleType()), PandasUDFType.UDAF)
+                @pandas_udf(ArrayType(DoubleType()), PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return [v.mean(), v.std()]
 
         with QuietTest(self.sc):
             with self.assertRaisesRegex(NotImplementedError, 'not supported'):
-                @pandas_udf('mean double, std double', PandasUDFType.UDAF)
+                @pandas_udf('mean double, std double', PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return v.mean(), v.std()
 
         with QuietTest(self.sc):
             with self.assertRaisesRegex(NotImplementedError, 'not supported'):
-                @pandas_udf(MapType(DoubleType(), DoubleType()), PandasUDFType.UDAF)
+                @pandas_udf(MapType(DoubleType(), DoubleType()), PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return {v.mean(): v.std()}
 
