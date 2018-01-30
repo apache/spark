@@ -157,7 +157,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("SPARK-22954 - Issue AnalysisException when analysis is run on view") {
+  test("SPARK-22954 - Issue AnalysisException when ANALYZE is run on view") {
     val viewName = "testView"
     val analyzeNotSupportedOnViewsMsg = "ANALYZE TABLE is not supported on views."
     withTempView(viewName) {
@@ -169,6 +169,10 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
 
       assert(intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $viewName COMPUTE STATISTICS FOR COLUMNS id")
+      }.getMessage.contains(analyzeNotSupportedOnViewsMsg))
+
+      assert(intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $viewName PARTITION (a) COMPUTE STATISTICS")
       }.getMessage.contains(analyzeNotSupportedOnViewsMsg))
     }
   }
