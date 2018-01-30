@@ -761,6 +761,43 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }
   }
 
+  test("Int Map") {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
+      val column = allocate(10, new MapType(IntegerType, IntegerType, false), memMode)
+      (0 to 1).foreach { colIndex =>
+        val data = column.getChild(colIndex)
+        (0 to 5).foreach {i =>
+          data.putInt(i, i * (colIndex + 1))
+        }
+      }
+
+      // Populate it with maps [0->0], [1->2, 2->4], [], [3->6, 4->8, 5->10]
+      column.putArray(0, 0, 1)
+      column.putArray(1, 1, 2)
+      column.putNull(2)
+      column.putArray(3, 2, 0)
+      column.putArray(4, 3, 3)
+
+      val a1 = ColumnVectorUtils.toJavaIntMap(column.getMap(0))
+      val a2 = ColumnVectorUtils.toJavaIntMap(column.getMap(1))
+      val a4 = ColumnVectorUtils.toJavaIntMap(column.getMap(3))
+      val a5 = ColumnVectorUtils.toJavaIntMap(column.getMap(4))
+
+      assert(a1.asScala == Map(0 -> 0))
+      assert(a2.asScala == Map(1 -> 2, 2 -> 4))
+      assert(a4.asScala == Map())
+      assert(a5.asScala == Map(3 -> 6, 4 -> 8, 5 -> 10))
+
+      assert(column.getMap(0).numElements == 1)
+      assert(column.getMap(1).numElements == 2)
+      assert(column.isNullAt(2))
+      assert(column.getMap(3).numElements == 0)
+      assert(column.getMap(4).numElements == 3)
+
+      column.close()
+    }
+  }
+
   testVector(
     "Struct Column",
     10,
