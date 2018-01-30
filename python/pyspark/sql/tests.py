@@ -3621,34 +3621,34 @@ class PandasUDFTests(ReusedSQLTestCase):
 
         udf = pandas_udf(lambda x: x, DoubleType())
         self.assertEqual(udf.returnType, DoubleType())
-        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
         udf = pandas_udf(lambda x: x, DoubleType(), PandasUDFType.SCALAR)
         self.assertEqual(udf.returnType, DoubleType())
-        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
         udf = pandas_udf(lambda x: x, 'double', PandasUDFType.SCALAR)
         self.assertEqual(udf.returnType, DoubleType())
-        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
         udf = pandas_udf(lambda x: x, StructType([StructField("v", DoubleType())]),
-                         PandasUDFType.GROUP_MAP)
+                         PandasUDFType.GROUPED_MAP)
         self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
-        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
-        udf = pandas_udf(lambda x: x, 'v double', PandasUDFType.GROUP_MAP)
+        udf = pandas_udf(lambda x: x, 'v double', PandasUDFType.GROUPED_MAP)
         self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
-        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
         udf = pandas_udf(lambda x: x, 'v double',
-                         functionType=PandasUDFType.GROUP_MAP)
+                         functionType=PandasUDFType.GROUPED_MAP)
         self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
-        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
         udf = pandas_udf(lambda x: x, returnType='v double',
-                         functionType=PandasUDFType.GROUP_MAP)
+                         functionType=PandasUDFType.GROUPED_MAP)
         self.assertEqual(udf.returnType, StructType([StructField("v", DoubleType())]))
-        self.assertEqual(udf.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(udf.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
     def test_pandas_udf_decorator(self):
         from pyspark.rdd import PythonEvalType
@@ -3659,45 +3659,45 @@ class PandasUDFTests(ReusedSQLTestCase):
         def foo(x):
             return x
         self.assertEqual(foo.returnType, DoubleType())
-        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
         @pandas_udf(returnType=DoubleType())
         def foo(x):
             return x
         self.assertEqual(foo.returnType, DoubleType())
-        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
         schema = StructType([StructField("v", DoubleType())])
 
-        @pandas_udf(schema, PandasUDFType.GROUP_MAP)
+        @pandas_udf(schema, PandasUDFType.GROUPED_MAP)
         def foo(x):
             return x
         self.assertEqual(foo.returnType, schema)
-        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
-        @pandas_udf('v double', PandasUDFType.GROUP_MAP)
+        @pandas_udf('v double', PandasUDFType.GROUPED_MAP)
         def foo(x):
             return x
         self.assertEqual(foo.returnType, schema)
-        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
-        @pandas_udf(schema, functionType=PandasUDFType.GROUP_MAP)
+        @pandas_udf(schema, functionType=PandasUDFType.GROUPED_MAP)
         def foo(x):
             return x
         self.assertEqual(foo.returnType, schema)
-        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
         @pandas_udf(returnType='v double', functionType=PandasUDFType.SCALAR)
         def foo(x):
             return x
         self.assertEqual(foo.returnType, schema)
-        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
-        @pandas_udf(returnType=schema, functionType=PandasUDFType.GROUP_MAP)
+        @pandas_udf(returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
         def foo(x):
             return x
         self.assertEqual(foo.returnType, schema)
-        self.assertEqual(foo.evalType, PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF)
+        self.assertEqual(foo.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
     def test_udf_wrong_arg(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
@@ -3724,15 +3724,15 @@ class PandasUDFTests(ReusedSQLTestCase):
                     return 1
 
             with self.assertRaisesRegexp(TypeError, 'Invalid returnType'):
-                @pandas_udf(returnType=PandasUDFType.GROUP_MAP)
+                @pandas_udf(returnType=PandasUDFType.GROUPED_MAP)
                 def foo(df):
                     return df
             with self.assertRaisesRegexp(ValueError, 'Invalid returnType'):
-                @pandas_udf(returnType='double', functionType=PandasUDFType.GROUP_MAP)
+                @pandas_udf(returnType='double', functionType=PandasUDFType.GROUPED_MAP)
                 def foo(df):
                     return df
             with self.assertRaisesRegexp(ValueError, 'Invalid function'):
-                @pandas_udf(returnType='k int, v double', functionType=PandasUDFType.GROUP_MAP)
+                @pandas_udf(returnType='k int, v double', functionType=PandasUDFType.GROUPED_MAP)
                 def foo(k, v):
                     return k
 
@@ -3804,11 +3804,11 @@ class ScalarPandasUDF(ReusedSQLTestCase):
         random_pandas_udf = pandas_udf(
             lambda x: random.randint(6, 6) + x, IntegerType()).asNondeterministic()
         self.assertEqual(random_pandas_udf.deterministic, False)
-        self.assertEqual(random_pandas_udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(random_pandas_udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
         nondeterministic_pandas_udf = self.spark.catalog.registerFunction(
             "randomPandasUDF", random_pandas_udf)
         self.assertEqual(nondeterministic_pandas_udf.deterministic, False)
-        self.assertEqual(nondeterministic_pandas_udf.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(nondeterministic_pandas_udf.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
         [row] = self.spark.sql("SELECT randomPandasUDF(1)").collect()
         self.assertEqual(row[0], 7)
 
@@ -4206,7 +4206,7 @@ class ScalarPandasUDF(ReusedSQLTestCase):
             col('id').cast('int').alias('b'))
         original_add = pandas_udf(lambda x, y: x + y, IntegerType())
         self.assertEqual(original_add.deterministic, True)
-        self.assertEqual(original_add.evalType, PythonEvalType.SQL_PANDAS_SCALAR_UDF)
+        self.assertEqual(original_add.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
         new_add = self.spark.catalog.registerFunction("add1", original_add)
         res1 = df.select(new_add(col('a'), col('b')))
         res2 = self.spark.sql(
@@ -4237,20 +4237,20 @@ class GroupbyApplyPandasUDFTests(ReusedSQLTestCase):
                  StructField('v', IntegerType()),
                  StructField('v1', DoubleType()),
                  StructField('v2', LongType())]),
-            PandasUDFType.GROUP_MAP
+            PandasUDFType.GROUPED_MAP
         )
 
         result = df.groupby('id').apply(foo_udf).sort('id').toPandas()
         expected = df.toPandas().groupby('id').apply(foo_udf.func).reset_index(drop=True)
         self.assertPandasEqual(expected, result)
 
-    def test_register_group_map_udf(self):
+    def test_register_grouped_map_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUP_MAP)
+        foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUPED_MAP)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(ValueError, 'f must be either SQL_BATCHED_UDF or '
-                                                     'SQL_PANDAS_SCALAR_UDF'):
+                                                     'SQL_SCALAR_PANDAS_UDF'):
                 self.spark.catalog.registerFunction("foo_udf", foo_udf)
 
     def test_decorator(self):
@@ -4259,7 +4259,7 @@ class GroupbyApplyPandasUDFTests(ReusedSQLTestCase):
 
         @pandas_udf(
             'id long, v int, v1 double, v2 long',
-            PandasUDFType.GROUP_MAP
+            PandasUDFType.GROUPED_MAP
         )
         def foo(pdf):
             return pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id)
@@ -4275,7 +4275,7 @@ class GroupbyApplyPandasUDFTests(ReusedSQLTestCase):
         foo = pandas_udf(
             lambda pdf: pdf,
             'id long, v double',
-            PandasUDFType.GROUP_MAP
+            PandasUDFType.GROUPED_MAP
         )
 
         result = df.groupby('id').apply(foo).sort('id').toPandas()
@@ -4289,7 +4289,7 @@ class GroupbyApplyPandasUDFTests(ReusedSQLTestCase):
 
         @pandas_udf(
             'id long, v int, norm double',
-            PandasUDFType.GROUP_MAP
+            PandasUDFType.GROUPED_MAP
         )
         def normalize(pdf):
             v = pdf.v
@@ -4308,7 +4308,7 @@ class GroupbyApplyPandasUDFTests(ReusedSQLTestCase):
 
         @pandas_udf(
             'id long, v int, norm double',
-            PandasUDFType.GROUP_MAP
+            PandasUDFType.GROUPED_MAP
         )
         def normalize(pdf):
             v = pdf.v
@@ -4328,7 +4328,7 @@ class GroupbyApplyPandasUDFTests(ReusedSQLTestCase):
         foo_udf = pandas_udf(
             lambda pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
             'id long, v int, v1 double, v2 long',
-            PandasUDFType.GROUP_MAP
+            PandasUDFType.GROUPED_MAP
         )
 
         result = df.groupby('id').apply(foo_udf).sort('id').toPandas()
@@ -4342,7 +4342,7 @@ class GroupbyApplyPandasUDFTests(ReusedSQLTestCase):
         foo = pandas_udf(
             lambda pdf: pdf,
             'id long, v map<int, int>',
-            PandasUDFType.GROUP_MAP
+            PandasUDFType.GROUPED_MAP
         )
 
         with QuietTest(self.sc):
@@ -4368,7 +4368,7 @@ class GroupbyApplyPandasUDFTests(ReusedSQLTestCase):
             with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
                 df.groupby('id').apply(
                     pandas_udf(lambda x, y: x, StructType([StructField("d", DoubleType())])))
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf.*GROUP_MAP'):
+            with self.assertRaisesRegexp(ValueError, 'Invalid udf.*GROUPED_MAP'):
                 df.groupby('id').apply(
                     pandas_udf(lambda x, y: x, StructType([StructField("d", DoubleType())]),
                                PandasUDFType.SCALAR))
@@ -4379,7 +4379,7 @@ class GroupbyApplyPandasUDFTests(ReusedSQLTestCase):
             [StructField("id", LongType(), True),
              StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(1, None,)], schema=schema)
-        f = pandas_udf(lambda x: x, df.schema, PandasUDFType.GROUP_MAP)
+        f = pandas_udf(lambda x: x, df.schema, PandasUDFType.GROUPED_MAP)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
                 df.groupby('id').apply(f).collect()
@@ -4422,7 +4422,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
     def pandas_agg_mean_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        @pandas_udf('double', PandasUDFType.GROUP_AGG)
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
         def avg(v):
             return v.mean()
         return avg
@@ -4431,7 +4431,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
     def pandas_agg_sum_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        @pandas_udf('double', PandasUDFType.GROUP_AGG)
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
         def sum(v):
             return v.sum()
         return sum
@@ -4441,7 +4441,7 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         import numpy as np
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
-        @pandas_udf('double', PandasUDFType.GROUP_AGG)
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
         def weighted_mean(v, w):
             return np.average(v, weights=w)
         return weighted_mean
@@ -4505,19 +4505,19 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
 
         with QuietTest(self.sc):
             with self.assertRaisesRegex(NotImplementedError, 'not supported'):
-                @pandas_udf(ArrayType(DoubleType()), PandasUDFType.GROUP_AGG)
+                @pandas_udf(ArrayType(DoubleType()), PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return [v.mean(), v.std()]
 
         with QuietTest(self.sc):
             with self.assertRaisesRegex(NotImplementedError, 'not supported'):
-                @pandas_udf('mean double, std double', PandasUDFType.GROUP_AGG)
+                @pandas_udf('mean double, std double', PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return v.mean(), v.std()
 
         with QuietTest(self.sc):
             with self.assertRaisesRegex(NotImplementedError, 'not supported'):
-                @pandas_udf(MapType(DoubleType(), DoubleType()), PandasUDFType.GROUP_AGG)
+                @pandas_udf(MapType(DoubleType(), DoubleType()), PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return {v.mean(): v.std()}
 
