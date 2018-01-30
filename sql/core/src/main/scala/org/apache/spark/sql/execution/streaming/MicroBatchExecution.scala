@@ -32,7 +32,6 @@ import org.apache.spark.sql.execution.streaming.sources.{InternalRowMicroBatchWr
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.{streaming, MicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader
-import org.apache.spark.sql.sources.v2.streaming.reader.{Offset => OffsetV2}
 import org.apache.spark.sql.sources.v2.writer.{StreamWriteSupport, SupportsWriteInternalRow}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.{Clock, Utils}

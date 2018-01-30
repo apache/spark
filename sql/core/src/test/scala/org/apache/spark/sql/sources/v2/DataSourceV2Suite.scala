@@ -20,8 +20,8 @@ package org.apache.spark.sql.sources.v2
 import java.util.{ArrayList, List => JList}
 
 import test.org.apache.spark.sql.sources.v2._
-import org.apache.spark.SparkException
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
