@@ -1684,7 +1684,7 @@ Spark will fall back to create the DataFrame without Arrow.
 Pandas UDFs are user defined functions that are executed by Spark using Arrow to transfer data and
 Pandas to work with the data. A Pandas UDF is defined using the keyword `pandas_udf` as a decorator
 or to wrap the function, no additional configuration is required. Currently, there are two types of
-Pandas UDF: Scalar and Group Map.
+Pandas UDF: Scalar and Grouped Map.
 
 ### Scalar
 
@@ -1702,8 +1702,8 @@ The following example shows how to create a scalar Pandas UDF that computes the 
 </div>
 </div>
 
-### Group Map
-Group map Pandas UDFs are used with `groupBy().apply()` which implements the "split-apply-combine" pattern.
+### Grouped Map
+Grouped map Pandas UDFs are used with `groupBy().apply()` which implements the "split-apply-combine" pattern.
 Split-apply-combine consists of three steps:
 * Split the data into groups by using `DataFrame.groupBy`.
 * Apply a function on each group. The input and output of the function are both `pandas.DataFrame`. The
@@ -1723,7 +1723,7 @@ The following example shows how to use `groupby().apply()` to subtract the mean 
 
 <div class="codetabs">
 <div data-lang="python" markdown="1">
-{% include_example group_map_pandas_udf python/sql/arrow.py %}
+{% include_example grouped_map_pandas_udf python/sql/arrow.py %}
 </div>
 </div>
 

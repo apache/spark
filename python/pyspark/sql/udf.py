@@ -36,24 +36,24 @@ def _wrap_function(sc, func, returnType):
 
 def _create_udf(f, returnType, evalType):
 
-    if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF or \
-            evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
+    if evalType in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                    PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF):
         import inspect
         from pyspark.sql.utils import require_minimum_pyarrow_version
 
         require_minimum_pyarrow_version()
         argspec = inspect.getargspec(f)
 
-        if evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF and len(argspec.args) == 0 and \
+        if evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF and len(argspec.args) == 0 and \
                 argspec.varargs is None:
             raise ValueError(
                 "Invalid function: 0-arg pandas_udfs are not supported. "
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
             )
 
-        if evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF and len(argspec.args) != 1:
+        if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF and len(argspec.args) != 1:
             raise ValueError(
-                "Invalid function: pandas_udfs with function type GROUP_MAP "
+                "Invalid function: pandas_udfs with function type GROUPED_MAP "
                 "must take a single arg that is a pandas DataFrame."
             )
 
@@ -109,10 +109,10 @@ class UserDefinedFunction(object):
             else:
                 self._returnType_placeholder = _parse_datatype_string(self._returnType)
 
-        if self.evalType == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF \
+        if self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF \
                 and not isinstance(self._returnType_placeholder, StructType):
             raise ValueError("Invalid returnType: returnType must be a StructType for "
-                             "pandas_udf with function type GROUP_MAP")
+                             "pandas_udf with function type GROUPED_MAP")
 
         return self._returnType_placeholder
 
@@ -285,9 +285,9 @@ class UDFRegistration(object):
                     "Invalid returnType: data type can not be specified when f is"
                     "a user-defined function, but got %s." % returnType)
             if f.evalType not in [PythonEvalType.SQL_BATCHED_UDF,
-                                  PythonEvalType.SQL_PANDAS_SCALAR_UDF]:
+                                  PythonEvalType.SQL_SCALAR_PANDAS_UDF]:
                 raise ValueError(
-                    "Invalid f: f must be either SQL_BATCHED_UDF or SQL_PANDAS_SCALAR_UDF")
+                    "Invalid f: f must be either SQL_BATCHED_UDF or SQL_SCALAR_PANDAS_UDF")
             register_udf = UserDefinedFunction(f.func, returnType=f.returnType, name=name,
                                                evalType=f.evalType,
                                                deterministic=f.deterministic)
