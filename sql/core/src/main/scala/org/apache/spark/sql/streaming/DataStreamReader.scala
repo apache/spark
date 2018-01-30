@@ -30,7 +30,6 @@ import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRel
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader.{ContinuousReadSupport, MicroBatchReadSupport}
-import org.apache.spark.sql.sources.v2.streaming.MicroBatchReadSupport
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
