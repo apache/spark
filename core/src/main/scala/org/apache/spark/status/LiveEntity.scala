@@ -425,8 +425,7 @@ private class LiveStage extends LiveEntity {
       newAccumulatorInfos(info.accumulables.values),
       None,
       None,
-      killedSummary,
-      blackListedExecutors)
+      killedSummary)
   }
 
   override protected def doUpdate(): Any = {

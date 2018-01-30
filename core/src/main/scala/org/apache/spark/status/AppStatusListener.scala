@@ -216,9 +216,7 @@ private[spark] class AppStatusListener(
     val now = System.nanoTime()
 
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
-      setStageBlackListStatus(stage, event.executorId, now)
-      stage.blackListedExecutors += event.executorId
-      maybeUpdate(stage, now)
+      setStageBlackListStatus(stage, now, event.executorId)
     }
     liveExecutors.get(event.executorId).foreach { exec =>
       addBlackListedStageTo(exec, event.stageId, now)
@@ -230,12 +228,8 @@ private[spark] class AppStatusListener(
 
     // Implicitly blacklist every available executor for the stage associated with this node
     Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
-      val executorIds = liveExecutors.values.filter(_.host == event.hostId).map(_.executorId)
-      executorIds.foreach { executorId =>
-        setStageBlackListStatus(stage, executorId, now)
-      }
-      stage.blackListedExecutors ++= executorIds
-      maybeUpdate(stage, now)
+      val executorIds = liveExecutors.values.filter(_.host == event.hostId).map(_.executorId).toSeq
+      setStageBlackListStatus(stage, now, executorIds: _*)
     }
     liveExecutors.values.filter(_.hostname == event.hostId).foreach { exec =>
       addBlackListedStageTo(exec, event.stageId, now)
@@ -247,10 +241,14 @@ private[spark] class AppStatusListener(
     liveUpdate(exec, now)
   }
 
-  private def setStageBlackListStatus(stage: LiveStage, executorId: String, now: Long) = {
-    val executorStageSummary = stage.executorSummary(executorId)
-    executorStageSummary.isBlacklisted = true
-    maybeUpdate(executorStageSummary, now)
+  private def setStageBlackListStatus(stage: LiveStage, now: Long, executorIds: String*): Unit = {
+    executorIds.foreach { executorId =>
+      val executorStageSummary = stage.executorSummary(executorId)
+      executorStageSummary.isBlacklisted = true
+      maybeUpdate(executorStageSummary, now)
+    }
+    stage.blackListedExecutors ++= executorIds
+    maybeUpdate(stage, now)
   }
 
   override def onExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Unit = {
