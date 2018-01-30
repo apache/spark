@@ -108,7 +108,12 @@ $(document).ready(function() {
     requestedIncomplete = getParameterByName("showIncomplete", searchString);
     requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
-    $.getJSON("api/v1/applications?limit=" + appLimit, function(response,status,jqXHR) {
+    appParams = {
+      limit: appLimit,
+      status: (requestedIncomplete ? "running" : "completed")
+    };
+
+    $.getJSON("api/v1/applications", appParams, function(response,status,jqXHR) {
       var array = [];
       var hasMultipleAttempts = false;
       for (i in response) {
