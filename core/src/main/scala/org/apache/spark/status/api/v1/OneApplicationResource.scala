@@ -25,7 +25,8 @@ import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 import scala.util.control.NonFatal
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.UIUtils
+import org.apache.spark.util.ThreadStackTrace
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AbstractApplicationResource extends BaseAppResource {
@@ -50,6 +51,21 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @GET
   @Path("executors")
   def executorList(): Seq[ExecutorSummary] = withUI(_.store.executorList(true))
+
+  @GET
+  @Path("executors/{executorId}/threads")
+  def threadDump(@PathParam("executorId") executorId: String):
+  Option[Array[ThreadStackTrace]] = withUI { ui =>
+    val safeExecutorId =
+      Option(UIUtils.stripXSS(executorId)).map { executorId =>
+        UIUtils.decodeURLParameter(executorId)
+      }.getOrElse {
+        throw new IllegalArgumentException(s"Missing executorId parameter")
+      }
+    ui.sc.flatMap { sc =>
+      sc.getExecutorThreadDump(safeExecutorId)
+    }
+  }
 
   @GET
   @Path("allexecutors")
