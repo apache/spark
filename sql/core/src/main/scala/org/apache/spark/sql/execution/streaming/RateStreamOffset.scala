@@ -21,9 +21,10 @@ import org.json4s.DefaultFormats
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.sources.v2
+import org.apache.spark.sql.sources.v2.reader.streaming.Offset
 
 case class RateStreamOffset(partitionToValueAndRunTimeMs: Map[Int, ValueRunTimeMsPair])
-  extends v2.streaming.reader.Offset {
+  extends Offset {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
   override val json = Serialization.write(partitionToValueAndRunTimeMs)
 }

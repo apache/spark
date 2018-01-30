@@ -31,8 +31,9 @@ import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeM
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2}
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.streaming.MicroBatchReadSupport
-import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
+import MicroBatchReadSupport
+import org.apache.spark.sql.sources.v2.streaming.reader.Offset
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
 import org.apache.spark.util.{ManualClock, SystemClock}
 

@@ -33,8 +33,10 @@ import org.apache.spark.sql.execution.streaming.continuous.RateStreamContinuousR
 import org.apache.spark.sql.execution.streaming.sources.RateStreamMicroBatchReader
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.sources.v2._
-import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
-import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousReader, MicroBatchReader}
+import org.apache.spark.sql.sources.v2.reader.ContinuousReadSupport
+import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReader
+import org.apache.spark.sql.sources.v2.streaming.MicroBatchReadSupport
+import org.apache.spark.sql.sources.v2.streaming.reader.MicroBatchReader
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{ManualClock, SystemClock}
 

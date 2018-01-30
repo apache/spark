@@ -30,9 +30,10 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
 import org.apache.spark.sql.execution.streaming.sources.{InternalRowMicroBatchWriter, MicroBatchWriter}
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.streaming.{MicroBatchReadSupport, StreamWriteSupport}
-import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset => OffsetV2}
-import org.apache.spark.sql.sources.v2.writer.SupportsWriteInternalRow
+import org.apache.spark.sql.sources.v2.reader.{streaming, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader
+import org.apache.spark.sql.sources.v2.streaming.reader.{Offset => OffsetV2}
+import org.apache.spark.sql.sources.v2.writer.{StreamWriteSupport, SupportsWriteInternalRow}
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.{Clock, Utils}
 
@@ -403,7 +404,7 @@ class MicroBatchExecution(
           val current = committedOffsets.get(reader).map(off => reader.deserializeOffset(off.json))
           reader.setOffsetRange(
             toJava(current),
-            Optional.of(available.asInstanceOf[OffsetV2]))
+            Optional.of(available.asInstanceOf[streaming.Offset]))
           logDebug(s"Retrieving data from $reader: $current -> $available")
           Some(reader ->
             new StreamingDataSourceV2Relation(reader.readSchema().toAttributes, reader))
@@ -492,7 +493,7 @@ class MicroBatchExecution(
     }
   }
 
-  private def toJava(scalaOption: Option[OffsetV2]): Optional[OffsetV2] = {
+  private def toJava(scalaOption: Option[streaming.Offset]): Optional[streaming.Offset] = {
     Optional.ofNullable(scalaOption.orNull)
   }
 }

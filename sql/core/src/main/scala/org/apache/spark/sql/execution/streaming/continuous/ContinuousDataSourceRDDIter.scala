@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rpc.RpcEndpointRef
@@ -32,7 +33,8 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, Ro
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousDataReader, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, PartitionOffset}
+import org.apache.spark.sql.sources.v2.streaming.reader.PartitionOffset
 import org.apache.spark.sql.streaming.ProcessingTime
 import org.apache.spark.util.{SystemClock, ThreadUtils}
 

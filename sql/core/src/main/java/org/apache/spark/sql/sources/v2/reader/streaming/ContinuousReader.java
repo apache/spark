@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.streaming.reader;
+package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
