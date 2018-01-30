@@ -61,11 +61,12 @@ def _create_udf(f, returnType, evalType):
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
             )
 
-        if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF and len(argspec.args) not in (1, 2):
+        if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF \
+                and len(argspec.args) not in (1, 2):
             raise ValueError(
                 "Invalid function: pandas_udfs with function type GROUPED_MAP "
                 "must take either one argument (data) or two arguments (key, data)."
-            )
+
 
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
