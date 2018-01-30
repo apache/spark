@@ -154,6 +154,8 @@ private[spark] class IndexShuffleBlockResolver(
             dataTmp.delete()
           }
         } else {
+          // This is the first successful attempt in writing the map outputs for this task,
+          // so override any existing index and data files with the ones we wrote.
           val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexTmp)))
           Utils.tryWithSafeFinally {
             // We take in lengths of each block, need to convert it to offsets.
@@ -167,8 +169,6 @@ private[spark] class IndexShuffleBlockResolver(
             out.close()
           }
 
-          // This is the first successful attempt in writing the map outputs for this task,
-          // so override any existing index and data files with the ones we wrote.
           if (indexFile.exists()) {
             indexFile.delete()
           }
