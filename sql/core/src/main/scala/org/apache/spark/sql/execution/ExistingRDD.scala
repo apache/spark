@@ -193,6 +193,6 @@ case class RDDScanExec(
   }
 
   override def simpleString: String = {
-    s"Scan $nodeName${Utils.truncatedString(output, "[", ",", "]")}"
+    s"$nodeName${Utils.truncatedString(output, "[", ",", "]")}"
   }
 }
