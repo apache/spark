@@ -157,7 +157,9 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
     val metadata = Map(
       "files" -> newFiles.toList,
       StreamInputInfo.METADATA_KEY_DESCRIPTION -> newFiles.mkString("\n"))
-    val inputInfo = StreamInputInfo(id, 0, metadata)
+    var numRecords = 0L
+    rdds.foreach(rdd => numRecords = numRecords + rdd.count)
+    val inputInfo = StreamInputInfo(id, numRecords, metadata)
     ssc.scheduler.inputInfoTracker.reportInfo(validTime, inputInfo)
     rdds
   }
