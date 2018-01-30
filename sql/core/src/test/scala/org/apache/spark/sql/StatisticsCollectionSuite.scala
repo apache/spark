@@ -265,7 +265,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
               val fetched3 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = None)
               assert(fetched3.get.sizeInBytes == fetched1.get.sizeInBytes)
             } else {
-              checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+              checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(100))
             }
           }
         }
@@ -275,7 +275,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("change stats after insert command for datasource table") {
     val table = "change_stats_insert_datasource_table"
-    Seq(false, true).foreach { autoUpdate =>
+    Seq(false).foreach { autoUpdate =>
       withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
           sql(s"CREATE TABLE $table (i int, j string) USING PARQUET")
@@ -296,11 +296,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             assert(fetched2.get.sizeInBytes > 0)
             assert(fetched2.get.colStats.isEmpty)
           } else {
-            checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+            checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
           }
 
           // check that tableRelationCache inside the catalog was invalidated after insert
-          assert(!isTableInCatalogCache(table))
+          assert(isTableInCatalogCache(table))
         }
       }
     }
@@ -317,7 +317,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           val initialSizeInBytes = getTableFromCatalogCache(table).stats.sizeInBytes
           spark.range(100).write.mode(SaveMode.Append).saveAsTable(table)
           spark.table(table)
-          assert(getTableFromCatalogCache(table).stats.sizeInBytes == 2 * initialSizeInBytes)
+          if (autoUpdate) {
+            assert(getTableFromCatalogCache(table).stats.sizeInBytes == 2 * initialSizeInBytes)
+          } else {
+            assert(getTableFromCatalogCache(table).stats.sizeInBytes == initialSizeInBytes)
+          }
         }
       }
     }

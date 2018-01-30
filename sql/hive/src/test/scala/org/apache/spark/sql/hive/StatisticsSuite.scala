@@ -626,6 +626,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       assert(fetchedStats3.colStats == Map(
         "c1" -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2), nullCount = 0,
           avgLen = 4, maxLen = 4),
+        "c2" -> ColumnStat(distinctCount = 1, min = None, max = None, nullCount = 0,
+          avgLen = 1, maxLen = 1, None),
         "c3" -> ColumnStat(distinctCount = 2, min = Some(10.0), max = Some(20.0), nullCount = 0,
           avgLen = 8, maxLen = 8)))
     }
@@ -814,7 +816,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             val statsProp = getStatsProperties(table)
             assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched2.get.sizeInBytes)
           } else {
-            assert(getStatsProperties(table).isEmpty)
+            assert(getStatsProperties(table).nonEmpty)
           }
         }
       }
@@ -847,7 +849,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               val statsProp = getStatsProperties(table)
               assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched2.get.sizeInBytes)
             } else {
-              assert(getStatsProperties(table).isEmpty)
+              assert(getStatsProperties(table).nonEmpty)
             }
           }
         }
@@ -918,7 +920,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
               val statsProp = getStatsProperties(table)
               assert(statsProp(STATISTICS_TOTAL_SIZE).toLong == fetched4.get.sizeInBytes)
             } else {
-              assert(getStatsProperties(table).isEmpty)
+              assert(getStatsProperties(table).nonEmpty)
             }
           }
         }
@@ -1388,6 +1390,18 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       val catalogStats = catalogTable.stats.get
       assert(catalogStats.sizeInBytes > 0)
       assert(catalogStats.rowCount.isEmpty)
+    }
+  }
+
+  test(s"create table stored as parquet should update table size " +
+    s"if automatic update table size is enabled") {
+    val table = "create_table_stored_as_parquet"
+    withTable(table) {
+      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> "true") {
+        sql(s"CREATE TABLE $table stored as parquet as select 'a', 'b'")
+        val catalogTable = getCatalogTable(table)
+        assert(catalogTable.stats.nonEmpty)
+      }
     }
   }
 }
