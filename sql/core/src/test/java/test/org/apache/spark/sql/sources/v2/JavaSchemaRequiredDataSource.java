@@ -20,8 +20,8 @@ package test.org.apache.spark.sql.sources.v2;
 import java.util.List;
 
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
 import org.apache.spark.sql.sources.v2.ReadSupportWithSchema;
 import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
 import org.apache.spark.sql.sources.v2.reader.DataReaderFactory;
@@ -48,7 +48,7 @@ public class JavaSchemaRequiredDataSource implements DataSourceV2, ReadSupportWi
   }
 
   @Override
-  public DataSourceReader createReader(StructType schema, DataSourceV2Options options) {
+  public DataSourceReader createReader(StructType schema, DataSourceOptions options) {
     return new Reader(schema);
   }
 }

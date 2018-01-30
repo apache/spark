@@ -209,7 +209,7 @@ class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceReader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class SimpleDataReaderFactory(start: Int, end: Int)
@@ -275,7 +275,7 @@ class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceReader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class AdvancedDataReaderFactory(start: Int, end: Int, requiredSchema: StructType)
@@ -315,7 +315,7 @@ class UnsafeRowDataSourceV2 extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceReader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class UnsafeRowDataReaderFactory(start: Int, end: Int)
@@ -348,7 +348,7 @@ class SchemaRequiredDataSource extends DataSourceV2 with ReadSupportWithSchema {
       java.util.Collections.emptyList()
   }
 
-  override def createReader(schema: StructType, options: DataSourceV2Options): DataSourceReader =
+  override def createReader(schema: StructType, options: DataSourceOptions): DataSourceReader =
     new Reader(schema)
 }
 
@@ -362,7 +362,7 @@ class BatchDataSourceV2 extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceReader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class BatchDataReaderFactory(start: Int, end: Int)
@@ -428,7 +428,7 @@ class PartitionAwareDataSource extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceReader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class SpecificDataReaderFactory(i: Array[Int], j: Array[Int])

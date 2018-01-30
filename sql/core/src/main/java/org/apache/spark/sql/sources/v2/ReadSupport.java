@@ -36,5 +36,5 @@ public interface ReadSupport extends DataSourceV2 {
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  DataSourceReader createReader(DataSourceV2Options options);
+  DataSourceReader createReader(DataSourceOptions options);
 }

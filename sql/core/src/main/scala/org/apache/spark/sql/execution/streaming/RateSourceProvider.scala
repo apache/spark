@@ -111,7 +111,7 @@ class RateSourceProvider extends StreamSourceProvider with DataSourceRegister
   override def createContinuousReader(
       schema: Optional[StructType],
       checkpointLocation: String,
-      options: DataSourceV2Options): ContinuousReader = {
+      options: DataSourceOptions): ContinuousReader = {
     new RateStreamContinuousReader(options)
   }
 

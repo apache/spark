@@ -104,7 +104,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceReader = {
+  override def createReader(options: DataSourceOptions): DataSourceReader = {
     val path = new Path(options.get("path").get())
     val conf = SparkContext.getActive.get.hadoopConfiguration
     new Reader(path.toUri.toString, conf)
@@ -114,7 +114,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
       jobId: String,
       schema: StructType,
       mode: SaveMode,
-      options: DataSourceV2Options): Optional[DataSourceWriter] = {
+      options: DataSourceOptions): Optional[DataSourceWriter] = {
     assert(DataType.equalsStructurally(schema.asNullable, this.schema.asNullable))
     assert(!SparkContext.getActive.get.conf.getBoolean("spark.speculation", false))
 

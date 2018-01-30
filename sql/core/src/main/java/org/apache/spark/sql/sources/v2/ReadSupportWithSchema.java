@@ -45,5 +45,5 @@ public interface ReadSupportWithSchema extends DataSourceV2 {
    * @param options the options for the returned data source reader, which is an immutable
    *                case-insensitive string-to-string map.
    */
-  DataSourceReader createReader(StructType schema, DataSourceV2Options options);
+  DataSourceReader createReader(StructType schema, DataSourceOptions options);
 }

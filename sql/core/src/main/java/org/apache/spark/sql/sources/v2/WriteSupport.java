@@ -48,5 +48,5 @@ public interface WriteSupport extends DataSourceV2 {
    *                case-insensitive string-to-string map.
    */
   Optional<DataSourceWriter> createWriter(
-      String jobId, StructType schema, SaveMode mode, DataSourceV2Options options);
+      String jobId, StructType schema, SaveMode mode, DataSourceOptions options);
 }
