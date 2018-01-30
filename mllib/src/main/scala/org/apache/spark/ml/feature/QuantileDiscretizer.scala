@@ -182,6 +182,13 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
           s"for multi-column transform.  Params (inputCols, outputCols) should have " +
           s"equal lengths, but they have different lengths: " +
           s"(${getInputCols.length}, ${getOutputCols.length}).")
+      if (isSet(numBucketsArray)) {
+        require(getInputCols.length == getNumBucketsArray.length,
+          s"QuantileDiscretizer $this has mismatched Params " +
+            s"for multi-column transform.  Params (inputCols, outputCols, numBucketsArray) " +
+            s"should have equal lengths, but they have different lengths: " +
+            s"(${getInputCols.length}, ${getOutputCols.length}, ${getNumBucketsArray.length}).")
+      }
     }
 
     val (inputColNames, outputColNames) = if (isSet(inputCols)) {

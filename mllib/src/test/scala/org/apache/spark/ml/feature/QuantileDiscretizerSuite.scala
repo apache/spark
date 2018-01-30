@@ -417,7 +417,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     assert(readDiscretizer.hasDefault(readDiscretizer.outputCol))
   }
 
-  test("Multiple Columns: Mismatched sizes of inputCols / outputCols") {
+  test("Multiple Columns: Mismatched sizes of inputCols/outputCols") {
     val spark = this.spark
     import spark.implicits._
     val discretizer = new QuantileDiscretizer()
@@ -426,6 +426,21 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
       .setNumBuckets(3)
     val df = sc.parallelize(Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
       .map(Tuple1.apply).toDF("input")
+    intercept[IllegalArgumentException] {
+      discretizer.fit(df)
+    }
+  }
+
+  test("Multiple Columns: Mismatched sizes of inputCols/numBucketsArray") {
+    val spark = this.spark
+    import spark.implicits._
+    val discretizer = new QuantileDiscretizer()
+      .setInputCols(Array("input1", "input2"))
+      .setOutputCols(Array("result1", "result2"))
+      .setNumBucketsArray(Array(2, 5, 10))
+    val data1 = Array(1.0, 3.0, 2.0, 1.0, 1.0, 2.0, 3.0, 2.0, 2.0, 2.0)
+    val data2 = Array(1.0, 2.0, 3.0, 1.0, 1.0, 1.0, 1.0, 3.0, 2.0, 3.0)
+    val df = data1.zip(data2).toSeq.toDF("input1", "input2")
     intercept[IllegalArgumentException] {
       discretizer.fit(df)
     }
