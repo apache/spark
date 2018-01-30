@@ -119,7 +119,8 @@ class UserDefinedFunction(object):
         elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF \
                 and isinstance(self._returnType_placeholder, (StructType, ArrayType, MapType)):
             raise NotImplementedError(
-                "ArrayType, StructType and MapType are not supported with PandasUDFType.GROUPED_AGG")
+                "ArrayType, StructType and MapType are not supported with "
+                "PandasUDFType.GROUPED_AGG")
 
         return self._returnType_placeholder
 
