@@ -825,23 +825,19 @@ private[hive] class HiveClientImpl(
   }
 
   def reset(): Unit = withHiveState {
-    try {
-      client.getAllTables("default").asScala.foreach { t =>
-        logDebug(s"Deleting table $t")
-        val table = client.getTable("default", t)
-        client.getIndexes("default", t, 255).asScala.foreach { index =>
-          shim.dropIndex(client, "default", t, index.getIndexName)
-        }
-        if (!table.isIndexTable) {
-          client.dropTable("default", t)
-        }
+    client.getAllTables("default").asScala.foreach { t =>
+      logDebug(s"Deleting table $t")
+      val table = client.getTable("default", t)
+      client.getIndexes("default", t, 255).asScala.foreach { index =>
+        shim.dropIndex(client, "default", t, index.getIndexName)
       }
-      client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
-        logDebug(s"Dropping Database: $db")
-        client.dropDatabase(db, true, false, true)
+      if (!table.isIndexTable) {
+        client.dropTable("default", t)
       }
-    } finally {
-      runSqlHive("USE default")
+    }
+    client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
+      logDebug(s"Dropping Database: $db")
+      client.dropDatabase(db, true, false, true)
     }
   }
 }
