@@ -421,7 +421,9 @@ $(document).ready(function () {
                             }
                         },
                         {data: 'hostPort'},
-                        {data: 'isActive', render: function (data, type, row) {
+                        {
+                            data: 'isActive',
+                            render: function (data, type, row) {
                                 return formatStatus (data, type, row);
                             }
                         },
