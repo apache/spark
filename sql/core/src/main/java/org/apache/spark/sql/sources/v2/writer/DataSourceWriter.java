@@ -51,8 +51,8 @@ import org.apache.spark.sql.types.StructType;
  * While Spark will retry failed writing tasks, Spark won't retry failed writing jobs. Users should
  * do it manually in their Spark applications if they want to retry.
  *
- * In general, all these function calls should be thread-safe in driver side and there is no need
- * to implement concurrency control.
+ * All these methods are guaranteed to be called in a single thread.
+ * No concurrency control is needed.
  *
  * Please refer to the documentation of add/commit/abort methods for detailed specifications.
  */
