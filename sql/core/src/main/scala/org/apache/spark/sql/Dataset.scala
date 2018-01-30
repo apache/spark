@@ -2150,6 +2150,9 @@ class Dataset[T] private[sql](
    * Returns a new Dataset by adding a column or replacing the existing column that has
    * the same name.
    *
+   * `column`'s expression must only refer to attributes supplied by this Dataset. It is an
+   * error to add a column that refers to some other Dataset.
+   *
    * @group untypedrel
    * @since 2.0.0
    */
