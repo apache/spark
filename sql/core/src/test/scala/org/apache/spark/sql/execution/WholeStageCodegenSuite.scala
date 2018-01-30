@@ -202,7 +202,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()._2
   }
 
-  test("SPARK-21871 check if we can get large code size when compiling too long functions") {
+  ignore("SPARK-21871 check if we can get large code size when compiling too long functions") {
     val codeWithShortFunctions = genGroupByCode(3)
     val (_, maxCodeSize1) = CodeGenerator.compile(codeWithShortFunctions)
     assert(maxCodeSize1 < SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
@@ -211,7 +211,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     assert(maxCodeSize2 > SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
   }
 
-  test("bytecode of batch file scan exceeds the limit of WHOLESTAGE_HUGE_METHOD_LIMIT") {
+  ignore("bytecode of batch file scan exceeds the limit of WHOLESTAGE_HUGE_METHOD_LIMIT") {
     import testImplicits._
     withTempPath { dir =>
       val path = dir.getCanonicalPath
