@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.sources.v2.DataSourceOptions
@@ -61,7 +63,7 @@ class ConsoleWriter(schema: StructType, options: DataSourceOptions)
     println("-------------------------------------------")
     // scalastyle:off println
     spark
-      .createDataFrame(spark.sparkContext.parallelize(rows), schema)
+      .createDataFrame(rows.toList.asJava, schema)
       .show(numRowsToShow, isTruncated)
   }
 
