@@ -299,19 +299,17 @@ We'll create a very simple Spark application, `SimpleApp.java`:
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.Dataset;
 
-public class SimpleApp {
-  public static void main(String[] args) {
-    String logFile = "YOUR_SPARK_HOME/README.md"; // Should be some file on your system
-    SparkSession spark = SparkSession.builder().appName("Simple Application").getOrCreate();
-    Dataset<String> logData = spark.read().textFile(logFile).cache();
+public class SimpleApp extends App {
+  String logFile = "YOUR_SPARK_HOME/README.md"; // Should be some file on your system
+  SparkSession spark = SparkSession.builder().appName("Simple Application").getOrCreate();
+  Dataset<String> logData = spark.read().textFile(logFile).cache();
 
-    long numAs = logData.filter(s -> s.contains("a")).count();
-    long numBs = logData.filter(s -> s.contains("b")).count();
+  long numAs = logData.filter(s -> s.contains("a")).count();
+  long numBs = logData.filter(s -> s.contains("b")).count();
 
-    System.out.println("Lines with a: " + numAs + ", lines with b: " + numBs);
+  System.out.println("Lines with a: " + numAs + ", lines with b: " + numBs);
 
-    spark.stop();
-  }
+  spark.stop();
 }
 {% endhighlight %}
 
