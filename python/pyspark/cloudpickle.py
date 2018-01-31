@@ -262,6 +262,8 @@ class CloudPickler(Pickler):
             if 'recursion' in e.args[0]:
                 msg = """Could not pickle object as excessively deep recursion required."""
                 raise pickle.PicklingError(msg)
+            else:
+                raise
 
     def save_memoryview(self, obj):
         self.save(obj.tobytes())
