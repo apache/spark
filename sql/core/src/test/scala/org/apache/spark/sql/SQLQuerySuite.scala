@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.math.MathContext
 import java.net.{MalformedURLException, URL}
 import java.sql.Timestamp
 import java.util.concurrent.atomic.AtomicBoolean
