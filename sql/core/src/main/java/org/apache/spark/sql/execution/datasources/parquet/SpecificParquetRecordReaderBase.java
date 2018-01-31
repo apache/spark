@@ -147,7 +147,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
     this.reader = new ParquetFileReader(
         configuration, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
-    for (BlockMetaData block : blocks) {
+    // use the blocks from the reader in case some do not match filters and will not be read
+    for (BlockMetaData block : reader.getRowGroups()) {
       this.totalRowCount += block.getRowCount();
     }
 
@@ -225,7 +226,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
     this.reader = new ParquetFileReader(
         config, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
-    for (BlockMetaData block : blocks) {
+    // use the blocks from the reader in case some do not match filters and will not be read
+    for (BlockMetaData block : reader.getRowGroups()) {
       this.totalRowCount += block.getRowCount();
     }
   }
