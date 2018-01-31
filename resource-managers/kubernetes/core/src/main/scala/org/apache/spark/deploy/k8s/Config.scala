@@ -58,6 +58,8 @@ private[spark] object Config extends Logging {
       "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver.mounted"
+  private[spark] val APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
+    "spark.kubernetes.authenticate.driver.mounted"
   val OAUTH_TOKEN_CONF_SUFFIX = "oauthToken"
   val OAUTH_TOKEN_FILE_CONF_SUFFIX = "oauthTokenFile"
   val CLIENT_KEY_FILE_CONF_SUFFIX = "clientKeyFile"
