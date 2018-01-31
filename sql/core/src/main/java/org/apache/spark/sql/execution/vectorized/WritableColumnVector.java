@@ -59,8 +59,8 @@ public abstract class WritableColumnVector extends ColumnVector {
     elementsAppended = 0;
     if (numNulls > 0) {
       putNotNulls(0, capacity);
+      numNulls = 0;
     }
-    numNulls = 0;
   }
 
   @Override

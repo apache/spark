@@ -119,7 +119,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNotNulls(int rowId, int count) {
-    if (numNulls == 0) return;
+    if (!hasNull()) return;
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)0;
     }
