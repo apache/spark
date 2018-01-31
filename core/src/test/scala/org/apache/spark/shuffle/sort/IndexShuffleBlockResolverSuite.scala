@@ -123,7 +123,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     assert(dataFile.length() === 35)
     assert(!dataTmp2.exists())
 
-    // the dataFile should be the new one, since we deleted the dataFile from the first attempt
+    // The dataFile should be the new one, since we deleted the dataFile from the first attempt
     val firstByte2 = new Array[Byte](1)
     val in2 = new FileInputStream(dataFile)
     Utils.tryWithSafeFinally {
@@ -135,9 +135,12 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
   }
 
   test("SPARK-23253: index files should be created properly") {
-    val idxName = "shuffle_1_2_0.index"
+    val shuffleId = 1
+    val mapId = 2
+    val idxName = s"shuffle_${shuffleId}_${mapId}_0.index"
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
-    val lengths = (1 to 10).map(_ => 8L).toArray
+
+    val lengths = (1 to 2).map(_ => 8L).toArray
     val dataTmp = File.createTempFile("shuffle", null, tempDir)
     val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(dataTmp)))
     Utils.tryWithSafeFinally {
@@ -145,13 +148,14 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out.close()
     }
-    resolver.writeIndexFileAndCommit(1, 2, lengths, dataTmp)
-    val indexFile1 = new File(tempDir.getAbsolutePath, idxName)
-    assert(indexFile1.exists())
-    val idxFile1Len = indexFile1.length()
-    assert(idxFile1Len === (lengths.length + 1) * 8)
+    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
 
-    val dataFile = resolver.getDataFile(1, 2)
+    val indexFile = new File(tempDir.getAbsolutePath, idxName)
+    val dataFile = resolver.getDataFile(shuffleId, mapId)
+    val idxFile1Len = indexFile.length()
+
+    assert(indexFile.exists())
+    assert(idxFile1Len === (lengths.length + 1) * 8)
     assert(dataFile.exists())
     assert(dataFile.length() === 8 * lengths.length)
     assert(!dataTmp.exists())
@@ -160,7 +164,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     dataFile.delete()
     assert(!dataFile.exists())
 
-    val lengths2 = (1 to 2).map(_ => 8L).toArray
+    val lengths2 = (1 to 4).map(_ => 8L).toArray
     val dataTmp2 = File.createTempFile("shuffle", null, tempDir)
     val out2 = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(dataTmp2)))
     Utils.tryWithSafeFinally {
@@ -168,15 +172,15 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out2.close()
     }
-    resolver.writeIndexFileAndCommit(1, 2, lengths2, dataTmp2)
-    val indexFile2 = new File(tempDir.getAbsolutePath, idxName)
-    assert(indexFile2.exists())
-    assert(indexFile2.length() === (lengths2.length + 1) * 8)
-    val idxFile2Len = indexFile2.length()
+    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths2, dataTmp2)
+    val idxFile2Len = indexFile.length()
+
+    assert(indexFile.exists())
+    assert(indexFile.length() === (lengths2.length + 1) * 8)
     assert(idxFile1Len !== idxFile2Len, "index file should be updated.")
 
     // all files are present and will be reused
-    val lengths3 = (1 to 3).map(_ => 8L).toArray
+    val lengths3 = (1 to 6).map(_ => 8L).toArray
     val dataTmp3 = File.createTempFile("shuffle", null, tempDir)
     val out3 = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(dataTmp3)))
     Utils.tryWithSafeFinally {
@@ -184,10 +188,10 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out3.close()
     }
-    resolver.writeIndexFileAndCommit(1, 2, lengths2, dataTmp2)
-    val indexFile3 = new File(tempDir.getAbsolutePath, idxName)
-    assert(indexFile3.exists())
-    val idxFile3Len = indexFile3.length()
+    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths2, dataTmp2)
+    val idxFile3Len = indexFile.length()
+
+    assert(indexFile.exists())
     assert(idxFile2Len === idxFile3Len, "index file should not change.")
   }
 }
