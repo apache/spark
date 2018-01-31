@@ -92,7 +92,7 @@ private[spark] class YarnRMClient extends Logging {
 
   /** Returns the attempt ID. */
   def getAttemptId(): ApplicationAttemptId = {
-    YarnSparkHadoopUtil.get.getContainerId.getApplicationAttemptId()
+    YarnSparkHadoopUtil.getContainerId.getApplicationAttemptId()
   }
 
   /** Returns the configuration for the AmIpFilter to add to the Spark UI. */

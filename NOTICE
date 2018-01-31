@@ -448,6 +448,12 @@ Copyright (C) 2011 Google Inc.
 Apache Commons Pool
 Copyright 1999-2009 The Apache Software Foundation
 
+This product includes/uses Kubernetes & OpenShift 3 Java Client (https://github.com/fabric8io/kubernetes-client)
+Copyright (C) 2015 Red Hat, Inc.
+
+This product includes/uses OkHttp (https://github.com/square/okhttp)
+Copyright (C) 2012 The Android Open Source Project
+
 =========================================================================
 ==  NOTICE file corresponding to section 4(d) of the Apache License,   ==
 ==  Version 2.0, in this case for the DataNucleus distribution.        ==

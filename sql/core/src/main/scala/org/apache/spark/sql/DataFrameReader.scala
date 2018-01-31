@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql
 
@@ -21,18 +21,20 @@ import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
-import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{DataSource, FailureSafeParser}
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
+import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -181,6 +183,49 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
+    val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
+    if (classOf[DataSourceV2].isAssignableFrom(cls)) {
+      val ds = cls.newInstance()
+      val options = new DataSourceV2Options((extraOptions ++
+        DataSourceV2Utils.extractSessionConfigs(
+          ds = ds.asInstanceOf[DataSourceV2],
+          conf = sparkSession.sessionState.conf)).asJava)
+
+      // Streaming also uses the data source V2 API. So it may be that the data source implements
+      // v2, but has no v2 implementation for batch reads. In that case, we fall back to loading
+      // the dataframe as a v1 source.
+      val reader = (ds, userSpecifiedSchema) match {
+        case (ds: ReadSupportWithSchema, Some(schema)) =>
+          ds.createReader(schema, options)
+
+        case (ds: ReadSupport, None) =>
+          ds.createReader(options)
+
+        case (ds: ReadSupportWithSchema, None) =>
+          throw new AnalysisException(s"A schema needs to be specified when using $ds.")
+
+        case (ds: ReadSupport, Some(schema)) =>
+          val reader = ds.createReader(options)
+          if (reader.readSchema() != schema) {
+            throw new AnalysisException(s"$ds does not allow user-specified schemas.")
+          }
+          reader
+
+        case _ => null // fall back to v1
+      }
+
+      if (reader == null) {
+        loadV1Source(paths: _*)
+      } else {
+        Dataset.ofRows(sparkSession, DataSourceV2Relation(reader))
+      }
+    } else {
+      loadV1Source(paths: _*)
+    }
+  }
+
+  private def loadV1Source(paths: String*) = {
+    // Code path for data source v1.
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
@@ -313,6 +358,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * (e.g. 00012)</li>
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
+   * <li>`allowUnquotedControlChars` (default `false`): allows JSON Strings to contain unquoted
+   * control characters (ASCII characters with value less than 32, including tab and line feed
+   * characters) or not.</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    * during parsing.
    *   <ul>
@@ -407,10 +455,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         parsedOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
-
-    Dataset.ofRows(
-      sparkSession,
-      LogicalRDD(schema.toAttributes, parsed)(sparkSession))
+    sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = jsonDataset.isStreaming)
   }
 
   /**
@@ -470,10 +515,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         parsedOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
-
-    Dataset.ofRows(
-      sparkSession,
-      LogicalRDD(schema.toAttributes, parsed)(sparkSession))
+    sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = csvDataset.isStreaming)
   }
 
   /**
@@ -485,17 +527,20 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * You can set the following CSV-specific options to deal with CSV files:
    * <ul>
-   * <li>`sep` (default `,`): sets the single character as a separator for each
+   * <li>`sep` (default `,`): sets a single character as a separator for each
    * field and value.</li>
    * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
    * type.</li>
-   * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
+   * <li>`quote` (default `"`): sets a single character used for escaping quoted values where
    * the separator can be part of the value. If you would like to turn off quotations, you need to
    * set not `null` but an empty string. This behaviour is different from
    * `com.databricks.spark.csv`.</li>
-   * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
+   * <li>`escape` (default `\`): sets a single character used for escaping quotes inside
    * an already quoted value.</li>
-   * <li>`comment` (default empty string): sets the single character used for skipping lines
+   * <li>`charToEscapeQuoteEscaping` (default `escape` or `\0`): sets a single character used for
+   * escaping the escape for the quote character. The default value is escape character when escape
+   * and quote characters are different, `\0` otherwise.</li>
+   * <li>`comment` (default empty string): sets a single character used for skipping lines
    * beginning with this character. By default, it is disabled.</li>
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
    * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
@@ -619,7 +664,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
    *
-   * Each line in the text files is a new row in the resulting DataFrame. For example:
+   * You can set the following text-specific option(s) for reading text files:
+   * <ul>
+   * <li>`wholetext` ( default `false`): If true, read a file as a single row and not split by "\n".
+   * </li>
+   * </ul>
+   * By default, each line in the text files is a new row in the resulting DataFrame.
+   *
+   * Usage example:
    * {{{
    *   // Scala:
    *   spark.read.text("/path/to/spark/README.md")
@@ -651,7 +703,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * If the directory structure of the text files contains partitioning information, those are
    * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
    *
-   * Each line in the text files is a new element in the resulting Dataset. For example:
+   * You can set the following textFile-specific option(s) for reading text files:
+   * <ul>
+   * <li>`wholetext` ( default `false`): If true, read a file as a single row and not split by "\n".
+   * </li>
+   * </ul>
+   * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:
    *   spark.read.textFile("/path/to/spark/README.md")

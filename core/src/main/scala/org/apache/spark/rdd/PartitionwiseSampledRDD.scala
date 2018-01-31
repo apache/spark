@@ -22,8 +22,8 @@ import java.util.Random
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, TaskContext}
-import org.apache.spark.util.random.RandomSampler
 import org.apache.spark.util.Utils
+import org.apache.spark.util.random.RandomSampler
 
 private[spark]
 class PartitionwiseSampledRDDPartition(val prev: Partition, val seed: Long)

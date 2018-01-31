@@ -56,6 +56,23 @@ from pyspark.traceback_utils import SCCallSiteSync
 __all__ = ["RDD"]
 
 
+class PythonEvalType(object):
+    """
+    Evaluation type of python rdd.
+
+    These values are internal to PySpark.
+
+    These values should match values in org.apache.spark.api.python.PythonEvalType.
+    """
+    NON_UDF = 0
+
+    SQL_BATCHED_UDF = 100
+
+    SQL_PANDAS_SCALAR_UDF = 200
+    SQL_PANDAS_GROUP_MAP_UDF = 201
+    SQL_PANDAS_GROUP_AGG_UDF = 202
+
+
 def portable_hash(x):
     """
     This function returns consistent hash code for builtin types, especially
@@ -127,7 +144,7 @@ def _load_from_socket(port, serializer):
         af, socktype, proto, canonname, sa = res
         sock = socket.socket(af, socktype, proto)
         try:
-            sock.settimeout(3)
+            sock.settimeout(15)
             sock.connect(sa)
         except socket.error:
             sock.close()
@@ -608,7 +625,7 @@ class RDD(object):
         sort records by their keys.
 
         >>> rdd = sc.parallelize([(0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)])
-        >>> rdd2 = rdd.repartitionAndSortWithinPartitions(2, lambda x: x % 2, 2)
+        >>> rdd2 = rdd.repartitionAndSortWithinPartitions(2, lambda x: x % 2, True)
         >>> rdd2.glom().collect()
         [[(0, 5), (0, 8), (2, 6)], [(1, 3), (3, 8), (3, 8)]]
         """
@@ -750,7 +767,7 @@ class RDD(object):
 
             def pipe_objs(out):
                 for obj in iterator:
-                    s = str(obj).rstrip('\n') + '\n'
+                    s = unicode(obj).rstrip('\n') + '\n'
                     out.write(s.encode('utf-8'))
                 out.close()
             Thread(target=pipe_objs, args=[pipe.stdin]).start()

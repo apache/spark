@@ -106,7 +106,7 @@ class JavaParams(JavaWrapper, Params):
 
     def _make_java_param_pair(self, param, value):
         """
-        Makes a Java parm pair.
+        Makes a Java param pair.
         """
         sc = SparkContext._active_spark_context
         param = self._resolveParam(param)
@@ -135,6 +135,20 @@ class JavaParams(JavaWrapper, Params):
                 paramMap.put([pair])
         return paramMap
 
+    def _create_params_from_java(self):
+        """
+        SPARK-10931: Temporary fix to create params that are defined in the Java obj but not here
+        """
+        java_params = list(self._java_obj.params())
+        from pyspark.ml.param import Param
+        for java_param in java_params:
+            java_param_name = java_param.name()
+            if not hasattr(self, java_param_name):
+                param = Param(self, java_param_name, java_param.doc())
+                setattr(param, "created_from_java_param", True)
+                setattr(self, java_param_name, param)
+                self._params = None  # need to reset so self.params will discover new params
+
     def _transfer_params_from_java(self):
         """
         Transforms the embedded params from the companion Java object.
@@ -147,6 +161,10 @@ class JavaParams(JavaWrapper, Params):
                 if self._java_obj.isSet(java_param):
                     value = _java2py(sc, self._java_obj.getOrDefault(java_param))
                     self._set(**{param.name: value})
+                # SPARK-10931: Temporary fix for params that have a default in Java
+                if self._java_obj.hasDefault(java_param) and not self.isDefined(param):
+                    value = _java2py(sc, self._java_obj.getDefault(java_param)).get()
+                    self._setDefault(**{param.name: value})
 
     def _transfer_param_map_from_java(self, javaParamMap):
         """
@@ -204,6 +222,11 @@ class JavaParams(JavaWrapper, Params):
             # Load information from java_stage to the instance.
             py_stage = py_type()
             py_stage._java_obj = java_stage
+
+            # SPARK-10931: Temporary fix so that persisted models would own params from Estimator
+            if issubclass(py_type, JavaModel):
+                py_stage._create_params_from_java()
+
             py_stage._resetUid(java_stage.uid())
             py_stage._transfer_params_from_java()
         elif hasattr(py_type, "_from_java"):
@@ -263,7 +286,8 @@ class JavaEstimator(JavaParams, Estimator):
 
     def _fit(self, dataset):
         java_model = self._fit_java(dataset)
-        return self._create_model(java_model)
+        model = self._create_model(java_model)
+        return self._copyValues(model)
 
 
 @inherit_doc
@@ -307,4 +331,10 @@ class JavaModel(JavaTransformer, Model):
         """
         super(JavaModel, self).__init__(java_model)
         if java_model is not None:
+
+            # SPARK-10931: This is a temporary fix to allow models to own params
+            # from estimators. Eventually, these params should be in models through
+            # using common base classes between estimators and models.
+            self._create_params_from_java()
+
             self._resetUid(java_model.uid())

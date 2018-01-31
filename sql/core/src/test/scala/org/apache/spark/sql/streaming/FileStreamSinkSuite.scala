@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -80,7 +81,7 @@ class FileStreamSinkSuite extends StreamTest {
       .start(outputDir)
 
     try {
-      // The output is partitoned by "value", so the value will appear in the file path.
+      // The output is partitioned by "value", so the value will appear in the file path.
       // This is to test if we handle spaces in the path correctly.
       inputData.addData("hello world")
       failAfter(streamingTimeout) {
@@ -126,8 +127,7 @@ class FileStreamSinkSuite extends StreamTest {
       // Verify that MetadataLogFileIndex is being used and the correct partitioning schema has
       // been inferred
       val hadoopdFsRelations = outputDf.queryExecution.analyzed.collect {
-        case LogicalRelation(baseRelation, _, _) if baseRelation.isInstanceOf[HadoopFsRelation] =>
-          baseRelation.asInstanceOf[HadoopFsRelation]
+        case LogicalRelation(baseRelation: HadoopFsRelation, _, _, _) => baseRelation
       }
       assert(hadoopdFsRelations.size === 1)
       assert(hadoopdFsRelations.head.location.isInstanceOf[MetadataLogFileIndex])
@@ -305,6 +305,10 @@ class FileStreamSinkSuite extends StreamTest {
     testFormat(Some("parquet"))
   }
 
+  test("orc") {
+    testFormat(Some("orc"))
+  }
+
   test("text") {
     testFormat(Some("text"))
   }
@@ -351,5 +355,41 @@ class FileStreamSinkSuite extends StreamTest {
 
     assertAncestorIsNotMetadataDirectory(s"/a/b/c")
     assertAncestorIsNotMetadataDirectory(s"/a/b/c/${FileStreamSink.metadataDir}extra")
+  }
+
+  test("SPARK-20460 Check name duplication in schema") {
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        val inputData = MemoryStream[(Int, Int)]
+        val df = inputData.toDF()
+
+        val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
+        val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+
+        var query: StreamingQuery = null
+        try {
+          query =
+            df.writeStream
+              .option("checkpointLocation", checkpointDir)
+              .format("json")
+              .start(outputDir)
+
+          inputData.addData((1, 1))
+
+          failAfter(streamingTimeout) {
+            query.processAllAvailable()
+          }
+        } finally {
+          if (query != null) {
+            query.stop()
+          }
+        }
+
+        val errorMsg = intercept[AnalysisException] {
+          spark.read.schema(s"$c0 INT, $c1 INT").json(outputDir).as[(Int, Int)]
+        }.getMessage
+        assert(errorMsg.contains("Found duplicate column(s) in the data schema: "))
+      }
+    }
   }
 }

@@ -2,6 +2,9 @@
 layout: global
 title: Spark Streaming + Kafka Integration Guide (Kafka broker version 0.8.2.1 or higher)
 ---
+
+**Note: Kafka 0.8 support is deprecated as of Spark 2.3.0.**
+
 Here we explain how to configure Spark Streaming to receive data from Kafka. There are two approaches to this - the old approach using Receivers and Kafka's high-level API, and a new approach (introduced in Spark 1.3) without using Receivers. They have different programming models, performance characteristics, and semantics guarantees, so read on for more details.  Both approaches are considered stable APIs as of the current version of Spark.
 
 ## Approach 1: Receiver-based Approach
@@ -28,8 +31,7 @@ Next, we discuss how to use this approach in your streaming application.
 		val kafkaStream = KafkaUtils.createStream(streamingContext,
             [ZK quorum], [consumer group id], [per-topic number of Kafka partitions to consume])
 
-    You can also specify the key and value classes and their corresponding decoder classes using variations of `createStream`. See the [API docs](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/KafkaWordCount.scala).
+    You can also specify the key and value classes and their corresponding decoder classes using variations of `createStream`. See the [API docs](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$).
 	</div>
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.kafka.*;
@@ -38,8 +40,7 @@ Next, we discuss how to use this approach in your streaming application.
 			KafkaUtils.createStream(streamingContext,
             [ZK quorum], [consumer group id], [per-topic number of Kafka partitions to consume]);
 
-    You can also specify the key and value classes and their corresponding decoder classes using variations of `createStream`. See the [API docs](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaKafkaWordCount.java).
+    You can also specify the key and value classes and their corresponding decoder classes using variations of `createStream`. See the [API docs](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html).
 
 	</div>
 	<div data-lang="python" markdown="1">
@@ -48,8 +49,7 @@ Next, we discuss how to use this approach in your streaming application.
 		kafkaStream = KafkaUtils.createStream(streamingContext, \
 			[ZK quorum], [consumer group id], [per-topic number of Kafka partitions to consume])
 
-	By default, the Python API will decode Kafka data as UTF8 encoded strings. You can specify your custom decoding function to decode the byte arrays in Kafka records to any arbitrary data type. See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/kafka_wordcount.py).
+	By default, the Python API will decode Kafka data as UTF8 encoded strings. You can specify your custom decoding function to decode the byte arrays in Kafka records to any arbitrary data type. See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils).
 	</div>
 	</div>
 
@@ -71,7 +71,7 @@ Next, we discuss how to use this approach in your streaming application.
 	    ./bin/spark-submit --packages org.apache.spark:spark-streaming-kafka-0-8_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} ...
 
 	Alternatively, you can also download the JAR of the Maven artifact `spark-streaming-kafka-0-8-assembly` from the
-	[Maven repository](http://search.maven.org/#search|ga|1|a%3A%22spark-streaming-kafka-0-8-assembly_{{site.SCALA_BINARY_VERSION}}%22%20AND%20v%3A%22{{site.SPARK_VERSION_SHORT}}%22) and add it to `spark-submit` with `--jars`.
+	[Maven repository](https://search.maven.org/#search|ga|1|a%3A%22spark-streaming-kafka-0-8-assembly_{{site.SCALA_BINARY_VERSION}}%22%20AND%20v%3A%22{{site.SPARK_VERSION_SHORT}}%22) and add it to `spark-submit` with `--jars`.
 
 ## Approach 2: Direct Approach (No Receivers)
 This new receiver-less "direct" approach has been introduced in Spark 1.3 to ensure stronger end-to-end guarantees. Instead of using receivers to receive data, this approach periodically queries Kafka for the latest offsets in each topic+partition, and accordingly defines the offset ranges to process in each batch. When the jobs to process the data are launched, Kafka's simple consumer API is used to read the defined ranges of offsets from Kafka (similar to read files from a file system). Note that this feature was introduced in Spark 1.3 for the Scala and Java API, in Spark 1.4 for the Python API.
@@ -105,8 +105,7 @@ Next, we discuss how to use this approach in your streaming application.
 			streamingContext, [map of Kafka parameters], [set of topics to consume])
 
 	You can also pass a `messageHandler` to `createDirectStream` to access `MessageAndMetadata` that contains metadata about the current message and transform it to any desired type.
-	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/DirectKafkaWordCount.scala).
+	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$).
 	</div>
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.kafka.*;
@@ -117,8 +116,7 @@ Next, we discuss how to use this approach in your streaming application.
 				[map of Kafka parameters], [set of topics to consume]);
 
 	You can also pass a `messageHandler` to `createDirectStream` to access `MessageAndMetadata` that contains metadata about the current message and transform it to any desired type.
-	See the [API docs](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaDirectKafkaWordCount.java).
+	See the [API docs](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html).
 
 	</div>
 	<div data-lang="python" markdown="1">
@@ -126,8 +124,7 @@ Next, we discuss how to use this approach in your streaming application.
 		directKafkaStream = KafkaUtils.createDirectStream(ssc, [topic], {"metadata.broker.list": brokers})
 
 	You can also pass a `messageHandler` to `createDirectStream` to access `KafkaMessageAndMetadata` that contains metadata about the current message and transform it to any desired type.
-	By default, the Python API will decode Kafka data as UTF8 encoded strings. You can specify your custom decoding function to decode the byte arrays in Kafka records to any arbitrary data type. See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/direct_kafka_wordcount.py).
+	By default, the Python API will decode Kafka data as UTF8 encoded strings. You can specify your custom decoding function to decode the byte arrays in Kafka records to any arbitrary data type. See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils).
 	</div>
 	</div>
 

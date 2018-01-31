@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
 import org.apache.spark.sql.types.MetadataBuilder
+import org.apache.spark.sql.util.SchemaUtils
 
 
 /**
@@ -97,7 +98,7 @@ case class CreateViewCommand(
 
   import ViewHelper._
 
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(child)
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
 
   if (viewType == PersistedView) {
     require(originalText.isDefined, "'originalText' must be provided to create permanent view")
@@ -266,7 +267,7 @@ case class AlterViewAsCommand(
 
   import ViewHelper._
 
-  override def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(session: SparkSession): Seq[Row] = {
     // If the plan cannot be analyzed, throw an exception and don't proceed.
@@ -355,15 +356,15 @@ object ViewHelper {
       properties: Map[String, String],
       session: SparkSession,
       analyzedPlan: LogicalPlan): Map[String, String] = {
+    val queryOutput = analyzedPlan.schema.fieldNames
+
     // Generate the query column names, throw an AnalysisException if there exists duplicate column
     // names.
-    val queryOutput = analyzedPlan.schema.fieldNames
-    assert(queryOutput.distinct.size == queryOutput.size,
-      s"The view output ${queryOutput.mkString("(", ",", ")")} contains duplicate column name.")
+    SchemaUtils.checkColumnNameDuplication(
+      queryOutput, "in the view definition", session.sessionState.conf.resolver)
 
     // Generate the view default database name.
     val viewDefaultDatabase = session.sessionState.catalog.getCurrentDatabase
-
     removeQueryColumnNames(properties) ++
       generateViewDefaultDatabase(viewDefaultDatabase) ++
       generateQueryColumnNames(queryOutput)

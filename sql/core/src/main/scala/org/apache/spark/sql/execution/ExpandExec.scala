@@ -93,6 +93,8 @@ case class ExpandExec(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
+  override def needCopyResult: Boolean = true
+
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     /*
      * When the projections list looks like:
@@ -130,9 +132,6 @@ case class ExpandExec(
      * We use a for loop here so we only includes one copy of the consume code and avoid code
      * size explosion.
      */
-
-    // Set input variables
-    ctx.currentVars = input
 
     // Tracks whether a column has the same output for all rows.
     // Size of sameOutput array should equal N.
@@ -187,7 +186,6 @@ case class ExpandExec(
     val i = ctx.freshName("i")
     // these column have to declared before the loop.
     val evaluate = evaluateVariables(outputColumns)
-    ctx.copyResult = true
     s"""
        |$evaluate
        |for (int $i = 0; $i < ${projections.length}; $i ++) {

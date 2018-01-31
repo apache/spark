@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.11</artifactId>
-    <version>2.3.0-SNAPSHOT</version>
+    <version>2.4.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -149,6 +149,16 @@
       </dependencies>
     </profile>
     <profile>
+      <id>kubernetes</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-kubernetes_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
       <id>hive</id>
       <dependencies>
         <dependency>
@@ -187,7 +197,7 @@
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-assembly-plugin</artifactId>
-            <version>3.0.0</version>
+            <version>3.1.0</version>
             <executions>
               <execution>
                 <id>dist</id>
@@ -218,6 +228,12 @@
       <id>hive-provided</id>
       <properties>
         <hive.deps.scope>provided</hive.deps.scope>
+      </properties>
+    </profile>
+    <profile>
+      <id>orc-provided</id>
+      <properties>
+        <orc.deps.scope>provided</orc.deps.scope>
       </properties>
     </profile>
     <profile>

@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SQLExecution
 
 case class CacheTableCommand(
     tableIdent: TableIdentifier,
@@ -31,7 +30,7 @@ case class CacheTableCommand(
   require(plan.isEmpty || tableIdent.database.isEmpty,
     "Database name is not allowed in CACHE TABLE AS SELECT")
 
-  override def innerChildren: Seq[QueryPlan[_]] = plan.toSeq
+  override protected def innerChildren: Seq[QueryPlan[_]] = plan.toSeq
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     plan.foreach { logicalPlan =>
@@ -55,10 +54,8 @@ case class UncacheTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val tableId = tableIdent.quotedString
-    try {
+    if (!ifExists || sparkSession.catalog.tableExists(tableId)) {
       sparkSession.catalog.uncacheTable(tableId)
-    } catch {
-      case _: NoSuchTableException if ifExists => // don't throw
     }
     Seq.empty[Row]
   }
@@ -67,10 +64,13 @@ case class UncacheTableCommand(
 /**
  * Clear all cached data from the in-memory cache.
  */
-case object ClearCacheCommand extends RunnableCommand {
+case class ClearCacheCommand() extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.catalog.clearCache()
     Seq.empty[Row]
   }
+
+  /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
+  override def makeCopy(newArgs: Array[AnyRef]): ClearCacheCommand = ClearCacheCommand()
 }

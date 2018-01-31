@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.test
 
 import java.io.File
+import java.net.URI
 import java.util.{Set => JavaSet}
 
 import scala.collection.JavaConverters._
@@ -51,11 +52,13 @@ object TestHive
       "TestSQLContext",
       new SparkConf()
         .set("spark.sql.test", "")
+        .set(SQLConf.CODEGEN_FALLBACK.key, "false")
         .set("spark.sql.hive.metastore.barrierPrefixes",
           "org.apache.spark.sql.hive.execution.PairSerDe")
         .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
-        .set("spark.ui.enabled", "false")))
+        .set("spark.ui.enabled", "false")
+        .set("spark.unsafe.exceptionOnMemoryLeak", "true")))
 
 
 case class TestHiveVersion(hiveClient: HiveClient)
@@ -177,7 +180,13 @@ private[hive] class TestHiveSparkSession(
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
       // scratch directory used by Hive's metastore client
       ConfVars.SCRATCHDIR.varname -> TestHiveContext.makeScratchDir().toURI.toString,
-      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1")
+      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1") ++
+      // After session cloning, the JDBC connect string for a JDBC metastore should not be changed.
+      existingSharedState.map { state =>
+        val connKey =
+          state.sparkContext.hadoopConfiguration.get(ConfVars.METASTORECONNECTURLKEY.varname)
+        ConfVars.METASTORECONNECTURLKEY.varname -> connKey
+      }
 
     metastoreTempConf.foreach { case (k, v) =>
       sc.hadoopConfiguration.set(k, v)
@@ -463,7 +472,7 @@ private[hive] class TestHiveSparkSession(
       // has already set the execution id.
       if (sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY) == null) {
         // We don't actually have a `QueryExecution` here, use a fake one instead.
-        SQLExecution.withNewExecutionId(this, new QueryExecution(this, OneRowRelation)) {
+        SQLExecution.withNewExecutionId(this, new QueryExecution(this, OneRowRelation())) {
           createCmds.foreach(_())
         }
       } else {
@@ -483,8 +492,7 @@ private[hive] class TestHiveSparkSession(
   protected val originalUDFs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
   /**
-   * Resets the test instance by deleting any tables that have been created.
-   * TODO: also clear out UDFs, views, etc.
+   * Resets the test instance by deleting any table, view, temp view, and UDF that have been created
    */
   def reset() {
     try {
@@ -495,6 +503,11 @@ private[hive] class TestHiveSparkSession(
           logger.setLevel(org.apache.log4j.Level.WARN)
         }
       }
+
+      // Clean out the Hive warehouse between each suite
+      val warehouseDir = new File(new URI(sparkContext.conf.get("spark.sql.warehouse.dir")).getPath)
+      Utils.deleteRecursively(warehouseDir)
+      warehouseDir.mkdir()
 
       sharedState.cacheManager.clearCache()
       loadedTables.clear()
@@ -554,7 +567,7 @@ private[hive] class TestHiveQueryExecution(
     // Make sure any test tables referenced are loaded.
     val referencedTables =
       describedTables ++
-        logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.table }
+        logical.collect { case UnresolvedRelation(tableIdent) => tableIdent.table }
     val resolver = sparkSession.sessionState.conf.resolver
     val referencedTestTables = sparkSession.testTables.keys.filter { testTable =>
       referencedTables.exists(resolver(_, testTable))
@@ -562,7 +575,7 @@ private[hive] class TestHiveQueryExecution(
     logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
     referencedTestTables.foreach(sparkSession.loadTestTable)
     // Proceed with analysis.
-    sparkSession.sessionState.analyzer.execute(logical)
+    sparkSession.sessionState.analyzer.executeAndCheck(logical)
   }
 }
 

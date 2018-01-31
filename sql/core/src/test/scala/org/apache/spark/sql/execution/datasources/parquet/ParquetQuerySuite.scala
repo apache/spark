@@ -235,6 +235,28 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     }
   }
 
+  test("SPARK-10365 timestamp written and read as INT64 - TIMESTAMP_MICROS") {
+    val data = (1 to 10).map { i =>
+      val ts = new java.sql.Timestamp(i)
+      ts.setNanos(2000)
+      Row(i, ts)
+    }
+    val schema = StructType(List(StructField("d", IntegerType, false),
+      StructField("time", TimestampType, false)).toArray)
+    withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MICROS") {
+      withTempPath { file =>
+        val df = spark.createDataFrame(sparkContext.parallelize(data), schema)
+        df.write.parquet(file.getCanonicalPath)
+        ("true" :: "false" :: Nil).foreach { vectorized =>
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+            val df2 = spark.read.parquet(file.getCanonicalPath)
+            checkAnswer(df2, df.collect().toSeq)
+          }
+        }
+      }
+    }
+  }
+
   test("Enabling/disabling merging partfiles when merging parquet schema") {
     def testSchemaMerging(expectedColumnNumber: Int): Unit = {
       withTempDir { dir =>
@@ -298,14 +320,27 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
           new Path(basePath, "first").toString,
           new Path(basePath, "second").toString,
           new Path(basePath, "third").toString)
-        checkAnswer(
-          df,
-          Seq(Row(0), Row(1)))
+        checkAnswer(df, Seq(Row(0), Row(1)))
+      }
+    }
+
+    def testIgnoreCorruptFilesWithoutSchemaInfer(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
+        spark.range(2, 3).toDF("a").write.json(new Path(basePath, "third").toString)
+        val df = spark.read.schema("a long").parquet(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
+        checkAnswer(df, Seq(Row(0), Row(1)))
       }
     }
 
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
       testIgnoreCorruptFiles()
+      testIgnoreCorruptFilesWithoutSchemaInfer()
     }
 
     withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
@@ -313,6 +348,43 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         testIgnoreCorruptFiles()
       }
       assert(exception.getMessage().contains("is not a Parquet file"))
+      val exception2 = intercept[SparkException] {
+        testIgnoreCorruptFilesWithoutSchemaInfer()
+      }
+      assert(exception2.getMessage().contains("is not a Parquet file"))
+    }
+  }
+
+  testQuietly("Enabling/disabling ignoreMissingFiles") {
+    def testIgnoreMissingFiles(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.parquet(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.parquet(new Path(basePath, "second").toString)
+        val thirdPath = new Path(basePath, "third")
+        spark.range(2, 3).toDF("a").write.parquet(thirdPath.toString)
+        val df = spark.read.parquet(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
+
+        val fs = thirdPath.getFileSystem(spark.sparkContext.hadoopConfiguration)
+        fs.delete(thirdPath, true)
+        checkAnswer(
+          df,
+          Seq(Row(0), Row(1)))
+      }
+    }
+
+    withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
+      testIgnoreMissingFiles()
+    }
+
+    withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+      val exception = intercept[SparkException] {
+        testIgnoreMissingFiles()
+      }
+      assert(exception.getMessage().contains("does not exist"))
     }
   }
 

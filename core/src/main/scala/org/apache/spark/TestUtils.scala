@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.Arrays
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.{CountDownLatch, TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream}
 import javax.net.ssl._
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
@@ -58,8 +58,8 @@ private[spark] object TestUtils {
   def createJarWithClasses(
       classNames: Seq[String],
       toStringValue: String = "",
-      classNamesWithBase: Seq[(String, String)] = Seq(),
-      classpathUrls: Seq[URL] = Seq()): URL = {
+      classNamesWithBase: Seq[(String, String)] = Seq.empty,
+      classpathUrls: Seq[URL] = Seq.empty): URL = {
     val tempDir = Utils.createTempDir()
     val files1 = for (name <- classNames) yield {
       createCompiledClass(name, tempDir, toStringValue, classpathUrls = classpathUrls)
@@ -137,7 +137,7 @@ private[spark] object TestUtils {
     val options = if (classpathUrls.nonEmpty) {
       Seq("-classpath", classpathUrls.map { _.getFile }.mkString(File.pathSeparator))
     } else {
-      Seq()
+      Seq.empty
     }
     compiler.getTask(null, null, null, options.asJava, null, Arrays.asList(sourceFile)).call()
 
@@ -160,7 +160,7 @@ private[spark] object TestUtils {
       destDir: File,
       toStringValue: String = "",
       baseClass: String = null,
-      classpathUrls: Seq[URL] = Seq()): File = {
+      classpathUrls: Seq[URL] = Seq.empty): File = {
     val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
     val sourceFile = new JavaSourceFromString(className,
       "public class " + className + extendsText + " implements java.io.Serializable {" +
@@ -230,6 +230,30 @@ private[spark] object TestUtils {
     } finally {
       connection.disconnect()
     }
+  }
+
+  /**
+   * Wait until at least `numExecutors` executors are up, or throw `TimeoutException` if the waiting
+   * time elapsed before `numExecutors` executors up. Exposed for testing.
+   *
+   * @param numExecutors the number of executors to wait at least
+   * @param timeout time to wait in milliseconds
+   */
+  private[spark] def waitUntilExecutorsUp(
+      sc: SparkContext,
+      numExecutors: Int,
+      timeout: Long): Unit = {
+    val finishTime = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout)
+    while (System.nanoTime() < finishTime) {
+      if (sc.statusTracker.getExecutorInfos.length > numExecutors) {
+        return
+      }
+      // Sleep rather than using wait/notify, because this is used only for testing and wait/notify
+      // add overhead in the general case.
+      Thread.sleep(10)
+    }
+    throw new TimeoutException(
+      s"Can't find $numExecutors executors before $timeout milliseconds elapsed")
   }
 
 }

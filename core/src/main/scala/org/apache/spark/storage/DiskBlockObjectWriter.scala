@@ -95,6 +95,7 @@ private[spark] class DiskBlockObjectWriter(
   /**
    * Keep track of number of records written and also use this to periodically
    * output bytes written since the latter is expensive to do for each record.
+   * And we reset it after every commitAndGet called.
    */
   private var numRecordsWritten = 0
 
@@ -185,6 +186,7 @@ private[spark] class DiskBlockObjectWriter(
       // In certain compression codecs, more bytes are written after streams are closed
       writeMetrics.incBytesWritten(committedPosition - reportedPosition)
       reportedPosition = committedPosition
+      numRecordsWritten = 0
       fileSegment
     } else {
       new FileSegment(file, committedPosition, 0)

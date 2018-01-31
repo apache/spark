@@ -38,7 +38,7 @@ case class ResolveTimeZone(conf: SQLConf) extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan =
-    plan.resolveExpressions(transformTimeZoneExprs)
+    plan.transformAllExpressions(transformTimeZoneExprs)
 
   def resolveTimeZones(e: Expression): Expression = e.transform(transformTimeZoneExprs)
 }

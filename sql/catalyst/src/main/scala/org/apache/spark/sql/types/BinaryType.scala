@@ -21,7 +21,6 @@ import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.InterfaceStability
-import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.util.TypeUtils
 
 
@@ -37,7 +36,7 @@ class BinaryType private() extends AtomicType {
 
   private[sql] type InternalType = Array[Byte]
 
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[InternalType] }
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 
   private[sql] val ordering = new Ordering[InternalType] {
     def compare(x: Array[Byte], y: Array[Byte]): Int = {

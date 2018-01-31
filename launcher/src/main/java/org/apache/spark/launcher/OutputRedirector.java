@@ -34,18 +34,24 @@ class OutputRedirector {
   private final BufferedReader reader;
   private final Logger sink;
   private final Thread thread;
+  private final ChildProcAppHandle callback;
 
   private volatile boolean active;
 
-  OutputRedirector(InputStream in, ThreadFactory tf) {
-    this(in, OutputRedirector.class.getName(), tf);
+  OutputRedirector(InputStream in, String loggerName, ThreadFactory tf) {
+    this(in, loggerName, tf, null);
   }
 
-  OutputRedirector(InputStream in, String loggerName, ThreadFactory tf) {
+  OutputRedirector(
+      InputStream in,
+      String loggerName,
+      ThreadFactory tf,
+      ChildProcAppHandle callback) {
     this.active = true;
     this.reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
     this.thread = tf.newThread(this::redirect);
     this.sink = Logger.getLogger(loggerName);
+    this.callback = callback;
     thread.start();
   }
 
@@ -59,6 +65,10 @@ class OutputRedirector {
       }
     } catch (IOException e) {
       sink.log(Level.FINE, "Error reading child process output.", e);
+    } finally {
+      if (callback != null) {
+        callback.monitorChild();
+      }
     }
   }
 
@@ -69,6 +79,10 @@ class OutputRedirector {
    */
   void stop() {
     active = false;
+  }
+
+  boolean isAlive() {
+    return thread.isAlive();
   }
 
 }

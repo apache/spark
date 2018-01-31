@@ -65,12 +65,15 @@ object TypeUtils {
       case i: AtomicType => i.ordering.asInstanceOf[Ordering[Any]]
       case a: ArrayType => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case s: StructType => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case udt: UserDefinedType[_] => getInterpretedOrdering(udt.sqlType)
     }
   }
 
   def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
     for (i <- 0 until x.length; if i < y.length) {
-      val res = x(i).compareTo(y(i))
+      val v1 = x(i) & 0xff
+      val v2 = y(i) & 0xff
+      val res = v1 - v2
       if (res != 0) return res
     }
     x.length - y.length

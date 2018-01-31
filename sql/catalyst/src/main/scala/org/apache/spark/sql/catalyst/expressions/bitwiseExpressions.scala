@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
  */
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise AND of `expr1` and `expr2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT 3 _FUNC_ 5;
        1
@@ -60,7 +60,7 @@ case class BitwiseAnd(left: Expression, right: Expression) extends BinaryArithme
  */
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise OR of `expr1` and `expr2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT 3 _FUNC_ 5;
        7
@@ -92,7 +92,7 @@ case class BitwiseOr(left: Expression, right: Expression) extends BinaryArithmet
  */
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns the result of bitwise exclusive OR of `expr1` and `expr2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT 3 _FUNC_ 5;
        2
@@ -122,7 +122,7 @@ case class BitwiseXor(left: Expression, right: Expression) extends BinaryArithme
  */
 @ExpressionDescription(
   usage = "_FUNC_ expr - Returns the result of bitwise NOT of `expr`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_ 0;
        -1

@@ -20,8 +20,8 @@ package org.apache.spark
 import java.util.concurrent.Semaphore
 
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
 import scala.concurrent.Future
+import scala.concurrent.duration._
 
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers

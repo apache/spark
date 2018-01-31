@@ -549,7 +549,7 @@ variable from a number of independent variables.
     </tr>
     <tr>
       <td>Mean Absolute Error (MAE)</td>
-      <td>$MAE=\sum_{i=0}^{N-1} \left|\mathbf{y}_i - \hat{\mathbf{y}}_i\right|$</td>
+      <td>$MAE=\frac{1}{N}\sum_{i=0}^{N-1} \left|\mathbf{y}_i - \hat{\mathbf{y}}_i\right|$</td>
     </tr>
     <tr>
       <td>Coefficient of Determination $(R^2)$</td>

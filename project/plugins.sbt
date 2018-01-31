@@ -1,25 +1,30 @@
+// need to make changes to uptake sbt 1.0 support in "com.eed3si9n" % "sbt-assembly" % "1.14.5"
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.11.2")
 
-addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "5.0.1")
+addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "5.2.3")
 
-addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.8.2")
+addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.9.0")
 
-addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "0.8.0")
+addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "1.0.0")
 
-addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.1.12")
+addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.1.17")
 
+// sbt 1.0.0 support: https://github.com/AlpineNow/junit_xml_listener/issues/6
 addSbtPlugin("com.alpinenow" % "junit_xml_listener" % "0.5.1")
 
+// need to make changes to uptake sbt 1.0 support in "com.eed3si9n" % "sbt-unidoc" % "0.4.1"
 addSbtPlugin("com.eed3si9n" % "sbt-unidoc" % "0.3.3")
 
+// need to make changes to uptake sbt 1.0 support in "com.cavorite" % "sbt-avro-1-7" % "1.1.2"
 addSbtPlugin("com.cavorite" % "sbt-avro" % "0.3.2")
 
-addSbtPlugin("io.spray" % "sbt-revolver" % "0.8.0")
+addSbtPlugin("io.spray" % "sbt-revolver" % "0.9.1")
 
 libraryDependencies += "org.ow2.asm"  % "asm" % "5.1"
 
 libraryDependencies += "org.ow2.asm"  % "asm-commons" % "5.1"
 
+// sbt 1.0.0 support: https://github.com/ihji/sbt-antlr4/issues/14
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.7.11")
 
 // Spark uses a custom fork of the sbt-pom-reader plugin which contains a patch to fix issues

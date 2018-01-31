@@ -128,8 +128,7 @@ private[spark] object SerDe {
   }
 
   def readBoolean(in: DataInputStream): Boolean = {
-    val intVal = in.readInt()
-    if (intVal == 0) false else true
+    in.readInt() != 0
   }
 
   def readDate(in: DataInputStream): Date = {

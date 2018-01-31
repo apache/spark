@@ -19,11 +19,11 @@ package org.apache.spark.mllib.regression
 
 import scala.beans.BeanInfo
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.feature.{LabeledPoint => NewLabeledPoint}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.NumericParser
-import org.apache.spark.SparkException
 
 /**
  * Class that represents the features and labels of a data point.

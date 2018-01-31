@@ -27,17 +27,7 @@ import org.apache.spark.sql.types._
  */
 private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
-  override def sqlType: StructType = {
-    // type: 0 = sparse, 1 = dense
-    // We only use "values" for dense vectors, and "size", "indices", and "values" for sparse
-    // vectors. The "values" field is nullable because we might want to add binary vectors later,
-    // which uses "size" and "indices", but not "values".
-    StructType(Seq(
-      StructField("type", ByteType, nullable = false),
-      StructField("size", IntegerType, nullable = true),
-      StructField("indices", ArrayType(IntegerType, containsNull = false), nullable = true),
-      StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
-  }
+  override final def sqlType: StructType = _sqlType
 
   override def serialize(obj: Vector): InternalRow = {
     obj match {
@@ -94,4 +84,16 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
   override def typeName: String = "vector"
 
   private[spark] override def asNullable: VectorUDT = this
+
+  private[this] val _sqlType = {
+    // type: 0 = sparse, 1 = dense
+    // We only use "values" for dense vectors, and "size", "indices", and "values" for sparse
+    // vectors. The "values" field is nullable because we might want to add binary vectors later,
+    // which uses "size" and "indices", but not "values".
+    StructType(Seq(
+      StructField("type", ByteType, nullable = false),
+      StructField("size", IntegerType, nullable = true),
+      StructField("indices", ArrayType(IntegerType, containsNull = false), nullable = true),
+      StructField("values", ArrayType(DoubleType, containsNull = false), nullable = true)))
+  }
 }

@@ -43,7 +43,7 @@ readObject <- function(con) {
 }
 
 readTypedObject <- function(con, type) {
-  switch (type,
+  switch(type,
     "i" = readInt(con),
     "c" = readString(con),
     "b" = readBoolean(con),

@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import warnings
+
 from py4j.protocol import Py4JJavaError
 
 from pyspark.rdd import RDD
@@ -55,7 +57,14 @@ class KafkaUtils(object):
         :param keyDecoder:  A function used to decode key (default is utf8_decoder)
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :return: A DStream object
+
+        .. note:: Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0.
+            See SPARK-21893.
         """
+        warnings.warn(
+            "Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0. "
+            "See SPARK-21893.",
+            DeprecationWarning)
         if kafkaParams is None:
             kafkaParams = dict()
         kafkaParams.update({
@@ -77,8 +86,6 @@ class KafkaUtils(object):
                            keyDecoder=utf8_decoder, valueDecoder=utf8_decoder,
                            messageHandler=None):
         """
-        .. note:: Experimental
-
         Create an input stream that directly pulls messages from a Kafka Broker and specific offset.
 
         This is not a receiver based Kafka input stream, it directly pulls the message from Kafka
@@ -103,7 +110,15 @@ class KafkaUtils(object):
         :param messageHandler: A function used to convert KafkaMessageAndMetadata. You can assess
                                meta using messageHandler (default is None).
         :return: A DStream object
+
+        .. note:: Experimental
+        .. note:: Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0.
+            See SPARK-21893.
         """
+        warnings.warn(
+            "Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0. "
+            "See SPARK-21893.",
+            DeprecationWarning)
         if fromOffsets is None:
             fromOffsets = dict()
         if not isinstance(topics, list):
@@ -142,8 +157,6 @@ class KafkaUtils(object):
                   keyDecoder=utf8_decoder, valueDecoder=utf8_decoder,
                   messageHandler=None):
         """
-        .. note:: Experimental
-
         Create an RDD from Kafka using offset ranges for each topic and partition.
 
         :param sc:  SparkContext object
@@ -156,7 +169,15 @@ class KafkaUtils(object):
         :param messageHandler: A function used to convert KafkaMessageAndMetadata. You can assess
                                meta using messageHandler (default is None).
         :return: An RDD object
+
+        .. note:: Experimental
+        .. note:: Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0.
+            See SPARK-21893.
         """
+        warnings.warn(
+            "Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0. "
+            "See SPARK-21893.",
+            DeprecationWarning)
         if leaders is None:
             leaders = dict()
         if not isinstance(kafkaParams, dict):
@@ -224,6 +245,9 @@ ________________________________________________________________________________
 class OffsetRange(object):
     """
     Represents a range of offsets from a single Kafka TopicAndPartition.
+
+    .. note:: Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0.
+        See SPARK-21893.
     """
 
     def __init__(self, topic, partition, fromOffset, untilOffset):
@@ -234,6 +258,10 @@ class OffsetRange(object):
         :param fromOffset: Inclusive starting offset.
         :param untilOffset: Exclusive ending offset.
         """
+        warnings.warn(
+            "Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0. "
+            "See SPARK-21893.",
+            DeprecationWarning)
         self.topic = topic
         self.partition = partition
         self.fromOffset = fromOffset
@@ -263,6 +291,9 @@ class OffsetRange(object):
 class TopicAndPartition(object):
     """
     Represents a specific topic and partition for Kafka.
+
+    .. note:: Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0.
+        See SPARK-21893.
     """
 
     def __init__(self, topic, partition):
@@ -271,6 +302,10 @@ class TopicAndPartition(object):
         :param topic: Kafka topic name.
         :param partition: Kafka partition id.
         """
+        warnings.warn(
+            "Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0. "
+            "See SPARK-21893.",
+            DeprecationWarning)
         self._topic = topic
         self._partition = partition
 
@@ -294,6 +329,9 @@ class TopicAndPartition(object):
 class Broker(object):
     """
     Represent the host and port info for a Kafka broker.
+
+    .. note:: Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0.
+        See SPARK-21893.
     """
 
     def __init__(self, host, port):
@@ -302,6 +340,10 @@ class Broker(object):
         :param host: Broker's hostname.
         :param port: Broker's port.
         """
+        warnings.warn(
+            "Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0. "
+            "See SPARK-21893.",
+            DeprecationWarning)
         self._host = host
         self._port = port
 
@@ -312,9 +354,16 @@ class Broker(object):
 class KafkaRDD(RDD):
     """
     A Python wrapper of KafkaRDD, to provide additional information on normal RDD.
+
+    .. note:: Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0.
+        See SPARK-21893.
     """
 
     def __init__(self, jrdd, ctx, jrdd_deserializer):
+        warnings.warn(
+            "Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0. "
+            "See SPARK-21893.",
+            DeprecationWarning)
         RDD.__init__(self, jrdd, ctx, jrdd_deserializer)
 
     def offsetRanges(self):
@@ -332,9 +381,16 @@ class KafkaRDD(RDD):
 class KafkaDStream(DStream):
     """
     A Python wrapper of KafkaDStream
+
+    .. note:: Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0.
+        See SPARK-21893.
     """
 
     def __init__(self, jdstream, ssc, jrdd_deserializer):
+        warnings.warn(
+            "Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0. "
+            "See SPARK-21893.",
+            DeprecationWarning)
         DStream.__init__(self, jdstream, ssc, jrdd_deserializer)
 
     def foreachRDD(self, func):
@@ -368,9 +424,16 @@ class KafkaDStream(DStream):
 class KafkaTransformedDStream(TransformedDStream):
     """
     Kafka specific wrapper of TransformedDStream to transform on Kafka RDD.
+
+    .. note:: Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0.
+        See SPARK-21893.
     """
 
     def __init__(self, prev, func):
+        warnings.warn(
+            "Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0. "
+            "See SPARK-21893.",
+            DeprecationWarning)
         TransformedDStream.__init__(self, prev, func)
 
     @property
@@ -388,6 +451,9 @@ class KafkaTransformedDStream(TransformedDStream):
 class KafkaMessageAndMetadata(object):
     """
     Kafka message and metadata information. Including topic, partition, offset and message
+
+    .. note:: Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0.
+        See SPARK-21893.
     """
 
     def __init__(self, topic, partition, offset, key, message):
@@ -401,6 +467,10 @@ class KafkaMessageAndMetadata(object):
         :param message: actual message payload of this Kafka message, the return data is
                         undecoded bytearray.
         """
+        warnings.warn(
+            "Deprecated in 2.3.0. Kafka 0.8 support is deprecated as of Spark 2.3.0. "
+            "See SPARK-21893.",
+            DeprecationWarning)
         self.topic = topic
         self.partition = partition
         self.offset = offset

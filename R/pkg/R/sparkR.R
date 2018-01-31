@@ -113,7 +113,7 @@ sparkR.stop <- function() {
 #'                  list(spark.executor.memory="4g"),
 #'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
 #'                  c("one.jar", "two.jar", "three.jar"),
-#'                  c("com.databricks:spark-avro_2.10:2.0.1"))
+#'                  c("com.databricks:spark-avro_2.11:2.0.1"))
 #'}
 #' @note sparkR.init since 1.4.0
 sparkR.init <- function(
@@ -357,7 +357,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #' sparkR.session("yarn-client", "SparkR", "/home/spark",
 #'                list(spark.executor.memory="4g"),
 #'                c("one.jar", "two.jar", "three.jar"),
-#'                c("com.databricks:spark-avro_2.10:2.0.1"))
+#'                c("com.databricks:spark-avro_2.11:2.0.1"))
 #' sparkR.session(spark.master = "yarn-client", spark.executor.memory = "4g")
 #'}
 #' @note sparkR.session since 2.0.0
@@ -420,6 +420,18 @@ sparkR.session <- function(
                                 enableHiveSupport)
     assign(".sparkRsession", sparkSession, envir = .sparkREnv)
   }
+
+  # Check if version number of SparkSession matches version number of SparkR package
+  jvmVersion <- callJMethod(sparkSession, "version")
+  # Remove -SNAPSHOT from jvm versions
+  jvmVersionStrip <- gsub("-SNAPSHOT", "", jvmVersion)
+  rPackageVersion <- paste0(packageVersion("SparkR"))
+
+  if (jvmVersionStrip != rPackageVersion) {
+    warning(paste("Version mismatch between Spark JVM and SparkR package. JVM version was",
+                  jvmVersion, ", while R package version was", rPackageVersion))
+  }
+
   sparkSession
 }
 
@@ -548,8 +560,53 @@ cancelJobGroup <- function(sc, groupId) {
 #'}
 #' @note setJobDescription since 2.3.0
 setJobDescription <- function(value) {
+  if (!is.null(value)) {
+    value <- as.character(value)
+  }
   sc <- getSparkContext()
   invisible(callJMethod(sc, "setJobDescription", value))
+}
+
+#' Set a local property that affects jobs submitted from this thread, such as the
+#' Spark fair scheduler pool.
+#'
+#' @param key The key for a local property.
+#' @param value The value for a local property.
+#' @rdname setLocalProperty
+#' @name setLocalProperty
+#' @examples
+#'\dontrun{
+#' setLocalProperty("spark.scheduler.pool", "poolA")
+#'}
+#' @note setLocalProperty since 2.3.0
+setLocalProperty <- function(key, value) {
+  if (is.null(key) || is.na(key)) {
+    stop("key should not be NULL or NA.")
+  }
+  if (!is.null(value)) {
+    value <- as.character(value)
+  }
+  sc <- getSparkContext()
+  invisible(callJMethod(sc, "setLocalProperty", as.character(key), value))
+}
+
+#' Get a local property set in this thread, or \code{NULL} if it is missing. See
+#' \code{setLocalProperty}.
+#'
+#' @param key The key for a local property.
+#' @rdname getLocalProperty
+#' @name getLocalProperty
+#' @examples
+#'\dontrun{
+#' getLocalProperty("spark.scheduler.pool")
+#'}
+#' @note getLocalProperty since 2.3.0
+getLocalProperty <- function(key) {
+  if (is.null(key) || is.na(key)) {
+    stop("key should not be NULL or NA.")
+  }
+  sc <- getSparkContext()
+  callJMethod(sc, "getLocalProperty", as.character(key))
 }
 
 sparkConfToSubmitOps <- new.env()

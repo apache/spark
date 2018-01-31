@@ -245,14 +245,12 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
   test("alter table schema") {
     val catalog = newBasicCatalog()
-    val newSchema = StructType(Seq(
+    val newDataSchema = StructType(Seq(
       StructField("col1", IntegerType),
-      StructField("new_field_2", StringType),
-      StructField("a", IntegerType),
-      StructField("b", StringType)))
-    catalog.alterTableSchema("db2", "tbl1", newSchema)
+      StructField("new_field_2", StringType)))
+    catalog.alterTableDataSchema("db2", "tbl1", newDataSchema)
     val newTbl1 = catalog.getTable("db2", "tbl1")
-    assert(newTbl1.schema == newSchema)
+    assert(newTbl1.dataSchema == newDataSchema)
   }
 
   test("alter table stats") {
@@ -446,6 +444,18 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     // if no partition is matched for the given partition spec, an empty list should be returned.
     assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown", "b" -> "1"))).isEmpty)
     assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown"))).isEmpty)
+  }
+
+  test("SPARK-21457: list partitions with special chars") {
+    val catalog = newBasicCatalog()
+    assert(catalog.listPartitions("db2", "tbl1").isEmpty)
+
+    val part1 = CatalogTablePartition(Map("a" -> "1", "b" -> "i+j"), storageFormat)
+    val part2 = CatalogTablePartition(Map("a" -> "1", "b" -> "i.j"), storageFormat)
+    catalog.createPartitions("db2", "tbl1", Seq(part1, part2), ignoreIfExists = false)
+
+    assert(catalog.listPartitions("db2", "tbl1", Some(part1.spec)).map(_.spec) == Seq(part1.spec))
+    assert(catalog.listPartitions("db2", "tbl1", Some(part2.spec)).map(_.spec) == Seq(part2.spec))
   }
 
   test("list partitions by filter") {

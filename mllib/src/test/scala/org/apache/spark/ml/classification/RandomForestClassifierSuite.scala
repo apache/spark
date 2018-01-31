@@ -155,6 +155,8 @@ class RandomForestClassifierSuite
         "probability prediction mismatch")
       assert(probPred.toArray.sum ~== 1.0 relTol 1E-5)
     }
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, RandomForestClassificationModel](model, df)
   }
 
   test("Fitting without numClasses in metadata") {

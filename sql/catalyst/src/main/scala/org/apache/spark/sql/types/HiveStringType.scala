@@ -19,7 +19,6 @@ package org.apache.spark.sql.types
 import scala.math.Ordering
 import scala.reflect.runtime.universe.typeTag
 
-import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -32,9 +31,7 @@ sealed abstract class HiveStringType extends AtomicType {
 
   private[sql] val ordering = implicitly[Ordering[InternalType]]
 
-  @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized {
-    typeTag[InternalType]
-  }
+  @transient private[sql] lazy val tag = typeTag[InternalType]
 
   override def defaultSize: Int = length
 

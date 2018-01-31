@@ -23,8 +23,8 @@ import scala.xml.Node
 
 import org.apache.mesos.Protos.TaskStatus
 
-import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterSubmissionState
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
@@ -37,10 +37,11 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
     val driverHeader = Seq("Driver ID")
     val historyHeader = historyServerURL.map(url => Seq("History")).getOrElse(Nil)
     val submissionHeader = Seq("Submit Date", "Main Class", "Driver Resources")
+    val sandboxHeader = Seq("Sandbox")
 
     val queuedHeaders = driverHeader ++ submissionHeader
     val driverHeaders = driverHeader ++ historyHeader ++ submissionHeader ++
-      Seq("Start Date", "Mesos Slave ID", "State")
+      Seq("Start Date", "Mesos Slave ID", "State") ++ sandboxHeader
     val retryHeaders = Seq("Driver ID", "Submit Date", "Description") ++
       Seq("Last Failed Status", "Next Retry Time", "Attempt Count")
     val queuedTable = UIUtils.listingTable(queuedHeaders, queuedRow, state.queuedDrivers)
@@ -76,6 +77,16 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
 
   private def driverRow(state: MesosClusterSubmissionState): Seq[Node] = {
     val id = state.driverDescription.submissionId
+    val proxy = parent.conf.getOption("spark.mesos.proxy.baseURL")
+
+    val sandboxCol = if (proxy.isDefined) {
+      val clusterSchedulerId = parent.scheduler.getSchedulerState().frameworkId
+      val sandBoxUri = s"${proxy.get}/#/agents/${state.slaveId.getValue}/frameworks/" +
+        s"${clusterSchedulerId}/executors/${id}/browse"
+      <a href={sandBoxUri}>Sandbox</a>
+    } else {
+      " "
+    }
 
     val historyCol = if (historyServerURL.isDefined) {
       <td>
@@ -94,6 +105,7 @@ private[mesos] class MesosClusterPage(parent: MesosClusterUI) extends WebUIPage(
       <td>{UIUtils.formatDate(state.startDate)}</td>
       <td>{state.slaveId.getValue}</td>
       <td>{stateString(state.mesosTaskStatus)}</td>
+      <td>{sandboxCol}</td>
     </tr>
   }
 

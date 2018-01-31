@@ -94,14 +94,16 @@ private[ui] trait PagedTable[T] {
     val _dataSource = dataSource
     try {
       val PageData(totalPages, data) = _dataSource.pageData(page)
+      val pageNavi = pageNavigation(page, _dataSource.pageSize, totalPages)
       <div>
-        {pageNavigation(page, _dataSource.pageSize, totalPages)}
+        {pageNavi}
         <table class={tableCssClass} id={tableId}>
           {headers}
           <tbody>
             {data.map(row)}
           </tbody>
         </table>
+        {pageNavi}
       </div>
     } catch {
       case e: IndexOutOfBoundsException =>

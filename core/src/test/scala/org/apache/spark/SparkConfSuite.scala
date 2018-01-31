@@ -26,6 +26,7 @@ import scala.util.{Random, Try}
 
 import com.esotericsoftware.kryo.Kryo
 
+import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{JavaSerializer, KryoRegistrator, KryoSerializer}
@@ -248,6 +249,12 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     conf.set("spark.kryoserializer.buffer.mb", "1.1")
     assert(conf.getSizeAsKb("spark.kryoserializer.buffer") === 1100)
+
+    conf.set("spark.history.fs.cleaner.maxAge.seconds", "42")
+    assert(conf.get(MAX_LOG_AGE_S) === 42L)
+
+    conf.set("spark.scheduler.listenerbus.eventqueue.size", "84")
+    assert(conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY) === 84)
   }
 
   test("akka deprecated configs") {
@@ -320,6 +327,16 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     conf.set(NETWORK_AUTH_ENABLED, true)
     conf.validateSettings()
+  }
+
+  test("spark.network.timeout should bigger than spark.executor.heartbeatInterval") {
+    val conf = new SparkConf()
+    conf.validateSettings()
+
+    conf.set("spark.network.timeout", "5s")
+    intercept[IllegalArgumentException] {
+      conf.validateSettings()
+    }
   }
 
 }

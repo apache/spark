@@ -39,23 +39,26 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
 @inherit_doc
 class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                        HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
-                       HasStandardization, HasSolver, HasWeightCol, HasAggregationDepth,
+                       HasStandardization, HasSolver, HasWeightCol, HasAggregationDepth, HasLoss,
                        JavaMLWritable, JavaMLReadable):
     """
     Linear regression.
 
-    The learning objective is to minimize the squared error, with regularization.
-    The specific squared error loss function used is: L = 1/2n ||A coefficients - y||^2^
+    The learning objective is to minimize the specified loss function, with regularization.
+    This supports two kinds of loss:
+
+    * squaredError (a.k.a squared loss)
+    * huber (a hybrid of squared error for relatively small errors and absolute error for \
+    relatively large ones, and we estimate the scale parameter from training data)
 
     This supports multiple types of regularization:
 
-     * none (a.k.a. ordinary least squares)
+    * none (a.k.a. ordinary least squares)
+    * L2 (ridge regression)
+    * L1 (Lasso)
+    * L2 + L1 (elastic net)
 
-     * L2 (ridge regression)
-
-     * L1 (Lasso)
-
-     * L2 + L1 (elastic net)
+    Note: Fitting with huber loss only supports none and L2 regularization.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
@@ -98,19 +101,28 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
                    "options: auto, normal, l-bfgs.", typeConverter=TypeConverters.toString)
 
+    loss = Param(Params._dummy(), "loss", "The loss function to be optimized. Supported " +
+                 "options: squaredError, huber.", typeConverter=TypeConverters.toString)
+
+    epsilon = Param(Params._dummy(), "epsilon", "The shape parameter to control the amount of " +
+                    "robustness. Must be > 1.0. Only valid when loss is huber",
+                    typeConverter=TypeConverters.toFloat)
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                 standardization=True, solver="auto", weightCol=None, aggregationDepth=2):
+                 standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
+                 loss="squaredError", epsilon=1.35):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                 standardization=True, solver="auto", weightCol=None, aggregationDepth=2)
+                 standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
+                 loss="squaredError", epsilon=1.35)
         """
         super(LinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.LinearRegression", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, loss="squaredError", epsilon=1.35)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -118,11 +130,13 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     @since("1.4.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
-                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2):
+                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2,
+                  loss="squaredError", epsilon=1.35):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
-                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2)
+                  standardization=True, solver="auto", weightCol=None, aggregationDepth=2, \
+                  loss="squaredError", epsilon=1.35)
         Sets params for linear regression.
         """
         kwargs = self._input_kwargs
@@ -130,6 +144,20 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
 
     def _create_model(self, java_model):
         return LinearRegressionModel(java_model)
+
+    @since("2.3.0")
+    def setEpsilon(self, value):
+        """
+        Sets the value of :py:attr:`epsilon`.
+        """
+        return self._set(epsilon=value)
+
+    @since("2.3.0")
+    def getEpsilon(self):
+        """
+        Gets the value of epsilon or its default value.
+        """
+        return self.getOrDefault(self.epsilon)
 
 
 class LinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable, JavaMLReadable):
@@ -154,6 +182,14 @@ class LinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWritable, Java
         Model intercept.
         """
         return self._call_java("intercept")
+
+    @property
+    @since("2.3.0")
+    def scale(self):
+        """
+        The value by which \|y - X'w\| is scaled down when loss is "huber", otherwise 1.0.
+        """
+        return self._call_java("scale")
 
     @property
     @since("2.0.0")
@@ -1014,6 +1050,11 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                      "Supported options: " + ", ".join(GBTParams.supportedLossTypes),
                      typeConverter=TypeConverters.toString)
 
+    stepSize = Param(Params._dummy(), "stepSize",
+                     "Step size (a.k.a. learning rate) in interval (0, 1] for shrinking " +
+                     "the contribution of each estimator.",
+                     typeConverter=TypeConverters.toFloat)
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
@@ -1118,7 +1159,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0), 1.0),
-    ...     (0.0, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
+    ...     (1e-40, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
     >>> aftsr = AFTSurvivalRegression()
     >>> model = aftsr.fit(df)
     >>> model.predict(Vectors.dense(6.3))
@@ -1126,12 +1167,12 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> model.predictQuantiles(Vectors.dense(6.3))
     DenseVector([0.0101, 0.0513, 0.1054, 0.2877, 0.6931, 1.3863, 2.3026, 2.9957, 4.6052])
     >>> model.transform(df).show()
-    +-----+---------+------+----------+
-    |label| features|censor|prediction|
-    +-----+---------+------+----------+
-    |  1.0|    [1.0]|   1.0|       1.0|
-    |  0.0|(1,[],[])|   0.0|       1.0|
-    +-----+---------+------+----------+
+    +-------+---------+------+----------+
+    |  label| features|censor|prediction|
+    +-------+---------+------+----------+
+    |    1.0|    [1.0]|   1.0|       1.0|
+    |1.0E-40|(1,[],[])|   0.0|       1.0|
+    +-------+---------+------+----------+
     ...
     >>> aftsr_path = temp_path + "/aftsr"
     >>> aftsr.save(aftsr_path)
@@ -1739,6 +1780,9 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
         then the last element returned corresponds to the intercept.
         """
         return self._call_java("pValues")
+
+    def __repr__(self):
+        return self._call_java("toString")
 
 
 if __name__ == "__main__":

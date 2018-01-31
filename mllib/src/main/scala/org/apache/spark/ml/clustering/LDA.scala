@@ -458,7 +458,7 @@ abstract class LDAModel private[ml] (
     if ($(topicDistributionCol).nonEmpty) {
 
       // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-      val transformer = oldLocalModel.getTopicDistributionMethod(sparkSession.sparkContext)
+      val transformer = oldLocalModel.getTopicDistributionMethod
 
       val t = udf { (v: Vector) => transformer(OldVectors.fromML(v)).asML }
       dataset.withColumn($(topicDistributionCol), t(col($(featuresCol)))).toDF()

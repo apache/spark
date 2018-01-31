@@ -48,7 +48,7 @@ import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
  */
 public class SessionManager extends CompositeService {
 
-  private static final Log LOG = LogFactory.getLog(CompositeService.class);
+  private static final Log LOG = LogFactory.getLog(SessionManager.class);
   public static final String HIVERCFILE = ".hiverc";
   private HiveConf hiveConf;
   private final Map<SessionHandle, HiveSession> handleToSession =

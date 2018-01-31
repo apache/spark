@@ -42,7 +42,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
    * Create a Hive aware resource loader.
    */
   override protected lazy val resourceLoader: HiveSessionResourceLoader = {
-    val client: HiveClient = externalCatalog.client.newSession()
+    val client: HiveClient = externalCatalog.client
     new HiveSessionResourceLoader(session, client)
   }
 
@@ -69,22 +69,23 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
   override protected def analyzer: Analyzer = new Analyzer(catalog, conf) {
     override val extendedResolutionRules: Seq[Rule[LogicalPlan]] =
       new ResolveHiveSerdeTable(session) +:
-      new FindDataSourceTable(session) +:
-      new ResolveSQLOnFile(session) +:
-      customResolutionRules
+        new FindDataSourceTable(session) +:
+        new ResolveSQLOnFile(session) +:
+        customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
       new DetermineTableStats(session) +:
-      RelationConversions(conf, catalog) +:
-      PreprocessTableCreation(session) +:
-      PreprocessTableInsertion(conf) +:
-      DataSourceAnalysis(conf) +:
-      HiveAnalysis +:
-      customPostHocResolutionRules
+        RelationConversions(conf, catalog) +:
+        PreprocessTableCreation(session) +:
+        PreprocessTableInsertion(conf) +:
+        DataSourceAnalysis(conf) +:
+        HiveAnalysis +:
+        customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
       PreWriteCheck +:
-      customCheckRules
+        PreReadCheck +:
+        customCheckRules
   }
 
   /**
@@ -95,22 +96,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
       override val sparkSession: SparkSession = session
 
       override def extraPlanningStrategies: Seq[Strategy] =
-        super.extraPlanningStrategies ++ customPlanningStrategies
-
-      override def strategies: Seq[Strategy] = {
-        experimentalMethods.extraStrategies ++
-          extraPlanningStrategies ++ Seq(
-          FileSourceStrategy,
-          DataSourceStrategy(conf),
-          SpecialLimits,
-          InMemoryScans,
-          HiveTableScans,
-          Scripts,
-          Aggregation,
-          JoinSelection,
-          BasicOperators
-        )
-      }
+        super.extraPlanningStrategies ++ customPlanningStrategies ++ Seq(HiveTableScans, Scripts)
     }
   }
 

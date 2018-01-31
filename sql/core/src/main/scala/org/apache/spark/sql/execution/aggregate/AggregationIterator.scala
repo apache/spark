@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
  *    is used to generate result.
  */
 abstract class AggregationIterator(
+    partIndex: Int,
     groupingExpressions: Seq[NamedExpression],
     inputAttributes: Seq[Attribute],
     aggregateExpressions: Seq[AggregateExpression],
@@ -217,6 +218,7 @@ abstract class AggregationIterator(
 
       val resultProjection =
         UnsafeProjection.create(resultExpressions, groupingAttributes ++ aggregateAttributes)
+      resultProjection.initialize(partIndex)
 
       (currentGroupingKey: UnsafeRow, currentBuffer: InternalRow) => {
         // Generate results for all expression-based aggregate functions.
@@ -235,6 +237,7 @@ abstract class AggregationIterator(
       val resultProjection = UnsafeProjection.create(
         groupingAttributes ++ bufferAttributes,
         groupingAttributes ++ bufferAttributes)
+      resultProjection.initialize(partIndex)
 
       // TypedImperativeAggregate stores generic object in aggregation buffer, and requires
       // calling serialization before shuffling. See [[TypedImperativeAggregate]] for more info.
@@ -256,6 +259,7 @@ abstract class AggregationIterator(
     } else {
       // Grouping-only: we only output values based on grouping expressions.
       val resultProjection = UnsafeProjection.create(resultExpressions, groupingAttributes)
+      resultProjection.initialize(partIndex)
       (currentGroupingKey: UnsafeRow, currentBuffer: InternalRow) => {
         resultProjection(currentGroupingKey)
       }

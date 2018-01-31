@@ -329,7 +329,7 @@ spark.addFile <- function(path, recursive = FALSE) {
 #' spark.getSparkFilesRootDirectory()
 #'}
 #' @note spark.getSparkFilesRootDirectory since 2.1.0
-spark.getSparkFilesRootDirectory <- function() {
+spark.getSparkFilesRootDirectory <- function() { # nolint
   if (Sys.getenv("SPARKR_IS_RUNNING_ON_WORKER") == "") {
     # Running on driver.
     callJStatic("org.apache.spark.SparkFiles", "getRootDirectory")

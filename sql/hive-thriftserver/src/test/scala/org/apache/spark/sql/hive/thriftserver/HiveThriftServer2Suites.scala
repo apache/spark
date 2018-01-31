@@ -33,11 +33,9 @@ import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.jdbc.HiveDriver
 import org.apache.hive.service.auth.PlainSaslHelper
-import org.apache.hive.service.cli.GetInfoType
+import org.apache.hive.service.cli.{FetchOrientation, FetchType, GetInfoType}
 import org.apache.hive.service.cli.thrift.TCLIService.Client
 import org.apache.hive.service.cli.thrift.ThriftCLIServiceClient
-import org.apache.hive.service.cli.FetchOrientation
-import org.apache.hive.service.cli.FetchType
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.BeforeAndAfterAll
@@ -160,7 +158,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
       assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
+      assert(resultSet.getString(2) === HiveUtils.builtinHiveVersion)
     }
   }
 
@@ -726,7 +724,7 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
       assert(resultSet.getString(1) === "spark.sql.hive.version")
-      assert(resultSet.getString(2) === HiveUtils.hiveExecutionVersion)
+      assert(resultSet.getString(2) === HiveUtils.builtinHiveVersion)
     }
   }
 }

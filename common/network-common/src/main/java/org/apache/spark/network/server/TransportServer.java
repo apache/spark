@@ -22,6 +22,7 @@ import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import com.codahale.metrics.MetricSet;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import io.netty.bootstrap.ServerBootstrap;
@@ -31,14 +32,11 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
-import org.apache.spark.network.util.JavaUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.TransportContext;
-import org.apache.spark.network.util.IOMode;
-import org.apache.spark.network.util.NettyUtils;
-import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.util.*;
 
 /**
  * Server for the efficient, low-level streaming service.
@@ -54,6 +52,7 @@ public class TransportServer implements Closeable {
   private ServerBootstrap bootstrap;
   private ChannelFuture channelFuture;
   private int port = -1;
+  private NettyMemoryMetrics metrics;
 
   /**
    * Creates a TransportServer that binds to the given host and the given port, or to any available
@@ -101,6 +100,9 @@ public class TransportServer implements Closeable {
       .option(ChannelOption.ALLOCATOR, allocator)
       .childOption(ChannelOption.ALLOCATOR, allocator);
 
+    this.metrics = new NettyMemoryMetrics(
+      allocator, conf.getModuleName() + "-server", conf);
+
     if (conf.backLog() > 0) {
       bootstrap.option(ChannelOption.SO_BACKLOG, conf.backLog());
     }
@@ -115,7 +117,7 @@ public class TransportServer implements Closeable {
 
     bootstrap.childHandler(new ChannelInitializer<SocketChannel>() {
       @Override
-      protected void initChannel(SocketChannel ch) throws Exception {
+      protected void initChannel(SocketChannel ch) {
         RpcHandler rpcHandler = appRpcHandler;
         for (TransportServerBootstrap bootstrap : bootstraps) {
           rpcHandler = bootstrap.doBootstrap(ch, rpcHandler);
@@ -131,6 +133,10 @@ public class TransportServer implements Closeable {
 
     port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
     logger.debug("Shuffle server started on port: {}", port);
+  }
+
+  public MetricSet getAllMetrics() {
+    return metrics;
   }
 
   @Override

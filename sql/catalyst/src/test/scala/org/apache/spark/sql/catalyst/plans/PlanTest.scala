@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans
 
+import org.scalatest.Suite
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
@@ -29,10 +31,16 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Provides helper methods for comparing plans.
  */
-trait PlanTest extends SparkFunSuite with PredicateHelper {
+trait PlanTest extends SparkFunSuite with PlanTestBase
 
-  // TODO(gatorsmile): remove this from PlanTest and all the analyzer/optimizer rules
-  protected val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)
+/**
+ * Provides helper methods for comparing plans, but without the overhead of
+ * mandating a FunSuite.
+ */
+trait PlanTestBase extends PredicateHelper { self: Suite =>
+
+  // TODO(gatorsmile): remove this from PlanTest and all the analyzer rules
+  protected def conf = SQLConf.get
 
   /**
    * Since attribute references are given globally unique ids during analysis,
@@ -116,7 +124,7 @@ trait PlanTest extends SparkFunSuite with PredicateHelper {
 
   /** Fails the test if the two expressions do not match */
   protected def compareExpressions(e1: Expression, e2: Expression): Unit = {
-    comparePlans(Filter(e1, OneRowRelation), Filter(e2, OneRowRelation), checkAnalysis = false)
+    comparePlans(Filter(e1, OneRowRelation()), Filter(e2, OneRowRelation()), checkAnalysis = false)
   }
 
   /** Fails the test if the join order in the two plans do not match */
@@ -146,7 +154,7 @@ trait PlanTest extends SparkFunSuite with PredicateHelper {
   }
 
   /**
-   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
+   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
    * configurations.
    */
   protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {

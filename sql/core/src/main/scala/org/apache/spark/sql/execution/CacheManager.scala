@@ -24,12 +24,11 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ResolvedHint}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -95,14 +94,13 @@ class CacheManager extends Logging {
       logWarning("Asked to cache already cached data.")
     } else {
       val sparkSession = query.sparkSession
-      cachedData.add(CachedData(
-        planToCache,
-        InMemoryRelation(
-          sparkSession.sessionState.conf.useCompression,
-          sparkSession.sessionState.conf.columnBatchSize,
-          storageLevel,
-          sparkSession.sessionState.executePlan(planToCache).executedPlan,
-          tableName)))
+      val inMemoryRelation = InMemoryRelation(
+        sparkSession.sessionState.conf.useCompression,
+        sparkSession.sessionState.conf.columnBatchSize, storageLevel,
+        sparkSession.sessionState.executePlan(planToCache).executedPlan,
+        tableName,
+        planToCache.stats)
+      cachedData.add(CachedData(planToCache, inMemoryRelation))
     }
   }
 
@@ -149,7 +147,8 @@ class CacheManager extends Logging {
           batchSize = cd.cachedRepresentation.batchSize,
           storageLevel = cd.cachedRepresentation.storageLevel,
           child = spark.sessionState.executePlan(cd.plan).executedPlan,
-          tableName = cd.cachedRepresentation.tableName)
+          tableName = cd.cachedRepresentation.tableName,
+          statsOfPlanToCache = cd.plan.stats)
         needToRecache += cd.copy(cachedRepresentation = newCache)
       }
     }
@@ -170,6 +169,13 @@ class CacheManager extends Logging {
   /** Replaces segments of the given logical plan with cached versions where possible. */
   def useCachedData(plan: LogicalPlan): LogicalPlan = {
     val newPlan = plan transformDown {
+      // Do not lookup the cache by hint node. Hint node is special, we should ignore it when
+      // canonicalizing plans, so that plans which are same except hint can hit the same cache.
+      // However, we also want to keep the hint info after cache lookup. Here we skip the hint
+      // node, so that the returned caching plan won't replace the hint node and drop the hint info
+      // from the original plan.
+      case hint: ResolvedHint => hint
+
       case currentFragment =>
         lookupCachedData(currentFragment)
           .map(_.cachedRepresentation.withOutput(currentFragment.output))

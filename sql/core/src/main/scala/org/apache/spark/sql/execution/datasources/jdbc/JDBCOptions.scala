@@ -21,6 +21,7 @@ import java.sql.{Connection, DriverManager}
 import java.util.{Locale, Properties}
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.types.StructType
 
 /**
  * Options for the JDBC data source.
@@ -97,10 +98,13 @@ class JDBCOptions(
   val lowerBound = parameters.get(JDBC_LOWER_BOUND).map(_.toLong)
   // the upper bound of the partition column
   val upperBound = parameters.get(JDBC_UPPER_BOUND).map(_.toLong)
-  require(partitionColumn.isEmpty ||
-    (lowerBound.isDefined && upperBound.isDefined && numPartitions.isDefined),
-    s"If '$JDBC_PARTITION_COLUMN' is specified then '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND'," +
-      s" and '$JDBC_NUM_PARTITIONS' are required.")
+  // numPartitions is also used for data source writing
+  require((partitionColumn.isEmpty && lowerBound.isEmpty && upperBound.isEmpty) ||
+    (partitionColumn.isDefined && lowerBound.isDefined && upperBound.isDefined &&
+      numPartitions.isDefined),
+    s"When reading JDBC data sources, users need to specify all or none for the following " +
+      s"options: '$JDBC_PARTITION_COLUMN', '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND', " +
+      s"and '$JDBC_NUM_PARTITIONS'")
   val fetchSize = {
     val size = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
     require(size >= 0,
@@ -120,6 +124,8 @@ class JDBCOptions(
   // TODO: to reuse the existing partition parameters for those partition specific options
   val createTableOptions = parameters.getOrElse(JDBC_CREATE_TABLE_OPTIONS, "")
   val createTableColumnTypes = parameters.get(JDBC_CREATE_TABLE_COLUMN_TYPES)
+  val customSchema = parameters.get(JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES)
+
   val batchSize = {
     val size = parameters.getOrElse(JDBC_BATCH_INSERT_SIZE, "1000").toInt
     require(size >= 1,
@@ -135,6 +141,8 @@ class JDBCOptions(
       case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
     }
+  // An option to execute custom SQL before fetching data from the remote DB
+  val sessionInitStatement = parameters.get(JDBC_SESSION_INIT_STATEMENT)
 }
 
 object JDBCOptions {
@@ -156,6 +164,8 @@ object JDBCOptions {
   val JDBC_TRUNCATE = newOption("truncate")
   val JDBC_CREATE_TABLE_OPTIONS = newOption("createTableOptions")
   val JDBC_CREATE_TABLE_COLUMN_TYPES = newOption("createTableColumnTypes")
+  val JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES = newOption("customSchema")
   val JDBC_BATCH_INSERT_SIZE = newOption("batchsize")
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
+  val JDBC_SESSION_INIT_STATEMENT = newOption("sessionInitStatement")
 }

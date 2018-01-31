@@ -214,7 +214,7 @@ class StateStoreRDDSuite extends SparkFunSuite with BeforeAndAfter with BeforeAn
       path: String,
       queryRunId: UUID = UUID.randomUUID,
       version: Int = 0): StatefulOperatorStateInfo = {
-    StatefulOperatorStateInfo(path, queryRunId, operatorId = 0, version)
+    StatefulOperatorStateInfo(path, queryRunId, operatorId = 0, version, numPartitions = 5)
   }
 
   private val increment = (store: StateStore, iter: Iterator[String]) => {

@@ -91,13 +91,13 @@ install_mvn() {
 
 # Install zinc under the build/ folder
 install_zinc() {
-  local zinc_path="zinc-0.3.11/bin/zinc"
+  local zinc_path="zinc-0.3.15/bin/zinc"
   [ ! -f "${_DIR}/${zinc_path}" ] && ZINC_INSTALL_FLAG=1
   local TYPESAFE_MIRROR=${TYPESAFE_MIRROR:-https://downloads.typesafe.com}
 
   install_app \
-    "${TYPESAFE_MIRROR}/zinc/0.3.11" \
-    "zinc-0.3.11.tgz" \
+    "${TYPESAFE_MIRROR}/zinc/0.3.15" \
+    "zinc-0.3.15.tgz" \
     "${zinc_path}"
   ZINC_BIN="${_DIR}/${zinc_path}"
 }

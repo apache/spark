@@ -19,8 +19,8 @@ package org.apache.spark.streaming.kafka
 
 import java.io.File
 import java.util.Arrays
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._

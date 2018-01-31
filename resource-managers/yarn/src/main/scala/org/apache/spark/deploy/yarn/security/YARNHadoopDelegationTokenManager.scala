@@ -38,7 +38,7 @@ import org.apache.spark.util.Utils
 private[yarn] class YARNHadoopDelegationTokenManager(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
-    fileSystems: Set[FileSystem]) extends Logging {
+    fileSystems: Configuration => Set[FileSystem]) extends Logging {
 
   private val delegationTokenManager =
     new HadoopDelegationTokenManager(sparkConf, hadoopConf, fileSystems)

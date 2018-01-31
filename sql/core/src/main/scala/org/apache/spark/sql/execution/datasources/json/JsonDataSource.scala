@@ -18,11 +18,12 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.InputStream
+import java.net.URI
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
@@ -59,9 +60,7 @@ abstract class JsonDataSource extends Serializable {
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): Option[StructType] = {
     if (inputPaths.nonEmpty) {
-      val jsonSchema = infer(sparkSession, inputPaths, parsedOptions)
-      checkConstraints(jsonSchema)
-      Some(jsonSchema)
+      Some(infer(sparkSession, inputPaths, parsedOptions))
     } else {
       None
     }
@@ -71,17 +70,6 @@ abstract class JsonDataSource extends Serializable {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType
-
-  /** Constraints to be imposed on schema to be stored. */
-  private def checkConstraints(schema: StructType): Unit = {
-    if (schema.fieldNames.length != schema.fieldNames.distinct.length) {
-      val duplicateColumns = schema.fieldNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => "\"" + x + "\""
-      }.mkString(", ")
-      throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
-        s"cannot save to JSON format")
-    }
-  }
 }
 
 object JsonDataSource {
@@ -181,9 +169,10 @@ object MultiLineJsonDataSource extends JsonDataSource {
   }
 
   private def createParser(jsonFactory: JsonFactory, record: PortableDataStream): JsonParser = {
+    val path = new Path(record.getPath())
     CreateJacksonParser.inputStream(
       jsonFactory,
-      CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, record.getPath()))
+      CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, path))
   }
 
   override def readFile(
@@ -193,7 +182,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       schema: StructType): Iterator[InternalRow] = {
     def partitionedFileString(ignored: Any): UTF8String = {
       Utils.tryWithResource {
-        CodecStreams.createInputStreamWithCloseResource(conf, file.filePath)
+        CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath)))
       } { inputStream =>
         UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
       }
@@ -206,6 +195,6 @@ object MultiLineJsonDataSource extends JsonDataSource {
       parser.options.columnNameOfCorruptRecord)
 
     safeParser.parse(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.filePath))
+      CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))))
   }
 }

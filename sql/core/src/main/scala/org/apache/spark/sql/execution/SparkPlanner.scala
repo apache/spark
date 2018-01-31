@@ -22,6 +22,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
 import org.apache.spark.sql.internal.SQLConf
 
 class SparkPlanner(
@@ -32,9 +33,10 @@ class SparkPlanner(
 
   def numPartitions: Int = conf.numShufflePartitions
 
-  def strategies: Seq[Strategy] =
+  override def strategies: Seq[Strategy] =
     experimentalMethods.extraStrategies ++
       extraPlanningStrategies ++ (
+      DataSourceV2Strategy ::
       FileSourceStrategy ::
       DataSourceStrategy(conf) ::
       SpecialLimits ::

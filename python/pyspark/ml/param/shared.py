@@ -256,6 +256,29 @@ class HasOutputCol(Params):
         return self.getOrDefault(self.outputCol)
 
 
+class HasOutputCols(Params):
+    """
+    Mixin for param outputCols: output column names.
+    """
+
+    outputCols = Param(Params._dummy(), "outputCols", "output column names.", typeConverter=TypeConverters.toListString)
+
+    def __init__(self):
+        super(HasOutputCols, self).__init__()
+
+    def setOutputCols(self, value):
+        """
+        Sets the value of :py:attr:`outputCols`.
+        """
+        return self._set(outputCols=value)
+
+    def getOutputCols(self):
+        """
+        Gets the value of outputCols or its default value.
+        """
+        return self.getOrDefault(self.outputCols)
+
+
 class HasNumFeatures(Params):
     """
     Mixin for param numFeatures: number of features.
@@ -281,10 +304,10 @@ class HasNumFeatures(Params):
 
 class HasCheckpointInterval(Params):
     """
-    Mixin for param checkpointInterval: set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.
+    Mixin for param checkpointInterval: set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.
     """
 
-    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.", typeConverter=TypeConverters.toInt)
+    checkpointInterval = Param(Params._dummy(), "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.", typeConverter=TypeConverters.toInt)
 
     def __init__(self):
         super(HasCheckpointInterval, self).__init__()
@@ -606,6 +629,53 @@ class HasAggregationDepth(Params):
         Gets the value of aggregationDepth or its default value.
         """
         return self.getOrDefault(self.aggregationDepth)
+
+
+class HasParallelism(Params):
+    """
+    Mixin for param parallelism: the number of threads to use when running parallel algorithms (>= 1).
+    """
+
+    parallelism = Param(Params._dummy(), "parallelism", "the number of threads to use when running parallel algorithms (>= 1).", typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(HasParallelism, self).__init__()
+        self._setDefault(parallelism=1)
+
+    def setParallelism(self, value):
+        """
+        Sets the value of :py:attr:`parallelism`.
+        """
+        return self._set(parallelism=value)
+
+    def getParallelism(self):
+        """
+        Gets the value of parallelism or its default value.
+        """
+        return self.getOrDefault(self.parallelism)
+
+
+class HasLoss(Params):
+    """
+    Mixin for param loss: the loss function to be optimized.
+    """
+
+    loss = Param(Params._dummy(), "loss", "the loss function to be optimized.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasLoss, self).__init__()
+
+    def setLoss(self, value):
+        """
+        Sets the value of :py:attr:`loss`.
+        """
+        return self._set(loss=value)
+
+    def getLoss(self):
+        """
+        Gets the value of loss or its default value.
+        """
+        return self.getOrDefault(self.loss)
 
 
 class DecisionTreeParams(Params):

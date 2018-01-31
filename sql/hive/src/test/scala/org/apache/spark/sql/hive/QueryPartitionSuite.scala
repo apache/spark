@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.sql.Timestamp
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.FileSystem
@@ -66,6 +67,22 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
 
       sql("DROP TABLE IF EXISTS table_with_partition")
       sql("DROP TABLE IF EXISTS createAndInsertTest")
+    }
+  }
+
+  test("SPARK-21739: Cast expression should initialize timezoneId") {
+    withTable("table_with_timestamp_partition") {
+      sql("CREATE TABLE table_with_timestamp_partition(value int) PARTITIONED BY (ts TIMESTAMP)")
+      sql("INSERT OVERWRITE TABLE table_with_timestamp_partition " +
+        "PARTITION (ts = '2010-01-01 00:00:00.000') VALUES (1)")
+
+      // test for Cast expression in TableReader
+      checkAnswer(sql("SELECT * FROM table_with_timestamp_partition"),
+        Seq(Row(1, Timestamp.valueOf("2010-01-01 00:00:00.000"))))
+
+      // test for Cast expression in HiveTableScanExec
+      checkAnswer(sql("SELECT value FROM table_with_timestamp_partition " +
+        "WHERE ts = '2010-01-01 00:00:00.000'"), Row(1))
     }
   }
 }

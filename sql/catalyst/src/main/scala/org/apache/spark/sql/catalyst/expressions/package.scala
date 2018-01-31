@@ -75,6 +75,13 @@ package object expressions  {
   }
 
   /**
+   * An identity projection. This returns the input row.
+   */
+  object IdentityProjection extends Projection {
+    override def apply(row: InternalRow): InternalRow = row
+  }
+
+  /**
    * Converts a [[InternalRow]] to another Row given a sequence of expression that define each
    * column of the new row. If the schema of the input row is specified, then the given expression
    * will be bound to that schema.

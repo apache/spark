@@ -28,12 +28,12 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
  */
 case class LocalTableScanExec(
     output: Seq[Attribute],
-    rows: Seq[InternalRow]) extends LeafExecNode {
+    @transient rows: Seq[InternalRow]) extends LeafExecNode {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  private lazy val unsafeRows: Array[InternalRow] = {
+  @transient private lazy val unsafeRows: Array[InternalRow] = {
     if (rows.isEmpty) {
       Array.empty
     } else {
