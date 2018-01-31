@@ -34,11 +34,10 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
   override val dataSourceName: String =
     classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName
 
-  // ORC does not play well with NullType and UDT.
+  // ORC does not play well with NullType.
   override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
     case _: NullType => false
     case _: CalendarIntervalType => false
-    case _: UserDefinedType[_] => false
     case _ => true
   }
 
