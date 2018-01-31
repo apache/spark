@@ -223,8 +223,8 @@ public abstract class ColumnVector implements AutoCloseable {
    * To support map type, implementations must construct an {@link ColumnarMap} and return it in
    * this method. {@link ColumnarMap} requires a {@link ColumnVector} that stores the data of all
    * the keys of all the maps in this vector, and another {@link ColumnVector} that stores the data
-   * of all the values of all the maps in this vector, and an offset and length which specifies the
-   * range of the key/value array that belongs to the map type value at rowId.
+   * of all the values of all the maps in this vector, and a pair of offset and length which
+   * specify the range of the key/value array that belongs to the map type value at rowId.
    */
   public abstract ColumnarMap getMap(int ordinal);
 
