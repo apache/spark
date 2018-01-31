@@ -20,8 +20,8 @@ package org.apache.spark.sql.sources.v2.streaming;
 import java.util.Optional;
 
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
 import org.apache.spark.sql.sources.v2.streaming.reader.MicroBatchReader;
 import org.apache.spark.sql.types.StructType;
 
@@ -36,8 +36,8 @@ public interface MicroBatchReadSupport extends DataSourceV2 {
    * streaming query.
    *
    * The execution engine will create a micro-batch reader at the start of a streaming query,
-   * alternate calls to setOffsetRange and createReadTasks for each batch to process, and then
-   * call stop() when the execution is complete. Note that a single query may have multiple
+   * alternate calls to setOffsetRange and createDataReaderFactories for each batch to process, and
+   * then call stop() when the execution is complete. Note that a single query may have multiple
    * executions due to restart or failure recovery.
    *
    * @param schema the user provided schema, or empty() if none was provided
@@ -50,5 +50,5 @@ public interface MicroBatchReadSupport extends DataSourceV2 {
   MicroBatchReader createMicroBatchReader(
       Optional<StructType> schema,
       String checkpointLocation,
-      DataSourceV2Options options);
+      DataSourceOptions options);
 }

@@ -20,6 +20,7 @@ package org.apache.spark.launcher;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -29,15 +30,15 @@ abstract class AbstractAppHandle implements SparkAppHandle {
 
   private final LauncherServer server;
 
-  private LauncherConnection connection;
+  private LauncherServer.ServerConnection connection;
   private List<Listener> listeners;
-  private State state;
+  private AtomicReference<State> state;
   private String appId;
-  private boolean disposed;
+  private volatile boolean disposed;
 
   protected AbstractAppHandle(LauncherServer server) {
     this.server = server;
-    this.state = State.UNKNOWN;
+    this.state = new AtomicReference<>(State.UNKNOWN);
   }
 
   @Override
@@ -50,7 +51,7 @@ abstract class AbstractAppHandle implements SparkAppHandle {
 
   @Override
   public State getState() {
-    return state;
+    return state.get();
   }
 
   @Override
@@ -70,20 +71,19 @@ abstract class AbstractAppHandle implements SparkAppHandle {
 
   @Override
   public synchronized void disconnect() {
-    if (!disposed) {
-      disposed = true;
+    if (!isDisposed()) {
       if (connection != null) {
         try {
-          connection.close();
+          connection.closeAndWait();
         } catch (IOException ioe) {
           // no-op.
         }
       }
-      server.unregister(this);
+      dispose();
     }
   }
 
-  void setConnection(LauncherConnection connection) {
+  void setConnection(LauncherServer.ServerConnection connection) {
     this.connection = connection;
   }
 
@@ -95,18 +95,40 @@ abstract class AbstractAppHandle implements SparkAppHandle {
     return disposed;
   }
 
+  /**
+   * Mark the handle as disposed, and set it as LOST in case the current state is not final.
+   */
+  synchronized void dispose() {
+    if (!isDisposed()) {
+      server.unregister(this);
+      // Set state to LOST if not yet final.
+      setState(State.LOST, false);
+      this.disposed = true;
+    }
+  }
+
   void setState(State s) {
     setState(s, false);
   }
 
-  synchronized void setState(State s, boolean force) {
-    if (force || !state.isFinal()) {
-      state = s;
+  void setState(State s, boolean force) {
+    if (force) {
+      state.set(s);
       fireEvent(false);
-    } else {
-      LOG.log(Level.WARNING, "Backend requested transition from final state {0} to {1}.",
-        new Object[] { state, s });
+      return;
     }
+
+    State current = state.get();
+    while (!current.isFinal()) {
+      if (state.compareAndSet(current, s)) {
+        fireEvent(false);
+        return;
+      }
+      current = state.get();
+    }
+
+    LOG.log(Level.WARNING, "Backend requested transition from final state {0} to {1}.",
+      new Object[] { current, s });
   }
 
   synchronized void setAppId(String appId) {

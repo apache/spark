@@ -154,14 +154,39 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("EXPLAIN CODEGEN command") {
-    checkKeywordsExist(sql("EXPLAIN CODEGEN SELECT 1"),
-      "WholeStageCodegen",
-      "Generated code:",
-      "/* 001 */ public Object generate(Object[] references) {",
-      "/* 002 */   return new GeneratedIterator(references);",
-      "/* 003 */ }"
+  test("explain output of physical plan should contain proper codegen stage ID") {
+    checkKeywordsExist(sql(
+      """
+        |EXPLAIN SELECT t1.id AS a, t2.id AS b FROM
+        |(SELECT * FROM range(3)) t1 JOIN
+        |(SELECT * FROM range(10)) t2 ON t1.id == t2.id % 3
+      """.stripMargin),
+      "== Physical Plan ==",
+      "*(2) Project ",
+      "+- *(2) BroadcastHashJoin ",
+      "   :- BroadcastExchange ",
+      "   :  +- *(1) Range ",
+      "   +- *(2) Range "
     )
+  }
+
+  test("EXPLAIN CODEGEN command") {
+    // the generated class name in this test should stay in sync with
+    //   org.apache.spark.sql.execution.WholeStageCodegenExec.generatedClassName()
+    for ((useIdInClassName, expectedClassName) <- Seq(
+           ("true", "GeneratedIteratorForCodegenStage1"),
+           ("false", "GeneratedIterator"))) {
+      withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME.key -> useIdInClassName) {
+        checkKeywordsExist(sql("EXPLAIN CODEGEN SELECT 1"),
+          "WholeStageCodegen",
+          "Generated code:",
+           "/* 001 */ public Object generate(Object[] references) {",
+          s"/* 002 */   return new $expectedClassName(references);",
+           "/* 003 */ }"
+        )
+      }
+    }
 
     checkKeywordsNotExist(sql("EXPLAIN CODEGEN SELECT 1"),
       "== Physical Plan =="

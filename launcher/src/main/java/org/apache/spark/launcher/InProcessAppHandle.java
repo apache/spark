@@ -39,15 +39,16 @@ class InProcessAppHandle extends AbstractAppHandle {
 
   @Override
   public synchronized void kill() {
-    LOG.warning("kill() may leave the underlying app running in in-process mode.");
-    disconnect();
+    if (!isDisposed()) {
+      LOG.warning("kill() may leave the underlying app running in in-process mode.");
+      setState(State.KILLED);
+      disconnect();
 
-    // Interrupt the thread. This is not guaranteed to kill the app, though.
-    if (app != null) {
-      app.interrupt();
+      // Interrupt the thread. This is not guaranteed to kill the app, though.
+      if (app != null) {
+        app.interrupt();
+      }
     }
-
-    setState(State.KILLED);
   }
 
   synchronized void start(String appName, Method main, String[] args) {
@@ -65,14 +66,7 @@ class InProcessAppHandle extends AbstractAppHandle {
         setState(State.FAILED);
       }
 
-      synchronized (InProcessAppHandle.this) {
-        if (!isDisposed()) {
-          disconnect();
-          if (!getState().isFinal()) {
-            setState(State.LOST, true);
-          }
-        }
-      }
+      disconnect();
     });
 
     app.setName(String.format(THREAD_NAME_FMT, THREAD_IDS.incrementAndGet(), appName));

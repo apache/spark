@@ -19,21 +19,21 @@ package org.apache.spark.sql.sources.v2.streaming.reader;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
-import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
+import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
 
 import java.util.Optional;
 
 /**
- * A mix-in interface for {@link DataSourceV2Reader}. Data source readers can implement this
+ * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
  * interface to allow reading in a continuous processing mode stream.
  *
- * Implementations must ensure each read task output is a {@link ContinuousDataReader}.
+ * Implementations must ensure each reader factory output is a {@link ContinuousDataReader}.
  *
  * Note: This class currently extends {@link BaseStreamingSource} to maintain compatibility with
  * DataSource V1 APIs. This extension will be removed once we get rid of V1 completely.
  */
 @InterfaceStability.Evolving
-public interface ContinuousReader extends BaseStreamingSource, DataSourceV2Reader {
+public interface ContinuousReader extends BaseStreamingSource, DataSourceReader {
     /**
      * Merge partitioned offsets coming from {@link ContinuousDataReader} instances for each
      * partition to a single global offset.
@@ -47,9 +47,9 @@ public interface ContinuousReader extends BaseStreamingSource, DataSourceV2Reade
     Offset deserializeOffset(String json);
 
     /**
-     * Set the desired start offset for read tasks created from this reader. The scan will start
-     * from the first record after the provided offset, or from an implementation-defined inferred
-     * starting point if no offset is provided.
+     * Set the desired start offset for reader factories created from this reader. The scan will
+     * start from the first record after the provided offset, or from an implementation-defined
+     * inferred starting point if no offset is provided.
      */
     void setOffset(Optional<Offset> start);
 
@@ -61,9 +61,9 @@ public interface ContinuousReader extends BaseStreamingSource, DataSourceV2Reade
     Offset getStartOffset();
 
     /**
-     * The execution engine will call this method in every epoch to determine if new read tasks need
-     * to be generated, which may be required if for example the underlying source system has had
-     * partitions added or removed.
+     * The execution engine will call this method in every epoch to determine if new reader
+     * factories need to be generated, which may be required if for example the underlying
+     * source system has had partitions added or removed.
      *
      * If true, the query will be shut down and restarted with a new reader.
      */

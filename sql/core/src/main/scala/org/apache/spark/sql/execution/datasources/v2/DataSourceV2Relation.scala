@@ -23,7 +23,7 @@ import org.apache.spark.sql.sources.v2.reader._
 
 case class DataSourceV2Relation(
     fullOutput: Seq[AttributeReference],
-    reader: DataSourceV2Reader) extends LeafNode with DataSourceReaderHolder {
+    reader: DataSourceReader) extends LeafNode with DataSourceReaderHolder {
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2Relation]
 
@@ -41,12 +41,12 @@ case class DataSourceV2Relation(
  */
 class StreamingDataSourceV2Relation(
     fullOutput: Seq[AttributeReference],
-    reader: DataSourceV2Reader) extends DataSourceV2Relation(fullOutput, reader) {
+    reader: DataSourceReader) extends DataSourceV2Relation(fullOutput, reader) {
   override def isStreaming: Boolean = true
 }
 
 object DataSourceV2Relation {
-  def apply(reader: DataSourceV2Reader): DataSourceV2Relation = {
+  def apply(reader: DataSourceReader): DataSourceV2Relation = {
     new DataSourceV2Relation(reader.readSchema().toAttributes, reader)
   }
 }

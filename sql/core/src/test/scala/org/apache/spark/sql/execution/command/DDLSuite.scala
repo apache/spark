@@ -739,7 +739,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     // starts with 'jar:', and it is an illegal parameter for Path, so here we copy it
     // to a temp file by withResourceTempPath
     withResourceTempPath("test-data/cars.csv") { tmpFile =>
-      withView("testview") {
+      withTempView("testview") {
         sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
           "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
           s"OPTIONS (PATH '${tmpFile.toURI}')")

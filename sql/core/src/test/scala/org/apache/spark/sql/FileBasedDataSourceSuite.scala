@@ -23,6 +23,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   private val allFileBasedDataSources = Seq("orc", "parquet", "csv", "json", "text")
+  private val nameWithSpecialChars = "sp&cial%c hars"
 
   allFileBasedDataSources.foreach { format =>
     test(s"Writing empty datasets should not fail - $format") {
@@ -54,7 +55,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
   // Only ORC/Parquet support this. `CSV` and `JSON` returns an empty schema.
   // `TEXT` data source always has a single column whose name is `value`.
   Seq("orc", "parquet").foreach { format =>
-    test(s"SPARK-15474 Write and read back non-emtpy schema with empty dataframe - $format") {
+    test(s"SPARK-15474 Write and read back non-empty schema with empty dataframe - $format") {
       withTempPath { file =>
         val path = file.getCanonicalPath
         val emptyDf = Seq((true, 1, "str")).toDF().limit(0)
@@ -69,11 +70,24 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
 
   allFileBasedDataSources.foreach { format =>
     test(s"SPARK-22146 read files containing special characters using $format") {
-      val nameWithSpecialChars = s"sp&cial%chars"
       withTempDir { dir =>
         val tmpFile = s"$dir/$nameWithSpecialChars"
         spark.createDataset(Seq("a", "b")).write.format(format).save(tmpFile)
         val fileContent = spark.read.format(format).load(tmpFile)
+        checkAnswer(fileContent, Seq(Row("a"), Row("b")))
+      }
+    }
+  }
+
+  // Separate test case for formats that support multiLine as an option.
+  Seq("json", "csv").foreach { format =>
+    test("SPARK-23148 read files containing special characters " +
+      s"using $format with multiline enabled") {
+      withTempDir { dir =>
+        val tmpFile = s"$dir/$nameWithSpecialChars"
+        spark.createDataset(Seq("a", "b")).write.format(format).save(tmpFile)
+        val reader = spark.read.format(format).option("multiLine", true)
+        val fileContent = reader.load(tmpFile)
         checkAnswer(fileContent, Seq(Row("a"), Row("b")))
       }
     }
