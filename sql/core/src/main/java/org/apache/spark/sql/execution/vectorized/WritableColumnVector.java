@@ -332,6 +332,7 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
+    if (isNullAt(rowId)) return null;
     if (precision <= Decimal.MAX_INT_DIGITS()) {
       return Decimal.createUnsafe(getInt(rowId), precision, scale);
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
@@ -358,6 +359,7 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public UTF8String getUTF8String(int rowId) {
+    if (isNullAt(rowId)) return null;
     if (dictionary == null) {
       return arrayData().getBytesAsUTF8String(getArrayOffset(rowId), getArrayLength(rowId));
     } else {
@@ -375,6 +377,7 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public byte[] getBinary(int rowId) {
+    if (isNullAt(rowId)) return null;
     if (dictionary == null) {
       return arrayData().getBytes(getArrayOffset(rowId), getArrayLength(rowId));
     } else {
@@ -604,6 +607,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   // array offsets and lengths in the current column vector.
   @Override
   public final ColumnarArray getArray(int rowId) {
+    if (isNullAt(rowId)) return null;
     return new ColumnarArray(arrayData(), getArrayOffset(rowId), getArrayLength(rowId));
   }
 

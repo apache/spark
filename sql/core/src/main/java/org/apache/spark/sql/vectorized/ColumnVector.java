@@ -188,7 +188,7 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the struct type value for rowId.
+   * Returns the struct type value for rowId. If the slot for rowId is null, it should return null.
    *
    * To support struct type, implementations must implement {@link #getChild(int)} and make this
    * vector a tree structure. The number of child vectors must be same as the number of fields of
@@ -201,7 +201,7 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the array type value for rowId.
+   * Returns the array type value for rowId. If the slot for rowId is null, it should return null.
    *
    * To support array type, implementations must construct an {@link ColumnarArray} and return it in
    * this method. {@link ColumnarArray} requires a {@link ColumnVector} that stores the data of all
@@ -221,24 +221,25 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the decimal type value for rowId.
+   * Returns the decimal type value for rowId. If the slot for rowId is null, it should return null.
    */
   public abstract Decimal getDecimal(int rowId, int precision, int scale);
 
   /**
-   * Returns the string type value for rowId. Note that the returned UTF8String may point to the
-   * data of this column vector, please copy it if you want to keep it after this column vector is
-   * freed.
+   * Returns the string type value for rowId. If the slot for rowId is null, it should return null.
+   * Note that the returned UTF8String may point to the data of this column vector, please copy it
+   * if you want to keep it after this column vector is freed.
    */
   public abstract UTF8String getUTF8String(int rowId);
 
   /**
-   * Returns the binary type value for rowId.
+   * Returns the binary type value for rowId. If the slot for rowId is null, it should return null.
    */
   public abstract byte[] getBinary(int rowId);
 
   /**
-   * Returns the calendar interval type value for rowId.
+   * Returns the calendar interval type value for rowId. If the slot for rowId is null, it should
+   * return null.
    *
    * In Spark, calendar interval type value is basically an integer value representing the number of
    * months in this interval, and a long value representing the number of microseconds in this

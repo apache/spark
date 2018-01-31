@@ -127,37 +127,31 @@ public final class MutableColumnarRow extends InternalRow {
 
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
     return columns[ordinal].getDecimal(rowId, precision, scale);
   }
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
     return columns[ordinal].getUTF8String(rowId);
   }
 
   @Override
   public byte[] getBinary(int ordinal) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
     return columns[ordinal].getBinary(rowId);
   }
 
   @Override
   public CalendarInterval getInterval(int ordinal) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
     return columns[ordinal].getInterval(rowId);
   }
 
   @Override
   public ColumnarRow getStruct(int ordinal, int numFields) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
     return columns[ordinal].getStruct(rowId);
   }
 
   @Override
   public ColumnarArray getArray(int ordinal) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
     return columns[ordinal].getArray(rowId);
   }
 
