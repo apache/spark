@@ -152,6 +152,26 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-22575: remove allocated blocks when they are not needed anymore") {
+    val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")
+    val df2 = Seq((1, "1"), (2, "2")).toDF("key", "value")
+    val df3 = df1.join(broadcast(df2), Seq("key"), "inner")
+    val numBroadCastHashJoin = df3.queryExecution.executedPlan.collect {
+      case b: BroadcastHashJoinExec => b
+    }.size
+    assert(numBroadCastHashJoin > 0)
+    df3.collect()
+    df3.destroy()
+    val blockManager = sparkContext.env.blockManager
+    val blocks = blockManager.getMatchingBlockIds(blockId => {
+      blockId.isBroadcast && blockManager.getStatus(blockId).get.storageLevel.deserialized
+    }).distinct
+    val blockValues = blocks.flatMap { id =>
+      blockManager.getSingle[Any](id)
+    }
+    assert(!blockValues.exists(_.isInstanceOf[HashedRelation]))
+  }
+
   test("broadcast hint isn't propagated after a join") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val df1 = Seq((1, "4"), (2, "2")).toDF("key", "value")

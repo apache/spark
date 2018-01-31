@@ -20,8 +20,10 @@ package org.apache.spark.sql.execution.exchange
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
+import scala.util.Success
 
-import org.apache.spark.{broadcast, SparkException}
+import org.apache.spark.SparkException
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -64,7 +66,7 @@ case class BroadcastExchangeExec(
   }
 
   @transient
-  private lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
+  private lazy val relationFuture: Future[Broadcast[Any]] = {
     // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     Future {
@@ -139,8 +141,15 @@ case class BroadcastExchangeExec(
       "BroadcastExchange does not support the execute() code path.")
   }
 
-  override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    ThreadUtils.awaitResult(relationFuture, timeout).asInstanceOf[broadcast.Broadcast[T]]
+  override protected[sql] def doExecuteBroadcast[T](): Broadcast[T] = {
+    ThreadUtils.awaitResult(relationFuture, timeout).asInstanceOf[Broadcast[T]]
+  }
+
+  override def doCleanUpResources: Unit = {
+    relationFuture.value match {
+      case Some(Success(broadcast)) => broadcast.destroy()
+      case _ =>
+    }
   }
 }
 

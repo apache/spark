@@ -288,6 +288,9 @@ private[hive] class SparkExecuteStatementOperation(
     if (statementId != null) {
       sqlContext.sparkContext.cancelJobGroup(statementId)
     }
+    if (result != null) {
+      result.destroy()
+    }
   }
 }
 

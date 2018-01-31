@@ -236,6 +236,19 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
+   * The code to eventually free resources, such as deleting broadcast variables, etc.
+   */
+  final def cleanUpResources(): Unit = {
+    children.foreach(_.cleanUpResources)
+    doCleanUpResources
+  }
+
+  /**
+   * Frees resources allocated by this plan.
+   */
+  protected def doCleanUpResources: Unit = {}
+
+  /**
    * Packing the UnsafeRows into byte array for faster serialization.
    * The byte arrays are in the following format:
    * [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]
