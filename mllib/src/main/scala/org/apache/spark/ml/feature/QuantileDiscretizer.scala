@@ -193,6 +193,8 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
             s"for multi-column transform.  Params (inputCols, outputCols, numBucketsArray) " +
             s"should have equal lengths, but they have different lengths: " +
             s"(${getInputCols.length}, ${getOutputCols.length}, ${getNumBucketsArray.length}).")
+        require(!isSet(numBuckets),
+          s"exactly one of numBuckets, numBucketsArray Params to be set, but both are set." )
       }
     }
 
