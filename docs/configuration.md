@@ -1228,7 +1228,7 @@ Apart from these, the following properties are also available, and may be useful
 
     In standalone and Mesos coarse-grained modes, for more detail, see
     <a href="spark-standalone.html#Executors Scheduling">this description</a>. In Kubernetes mode,
-    a fractional value can be used, e.g., 0.1 or 100m.
+    a fractional value can be used, e.g., 0.1 (100 millicpus).
   </td>
 </tr>
 <tr>
