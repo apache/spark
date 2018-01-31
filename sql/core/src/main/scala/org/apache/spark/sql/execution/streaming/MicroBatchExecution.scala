@@ -268,16 +268,17 @@ class MicroBatchExecution(
             }
           case s: MicroBatchReader =>
             updateStatusMessage(s"Getting offsets from $s")
-            reportTimeTaken("getOffset") {
-            // Once v1 streaming source execution is gone, we can refactor this away.
-            // For now, we set the range here to get the source to infer the available end offset,
-            // get that offset, and then set the range again when we later execute.
-            s.setOffsetRange(
-              toJava(availableOffsets.get(s).map(off => s.deserializeOffset(off.json))),
-              Optional.empty())
-
-              (s, Option(s.getEndOffset))
+            reportTimeTaken("setOffsetRange") {
+              // Once v1 streaming source execution is gone, we can refactor this away.
+              // For now, we set the range here to get the source to infer the available end offset,
+              // get that offset, and then set the range again when we later execute.
+              s.setOffsetRange(
+                toJava(availableOffsets.get(s).map(off => s.deserializeOffset(off.json))),
+                Optional.empty())
             }
+
+            val currentOffset = reportTimeTaken("getEndOffset") { s.getEndOffset() }
+            (s, Option(currentOffset))
         }.toMap
         availableOffsets ++= latestOffsets.filter { case (_, o) => o.nonEmpty }.mapValues(_.get)
 
