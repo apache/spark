@@ -27,8 +27,7 @@ import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2, Par
  * their offsets.
  */
 private[kafka010]
-case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long])
-  extends OffsetV2 {
+case class KafkaSourceOffset(partitionToOffsets: Map[TopicPartition, Long]) extends OffsetV2 {
 
   override val json = JsonUtils.partitionOffsets(partitionToOffsets)
 }
