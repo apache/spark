@@ -21,7 +21,7 @@ import java.util.{ArrayList, List => JList}
 
 import test.org.apache.spark.sql.sources.v2._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
@@ -34,6 +34,10 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   import testImplicits._
+
+  override def sparkConf: SparkConf = {
+    super.sparkConf.set("spark.default.parallelism", "2")
+  }
 
   test("simplest implementation") {
     Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
@@ -194,6 +198,24 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(5).select('id, -'id))
+      }
+    }
+  }
+
+  test("simple counter in writer with onDataWriterCommit") {
+    Seq(classOf[SimpleWritableDataSource]).foreach { cls =>
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
+
+        spark.range(10).select('id, -'id).write.format(cls.getName)
+          .option("path", path).save()
+        checkAnswer(
+          spark.read.format(cls.getName).option("path", path).load(),
+          spark.range(10).select('id, -'id))
+
+        assert(SimpleCounter.getCounter == 2,
+          "method onDataWriterCommit should be called as many as the number of partitions")
       }
     }
   }

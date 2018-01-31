@@ -63,7 +63,7 @@ public interface DataSourceWriter {
   DataWriterFactory<Row> createWriterFactory();
 
   /**
-   * Handles a commit message which is collected from a successful data writer.
+   * Handles a commit message on receiving from a successful data writer.
    *
    * If this method fails (by throwing an exception), this writing job is considered to to have been
    * failed, and {@link #abort(WriterCommitMessage[]) would be called. The state of the destination
