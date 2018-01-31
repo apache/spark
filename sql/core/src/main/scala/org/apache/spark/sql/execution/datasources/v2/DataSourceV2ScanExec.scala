@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
+import scala.language.existentials
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
@@ -27,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.streaming.continuous._
+import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.streaming.reader.ContinuousReader
 import org.apache.spark.sql.types.StructType
@@ -35,13 +37,17 @@ import org.apache.spark.sql.types.StructType
  * Physical plan node for scanning data from a data source.
  */
 case class DataSourceV2ScanExec(
-    fullOutput: Seq[AttributeReference],
-    @transient reader: DataSourceReader)
-  extends LeafExecNode with DataSourceReaderHolder with ColumnarBatchScan {
+    output: Seq[AttributeReference],
+    @transient reader: DataSourceReader,
+    @transient sourceClass: Class[_ <: DataSourceV2],
+    @transient filters: Set[Expression])
+  extends LeafExecNode with DataSourceV2QueryPlan with ColumnarBatchScan {
+
+  override def references: AttributeSet = AttributeSet.empty
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2ScanExec]
 
-  override def producedAttributes: AttributeSet = AttributeSet(fullOutput)
+  override def simpleString: String = s"Scan $metadataString"
 
   override def outputPartitioning: physical.Partitioning = reader match {
     case s: SupportsReportPartitioning =>

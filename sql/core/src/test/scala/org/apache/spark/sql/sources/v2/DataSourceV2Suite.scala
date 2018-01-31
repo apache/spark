@@ -24,6 +24,7 @@ import test.org.apache.spark.sql.sources.v2._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
@@ -51,10 +52,70 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       withClue(cls.getName) {
         val df = spark.read.format(cls.getName).load()
         checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
-        checkAnswer(df.select('j), (0 until 10).map(i => Row(-i)))
-        checkAnswer(df.filter('i > 3), (4 until 10).map(i => Row(i, -i)))
-        checkAnswer(df.select('j).filter('i > 6), (7 until 10).map(i => Row(-i)))
-        checkAnswer(df.select('i).filter('i > 10), Nil)
+
+        val q1 = df.select('j)
+        checkAnswer(q1, (0 until 10).map(i => Row(-i)))
+        if (cls == classOf[AdvancedDataSourceV2]) {
+          val reader = q1.queryExecution.executedPlan.collect {
+            case d: DataSourceV2ScanExec => d.reader.asInstanceOf[AdvancedDataSourceV2#Reader]
+          }.head
+          assert(reader.filters.isEmpty)
+          assert(reader.requiredSchema.map(_.name) == Seq("j"))
+        } else {
+          val reader = q1.queryExecution.executedPlan.collect {
+            case d: DataSourceV2ScanExec => d.reader.asInstanceOf[JavaAdvancedDataSourceV2#Reader]
+          }.head
+          assert(reader.filters.isEmpty)
+          assert(reader.requiredSchema.map(_.name) == Seq("j"))
+        }
+
+        val q2 = df.filter('i > 3)
+        checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
+        if (cls == classOf[AdvancedDataSourceV2]) {
+          val reader = q2.queryExecution.executedPlan.collect {
+            case d: DataSourceV2ScanExec => d.reader.asInstanceOf[AdvancedDataSourceV2#Reader]
+          }.head
+          assert(reader.filters.flatMap(_.references).toSet == Set("i"))
+          assert(reader.requiredSchema.map(_.name) == Seq("i", "j"))
+        } else {
+          val reader = q2.queryExecution.executedPlan.collect {
+            case d: DataSourceV2ScanExec => d.reader.asInstanceOf[JavaAdvancedDataSourceV2#Reader]
+          }.head
+          assert(reader.filters.flatMap(_.references).toSet == Set("i"))
+          assert(reader.requiredSchema.map(_.name) == Seq("i", "j"))
+        }
+
+        val q3 = df.select('j).filter('i > 6)
+        checkAnswer(q3, (7 until 10).map(i => Row(-i)))
+        if (cls == classOf[AdvancedDataSourceV2]) {
+          val reader = q3.queryExecution.executedPlan.collect {
+            case d: DataSourceV2ScanExec => d.reader.asInstanceOf[AdvancedDataSourceV2#Reader]
+          }.head
+          assert(reader.filters.flatMap(_.references).toSet == Set("i"))
+          assert(reader.requiredSchema.map(_.name) == Seq("j"))
+        } else {
+          val reader = q3.queryExecution.executedPlan.collect {
+            case d: DataSourceV2ScanExec => d.reader.asInstanceOf[JavaAdvancedDataSourceV2#Reader]
+          }.head
+          assert(reader.filters.flatMap(_.references).toSet == Set("i"))
+          assert(reader.requiredSchema.map(_.name) == Seq("j"))
+        }
+
+        val q4 = df.select('i).filter('i > 10)
+        checkAnswer(q4, Nil)
+        if (cls == classOf[AdvancedDataSourceV2]) {
+          val reader = q4.queryExecution.executedPlan.collect {
+            case d: DataSourceV2ScanExec => d.reader.asInstanceOf[AdvancedDataSourceV2#Reader]
+          }.head
+          assert(reader.filters.flatMap(_.references).toSet == Set("i"))
+          assert(reader.requiredSchema.map(_.name) == Seq("i"))
+        } else {
+          val reader = q4.queryExecution.executedPlan.collect {
+            case d: DataSourceV2ScanExec => d.reader.asInstanceOf[JavaAdvancedDataSourceV2#Reader]
+          }.head
+          assert(reader.filters.flatMap(_.references).toSet == Set("i"))
+          assert(reader.requiredSchema.map(_.name) == Seq("i"))
+        }
       }
     }
   }
@@ -247,8 +308,6 @@ class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
       this.filters = filters
       Array.empty
     }
-
-    override def pushedFilters(): Array[Filter] = filters
 
     override def readSchema(): StructType = {
       requiredSchema
