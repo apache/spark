@@ -69,7 +69,7 @@ from pyspark.sql.types import UserDefinedType, _infer_type, _make_type_verifier
 from pyspark.sql.types import _array_signed_int_typecode_ctype_mappings, _array_type_mappings
 from pyspark.sql.types import _array_unsigned_int_typecode_ctype_mappings
 from pyspark.sql.types import _merge_type
-from pyspark.tests import QuietTest, ReusedPySparkTestCase, SparkSubmitTests
+from pyspark.tests import QuietTest, ReusedPySparkTestCase, PySparkTestCase, SparkSubmitTests
 from pyspark.sql.functions import UserDefinedFunction, sha2, lit
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
@@ -2923,6 +2923,32 @@ class SQLTests2(ReusedSQLTestCase):
         finally:
             spark.stop()
             sc.stop()
+
+
+class SparkSessionTests(PySparkTestCase):
+
+    # This test is separate because it's closely related with session's start and stop.
+    # See SPARK-23228.
+    def test_set_jvm_default_session(self):
+        spark = SparkSession.builder.getOrCreate()
+        try:
+            self.assertTrue(spark._jvm.SparkSession.getDefaultSession().isDefined())
+        finally:
+            spark.stop()
+            self.assertTrue(spark._jvm.SparkSession.getDefaultSession().isEmpty())
+
+    def test_jvm_default_session_already_set(self):
+        # Here, we assume there is the default session already set in JVM.
+        jsession = self.sc._jvm.SparkSession(self.sc._jsc.sc())
+        self.sc._jvm.SparkSession.setDefaultSession(jsession)
+
+        spark = SparkSession.builder.getOrCreate()
+        try:
+            self.assertTrue(spark._jvm.SparkSession.getDefaultSession().isDefined())
+            # The session should be the same with the exiting one.
+            self.assertTrue(jsession.equals(spark._jvm.SparkSession.getDefaultSession().get()))
+        finally:
+            spark.stop()
 
 
 class UDFInitializationTests(unittest.TestCase):
