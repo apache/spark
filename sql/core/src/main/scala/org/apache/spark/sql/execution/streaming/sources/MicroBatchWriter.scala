@@ -28,22 +28,30 @@ import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, DataWriterFacto
  * streaming writer.
  */
 class MicroBatchWriter(batchId: Long, writer: StreamWriter) extends DataSourceWriter {
-  override def commit(messages: Array[WriterCommitMessage]): Unit = {
-    writer.commit(batchId, messages)
+  override def add(message: WriterCommitMessage): Unit = {
+    writer.add(message)
   }
 
-  override def abort(messages: Array[WriterCommitMessage]): Unit = writer.abort(batchId, messages)
+  override def commit(): Unit = {
+    writer.commit(batchId)
+  }
+
+  override def abort(): Unit = writer.abort(batchId)
 
   override def createWriterFactory(): DataWriterFactory[Row] = writer.createWriterFactory()
 }
 
 class InternalRowMicroBatchWriter(batchId: Long, writer: StreamWriter)
   extends DataSourceWriter with SupportsWriteInternalRow {
-  override def commit(messages: Array[WriterCommitMessage]): Unit = {
-    writer.commit(batchId, messages)
+  override def add(message: WriterCommitMessage): Unit = {
+    writer.add(message)
   }
 
-  override def abort(messages: Array[WriterCommitMessage]): Unit = writer.abort(batchId, messages)
+  override def commit(): Unit = {
+    writer.commit(batchId)
+  }
+
+  override def abort(): Unit = writer.abort(batchId)
 
   override def createInternalRowWriterFactory(): DataWriterFactory[InternalRow] =
     writer match {

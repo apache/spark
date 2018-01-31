@@ -41,19 +41,16 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
   test("continuous writer") {
     val sink = new MemorySinkV2
     val writer = new MemoryStreamWriter(sink, OutputMode.Append())
-    writer.commit(0,
-      Array(
-        MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
-        MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
-        MemoryWriterCommitMessage(2, Seq(Row(6), Row(7)))
-      ))
+    writer.add(MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))))
+    writer.add(MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))))
+    writer.add(MemoryWriterCommitMessage(2, Seq(Row(6), Row(7))))
+    writer.commit(0)
     assert(sink.latestBatchId.contains(0))
     assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7))
-    writer.commit(19,
-      Array(
-        MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))),
-        MemoryWriterCommitMessage(0, Seq(Row(33)))
-      ))
+
+    writer.add(MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))))
+    writer.add(MemoryWriterCommitMessage(0, Seq(Row(33))))
+    writer.commit(19)
     assert(sink.latestBatchId.contains(19))
     assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(11, 22, 33))
 
@@ -62,19 +59,18 @@ class MemorySinkV2Suite extends StreamTest with BeforeAndAfter {
 
   test("microbatch writer") {
     val sink = new MemorySinkV2
-    new MemoryWriter(sink, 0, OutputMode.Append()).commit(
-      Array(
-        MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
-        MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
-        MemoryWriterCommitMessage(2, Seq(Row(6), Row(7)))
-      ))
+    val writer = new MemoryWriter(sink, 0, OutputMode.Append())
+    writer.add(MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))))
+    writer.add(MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))))
+    writer.add(MemoryWriterCommitMessage(2, Seq(Row(6), Row(7))))
+    writer.commit()
     assert(sink.latestBatchId.contains(0))
     assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7))
-    new MemoryWriter(sink, 19, OutputMode.Append()).commit(
-      Array(
-        MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))),
-        MemoryWriterCommitMessage(0, Seq(Row(33)))
-      ))
+
+    val newWriter = new MemoryWriter(sink, 19, OutputMode.Append())
+    newWriter.add(MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))))
+    newWriter.add(MemoryWriterCommitMessage(0, Seq(Row(33))))
+    newWriter.commit()
     assert(sink.latestBatchId.contains(19))
     assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(11, 22, 33))
 

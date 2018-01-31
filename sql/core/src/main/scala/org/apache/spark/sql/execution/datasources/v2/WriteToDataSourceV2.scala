@@ -54,10 +54,9 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
     }
 
     val rdd = query.execute()
-    val messages = new Array[WriterCommitMessage](rdd.partitions.length)
 
     logInfo(s"Start processing data source writer: $writer. " +
-      s"The input RDD has ${messages.length} partitions.")
+      s"The input RDD has ${rdd.partitions.length} partitions.")
 
     try {
       val runTask = writer match {
@@ -80,12 +79,12 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
         rdd,
         runTask,
         rdd.partitions.indices,
-        (index, message: WriterCommitMessage) => messages(index) = message
+        (_, message: WriterCommitMessage) => writer.add(message)
       )
 
       if (!writer.isInstanceOf[StreamWriter]) {
         logInfo(s"Data source writer $writer is committing.")
-        writer.commit(messages)
+        writer.commit()
         logInfo(s"Data source writer $writer committed.")
       }
     } catch {
@@ -94,7 +93,7 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
       case cause: Throwable =>
         logError(s"Data source writer $writer is aborting.")
         try {
-          writer.abort(messages)
+          writer.abort()
         } catch {
           case t: Throwable =>
             logError(s"Data source writer $writer failed to abort.")

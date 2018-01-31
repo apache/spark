@@ -49,8 +49,9 @@ class KafkaStreamWriter(
   override def createInternalRowWriterFactory(): KafkaStreamWriterFactory =
     KafkaStreamWriterFactory(topic, producerParams, schema)
 
-  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
-  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+  override def add(message: WriterCommitMessage): Unit = {}
+  override def commit(epochId: Long): Unit = {}
+  override def abort(epochId: Long): Unit = {}
 }
 
 /**
