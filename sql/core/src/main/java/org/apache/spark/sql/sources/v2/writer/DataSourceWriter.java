@@ -63,6 +63,15 @@ public interface DataSourceWriter {
   DataWriterFactory<Row> createWriterFactory();
 
   /**
+   * Handles a commit message which is collected from a successful data writer.
+   *
+   * If this method fails (by throwing an exception), this writing job is considered to to have been
+   * failed, and {@link #abort(WriterCommitMessage[]) would be called. The state of the destination
+   * is undefined and {@link #abort(WriterCommitMessage[]) may not be able to deal with it.
+   */
+  default void onDataWriterCommit(WriterCommitMessage message) {}
+
+  /**
    * Commits this writing job with a list of commit messages. The commit messages are collected from
    * successful data writers and are produced by {@link DataWriter#commit()}.
    *
@@ -78,8 +87,10 @@ public interface DataSourceWriter {
   void commit(WriterCommitMessage[] messages);
 
   /**
-   * Aborts this writing job because some data writers are failed and keep failing when retry, or
-   * the Spark job fails with some unknown reasons, or {@link #commit(WriterCommitMessage[])} fails.
+   * Aborts this writing job because some data writers are failed and keep failing when retry,
+   * or the Spark job fails with some unknown reasons,
+   * or {@link #onDataWriterCommit(WriterCommitMessage)} fails,
+   * or {@link #commit(WriterCommitMessage[])} fails.
    *
    * If this method fails (by throwing an exception), the underlying data source may require manual
    * cleanup.
