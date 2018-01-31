@@ -59,8 +59,8 @@ public abstract class WritableColumnVector extends ColumnVector {
     elementsAppended = 0;
     if (numNulls > 0) {
       putNotNulls(0, capacity);
+      numNulls = 0;
     }
-    numNulls = 0;
   }
 
   @Override
@@ -100,6 +100,11 @@ public abstract class WritableColumnVector extends ColumnVector {
         "vectorized reader by setting " + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() +
         " to false.";
     throw new RuntimeException(message, cause);
+  }
+
+  @Override
+  public boolean hasNull() {
+    return numNulls > 0;
   }
 
   @Override

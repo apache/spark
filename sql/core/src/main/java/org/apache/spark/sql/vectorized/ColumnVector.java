@@ -66,6 +66,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract void close();
 
   /**
+   * Returns true if this column vector contains any null values.
+   */
+  public abstract boolean hasNull();
+
+  /**
    * Returns the number of nulls in this column vector.
    */
   public abstract int numNulls();
