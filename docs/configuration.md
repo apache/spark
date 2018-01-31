@@ -1220,14 +1220,15 @@ Apart from these, the following properties are also available, and may be useful
 <tr>
   <td><code>spark.executor.cores</code></td>
   <td>
-    1 in YARN mode, all the available cores on the worker in
+    1 in YARN and Kubernetes modes, all the available cores on the worker in
     standalone and Mesos coarse-grained modes.
   </td>
   <td>
     The number of cores to use on each executor.
 
     In standalone and Mesos coarse-grained modes, for more detail, see
-    <a href="spark-standalone.html#Executors Scheduling">this description</a>.
+    <a href="spark-standalone.html#Executors Scheduling">this description</a>. In Kubernetes mode,
+    a fractional value can be used, e.g., 0.1 or 100m.
   </td>
 </tr>
 <tr>

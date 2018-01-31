@@ -267,7 +267,11 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         && Try(JavaUtils.byteStringAsBytes(executorMemory)).getOrElse(-1L) <= 0) {
       SparkSubmit.printErrorAndExit("Executor Memory cores must be a positive number")
     }
-    if (executorCores != null && Try(executorCores.toInt).getOrElse(-1) <= 0) {
+    // Kubernetes mode allows fractional values for spark.executor.cores so bypass this check in
+    // the Kubernetes mode.
+    if (!master.startsWith("k8s")
+      && executorCores != null
+      && Try(executorCores.toInt).getOrElse(-1) <= 0) {
       SparkSubmit.printErrorAndExit("Executor cores must be a positive number")
     }
     if (totalExecutorCores != null && Try(totalExecutorCores.toInt).getOrElse(-1) <= 0) {
