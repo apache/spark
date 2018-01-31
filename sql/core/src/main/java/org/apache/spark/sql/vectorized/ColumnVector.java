@@ -20,6 +20,7 @@ import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -195,6 +196,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * struct field.
    */
   public final ColumnarRow getStruct(int rowId) {
+    if (isNullAt(rowId)) return null;
     return new ColumnarRow(this, rowId);
   }
 
@@ -236,9 +238,29 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract byte[] getBinary(int rowId);
 
   /**
-   * Returns the ordinal's child column vector.
+   * Returns the calendar interval type value for rowId.
+   *
+   * In Spark, calendar interval type value is basically an integer value representing the number of
+   * months in this interval, and a long value representing the number of microseconds in this
+   * interval. An interval type vector is the same as a struct type vector with 2 fields: `months`
+   * and `microseconds`.
+   *
+   * To support interval type, implementations must implement {@link #getChild(int)} and define 2
+   * child vectors: the first child vector is an int type vector, containing all the month values of
+   * all the interval values in this vector. The second child vector is a long type vector,
+   * containing all the microsecond values of all the interval values in this vector.
    */
-  public abstract ColumnVector getChild(int ordinal);
+  public final CalendarInterval getInterval(int rowId) {
+    if (isNullAt(rowId)) return null;
+    final int months = getChild(0).getInt(rowId);
+    final long microseconds = getChild(1).getLong(rowId);
+    return new CalendarInterval(months, microseconds);
+  }
+
+  /**
+   * @return child [[ColumnVector]] at the given ordinal.
+   */
+  protected abstract ColumnVector getChild(int ordinal);
 
   /**
    * Data type for this column.

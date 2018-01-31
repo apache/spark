@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A column vector backed by Apache Arrow. Currently time interval type and map type are not
+ * A column vector backed by Apache Arrow. Currently calendar interval type and map type are not
  * supported.
  */
 @InterfaceStability.Evolving
