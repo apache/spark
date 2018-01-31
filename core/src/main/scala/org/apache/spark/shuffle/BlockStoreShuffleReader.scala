@@ -95,7 +95,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
     }
 
     // Sort the output if there is a sort ordering defined.
-    dep.keyOrdering match {
+    val resultIter = dep.keyOrdering match {
       case Some(keyOrd: Ordering[K]) =>
         // Create an ExternalSorter to sort the data.
         val sorter =
@@ -104,9 +104,18 @@ private[spark] class BlockStoreShuffleReader[K, C](
         context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
         context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
         context.taskMetrics().incPeakExecutionMemory(sorter.peakMemoryUsedBytes)
+        // Use completion callback to stop sorter if task was cancelled.
+        context.addTaskCompletionListener(tc => {
+          // Note: we only stop sorter if cancelled as sorter.stop wouldn't be called in
+          // CompletionIterator. Another way would be making sorter.stop idempotent.
+          if (tc.isInterrupted()) { sorter.stop() }
+        })
         CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](sorter.iterator, sorter.stop())
       case None =>
         aggregatedIter
     }
+    // Use another interruptible iterator here to support task cancellation as aggregator or(and)
+    // sorter may have consumed previous interruptible iterator.
+    new InterruptibleIterator[Product2[K, C]](context, resultIter)
   }
 }

@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -320,6 +321,41 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     f2.get()
   }
 
+  test("Interruptible iterator of shuffle reader") {
+    import JobCancellationSuite._
+    sc = new SparkContext("local[2]", "test")
+
+    val f = sc.parallelize(1 to 1000, 2).map { i => (i, i) }
+      .repartitionAndSortWithinPartitions(new HashPartitioner(2))
+      .mapPartitions { iter =>
+        taskStartedSemaphore.release()
+        // Small delay to ensure that foreach is cancelled if task is killed
+        Thread.sleep(1000)
+        iter
+      }.foreachAsync { _ =>
+        executionOfInterruptibleCounter.getAndIncrement()
+    }
+
+    val sem = new Semaphore(0)
+    Future {
+      taskStartedSemaphore.acquire()
+      f.cancel()
+      sem.release()
+    }
+
+    sem.acquire()
+
+    val e = intercept[SparkException] { f.get() }.getCause
+
+    assert(executionOfInterruptibleCounter.get() === 0)
+    assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
+
+    // Small delay to ensure tasks are actually finished or killed
+    Thread.sleep(2000)
+    assert(executionOfInterruptibleCounter.get() === 0)
+
+  }
+
   def testCount() {
     // Cancel before launching any tasks
     {
@@ -384,4 +420,5 @@ object JobCancellationSuite {
   val taskStartedSemaphore = new Semaphore(0)
   val taskCancelledSemaphore = new Semaphore(0)
   val twoJobsSharingStageSemaphore = new Semaphore(0)
+  val executionOfInterruptibleCounter = new AtomicInteger(0)
 }
