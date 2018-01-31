@@ -103,6 +103,11 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   @Override
+  public boolean hasNull() {
+    return numNulls > 0;
+  }
+
+  @Override
   public int numNulls() { return numNulls; }
 
   /**
