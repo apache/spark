@@ -78,6 +78,11 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   }
 
   @Override
+  public boolean hasNull() {
+    return !baseData.noNulls;
+  }
+
+  @Override
   public int numNulls() {
     if (baseData.isRepeating) {
       if (baseData.isNull[0]) {

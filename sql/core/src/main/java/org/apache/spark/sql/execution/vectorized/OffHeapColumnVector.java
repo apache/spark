@@ -123,7 +123,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNotNulls(int rowId, int count) {
-    if (numNulls == 0) return;
+    if (!hasNull()) return;
     long offset = nulls + rowId;
     for (int i = 0; i < count; ++i, ++offset) {
       Platform.putByte(null, offset, (byte) 0);
