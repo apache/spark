@@ -685,6 +685,15 @@ class DataFrame(object):
         >>> data = df.union(df).repartition(1, "age")
         >>> data.rdd.getNumPartitions()
         1
+        >>> data.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
         >>> data = data.repartitionByRange(3, "age")
         >>> data.show()
         +---+-----+
