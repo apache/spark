@@ -446,6 +446,20 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("Setting numBucketsArray for Single-Column QuantileDiscretizer") {
+    val spark = this.spark
+    import spark.implicits._
+    val discretizer = new QuantileDiscretizer()
+      .setInputCol("input")
+      .setOutputCol("result")
+      .setNumBucketsArray(Array(2, 5))
+    val df = sc.parallelize(Array(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
+      .map(Tuple1.apply).toDF("input")
+    intercept[IllegalArgumentException] {
+      discretizer.fit(df)
+    }
+  }
+
   test("Assert exception is thrown if both multi-column and single-column params are set") {
     val spark = this.spark
     import spark.implicits._

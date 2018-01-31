@@ -176,6 +176,11 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
     ParamValidators.checkSingleVsMultiColumnParams(this, Seq(outputCol),
       Seq(outputCols))
 
+    if (isSet(inputCol)) {
+      require(!isSet(numBucketsArray),
+        s"numBucketsArray can't be set for single-column QuantileDiscretizer.")
+    }
+
     if (isSet(inputCols)) {
       require(getInputCols.length == getOutputCols.length,
         s"QuantileDiscretizer $this has mismatched Params " +
