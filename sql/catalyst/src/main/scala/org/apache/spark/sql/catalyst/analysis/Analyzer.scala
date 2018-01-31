@@ -1493,7 +1493,7 @@ class Analyzer(
           // to push down this ordering expression and can reference the original aggregate
           // expression instead.
           val needsPushDown = ArrayBuffer.empty[NamedExpression]
-          val evaluatedOrderings = resolvedAliasedOrdering.zip(sortOrder).map {
+          val evaluatedOrderings = resolvedAliasedOrdering.zip(unresolvedSortOrders).map {
             case (evaluated, order) =>
               val index = originalAggExprs.indexWhere {
                 case Alias(child, _) => child semanticEquals evaluated.child
