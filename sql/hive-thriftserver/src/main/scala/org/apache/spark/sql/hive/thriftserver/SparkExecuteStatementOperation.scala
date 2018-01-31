@@ -102,9 +102,7 @@ private[hive] class SparkExecuteStatementOperation(
         to += from.getAs[Timestamp](ordinal)
       case BinaryType =>
         to += from.getAs[Array[Byte]](ordinal)
-      case udt: UserDefinedType[_] =>
-        to += from.get(ordinal).toString
-      case _: ArrayType | _: StructType | _: MapType =>
+      case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] =>
         val hiveString = HiveUtils.toHiveString((from.get(ordinal), dataTypes(ordinal)))
         to += hiveString
     }
