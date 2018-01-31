@@ -74,7 +74,7 @@ def wrap_udf(f, return_type):
         return lambda *a: f(*a)
 
 
-def wrap_pandas_scalar_udf(f, return_type):
+def wrap_scalar_pandas_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
     def verify_result_length(*a):
@@ -90,7 +90,7 @@ def wrap_pandas_scalar_udf(f, return_type):
     return lambda *a: (verify_result_length(*a), arrow_return_type)
 
 
-def wrap_pandas_group_map_udf(f, return_type):
+def wrap_grouped_map_pandas_udf(f, return_type):
     def wrapped(*series):
         import pandas as pd
 
@@ -122,10 +122,10 @@ def read_single_udf(pickleSer, infile, eval_type):
             row_func = chain(row_func, f)
 
     # the last returnType will be the return type of UDF
-    if eval_type == PythonEvalType.SQL_PANDAS_SCALAR_UDF:
-        return arg_offsets, wrap_pandas_scalar_udf(row_func, return_type)
-    elif eval_type == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
-        return arg_offsets, wrap_pandas_group_map_udf(row_func, return_type)
+    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
+        return arg_offsets, wrap_scalar_pandas_udf(row_func, return_type)
+    elif eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+        return arg_offsets, wrap_grouped_map_pandas_udf(row_func, return_type)
     else:
         return arg_offsets, wrap_udf(row_func, return_type)
 
@@ -148,8 +148,8 @@ def read_udfs(pickleSer, infile, eval_type):
 
     func = lambda _, it: map(mapper, it)
 
-    if eval_type == PythonEvalType.SQL_PANDAS_SCALAR_UDF \
-       or eval_type == PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
+    if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
+                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF):
         timezone = utf8_deserializer.loads(infile)
         ser = ArrowStreamPandasSerializer(timezone)
     else:
