@@ -168,6 +168,21 @@ class ReplaceOperatorSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("replace Except with Filter when only right filter can be applied to the left") {
+    val table = LocalRelation(Seq('a.int, 'b.int))
+    val left = table.where('b < 1).select('a).as("left")
+    val right = table.where('b < 3).select('a).as("right")
+
+    val query = Except(left, right)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Aggregate(left.output, right.output,
+        Join(left, right, LeftAnti, Option($"left.a" <=> $"right.a"))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("replace Distinct with Aggregate") {
     val input = LocalRelation('a.int, 'b.int)
 
