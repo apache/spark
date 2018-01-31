@@ -162,7 +162,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
       val allEvents = ForeachSinkSuite.allEvents()
       assert(allEvents.size === 1)
       assert(allEvents(0)(0) === ForeachSinkSuite.Open(partition = 0, version = 0))
-      assert(allEvents(0)(1) === ForeachSinkSuite.Process(value = 2))
+      assert(allEvents(0)(1) === ForeachSinkSuite.Process(value = 1))
 
       // `close` should be called with the error
       val errorEvent = allEvents(0)(2).asInstanceOf[ForeachSinkSuite.Close]

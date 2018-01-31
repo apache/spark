@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, Statistics}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.sources.v2.reader.{DataReader, ReadTask}
+import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory}
 import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -127,7 +127,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     if (endOffset.offset == -1) null else endOffset
   }
 
-  override def createReadTasks(): ju.List[ReadTask[Row]] = synchronized {
+  override def createDataReaderFactories(): ju.List[DataReaderFactory[Row]] = synchronized {
     // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
     val startOrdinal = startOffset.offset.toInt + 1
     val endOrdinal = endOffset.offset.toInt + 1
@@ -143,8 +143,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     logDebug(generateDebugString(newBlocks, startOrdinal, endOrdinal))
 
     newBlocks.map { ds =>
-      val items = ds.toDF().collect()
-      new MemoryStreamReadTask(items).asInstanceOf[ReadTask[Row]]
+      new MemoryStreamDataReaderFactory(ds.toDF().collect()).asInstanceOf[DataReaderFactory[Row]]
     }.asJava
   }
 
@@ -193,22 +192,23 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 }
 
-class MemoryStreamReadTask(records: Array[Row]) extends ReadTask[Row] {
-  override def createDataReader(): DataReader[Row] = new MemoryStreamDataReader(records)
-}
 
-class MemoryStreamDataReader(records: Array[Row]) extends DataReader[Row] {
-  private var currentIndex = -1
+class MemoryStreamDataReaderFactory(records: Array[Row]) extends DataReaderFactory[Row] {
+  override def createDataReader(): DataReader[Row] = {
+    new DataReader[Row] {
+      private var currentIndex = -1
 
-  override def next(): Boolean = {
-    // Return true as long as the new index is in the array.
-    currentIndex += 1
-    currentIndex < records.length
+      override def next(): Boolean = {
+        // Return true as long as the new index is in the array.
+        currentIndex += 1
+        currentIndex < records.length
+      }
+
+      override def get(): Row = records(currentIndex)
+
+      override def close(): Unit = {}
+    }
   }
-
-  override def get(): Row = records(currentIndex)
-
-  override def close(): Unit = {}
 }
 
 /**

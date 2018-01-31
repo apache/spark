@@ -22,24 +22,24 @@ import scala.collection.JavaConverters._
 import org.apache.spark.SparkFunSuite
 
 /**
- * A simple test suite to verify `DataSourceV2Options`.
+ * A simple test suite to verify `DataSourceOptions`.
  */
-class DataSourceV2OptionsSuite extends SparkFunSuite {
+class DataSourceOptionsSuite extends SparkFunSuite {
 
   test("key is case-insensitive") {
-    val options = new DataSourceV2Options(Map("foo" -> "bar").asJava)
+    val options = new DataSourceOptions(Map("foo" -> "bar").asJava)
     assert(options.get("foo").get() == "bar")
     assert(options.get("FoO").get() == "bar")
     assert(!options.get("abc").isPresent)
   }
 
   test("value is case-sensitive") {
-    val options = new DataSourceV2Options(Map("foo" -> "bAr").asJava)
+    val options = new DataSourceOptions(Map("foo" -> "bAr").asJava)
     assert(options.get("foo").get == "bAr")
   }
 
   test("getInt") {
-    val options = new DataSourceV2Options(Map("numFOo" -> "1", "foo" -> "bar").asJava)
+    val options = new DataSourceOptions(Map("numFOo" -> "1", "foo" -> "bar").asJava)
     assert(options.getInt("numFOO", 10) == 1)
     assert(options.getInt("numFOO2", 10) == 10)
 
@@ -49,7 +49,7 @@ class DataSourceV2OptionsSuite extends SparkFunSuite {
   }
 
   test("getBoolean") {
-    val options = new DataSourceV2Options(
+    val options = new DataSourceOptions(
       Map("isFoo" -> "true", "isFOO2" -> "false", "foo" -> "bar").asJava)
     assert(options.getBoolean("isFoo", false))
     assert(!options.getBoolean("isFoo2", true))
@@ -59,7 +59,7 @@ class DataSourceV2OptionsSuite extends SparkFunSuite {
   }
 
   test("getLong") {
-    val options = new DataSourceV2Options(Map("numFoo" -> "9223372036854775807",
+    val options = new DataSourceOptions(Map("numFoo" -> "9223372036854775807",
       "foo" -> "bar").asJava)
     assert(options.getLong("numFOO", 0L) == 9223372036854775807L)
     assert(options.getLong("numFoo2", -1L) == -1L)
@@ -70,7 +70,7 @@ class DataSourceV2OptionsSuite extends SparkFunSuite {
   }
 
   test("getDouble") {
-    val options = new DataSourceV2Options(Map("numFoo" -> "922337.1",
+    val options = new DataSourceOptions(Map("numFoo" -> "922337.1",
       "foo" -> "bar").asJava)
     assert(options.getDouble("numFOO", 0d) == 922337.1d)
     assert(options.getDouble("numFoo2", -1.02d) == -1.02d)

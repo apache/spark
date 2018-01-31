@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.{ContinuousExecution, ContinuousTrigger}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.streaming.{ContinuousWriteSupport, MicroBatchWriteSupport}
+import org.apache.spark.sql.sources.v2.streaming.StreamWriteSupport
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -241,7 +241,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
     }
 
     (sink, trigger) match {
-      case (v2Sink: ContinuousWriteSupport, trigger: ContinuousTrigger) =>
+      case (v2Sink: StreamWriteSupport, trigger: ContinuousTrigger) =>
         UnsupportedOperationChecker.checkForContinuous(analyzedPlan, outputMode)
         new StreamingQueryWrapper(new ContinuousExecution(
           sparkSession,
@@ -254,7 +254,7 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           outputMode,
           extraOptions,
           deleteCheckpointOnStop))
-      case (_: MicroBatchWriteSupport, _) | (_: Sink, _) =>
+      case _ =>
         new StreamingQueryWrapper(new MicroBatchExecution(
           sparkSession,
           userSpecifiedName.orNull,
@@ -266,9 +266,6 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Lo
           outputMode,
           extraOptions,
           deleteCheckpointOnStop))
-      case (_: ContinuousWriteSupport, t) if !t.isInstanceOf[ContinuousTrigger] =>
-        throw new AnalysisException(
-          "Sink only supports continuous writes, but a continuous trigger was not specified.")
     }
   }
 

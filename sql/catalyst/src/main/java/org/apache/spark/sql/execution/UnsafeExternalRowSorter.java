@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution;
 import java.io.IOException;
 import java.util.function.Supplier;
 
-import org.apache.spark.sql.catalyst.util.TypeUtils;
 import scala.collection.AbstractIterator;
 import scala.collection.Iterator;
 import scala.math.Ordering;

@@ -160,7 +160,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           }
 
           val evaluation = validUdfs.partition(
-            _.evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF
+            _.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
           ) match {
             case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
               ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)

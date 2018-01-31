@@ -33,7 +33,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.v2.reader.ReadTask
+import org.apache.spark.sql.sources.v2.reader.DataReaderFactory
 import org.apache.spark.sql.sources.v2.streaming.reader.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
@@ -223,13 +223,13 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         if (currentOffset.offset != -1) {  // no data available
           clock.waitTillTime(1150)
         }
-        super.getEndOffset
+        super.getEndOffset()
       }
 
       // getBatch should take 100 ms the first time it is called
-      override def createReadTasks(): ju.List[ReadTask[Row]] = synchronized {
+      override def createDataReaderFactories(): ju.List[DataReaderFactory[Row]] = synchronized {
         clock.waitTillTime(1350)
-        super.createReadTasks()
+        super.createDataReaderFactories()
       }
     }
 
