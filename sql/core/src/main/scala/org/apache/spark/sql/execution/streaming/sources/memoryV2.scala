@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Append, Complete, Update}
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2}
-import org.apache.spark.sql.sources.v2.writer.{StreamWriteSupport, _}
+import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
