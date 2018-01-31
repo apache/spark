@@ -135,9 +135,7 @@ public final class ColumnarArray extends ArrayData {
 
   @Override
   public CalendarInterval getInterval(int ordinal) {
-    int month = data.getChild(0).getInt(offset + ordinal);
-    long microseconds = data.getChild(1).getLong(offset + ordinal);
-    return new CalendarInterval(month, microseconds);
+    return data.getInterval(offset + ordinal);
   }
 
   @Override

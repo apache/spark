@@ -139,9 +139,7 @@ public final class ColumnarRow extends InternalRow {
   @Override
   public CalendarInterval getInterval(int ordinal) {
     if (data.getChild(ordinal).isNullAt(rowId)) return null;
-    final int months = data.getChild(ordinal).getChild(0).getInt(rowId);
-    final long microseconds = data.getChild(ordinal).getChild(1).getLong(rowId);
-    return new CalendarInterval(months, microseconds);
+    return data.getChild(ordinal).getInterval(rowId);
   }
 
   @Override
