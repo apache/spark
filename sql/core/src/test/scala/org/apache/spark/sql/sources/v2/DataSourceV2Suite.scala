@@ -35,10 +35,6 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  override def sparkConf: SparkConf = {
-    super.sparkConf.set("spark.default.parallelism", "2")
-  }
-
   test("simplest implementation") {
     Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
       withClue(cls.getName) {
@@ -208,13 +204,14 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         val path = file.getCanonicalPath
         assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
 
-        spark.range(10).select('id, -'id).write.format(cls.getName)
+        val numPartition = 6
+        spark.range(0, 10, 1, numPartition).select('id, -'id).write.format(cls.getName)
           .option("path", path).save()
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(10).select('id, -'id))
 
-        assert(SimpleCounter.getCounter == 2,
+        assert(SimpleCounter.getCounter == numPartition,
           "method onDataWriterCommit should be called as many as the number of partitions")
       }
     }
