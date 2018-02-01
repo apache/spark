@@ -39,7 +39,7 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] with PredicateHel
     // TODO: Ideally column pruning should be implemented via a plan property that is propagated
     // top-down, then we can simplify the logic here and only collect target operators.
     val filterPushed = plan transformUp {
-      case FilterAndProject(fields, condition, r @ DataSourceV2Relation(_, reader)) =>
+      case FilterAndProject(fields, condition, r @ DataSourceV2Relation(_, _, reader)) =>
         val (candidates, nonDeterministic) =
           splitConjunctivePredicates(condition).partition(_.deterministic)
 
