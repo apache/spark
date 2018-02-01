@@ -64,6 +64,10 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
   }
 
   test("commit shuffle files multiple times") {
+    val shuffleId = 1
+    val mapId = 2
+    val idxName = s"shuffle_${shuffleId}_${mapId}_0.index"
+
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
     val lengths = Array[Long](10, 0, 20)
     val dataTmp = File.createTempFile("shuffle", null, tempDir)
@@ -73,9 +77,16 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out.close()
     }
-    resolver.writeIndexFileAndCommit(1, 2, lengths, dataTmp)
+    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
 
     val dataFile = resolver.getDataFile(1, 2)
+    val indexFile = new File(tempDir.getAbsolutePath, idxName)
+
+    val idxFile1Len = indexFile.length()
+
+    assert(indexFile.exists())
+    assert(idxFile1Len === (lengths.length + 1) * 8)
+
     assert(dataFile.exists())
     assert(dataFile.length() === 30)
     assert(!dataTmp.exists())
@@ -89,7 +100,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out2.close()
     }
-    resolver.writeIndexFileAndCommit(1, 2, lengths2, dataTmp2)
+    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths2, dataTmp2)
     assert(lengths2.toSeq === lengths.toSeq)
     assert(dataFile.exists())
     assert(dataFile.length() === 30)
@@ -97,101 +108,60 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
 
     // The dataFile should be the previous one
     val firstByte = new Array[Byte](1)
-    val in = new FileInputStream(dataFile)
+    val dataIn = new FileInputStream(dataFile)
     Utils.tryWithSafeFinally {
-      in.read(firstByte)
+      dataIn.read(firstByte)
     } {
-      in.close()
+      dataIn.close()
     }
     assert(firstByte(0) === 0)
+
+    // The index file should not change
+    val secondBytes = new Array[Byte](8)
+    val indexIn = new FileInputStream(indexFile)
+    Utils.tryWithSafeFinally {
+      indexIn.read(secondBytes)
+      indexIn.read(secondBytes)
+    } {
+      indexIn.close()
+    }
+    assert(secondBytes(7) === 10, "The index file should not change")
 
     // remove data file
     dataFile.delete()
 
-    val lengths3 = Array[Long](10, 10, 15)
+    val lengths3 = Array[Long](7, 10, 15)
     val dataTmp3 = File.createTempFile("shuffle", null, tempDir)
     val out3 = new FileOutputStream(dataTmp3)
     Utils.tryWithSafeFinally {
       out3.write(Array[Byte](2))
-      out3.write(new Array[Byte](34))
+      out3.write(new Array[Byte](31))
     } {
       out3.close()
     }
-    resolver.writeIndexFileAndCommit(1, 2, lengths3, dataTmp3)
+    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths3, dataTmp3)
     assert(lengths3.toSeq != lengths.toSeq)
     assert(dataFile.exists())
-    assert(dataFile.length() === 35)
-    assert(!dataTmp2.exists())
+    assert(dataFile.length() === 32)
+    assert(!dataTmp3.exists())
 
     // The dataFile should be the new one, since we deleted the dataFile from the first attempt
-    val firstByte2 = new Array[Byte](1)
-    val in2 = new FileInputStream(dataFile)
+    val dataIn2 = new FileInputStream(dataFile)
     Utils.tryWithSafeFinally {
-      in2.read(firstByte2)
+      dataIn2.read(firstByte)
     } {
-      in2.close()
+      dataIn2.close()
     }
-    assert(firstByte2(0) === 2)
-  }
+    assert(firstByte(0) === 2)
 
-  test("SPARK-23253: index files should be created properly") {
-    val shuffleId = 1
-    val mapId = 2
-    val idxName = s"shuffle_${shuffleId}_${mapId}_0.index"
-    val resolver = new IndexShuffleBlockResolver(conf, blockManager)
-
-    val lengths = (1 to 2).map(_ => 8L).toArray
-    val dataTmp = File.createTempFile("shuffle", null, tempDir)
-    val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(dataTmp)))
+    // The index file should be updated, since we deleted the dataFile from the first attempt
+    val indexIn2 = new FileInputStream(indexFile)
     Utils.tryWithSafeFinally {
-      lengths.foreach(out.writeLong)
+      indexIn2.read(secondBytes)
+      indexIn2.read(secondBytes)
     } {
-      out.close()
+      indexIn2.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
-
-    val indexFile = new File(tempDir.getAbsolutePath, idxName)
-    val dataFile = resolver.getDataFile(shuffleId, mapId)
-    val idxFile1Len = indexFile.length()
-
-    assert(indexFile.exists())
-    assert(idxFile1Len === (lengths.length + 1) * 8)
-    assert(dataFile.exists())
-    assert(dataFile.length() === 8 * lengths.length)
-    assert(!dataTmp.exists())
-
-    // delete dataFile, index file will be replaced.
-    dataFile.delete()
-    assert(!dataFile.exists())
-
-    val lengths2 = (1 to 4).map(_ => 8L).toArray
-    val dataTmp2 = File.createTempFile("shuffle", null, tempDir)
-    val out2 = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(dataTmp2)))
-    Utils.tryWithSafeFinally {
-      lengths2.foreach(out2.writeLong)
-    } {
-      out2.close()
-    }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths2, dataTmp2)
-    val idxFile2Len = indexFile.length()
-
-    assert(indexFile.exists())
-    assert(indexFile.length() === (lengths2.length + 1) * 8)
-    assert(idxFile1Len !== idxFile2Len, "index file should be updated.")
-
-    // all files are present and will be reused
-    val lengths3 = (1 to 6).map(_ => 8L).toArray
-    val dataTmp3 = File.createTempFile("shuffle", null, tempDir)
-    val out3 = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(dataTmp3)))
-    Utils.tryWithSafeFinally {
-      lengths3.foreach(out3.writeLong)
-    } {
-      out3.close()
-    }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths2, dataTmp2)
-    val idxFile3Len = indexFile.length()
-
-    assert(indexFile.exists())
-    assert(idxFile2Len === idxFile3Len, "index file should not change.")
+    assert(secondBytes(7) === 7, "The index file should be updated")
   }
 }
