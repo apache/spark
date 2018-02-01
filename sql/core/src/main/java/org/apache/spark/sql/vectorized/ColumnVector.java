@@ -17,7 +17,6 @@
 package org.apache.spark.sql.vectorized;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.CalendarInterval;
