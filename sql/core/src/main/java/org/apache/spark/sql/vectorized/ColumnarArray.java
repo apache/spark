@@ -149,8 +149,8 @@ public final class ColumnarArray extends ArrayData {
   }
 
   @Override
-  public MapData getMap(int ordinal) {
-    throw new UnsupportedOperationException();
+  public ColumnarMap getMap(int ordinal) {
+    return data.getMap(offset + ordinal);
   }
 
   @Override

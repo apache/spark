@@ -120,6 +120,11 @@ public final class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
+  public ColumnarMap getMap(int rowId) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public ArrowColumnVector getChild(int ordinal) { return childColumns[ordinal]; }
 
   public ArrowColumnVector(ValueVector vector) {
