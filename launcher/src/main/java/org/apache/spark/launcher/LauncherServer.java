@@ -360,12 +360,12 @@ class LauncherServer implements Closeable {
     }
 
     /**
-     * Close the connection and wait for any buffered data to be processed before returning.
+     * Wait for the remote side to close the connection so that any pending data is processed.
      * This ensures any changes reported by the child application take effect.
      *
-     * This method allows a short period for the connection thread to finish by itself (same amount
-     * of time as the connection timeout, which is configurable). This should be fine for
-     * well-behaved applications, where they close the connection when the app handle detects the
+     * This method allows a short period for the above to happen (same amount of time as the
+     * connection timeout, which is configurable). This should be fine for well-behaved
+     * applications, where they close the connection arond the same time the app handle detects the
      * app has finished.
      *
      * In case the connection is not closed within the grace period, this method forcefully closes
