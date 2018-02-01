@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, Expression, NamedExpression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSet, Expression, NamedExpression, PredicateHelper}
 import org.apache.spark.sql.catalyst.optimizer.RemoveRedundantProject
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -39,10 +39,11 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] with PredicateHel
     // TODO: Ideally column pruning should be implemented via a plan property that is propagated
     // top-down, then we can simplify the logic here and only collect target operators.
     val filterPushed = plan transformUp {
-      case FilterAndProject(fields, condition, r @ DataSourceV2Relation(_, reader)) =>
+      case FilterAndProject(fields, condition, relation: DataSourceV2Relation) =>
         val (candidates, nonDeterministic) =
           splitConjunctivePredicates(condition).partition(_.deterministic)
 
+        val reader = relation.reader
         val stayUpFilters: Seq[Expression] = reader match {
           case r: SupportsPushDownCatalystFilters =>
             r.pushCatalystFilters(candidates.toArray)
@@ -70,8 +71,11 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] with PredicateHel
           case _ => candidates
         }
 
+        val newRelation = relation.copy(
+          filters = candidates.toSet -- stayUpFilters,
+          existingReader = Some(reader))
         val filterCondition = (stayUpFilters ++ nonDeterministic).reduceLeftOption(And)
-        val withFilter = filterCondition.map(Filter(_, r)).getOrElse(r)
+        val withFilter = filterCondition.map(Filter(_, newRelation)).getOrElse(newRelation)
         if (withFilter.output == fields) {
           withFilter
         } else {
@@ -81,35 +85,45 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] with PredicateHel
 
     // TODO: add more push down rules.
 
-    // TODO: nested fields pruning
-    def pushDownRequiredColumns(plan: LogicalPlan, requiredByParent: Seq[Attribute]): Unit = {
-      plan match {
-        case Project(projectList, child) =>
-          val required = projectList.filter(requiredByParent.contains).flatMap(_.references)
-          pushDownRequiredColumns(child, required)
+    val columnPruned = pushDownRequiredColumns(filterPushed, filterPushed.outputSet)
+    // After column pruning, we may have redundant PROJECT nodes in the query plan, remove them.
+    RemoveRedundantProject(columnPruned)
+  }
 
-        case Filter(condition, child) =>
-          val required = requiredByParent ++ condition.references
-          pushDownRequiredColumns(child, required)
+  // TODO: nested fields pruning
+  private def pushDownRequiredColumns(
+      plan: LogicalPlan, requiredByParent: AttributeSet): LogicalPlan = plan match {
+    case p @ Project(projectList, child) =>
+      val required = projectList.flatMap(_.references)
+      p.copy(child = pushDownRequiredColumns(child, AttributeSet(required)))
 
-        case DataSourceV2Relation(fullOutput, reader) => reader match {
-          case r: SupportsPushDownRequiredColumns =>
-            // Match original case of attributes.
-            val attrMap = AttributeMap(fullOutput.zip(fullOutput))
-            val requiredColumns = requiredByParent.map(attrMap)
-            r.pruneColumns(requiredColumns.toStructType)
-          case _ =>
+    case f @ Filter(condition, child) =>
+      val required = requiredByParent ++ condition.references
+      f.copy(child = pushDownRequiredColumns(child, required))
+
+    case relation: DataSourceV2Relation => relation.reader match {
+      case reader: SupportsPushDownRequiredColumns =>
+        if (requiredByParent == relation.outputSet) {
+          relation
+        } else {
+          assert(relation.output.toStructType == reader.readSchema(),
+            "Schema of data source reader does not match the relation plan.")
+
+          // Match original case of attributes.
+          val requiredColumns = relation.output.filter(requiredByParent.contains)
+          reader.pruneColumns(requiredColumns.toStructType)
+
+          val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
+          val newOutput = reader.readSchema().map(_.name).map(nameToAttr)
+          relation.copy(output = newOutput, existingReader = Some(reader))
         }
 
-        // TODO: there may be more operators can be used to calculate required columns, we can add
-        // more and more in the future.
-        case _ => plan.children.foreach(child => pushDownRequiredColumns(child, child.output))
-      }
+      case _ => relation
     }
 
-    pushDownRequiredColumns(filterPushed, filterPushed.output)
-    // After column pruning, we may have redundant PROJECT nodes in the query plan, remove them.
-    RemoveRedundantProject(filterPushed)
+    // TODO: there may be more operators can be used to calculate required columns, we can add
+    // more and more in the future.
+    case other => other.mapChildren(c => pushDownRequiredColumns(c, c.outputSet))
   }
 
   /**

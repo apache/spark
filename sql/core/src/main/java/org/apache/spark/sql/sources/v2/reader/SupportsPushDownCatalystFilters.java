@@ -37,12 +37,4 @@ public interface SupportsPushDownCatalystFilters extends DataSourceReader {
    * Pushes down filters, and returns unsupported filters.
    */
   Expression[] pushCatalystFilters(Expression[] filters);
-
-  /**
-   * Returns the catalyst filters that are pushed in {@link #pushCatalystFilters(Expression[])}.
-   * It's possible that there is no filters in the query and
-   * {@link #pushCatalystFilters(Expression[])} is never called, empty array should be returned for
-   * this case.
-   */
-  Expression[] pushedCatalystFilters();
 }
