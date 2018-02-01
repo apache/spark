@@ -155,8 +155,9 @@ public final class ColumnarRow extends InternalRow {
   }
 
   @Override
-  public MapData getMap(int ordinal) {
-    throw new UnsupportedOperationException();
+  public ColumnarMap getMap(int ordinal) {
+    if (data.getChild(ordinal).isNullAt(rowId)) return null;
+    return data.getChild(ordinal).getMap(rowId);
   }
 
   @Override

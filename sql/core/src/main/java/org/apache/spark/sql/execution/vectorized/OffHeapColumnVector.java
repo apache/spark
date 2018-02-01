@@ -60,7 +60,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   private long nulls;
   private long data;
 
-  // Set iff the type is array.
+  // Only set if type is Array or Map.
   private long lengthData;
   private long offsetData;
 
@@ -530,7 +530,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   protected void reserveInternal(int newCapacity) {
     int oldCapacity = (nulls == 0L) ? 0 : capacity;
-    if (isArray()) {
+    if (isArray() || type instanceof MapType) {
       this.lengthData =
           Platform.reallocateMemory(lengthData, oldCapacity * 4, newCapacity * 4);
       this.offsetData =
