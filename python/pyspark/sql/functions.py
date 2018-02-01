@@ -814,10 +814,6 @@ def unboundedPreceding():
     """
     Window function: returns the special frame boundary that represents the first row
     in the window partition.
-
-    >>> df = spark.createDataFrame([(5,)])
-    >>> df.select(unboundedPreceding()).columns[0]
-    'UNBOUNDED PRECEDING'
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.unboundedPreceding())
@@ -828,10 +824,6 @@ def unboundedFollowing():
     """
     Window function: returns the special frame boundary that represents the last row
     in the window partition.
-
-    >>> df = spark.createDataFrame([(5,)])
-    >>> df.select(unboundedFollowing()).columns[0]
-    'UNBOUNDED FOLLOWING'
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.unboundedFollowing())
@@ -842,10 +834,6 @@ def currentRow():
     """
     Window function: returns the special frame boundary that represents the current row
     in the window partition.
-
-    >>> df = spark.createDataFrame([(5,)])
-    >>> df.select(currentRow()).columns[0]
-    'CURRENT ROW'
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.currentRow())

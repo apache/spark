@@ -122,22 +122,25 @@ class Window(object):
         and "5" means the five off after the current row.
 
         We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
-        and ``Window.currentRow`` to specify special boundary values, rather than using integral
-        values directly.
+        ``Window.currentRow``, ``pyspark.sql.functions.unboundedPreceding``,
+        ``pyspark.sql.functions.unboundedFollowing`` and ``pyspark.sql.functions.currentRow``
+        to specify special boundary values, rather than using integral values directly.
 
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
+                      The frame is unbounded if this is ``Window.unboundedPreceding``,
+                      a column returned by ``pyspark.sql.functions.unboundedPreceding``, or
                       any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
+                    The frame is unbounded if this is ``Window.unboundedFollowing``,
+                    a column returned by ``pyspark.sql.functions.unboundedFollowing``, or
                     any value greater than or equal to min(sys.maxsize, 9223372036854775807).
 
         >>> from pyspark.sql import functions as F, SparkSession, Window
         >>> spark = SparkSession.builder.getOrCreate()
-        >>> df = spark.createDataFrame([(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"),
-        ... (3, "b")], ["id", "category"])
-        >>> window = Window.orderBy("id").partitionBy("category").rangeBetween(F.currentRow(),
-        ... F.lit(1))
+        >>> df = spark.createDataFrame(
+        ...     [(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b")], ["id", "category"])
+        >>> window = Window.orderBy("id").partitionBy("category").rangeBetween(
+        ...     F.currentRow(), F.lit(1))
         >>> df.withColumn("sum", F.sum("id").over(window)).show()
         +---+--------+---+
         | id|category|sum|
@@ -233,16 +236,18 @@ class WindowSpec(object):
         and "5" means the five off after the current row.
 
         We recommend users use ``Window.unboundedPreceding``, ``Window.unboundedFollowing``,
-        and ``Window.currentRow`` to specify special boundary values, rather than using integral
-        values directly.
+        ``Window.currentRow``, ``pyspark.sql.functions.unboundedPreceding``,
+        ``pyspark.sql.functions.unboundedFollowing`` and ``pyspark.sql.functions.currentRow``
+        to specify special boundary values, rather than using integral values directly.
 
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
+                      The frame is unbounded if this is ``Window.unboundedPreceding``,
+                      a column returned by ``pyspark.sql.functions.unboundedPreceding``, or
                       any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
+                    The frame is unbounded if this is ``Window.unboundedFollowing``,
+                    a column returned by ``pyspark.sql.functions.unboundedFollowing``, or
                     any value greater than or equal to min(sys.maxsize, 9223372036854775807).
-
         """
         if isinstance(start, (int, long)) and isinstance(end, (int, long)):
             if start <= Window._PRECEDING_THRESHOLD:
