@@ -42,7 +42,7 @@ abstract class AbstractAppHandle implements SparkAppHandle {
   }
 
   @Override
-  public void addListener(Listener l) {
+  public synchronized void addListener(Listener l) {
     if (listeners == null) {
       listeners = new CopyOnWriteArrayList<>();
     }
@@ -95,6 +95,10 @@ abstract class AbstractAppHandle implements SparkAppHandle {
 
   /**
    * Mark the handle as disposed, and set it as LOST in case the current state is not final.
+   *
+   * This method should be called only when there's a reasonable expectation that the communication
+   * with the child application is not needed anymore, either because the code managing the handle
+   * has said so, or because the child application is finished.
    */
   synchronized void dispose() {
     if (!isDisposed()) {
