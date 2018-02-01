@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.sources.v2.reader._
 
 case class DataSourceV2Relation(
     fullOutput: Seq[AttributeReference],
-    reader: DataSourceReader) extends LeafNode with DataSourceReaderHolder {
+    reader: DataSourceReader)
+  extends LeafNode with MultiInstanceRelation with DataSourceReaderHolder {
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2Relation]
 
@@ -32,6 +34,10 @@ case class DataSourceV2Relation(
       Statistics(sizeInBytes = r.getStatistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
+  }
+
+  override def newInstance(): DataSourceV2Relation = {
+    copy(fullOutput = fullOutput.map(_.newInstance()))
   }
 }
 
