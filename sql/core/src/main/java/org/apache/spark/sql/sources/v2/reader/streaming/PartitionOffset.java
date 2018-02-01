@@ -15,22 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.streaming.reader;
+package org.apache.spark.sql.sources.v2.reader.streaming;
+
+import java.io.Serializable;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.DataReader;
 
 /**
- * A variation on {@link DataReader} for use with streaming in continuous processing mode.
+ * Used for per-partition offsets in continuous processing. ContinuousReader implementations will
+ * provide a method to merge these into a global Offset.
+ *
+ * These offsets must be serializable.
  */
 @InterfaceStability.Evolving
-public interface ContinuousDataReader<T> extends DataReader<T> {
-    /**
-     * Get the offset of the current record, or the start offset if no records have been read.
-     *
-     * The execution engine will call this method along with get() to keep track of the current
-     * offset. When an epoch ends, the offset of the previous record in each partition will be saved
-     * as a restart checkpoint.
-     */
-    PartitionOffset getOffset();
+public interface PartitionOffset extends Serializable {
 }
