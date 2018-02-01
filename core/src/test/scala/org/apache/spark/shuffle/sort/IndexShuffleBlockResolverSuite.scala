@@ -67,7 +67,6 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     val shuffleId = 1
     val mapId = 2
     val idxName = s"shuffle_${shuffleId}_${mapId}_0.index"
-
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
     val lengths = Array[Long](10, 0, 20)
     val dataTmp = File.createTempFile("shuffle", null, tempDir)
@@ -79,14 +78,11 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     }
     resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
 
-    val dataFile = resolver.getDataFile(1, 2)
     val indexFile = new File(tempDir.getAbsolutePath, idxName)
-
-    val idxFile1Len = indexFile.length()
+    val dataFile = resolver.getDataFile(shuffleId, mapId)
 
     assert(indexFile.exists())
-    assert(idxFile1Len === (lengths.length + 1) * 8)
-
+    assert(indexFile.length() === (lengths.length + 1) * 8)
     assert(dataFile.exists())
     assert(dataFile.length() === 30)
     assert(!dataTmp.exists())
@@ -101,6 +97,8 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
       out2.close()
     }
     resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths2, dataTmp2)
+
+    assert(indexFile.length() === (lengths.length + 1) * 8)
     assert(lengths2.toSeq === lengths.toSeq)
     assert(dataFile.exists())
     assert(dataFile.length() === 30)
@@ -130,19 +128,20 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     // remove data file
     dataFile.delete()
 
-    val lengths3 = Array[Long](7, 10, 15)
+    val lengths3 = Array[Long](7, 10, 15, 3)
     val dataTmp3 = File.createTempFile("shuffle", null, tempDir)
     val out3 = new FileOutputStream(dataTmp3)
     Utils.tryWithSafeFinally {
       out3.write(Array[Byte](2))
-      out3.write(new Array[Byte](31))
+      out3.write(new Array[Byte](34))
     } {
       out3.close()
     }
     resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths3, dataTmp3)
+    assert(indexFile.length() === (lengths3.length + 1) * 8)
     assert(lengths3.toSeq != lengths.toSeq)
     assert(dataFile.exists())
-    assert(dataFile.length() === 32)
+    assert(dataFile.length() === 35)
     assert(!dataTmp3.exists())
 
     // The dataFile should be the new one, since we deleted the dataFile from the first attempt
