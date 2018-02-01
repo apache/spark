@@ -38,6 +38,11 @@ public final class ArrowColumnVector extends ColumnVector {
   private ArrowColumnVector[] childColumns;
 
   @Override
+  public boolean hasNull() {
+    return accessor.getNullCount() > 0;
+  }
+
+  @Override
   public int numNulls() {
     return accessor.getNullCount();
   }
@@ -116,6 +121,11 @@ public final class ArrowColumnVector extends ColumnVector {
   public ColumnarArray getArray(int rowId) {
     if (isNullAt(rowId)) return null;
     return accessor.getArray(rowId);
+  }
+
+  @Override
+  public ColumnarMap getMap(int rowId) {
+    throw new UnsupportedOperationException();
   }
 
   @Override
