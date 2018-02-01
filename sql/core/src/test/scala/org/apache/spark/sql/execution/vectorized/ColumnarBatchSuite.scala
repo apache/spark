@@ -1214,4 +1214,116 @@ class ColumnarBatchSuite extends SparkFunSuite {
     batch.close()
     allocator.close()
   }
+
+  testVector("getUTF8String should return null for null slot", 4, StringType) {
+    column =>
+      assert(column.numNulls() == 0)
+
+      var idx = 0
+      column.putNull(idx)
+      assert(column.getUTF8String(idx) == null)
+      idx += 1
+      column.putNull(idx)
+      assert(column.getUTF8String(idx) == null)
+      assert(column.numNulls() == 2)
+
+      idx += 1
+      column.putByteArray(idx, "Hello".getBytes(StandardCharsets.UTF_8),
+        0, "Hello".getBytes(StandardCharsets.UTF_8).length)
+      assert(column.getUTF8String(idx) != null)
+  }
+
+  testVector("getInterval should return null for null slot", 4, CalendarIntervalType) {
+    column =>
+      assert(column.numNulls() == 0)
+
+      var idx = 0
+      column.putNull(idx)
+      assert(column.getInterval(idx) == null)
+      idx += 1
+      column.putNull(idx)
+      assert(column.getInterval(idx) == null)
+      assert(column.numNulls() == 2)
+
+      idx += 1
+      val months = column.getChild(0)
+      val microseconds = column.getChild(1)
+      months.putInt(idx, 1)
+      microseconds.putLong(idx, 100)
+      assert(column.getInterval(idx) != null)
+  }
+
+  testVector("getArray should return null for null slot", 4, new ArrayType(IntegerType, true)) {
+    column =>
+      assert(column.numNulls() == 0)
+
+      var idx = 0
+      column.putNull(idx)
+      assert(column.getArray(idx) == null)
+      idx += 1
+      column.putNull(idx)
+      assert(column.getArray(idx) == null)
+      assert(column.numNulls() == 2)
+
+      idx += 1
+      val data = column.arrayData()
+      data.putInt(0, 0)
+      data.putInt(1, 1)
+      column.putArray(idx, 0, 2)
+      assert(column.getArray(idx) != null)
+  }
+
+  testVector("getDecimal should return null for null slot", 4, DecimalType.IntDecimal) {
+    column =>
+      assert(column.numNulls() == 0)
+
+      var idx = 0
+      column.putNull(idx)
+      assert(column.getDecimal(idx, 10, 0) == null)
+      idx += 1
+      column.putNull(idx)
+      assert(column.getDecimal(idx, 10, 0) == null)
+      assert(column.numNulls() == 2)
+
+      idx += 1
+      column.putDecimal(idx, new Decimal().set(10), 10)
+      assert(column.getDecimal(idx, 10, 0) != null)
+  }
+
+  testVector("getStruct should return null for null slot", 4,
+    new StructType().add("int", IntegerType).add("double", DoubleType)) { column =>
+      assert(column.numNulls() == 0)
+
+      var idx = 0
+      column.putNull(idx)
+      assert(column.getStruct(idx) == null)
+      idx += 1
+      column.putNull(idx)
+      assert(column.getStruct(idx) == null)
+      assert(column.numNulls() == 2)
+
+      idx += 1
+      val c1 = column.getChild(0)
+      val c2 = column.getChild(1)
+      c1.putInt(0, 123)
+      c2.putDouble(0, 3.45)
+      assert(column.getStruct(idx) != null)
+  }
+
+  testVector("getBinary should return null for null slot", 4, BinaryType) {
+    column =>
+      assert(column.numNulls() == 0)
+
+      var idx = 0
+      column.putNull(idx)
+      assert(column.getBinary(idx) == null)
+      idx += 1
+      column.putNull(idx)
+      assert(column.getBinary(idx) == null)
+      assert(column.numNulls() == 2)
+
+      idx += 1
+      column.putByteArray(idx, "Hello".getBytes(StandardCharsets.UTF_8))
+      assert(column.getBinary(idx) != null)
+  }
 }
