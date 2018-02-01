@@ -74,7 +74,7 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with
    * @group param
    */
   @Since("2.3.0")
-  final override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
     "How to handle invalid data (unseen or NULL values) in features and label column of string " +
     "type. Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
