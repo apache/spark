@@ -655,4 +655,35 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
       }
     }
   }
+
+  testQuietly("Enabling/disabling ignoreMissingFiles") {
+    def testIgnoreMissingFiles(): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        spark.range(1).toDF("a").write.orc(new Path(basePath, "first").toString)
+        spark.range(1, 2).toDF("a").write.orc(new Path(basePath, "second").toString)
+        val thirdPath = new Path(basePath, "third")
+        spark.range(2, 3).toDF("a").write.orc(thirdPath.toString)
+        val df = spark.read.orc(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString,
+          new Path(basePath, "third").toString)
+
+        val fs = thirdPath.getFileSystem(spark.sparkContext.hadoopConfiguration)
+        fs.delete(thirdPath, true)
+        checkAnswer(df, Seq(Row(0), Row(1)))
+      }
+    }
+
+    withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "true") {
+      testIgnoreMissingFiles()
+    }
+
+    withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> "false") {
+      val exception = intercept[SparkException] {
+        testIgnoreMissingFiles()
+      }
+      assert(exception.getMessage().contains("does not exist"))
+    }
+  }
 }
