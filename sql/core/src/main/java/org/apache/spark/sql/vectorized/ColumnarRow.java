@@ -150,7 +150,6 @@ public final class ColumnarRow extends InternalRow {
 
   @Override
   public ColumnarMap getMap(int ordinal) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getMap(rowId);
   }
 

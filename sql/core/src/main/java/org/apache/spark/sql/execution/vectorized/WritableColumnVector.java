@@ -624,6 +624,7 @@ public abstract class WritableColumnVector extends ColumnVector {
   // second child column vector, and puts the offsets and lengths in the current column vector.
   @Override
   public final ColumnarMap getMap(int rowId) {
+    if (isNullAt(rowId)) return null;
     return new ColumnarMap(getChild(0), getChild(1), getArrayOffset(rowId), getArrayLength(rowId));
   }
 

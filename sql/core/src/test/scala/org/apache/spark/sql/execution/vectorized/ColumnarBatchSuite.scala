@@ -1373,4 +1373,28 @@ class ColumnarBatchSuite extends SparkFunSuite {
       column.putByteArray(idx, "Hello".getBytes(StandardCharsets.UTF_8))
       assert(column.getBinary(idx) != null)
   }
+
+  testVector("getMap should return null for null slot", 4,
+    new MapType(IntegerType, IntegerType, false)) { column =>
+      assert(column.numNulls() == 0)
+
+      var idx = 0
+      column.putNull(idx)
+      assert(column.getBinary(idx) == null)
+      idx += 1
+      column.putNull(idx)
+      assert(column.getBinary(idx) == null)
+      assert(column.numNulls() == 2)
+
+      idx += 1
+      val keyCol = column.getChild(0)
+      keyCol.putInt(0, 0)
+      keyCol.putInt(1, 1)
+      val valueCol = column.getChild(1)
+      valueCol.putInt(0, 0)
+      valueCol.putInt(1, 2)
+
+      column.putArray(idx, 0, 2)
+      assert(column.getMap(idx) != null)
+  }
 }
