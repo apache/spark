@@ -220,10 +220,18 @@ public abstract class ColumnVector implements AutoCloseable {
 
   /**
    * Returns the map type value for rowId.
+   *
+   * In Spark, map type value is basically a key data array and a value data array. A key from the
+   * key array with a index and a value from the value array with the same index contribute to
+   * an entry of this map type value.
+   *
+   * To support map type, implementations must construct an {@link ColumnarMap} and return it in
+   * this method. {@link ColumnarMap} requires a {@link ColumnVector} that stores the data of all
+   * the keys of all the maps in this vector, and another {@link ColumnVector} that stores the data
+   * of all the values of all the maps in this vector, and a pair of offset and length which
+   * specify the range of the key/value array that belongs to the map type value at rowId.
    */
-  public MapData getMap(int ordinal) {
-    throw new UnsupportedOperationException();
-  }
+  public abstract ColumnarMap getMap(int ordinal);
 
   /**
    * Returns the decimal type value for rowId.
