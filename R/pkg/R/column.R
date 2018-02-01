@@ -169,7 +169,7 @@ setMethod("alias",
 #' @note substr since 1.4.0
 setMethod("substr", signature(x = "Column"),
           function(x, start, stop) {
-            jc <- callJMethod(x@jc, "substr", as.integer(start - 1), as.integer(stop - start + 1))
+            jc <- callJMethod(x@jc, "substr", as.integer(start), as.integer(stop - start + 1))
             column(jc)
           })
 
