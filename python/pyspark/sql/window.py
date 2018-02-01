@@ -20,7 +20,7 @@ if sys.version >= '3':
     long = int
 
 from pyspark import since, SparkContext
-from pyspark.sql.column import _to_seq, _to_java_column
+from pyspark.sql.column import Column, _to_seq, _to_java_column
 
 __all__ = ["Window", "WindowSpec"]
 
@@ -126,20 +126,39 @@ class Window(object):
         values directly.
 
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``,
-                      ``org.apache.spark.sql.catalyst.expressions.UnboundedPreceding``, or
+                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
                       any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``,
-                    ``org.apache.spark.sql.catalyst.expressions.UnboundedFollowing``, or
+                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
                     any value greater than or equal to min(sys.maxsize, 9223372036854775807).
-                    any value greater than or equal to 9223372036854775807.
+
+        >>> from pyspark.sql import functions as F, SparkSession, Window
+        >>> spark = SparkSession.builder.getOrCreate()
+        >>> df = spark.createDataFrame([(1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"),
+        ... (3, "b")], ["id", "category"])
+        >>> window = Window.orderBy("id").partitionBy("category").rangeBetween(F.currentRow(),
+        ... F.lit(1))
+        >>> df.withColumn("sum", F.sum("id").over(window)).show()
+        +---+--------+---+
+        | id|category|sum|
+        +---+--------+---+
+        |  1|       b|  3|
+        |  2|       b|  5|
+        |  3|       b|  3|
+        |  1|       a|  4|
+        |  1|       a|  4|
+        |  2|       a|  2|
+        +---+--------+---+
+        <BLANKLINE>
         """
         if isinstance(start, (int, long)) and isinstance(end, (int, long)):
             if start <= Window._PRECEDING_THRESHOLD:
                 start = Window.unboundedPreceding
             if end >= Window._FOLLOWING_THRESHOLD:
                 end = Window.unboundedFollowing
+        elif isinstance(start, Column) and isinstance(end, Column):
+            start = start._jc
+            end = end._jc
         sc = SparkContext._active_spark_context
         jspec = sc._jvm.org.apache.spark.sql.expressions.Window.rangeBetween(start, end)
         return WindowSpec(jspec)
@@ -218,12 +237,10 @@ class WindowSpec(object):
         values directly.
 
         :param start: boundary start, inclusive.
-                      The frame is unbounded if this is ``Window.unboundedPreceding``,
-                      ``org.apache.spark.sql.catalyst.expressions.UnboundedPreceding``, or
+                      The frame is unbounded if this is ``Window.unboundedPreceding``, or
                       any value less than or equal to max(-sys.maxsize, -9223372036854775808).
         :param end: boundary end, inclusive.
-                    The frame is unbounded if this is ``Window.unboundedFollowing``,
-                    ``org.apache.spark.sql.catalyst.expressions.UnboundedFollowing``, or
+                    The frame is unbounded if this is ``Window.unboundedFollowing``, or
                     any value greater than or equal to min(sys.maxsize, 9223372036854775807).
 
         """
@@ -232,6 +249,9 @@ class WindowSpec(object):
                 start = Window.unboundedPreceding
             if end >= Window._FOLLOWING_THRESHOLD:
                 end = Window.unboundedFollowing
+        elif isinstance(start, Column) and isinstance(end, Column):
+            start = start._jc
+            end = end._jc
         return WindowSpec(self._jspec.rangeBetween(start, end))
 
 
