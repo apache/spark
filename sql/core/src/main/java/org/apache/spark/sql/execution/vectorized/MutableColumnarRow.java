@@ -157,7 +157,6 @@ public final class MutableColumnarRow extends InternalRow {
 
   @Override
   public ColumnarMap getMap(int ordinal) {
-    if (columns[ordinal].isNullAt(rowId)) return null;
     return columns[ordinal].getMap(rowId);
   }
 
