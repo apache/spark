@@ -4530,19 +4530,19 @@ class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(NotImplementedError, 'not supported'):
+            with self.assertRaisesRegexp(NotImplementedError, 'not supported'):
                 @pandas_udf(ArrayType(DoubleType()), PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return [v.mean(), v.std()]
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(NotImplementedError, 'not supported'):
+            with self.assertRaisesRegexp(NotImplementedError, 'not supported'):
                 @pandas_udf('mean double, std double', PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return v.mean(), v.std()
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegex(NotImplementedError, 'not supported'):
+            with self.assertRaisesRegexp(NotImplementedError, 'not supported'):
                 @pandas_udf(MapType(DoubleType(), DoubleType()), PandasUDFType.GROUPED_AGG)
                 def mean_and_std_udf(v):
                     return {v.mean(): v.std()}
