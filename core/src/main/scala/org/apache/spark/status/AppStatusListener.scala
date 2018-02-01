@@ -878,7 +878,7 @@ private[spark] class AppStatusListener(
     val toDelete = KVUtils.viewToSeq(kvstore.view(classOf[JobDataWrapper]),
         countToDelete.toInt) { j =>
       j.info.status != JobExecutionStatus.RUNNING && j.info.status != JobExecutionStatus.UNKNOWN
-    }
+    } { _.info.completionTime.map(_.getTime).getOrElse(Long.MaxValue) }
     toDelete.foreach { j => kvstore.delete(j.getClass(), j.info.jobId) }
   }
 
@@ -891,7 +891,7 @@ private[spark] class AppStatusListener(
     val stages = KVUtils.viewToSeq(kvstore.view(classOf[StageDataWrapper]),
         countToDelete.toInt) { s =>
       s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING
-    }
+    } { _.info.completionTime.map(_.getTime).getOrElse(Long.MaxValue) }
 
     stages.foreach { s =>
       val key = Array(s.info.stageId, s.info.attemptId)
@@ -951,7 +951,7 @@ private[spark] class AppStatusListener(
       // Try to delete finished tasks only.
       val toDelete = KVUtils.viewToSeq(view, countToDelete) { t =>
         !live || t.status != TaskState.RUNNING.toString()
-      }
+      } { t => t.launchTime + t.duration }
       toDelete.foreach { t => kvstore.delete(t.getClass(), t.taskId) }
       stage.savedTasks.addAndGet(-toDelete.size)
 
