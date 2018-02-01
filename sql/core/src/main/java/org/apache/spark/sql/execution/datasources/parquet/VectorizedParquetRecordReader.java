@@ -51,7 +51,7 @@ import org.apache.spark.sql.types.StructType;
  */
 public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBase<Object> {
 
-  // The default size of vectorized batch.
+  // The capacity of vectorized batch.
   private int capacity;
 
   /**
@@ -120,11 +120,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     this.convertTz = convertTz;
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
     this.capacity = capacity;
-  }
-
-  // Vectorized parquet reader used for testing and benchmark.
-  public VectorizedParquetRecordReader(boolean useOffHeap) {
-    this(null, useOffHeap, 4096);
   }
 
   /**

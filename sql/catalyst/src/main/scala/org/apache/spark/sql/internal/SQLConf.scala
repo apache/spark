@@ -377,7 +377,7 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val PARQUET_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.parquet.batchSize")
+  val PARQUET_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.parquet.columnarReaderBatchSize")
     .doc("The number of rows to include in a parquet vectorized reader batch. The number should " +
       "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
     .intConf
@@ -406,7 +406,7 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val ORC_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.orc.batchSize")
+  val ORC_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.orc.columnarReaderBatchSize")
     .doc("The number of rows to include in a orc vectorized reader batch. The number should " +
       "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
     .intConf

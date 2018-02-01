@@ -50,7 +50,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  */
 public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
-  // The default size of vectorized batch.
+  // The capacity of vectorized batch.
   private int capacity;
 
   // Vectorized ORC Row Batch
