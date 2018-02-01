@@ -572,7 +572,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("String APIs", 6, StringType) {
+  testVector("String APIs", 7, StringType) {
     column =>
       val reference = mutable.ArrayBuffer.empty[String]
 
@@ -619,6 +619,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
       idx += 1
       assert(column.arrayData().elementsAppended == 17 + (s + s).length)
 
+      column.putNull(idx)
+      assert(column.getUTF8String(idx) == null)
+      idx += 1
+
       reference.zipWithIndex.foreach { v =>
         val errMsg = "VectorType=" + column.getClass.getSimpleName
         assert(v._1.length == column.getArrayLength(v._2), errMsg)
@@ -647,6 +651,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       reference += new CalendarInterval(0, 2000)
 
       column.putNull(2)
+      assert(column.getInterval(2) == null)
       reference += null
 
       months.putInt(3, 20)
@@ -683,6 +688,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.getArray(0).numElements == 1)
       assert(column.getArray(1).numElements == 2)
       assert(column.isNullAt(2))
+      assert(column.getArray(2) == null)
       assert(column.getArray(3).numElements == 0)
       assert(column.getArray(4).numElements == 3)
 
@@ -785,6 +791,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       column.putArray(0, 0, 1)
       column.putArray(1, 1, 2)
       column.putNull(2)
+      assert(column.getMap(2) == null)
       column.putArray(3, 3, 0)
       column.putArray(4, 3, 3)
 
@@ -821,6 +828,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       c2.putDouble(0, 3.45)
 
       column.putNull(1)
+      assert(column.getStruct(1) == null)
 
       c1.putInt(2, 456)
       c2.putDouble(2, 5.67)
@@ -1262,64 +1270,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
     allocator.close()
   }
 
-  testVector("getUTF8String should return null for null slot", 4, StringType) {
-    column =>
-      assert(column.numNulls() == 0)
-
-      var idx = 0
-      column.putNull(idx)
-      assert(column.getUTF8String(idx) == null)
-      idx += 1
-      column.putNull(idx)
-      assert(column.getUTF8String(idx) == null)
-      assert(column.numNulls() == 2)
-
-      idx += 1
-      column.putByteArray(idx, "Hello".getBytes(StandardCharsets.UTF_8),
-        0, "Hello".getBytes(StandardCharsets.UTF_8).length)
-      assert(column.getUTF8String(idx) != null)
-  }
-
-  testVector("getInterval should return null for null slot", 4, CalendarIntervalType) {
-    column =>
-      assert(column.numNulls() == 0)
-
-      var idx = 0
-      column.putNull(idx)
-      assert(column.getInterval(idx) == null)
-      idx += 1
-      column.putNull(idx)
-      assert(column.getInterval(idx) == null)
-      assert(column.numNulls() == 2)
-
-      idx += 1
-      val months = column.getChild(0)
-      val microseconds = column.getChild(1)
-      months.putInt(idx, 1)
-      microseconds.putLong(idx, 100)
-      assert(column.getInterval(idx) != null)
-  }
-
-  testVector("getArray should return null for null slot", 4, new ArrayType(IntegerType, true)) {
-    column =>
-      assert(column.numNulls() == 0)
-
-      var idx = 0
-      column.putNull(idx)
-      assert(column.getArray(idx) == null)
-      idx += 1
-      column.putNull(idx)
-      assert(column.getArray(idx) == null)
-      assert(column.numNulls() == 2)
-
-      idx += 1
-      val data = column.arrayData()
-      data.putInt(0, 0)
-      data.putInt(1, 1)
-      column.putArray(idx, 0, 2)
-      assert(column.getArray(idx) != null)
-  }
-
   testVector("getDecimal should return null for null slot", 4, DecimalType.IntDecimal) {
     column =>
       assert(column.numNulls() == 0)
@@ -1337,26 +1287,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.getDecimal(idx, 10, 0) != null)
   }
 
-  testVector("getStruct should return null for null slot", 4,
-    new StructType().add("int", IntegerType).add("double", DoubleType)) { column =>
-      assert(column.numNulls() == 0)
-
-      var idx = 0
-      column.putNull(idx)
-      assert(column.getStruct(idx) == null)
-      idx += 1
-      column.putNull(idx)
-      assert(column.getStruct(idx) == null)
-      assert(column.numNulls() == 2)
-
-      idx += 1
-      val c1 = column.getChild(0)
-      val c2 = column.getChild(1)
-      c1.putInt(0, 123)
-      c2.putDouble(0, 3.45)
-      assert(column.getStruct(idx) != null)
-  }
-
   testVector("getBinary should return null for null slot", 4, BinaryType) {
     column =>
       assert(column.numNulls() == 0)
@@ -1372,29 +1302,5 @@ class ColumnarBatchSuite extends SparkFunSuite {
       idx += 1
       column.putByteArray(idx, "Hello".getBytes(StandardCharsets.UTF_8))
       assert(column.getBinary(idx) != null)
-  }
-
-  testVector("getMap should return null for null slot", 4,
-    new MapType(IntegerType, IntegerType, false)) { column =>
-      assert(column.numNulls() == 0)
-
-      var idx = 0
-      column.putNull(idx)
-      assert(column.getBinary(idx) == null)
-      idx += 1
-      column.putNull(idx)
-      assert(column.getBinary(idx) == null)
-      assert(column.numNulls() == 2)
-
-      idx += 1
-      val keyCol = column.getChild(0)
-      keyCol.putInt(0, 0)
-      keyCol.putInt(1, 1)
-      val valueCol = column.getChild(1)
-      valueCol.putInt(0, 0)
-      valueCol.putInt(1, 2)
-
-      column.putArray(idx, 0, 2)
-      assert(column.getMap(idx) != null)
   }
 }
