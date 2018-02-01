@@ -2173,8 +2173,14 @@ private[spark] object Utils extends Logging {
         val v1 = if (threadTrace1.getThreadName.contains("Executor task launch")) 1 else 0
         val v2 = if (threadTrace2.getThreadName.contains("Executor task launch")) 1 else 0
         if (v1 == v2) {
-          threadTrace1.getThreadName().toLowerCase(Locale.ROOT) <
-            threadTrace2.getThreadName().toLowerCase(Locale.ROOT)
+          val name1 = threadTrace1.getThreadName().toLowerCase(Locale.ROOT)
+          val name2 = threadTrace2.getThreadName().toLowerCase(Locale.ROOT)
+          val nameCmpRes = name1.compareTo(name2)
+          if (nameCmpRes == 0) {
+            threadTrace1.getThreadId < threadTrace2.getThreadId
+          } else {
+            nameCmpRes < 0
+          }
         } else {
           v1 > v2
         }

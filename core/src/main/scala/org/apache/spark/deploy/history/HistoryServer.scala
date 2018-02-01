@@ -20,6 +20,7 @@ package org.apache.spark.deploy.history
 import java.util.NoSuchElementException
 import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+import javax.ws.rs.core.Response
 
 import scala.util.control.NonFatal
 import scala.xml.Node
@@ -194,6 +195,13 @@ class HistoryServer(
 
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
     provider.getApplicationInfo(appId)
+  }
+
+  override def executorThreadDumpsNotAvailableError(): Option[Response] = {
+    Some(Response.serverError()
+      .entity("Thread dumps not available through the history server.")
+      .status(Response.Status.SERVICE_UNAVAILABLE)
+      .build())
   }
 
   override def writeEventLogs(
