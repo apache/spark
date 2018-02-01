@@ -66,7 +66,12 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
 
   class Writer(jobId: String, path: String, conf: Configuration) extends DataSourceWriter {
     override def createWriterFactory(): DataWriterFactory[Row] = {
+      SimpleCounter.resetCounter
       new SimpleCSVDataWriterFactory(path, jobId, new SerializableConfiguration(conf))
+    }
+
+    override def onDataWriterCommit(message: WriterCommitMessage): Unit = {
+      SimpleCounter.increaseCounter
     }
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = {
@@ -180,6 +185,22 @@ class SimpleCSVDataReaderFactory(path: String, conf: SerializableConfiguration)
 
   override def close(): Unit = {
     inputStream.close()
+  }
+}
+
+private[v2] object SimpleCounter {
+  private var count: Int = 0
+
+  def increaseCounter: Unit = {
+    count += 1
+  }
+
+  def getCounter: Int = {
+    count
+  }
+
+  def resetCounter: Unit = {
+    count = 0
   }
 }
 
