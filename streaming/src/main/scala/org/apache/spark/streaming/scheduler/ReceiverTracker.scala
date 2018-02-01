@@ -521,7 +521,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
               if (active) {
                 context.reply(addBlock(receivedBlockInfo))
               } else {
-                throw new IllegalStateException("ReceiverTracker RpcEndpoint shut down.")
+                context.sendFailure(
+                  new IllegalStateException("ReceiverTracker RpcEndpoint already shut down."))
               }
             }
           })

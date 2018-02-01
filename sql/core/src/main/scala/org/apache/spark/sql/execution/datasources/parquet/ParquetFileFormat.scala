@@ -350,6 +350,7 @@ class ParquetFileFormat
       sparkSession.sessionState.conf.parquetRecordFilterEnabled
     val timestampConversion: Boolean =
       sparkSession.sessionState.conf.isParquetINT96TimestampConversion
+    val capacity = sqlConf.parquetVectorizedReaderBatchSize
     // Whole stage codegen (PhysicalRDD) is able to deal with batches directly
     val returningBatch = supportBatch(sparkSession, resultSchema)
 
@@ -396,7 +397,7 @@ class ParquetFileFormat
       val taskContext = Option(TaskContext.get())
       val parquetReader = if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
-          convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined)
+          convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.sources.v2.reader.partitioning.Partitioning;
 
 /**
  * A mix in interface for {@link DataSourceReader}. Data source readers can implement this

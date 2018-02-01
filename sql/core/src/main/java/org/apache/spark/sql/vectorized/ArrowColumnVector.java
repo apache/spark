@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
- * A column vector backed by Apache Arrow. Currently time interval type and map type are not
+ * A column vector backed by Apache Arrow. Currently calendar interval type and map type are not
  * supported.
  */
 @InterfaceStability.Evolving
@@ -36,6 +36,11 @@ public final class ArrowColumnVector extends ColumnVector {
 
   private final ArrowVectorAccessor accessor;
   private ArrowColumnVector[] childColumns;
+
+  @Override
+  public boolean hasNull() {
+    return accessor.getNullCount() > 0;
+  }
 
   @Override
   public int numNulls() {
@@ -112,6 +117,11 @@ public final class ArrowColumnVector extends ColumnVector {
   @Override
   public ColumnarArray getArray(int rowId) {
     return accessor.getArray(rowId);
+  }
+
+  @Override
+  public ColumnarMap getMap(int rowId) {
+    throw new UnsupportedOperationException();
   }
 
   @Override

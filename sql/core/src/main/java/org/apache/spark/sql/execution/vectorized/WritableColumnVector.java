@@ -25,6 +25,7 @@ import org.apache.spark.sql.internal.SQLConf;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
+import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -59,8 +60,8 @@ public abstract class WritableColumnVector extends ColumnVector {
     elementsAppended = 0;
     if (numNulls > 0) {
       putNotNulls(0, capacity);
+      numNulls = 0;
     }
-    numNulls = 0;
   }
 
   @Override
@@ -97,9 +98,17 @@ public abstract class WritableColumnVector extends ColumnVector {
   private void throwUnsupportedException(int requiredCapacity, Throwable cause) {
     String message = "Cannot reserve additional contiguous bytes in the vectorized reader " +
         "(requested = " + requiredCapacity + " bytes). As a workaround, you can disable the " +
-        "vectorized reader by setting " + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() +
-        " to false.";
+        "vectorized reader, or increase the vectorized reader batch size. For parquet file " +
+        "format, refer to " + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() + " and " +
+        SQLConf.PARQUET_VECTORIZED_READER_BATCH_SIZE().key() + "; for orc file format, refer to " +
+        SQLConf.ORC_VECTORIZED_READER_ENABLED().key() + " and " +
+        SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE().key() + ".";
     throw new RuntimeException(message, cause);
+  }
+
+  @Override
+  public boolean hasNull() {
+    return numNulls > 0;
   }
 
   @Override
@@ -607,6 +616,13 @@ public abstract class WritableColumnVector extends ColumnVector {
     return new ColumnarArray(arrayData(), getArrayOffset(rowId), getArrayLength(rowId));
   }
 
+  // `WritableColumnVector` puts the key array in the first child column vector, value array in the
+  // second child column vector, and puts the offsets and lengths in the current column vector.
+  @Override
+  public final ColumnarMap getMap(int rowId) {
+    return new ColumnarMap(getChild(0), getChild(1), getArrayOffset(rowId), getArrayLength(rowId));
+  }
+
   public WritableColumnVector arrayData() {
     return childColumns[0];
   }
@@ -700,6 +716,11 @@ public abstract class WritableColumnVector extends ColumnVector {
       for (int i = 0; i < childColumns.length; ++i) {
         this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
       }
+    } else if (type instanceof MapType) {
+      MapType mapType = (MapType) type;
+      this.childColumns = new WritableColumnVector[2];
+      this.childColumns[0] = reserveNewColumn(capacity, mapType.keyType());
+      this.childColumns[1] = reserveNewColumn(capacity, mapType.valueType());
     } else if (type instanceof CalendarIntervalType) {
       // Two columns. Months as int. Microseconds as Long.
       this.childColumns = new WritableColumnVector[2];

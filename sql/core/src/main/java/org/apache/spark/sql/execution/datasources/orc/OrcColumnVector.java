@@ -25,6 +25,7 @@ import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.TimestampType;
 import org.apache.spark.sql.vectorized.ColumnarArray;
+import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -75,6 +76,11 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   @Override
   public void close() {
 
+  }
+
+  @Override
+  public boolean hasNull() {
+    return !baseData.noNulls;
   }
 
   @Override
@@ -169,6 +175,11 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
 
   @Override
   public ColumnarArray getArray(int rowId) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public ColumnarMap getMap(int rowId) {
     throw new UnsupportedOperationException();
   }
 
