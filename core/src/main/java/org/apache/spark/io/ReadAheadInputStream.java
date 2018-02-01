@@ -27,6 +27,7 @@ import java.io.InterruptedIOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -78,9 +79,8 @@ public class ReadAheadInputStream extends InputStream {
   // whether there is a read ahead task running,
   private boolean isReading;
 
-  // If the remaining data size in the current buffer is below this threshold,
-  // we issue an async read from the underlying input stream.
-  private final int readAheadThresholdInBytes;
+  // whether there is a reader waiting for data.
+  private AtomicBoolean isWaiting = new AtomicBoolean(false);
 
   private final InputStream underlyingInputStream;
 
@@ -97,20 +97,13 @@ public class ReadAheadInputStream extends InputStream {
    *
    * @param inputStream The underlying input stream.
    * @param bufferSizeInBytes The buffer size.
-   * @param readAheadThresholdInBytes If the active buffer has less data than the read-ahead
-   *                                  threshold, an async read is triggered.
    */
   public ReadAheadInputStream(
-      InputStream inputStream, int bufferSizeInBytes, int readAheadThresholdInBytes) {
+      InputStream inputStream, int bufferSizeInBytes) {
     Preconditions.checkArgument(bufferSizeInBytes > 0,
         "bufferSizeInBytes should be greater than 0, but the value is " + bufferSizeInBytes);
-    Preconditions.checkArgument(readAheadThresholdInBytes > 0 &&
-            readAheadThresholdInBytes < bufferSizeInBytes,
-        "readAheadThresholdInBytes should be greater than 0 and less than bufferSizeInBytes, " +
-            "but the value is " + readAheadThresholdInBytes);
     activeBuffer = ByteBuffer.allocate(bufferSizeInBytes);
     readAheadBuffer = ByteBuffer.allocate(bufferSizeInBytes);
-    this.readAheadThresholdInBytes = readAheadThresholdInBytes;
     this.underlyingInputStream = inputStream;
     activeBuffer.flip();
     readAheadBuffer.flip();
@@ -166,12 +159,17 @@ public class ReadAheadInputStream extends InputStream {
         // in that case the reader waits for this async read to complete.
         // So there is no race condition in both the situations.
         int read = 0;
+        int off = 0, len = arr.length;
         Throwable exception = null;
         try {
-          while (true) {
-            read = underlyingInputStream.read(arr);
-            if (0 != read) break;
-          }
+          // try to fill the read ahead buffer.
+          // if a reader is waiting, possibly return early.
+          do {
+            read = underlyingInputStream.read(arr, off, len);
+            if (read <= 0) break;
+            off += read;
+            len -= read;
+          } while (len > 0 && !isWaiting.get());
         } catch (Throwable ex) {
           exception = ex;
           if (ex instanceof Error) {
@@ -181,13 +179,12 @@ public class ReadAheadInputStream extends InputStream {
           }
         } finally {
           stateChangeLock.lock();
+          readAheadBuffer.limit(off);
           if (read < 0 || (exception instanceof EOFException)) {
             endOfStream = true;
           } else if (exception != null) {
             readAborted = true;
             readException = exception;
-          } else {
-            readAheadBuffer.limit(read);
           }
           readInProgress = false;
           signalAsyncReadComplete();
@@ -232,7 +229,9 @@ public class ReadAheadInputStream extends InputStream {
     stateChangeLock.lock();
     try {
       while (readInProgress) {
+        isWaiting.set(true);
         asyncReadComplete.await();
+        isWaiting.set(false);
       }
     } catch (InterruptedException e) {
       InterruptedIOException iio = new InterruptedIOException(e.getMessage());
@@ -246,7 +245,7 @@ public class ReadAheadInputStream extends InputStream {
 
   @Override
   public int read() throws IOException {
-    if (activeBuffer.remaining() > readAheadThresholdInBytes) {
+    if (activeBuffer.hasRemaining()) {
       // short path - just get one byte.
       return activeBuffer.get() & 0xFF;
     } else {
@@ -269,35 +268,24 @@ public class ReadAheadInputStream extends InputStream {
       stateChangeLock.lock();
       try {
         waitForAsyncReadComplete();
-        if (readAheadBuffer.hasRemaining()) {
-          swapBuffers();
-        } else {
+        if (!readAheadBuffer.hasRemaining()) {
           // The first read or activeBuffer is skipped.
           readAsync();
           waitForAsyncReadComplete();
           if (isEndOfStream()) {
             return -1;
           }
-          swapBuffers();
         }
+        // Swap the newly read read ahead buffer in place of empty active buffer.
+        swapBuffers();
+        // After swapping buffers, trigger another async read for read ahead buffer.
+        readAsync();
       } finally {
         stateChangeLock.unlock();
       }
     }
     len = Math.min(len, activeBuffer.remaining());
     activeBuffer.get(b, offset, len);
-
-    if (activeBuffer.remaining() <= readAheadThresholdInBytes) {
-      // low remaining in active buffer - trigger async read ahead.
-      stateChangeLock.lock();
-      try {
-        if (!readAheadBuffer.hasRemaining()) {
-          readAsync();
-        }
-      } finally {
-        stateChangeLock.unlock();
-      }
-    }
 
     return len;
   }
@@ -354,10 +342,6 @@ public class ReadAheadInputStream extends InputStream {
       if (toSkip <= activeBuffer.remaining()) {
         // Only skipping from active buffer is sufficient
         activeBuffer.position(toSkip + activeBuffer.position());
-        if (activeBuffer.remaining() <= readAheadThresholdInBytes
-            && !readAheadBuffer.hasRemaining()) {
-          readAsync();
-        }
         return n;
       }
       // We need to skip from both active buffer and read ahead buffer
@@ -366,6 +350,7 @@ public class ReadAheadInputStream extends InputStream {
       activeBuffer.flip();
       readAheadBuffer.position(toSkip + readAheadBuffer.position());
       swapBuffers();
+      // Trigger async read to emptied read ahead buffer.
       readAsync();
       return n;
     } else {

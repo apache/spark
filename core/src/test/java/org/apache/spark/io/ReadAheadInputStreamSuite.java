@@ -29,6 +29,6 @@ public class ReadAheadInputStreamSuite extends GenericFileInputStreamSuite {
   public void setUp() throws IOException {
     super.setUp();
     inputStream = new ReadAheadInputStream(
-        new NioBufferedFileInputStream(inputFile), 8 * 1024, 4 * 1024);
+        new NioBufferedFileInputStream(inputFile), 8 * 1024);
   }
 }
