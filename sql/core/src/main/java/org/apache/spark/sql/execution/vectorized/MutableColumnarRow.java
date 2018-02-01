@@ -21,10 +21,10 @@ import java.math.BigDecimal;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
-import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
+import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.sql.vectorized.ColumnarRow;
 import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.unsafe.types.CalendarInterval;
@@ -162,8 +162,9 @@ public final class MutableColumnarRow extends InternalRow {
   }
 
   @Override
-  public MapData getMap(int ordinal) {
-    throw new UnsupportedOperationException();
+  public ColumnarMap getMap(int ordinal) {
+    if (columns[ordinal].isNullAt(rowId)) return null;
+    return columns[ordinal].getMap(rowId);
   }
 
   @Override
