@@ -1829,7 +1829,7 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` by adding a column or replacing the
         existing column that has the same name.
 
-        The column expression must be an expression over this dataframe; attempting to add
+        The column expression must be an expression over this DataFrame; attempting to add
         a column from some other dataframe will raise an error.
 
         :param colName: string, name of the new column.
