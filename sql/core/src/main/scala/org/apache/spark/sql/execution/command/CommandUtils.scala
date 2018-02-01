@@ -116,8 +116,8 @@ object CommandUtils extends Logging {
       oldStats: Option[CatalogStatistics],
       newTotalSize: BigInt,
       newRowCount: Option[BigInt]): Option[CatalogStatistics] = {
-    val oldTotalSize = oldStats.map(_.sizeInBytes.toLong).getOrElse(-1L)
-    val oldRowCount = oldStats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
+    val oldTotalSize = oldStats.map(_.sizeInBytes).getOrElse(BigInt(-1))
+    val oldRowCount = oldStats.flatMap(_.rowCount).getOrElse(BigInt(-1))
     var newStats: Option[CatalogStatistics] = None
     if (newTotalSize >= 0 && newTotalSize != oldTotalSize) {
       newStats = Some(CatalogStatistics(sizeInBytes = newTotalSize))

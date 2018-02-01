@@ -26,10 +26,10 @@ trait ValueInterval {
   def contains(l: Literal): Boolean
 }
 
-/** For simplicity we use decimal to unify operations of numeric intervals. */
-case class NumericValueInterval(min: Decimal, max: Decimal) extends ValueInterval {
+/** For simplicity we use double to unify operations of numeric intervals. */
+case class NumericValueInterval(min: Double, max: Double) extends ValueInterval {
   override def contains(l: Literal): Boolean = {
-    val lit = EstimationUtils.toDecimal(l.value, l.dataType)
+    val lit = EstimationUtils.toDouble(l.value, l.dataType)
     min <= lit && max >= lit
   }
 }
@@ -56,8 +56,8 @@ object ValueInterval {
     case _ if min.isEmpty || max.isEmpty => new NullValueInterval()
     case _ =>
       NumericValueInterval(
-        min = EstimationUtils.toDecimal(min.get, dataType),
-        max = EstimationUtils.toDecimal(max.get, dataType))
+        min = EstimationUtils.toDouble(min.get, dataType),
+        max = EstimationUtils.toDouble(max.get, dataType))
   }
 
   def isIntersected(r1: ValueInterval, r2: ValueInterval): Boolean = (r1, r2) match {
@@ -84,8 +84,8 @@ object ValueInterval {
         // Choose the maximum of two min values, and the minimum of two max values.
         val newMin = if (n1.min <= n2.min) n2.min else n1.min
         val newMax = if (n1.max <= n2.max) n1.max else n2.max
-        (Some(EstimationUtils.fromDecimal(newMin, dt)),
-          Some(EstimationUtils.fromDecimal(newMax, dt)))
+        (Some(EstimationUtils.fromDouble(newMin, dt)),
+          Some(EstimationUtils.fromDouble(newMax, dt)))
     }
   }
 }

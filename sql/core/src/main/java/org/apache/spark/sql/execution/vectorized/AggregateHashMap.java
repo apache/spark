@@ -41,7 +41,7 @@ import static org.apache.spark.sql.types.DataTypes.LongType;
 public class AggregateHashMap {
 
   private OnHeapColumnVector[] columnVectors;
-  private ColumnarBatch batch;
+  private MutableColumnarRow aggBufferRow;
   private int[] buckets;
   private int numBuckets;
   private int numRows = 0;
@@ -63,7 +63,7 @@ public class AggregateHashMap {
     this.maxSteps = maxSteps;
     numBuckets = (int) (capacity / loadFactor);
     columnVectors = OnHeapColumnVector.allocateColumns(capacity, schema);
-    batch = new ColumnarBatch(schema, columnVectors, capacity);
+    aggBufferRow = new MutableColumnarRow(columnVectors);
     buckets = new int[numBuckets];
     Arrays.fill(buckets, -1);
   }
@@ -72,14 +72,15 @@ public class AggregateHashMap {
     this(schema, DEFAULT_CAPACITY, DEFAULT_LOAD_FACTOR, DEFAULT_MAX_STEPS);
   }
 
-  public ColumnarRow findOrInsert(long key) {
+  public MutableColumnarRow findOrInsert(long key) {
     int idx = find(key);
     if (idx != -1 && buckets[idx] == -1) {
       columnVectors[0].putLong(numRows, key);
       columnVectors[1].putLong(numRows, 0);
       buckets[idx] = numRows++;
     }
-    return batch.getRow(buckets[idx]);
+    aggBufferRow.rowId = buckets[idx];
+    return aggBufferRow;
   }
 
   @VisibleForTesting

@@ -38,6 +38,9 @@ import org.apache.spark.util.Utils
 /** Testsuite for testing the network receiver behavior */
 class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
 
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val signaler: Signaler = ThreadSignaler
+
   test("receiver life cycle") {
 
     val receiver = new FakeReceiver
@@ -60,8 +63,6 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
 
     // Verify that the receiver
     intercept[Exception] {
-      // Necessary to make failAfter interrupt awaitTermination() in ScalaTest 3.x
-      implicit val signaler: Signaler = ThreadSignaler
       failAfter(200 millis) {
         executingThread.join()
       }
@@ -104,13 +105,13 @@ class ReceiverSuite extends TestSuiteBase with TimeLimits with Serializable {
     assert(executor.errors.head.eq(exception))
 
     // Verify restarting actually stops and starts the receiver
-    receiver.restart("restarting", null, 100)
-    eventually(timeout(50 millis), interval(10 millis)) {
+    receiver.restart("restarting", null, 600)
+    eventually(timeout(300 millis), interval(10 millis)) {
       // receiver will be stopped async
       assert(receiver.isStopped)
       assert(receiver.onStopCalled)
     }
-    eventually(timeout(1000 millis), interval(100 millis)) {
+    eventually(timeout(1000 millis), interval(10 millis)) {
       // receiver will be started async
       assert(receiver.onStartCalled)
       assert(executor.isReceiverStarted)

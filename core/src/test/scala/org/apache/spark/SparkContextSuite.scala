@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io.File
 import java.net.{MalformedURLException, URI}
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Semaphore, TimeUnit}
 
 import scala.concurrent.duration._
 
@@ -309,6 +309,17 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
     assert(sc.listJars().head.contains(tmpJar.getName))
   }
 
+  test("SPARK-22585 addJar argument without scheme is interpreted literally without url decoding") {
+    val tmpDir = new File(Utils.createTempDir(), "host%3A443")
+    tmpDir.mkdirs()
+    val tmpJar = File.createTempFile("t%2F", ".jar", tmpDir)
+
+    sc = new SparkContext("local", "test")
+
+    sc.addJar(tmpJar.getAbsolutePath)
+    assert(sc.listJars().size === 1)
+  }
+
   test("Cancelling job group should not cause SparkContext to shutdown (SPARK-6414)") {
     try {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
@@ -488,6 +499,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
   test("Cancelling stages/jobs with custom reasons.") {
     sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
     val REASON = "You shall not pass"
+    val slices = 10
 
     val listener = new SparkListener {
       override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
@@ -497,6 +509,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           }
           sc.cancelStage(taskStart.stageId, REASON)
           SparkContextSuite.cancelStage = false
+          SparkContextSuite.semaphore.release(slices)
         }
       }
 
@@ -507,21 +520,25 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
           }
           sc.cancelJob(jobStart.jobId, REASON)
           SparkContextSuite.cancelJob = false
+          SparkContextSuite.semaphore.release(slices)
         }
       }
     }
     sc.addSparkListener(listener)
 
     for (cancelWhat <- Seq("stage", "job")) {
+      SparkContextSuite.semaphore.drainPermits()
       SparkContextSuite.isTaskStarted = false
       SparkContextSuite.cancelStage = (cancelWhat == "stage")
       SparkContextSuite.cancelJob = (cancelWhat == "job")
 
       val ex = intercept[SparkException] {
-        sc.range(0, 10000L).mapPartitions { x =>
-          org.apache.spark.SparkContextSuite.isTaskStarted = true
+        sc.range(0, 10000L, numSlices = slices).mapPartitions { x =>
+          SparkContextSuite.isTaskStarted = true
+          // Block waiting for the listener to cancel the stage or job.
+          SparkContextSuite.semaphore.acquire()
           x
-        }.cartesian(sc.range(0, 10L))count()
+        }.count()
       }
 
       ex.getCause() match {
@@ -536,6 +553,12 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
       eventually(timeout(20.seconds)) {
         assert(sc.statusTracker.getExecutorInfos.map(_.numRunningTasks()).sum == 0)
       }
+    }
+  }
+
+  test("client mode with a k8s master url") {
+    intercept[SparkException] {
+      sc = new SparkContext("k8s://https://host:port", "test", new SparkConf())
     }
   }
 
@@ -619,4 +642,5 @@ object SparkContextSuite {
   @volatile var isTaskStarted = false
   @volatile var taskKilled = false
   @volatile var taskSucceeded = false
+  val semaphore = new Semaphore(0)
 }

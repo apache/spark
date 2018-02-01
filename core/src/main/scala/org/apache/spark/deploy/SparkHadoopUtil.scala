@@ -75,9 +75,7 @@ class SparkHadoopUtil extends Logging {
   }
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
-    for (token <- source.getTokens.asScala) {
-      dest.addToken(token)
-    }
+    dest.addCredentials(source.getCredentials())
   }
 
   /**
@@ -120,16 +118,9 @@ class SparkHadoopUtil extends Logging {
    * Add any user credentials to the job conf which are necessary for running on a secure Hadoop
    * cluster.
    */
-  def addCredentials(conf: JobConf) {}
-
-  def isYarnMode(): Boolean = { false }
-
-  def addSecretKeyToUserCredentials(key: String, secret: String) {}
-
-  def getSecretKeyFromUserCredentials(key: String): Array[Byte] = { null }
-
-  def getCurrentUserCredentials(): Credentials = {
-    UserGroupInformation.getCurrentUser().getCredentials()
+  def addCredentials(conf: JobConf): Unit = {
+    val jobCreds = conf.getCredentials()
+    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
   }
 
   def addCurrentUserCredentials(creds: Credentials): Unit = {
@@ -329,17 +320,6 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Start a thread to periodically update the current user's credentials with new credentials so
-   * that access to secured service does not fail.
-   */
-  private[spark] def startCredentialUpdater(conf: SparkConf) {}
-
-  /**
-   * Stop the thread that does the credential updates.
-   */
-  private[spark] def stopCredentialUpdater() {}
-
-  /**
    * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.
    * This is to prevent the DFSClient from using an old cached token to connect to the NameNode.
    */
@@ -441,14 +421,7 @@ class SparkHadoopUtil extends Logging {
 
 object SparkHadoopUtil {
 
-  private lazy val hadoop = new SparkHadoopUtil
-  private lazy val yarn = try {
-    Utils.classForName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
-      .newInstance()
-      .asInstanceOf[SparkHadoopUtil]
-  } catch {
-    case e: Exception => throw new SparkException("Unable to load YARN support", e)
-  }
+  private lazy val instance = new SparkHadoopUtil
 
   val SPARK_YARN_CREDS_TEMP_EXTENSION = ".tmp"
 
@@ -462,16 +435,7 @@ object SparkHadoopUtil {
    */
   private[spark] val UPDATE_INPUT_METRICS_INTERVAL_RECORDS = 1000
 
-  def get: SparkHadoopUtil = {
-    // Check each time to support changing to/from YARN
-    val yarnMode = java.lang.Boolean.parseBoolean(
-        System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
-    if (yarnMode) {
-      yarn
-    } else {
-      hadoop
-    }
-  }
+  def get: SparkHadoopUtil = instance
 
   /**
    * Given an expiration date (e.g. for Hadoop Delegation Tokens) return a the date

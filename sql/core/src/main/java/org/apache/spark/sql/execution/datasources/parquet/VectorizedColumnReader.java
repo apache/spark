@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.util.TimeZone;
 
 import org.apache.parquet.bytes.BytesUtils;
 import org.apache.parquet.column.ColumnDescriptor;
@@ -30,7 +31,6 @@ import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
-import org.apache.spark.sql.execution.vectorized.ColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
@@ -93,13 +93,18 @@ public class VectorizedColumnReader {
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
   private final OriginalType originalType;
+  // The timezone conversion to apply to int96 timestamps. Null if no conversion.
+  private final TimeZone convertTz;
+  private static final TimeZone UTC = DateTimeUtils.TimeZoneUTC();
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
       OriginalType originalType,
-      PageReader pageReader) throws IOException {
+      PageReader pageReader,
+      TimeZone convertTz) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReader;
+    this.convertTz = convertTz;
     this.originalType = originalType;
     this.maxDefLevel = descriptor.getMaxDefinitionLevel();
 
@@ -222,6 +227,10 @@ public class VectorizedColumnReader {
     }
   }
 
+  private boolean shouldConvertTimestamps() {
+    return convertTz != null && !convertTz.equals(UTC);
+  }
+
   /**
    * Reads `num` values into column, decoding the values from `dictionaryIds` and `dictionary`.
    */
@@ -229,7 +238,7 @@ public class VectorizedColumnReader {
       int rowId,
       int num,
       WritableColumnVector column,
-      ColumnVector dictionaryIds) {
+      WritableColumnVector dictionaryIds) {
     switch (descriptor.getType()) {
       case INT32:
         if (column.dataType() == DataTypes.IntegerType ||
@@ -294,11 +303,21 @@ public class VectorizedColumnReader {
         break;
       case INT96:
         if (column.dataType() == DataTypes.TimestampType) {
-          for (int i = rowId; i < rowId + num; ++i) {
-            // TODO: Convert dictionary of Binaries to dictionary of Longs
-            if (!column.isNullAt(i)) {
-              Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
-              column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
+          if (!shouldConvertTimestamps()) {
+            for (int i = rowId; i < rowId + num; ++i) {
+              if (!column.isNullAt(i)) {
+                Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
+                column.putLong(i, ParquetRowConverter.binaryToSQLTimestamp(v));
+              }
+            }
+          } else {
+            for (int i = rowId; i < rowId + num; ++i) {
+              if (!column.isNullAt(i)) {
+                Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(i));
+                long rawTime = ParquetRowConverter.binaryToSQLTimestamp(v);
+                long adjTime = DateTimeUtils.convertTz(rawTime, convertTz, UTC);
+                column.putLong(i, adjTime);
+              }
             }
           }
         } else {
@@ -425,16 +444,29 @@ public class VectorizedColumnReader {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
-    if (column.isArray()) {
+    if (column.dataType() == DataTypes.StringType || column.dataType() == DataTypes.BinaryType) {
       defColumn.readBinarys(num, column, rowId, maxDefLevel, data);
     } else if (column.dataType() == DataTypes.TimestampType) {
-      for (int i = 0; i < num; i++) {
-        if (defColumn.readInteger() == maxDefLevel) {
-          column.putLong(rowId + i,
-              // Read 12 bytes for INT96
-              ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12)));
-        } else {
-          column.putNull(rowId + i);
+      if (!shouldConvertTimestamps()) {
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            // Read 12 bytes for INT96
+            long rawTime = ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12));
+            column.putLong(rowId + i, rawTime);
+          } else {
+            column.putNull(rowId + i);
+          }
+        }
+      } else {
+        for (int i = 0; i < num; i++) {
+          if (defColumn.readInteger() == maxDefLevel) {
+            // Read 12 bytes for INT96
+            long rawTime = ParquetRowConverter.binaryToSQLTimestamp(data.readBinary(12));
+            long adjTime = DateTimeUtils.convertTz(rawTime, convertTz, UTC);
+            column.putLong(rowId + i, adjTime);
+          } else {
+            column.putNull(rowId + i);
+          }
         }
       }
     } else {

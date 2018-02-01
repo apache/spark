@@ -81,7 +81,7 @@ class FileStreamSinkSuite extends StreamTest {
       .start(outputDir)
 
     try {
-      // The output is partitoned by "value", so the value will appear in the file path.
+      // The output is partitioned by "value", so the value will appear in the file path.
       // This is to test if we handle spaces in the path correctly.
       inputData.addData("hello world")
       failAfter(streamingTimeout) {
@@ -303,6 +303,10 @@ class FileStreamSinkSuite extends StreamTest {
   test("parquet") {
     testFormat(None) // should not throw error as default format parquet when not specified
     testFormat(Some("parquet"))
+  }
+
+  test("orc") {
+    testFormat(Some("orc"))
   }
 
   test("text") {

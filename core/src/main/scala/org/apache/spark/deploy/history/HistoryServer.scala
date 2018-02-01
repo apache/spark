@@ -28,9 +28,10 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.history.config.HISTORY_SERVER_UI_PORT
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource, UIRoot}
+import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
@@ -175,7 +176,7 @@ class HistoryServer(
    *
    * @return List of all known applications.
    */
-  def getApplicationList(): Iterator[ApplicationHistoryInfo] = {
+  def getApplicationList(): Iterator[ApplicationInfo] = {
     provider.getListing()
   }
 
@@ -188,11 +189,11 @@ class HistoryServer(
   }
 
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
-    getApplicationList().map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+    getApplicationList()
   }
 
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
-    provider.getApplicationInfo(appId).map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+    provider.getApplicationInfo(appId)
   }
 
   override def writeEventLogs(
@@ -276,7 +277,7 @@ object HistoryServer extends Logging {
       .newInstance(conf)
       .asInstanceOf[ApplicationHistoryProvider]
 
-    val port = conf.getInt("spark.history.ui.port", 18080)
+    val port = conf.get(HISTORY_SERVER_UI_PORT)
 
     val server = new HistoryServer(conf, provider, securityManager, port)
     server.bind()

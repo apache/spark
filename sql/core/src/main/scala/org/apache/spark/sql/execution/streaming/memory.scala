@@ -119,7 +119,13 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     val newBlocks = synchronized {
       val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt - 1
       val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
+      assert(sliceStart <= sliceEnd, s"sliceStart: $sliceStart sliceEnd: $sliceEnd")
       batches.slice(sliceStart, sliceEnd)
+    }
+
+    if (newBlocks.isEmpty) {
+      return sqlContext.internalCreateDataFrame(
+        sqlContext.sparkContext.emptyRDD, schema, isStreaming = true)
     }
 
     logDebug(generateDebugString(newBlocks, startOrdinal, endOrdinal))

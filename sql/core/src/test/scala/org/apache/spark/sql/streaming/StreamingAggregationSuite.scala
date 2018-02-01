@@ -299,7 +299,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
-        q.batchCommitLog.purge(3)
+        q.commitLog.purge(3)
         // advance by a minute i.e., 90 seconds total
         clock.advance(60 * 1000L)
         true
@@ -351,7 +351,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
-        q.batchCommitLog.purge(3)
+        q.commitLog.purge(3)
         // advance by 60 days i.e., 90 days total
         clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
         true

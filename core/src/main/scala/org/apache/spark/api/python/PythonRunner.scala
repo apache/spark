@@ -37,8 +37,17 @@ private[spark] object PythonEvalType {
 
   val SQL_BATCHED_UDF = 100
 
-  val SQL_PANDAS_SCALAR_UDF = 200
-  val SQL_PANDAS_GROUP_MAP_UDF = 201
+  val SQL_SCALAR_PANDAS_UDF = 200
+  val SQL_GROUPED_MAP_PANDAS_UDF = 201
+  val SQL_GROUPED_AGG_PANDAS_UDF = 202
+
+  def toString(pythonEvalType: Int): String = pythonEvalType match {
+    case NON_UDF => "NON_UDF"
+    case SQL_BATCHED_UDF => "SQL_BATCHED_UDF"
+    case SQL_SCALAR_PANDAS_UDF => "SQL_SCALAR_PANDAS_UDF"
+    case SQL_GROUPED_MAP_PANDAS_UDF => "SQL_GROUPED_MAP_PANDAS_UDF"
+    case SQL_GROUPED_AGG_PANDAS_UDF => "SQL_GROUPED_AGG_PANDAS_UDF"
+  }
 }
 
 /**
@@ -316,10 +325,6 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       case e: Exception if context.isInterrupted =>
         logDebug("Exception thrown after task interruption", e)
         throw new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
-
-      case e: Exception if env.isStopped =>
-        logDebug("Exception thrown after context is stopped", e)
-        null.asInstanceOf[OUT]  // exit silently
 
       case e: Exception if writerThread.exception.isDefined =>
         logError("Python worker exited unexpectedly (crashed)", e)

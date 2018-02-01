@@ -56,10 +56,27 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
 
-  private val sparkConf = new SparkConf()
-  private val yarnConf: YarnConfiguration = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    .asInstanceOf[YarnConfiguration]
   private val isClusterMode = args.userClass != null
+
+  private val sparkConf = new SparkConf()
+  if (args.propertiesFile != null) {
+    Utils.getPropertiesFromFile(args.propertiesFile).foreach { case (k, v) =>
+      sparkConf.set(k, v)
+    }
+  }
+
+  private val securityMgr = new SecurityManager(sparkConf)
+
+  // Set system properties for each config entry. This covers two use cases:
+  // - The default configuration stored by the SparkHadoopUtil class
+  // - The user application creating a new SparkConf in cluster mode
+  //
+  // Both cases create a new SparkConf object which reads these configs from system properties.
+  sparkConf.getAll.foreach { case (k, v) =>
+    sys.props(k) = v
+  }
+
+  private val yarnConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
 
   private val ugi = {
     val original = UserGroupInformation.getCurrentUser()
@@ -311,7 +328,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
             val credentialManager = new YARNHadoopDelegationTokenManager(
               sparkConf,
               yarnConf,
-              conf => YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, conf))
+              conf => YarnSparkHadoopUtil.hadoopFSsToAccess(sparkConf, conf))
 
             val credentialRenewer =
               new AMCredentialRenewer(sparkConf, yarnConf, credentialManager)
@@ -323,13 +340,10 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         credentialRenewerThread.join()
       }
 
-      // Call this to force generation of secret so it gets populated into the Hadoop UGI.
-      val securityMgr = new SecurityManager(sparkConf)
-
       if (isClusterMode) {
-        runDriver(securityMgr)
+        runDriver()
       } else {
-        runExecutorLauncher(securityMgr)
+        runExecutorLauncher()
       }
     } catch {
       case e: Exception =>
@@ -410,15 +424,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       _sparkConf: SparkConf,
       _rpcEnv: RpcEnv,
       driverRef: RpcEndpointRef,
-      uiAddress: Option[String],
-      securityMgr: SecurityManager) = {
+      uiAddress: Option[String]) = {
     val appId = client.getAttemptId().getApplicationId().toString()
     val attemptId = client.getAttemptId().getAttemptId().toString()
-    val historyAddress =
-      _sparkConf.get(HISTORY_SERVER_ADDRESS)
-        .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
-        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
-        .getOrElse("")
+    val historyAddress = ApplicationMaster
+      .getHistoryServerAddress(_sparkConf, yarnConf, appId, attemptId)
 
     val driverUrl = RpcEndpointAddress(
       _sparkConf.get("spark.driver.host"),
@@ -463,7 +473,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       YarnSchedulerBackend.ENDPOINT_NAME)
   }
 
-  private def runDriver(securityMgr: SecurityManager): Unit = {
+  private def runDriver(): Unit = {
     addAmIpFilter(None)
     userClassThread = startUserApplication()
 
@@ -479,7 +489,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         val driverRef = createSchedulerRef(
           sc.getConf.get("spark.driver.host"),
           sc.getConf.get("spark.driver.port"))
-        registerAM(sc.getConf, rpcEnv, driverRef, sc.ui.map(_.webUrl), securityMgr)
+        registerAM(sc.getConf, rpcEnv, driverRef, sc.ui.map(_.webUrl))
         registered = true
       } else {
         // Sanity check; should never happen in normal operation, since sc should only be null
@@ -498,15 +508,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     }
   }
 
-  private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
+  private def runExecutorLauncher(): Unit = {
     val hostname = Utils.localHostName
     val amCores = sparkConf.get(AM_CORES)
     rpcEnv = RpcEnv.create("sparkYarnAM", hostname, hostname, -1, sparkConf, securityMgr,
       amCores, true)
     val driverRef = waitForSparkDriver()
     addAmIpFilter(Some(driverRef))
-    registerAM(sparkConf, rpcEnv, driverRef, sparkConf.getOption("spark.driver.appUIAddress"),
-      securityMgr)
+    registerAM(sparkConf, rpcEnv, driverRef, sparkConf.getOption("spark.driver.appUIAddress"))
     registered = true
 
     // In client mode the actor will stop the reporter thread.
@@ -686,6 +695,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     if (args.primaryRFile != null && args.primaryRFile.endsWith(".R")) {
       // TODO(davies): add R dependencies here
     }
+
     val mainMethod = userClassLoader.loadClass(args.userClass)
       .getMethod("main", classOf[Array[String]])
 
@@ -809,15 +819,6 @@ object ApplicationMaster extends Logging {
   def main(args: Array[String]): Unit = {
     SignalUtils.registerLogger(log)
     val amArgs = new ApplicationMasterArguments(args)
-
-    // Load the properties file with the Spark configuration and set entries as system properties,
-    // so that user code run inside the AM also has access to them.
-    // Note: we must do this before SparkHadoopUtil instantiated
-    if (amArgs.propertiesFile != null) {
-      Utils.getPropertiesFromFile(amArgs.propertiesFile).foreach { case (k, v) =>
-        sys.props(k) = v
-      }
-    }
     master = new ApplicationMaster(amArgs)
     System.exit(master.run())
   }
@@ -830,6 +831,16 @@ object ApplicationMaster extends Logging {
     master.getAttemptId
   }
 
+  private[spark] def getHistoryServerAddress(
+      sparkConf: SparkConf,
+      yarnConf: YarnConfiguration,
+      appId: String,
+      attemptId: String): String = {
+    sparkConf.get(HISTORY_SERVER_ADDRESS)
+      .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
+      .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
+      .getOrElse("")
+  }
 }
 
 /**

@@ -135,10 +135,8 @@ object SparkALS {
                 .map(i => update(i, usb.value(i), msb.value, Rc.value.transpose()))
                 .collect()
       usb = sc.broadcast(us) // Re-broadcast us because it was updated
-      println("RMSE = " + rmse(R, ms, us))
-      println()
+      println(s"RMSE = ${rmse(R, ms, us)}")
     }
-
     spark.stop()
   }
 

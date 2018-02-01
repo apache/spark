@@ -74,4 +74,29 @@ public final class ByteArray {
     }
     return Arrays.copyOfRange(bytes, start, end);
   }
+
+  public static byte[] concat(byte[]... inputs) {
+    // Compute the total length of the result
+    int totalLength = 0;
+    for (int i = 0; i < inputs.length; i++) {
+      if (inputs[i] != null) {
+        totalLength += inputs[i].length;
+      } else {
+        return null;
+      }
+    }
+
+    // Allocate a new byte array, and copy the inputs one by one into it
+    final byte[] result = new byte[totalLength];
+    int offset = 0;
+    for (int i = 0; i < inputs.length; i++) {
+      int len = inputs[i].length;
+      Platform.copyMemory(
+        inputs[i], Platform.BYTE_ARRAY_OFFSET,
+        result, Platform.BYTE_ARRAY_OFFSET + offset,
+        len);
+      offset += len;
+    }
+    return result;
+  }
 }

@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.lang.{Byte => JByte}
 import java.net.{Authenticator, PasswordAuthentication}
+import java.nio.charset.StandardCharsets.UTF_8
 import java.security.{KeyStore, SecureRandom}
 import java.security.cert.X509Certificate
 import javax.net.ssl._
@@ -26,10 +27,11 @@ import javax.net.ssl._
 import com.google.common.hash.HashCodes
 import com.google.common.io.Files
 import org.apache.hadoop.io.Text
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.sasl.SecretKeyHolder
 import org.apache.spark.util.Utils
 
@@ -225,7 +227,6 @@ private[spark] class SecurityManager(
   setViewAclsGroups(sparkConf.get("spark.ui.view.acls.groups", ""));
   setModifyAclsGroups(sparkConf.get("spark.modify.acls.groups", ""));
 
-  private val secretKey = generateSecretKey()
   logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
     "; ui acls " + (if (aclsOn) "enabled" else "disabled") +
     "; users  with view permissions: " + viewAcls.toString() +
@@ -417,50 +418,6 @@ private[spark] class SecurityManager(
   def getIOEncryptionKey(): Option[Array[Byte]] = ioEncryptionKey
 
   /**
-   * Generates or looks up the secret key.
-   *
-   * The way the key is stored depends on the Spark deployment mode. Yarn
-   * uses the Hadoop UGI.
-   *
-   * For non-Yarn deployments, If the config variable is not set
-   * we throw an exception.
-   */
-  private def generateSecretKey(): String = {
-    if (!isAuthenticationEnabled) {
-      null
-    } else if (SparkHadoopUtil.get.isYarnMode) {
-      // In YARN mode, the secure cookie will be created by the driver and stashed in the
-      // user's credentials, where executors can get it. The check for an array of size 0
-      // is because of the test code in YarnSparkHadoopUtilSuite.
-      val secretKey = SparkHadoopUtil.get.getSecretKeyFromUserCredentials(SECRET_LOOKUP_KEY)
-      if (secretKey == null || secretKey.length == 0) {
-        logDebug("generateSecretKey: yarn mode, secret key from credentials is null")
-        val rnd = new SecureRandom()
-        val length = sparkConf.getInt("spark.authenticate.secretBitLength", 256) / JByte.SIZE
-        val secret = new Array[Byte](length)
-        rnd.nextBytes(secret)
-
-        val cookie = HashCodes.fromBytes(secret).toString()
-        SparkHadoopUtil.get.addSecretKeyToUserCredentials(SECRET_LOOKUP_KEY, cookie)
-        cookie
-      } else {
-        new Text(secretKey).toString
-      }
-    } else {
-      // user must have set spark.authenticate.secret config
-      // For Master/Worker, auth secret is in conf; for Executors, it is in env variable
-      Option(sparkConf.getenv(SecurityManager.ENV_AUTH_SECRET))
-        .orElse(sparkConf.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF)) match {
-        case Some(value) => value
-        case None =>
-          throw new IllegalArgumentException(
-            "Error: a secret key must be specified via the " +
-              SecurityManager.SPARK_AUTH_SECRET_CONF + " config")
-      }
-    }
-  }
-
-  /**
    * Check to see if Acls for the UI are enabled
    * @return true if UI authentication is enabled, otherwise false
    */
@@ -542,7 +499,51 @@ private[spark] class SecurityManager(
    * Gets the secret key.
    * @return the secret key as a String if authentication is enabled, otherwise returns null
    */
-  def getSecretKey(): String = secretKey
+  def getSecretKey(): String = {
+    if (isAuthenticationEnabled) {
+      val creds = UserGroupInformation.getCurrentUser().getCredentials()
+      Option(creds.getSecretKey(SECRET_LOOKUP_KEY))
+        .map { bytes => new String(bytes, UTF_8) }
+        .orElse(Option(sparkConf.getenv(ENV_AUTH_SECRET)))
+        .orElse(sparkConf.getOption(SPARK_AUTH_SECRET_CONF))
+        .getOrElse {
+          throw new IllegalArgumentException(
+            s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config")
+        }
+    } else {
+      null
+    }
+  }
+
+  /**
+   * Initialize the authentication secret.
+   *
+   * If authentication is disabled, do nothing.
+   *
+   * In YARN mode, generate a new secret and store it in the current user's credentials.
+   *
+   * In other modes, assert that the auth secret is set in the configuration.
+   */
+  def initializeAuth(): Unit = {
+    if (!sparkConf.get(NETWORK_AUTH_ENABLED)) {
+      return
+    }
+
+    if (sparkConf.get(SparkLauncher.SPARK_MASTER, null) != "yarn") {
+      require(sparkConf.contains(SPARK_AUTH_SECRET_CONF),
+        s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config.")
+      return
+    }
+
+    val rnd = new SecureRandom()
+    val length = sparkConf.getInt("spark.authenticate.secretBitLength", 256) / JByte.SIZE
+    val secretBytes = new Array[Byte](length)
+    rnd.nextBytes(secretBytes)
+
+    val creds = new Credentials()
+    creds.addSecretKey(SECRET_LOOKUP_KEY, secretBytes)
+    UserGroupInformation.getCurrentUser().addCredentials(creds)
+  }
 
   // Default SecurityManager only has a single secret key, so ignore appId.
   override def getSaslUser(appId: String): String = getSaslUser()
@@ -551,13 +552,12 @@ private[spark] class SecurityManager(
 
 private[spark] object SecurityManager {
 
-  val SPARK_AUTH_CONF: String = "spark.authenticate"
-  val SPARK_AUTH_SECRET_CONF: String = "spark.authenticate.secret"
+  val SPARK_AUTH_CONF = NETWORK_AUTH_ENABLED.key
+  val SPARK_AUTH_SECRET_CONF = "spark.authenticate.secret"
   // This is used to set auth secret to an executor's env variable. It should have the same
   // value as SPARK_AUTH_SECRET_CONF set in SparkConf
   val ENV_AUTH_SECRET = "_SPARK_AUTH_SECRET"
 
   // key used to store the spark secret in the Hadoop UGI
-  val SECRET_LOOKUP_KEY = "sparkCookie"
-
+  val SECRET_LOOKUP_KEY = new Text("sparkCookie")
 }

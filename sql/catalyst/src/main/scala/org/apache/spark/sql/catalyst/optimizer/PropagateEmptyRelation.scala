@@ -41,6 +41,10 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
   private def empty(plan: LogicalPlan) =
     LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
 
+  // Construct a project list from plan's output, while the value is always NULL.
+  private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] =
+    plan.output.map{ a => Alias(Literal(null), a.name)(a.exprId) }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p: Union if p.children.forall(isEmptyLocalRelation) =>
       empty(p)
@@ -49,16 +53,28 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
     // as stateful streaming joins need to perform other state management operations other than
     // just processing the input data.
     case p @ Join(_, _, joinType, _)
-        if !p.children.exists(_.isStreaming) && p.children.exists(isEmptyLocalRelation) =>
-      joinType match {
-        case _: InnerLike => empty(p)
-        // Intersect is handled as LeftSemi by `ReplaceIntersectWithSemiJoin` rule.
-        // Except is handled as LeftAnti by `ReplaceExceptWithAntiJoin` rule.
-        case LeftOuter | LeftSemi | LeftAnti if isEmptyLocalRelation(p.left) => empty(p)
-        case RightOuter if isEmptyLocalRelation(p.right) => empty(p)
-        case FullOuter if p.children.forall(isEmptyLocalRelation) => empty(p)
-        case _ => p
-    }
+        if !p.children.exists(_.isStreaming) =>
+      val isLeftEmpty = isEmptyLocalRelation(p.left)
+      val isRightEmpty = isEmptyLocalRelation(p.right)
+      if (isLeftEmpty || isRightEmpty) {
+        joinType match {
+          case _: InnerLike => empty(p)
+          // Intersect is handled as LeftSemi by `ReplaceIntersectWithSemiJoin` rule.
+          // Except is handled as LeftAnti by `ReplaceExceptWithAntiJoin` rule.
+          case LeftOuter | LeftSemi | LeftAnti if isLeftEmpty => empty(p)
+          case LeftSemi if isRightEmpty => empty(p)
+          case LeftAnti if isRightEmpty => p.left
+          case FullOuter if isLeftEmpty && isRightEmpty => empty(p)
+          case LeftOuter | FullOuter if isRightEmpty =>
+            Project(p.left.output ++ nullValueProjectList(p.right), p.left)
+          case RightOuter if isRightEmpty => empty(p)
+          case RightOuter | FullOuter if isLeftEmpty =>
+            Project(nullValueProjectList(p.left) ++ p.right.output, p.right)
+          case _ => p
+        }
+      } else {
+        p
+      }
 
     case p: UnaryNode if p.children.nonEmpty && p.children.forall(isEmptyLocalRelation) => p match {
       case _: Project => empty(p)

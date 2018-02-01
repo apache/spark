@@ -26,6 +26,7 @@ import org.apache.spark.sql.hive.client.HiveClient
 
 
 trait TestHiveSingleton extends SparkFunSuite with BeforeAndAfterAll {
+  override protected val enableAutoThreadAudit = false
   protected val spark: SparkSession = TestHive.sparkSession
   protected val hiveContext: TestHiveContext = TestHive
   protected val hiveClient: HiveClient =

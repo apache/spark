@@ -107,4 +107,10 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
       .filter(_.contains("Num Buckets")).head
     assert(bucketString.contains("10"))
   }
+
+  test("SPARK-23001: NullPointerException when running desc database") {
+    val catalog = newBasicCatalog()
+    catalog.createDatabase(newDb("dbWithNullDesc").copy(description = null), ignoreIfExists = false)
+    assert(catalog.getDatabase("dbWithNullDesc").description == "")
+  }
 }

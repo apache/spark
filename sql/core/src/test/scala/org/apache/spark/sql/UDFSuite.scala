@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.command.ExplainCommand
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
-import org.apache.spark.sql.types.DataTypes
+import org.apache.spark.sql.types.{DataTypes, DoubleType}
 
 private case class FunctionResult(f1: String, f2: String)
 
@@ -79,7 +80,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException] {
       df.selectExpr("substr('abcd', 2, 3, 4)")
     }
-    assert(e.getMessage.contains("Invalid number of arguments for function substr"))
+    assert(e.getMessage.contains("Invalid number of arguments for function substr. Expected:"))
   }
 
   test("error reporting for incorrect number of arguments - udf") {
@@ -88,7 +89,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       spark.udf.register("foo", (_: String).length)
       df.selectExpr("foo(2, 3, 4)")
     }
-    assert(e.getMessage.contains("Invalid number of arguments for function foo"))
+    assert(e.getMessage.contains("Invalid number of arguments for function foo. Expected:"))
   }
 
   test("error reporting for undefined functions") {
@@ -128,6 +129,13 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     val df2 = testData.select(bar())
     assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
     assert(df2.head().getDouble(0) >= 0.0)
+
+    val javaUdf = udf(new UDF0[Double] {
+      override def call(): Double = Math.random()
+    }, DoubleType).asNondeterministic()
+    val df3 = testData.select(javaUdf())
+    assert(df3.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+    assert(df3.head().getDouble(0) >= 0.0)
   }
 
   test("TwoArgument UDF") {
