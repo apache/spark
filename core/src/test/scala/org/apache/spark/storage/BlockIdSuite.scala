@@ -73,7 +73,7 @@ class BlockIdSuite extends SparkFunSuite {
     assert(id.shuffleId === 1)
     assert(id.mapId === 2)
     assert(id.reduceId === 3)
-    assert(id.length === 4)
+    assert(id.numBlocks === 4)
     assert(id.isShuffle)
     assertSame(id, BlockId(id.toString))
   }

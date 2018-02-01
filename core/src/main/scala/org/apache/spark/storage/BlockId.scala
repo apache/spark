@@ -64,9 +64,10 @@ case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int)
 }
 
 @DeveloperApi
-case class ContinuousShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int, length: Int)
+case class ContinuousShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int, numBlocks: Int)
   extends BlockId with ShuffleBlockIdBase {
-  override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + "_" + length
+  override def name: String =
+    "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + "_" + numBlocks
 }
 
 @DeveloperApi
