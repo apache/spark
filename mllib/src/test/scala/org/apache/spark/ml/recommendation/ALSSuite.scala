@@ -565,7 +565,6 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
   test("read/write") {
     val spark = this.spark
     import spark.implicits._
-
     import ALSSuite._
     val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
 
@@ -599,14 +598,10 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
           (ex, act) =>
             ex.userFactors.first().getSeq[Float](1) === act.userFactors.first.getSeq[Float](1)
         } { (ex, act, _) =>
-          testTransformerByGlobalCheckFunc[Float](_: DataFrame, ex, "prediction") {
-            case exRows: Seq[Row] =>
-              val exFirst = exRows(0).getDouble(0)
-              testTransformerByGlobalCheckFunc[Float](_: DataFrame, act, "prediction") {
-                case actRows: Seq[Row] =>
-                  val actFirst = actRows(0).getDouble(0)
-                  exFirst ~== actFirst absTol 1e-6
-              }
+          testTransformerByGlobalCheckFunc[Float](_: DataFrame, act, "prediction") {
+            case actRows: Seq[Row] =>
+              ex.transform(_: DataFrame).select("prediction").first.getDouble(0) ~==
+                actRows(0).getDouble(0) absTol 1e-6
           }
         }
     }
@@ -640,9 +635,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
           model.transform(dataFrame).first
         }.getMessage.contains(msg))
         assert(intercept[StreamingQueryException] {
-          testTransformer[A](dataFrame, model, "prediction") {
-            case _ =>
-          }
+          testTransformer[A](dataFrame, model, "prediction") { _ => }
         }.getMessage.contains(msg))
       }
       testTransformIdExceedsIntRange[(Long, Int)](df.select(df("user_big").as("user"),
@@ -666,7 +659,6 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
   test("ALS cold start user/item prediction strategy") {
     val spark = this.spark
     import spark.implicits._
-
     import org.apache.spark.sql.functions._
 
     val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
@@ -685,22 +677,20 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val als = new ALS().setMaxIter(1).setRank(1)
     // default is 'nan'
     val defaultModel = als.fit(data)
-    var defaultPredictionNotNaN = Float.NaN
     testTransformer[(Int, Int, Boolean)](test, defaultModel, "expectedIsNaN", "prediction") {
       case Row(expectedIsNaN: Boolean, prediction: Float) =>
         assert(prediction.isNaN === expectedIsNaN)
-        if (!expectedIsNaN) defaultPredictionNotNaN = prediction
     }
-    assert(!defaultPredictionNotNaN.isNaN)
 
     // check 'drop' strategy should filter out rows with unknown users/items
+    val defaultPrediction = defaultModel.transform(test).select("prediction").as[Float].filter(!_.isNaN).first()
     testTransformerByGlobalCheckFunc[(Int, Int, Boolean)](test,
       defaultModel.setColdStartStrategy("drop"), "prediction") {
       case rows: Seq[Row] =>
         val dropPredictions = rows.map(_.getFloat(0))
         assert(dropPredictions.length == 1)
         assert(!dropPredictions.head.isNaN)
-        assert(dropPredictions.head ~== defaultPredictionNotNaN relTol 1e-14)
+        assert(dropPredictions.head ~== defaultPrediction relTol 1e-14)
     }
   }
 
@@ -711,9 +701,7 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val data = ratings.toDF
     val model = new ALS().fit(data)
     Seq("nan", "NaN", "Nan", "drop", "DROP", "Drop").foreach { s =>
-      testTransformer[Rating[Int]](data, model.setColdStartStrategy(s), "prediction") {
-        case _ =>
-      }
+      testTransformer[Rating[Int]](data, model.setColdStartStrategy(s), "prediction") { _ => }
     }
   }
 
