@@ -141,15 +141,15 @@ class BernoulliCellSampler[T](lb: Double, ub: Double, complement: Boolean = fals
  * @tparam T item type
  */
 @DeveloperApi
-class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T] {
+class BernoulliSampler[T: ClassTag](fraction: Double,
+                                    rng: Random = RandomSampler.newDefaultRNG)
+  extends RandomSampler[T, T] {
 
   /** epsilon slop to avoid failure from floating point jitter */
   require(
     fraction >= (0.0 - RandomSampler.roundingEpsilon)
       && fraction <= (1.0 + RandomSampler.roundingEpsilon),
     s"Sampling fraction ($fraction) must be on interval [0, 1]")
-
-  private val rng: Random = RandomSampler.newDefaultRNG
 
   override def setSeed(seed: Long): Unit = rng.setSeed(seed)
 

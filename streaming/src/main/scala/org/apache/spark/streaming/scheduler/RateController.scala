@@ -20,11 +20,11 @@ package org.apache.spark.streaming.scheduler
 import java.io.ObjectInputStream
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ ExecutionContext, Future }
 
 import org.apache.spark.SparkConf
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{ ThreadUtils, Utils }
 
 /**
  * A StreamingListener that receives batch completion updates, and maintains
