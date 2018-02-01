@@ -48,19 +48,12 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
-_have_pandas = False
-_have_old_pandas = False
-try:
-    import pandas
-    try:
-        from pyspark.sql.utils import require_minimum_pandas_version
-        require_minimum_pandas_version()
-        _have_pandas = True
-    except:
-        _have_old_pandas = True
-except:
-    # No Pandas, but that's okay, we'll skip those tests
-    pass
+# make sure pandas and pyarrow are installed and satisfy our version requirement during tests.
+from pyspark.sql.utils import require_minimum_pandas_version, require_minimum_pyarrow_version
+import pandas
+require_minimum_pandas_version()
+import pyarrow
+require_minimum_pyarrow_version()
 
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
@@ -73,15 +66,6 @@ from pyspark.tests import QuietTest, ReusedPySparkTestCase, SparkSubmitTests
 from pyspark.sql.functions import UserDefinedFunction, sha2, lit
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
-
-
-_have_arrow = False
-try:
-    import pyarrow
-    _have_arrow = True
-except:
-    # No Arrow, but that's okay, we'll skip those tests
-    pass
 
 
 class UTCOffsetTimezone(datetime.tzinfo):
@@ -2807,7 +2791,6 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(data, schema)
         return df.toPandas()
 
-    @unittest.skipIf(not _have_pandas, "Pandas not installed")
     def test_to_pandas(self):
         import numpy as np
         pdf = self._to_pandas()
@@ -2819,13 +2802,6 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEquals(types[4], 'datetime64[ns]')
         self.assertEquals(types[5], 'datetime64[ns]')
 
-    @unittest.skipIf(not _have_old_pandas, "Old Pandas not installed")
-    def test_to_pandas_old(self):
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ImportError, 'Pandas >= .* must be installed'):
-                self._to_pandas()
-
-    @unittest.skipIf(not _have_pandas, "Pandas not installed")
     def test_to_pandas_avoid_astype(self):
         import numpy as np
         schema = StructType().add("a", IntegerType()).add("b", StringType())\
@@ -2843,7 +2819,6 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(data)
         self.assertEqual(df.first(), Row(longarray=[-9223372036854775808, 0, 9223372036854775807]))
 
-    @unittest.skipIf(not _have_pandas, "Pandas not installed")
     def test_create_dataframe_from_pandas_with_timestamp(self):
         import pandas as pd
         from datetime import datetime
@@ -2857,16 +2832,6 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(pdf, schema="d date, ts timestamp")
         self.assertTrue(isinstance(df.schema['ts'].dataType, TimestampType))
         self.assertTrue(isinstance(df.schema['d'].dataType, DateType))
-
-    @unittest.skipIf(not _have_old_pandas, "Old Pandas not installed")
-    def test_create_dataframe_from_old_pandas(self):
-        import pandas as pd
-        from datetime import datetime
-        pdf = pd.DataFrame({"ts": [datetime(2017, 10, 31, 1, 1, 1)],
-                            "d": [pd.Timestamp.now().date()]})
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ImportError, 'Pandas >= .* must be installed'):
-                self.spark.createDataFrame(pdf)
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
@@ -3132,7 +3097,6 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
         parse_result = df.select(functions.to_date(functions.col("dateCol"))).first()
         self.assertEquals(date(2017, 1, 22), parse_result['to_date(`dateCol`)'])
 
-    @unittest.skipIf(sys.version_info < (3, 3), "Unittest < 3.3 doesn't support mocking")
     def test_unbounded_frames(self):
         from unittest.mock import patch
         from pyspark.sql import functions as F
@@ -3357,7 +3321,6 @@ class DataTypeVerificationTests(unittest.TestCase):
                 _make_type_verifier(data_type, nullable=False)(obj)
 
 
-@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class ArrowTests(ReusedSQLTestCase):
 
     @classmethod
@@ -3613,7 +3576,6 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(pdf_col_names, df_arrow.columns)
 
 
-@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class PandasUDFTests(ReusedSQLTestCase):
     def test_pandas_udf_basic(self):
         from pyspark.rdd import PythonEvalType
@@ -3737,7 +3699,6 @@ class PandasUDFTests(ReusedSQLTestCase):
                     return k
 
 
-@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class ScalarPandasUDF(ReusedSQLTestCase):
 
     @classmethod
@@ -4216,7 +4177,6 @@ class ScalarPandasUDF(ReusedSQLTestCase):
         self.assertEquals(expected.collect(), res2.collect())
 
 
-@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class GroupbyApplyPandasUDFTests(ReusedSQLTestCase):
 
     @property
@@ -4385,7 +4345,6 @@ class GroupbyApplyPandasUDFTests(ReusedSQLTestCase):
                 df.groupby('id').apply(f).collect()
 
 
-@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
 
     @property
