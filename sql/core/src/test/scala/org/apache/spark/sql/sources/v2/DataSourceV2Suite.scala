@@ -217,6 +217,12 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-23293: data source v2 self join") {
+    val df = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
+    val df2 = df.select(($"i" + 1).as("k"), $"j")
+    checkAnswer(df.join(df2, "j"), (0 until 10).map(i => Row(-i, i, i + 1)))
+  }
 }
 
 class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
