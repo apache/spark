@@ -18,7 +18,6 @@ package org.apache.spark.sql.vectorized;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.catalyst.util.ArrayData;
-import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
