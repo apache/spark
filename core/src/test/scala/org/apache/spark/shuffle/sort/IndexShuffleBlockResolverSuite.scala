@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle.sort
 
-import java.io._
+import java.io.{File, FileInputStream, FileOutputStream}
 
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
@@ -115,15 +115,15 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     assert(firstByte(0) === 0)
 
     // The index file should not change
-    val secondBytes = new Array[Byte](8)
+    val secondValueOffset = new Array[Byte](8)
     val indexIn = new FileInputStream(indexFile)
     Utils.tryWithSafeFinally {
-      indexIn.read(secondBytes)
-      indexIn.read(secondBytes)
+      indexIn.read(secondValueOffset)
+      indexIn.read(secondValueOffset)
     } {
       indexIn.close()
     }
-    assert(secondBytes(7) === 10, "The index file should not change")
+    assert(secondValueOffset(7) === 10, "The index file should not change")
 
     // remove data file
     dataFile.delete()
@@ -156,11 +156,11 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     // The index file should be updated, since we deleted the dataFile from the first attempt
     val indexIn2 = new FileInputStream(indexFile)
     Utils.tryWithSafeFinally {
-      indexIn2.read(secondBytes)
-      indexIn2.read(secondBytes)
+      indexIn2.read(secondValueOffset)
+      indexIn2.read(secondValueOffset)
     } {
       indexIn2.close()
     }
-    assert(secondBytes(7) === 7, "The index file should be updated")
+    assert(secondValueOffset(7) === 7, "The index file should be updated")
   }
 }
