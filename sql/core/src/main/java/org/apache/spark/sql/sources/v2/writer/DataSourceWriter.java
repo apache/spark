@@ -66,8 +66,7 @@ public interface DataSourceWriter {
    * Handles a commit message on receiving from a successful data writer.
    *
    * If this method fails (by throwing an exception), this writing job is considered to to have been
-   * failed, and {@link #abort(WriterCommitMessage[])} would be called. The state of the destination
-   * is undefined and {@link #abort(WriterCommitMessage[])} may not be able to deal with it.
+   * failed, and {@link #abort(WriterCommitMessage[])} would be called.
    */
   default void onDataWriterCommit(WriterCommitMessage message) {}
 
