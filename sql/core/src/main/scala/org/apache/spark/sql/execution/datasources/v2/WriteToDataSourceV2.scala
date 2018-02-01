@@ -80,7 +80,10 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
         rdd,
         runTask,
         rdd.partitions.indices,
-        (index, message: WriterCommitMessage) => messages(index) = message
+        (index, message: WriterCommitMessage) => {
+          messages(index) = message
+          writer.onDataWriterCommit(message)
+        }
       )
 
       if (!writer.isInstanceOf[StreamWriter]) {
