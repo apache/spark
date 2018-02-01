@@ -17,8 +17,8 @@
 
 package org.apache.spark.streaming.receiver
 
-import java.util.concurrent.atomic.AtomicLong
 import java.util.Random
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.ArrayBuffer
 

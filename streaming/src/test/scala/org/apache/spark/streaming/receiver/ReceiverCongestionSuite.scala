@@ -20,15 +20,15 @@ package org.apache.spark.streaming.receiver
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.concurrent.Timeouts
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkConf
+import org.apache.spark.streaming.FakeBlockGeneratorListener
+import org.apache.spark.streaming.TestSuiteBase
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.util.Utils
-import org.apache.spark.streaming.TestSuiteBase
-import org.apache.spark.streaming.FakeBlockGeneratorListener
 
 class ReceiverCongestionSuite extends TestSuiteBase with Timeouts with Serializable {
 
@@ -69,7 +69,7 @@ class ReceiverCongestionSuite extends TestSuiteBase with Timeouts with Serializa
     assert(rsize > 0, "No blocks received")
     assert(rsize >= expectedBlocks && rsize <= expectedBlocks + 1,
            s"Received ${recordedBlocks.size} blocks instead of the expected $expectedBlocks")
-    if(testIdentity){
+    if(testIdentity) {
           assert(recordedData.toSet === generatedData.toSet, "Received data not same")
     }
 
@@ -103,7 +103,7 @@ class ReceiverCongestionSuite extends TestSuiteBase with Timeouts with Serializa
     )
   }
 
-  ignore("congestion strategy drop"){
+  ignore("congestion strategy drop") {
     val dropStrategyConf = new SparkConf().
     set("spark.streaming.blockInterval", "100ms").
     set("spark.streaming.backPressure.congestionStrategy", "drop").
@@ -111,7 +111,7 @@ class ReceiverCongestionSuite extends TestSuiteBase with Timeouts with Serializa
     testBlockGeneratorCongestion(dropStrategyConf, 1000, 20)
   }
 
-  ignore("congestion strategy sample"){
+  ignore("congestion strategy sample") {
     val sampleStrategyConf = new SparkConf().
     set("spark.streaming.blockInterval", "100ms").
     set("spark.streaming.backPressure.congestionStrategy", "sample").
@@ -119,7 +119,7 @@ class ReceiverCongestionSuite extends TestSuiteBase with Timeouts with Serializa
     testBlockGeneratorCongestion(sampleStrategyConf, 1000, 20)
   }
 
-  ignore("congestion strategy throttle"){
+  ignore("congestion strategy throttle") {
     val throttleStrategyConf = new SparkConf().
     set("spark.streaming.blockInterval", "100ms").
     set("spark.streaming.backPressure.congestionStrategy", "throttle").
@@ -127,7 +127,7 @@ class ReceiverCongestionSuite extends TestSuiteBase with Timeouts with Serializa
     testBlockGeneratorCongestion(throttleStrategyConf, 1000, 20)
   }
 
-   ignore("block generator throttling"){
+   ignore("block generator throttling") {
     val throttlingWithoutCongestion = new SparkConf().
       set("spark.streaming.blockInterval", "100ms").
       set("spark.streaming.receiver.maxRate", "100").

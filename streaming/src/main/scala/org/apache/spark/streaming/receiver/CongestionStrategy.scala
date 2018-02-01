@@ -17,8 +17,9 @@
 
 package org.apache.spark.streaming.receiver
 
-import org.apache.spark.SparkConf
 import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.SparkConf
 
 /**
  * These traits provide a strategy to deal w/ a large amount of data seen
