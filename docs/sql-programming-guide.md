@@ -1798,7 +1798,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
           native
         </td>
         <td>
-          The name of ORC implementation: 'native' means the native version of ORC support instead of the ORC library in Hive 1.2.1. It is 'hive' by default prior to Spark 2.3.
+          The name of ORC implementation: 'native' means the native ORC support that is built on Apache ORC 1.4.1 instead of the ORC library in Hive 1.2.1. It is 'hive' by default prior to Spark 2.3.
         </td>
       </tr>
       <tr>
