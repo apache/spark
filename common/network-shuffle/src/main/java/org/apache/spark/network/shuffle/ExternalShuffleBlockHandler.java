@@ -196,7 +196,7 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     private final String appId;
     private final String execId;
     private final int shuffleId;
-    // An array containing mapId, reduceId and length tuple
+    // An array containing mapId, reduceId and numBlocks tuple
     private final int[] shuffleBlockIds;
 
     ManagedBufferIterator(String appId, String execId, String[] blockIds) {

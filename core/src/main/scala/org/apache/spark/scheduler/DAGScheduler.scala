@@ -1321,7 +1321,7 @@ class DAGScheduler(
               "tasks in ShuffleMapStages.")
         }
 
-      case FetchFailed(bmAddress, shuffleId, mapId, reduceId, failureMessage, length) =>
+      case FetchFailed(bmAddress, shuffleId, mapId, reduceId, failureMessage, numBlocks) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleIdToMapStage(shuffleId)
 

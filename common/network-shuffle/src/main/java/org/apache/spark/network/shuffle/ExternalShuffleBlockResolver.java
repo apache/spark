@@ -245,13 +245,13 @@ public class ExternalShuffleBlockResolver {
    * and the block id format is from ShuffleDataBlockId and ShuffleIndexBlockId.
    */
   private ManagedBuffer getSortBasedShuffleBlockData(
-    ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId, int length) {
+    ExecutorShuffleInfo executor, int shuffleId, int mapId, int reduceId, int numBlocks) {
     File indexFile = getFile(executor.localDirs, executor.subDirsPerLocalDir,
       "shuffle_" + shuffleId + "_" + mapId + "_0.index");
 
     try {
       ShuffleIndexInformation shuffleIndexInformation = shuffleIndexCache.get(indexFile);
-      ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(reduceId, length);
+      ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(reduceId, numBlocks);
       return new FileSegmentManagedBuffer(
         conf,
         getFile(executor.localDirs, executor.subDirsPerLocalDir,
