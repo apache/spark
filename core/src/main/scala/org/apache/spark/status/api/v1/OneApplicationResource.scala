@@ -77,16 +77,13 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
             .status(Response.Status.BAD_REQUEST)
             .build()
         } else {
-          val maybeStackTraces = ui.sc.flatMap { sc =>
-            sc.getExecutorThreadDump(safeExecutorId)
-          }
-          maybeStackTraces match {
-            case Some(stackTraces) => Response.ok(stackTraces).build()
-            case None => Response.serverError()
-              .entity("No stack traces are available.")
-              .status(Response.Status.NOT_FOUND)
-              .build()
-          }
+          ui.sc.flatMap(_.getExecutorThreadDump(safeExecutorId))
+            .map(Response.ok(_).build())
+            .getOrElse(
+              Response.serverError()
+                .entity("No stack traces are available.")
+                .status(Response.Status.NOT_FOUND)
+                .build())
         }
       }
     }
