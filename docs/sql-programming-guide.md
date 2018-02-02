@@ -1814,17 +1814,6 @@ working with timestamps in `pandas_udf`s to get the best performance, see
       </tr>
       <tr>
         <td>
-          spark.sql.orc.columnarReaderBatchSize
-        </td>
-        <td>
-          4096
-        </td>
-        <td>
-          The number of rows to include in a orc vectorized reader batch. The number should be carefully chosen to minimize overhead and avoid OOMs in reading data.
-        </td>
-      </tr>
-      <tr>
-        <td>
           spark.sql.orc.filterPushdown
         </td>
         <td>
