@@ -112,7 +112,7 @@ class ChildProcAppHandle extends AbstractAppHandle {
         }
       }
 
-      disconnect();
+      dispose();
     }
   }
 
