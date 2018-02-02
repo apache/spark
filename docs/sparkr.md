@@ -666,4 +666,4 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 
 ## Upgrading to Spark 2.4.0
 
- - The first parameter of `substr` method was wrongly subtracted by one, previously. This can lead to inconsistent substring results and also does not match with the behaviour with `substr` in R. It has been corrected.
+ - The `start` parameter of `substr` method was wrongly subtracted by one, previously. This can lead to inconsistent substring results and also does not match with the behaviour with `substr` in R. It has been corrected.
