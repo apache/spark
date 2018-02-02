@@ -99,14 +99,14 @@ Available metrics are the column-wise max, min, mean, variance, and number of no
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 The following example demonstrates using [`Summarizer`](api/scala/index.html#org.apache.spark.ml.stat.Summarizer$)
-to compute the mean and variance for the input dataframe, with and without a weight column.
+to compute the mean and variance for a vector column of the input dataframe, with and without a weight column.
 
 {% include_example scala/org/apache/spark/examples/ml/SummarizerExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 The following example demonstrates using [`Summarizer`](api/java/org/apache/spark/ml/stat/Summarizer.html)
-to compute the mean and variance for the input dataframe, with and without a weight column.
+to compute the mean and variance for a vector column of the input dataframe, with and without a weight column.
 
 {% include_example java/org/apache/spark/examples/ml/JavaSummarizerExample.java %}
 </div>
