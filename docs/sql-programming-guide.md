@@ -1831,7 +1831,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
           true
         </td>
         <td>
-          Enables the built-in ORC reader and writer to process Hive ORC tables, instead of Hive serde. It is 'false' by default prior to Spark 2.3.
+          Enable Spark's ORC support instead of Hive SerDe when reading from and writing to Hive ORC tables. It is 'false' by default prior to Spark 2.3.
         </td>
       </tr>
     </table>
