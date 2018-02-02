@@ -1792,46 +1792,46 @@ working with timestamps in `pandas_udf`s to get the best performance, see
       </tr>
       <tr>
         <td>
-          spark.sql.orc.impl
+          <code>spark.sql.orc.impl</code>
         </td>
         <td>
-          native
+          <code>native</code>
         </td>
         <td>
-          The name of ORC implementation: `native` means the native ORC support that is built on Apache ORC 1.4.1 instead of the ORC library in Hive 1.2.1. It is `hive` by default prior to Spark 2.3.
-        </td>
-      </tr>
-      <tr>
-        <td>
-          spark.sql.orc.enableVectorizedReader
-        </td>
-        <td>
-          true
-        </td>
-        <td>
-          Enables vectorized orc decoding in `native` implementation. If `false`, a new non-vectorized ORC reader is used in `native` implementation. For `hive` implementation, this is ignored.
+          The name of ORC implementation: <code>native</code> means the native ORC support that is built on Apache ORC 1.4.1 instead of the ORC library in Hive 1.2.1. It is <code>hive</code> by default prior to Spark 2.3.
         </td>
       </tr>
       <tr>
         <td>
-          spark.sql.orc.filterPushdown
+          <code>spark.sql.orc.enableVectorizedReader</code>
         </td>
         <td>
-          true
+          <code>true</code>
         </td>
         <td>
-          Enables filter pushdown for ORC files. It is `false` by default prior to Spark 2.3.
+          Enables vectorized orc decoding in <code>native</code> implementation. If <code>false</code>, a new non-vectorized ORC reader is used in <code>native</code> implementation. For <code>hive</code> implementation, this is ignored.
         </td>
       </tr>
       <tr>
         <td>
-          spark.sql.hive.convertMetastoreOrc
+          <code>spark.sql.orc.filterPushdown</code>
         </td>
         <td>
-          true
+          <code>true</code>
         </td>
         <td>
-          Enable Spark's ORC support instead of Hive SerDe when reading from and writing to Hive ORC tables. It is `false` by default prior to Spark 2.3.
+          Enables filter pushdown for ORC files. It is <code>false</code> by default prior to Spark 2.3.
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <code>spark.sql.hive.convertMetastoreOrc</code>
+        </td>
+        <td>
+          <code>true</code>
+        </td>
+        <td>
+          Enable Spark's ORC support instead of Hive SerDe when reading from and writing to Hive ORC tables. It is <code>false</code> by default prior to Spark 2.3.
         </td>
       </tr>
     </table>
