@@ -1831,7 +1831,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
           true
         </td>
         <td>
-          Enable filter pushdown for ORC files. It is 'false' by default prior to Spark 2.3.
+          Enables filter pushdown for ORC files. It is 'false' by default prior to Spark 2.3.
         </td>
       </tr>
       <tr>
@@ -1842,7 +1842,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
           true
         </td>
         <td>
-          Enable the built-in ORC reader and writer to process Hive ORC tables, instead of Hive serde. It is 'false' by default prior to Spark 2.3.
+          Enables the built-in ORC reader and writer to process Hive ORC tables, instead of Hive serde. It is 'false' by default prior to Spark 2.3.
         </td>
       </tr>
     </table>
