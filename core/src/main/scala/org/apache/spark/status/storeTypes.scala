@@ -74,7 +74,7 @@ private[spark] class JobDataWrapper(
   private def id: Int = info.jobId
 
   @JsonIgnore @KVIndex("completionTime")
-  private def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1)
+  private def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1L)
 }
 
 private[spark] class StageDataWrapper(
@@ -93,7 +93,7 @@ private[spark] class StageDataWrapper(
   private def active: Boolean = info.status == StageStatus.ACTIVE
 
   @JsonIgnore @KVIndex("completionTime")
-  private def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1)
+  private def completionTime: Long = info.completionTime.map(_.getTime).getOrElse(-1L)
 }
 
 /**
@@ -138,7 +138,7 @@ private[spark] object TaskIndexNames {
   final val STAGE = "stage"
   final val STATUS = "sta"
   final val TASK_INDEX = "idx"
-  final val COMPLETION_TIME = "completionTime"
+  final val COMPLETION_TIME = "ct"
 }
 
 /**
