@@ -90,16 +90,15 @@ case class RowDataSourceScanExec(
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val unsafeRow = rdd.mapPartitionsWithIndexInternal { (index, iter) =>
+    val numOutputRows = longMetric("numOutputRows")
+
+    rdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val proj = UnsafeProjection.create(schema)
       proj.initialize(index)
-      iter.map(proj)
-    }
-
-    val numOutputRows = longMetric("numOutputRows")
-    unsafeRow.map { r =>
-      numOutputRows += 1
-      r
+      iter.map( r => {
+        numOutputRows += 1
+        proj(r)
+      })
     }
   }
 
@@ -326,22 +325,22 @@ case class FileSourceScanExec(
       // 2) the number of columns should be smaller than spark.sql.codegen.maxFields
       WholeStageCodegenExec(this)(codegenStageId = 0).execute()
     } else {
-      val unsafeRows = {
-        val scan = inputRDD
-        if (needsUnsafeRowConversion) {
-          scan.mapPartitionsWithIndexInternal { (index, iter) =>
-            val proj = UnsafeProjection.create(schema)
-            proj.initialize(index)
-            iter.map(proj)
-          }
-        } else {
-          scan
-        }
-      }
       val numOutputRows = longMetric("numOutputRows")
-      unsafeRows.map { r =>
-        numOutputRows += 1
-        r
+
+      if (needsUnsafeRowConversion) {
+        inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+          val proj = UnsafeProjection.create(schema)
+          proj.initialize(index)
+          iter.map( r => {
+            numOutputRows += 1
+            proj(r)
+          })
+        }
+      } else {
+        inputRDD.map { r =>
+          numOutputRows += 1
+          r
+        }
       }
     }
   }
@@ -445,16 +444,29 @@ case class FileSourceScanExec(
       currentSize = 0
     }
 
-    // Assign files to partitions using "Next Fit Decreasing"
-    splitFiles.foreach { file =>
-      if (currentSize + file.length > maxSplitBytes) {
-        closePartition()
-      }
-      // Add the given file to the current partition.
-      currentSize += file.length + openCostInBytes
-      currentFiles += file
+    def addFile(file: PartitionedFile): Unit = {
+        currentFiles += file
+        currentSize += file.length + openCostInBytes
     }
-    closePartition()
+
+    var frontIndex = 0
+    var backIndex = splitFiles.length - 1
+
+    while (frontIndex <= backIndex) {
+      addFile(splitFiles(frontIndex))
+      frontIndex += 1
+      while (frontIndex <= backIndex &&
+             currentSize + splitFiles(frontIndex).length <= maxSplitBytes) {
+        addFile(splitFiles(frontIndex))
+        frontIndex += 1
+      }
+      while (backIndex > frontIndex &&
+             currentSize + splitFiles(backIndex).length <= maxSplitBytes) {
+        addFile(splitFiles(backIndex))
+        backIndex -= 1
+      }
+      closePartition()
+    }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
   }

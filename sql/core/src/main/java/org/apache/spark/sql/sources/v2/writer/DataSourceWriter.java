@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.StructType;
 /**
  * A data source writer that is returned by
  * {@link WriteSupport#createWriter(String, StructType, SaveMode, DataSourceOptions)}/
- * {@link org.apache.spark.sql.sources.v2.streaming.StreamWriteSupport#createStreamWriter(
+ * {@link StreamWriteSupport#createStreamWriter(
  * String, StructType, OutputMode, DataSourceOptions)}.
  * It can mix in various writing optimization interfaces to speed up the data saving. The actual
  * writing logic is delegated to {@link DataWriter}.
@@ -63,6 +63,14 @@ public interface DataSourceWriter {
   DataWriterFactory<Row> createWriterFactory();
 
   /**
+   * Handles a commit message on receiving from a successful data writer.
+   *
+   * If this method fails (by throwing an exception), this writing job is considered to to have been
+   * failed, and {@link #abort(WriterCommitMessage[])} would be called.
+   */
+  default void onDataWriterCommit(WriterCommitMessage message) {}
+
+  /**
    * Commits this writing job with a list of commit messages. The commit messages are collected from
    * successful data writers and are produced by {@link DataWriter#commit()}.
    *
@@ -78,8 +86,10 @@ public interface DataSourceWriter {
   void commit(WriterCommitMessage[] messages);
 
   /**
-   * Aborts this writing job because some data writers are failed and keep failing when retry, or
-   * the Spark job fails with some unknown reasons, or {@link #commit(WriterCommitMessage[])} fails.
+   * Aborts this writing job because some data writers are failed and keep failing when retry,
+   * or the Spark job fails with some unknown reasons,
+   * or {@link #onDataWriterCommit(WriterCommitMessage)} fails,
+   * or {@link #commit(WriterCommitMessage[])} fails.
    *
    * If this method fails (by throwing an exception), the underlying data source may require manual
    * cleanup.
