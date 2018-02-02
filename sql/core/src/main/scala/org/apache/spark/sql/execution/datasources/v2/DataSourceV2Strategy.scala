@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.Strategy
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.SparkPlan
 
 object DataSourceV2Strategy extends Strategy {
@@ -28,6 +28,10 @@ object DataSourceV2Strategy extends Strategy {
 
     case relation: StreamingDataSourceV2Relation =>
       DataSourceV2ScanExec(relation.fullOutput, relation.reader) :: Nil
+
+    case InsertIntoTable(relation: DataSourceV2Relation, _, query, overwrite, ifNotExists) =>
+      val mode = DataSourceV2Utils.saveMode(overwrite, ifNotExists)
+      WriteToDataSourceV2Exec(relation.writer(query.schema, mode).get, planLater(query)) :: Nil
 
     case WriteToDataSourceV2(writer, query) =>
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil

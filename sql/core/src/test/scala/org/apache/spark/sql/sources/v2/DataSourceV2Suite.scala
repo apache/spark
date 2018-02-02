@@ -259,6 +259,22 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-23321: test preprocess table insertion is applied") {
+    Seq(classOf[SimpleWritableDataSource]).foreach { cls =>
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
+
+        // attempt to write more columns than the table contains
+        val e = intercept[AnalysisException] {
+          spark.range(10).select('id, -'id, 'id * 'id)
+              .write.format(cls.getName).option("path", path).save()
+        }
+        assert(e.message.contains("data to be inserted have the same number of columns"))
+      }
+    }
+  }
+
   test("simple counter in writer with onDataWriterCommit") {
     Seq(classOf[SimpleWritableDataSource]).foreach { cls =>
       withTempPath { file =>

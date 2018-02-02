@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.text.SimpleDateFormat
-import java.util.{Date, Locale, Properties, UUID}
+import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
@@ -30,8 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AnalysisBarrier, InsertIntoT
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
@@ -240,22 +238,18 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
     val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val ds = cls.newInstance()
+      val ds = cls.newInstance().asInstanceOf[DataSourceV2]
       ds match {
-        case ws: WriteSupport =>
-          val options = new DataSourceOptions((extraOptions ++
-            DataSourceV2Utils.extractSessionConfigs(
-              ds = ds.asInstanceOf[DataSourceV2],
-              conf = df.sparkSession.sessionState.conf)).asJava)
-          // Using a timestamp and a random UUID to distinguish different writing jobs. This is good
-          // enough as there won't be tons of writing jobs created at the same second.
-          val jobId = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
-            .format(new Date()) + "-" + UUID.randomUUID()
-          val writer = ws.createWriter(jobId, df.logicalPlan.schema, mode, options)
-          if (writer.isPresent) {
-            runCommand(df.sparkSession, "save") {
-              WriteToDataSourceV2(writer.get(), df.logicalPlan)
-            }
+        case _: WriteSupport =>
+          val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+            ds = ds, conf = df.sparkSession.sessionState.conf)
+          val relation = DataSourceV2Relation(
+            ds, extraOptions.toMap ++ sessionOptions, path = extraOptions.get("path"))
+
+          val (overwrite, ifNotExists) = DataSourceV2Utils.overwriteAndIfNotExists(mode)
+
+          runCommand(df.sparkSession, "save") {
+            InsertIntoTable(relation, Map.empty, df.logicalPlan, overwrite, ifNotExists)
           }
 
         // Streaming also uses the data source V2 API. So it may be that the data source implements
