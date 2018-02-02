@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.Objects
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.sources.v2.reader._
 
 /**
@@ -28,9 +28,9 @@ import org.apache.spark.sql.sources.v2.reader._
 trait DataSourceReaderHolder {
 
   /**
-   * The full output of the data source reader, without column pruning.
+   * The output of the data source reader, w.r.t. column pruning.
    */
-  def fullOutput: Seq[AttributeReference]
+  def output: Seq[Attribute]
 
   /**
    * The held data source reader.
@@ -46,7 +46,7 @@ trait DataSourceReaderHolder {
       case s: SupportsPushDownFilters => s.pushedFilters().toSet
       case _ => Nil
     }
-    Seq(fullOutput, reader.getClass, reader.readSchema(), filters)
+    Seq(output, reader.getClass, filters)
   }
 
   def canEqual(other: Any): Boolean
@@ -60,9 +60,5 @@ trait DataSourceReaderHolder {
 
   override def hashCode(): Int = {
     metadata.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
-  }
-
-  lazy val output: Seq[Attribute] = reader.readSchema().map(_.name).map { name =>
-    fullOutput.find(_.name == name).get
   }
 }
