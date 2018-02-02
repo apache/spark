@@ -1115,6 +1115,12 @@ object MimaExcludes {
       ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasLoss.org$apache$spark$ml$param$shared$HasLoss$_setter_$loss_="),
       ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasLoss.getLoss"),
       ProblemFilters.exclude[InheritedNewAbstractMethodProblem]("org.apache.spark.ml.param.shared.HasLoss.loss")
+    ) ++ Seq(
+      // [SPARK-9853][Core] Optimize shuffle fetch of contiguous partition IDs.
+      ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.FetchFailed$"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.apply"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.copy"),
+      ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.FetchFailed.this")
     )
   }
 
