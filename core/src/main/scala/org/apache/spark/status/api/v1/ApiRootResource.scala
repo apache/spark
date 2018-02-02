@@ -83,8 +83,6 @@ private[spark] trait UIRoot {
   def getApplicationInfoList: Iterator[ApplicationInfo]
   def getApplicationInfo(appId: String): Option[ApplicationInfo]
 
-  def executorThreadDumpsNotAvailableError(): Option[Response] = None
-
   /**
    * Write the event logs for the given app to the [[ZipOutputStream]] instance. If attemptId is
    * [[None]], event logs for all attempts of this application will be written out.

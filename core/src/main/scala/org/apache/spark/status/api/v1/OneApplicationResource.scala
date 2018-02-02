@@ -26,7 +26,6 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{JobExecutionStatus, SparkContext}
 import org.apache.spark.ui.UIUtils
-import org.apache.spark.util.ThreadStackTrace
 
 @Produces(Array(MediaType.APPLICATION_JSON))
 private[v1] class AbstractApplicationResource extends BaseAppResource {
@@ -55,37 +54,46 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @GET
   @Path("executors/{executorId}/threads")
   def threadDump(@PathParam("executorId") executorId: String): Response = withUI { ui =>
-    uiRoot.executorThreadDumpsNotAvailableError().getOrElse {
-      val safeExecutorId =
-        Option(UIUtils.stripXSS(executorId)).map { executorId =>
-          UIUtils.decodeURLParameter(executorId)
-        }.getOrElse {
-          throw new IllegalArgumentException(s"Missing executorId parameter")
-        }
+    val safeExecutorId =
+      Option(UIUtils.stripXSS(executorId)).map { executorId =>
+        UIUtils.decodeURLParameter(executorId)
+      }.getOrElse {
+        throw new IllegalArgumentException(s"Missing executorId parameter")
+      }
 
-      def isAllDigits(x: String) = x.forall(Character.isDigit)
+    def isAllDigits(x: String) = x.forall(Character.isDigit)
 
-      if (executorId != SparkContext.DRIVER_IDENTIFIER && !isAllDigits(executorId)) {
-        Response.serverError()
-          .entity(s"Invalid executorId: neither '${SparkContext.DRIVER_IDENTIFIER}' nor number.")
-          .status(Response.Status.BAD_REQUEST)
-          .build()
-      } else {
-        if (ui.store.asOption(ui.store.executorSummary(executorId)).exists(!_.isActive)) {
+    if (executorId != SparkContext.DRIVER_IDENTIFIER && !isAllDigits(executorId)) {
+      Response.serverError()
+        .entity(s"Invalid executorId: neither '${SparkContext.DRIVER_IDENTIFIER}' nor number.")
+        .status(Response.Status.BAD_REQUEST)
+        .build()
+    } else {
+      ui.store.asOption(ui.store.executorSummary(executorId)).map { executorSummary =>
+        if (executorSummary.isActive) {
+          ui.sc match {
+            case Some(sc) => sc.getExecutorThreadDump(safeExecutorId)
+              .map(Response.ok(_).build())
+              .getOrElse(Response.serverError()
+                .entity("No stack traces are available.")
+                .status(Response.Status.NOT_FOUND)
+                .build())
+            case None => Response.serverError()
+              .entity("Thread dumps not available through the history server.")
+              .status(Response.Status.SERVICE_UNAVAILABLE)
+              .build()
+          }
+        } else {
           Response.serverError()
             .entity("Executor is already dead.")
             .status(Response.Status.BAD_REQUEST)
             .build()
-        } else {
-          ui.sc.flatMap(_.getExecutorThreadDump(safeExecutorId))
-            .map(Response.ok(_).build())
-            .getOrElse(
-              Response.serverError()
-                .entity("No stack traces are available.")
-                .status(Response.Status.NOT_FOUND)
-                .build())
         }
-      }
+      }.getOrElse(Response.serverError()
+        .entity("Executor does not exist.")
+        .status(Response.Status.NOT_FOUND)
+        .build()
+      )
     }
   }
 
