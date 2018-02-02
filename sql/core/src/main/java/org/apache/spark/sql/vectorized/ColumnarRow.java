@@ -119,43 +119,36 @@ public final class ColumnarRow extends InternalRow {
 
   @Override
   public Decimal getDecimal(int ordinal, int precision, int scale) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getDecimal(rowId, precision, scale);
   }
 
   @Override
   public UTF8String getUTF8String(int ordinal) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getUTF8String(rowId);
   }
 
   @Override
   public byte[] getBinary(int ordinal) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getBinary(rowId);
   }
 
   @Override
   public CalendarInterval getInterval(int ordinal) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getInterval(rowId);
   }
 
   @Override
   public ColumnarRow getStruct(int ordinal, int numFields) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getStruct(rowId);
   }
 
   @Override
   public ColumnarArray getArray(int ordinal) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getArray(rowId);
   }
 
   @Override
   public ColumnarMap getMap(int ordinal) {
-    if (data.getChild(ordinal).isNullAt(rowId)) return null;
     return data.getChild(ordinal).getMap(rowId);
   }
 
