@@ -753,7 +753,6 @@ class DataFrame(object):
         else:
             raise TypeError("numPartitions should be an int or Column")
 
-
     @since(1.3)
     def distinct(self):
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
