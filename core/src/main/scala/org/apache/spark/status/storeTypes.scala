@@ -341,8 +341,6 @@ private[spark] class TaskDataWrapper(
   @JsonIgnore @KVIndex(value = TaskIndexNames.ERROR, parent = TaskIndexNames.STAGE)
   private def error: String = if (errorMessage.isDefined) errorMessage.get else ""
 
-  @JsonIgnore @KVIndex("completionTime")
-  private def completionTime: Long = launchTime + duration
 }
 
 private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) {
