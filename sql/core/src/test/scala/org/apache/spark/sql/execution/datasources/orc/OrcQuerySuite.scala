@@ -670,7 +670,7 @@ class OrcQuerySuite extends OrcQueryTest with SharedSQLContext {
           new Path(basePath, "third").toString)
 
         val fs = thirdPath.getFileSystem(spark.sparkContext.hadoopConfiguration)
-        fs.delete(thirdPath, true)
+        assert(fs.delete(thirdPath, true))
         checkAnswer(df, Seq(Row(0), Row(1)))
       }
     }
