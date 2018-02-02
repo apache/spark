@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.sources.v2.streaming.reader.{Offset => OffsetV2}
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 
 /**
  * A simple offset for sources that produce a single linear stream of data.
