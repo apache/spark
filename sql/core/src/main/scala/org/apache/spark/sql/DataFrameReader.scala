@@ -59,7 +59,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Specifies the input schema. Some data sources (e.g. JSON) can infer the input schema
-   * automatically from data. By specifying the schema here, the underlying data source can
+   * automatically from data. By specifyinlg the schema here, the underlying data source can
    * skip the schema inference step, and thus speed up data loading.
    *
    * @since 1.4.0
@@ -73,6 +73,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Specifies the schema by using the input DDL-formatted string. Some data sources (e.g. JSON) can
    * infer the input schema automatically from data. By specifying the schema here, the underlying
    * data source can skip the schema inference step, and thus speed up data loading.
+   *
+   * {{{
+   *   spark.read.schema("a INT, b STRING, c DOUBLE").csv("test.csv")
+   * }}}
    *
    * @since 2.3.0
    */
