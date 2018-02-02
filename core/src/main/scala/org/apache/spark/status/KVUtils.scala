@@ -69,17 +69,14 @@ private[spark] object KVUtils extends Logging {
     db
   }
 
-  /**
-   * Turns a KVStoreView into a Scala sequence, applying a filter, sorting the sequence and
-   * selecting the first `max` values.
-   */
-  def viewToSeq[T, S: Ordering](
-    view: KVStoreView[T],
-    max: Int)
-    (filter: T => Boolean)(sorter: T => S): Seq[T] = {
+  /** Turns a KVStoreView into a Scala sequence, applying a filter. */
+  def viewToSeq[T](
+      view: KVStoreView[T],
+      max: Int)
+      (filter: T => Boolean): Seq[T] = {
     val iter = view.closeableIterator()
     try {
-      iter.asScala.filter(filter).toList.sortBy(sorter).take(max)
+      iter.asScala.filter(filter).take(max).toList
     } finally {
       iter.close()
     }

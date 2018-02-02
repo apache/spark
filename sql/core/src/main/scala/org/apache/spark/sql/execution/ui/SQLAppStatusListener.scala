@@ -332,8 +332,9 @@ class SQLAppStatusListener(
       return
     }
 
-    val toDelete = KVUtils.viewToSeq(kvstore.view(classOf[SQLExecutionUIData]),
-        countToDelete.toInt) { _.completionTime.isDefined } { _.completionTime.get.getTime }
+    val toDelete = KVUtils.viewToSeq(
+      kvstore.view(classOf[SQLExecutionUIData]).index("completionTime"),
+      countToDelete.toInt)(_.completionTime.isDefined)
     toDelete.foreach { e => kvstore.delete(e.getClass(), e.executionId) }
   }
 
