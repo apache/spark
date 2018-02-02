@@ -1776,6 +1776,77 @@ working with timestamps in `pandas_udf`s to get the best performance, see
 
 ## Upgrading From Spark SQL 2.2 to 2.3
 
+  - Since Spark 2.3, Spark supports a vectorized ORC reader with a new ORC file format for ORC files and Hive ORC tables. To do that, the following configurations are newly added or change their default values.
+
+    <table class="table">
+      <tr>
+        <th>
+          <b>Property Name</b>
+        </th>
+        <th>
+          <b>Default</b>
+        </th>
+        <th>
+          <b>Meaning</b>
+        </th>
+      </tr>
+      <tr>
+        <td>
+          spark.sql.orc.impl
+        </td>
+        <td>
+          native
+        </td>
+        <td>
+          The name of ORC implementation: 'native' means the native version of ORC support instead of the ORC library in Hive 1.2.1. It is 'hive' by default prior to Spark 2.3.
+        </td>
+      </tr>
+      <tr>
+        <td>
+          spark.sql.orc.enableVectorizedReader
+        </td>
+        <td>
+          true
+        </td>
+        <td>
+          Enables vectorized orc decoding in 'native' implementation. If 'false', a new non-vectorized ORC reader is used in 'native' implementation.
+        </td>
+      </tr>
+      <tr>
+        <td>
+          spark.sql.orc.columnarReaderBatchSize
+        </td>
+        <td>
+          4096
+        </td>
+        <td>
+          The number of rows to include in a orc vectorized reader batch. The number should be carefully chosen to minimize overhead and avoid OOMs in reading data.
+        </td>
+      </tr>
+      <tr>
+        <td>
+          spark.sql.orc.filterPushdown
+        </td>
+        <td>
+          true
+        </td>
+        <td>
+          Enable filter pushdown for ORC files. It is 'false' by default prior to Spark 2.3.
+        </td>
+      </tr>
+      <tr>
+        <td>
+          spark.sql.hive.convertMetastoreOrc
+        </td>
+        <td>
+          true
+        </td>
+        <td>
+          Enable the built-in ORC reader and writer to process Hive ORC tables, instead of Hive serde. It is 'false' by default prior to Spark 2.3.
+        </td>
+      </tr>
+    </table>
+
   - Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the referenced columns only include the internal corrupt record column (named `_corrupt_record` by default). For example, `spark.read.schema(schema).json(file).filter($"_corrupt_record".isNotNull).count()` and `spark.read.schema(schema).json(file).select("_corrupt_record").show()`. Instead, you can cache or save the parsed results and then send the same query. For example, `val df = spark.read.schema(schema).json(file).cache()` and then `df.filter($"_corrupt_record".isNotNull).count()`.
   - The `percentile_approx` function previously accepted numeric type input and output double type results. Now it supports date type, timestamp type and numeric types as input types. The result type is also changed to be the same as the input type, which is more reasonable for percentiles.
   - Since Spark 2.3, the Join/Filter's deterministic predicates that are after the first non-deterministic predicates are also pushed down/through the child operators, if possible. In prior Spark versions, these filters are not eligible for predicate pushdown.
