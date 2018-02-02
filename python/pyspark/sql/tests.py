@@ -3764,7 +3764,7 @@ class PandasUDFTests(ReusedSQLTestCase):
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
-class ScalarPandasUDF(ReusedSQLTestCase):
+class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     @classmethod
     def setUpClass(cls):
