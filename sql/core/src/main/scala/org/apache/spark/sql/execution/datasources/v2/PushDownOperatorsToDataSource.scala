@@ -105,8 +105,8 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] with PredicateHel
         case _ =>
       }
 
-      // TODO: there may be more operators can be used to calculate required columns, we can add
-      // more and more in the future.
+      // TODO: there may be more operators that can be used to calculate the required columns. We
+      // can add more and more in the future.
       case _ => plan.children.foreach(child => pushDownRequiredColumns(child, child.outputSet))
     }
   }
