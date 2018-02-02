@@ -668,7 +668,7 @@ class DataFrame(object):
             raise TypeError("numPartitions should be an int or Column")
 
     @since("2.3.0")
-    def repartitionByRange(self, numPartitions, *cols, **kwargs):
+    def repartitionByRange(self, numPartitions, *cols):
         """
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting DataFrame is range partitioned.
@@ -682,9 +682,16 @@ class DataFrame(object):
 
         >>> df.repartitionByRange(2, "age").rdd.getNumPartitions()
         2
-        >>> data = df.union(df).repartition(1, "age")
-        >>> data.rdd.getNumPartitions()
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+        >>> df.repartitionByRange(1, "age").rdd.getNumPartitions()
         1
+        >>> data = df.union(df)
         >>> data.show()
         +---+-----+
         |age| name|
@@ -706,6 +713,33 @@ class DataFrame(object):
         +---+-----+
         >>> data.rdd.getNumPartitions()
         3
+        >>> data = data.repartitionByRange("age")
+        >>> data.rdd.getNumPartitions()
+        3
+        >>> data2 = df.union(df).union(df)
+        >>> data2.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        |  2|Alice|
+        |  5|  Bob|
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+        >>> data2 = data2.repartitionByRange("age","name")
+        >>> data2.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  2|Alice|
+        |  2|Alice|
+        |  5|  Bob|
+        |  5|  Bob|
+        |  5|  Bob|
+        +---+-----+
         """
         if isinstance(numPartitions, int):
             if len(cols) == 0:
@@ -713,8 +747,12 @@ class DataFrame(object):
             else:
                 return DataFrame(
                     self._jdf.repartitionByRange(numPartitions, self._jcols(*cols)), self.sql_ctx)
+        elif isinstance(numPartitions, (basestring, Column)):
+            cols = (numPartitions,) + cols
+            return DataFrame(self._jdf.repartitionByRange(self._jcols(*cols)), self.sql_ctx)
         else:
             raise TypeError("numPartitions should be an int or Column")
+
 
     @since(1.3)
     def distinct(self):
