@@ -29,10 +29,10 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, Statistics}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory}
+import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory, SupportsScanUnsafeRow}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset => OffsetV2}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -53,7 +53,7 @@ object MemoryStream {
  * available.
  */
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
-    extends MicroBatchReader with Logging {
+    extends MicroBatchReader with SupportsScanUnsafeRow with Logging {
   protected val encoder = encoderFor[A]
   private val attributes = encoder.schema.toAttributes
   protected val logicalPlan = StreamingExecutionRelation(this, attributes)(sqlContext.sparkSession)
@@ -64,7 +64,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
    * Stored in a ListBuffer to facilitate removing committed batches.
    */
   @GuardedBy("this")
-  protected val batches = new ListBuffer[Dataset[A]]
+  protected val batches = new ListBuffer[Array[UnsafeRow]]
 
   @GuardedBy("this")
   protected var currentOffset: LongOffset = new LongOffset(-1)
@@ -95,13 +95,12 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   def addData(data: TraversableOnce[A]): Offset = {
-    val encoded = data.toVector.map(d => encoder.toRow(d).copy())
-    val plan = new LocalRelation(attributes, encoded, isStreaming = false)
-    val ds = Dataset[A](sqlContext.sparkSession, plan)
-    logDebug(s"Adding ds: $ds")
+    val objects = data.toSeq
+    val rows = objects.iterator.map(d => encoder.toRow(d).copy().asInstanceOf[UnsafeRow]).toArray
+    logDebug(s"Adding: $objects")
     this.synchronized {
       currentOffset = currentOffset + 1
-      batches += ds
+      batches += rows
       currentOffset
     }
   }
@@ -127,28 +126,30 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     if (endOffset.offset == -1) null else endOffset
   }
 
-  override def createDataReaderFactories(): ju.List[DataReaderFactory[Row]] = synchronized {
-    // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
-    val startOrdinal = startOffset.offset.toInt + 1
-    val endOrdinal = endOffset.offset.toInt + 1
+  override def createUnsafeRowReaderFactories(): ju.List[DataReaderFactory[UnsafeRow]] = {
+    synchronized {
+      // Compute the internal batch numbers to fetch: [startOrdinal, endOrdinal)
+      val startOrdinal = startOffset.offset.toInt + 1
+      val endOrdinal = endOffset.offset.toInt + 1
 
-    // Internal buffer only holds the batches after lastCommittedOffset.
-    val newBlocks = synchronized {
-      val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt - 1
-      val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
-      assert(sliceStart <= sliceEnd, s"sliceStart: $sliceStart sliceEnd: $sliceEnd")
-      batches.slice(sliceStart, sliceEnd)
+      // Internal buffer only holds the batches after lastCommittedOffset.
+      val newBlocks = synchronized {
+        val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt - 1
+        val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
+        assert(sliceStart <= sliceEnd, s"sliceStart: $sliceStart sliceEnd: $sliceEnd")
+        batches.slice(sliceStart, sliceEnd)
+      }
+
+      logDebug(generateDebugString(newBlocks, startOrdinal, endOrdinal))
+
+      newBlocks.map { block =>
+        new MemoryStreamDataReaderFactory(block).asInstanceOf[DataReaderFactory[UnsafeRow]]
+      }.asJava
     }
-
-    logDebug(generateDebugString(newBlocks, startOrdinal, endOrdinal))
-
-    newBlocks.map { ds =>
-      new MemoryStreamDataReaderFactory(ds.toDF().collect()).asInstanceOf[DataReaderFactory[Row]]
-    }.asJava
   }
 
   private def generateDebugString(
-      blocks: TraversableOnce[Dataset[A]],
+      blocks: Iterable[Array[UnsafeRow]],
       startOrdinal: Int,
       endOrdinal: Int): String = {
     val originalUnsupportedCheck =
@@ -156,7 +157,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     try {
       sqlContext.setConf("spark.sql.streaming.unsupportedOperationCheck", "false")
       s"MemoryBatch [$startOrdinal, $endOrdinal]: " +
-          s"${blocks.flatMap(_.collect()).mkString(", ")}"
+          s"${blocks.flatten.map(row => encoder.fromRow(row)).mkString(", ")}"
     } finally {
       sqlContext.setConf("spark.sql.streaming.unsupportedOperationCheck", originalUnsupportedCheck)
     }
@@ -193,9 +194,10 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 }
 
 
-class MemoryStreamDataReaderFactory(records: Array[Row]) extends DataReaderFactory[Row] {
-  override def createDataReader(): DataReader[Row] = {
-    new DataReader[Row] {
+class MemoryStreamDataReaderFactory(records: Array[UnsafeRow])
+  extends DataReaderFactory[UnsafeRow] {
+  override def createDataReader(): DataReader[UnsafeRow] = {
+    new DataReader[UnsafeRow] {
       private var currentIndex = -1
 
       override def next(): Boolean = {
@@ -204,7 +206,7 @@ class MemoryStreamDataReaderFactory(records: Array[Row]) extends DataReaderFacto
         currentIndex < records.length
       }
 
-      override def get(): Row = records(currentIndex)
+      override def get(): UnsafeRow = records(currentIndex)
 
       override def close(): Unit = {}
     }

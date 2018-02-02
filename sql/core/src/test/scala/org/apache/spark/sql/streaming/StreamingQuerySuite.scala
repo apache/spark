@@ -29,7 +29,8 @@ import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -220,16 +221,16 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
       // getEndOffset should take 100 ms the first time it is called after data is added
       override def getEndOffset(): OffsetV2 = synchronized {
-        if (currentOffset.offset != -1) {  // no data available
-          clock.waitTillTime(1150)
-        }
+        if (dataAdded) clock.waitTillTime(1150)
         super.getEndOffset()
       }
 
       // getBatch should take 100 ms the first time it is called
-      override def createDataReaderFactories(): ju.List[DataReaderFactory[Row]] = synchronized {
-        clock.waitTillTime(1350)
-        super.createDataReaderFactories()
+      override def createUnsafeRowReaderFactories(): ju.List[DataReaderFactory[UnsafeRow]] = {
+        synchronized {
+          clock.waitTillTime(1350)
+          super.createUnsafeRowReaderFactories()
+        }
       }
     }
 
