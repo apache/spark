@@ -97,17 +97,15 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  // Only ORC/Parquet support this.
-  Seq("orc", "parquet").foreach { format =>
+  allFileBasedDataSources.foreach { format =>
     testQuietly(s"Enabling/disabling ignoreMissingFiles using $format") {
       def testIgnoreMissingFiles(): Unit = {
         withTempDir { dir =>
           val basePath = dir.getCanonicalPath
-          spark.range(1).toDF("a").write.format(format).save(new Path(basePath, "first").toString)
-          spark.range(1, 2).toDF("a").write.format(format)
-            .save(new Path(basePath, "second").toString)
+          Seq("0").toDF("a").write.format(format).save(new Path(basePath, "first").toString)
+          Seq("1").toDF("a").write.format(format).save(new Path(basePath, "second").toString)
           val thirdPath = new Path(basePath, "third")
-          spark.range(2, 3).toDF("a").write.format(format).save(thirdPath.toString)
+          Seq("2").toDF("a").write.format(format).save(thirdPath.toString)
           val df = spark.read.format(format).load(
             new Path(basePath, "first").toString,
             new Path(basePath, "second").toString,
@@ -115,7 +113,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
 
           val fs = thirdPath.getFileSystem(spark.sparkContext.hadoopConfiguration)
           assert(fs.delete(thirdPath, true))
-          checkAnswer(df, Seq(Row(0), Row(1)))
+          checkAnswer(df, Seq(Row("0"), Row("1")))
         }
       }
 
