@@ -45,6 +45,7 @@ import scala.util.matching.Regex
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.io.{ByteStreams, Files => GFiles}
+import com.google.common.math.DoubleMath
 import com.google.common.net.InetAddresses
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
@@ -2804,6 +2805,14 @@ private[spark] object Utils extends Logging {
     }
 
     s"k8s://$resolvedURL"
+  }
+
+  /**
+   * Get the number of tasks an executor can take given the number of CPU cores allocated to the
+   * executor and the number of CPU cores per task.
+   */
+  def getTasksPerExecutor(cores: Double, taskCpus: Double): Int = {
+    DoubleMath.roundToInt(cores / taskCpus, RoundingMode.FLOOR)
   }
 }
 

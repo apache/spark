@@ -1670,7 +1670,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.task.cpus</code></td>
   <td>1</td>
   <td>
-    Number of cores to allocate for each task.
+    Number of cores to allocate for each task. Can have fractional values, e.g. 0.1 (100 millicpus), in Kubernetes mode.
   </td>
 </tr>
 <tr>
