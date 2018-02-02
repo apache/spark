@@ -84,7 +84,7 @@ class _ImageSchema(object):
         :return: a :class:`StructType` for image column,
             ``struct<origin:string, height:int, width:int, nChannels:int, mode:int, data:binary>``.
 
-        .. versionadded:: 2.3.0
+        .. versionadded:: 2.4.0
         """
 
         if self._columnSchema is None:
