@@ -186,15 +186,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
       val ds = cls.newInstance().asInstanceOf[DataSourceV2]
-      val (pathOption, tableOption) = DataSourceV2Utils.parseTableLocation(
-        sparkSession, extraOptions.get("path"))
-      val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
-        ds = ds, conf = sparkSession.sessionState.conf)
-
       if (ds.isInstanceOf[ReadSupport] || ds.isInstanceOf[ReadSupportWithSchema]) {
+        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+          ds = ds, conf = sparkSession.sessionState.conf)
         Dataset.ofRows(sparkSession, DataSourceV2Relation(
-          ds, extraOptions.toMap ++ sessionOptions, pathOption, tableOption,
+          ds, extraOptions.toMap ++ sessionOptions, path = extraOptions.get("path"),
           userSchema = userSpecifiedSchema))
+
       } else {
         loadV1Source(paths: _*)
       }
