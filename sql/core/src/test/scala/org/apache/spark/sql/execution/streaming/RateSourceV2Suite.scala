@@ -160,7 +160,7 @@ class RateSourceV2Suite extends StreamTest {
   test("continuous data") {
     val reader = new RateStreamContinuousReader(
       new DataSourceOptions(Map("numPartitions" -> "2", "rowsPerSecond" -> "20").asJava))
-    reader.setOffset(Optional.empty())
+    reader.setStartOffset(Optional.empty())
     val tasks = reader.createDataReaderFactories()
     assert(tasks.size == 2)
 
