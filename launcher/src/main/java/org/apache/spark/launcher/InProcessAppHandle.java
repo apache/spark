@@ -66,7 +66,7 @@ class InProcessAppHandle extends AbstractAppHandle {
         setState(State.FAILED);
       }
 
-      disconnect();
+      dispose();
     });
 
     app.setName(String.format(THREAD_NAME_FMT, THREAD_IDS.incrementAndGet(), appName));
