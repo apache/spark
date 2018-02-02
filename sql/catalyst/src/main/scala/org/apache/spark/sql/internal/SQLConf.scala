@@ -141,6 +141,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val CACHE_VECTORIZED_READER_ENABLED =
+    buildConf("spark.sql.inMemoryColumnarStorage.enableVectorizedReader")
+      .doc("Enables vectorized reader for columnar caching.")
+      .booleanConf
+      .createWithDefault(true)
+
   val COLUMN_VECTOR_OFFHEAP_ENABLED =
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
@@ -1271,6 +1277,8 @@ class SQLConf extends Serializable with Logging {
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
+
+  def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
 
   def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
