@@ -54,7 +54,7 @@ case class InMemoryTableScanExec(
   override val supportsBatch: Boolean = {
     // In the initial implementation, for ease of review
     // support only primitive data types and # of fields is less than wholeStageMaxNumFields
-    relation.schema.fields.forall(f => f.dataType match {
+    conf.cacheVectorizedReaderEnabled && relation.schema.fields.forall(f => f.dataType match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType |
            FloatType | DoubleType => true
       case _ => false
