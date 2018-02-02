@@ -15,24 +15,39 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader;
+package org.apache.spark.sql.vectorized;
 
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.catalyst.util.MapData;
 
 /**
- * A concrete implementation of {@link Distribution}. Represents a distribution where records that
- * share the same values for the {@link #clusteredColumns} will be produced by the same
- * {@link ReadTask}.
+ * Map abstraction in {@link ColumnVector}.
  */
-@InterfaceStability.Evolving
-public class ClusteredDistribution implements Distribution {
+public final class ColumnarMap extends MapData {
+  private final ColumnarArray keys;
+  private final ColumnarArray values;
+  private final int length;
 
-  /**
-   * The names of the clustered columns. Note that they are order insensitive.
-   */
-  public final String[] clusteredColumns;
+  public ColumnarMap(ColumnVector keys, ColumnVector values, int offset, int length) {
+    this.length = length;
+    this.keys = new ColumnarArray(keys, offset, length);
+    this.values = new ColumnarArray(values, offset, length);
+  }
 
-  public ClusteredDistribution(String[] clusteredColumns) {
-    this.clusteredColumns = clusteredColumns;
+  @Override
+  public int numElements() { return length; }
+
+  @Override
+  public ColumnarArray keyArray() {
+    return keys;
+  }
+
+  @Override
+  public ColumnarArray valueArray() {
+    return values;
+  }
+
+  @Override
+  public ColumnarMap copy() {
+    throw new UnsupportedOperationException();
   }
 }

@@ -819,6 +819,29 @@ class DataFrame(object):
         """
         return [f.name for f in self.schema.fields]
 
+    @since(2.3)
+    def colRegex(self, colName):
+        """
+        Selects column based on the column name specified as a regex and returns it
+        as :class:`Column`.
+
+        :param colName: string, column name specified as a regex.
+
+        >>> df = spark.createDataFrame([("a", 1), ("b", 2), ("c",  3)], ["Col1", "Col2"])
+        >>> df.select(df.colRegex("`(Col1)?+.+`")).show()
+        +----+
+        |Col2|
+        +----+
+        |   1|
+        |   2|
+        |   3|
+        +----+
+        """
+        if not isinstance(colName, basestring):
+            raise ValueError("colName should be provided as string")
+        jc = self._jdf.colRegex(colName)
+        return Column(jc)
+
     @ignore_unicode_prefix
     @since(1.3)
     def alias(self, alias):
@@ -1806,11 +1829,15 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` by adding a column or replacing the
         existing column that has the same name.
 
+        The column expression must be an expression over this DataFrame; attempting to add
+        a column from some other dataframe will raise an error.
+
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
 
         >>> df.withColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
+
         """
         assert isinstance(col, Column), "col should be Column"
         return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
