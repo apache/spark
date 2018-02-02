@@ -21,6 +21,7 @@ import java.io.IOException
 
 import scala.collection.mutable
 import scala.util.Random
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.feature.LabeledPoint
@@ -916,15 +917,11 @@ private[spark] object RandomForest extends Logging {
       // being spun up that will definitely do no work.
       val numPartitions = math.min(continuousFeatures.length, input.partitions.length)
 
-      val numInput = input.count()
-      val bcNumInput = input.sparkContext.broadcast(numInput)
-
       input
-        .flatMap(point => continuousFeatures.map(idx => (idx, point.features(idx))))
-        .filter(_._2 != 0.0)
+        .flatMap(point => continuousFeatures.map(idx => (idx, point.features(idx))).filter(_._2 != 0.0))
         .groupByKey(numPartitions)
         .map { case (idx, samples) =>
-          val thresholds = findSplitsForContinuousFeature(samples, metadata, idx, bcNumInput.value)
+          val thresholds = findSplitsForContinuousFeature(samples, metadata, idx)
           val splits: Array[Split] = thresholds.map(thresh => new ContinuousSplit(idx, thresh))
           logDebug(s"featureIndex = $idx, numSplits = ${splits.length}")
           (idx, splits)
@@ -935,7 +932,7 @@ private[spark] object RandomForest extends Logging {
     val splits: Array[Array[Split]] = Array.tabulate(numFeatures) {
       case i if metadata.isContinuous(i) =>
         // some features may only contains zero, so continuousSplits will not have a record
-        val split = if ( continuousSplits.contains(i) ) continuousSplits(i) else Array.empty[Split]
+        val split = if (continuousSplits.contains(i)) continuousSplits(i) else Array.empty[Split]
         metadata.setNumSplits(i, split.length)
         split
 
@@ -991,14 +988,12 @@ private[spark] object RandomForest extends Logging {
    *                 NOTE: `metadata.numbins` will be changed accordingly
    *                       if there are not enough splits to be found
    * @param featureIndex feature index to find splits
-   * @param numInput total number of samples
    * @return array of split thresholds
    */
   private[tree] def findSplitsForContinuousFeature(
       featureSamples: Iterable[Double],
       metadata: DecisionTreeMetadata,
-      featureIndex: Int,
-      numInput: Long): Array[Double] = {
+      featureIndex: Int): Array[Double] = {
     require(metadata.isContinuous(featureIndex),
       "findSplitsForContinuousFeature can only be used to find splits for a continuous feature.")
 
@@ -1007,14 +1002,21 @@ private[spark] object RandomForest extends Logging {
     } else {
       val numSplits = metadata.numSplits(featureIndex)
 
-      // get count for each distinct value
-      var (valueCountMap, numSamples) = featureSamples.foldLeft((Map.empty[Double, Int], 0)) {
+      // get count for each distinct value except zero value
+      val (partValueCountMap, partNumSamples) = featureSamples.foldLeft((Map.empty[Double, Int], 0)) {
         case ((m, cnt), x) =>
           (m + ((x, m.getOrElse(x, 0) + 1)), cnt + 1)
       }
-      // add zero value count
-      valueCountMap += (0.0 -> (numInput.toInt - numSamples))
-      numSamples = numInput.toInt
+
+      // Calculate the number of samples for finding splits
+      var requiredSamples: Long = math.max(metadata.maxBins * metadata.maxBins, 10000)
+      if (requiredSamples >= metadata.numExamples) {
+        requiredSamples = metadata.numExamples
+      }
+
+      // add zero value count and get complete statistics
+      val valueCountMap: Map[Double, Int] = partValueCountMap + (0.0 -> (requiredSamples.toInt - partNumSamples))
+      val numSamples: Int = requiredSamples.toInt
 
       // sort distinct values
       val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray
