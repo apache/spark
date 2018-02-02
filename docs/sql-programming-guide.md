@@ -1798,7 +1798,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
           native
         </td>
         <td>
-          The name of ORC implementation: 'native' means the native ORC support that is built on Apache ORC 1.4.1 instead of the ORC library in Hive 1.2.1. It is 'hive' by default prior to Spark 2.3.
+          The name of ORC implementation: `native` means the native ORC support that is built on Apache ORC 1.4.1 instead of the ORC library in Hive 1.2.1. It is `hive` by default prior to Spark 2.3.
         </td>
       </tr>
       <tr>
@@ -1809,7 +1809,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
           true
         </td>
         <td>
-          Enables vectorized orc decoding in 'native' implementation. If 'false', a new non-vectorized ORC reader is used in 'native' implementation.
+          Enables vectorized orc decoding in `native` implementation. If `false`, a new non-vectorized ORC reader is used in `native` implementation. For `hive` implementation, this is ignored.
         </td>
       </tr>
       <tr>
@@ -1820,7 +1820,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
           true
         </td>
         <td>
-          Enables filter pushdown for ORC files. It is 'false' by default prior to Spark 2.3.
+          Enables filter pushdown for ORC files. It is `false` by default prior to Spark 2.3.
         </td>
       </tr>
       <tr>
@@ -1831,7 +1831,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
           true
         </td>
         <td>
-          Enable Spark's ORC support instead of Hive SerDe when reading from and writing to Hive ORC tables. It is 'false' by default prior to Spark 2.3.
+          Enable Spark's ORC support instead of Hive SerDe when reading from and writing to Hive ORC tables. It is `false` by default prior to Spark 2.3.
         </td>
       </tr>
     </table>
