@@ -20,6 +20,7 @@ package org.apache.spark.sql.sources.v2.writer;
 import java.io.Serializable;
 
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.scheduler.OutputCommitCoordinator;
 
 /**
  * A factory of {@link DataWriter} returned by {@link DataSourceWriter#createWriterFactory()},
@@ -31,6 +32,16 @@ import org.apache.spark.annotation.InterfaceStability;
  */
 @InterfaceStability.Evolving
 public interface DataWriterFactory<T> extends Serializable {
+
+  /**
+   * Returns whether Spark should use the {@link OutputCommitCoordinator} to ensure that only one
+   * attempt for each task commits.
+   *
+   * @return true if commit coordinator should be used, false otherwise.
+   */
+  default boolean useCommitCoordinator() {
+    return true;
+  }
 
   /**
    * Returns a data writer to do the actual writing work.
