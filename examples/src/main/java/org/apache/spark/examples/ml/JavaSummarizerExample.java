@@ -54,8 +54,8 @@ public class JavaSummarizerExample {
     Dataset<Row> df = spark.createDataFrame(data, schema);
 
     Row result1 = df.select(Summarizer.metrics("mean", "variance")
-        .summary(new Column("features"), new Column("weight")))
-        .first().getStruct(0);
+      .summary(new Column("features"), new Column("weight")).as("summary"))
+      .select("summary.mean", "summary.variance").first();
     System.out.println("with weight: mean = " + result1.<Vector>getAs(0).toString() +
       ", variance = " + result1.<Vector>getAs(1).toString());
 

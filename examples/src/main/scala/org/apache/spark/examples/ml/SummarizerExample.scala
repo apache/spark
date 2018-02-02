@@ -42,9 +42,10 @@ object SummarizerExample {
 
     val df = data.toDF("features", "weight")
 
-    val Tuple1((meanVal, varianceVal)) = df.select(metrics("mean", "variance")
-      .summary($"features", $"weight"))
-      .as[Tuple1[(Vector, Vector)]].first()
+    val (meanVal, varianceVal) = df.select(metrics("mean", "variance")
+      .summary($"features", $"weight").as("summary"))
+      .select("summary.mean", "summary.variance")
+      .as[(Vector, Vector)].first()
 
     println(s"with weight: mean = ${meanVal}, variance = ${varianceVal}")
 
