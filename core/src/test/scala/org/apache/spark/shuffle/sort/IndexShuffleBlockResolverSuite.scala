@@ -123,7 +123,6 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
       indexIn.close()
     }
 
-
     // remove data file
     dataFile.delete()
 
