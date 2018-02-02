@@ -94,7 +94,7 @@ class SQLExecutionUIData(
     val metricValues: Map[Long, String]) {
 
   @JsonIgnore @KVIndex("completionTime")
-  private def completionTimeIndex: Long = completionTime.map(_.getTime).getOrElse(Long.MaxValue)
+  private def completionTimeIndex: Long = completionTime.map(_.getTime).getOrElse(-1L)
 }
 
 class SparkPlanGraphWrapper(
