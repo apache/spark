@@ -94,19 +94,21 @@ Refer to the [`ChiSquareTest` Python docs](api/python/index.html#pyspark.ml.stat
 ## Summarizer
 
 We provide vector column summary statistics for `Dataframe` through `Summarizer`.
-Available metrics contain the column-wise max, min, mean, variance, and number of nonzeros, as well as the total count.
+Available metrics are the column-wise max, min, mean, variance, and number of nonzeros, as well as the total count.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 [`Summarizer`](api/scala/index.html#org.apache.spark.ml.stat.Summarizer$)
-compute and print the mean and variace for the input dataframe. Including the two cases of with and without weight.
+The following example demonstrates using `Summarizer` to compute the mean and variance for the input dataframe, with
+and without a weight column.
 
 {% include_example scala/org/apache/spark/examples/ml/SummarizerExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
 [`Summarizer`](api/java/org/apache/spark/ml/stat/Summarizer.html)
-compute and print the mean and variace for the input dataframe. Including the two cases of with and without weight.
+The following example demonstrates using `Summarizer` to compute the mean and variance for the input dataframe, with
+and without a weight column.
 
 {% include_example java/org/apache/spark/examples/ml/JavaSummarizerExample.java %}
 </div>
