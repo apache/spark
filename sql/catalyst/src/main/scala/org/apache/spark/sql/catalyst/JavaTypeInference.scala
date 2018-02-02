@@ -104,6 +104,11 @@ object JavaTypeInference {
       case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
 
+      case c if ExpressionEncoderUtils.hasEncoderForClass(c) =>
+        // User-defined type. Use user-defined Encoder to get schema for this type
+        val dataType = ExpressionEncoderUtils.getEncoderForClass(c).schemaFor(c)
+        (dataType, true)
+
       case _ if typeToken.isArray =>
         val (dataType, nullable) = inferDataType(typeToken.getComponentType, seenTypeSet)
         (ArrayType(dataType, nullable), true)
@@ -277,6 +282,10 @@ object JavaTypeInference {
           inferDataType(et)._1,
           customCollectionCls = Some(c))
 
+      case c if ExpressionEncoderUtils.hasEncoderForClass(c) =>
+        // User-defined type. Use user-defined Encoder to get deserializer for this type
+        ExpressionEncoderUtils.getEncoderForClass(c).deserializerFor(path, c)
+
       case _ if mapType.isAssignableFrom(typeToken) =>
         val (keyType, valueType) = mapKeyValueType(typeToken)
         val keyDataType = inferDataType(keyType)._1
@@ -421,6 +430,10 @@ object JavaTypeInference {
           Invoke(inputObject, "floatValue", FloatType)
         case c if c == classOf[java.lang.Double] =>
           Invoke(inputObject, "doubleValue", DoubleType)
+
+        case c if ExpressionEncoderUtils.hasEncoderForClass(c) =>
+          // User-defined type. Use user-defined Encoder to get serializer for this type
+          ExpressionEncoderUtils.getEncoderForClass(c).serializerFor(inputObject, c)
 
         case _ if typeToken.isArray =>
           toCatalystArray(inputObject, typeToken.getComponentType)

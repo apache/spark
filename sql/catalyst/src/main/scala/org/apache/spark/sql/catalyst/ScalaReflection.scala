@@ -416,6 +416,11 @@ object ScalaReflection extends ScalaReflection {
         } else {
           newInstance
         }
+
+      case t if ExpressionEncoderUtils.hasEncoderForClass(getClassFromType(t)) =>
+        // User-defined type. Use user-defined Encoder to get deserializer for this type
+        ExpressionEncoderUtils.getEncoderForClass(getClassFromType(t))
+          .deserializerFor(path, getClassFromType(tpe))
     }
   }
 
@@ -643,6 +648,11 @@ object ScalaReflection extends ScalaReflection {
         val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
         expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
 
+      case t if ExpressionEncoderUtils.hasEncoderForClass(getClassFromType(t)) =>
+        // User-defined type. Use user-defined Encoder to get serializer for this type
+        ExpressionEncoderUtils.getEncoderForClass(getClassFromType(t))
+          .serializerFor(inputObject, getClassFromType(tpe))
+
       case other =>
         throw new UnsupportedOperationException(
           s"No Encoder found for $tpe\n" + walkedTypePath.mkString("\n"))
@@ -780,6 +790,13 @@ object ScalaReflection extends ScalaReflection {
             val Schema(dataType, nullable) = schemaFor(fieldType)
             StructField(fieldName, dataType, nullable)
           }), nullable = true)
+
+      case t if ExpressionEncoderUtils.hasEncoderForClass(getClassFromType(t)) =>
+        // User-defined type. Use user-defined Encoder to get schema for this type
+        val dataType = ExpressionEncoderUtils.getEncoderForClass(getClassFromType(t))
+          .schemaFor(getClassFromType(tpe))
+        Schema(dataType, nullable = true)
+
       case other =>
         throw new UnsupportedOperationException(s"Schema for type $other is not supported")
     }
