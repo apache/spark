@@ -61,7 +61,7 @@ class RateStreamContinuousReader(options: DataSourceOptions)
 
   private var offset: Offset = _
 
-  override def setOffset(offset: java.util.Optional[Offset]): Unit = {
+  override def setStartOffset(offset: java.util.Optional[Offset]): Unit = {
     this.offset = offset.orElse(RateStreamSourceV2.createInitialOffset(numPartitions, creationTime))
   }
 
