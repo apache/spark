@@ -74,6 +74,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * infer the input schema automatically from data. By specifying the schema here, the underlying
    * data source can skip the schema inference step, and thus speed up data loading.
    *
+   * {{{
+   *   spark.read.schema("a INT, b STRING, c DOUBLE").csv("test.csv")
+   * }}}
+   *
    * @since 2.3.0
    */
   def schema(schemaString: String): DataFrameReader = {
