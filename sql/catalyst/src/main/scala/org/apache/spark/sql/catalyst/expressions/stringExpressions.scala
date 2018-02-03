@@ -1655,15 +1655,17 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the character length of `expr` or number of bytes in binary data.",
+  usage = "_FUNC_(expr) - Returns the character length of `expr` or number of bytes in binary data. " +
+    "The length of character strings include the trailing spaces. The length of binary strings " +
+    "includes binary zeros.",
   examples = """
     Examples:
-      > SELECT _FUNC_('Spark SQL');
-       9
-      > SELECT CHAR_LENGTH('Spark SQL');
-       9
-      > SELECT CHARACTER_LENGTH('Spark SQL');
-       9
+      > SELECT _FUNC_('Spark SQL ');
+       10
+      > SELECT CHAR_LENGTH('Spark SQL ');
+       10
+      > SELECT CHARACTER_LENGTH('Spark SQL ');
+       10
   """)
 // scalastyle:on line.size.limit
 case class Length(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
