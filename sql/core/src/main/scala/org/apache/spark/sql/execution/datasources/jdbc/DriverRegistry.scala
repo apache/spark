@@ -32,7 +32,11 @@ import org.apache.spark.util.Utils
  */
 object DriverRegistry extends Logging {
 
-  // Initialize DriverManager first to prevent potential deadlocks between DriverManager and Driver
+  /**
+   * Load DriverManager first to avoid any race condition between
+   * DriverManager static initialization block and specific driver class's
+   * static initialization block. e.g. PhoenixDriver
+   */
   DriverManager.getDrivers
 
   private val wrapperMap: mutable.Map[String, DriverWrapper] = mutable.Map.empty
