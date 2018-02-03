@@ -83,7 +83,7 @@ private[spark] class TaskSchedulerImpl(
   val STARVATION_TIMEOUT_MS = conf.getTimeAsMs("spark.starvation.timeout", "15s")
 
   // CPUs to request per task
-  val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
+  val CPUS_PER_TASK = conf.get(config.CPUS_PER_TASK)
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
@@ -344,7 +344,9 @@ private[spark] class TaskSchedulerImpl(
 
     val shuffledOffers = shuffleOffers(filteredOffers)
     // Build a list of tasks to assign to each worker.
-    val tasks = shuffledOffers.map(o => new ArrayBuffer[TaskDescription](o.cores / CPUS_PER_TASK))
+    val tasks = shuffledOffers.map { o =>
+      new ArrayBuffer[TaskDescription](Utils.getTasksPerExecutor(o.cores, CPUS_PER_TASK))
+    }
     val availableCpus = shuffledOffers.map(o => o.cores).toArray
     val sortedTaskSets = rootPool.getSortedTaskSetQueue
     for (taskSet <- sortedTaskSets) {

@@ -23,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
 
+import com.google.common.math.DoubleMath
 import org.apache.avro.{Schema, SchemaNormalization}
 
 import org.apache.spark.deploy.history.config._
@@ -552,12 +553,10 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
     if (contains("spark.cores.max") && contains("spark.executor.cores")) {
       val totalCores = getInt("spark.cores.max", 1)
-      val executorCores = getInt("spark.executor.cores", 1)
-      val leftCores = totalCores % executorCores
-      if (leftCores != 0) {
-        logWarning(s"Total executor cores: ${totalCores} is not " +
-          s"divisible by cores per executor: ${executorCores}, " +
-          s"the left cores: ${leftCores} will not be allocated")
+      val executorCores = getDouble("spark.executor.cores", 1d)
+      if (DoubleMath.isMathematicalInteger(totalCores / executorCores)) {
+        logWarning(s"Total executor cores: $totalCores is not " +
+          s"divisible by cores per executor: $executorCores")
       }
     }
 

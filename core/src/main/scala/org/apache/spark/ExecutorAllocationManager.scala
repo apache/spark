@@ -26,7 +26,7 @@ import scala.util.control.{ControlThrowable, NonFatal}
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS}
+import org.apache.spark.internal.config.{CPUS_PER_TASK, DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
@@ -114,8 +114,8 @@ private[spark] class ExecutorAllocationManager(
   // TODO: The default value of 1 for spark.executor.cores works right now because dynamic
   // allocation is only supported for YARN and the default number of cores per executor in YARN is
   // 1, but it might need to be attained differently for different cluster managers
-  private val tasksPerExecutor =
-    conf.getInt("spark.executor.cores", 1) / conf.getInt("spark.task.cpus", 1)
+  private val tasksPerExecutor = Utils.getTasksPerExecutor(
+    conf.getDouble("spark.executor.cores", 1), conf.get(CPUS_PER_TASK))
 
   validateSettings()
 

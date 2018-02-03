@@ -27,11 +27,13 @@ import scala.collection.mutable.HashMap
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.CPUS_PER_TASK
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.scope._
+import org.apache.spark.util.Utils
 
 /**
  * A Spark listener that writes application information to a data store. The types written to the
@@ -51,7 +53,7 @@ private[spark] class AppStatusListener(
   private var sparkVersion = SPARK_VERSION
   private var appInfo: v1.ApplicationInfo = null
   private var appSummary = new AppSummary(0, 0)
-  private var coresPerTask: Int = 1
+  private var coresPerTask: Double = 1d
 
   // How often to update live entities. -1 means "never update" when replaying applications,
   // meaning only the last write will happen. For live applications, this avoids a few
@@ -147,7 +149,7 @@ private[spark] class AppStatusListener(
       details.getOrElse("System Properties", Nil),
       details.getOrElse("Classpath Entries", Nil))
 
-    coresPerTask = envInfo.sparkProperties.toMap.get("spark.task.cpus").map(_.toInt)
+    coresPerTask = envInfo.sparkProperties.toMap.get(CPUS_PER_TASK.key).map(_.toDouble)
       .getOrElse(coresPerTask)
 
     kvstore.write(new ApplicationEnvironmentInfoWrapper(envInfo))
@@ -183,7 +185,7 @@ private[spark] class AppStatusListener(
     exec.host = event.executorInfo.executorHost
     exec.isActive = true
     exec.totalCores = event.executorInfo.totalCores
-    exec.maxTasks = event.executorInfo.totalCores / coresPerTask
+    exec.maxTasks = Utils.getTasksPerExecutor(event.executorInfo.totalCores, coresPerTask)
     exec.executorLogs = event.executorInfo.logUrlMap
     liveUpdate(exec, System.nanoTime())
   }

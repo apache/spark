@@ -1167,6 +1167,13 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       Utils.checkAndGetK8sMasterUrl("k8s://foo://host:port")
     }
   }
+
+  test("get tasks per executor") {
+    assert(Utils.getTasksPerExecutor(1d, 1d) == 1)
+    assert(Utils.getTasksPerExecutor(2d, 0.5d) == 4)
+    assert(Utils.getTasksPerExecutor(0.1d, 0.05d) == 2)
+    assert(Utils.getTasksPerExecutor(0.5d, 0.6d) == 0)
+  }
 }
 
 private class SimpleExtension

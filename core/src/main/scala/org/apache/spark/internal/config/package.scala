@@ -114,7 +114,8 @@ package object config {
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)
 
-  private[spark] val CPUS_PER_TASK = ConfigBuilder("spark.task.cpus").intConf.createWithDefault(1)
+  private[spark] val CPUS_PER_TASK = ConfigBuilder("spark.task.cpus").doubleConf
+    .createWithDefault(1d)
 
   private[spark] val DYN_ALLOCATION_MIN_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.minExecutors").intConf.createWithDefault(0)
