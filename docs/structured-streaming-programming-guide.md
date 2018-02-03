@@ -1346,9 +1346,19 @@ joined <- join(
 </div>
 </div>
 
-However, note that the outer NULL results will be generated with a delay (depends on the specified
-watermark delay and the time range condition) because the engine has to wait for that long to ensure
+
+There are a few points to note regarding outer joins.
+
+- *The outer NULL results will be generated with a delay that depends on the specified watermark
+delay and the time range condition.* This is because the engine has to wait for that long to ensure
 there were no matches and there will be no more matches in future.
+
+- In the current implementation in the micro-batch engine, watermarks are advanced at the end of a
+micro-batch, and the next micro-batch uses the updated watermark to clean up state and output
+outer results. Since we trigger a micro-batch only when there is new data to be processed, the
+generation of the outer result may get delayed if there no new data being received in the stream.
+*In short, if any of the two input streams being joined does not receive data for a while, the
+outer (both cases, left or right) output may get delayed.*
 
 ##### Support matrix for joins in streaming queries
 
