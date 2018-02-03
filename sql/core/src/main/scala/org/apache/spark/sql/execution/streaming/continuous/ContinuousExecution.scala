@@ -181,7 +181,7 @@ class ContinuousExecution(
 
         val loggedOffset = offsets.offsets(0)
         val realOffset = loggedOffset.map(off => reader.deserializeOffset(off.json))
-        reader.setOffset(java.util.Optional.ofNullable(realOffset.orNull))
+        reader.setStartOffset(java.util.Optional.ofNullable(realOffset.orNull))
         new StreamingDataSourceV2Relation(newOutput, reader)
     }
 

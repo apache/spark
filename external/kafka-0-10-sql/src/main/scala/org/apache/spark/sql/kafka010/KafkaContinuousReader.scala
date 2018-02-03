@@ -71,7 +71,7 @@ class KafkaContinuousReader(
   override def readSchema: StructType = KafkaOffsetReader.kafkaSchema
 
   private var offset: Offset = _
-  override def setOffset(start: ju.Optional[Offset]): Unit = {
+  override def setStartOffset(start: ju.Optional[Offset]): Unit = {
     offset = start.orElse {
       val offsets = initialOffsets match {
         case EarliestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchEarliestOffsets())

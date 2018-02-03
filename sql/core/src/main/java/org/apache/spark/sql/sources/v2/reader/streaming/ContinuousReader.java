@@ -51,12 +51,12 @@ public interface ContinuousReader extends BaseStreamingSource, DataSourceReader 
      * start from the first record after the provided offset, or from an implementation-defined
      * inferred starting point if no offset is provided.
      */
-    void setOffset(Optional<Offset> start);
+    void setStartOffset(Optional<Offset> start);
 
     /**
      * Return the specified or inferred start offset for this reader.
      *
-     * @throws IllegalStateException if setOffset has not been called
+     * @throws IllegalStateException if setStartOffset has not been called
      */
     Offset getStartOffset();
 
