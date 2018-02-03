@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""
+r"""
  Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
  Usage: flume_wordcount.py <hostname> <port>
 

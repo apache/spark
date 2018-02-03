@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""
+r"""
  Counts words in new text files created in the given directory
  Usage: hdfs_wordcount.py <directory>
    <directory> is the directory that Spark Streaming will use to find and read new text files.
