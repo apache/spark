@@ -49,7 +49,7 @@ select 1e35 / 0.1;
 
 -- arithmetic operations causing a precision loss are truncated
 select 123456789123456789.1234567890 * 1.123456789123456789;
-select 0.001 / 9876543210987654321098765432109876543.2
+select 0.001 / 9876543210987654321098765432109876543.2;
 
 -- return NULL instead of rounding, according to old Spark versions' behavior
 set spark.sql.decimalOperations.allowPrecisionLoss=false;
@@ -75,6 +75,6 @@ select 1e35 / 0.1;
 
 -- arithmetic operations causing a precision loss return NULL
 select 123456789123456789.1234567890 * 1.123456789123456789;
-select 0.001 / 9876543210987654321098765432109876543.2
+select 0.001 / 9876543210987654321098765432109876543.2;
 
 drop table decimals_test;
