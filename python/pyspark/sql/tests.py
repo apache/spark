@@ -234,6 +234,10 @@ class DataTypeTests(unittest.TestCase):
         row = Row()
         self.assertEqual(len(row), 0)
 
+    def test_row_without_column_name(self):
+        row = Row("Alice", 11)
+        self.assertEqual(row.__repr__(), "<Row(Alice, 11)>")
+
     def test_struct_field_type_name(self):
         struct_field = StructField("a", IntegerType())
         self.assertRaises(TypeError, struct_field.typeName)
