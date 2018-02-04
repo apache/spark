@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeTableCommand}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.TypeCoercionMode
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -108,7 +110,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   listTestCases().foreach(createScalaTestCase)
 
   /** A test case. */
-  private case class TestCase(name: String, inputFile: String, resultFile: String)
+  private case class TestCase(
+      name: String,
+      inputFile: String,
+      resultFile: String,
+      typeCoercionMode: String = SQLConf.typeCoercionMode.defaultValue.get)
 
   /** A single SQL query's output. */
   private case class QueryOutput(sql: String, schema: String, output: String) {
@@ -148,6 +154,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     // Create a local SparkSession to have stronger isolation between different test cases.
     // This does not isolate catalog changes.
     val localSparkSession = spark.newSession()
+    localSparkSession.conf.set(SQLConf.typeCoercionMode.key, testCase.typeCoercionMode)
     loadTestData(localSparkSession)
 
     // Run the SQL queries preparing them for comparison.
@@ -250,11 +257,20 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   private def listTestCases(): Seq[TestCase] = {
-    listFilesRecursively(new File(inputFilePath)).map { file =>
-      val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
+    listFilesRecursively(new File(inputFilePath)).flatMap { file =>
+      val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath)  + ".out"
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
-      TestCase(testCaseName, absPath, resultFile)
+      if (testCaseName.toLowerCase(Locale.ROOT).contains("typeCoercion".toLowerCase(Locale.ROOT))) {
+        TypeCoercionMode.values.map(_.toString).map { mode =>
+          val fileNameWithMode = mode + File.separator + file.getName
+          val newTestCaseName = testCaseName.replace(file.getName, fileNameWithMode)
+          val newResultFile = resultFile.replace(file.getName, fileNameWithMode)
+          TestCase(newTestCaseName, absPath, newResultFile, mode)
+        }.toSeq
+      } else {
+        Seq(TestCase(testCaseName, absPath, resultFile))
+      }
     }
   }
 
