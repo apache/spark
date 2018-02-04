@@ -691,53 +691,12 @@ class DataFrame(object):
         +---+-----+
         >>> df.repartitionByRange(1, "age").rdd.getNumPartitions()
         1
-        >>> data = df.union(df)
-        >>> data.show()
+        >>> data = df.repartitionByRange("age")
+        >>> df.show()
         +---+-----+
         |age| name|
         +---+-----+
         |  2|Alice|
-        |  5|  Bob|
-        |  2|Alice|
-        |  5|  Bob|
-        +---+-----+
-        >>> data = data.repartitionByRange(3, "age")
-        >>> data.show()
-        +---+-----+
-        |age| name|
-        +---+-----+
-        |  2|Alice|
-        |  2|Alice|
-        |  5|  Bob|
-        |  5|  Bob|
-        +---+-----+
-        >>> data.rdd.getNumPartitions()
-        3
-        >>> data = data.repartitionByRange("age")
-        >>> data.rdd.getNumPartitions()
-        3
-        >>> data2 = df.union(df).union(df)
-        >>> data2.show()
-        +---+-----+
-        |age| name|
-        +---+-----+
-        |  2|Alice|
-        |  5|  Bob|
-        |  2|Alice|
-        |  5|  Bob|
-        |  2|Alice|
-        |  5|  Bob|
-        +---+-----+
-        >>> data2 = data2.repartitionByRange("age","name")
-        >>> data2.show()
-        +---+-----+
-        |age| name|
-        +---+-----+
-        |  2|Alice|
-        |  2|Alice|
-        |  2|Alice|
-        |  5|  Bob|
-        |  5|  Bob|
         |  5|  Bob|
         +---+-----+
         """
