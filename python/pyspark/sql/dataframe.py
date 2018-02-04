@@ -710,7 +710,7 @@ class DataFrame(object):
             cols = (numPartitions,) + cols
             return DataFrame(self._jdf.repartitionByRange(self._jcols(*cols)), self.sql_ctx)
         else:
-            raise TypeError("numPartitions should be an int or Column")
+            raise TypeError("numPartitions should be an int, string or Column")
 
     @since(1.3)
     def distinct(self):
