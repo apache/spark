@@ -739,6 +739,11 @@ class DataTypeTests(unittest.TestCase):
         tst = TimestampType()
         self.assertEqual(tst.toInternal(datetime.datetime.max) % 1000000, 999999)
 
+    # regression test for SPARK-23299
+    def test_row_without_column_name(self):
+        row = Row("Alice", 11)
+        self.assertEqual(repr(row), "<Row(Alice, 11)>")
+
     def test_empty_row(self):
         row = Row()
         self.assertEqual(len(row), 0)
