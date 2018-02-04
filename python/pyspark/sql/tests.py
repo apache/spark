@@ -2163,7 +2163,7 @@ class SQLTests(ReusedSQLTestCase):
 
         # test repartitionByRange(numPartitions, *cols)
         df3 = df1.repartitionByRange(2, "name", "age")
-        self.assertEqual(df3.rdd.getNumPartitions(),2)
+        self.assertEqual(df3.rdd.getNumPartitions(), 2)
         self.assertEqual(df3.rdd.first(), df2.rdd.first())
         self.assertEqual(df3.rdd.take(3), df2.rdd.take(3))
 
