@@ -57,7 +57,7 @@ import org.apache.spark.util.Utils
  *
  * // If this struct does not have a field called "d", it throws an exception.
  * struct("d")
- * // java.lang.IllegalArgumentException: Field "d" does not exist.
+ * // java.lang.IllegalArgumentException: Column "d" does not exist.
  * //   ...
  *
  * // Extract multiple StructFields. Field names are provided in a set.
@@ -69,7 +69,7 @@ import org.apache.spark.util.Utils
  * // Any names without matching fields will throw an exception.
  * // For the case shown below, an exception is thrown due to "d".
  * struct(Set("b", "c", "d"))
- * // java.lang.IllegalArgumentException: Field "d" does not exist.
+ * // java.lang.IllegalArgumentException: Column "d" does not exist.
  * //    ...
  * }}}
  *
@@ -260,24 +260,24 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   /**
    * Extracts the [[StructField]] with the given name.
    *
-   * @throws IllegalArgumentException if a field with the given name does not exist
+   * @throws IllegalArgumentException if a column with the given name does not exist
    */
   def apply(name: String): StructField = {
     nameToField.getOrElse(name,
-      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
+      throw new IllegalArgumentException(s"""Column "$name" does not exist."""))
   }
 
   /**
    * Returns a [[StructType]] containing [[StructField]]s of the given names, preserving the
    * original order of fields.
    *
-   * @throws IllegalArgumentException if a field cannot be found for any of the given names
+   * @throws IllegalArgumentException if a column cannot be found for any of the given names
    */
   def apply(names: Set[String]): StructType = {
     val nonExistFields = names -- fieldNamesSet
     if (nonExistFields.nonEmpty) {
       throw new IllegalArgumentException(
-        s"Field ${nonExistFields.mkString(",")} does not exist.")
+        s"Column ${nonExistFields.mkString(",")} does not exist.")
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
@@ -286,11 +286,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   /**
    * Returns the index of a given field.
    *
-   * @throws IllegalArgumentException if a field with the given name does not exist
+   * @throws IllegalArgumentException if a column with the given name does not exist
    */
   def fieldIndex(name: String): Int = {
     nameToIndex.getOrElse(name,
-      throw new IllegalArgumentException(s"""Field "$name" does not exist."""))
+      throw new IllegalArgumentException(s"""Column "$name" does not exist."""))
   }
 
   private[sql] def getFieldIndex(name: String): Option[Int] = {
