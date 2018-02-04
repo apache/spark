@@ -383,6 +383,12 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
     checkDataset(Seq(HSet(Set(1, 2), Set(3, 4))).toDS(), HSet(Set(1, 2), Set(3, 4)))
   }
 
+  test("collections without element encoders") {
+    assertTypeError("Seq(Seq(1: Any)).toDS()")
+    assertTypeError("Seq(Map(1 -> (1: Any))).toDS()")
+    assertTypeError("Seq(Set(1: Any)).toDS()")
+  }
+
   test("package objects") {
     import packageobject._
     checkDataset(Seq(PackageClass(1)).toDS(), PackageClass(1))
