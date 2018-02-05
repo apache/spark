@@ -327,6 +327,14 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
+      // For integralType should not convert to double which will cause precision loss.
+      case a @ BinaryArithmetic(left @ StringType(), right @ IntegralType()) =>
+        a.makeCopy(Array(Cast(left, DecimalType.forType(LongType)),
+          Cast(right, DecimalType.forType(LongType))))
+      case a @ BinaryArithmetic(left @ IntegralType(), right @ StringType()) =>
+        a.makeCopy(Array(Cast(left, DecimalType.forType(LongType)),
+          Cast(right, DecimalType.forType(LongType))))
+
       case a @ BinaryArithmetic(left @ StringType(), right)
         if right.dataType != CalendarIntervalType =>
         a.makeCopy(Array(Cast(left, DoubleType), right))
