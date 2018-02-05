@@ -1698,7 +1698,7 @@ def _correct_date_of_dataframe_from_arrow(pdf, schema):
     """ Correct date type value to use datetime.date.
 
     Pandas DataFrame created from PyArrow uses datetime64[ns] for date type values, but we should
-    use datetime.date to keep backward compatibility.
+    use datetime.date to match the behavior with when Arrow optimization is disabled.
 
     :param pdf: pandas.DataFrame
     :param schema: a Spark schema of the pandas.DataFrame
