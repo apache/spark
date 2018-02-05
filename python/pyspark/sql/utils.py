@@ -115,6 +115,7 @@ def toJArray(gateway, jtype, arr):
 def require_minimum_pandas_version():
     """ Raise ImportError if minimum version of Pandas is not installed
     """
+    # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
     minimum_pandas_version = "0.19.2"
 
     from distutils.version import LooseVersion
@@ -131,6 +132,7 @@ def require_minimum_pandas_version():
 def require_minimum_pyarrow_version():
     """ Raise ImportError if minimum version of pyarrow is not installed
     """
+    # TODO(HyukjinKwon): Relocate and deduplicate the version specification.
     minimum_pyarrow_version = "0.8.0"
 
     from distutils.version import LooseVersion
