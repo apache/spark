@@ -179,7 +179,7 @@ private[ui] abstract class ExecutionTable(
   }
 
   private def descriptionCell(execution: SQLExecutionUIData): Seq[Node] = {
-    val details = if (execution.details != null) {
+    val details = if (execution.details != null && execution.details.nonEmpty) {
       <span onclick="clickDetail(this)" class="expand-details">
         +details
       </span> ++
@@ -190,7 +190,7 @@ private[ui] abstract class ExecutionTable(
       Nil
     }
 
-    val desc = if (execution.description != null) {
+    val desc = if (execution.description != null && execution.description.nonEmpty) {
       <a href={executionURL(execution.executionId)}>{execution.description}</a>
     } else {
       <a href={executionURL(execution.executionId)}>{execution.executionId}</a>
