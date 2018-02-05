@@ -2816,7 +2816,7 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEquals(types[1], np.object)
         self.assertEquals(types[2], np.bool)
         self.assertEquals(types[3], np.float32)
-        self.assertEquals(types[4], 'datetime64[ns]')
+        self.assertEquals(types[4], np.object)  # datetime.date
         self.assertEquals(types[5], 'datetime64[ns]')
 
     @unittest.skipIf(not _have_old_pandas, "Old Pandas not installed")
@@ -3388,7 +3388,7 @@ class ArrowTests(ReusedSQLTestCase):
 
     @classmethod
     def setUpClass(cls):
-        from datetime import datetime
+        from datetime import date, datetime
         from decimal import Decimal
         ReusedSQLTestCase.setUpClass()
 
@@ -3410,11 +3410,11 @@ class ArrowTests(ReusedSQLTestCase):
             StructField("7_date_t", DateType(), True),
             StructField("8_timestamp_t", TimestampType(), True)])
         cls.data = [(u"a", 1, 10, 0.2, 2.0, Decimal("2.0"),
-                     datetime(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+                     date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
                     (u"b", 2, 20, 0.4, 4.0, Decimal("4.0"),
-                     datetime(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
+                     date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
                     (u"c", 3, 30, 0.8, 6.0, Decimal("6.0"),
-                     datetime(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
+                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
 
     @classmethod
     def tearDownClass(cls):
