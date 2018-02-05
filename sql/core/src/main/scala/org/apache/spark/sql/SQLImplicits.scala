@@ -112,66 +112,88 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newSequenceEncoder]]
+   * @deprecated use [[newCheckedSequenceEncoder]]
    */
   def newIntSeqEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newSequenceEncoder]]
+   * @deprecated use [[newCheckedSequenceEncoder]]
    */
   def newLongSeqEncoder: Encoder[Seq[Long]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newSequenceEncoder]]
+   * @deprecated use [[newCheckedSequenceEncoder]]
    */
   def newDoubleSeqEncoder: Encoder[Seq[Double]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newSequenceEncoder]]
+   * @deprecated use [[newCheckedSequenceEncoder]]
    */
   def newFloatSeqEncoder: Encoder[Seq[Float]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newSequenceEncoder]]
+   * @deprecated use [[newCheckedSequenceEncoder]]
    */
   def newByteSeqEncoder: Encoder[Seq[Byte]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newSequenceEncoder]]
+   * @deprecated use [[newCheckedSequenceEncoder]]
    */
   def newShortSeqEncoder: Encoder[Seq[Short]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newSequenceEncoder]]
+   * @deprecated use [[newCheckedSequenceEncoder]]
    */
   def newBooleanSeqEncoder: Encoder[Seq[Boolean]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newSequenceEncoder]]
+   * @deprecated use [[newCheckedSequenceEncoder]]
    */
   def newStringSeqEncoder: Encoder[Seq[String]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newSequenceEncoder]]
+   * @deprecated use [[newCheckedSequenceEncoder]]
    */
   def newProductSeqEncoder[A <: Product : TypeTag]: Encoder[Seq[A]] = ExpressionEncoder()
 
-  /** @since 2.2.0 */
-  implicit def newSequenceEncoder[T[_], E : Encoder]
+  /**
+   * @since 2.2.0
+   * @deprecated use [[newCheckedSequenceEncoder]]
+   */
+  def newSequenceEncoder[T <: Seq[_] : TypeTag]: Encoder[T] = ExpressionEncoder()
+
+  /**
+   * @since 2.3.0
+   * @deprecated use [[newCheckedMapEncoder]]
+   */
+  def newMapEncoder[T <: Map[_, _] : TypeTag]: Encoder[T] = ExpressionEncoder()
+
+  /**
+   * Notice that we serialize `Set` to Catalyst array. The set property is only kept when
+   * manipulating the domain objects. The serialization format doesn't keep the set property.
+   * When we have a Catalyst array which contains duplicated elements and convert it to
+   * `Dataset[Set[T]]` by using the encoder, the elements will be de-duplicated.
+   *
+   * @since 2.3.0
+   * @deprecated use [[newCheckedSetEncoder]]
+   */
+  def newSetEncoder[T <: Set[_] : TypeTag]: Encoder[T] = ExpressionEncoder()
+
+  /** @since 2.4.0 */
+  implicit def newCheckedSequenceEncoder[T[_], E : Encoder]
   (implicit ev: T[E] <:< Seq[E], tag: TypeTag[T[E]]): Encoder[T[E]] =
     ExpressionEncoder()
 
-  // Maps
-  /** @since 2.3.0 */
-  implicit def newMapEncoder[T[_, _], K : Encoder, V : Encoder]
+  /** @since 2.4.0 */
+  implicit def newCheckedMapEncoder[T[_, _], K : Encoder, V : Encoder]
   (implicit ev: T[K, V] <:< Map[K, V], tag: TypeTag[T[K, V]]): Encoder[T[K, V]] =
     ExpressionEncoder()
 
@@ -181,9 +203,9 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
    * When we have a Catalyst array which contains duplicated elements and convert it to
    * `Dataset[Set[T]]` by using the encoder, the elements will be de-duplicated.
    *
-   * @since 2.3.0
+   * @since 2.4.0
    */
-  implicit def newSetEncoder[T[_], E : Encoder]
+  implicit def newCheckedSetEncoder[T[_], E : Encoder]
   (implicit ev: T[E] <:< Set[E], tag: TypeTag[T[E]]): Encoder[T[E]] =
     ExpressionEncoder()
 
