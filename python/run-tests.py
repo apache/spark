@@ -168,6 +168,7 @@ def _check_dependencies(python_exec, modules_to_test):
     # If we should test 'pyspark-sql', it checks if PyArrow and Pandas are installed and
     # explicitly prints out. See SPARK-23300.
     if pyspark_sql in modules_to_test:
+        # TODO(HyukjinKwon): Relocate and deduplicate these version specifications.
         minimum_pyarrow_version = '0.8.0'
         minimum_pandas_version = '0.19.2'
 
