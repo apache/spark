@@ -258,10 +258,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
   private def listTestCases(): Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
-      val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath)  + ".out"
+      val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
       val absPath = file.getAbsolutePath
       val testCaseName = absPath.stripPrefix(inputFilePath).stripPrefix(File.separator)
-      if (testCaseName.toLowerCase(Locale.ROOT).contains("typeCoercion".toLowerCase(Locale.ROOT))) {
+      if (testCaseName.contains("typeCoercion")) {
         TypeCoercionMode.values.map(_.toString).map { mode =>
           val fileNameWithMode = mode + File.separator + file.getName
           val newTestCaseName = testCaseName.replace(file.getName, fileNameWithMode)
