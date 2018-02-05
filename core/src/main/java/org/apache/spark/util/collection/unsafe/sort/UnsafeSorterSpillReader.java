@@ -76,8 +76,10 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
         SparkEnv.get() == null ? 0.5 :
              SparkEnv.get().conf().getDouble("spark.unsafe.sorter.spill.read.ahead.fraction", 0.5);
 
+    // SPARK-23310: Disable read-ahead input stream, because it is causing lock contention and perf regression for
+    // TPC-DS queries.
     final boolean readAheadEnabled = SparkEnv.get() != null &&
-        SparkEnv.get().conf().getBoolean("spark.unsafe.sorter.spill.read.ahead.enabled", true);
+        SparkEnv.get().conf().getBoolean("spark.unsafe.sorter.spill.read.ahead.enabled", false);
 
     final InputStream bs =
         new NioBufferedFileInputStream(file, (int) bufferSizeBytes);
