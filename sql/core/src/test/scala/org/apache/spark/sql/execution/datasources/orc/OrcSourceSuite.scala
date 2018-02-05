@@ -160,6 +160,16 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       }
     }
   }
+
+  // This is a test case for ORC-285
+  test("SPARK-23340 Empty float/double array columns raise EOFException") {
+    Seq(Seq(Array.empty[Float]).toDF(), Seq(Array.empty[Double]).toDF()).foreach { df =>
+      withTempPath { path =>
+        df.write.format("orc").save(path.getCanonicalPath)
+        checkAnswer(spark.read.orc(path.getCanonicalPath), df)
+      }
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSQLContext {
