@@ -183,9 +183,14 @@ final class OneVsRestModel private[ml] (
         val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
           predictions + ((index, prediction(1)))
         }
+
         model.setFeaturesCol($(featuresCol))
+        val rawPredictionColName = model.getRawPredictionCol
+        // set rawPredictionColName to a temporary column to avoid column conflict
         model.setRawPredictionCol(tmpRawPredictionColName)
         val transformedDataset = model.transform(df).select(columns: _*)
+        model.setRawPredictionCol(rawPredictionColName)
+
         val updatedDataset = transformedDataset
           .withColumn(tmpColName, updateUDF(col(accColName), col(tmpRawPredictionColName)))
         val newColumns = origCols ++ List(col(tmpColName))
