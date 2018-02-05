@@ -152,7 +152,6 @@ class Window(object):
         |  1|       a|  4|
         |  2|       a|  2|
         +---+--------+---+
-        <BLANKLINE>
         """
         if isinstance(start, (int, long)) and isinstance(end, (int, long)):
             if start <= Window._PRECEDING_THRESHOLD:
@@ -263,7 +262,7 @@ class WindowSpec(object):
 def _test():
     import doctest
     SparkContext('local[4]', 'PythonTest')
-    (failure_count, test_count) = doctest.testmod()
+    (failure_count, test_count) = doctest.testmod(optionflags=doctest.NORMALIZE_WHITESPACE)
     if failure_count:
         exit(-1)
 

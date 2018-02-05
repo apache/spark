@@ -809,7 +809,7 @@ def ntile(n):
     return Column(sc._jvm.functions.ntile(int(n)))
 
 
-@since(2.3)
+@since(2.4)
 def unboundedPreceding():
     """
     Window function: returns the special frame boundary that represents the first row
@@ -819,7 +819,7 @@ def unboundedPreceding():
     return Column(sc._jvm.functions.unboundedPreceding())
 
 
-@since(2.3)
+@since(2.4)
 def unboundedFollowing():
     """
     Window function: returns the special frame boundary that represents the last row
@@ -829,7 +829,7 @@ def unboundedFollowing():
     return Column(sc._jvm.functions.unboundedFollowing())
 
 
-@since(2.3)
+@since(2.4)
 def currentRow():
     """
     Window function: returns the special frame boundary that represents the current row
