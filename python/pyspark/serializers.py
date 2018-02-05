@@ -230,6 +230,9 @@ def _create_batch(series, timezone):
             s = _check_series_convert_timestamps_internal(s.fillna(0), timezone)
             # TODO: need cast after Arrow conversion, ns values cause error with pandas 0.19.2
             return pa.Array.from_pandas(s, mask=mask).cast(t, safe=False)
+        elif t is not None and pa.types.is_string(t) and sys.version < '3':
+            # TODO: need decode before converting to Arrow in Python 2
+            return pa.Array.from_pandas(s.str.decode('utf-8'), mask=mask, type=t)
         return pa.Array.from_pandas(s, mask=mask, type=t)
 
     arrs = [create_array(s, t) for s, t in series]
