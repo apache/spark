@@ -890,13 +890,7 @@ private[spark] object RandomForest extends Logging {
     // Sample the input only if there are continuous features.
     val continuousFeatures = Range(0, numFeatures).filter(metadata.isContinuous)
     val sampledInput = if (continuousFeatures.nonEmpty) {
-      // Calculate the number of samples for approximate quantile calculation.
-      val requiredSamples = math.max(metadata.maxBins * metadata.maxBins, 10000)
-      val fraction = if (requiredSamples < metadata.numExamples) {
-        requiredSamples.toDouble / metadata.numExamples
-      } else {
-        1.0
-      }
+      val fraction = samplesFractionForFindSplits(metadata)
       logDebug("fraction of data used for calculating quantiles = " + fraction)
       input.sample(withReplacement = false, fraction, new XORShiftRandom(seed).nextInt())
     } else {
@@ -1009,10 +1003,7 @@ private[spark] object RandomForest extends Logging {
       }
 
       // Calculate the number of samples for finding splits
-      var requiredSamples: Long = math.max(metadata.maxBins * metadata.maxBins, 10000)
-      if (requiredSamples >= metadata.numExamples) {
-        requiredSamples = metadata.numExamples
-      }
+      val requiredSamples: Long = (samplesFractionForFindSplits(metadata) * metadata.numExamples.toDouble).toLong
 
       // add zero value count and get complete statistics
       val valueCountMap: Map[Double, Int] = partValueCountMap + (0.0 -> (requiredSamples.toInt - partNumSamples))
@@ -1157,6 +1148,22 @@ private[spark] object RandomForest extends Logging {
       metadata.numClasses * totalBins
     } else {
       3 * totalBins
+    }
+  }
+
+  /**
+    * Calculate the subsample fraction for finding splits
+    * @param metadata decision tree metadata
+    * @return subsample fraction
+    */
+  private def samplesFractionForFindSplits(
+      metadata: DecisionTreeMetadata): Double = {
+    // Calculate the number of samples for approximate quantile calculation.
+    val requiredSamples = math.max(metadata.maxBins * metadata.maxBins, 10000)
+    if (requiredSamples < metadata.numExamples) {
+      requiredSamples.toDouble / metadata.numExamples
+    } else {
+      1.0
     }
   }
 }
