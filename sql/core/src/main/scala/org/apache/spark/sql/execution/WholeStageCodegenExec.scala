@@ -540,8 +540,9 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
       ${ctx.registerComment(
         s"""Codegend pipeline for stage (id=$codegenStageId)
-           |${this.treeString.trim}""".stripMargin)}
-      ${ctx.registerComment(s"codegenStageId=$codegenStageId", true)}
+           |${this.treeString.trim}""".stripMargin,
+        "wsc_codegenPipeline")}
+      ${ctx.registerComment(s"codegenStageId=$codegenStageId", "wsc_codegenStageId", true)}
       final class $className extends ${classOf[BufferedRowIterator].getName} {
 
         private Object[] references;

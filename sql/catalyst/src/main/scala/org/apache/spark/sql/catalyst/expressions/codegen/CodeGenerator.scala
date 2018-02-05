@@ -1227,16 +1227,20 @@ class CodegenContext {
   /**
    * Register a comment and return the corresponding place holder
    *
+   * @param placeholderId a string for a place holder
    * @param force whether to force registering the comments
    */
-  def registerComment(text: => String, force: Boolean = false): String = {
+  def registerComment(
+      text: => String,
+      placeholderId: String = "",
+      force: Boolean = false): String = {
     // By default, disable comments in generated code because computing the comments themselves can
     // be extremely expensive in certain cases, such as deeply-nested expressions which operate over
     // inputs with wide schemas. For more details on the performance issues that motivated this
     // flat, see SPARK-15680.
     if (force ||
       SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
-      val name = freshName("c")
+      val name = if (placeholderId != "") placeholderId else freshName("c")
       val comment = if (text.contains("\n") || text.contains("\r")) {
         text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
       } else {
