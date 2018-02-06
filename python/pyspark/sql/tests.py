@@ -3740,7 +3740,7 @@ class PandasUDFTests(ReusedSQLTestCase):
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
-class VectorizedUDFTests(ReusedSQLTestCase):
+class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -4253,7 +4253,7 @@ class VectorizedUDFTests(ReusedSQLTestCase):
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
-class GroupbyApplyTests(ReusedSQLTestCase):
+class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
     def assertFramesEqual(self, expected, result):
         msg = ("DataFrames are not equal: " +
