@@ -167,15 +167,14 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
     val files = OrcUtils.listOrcFiles(path, conf)
     assert(files.length == 1)
     val file = files.head
-    val fs = file.getFileSystem(conf)
-    val readerOptions = org.apache.orc.OrcFile.readerOptions(conf).filesystem(fs)
+    val readerOptions = OrcFile.readerOptions(conf).filesystem(file.getFileSystem(conf))
     OrcFile.createReader(file, readerOptions)
   }
 
   test("SPARK-23342 Support orc.stripe.size and hive.exec.orc.default.stripe.size") {
     val df = spark.range(1000000).map(_ => scala.util.Random.nextLong).repartition(1)
 
-    Seq(org.apache.orc.OrcConf.STRIPE_SIZE).foreach { conf =>
+    Seq(STRIPE_SIZE).foreach { conf =>
       Seq(conf.getAttribute, conf.getHiveConfName).foreach { name =>
         // Since the default value of orc.stripe.size is 64MB, there exists only 1 stripe.
         withTempPath { path =>
@@ -201,6 +200,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
         withTempPath { path =>
           val dir = path.getCanonicalPath
           df.write.format("orc").save(dir)
+          assert(getReader(dir).getRowIndexStride === ROW_INDEX_STRIDE.getDefaultValue)
         }
 
         withTempPath { path =>
