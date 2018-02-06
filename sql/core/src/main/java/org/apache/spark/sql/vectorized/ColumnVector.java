@@ -17,9 +17,9 @@
 package org.apache.spark.sql.vectorized;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
+import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -65,6 +65,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract void close();
 
   /**
+   * Returns true if this column vector contains any null values.
+   */
+  public abstract boolean hasNull();
+
+  /**
    * Returns the number of nulls in this column vector.
    */
   public abstract int numNulls();
@@ -75,12 +80,14 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract boolean isNullAt(int rowId);
 
   /**
-   * Returns the boolean type value for rowId.
+   * Returns the boolean type value for rowId. The return value is undefined and can be anything,
+   * if the slot for rowId is null.
    */
   public abstract boolean getBoolean(int rowId);
 
   /**
-   * Gets boolean type values from [rowId, rowId + count)
+   * Gets boolean type values from [rowId, rowId + count). The return values for the null slots
+   * are undefined and can be anything.
    */
   public boolean[] getBooleans(int rowId, int count) {
     boolean[] res = new boolean[count];
@@ -91,12 +98,14 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the byte type value for rowId.
+   * Returns the byte type value for rowId. The return value is undefined and can be anything,
+   * if the slot for rowId is null.
    */
   public abstract byte getByte(int rowId);
 
   /**
-   * Gets byte type values from [rowId, rowId + count)
+   * Gets byte type values from [rowId, rowId + count). The return values for the null slots
+   * are undefined and can be anything.
    */
   public byte[] getBytes(int rowId, int count) {
     byte[] res = new byte[count];
@@ -107,12 +116,14 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the short type value for rowId.
+   * Returns the short type value for rowId. The return value is undefined and can be anything,
+   * if the slot for rowId is null.
    */
   public abstract short getShort(int rowId);
 
   /**
-   * Gets short type values from [rowId, rowId + count)
+   * Gets short type values from [rowId, rowId + count). The return values for the null slots
+   * are undefined and can be anything.
    */
   public short[] getShorts(int rowId, int count) {
     short[] res = new short[count];
@@ -123,12 +134,14 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the int type value for rowId.
+   * Returns the int type value for rowId. The return value is undefined and can be anything,
+   * if the slot for rowId is null.
    */
   public abstract int getInt(int rowId);
 
   /**
-   * Gets int type values from [rowId, rowId + count)
+   * Gets int type values from [rowId, rowId + count). The return values for the null slots
+   * are undefined and can be anything.
    */
   public int[] getInts(int rowId, int count) {
     int[] res = new int[count];
@@ -139,12 +152,14 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the long type value for rowId.
+   * Returns the long type value for rowId. The return value is undefined and can be anything,
+   * if the slot for rowId is null.
    */
   public abstract long getLong(int rowId);
 
   /**
-   * Gets long type values from [rowId, rowId + count)
+   * Gets long type values from [rowId, rowId + count). The return values for the null slots
+   * are undefined and can be anything.
    */
   public long[] getLongs(int rowId, int count) {
     long[] res = new long[count];
@@ -155,12 +170,14 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the float type value for rowId.
+   * Returns the float type value for rowId. The return value is undefined and can be anything,
+   * if the slot for rowId is null.
    */
   public abstract float getFloat(int rowId);
 
   /**
-   * Gets float type values from [rowId, rowId + count)
+   * Gets float type values from [rowId, rowId + count). The return values for the null slots
+   * are undefined and can be anything.
    */
   public float[] getFloats(int rowId, int count) {
     float[] res = new float[count];
@@ -171,12 +188,14 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the double type value for rowId.
+   * Returns the double type value for rowId. The return value is undefined and can be anything,
+   * if the slot for rowId is null.
    */
   public abstract double getDouble(int rowId);
 
   /**
-   * Gets double type values from [rowId, rowId + count)
+   * Gets double type values from [rowId, rowId + count). The return values for the null slots
+   * are undefined and can be anything.
    */
   public double[] getDoubles(int rowId, int count) {
     double[] res = new double[count];
@@ -187,7 +206,7 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Returns the struct type value for rowId.
+   * Returns the struct type value for rowId. If the slot for rowId is null, it should return null.
    *
    * To support struct type, implementations must implement {@link #getChild(int)} and make this
    * vector a tree structure. The number of child vectors must be same as the number of fields of
@@ -195,11 +214,12 @@ public abstract class ColumnVector implements AutoCloseable {
    * struct field.
    */
   public final ColumnarRow getStruct(int rowId) {
+    if (isNullAt(rowId)) return null;
     return new ColumnarRow(this, rowId);
   }
 
   /**
-   * Returns the array type value for rowId.
+   * Returns the array type value for rowId. If the slot for rowId is null, it should return null.
    *
    * To support array type, implementations must construct an {@link ColumnarArray} and return it in
    * this method. {@link ColumnarArray} requires a {@link ColumnVector} that stores the data of all
@@ -212,33 +232,62 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract ColumnarArray getArray(int rowId);
 
   /**
-   * Returns the map type value for rowId.
+   * Returns the map type value for rowId. If the slot for rowId is null, it should return null.
+   *
+   * In Spark, map type value is basically a key data array and a value data array. A key from the
+   * key array with a index and a value from the value array with the same index contribute to
+   * an entry of this map type value.
+   *
+   * To support map type, implementations must construct a {@link ColumnarMap} and return it in
+   * this method. {@link ColumnarMap} requires a {@link ColumnVector} that stores the data of all
+   * the keys of all the maps in this vector, and another {@link ColumnVector} that stores the data
+   * of all the values of all the maps in this vector, and a pair of offset and length which
+   * specify the range of the key/value array that belongs to the map type value at rowId.
    */
-  public MapData getMap(int ordinal) {
-    throw new UnsupportedOperationException();
-  }
+  public abstract ColumnarMap getMap(int ordinal);
 
   /**
-   * Returns the decimal type value for rowId.
+   * Returns the decimal type value for rowId. If the slot for rowId is null, it should return null.
    */
   public abstract Decimal getDecimal(int rowId, int precision, int scale);
 
   /**
-   * Returns the string type value for rowId. Note that the returned UTF8String may point to the
-   * data of this column vector, please copy it if you want to keep it after this column vector is
-   * freed.
+   * Returns the string type value for rowId. If the slot for rowId is null, it should return null.
+   * Note that the returned UTF8String may point to the data of this column vector, please copy it
+   * if you want to keep it after this column vector is freed.
    */
   public abstract UTF8String getUTF8String(int rowId);
 
   /**
-   * Returns the binary type value for rowId.
+   * Returns the binary type value for rowId. If the slot for rowId is null, it should return null.
    */
   public abstract byte[] getBinary(int rowId);
 
   /**
-   * Returns the ordinal's child column vector.
+   * Returns the calendar interval type value for rowId. If the slot for rowId is null, it should
+   * return null.
+   *
+   * In Spark, calendar interval type value is basically an integer value representing the number of
+   * months in this interval, and a long value representing the number of microseconds in this
+   * interval. An interval type vector is the same as a struct type vector with 2 fields: `months`
+   * and `microseconds`.
+   *
+   * To support interval type, implementations must implement {@link #getChild(int)} and define 2
+   * child vectors: the first child vector is an int type vector, containing all the month values of
+   * all the interval values in this vector. The second child vector is a long type vector,
+   * containing all the microsecond values of all the interval values in this vector.
    */
-  public abstract ColumnVector getChild(int ordinal);
+  public final CalendarInterval getInterval(int rowId) {
+    if (isNullAt(rowId)) return null;
+    final int months = getChild(0).getInt(rowId);
+    final long microseconds = getChild(1).getLong(rowId);
+    return new CalendarInterval(months, microseconds);
+  }
+
+  /**
+   * @return child [[ColumnVector]] at the given ordinal.
+   */
+  protected abstract ColumnVector getChild(int ordinal);
 
   /**
    * Data type for this column.

@@ -22,7 +22,7 @@ import java.io.Serializable;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A reader factory returned by {@link DataSourceV2Reader#createDataReaderFactories()} and is
+ * A reader factory returned by {@link DataSourceReader#createDataReaderFactories()} and is
  * responsible for creating the actual data reader. The relationship between
  * {@link DataReaderFactory} and {@link DataReader}
  * is similar to the relationship between {@link Iterable} and {@link java.util.Iterator}.

@@ -29,10 +29,9 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2}
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.streaming.MicroBatchReadSupport
-import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
 import org.apache.spark.util.{ManualClock, SystemClock}
 
@@ -44,14 +43,14 @@ class RateSourceProviderV2 extends DataSourceV2 with MicroBatchReadSupport with 
   override def createMicroBatchReader(
       schema: Optional[StructType],
       checkpointLocation: String,
-      options: DataSourceV2Options): MicroBatchReader = {
+      options: DataSourceOptions): MicroBatchReader = {
     new RateStreamMicroBatchReader(options)
   }
 
   override def shortName(): String = "ratev2"
 }
 
-class RateStreamMicroBatchReader(options: DataSourceV2Options)
+class RateStreamMicroBatchReader(options: DataSourceOptions)
   extends MicroBatchReader {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 

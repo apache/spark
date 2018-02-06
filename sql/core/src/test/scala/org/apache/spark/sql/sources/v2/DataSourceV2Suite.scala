@@ -22,12 +22,15 @@ import java.util.{ArrayList, List => JList}
 import test.org.apache.spark.sql.sources.v2._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.reader.partitioning.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -47,14 +50,72 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   }
 
   test("advanced implementation") {
+    def getReader(query: DataFrame): AdvancedDataSourceV2#Reader = {
+      query.queryExecution.executedPlan.collect {
+        case d: DataSourceV2ScanExec => d.reader.asInstanceOf[AdvancedDataSourceV2#Reader]
+      }.head
+    }
+
+    def getJavaReader(query: DataFrame): JavaAdvancedDataSourceV2#Reader = {
+      query.queryExecution.executedPlan.collect {
+        case d: DataSourceV2ScanExec => d.reader.asInstanceOf[JavaAdvancedDataSourceV2#Reader]
+      }.head
+    }
+
     Seq(classOf[AdvancedDataSourceV2], classOf[JavaAdvancedDataSourceV2]).foreach { cls =>
       withClue(cls.getName) {
         val df = spark.read.format(cls.getName).load()
         checkAnswer(df, (0 until 10).map(i => Row(i, -i)))
-        checkAnswer(df.select('j), (0 until 10).map(i => Row(-i)))
-        checkAnswer(df.filter('i > 3), (4 until 10).map(i => Row(i, -i)))
-        checkAnswer(df.select('j).filter('i > 6), (7 until 10).map(i => Row(-i)))
-        checkAnswer(df.select('i).filter('i > 10), Nil)
+
+        val q1 = df.select('j)
+        checkAnswer(q1, (0 until 10).map(i => Row(-i)))
+        if (cls == classOf[AdvancedDataSourceV2]) {
+          val reader = getReader(q1)
+          assert(reader.filters.isEmpty)
+          assert(reader.requiredSchema.fieldNames === Seq("j"))
+        } else {
+          val reader = getJavaReader(q1)
+          assert(reader.filters.isEmpty)
+          assert(reader.requiredSchema.fieldNames === Seq("j"))
+        }
+
+        val q2 = df.filter('i > 3)
+        checkAnswer(q2, (4 until 10).map(i => Row(i, -i)))
+        if (cls == classOf[AdvancedDataSourceV2]) {
+          val reader = getReader(q2)
+          assert(reader.filters.flatMap(_.references).toSet == Set("i"))
+          assert(reader.requiredSchema.fieldNames === Seq("i", "j"))
+        } else {
+          val reader = getJavaReader(q2)
+          assert(reader.filters.flatMap(_.references).toSet == Set("i"))
+          assert(reader.requiredSchema.fieldNames === Seq("i", "j"))
+        }
+
+        val q3 = df.select('i).filter('i > 6)
+        checkAnswer(q3, (7 until 10).map(i => Row(i)))
+        if (cls == classOf[AdvancedDataSourceV2]) {
+          val reader = getReader(q3)
+          assert(reader.filters.flatMap(_.references).toSet == Set("i"))
+          assert(reader.requiredSchema.fieldNames === Seq("i"))
+        } else {
+          val reader = getJavaReader(q3)
+          assert(reader.filters.flatMap(_.references).toSet == Set("i"))
+          assert(reader.requiredSchema.fieldNames === Seq("i"))
+        }
+
+        val q4 = df.select('j).filter('j < -10)
+        checkAnswer(q4, Nil)
+        if (cls == classOf[AdvancedDataSourceV2]) {
+          val reader = getReader(q4)
+          // 'j < 10 is not supported by the testing data source.
+          assert(reader.filters.isEmpty)
+          assert(reader.requiredSchema.fieldNames === Seq("j"))
+        } else {
+          val reader = getJavaReader(q4)
+          // 'j < 10 is not supported by the testing data source.
+          assert(reader.filters.isEmpty)
+          assert(reader.requiredSchema.fieldNames === Seq("j"))
+        }
       }
     }
   }
@@ -197,11 +258,69 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("simple counter in writer with onDataWriterCommit") {
+    Seq(classOf[SimpleWritableDataSource]).foreach { cls =>
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
+
+        val numPartition = 6
+        spark.range(0, 10, 1, numPartition).select('id, -'id).write.format(cls.getName)
+          .option("path", path).save()
+        checkAnswer(
+          spark.read.format(cls.getName).option("path", path).load(),
+          spark.range(10).select('id, -'id))
+
+        assert(SimpleCounter.getCounter == numPartition,
+          "method onDataWriterCommit should be called as many as the number of partitions")
+      }
+    }
+  }
+
+  test("SPARK-23293: data source v2 self join") {
+    val df = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
+    val df2 = df.select(($"i" + 1).as("k"), $"j")
+    checkAnswer(df.join(df2, "j"), (0 until 10).map(i => Row(-i, i, i + 1)))
+  }
+
+  test("SPARK-23301: column pruning with arbitrary expressions") {
+    def getReader(query: DataFrame): AdvancedDataSourceV2#Reader = {
+      query.queryExecution.executedPlan.collect {
+        case d: DataSourceV2ScanExec => d.reader.asInstanceOf[AdvancedDataSourceV2#Reader]
+      }.head
+    }
+
+    val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+
+    val q1 = df.select('i + 1)
+    checkAnswer(q1, (1 until 11).map(i => Row(i)))
+    val reader1 = getReader(q1)
+    assert(reader1.requiredSchema.fieldNames === Seq("i"))
+
+    val q2 = df.select(lit(1))
+    checkAnswer(q2, (0 until 10).map(i => Row(1)))
+    val reader2 = getReader(q2)
+    assert(reader2.requiredSchema.isEmpty)
+
+    // 'j === 1 can't be pushed down, but we should still be able do column pruning
+    val q3 = df.filter('j === -1).select('j * 2)
+    checkAnswer(q3, Row(-2))
+    val reader3 = getReader(q3)
+    assert(reader3.filters.isEmpty)
+    assert(reader3.requiredSchema.fieldNames === Seq("j"))
+
+    // column pruning should work with other operators.
+    val q4 = df.sort('i).limit(1).select('i + 1)
+    checkAnswer(q4, Row(1))
+    val reader4 = getReader(q4)
+    assert(reader4.requiredSchema.fieldNames === Seq("i"))
+  }
 }
 
 class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
 
-  class Reader extends DataSourceV2Reader {
+  class Reader extends DataSourceReader {
     override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
 
     override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
@@ -209,7 +328,7 @@ class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceV2Reader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class SimpleDataReaderFactory(start: Int, end: Int)
@@ -233,7 +352,7 @@ class SimpleDataReaderFactory(start: Int, end: Int)
 
 class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
 
-  class Reader extends DataSourceV2Reader
+  class Reader extends DataSourceReader
     with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
 
     var requiredSchema = new StructType().add("i", "int").add("j", "int")
@@ -244,8 +363,12 @@ class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
     }
 
     override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-      this.filters = filters
-      Array.empty
+      val (supported, unsupported) = filters.partition {
+        case GreaterThan("i", _: Int) => true
+        case _ => false
+      }
+      this.filters = supported
+      unsupported
     }
 
     override def pushedFilters(): Array[Filter] = filters
@@ -275,7 +398,7 @@ class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceV2Reader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class AdvancedDataReaderFactory(start: Int, end: Int, requiredSchema: StructType)
@@ -306,7 +429,7 @@ class AdvancedDataReaderFactory(start: Int, end: Int, requiredSchema: StructType
 
 class UnsafeRowDataSourceV2 extends DataSourceV2 with ReadSupport {
 
-  class Reader extends DataSourceV2Reader with SupportsScanUnsafeRow {
+  class Reader extends DataSourceReader with SupportsScanUnsafeRow {
     override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
 
     override def createUnsafeRowReaderFactories(): JList[DataReaderFactory[UnsafeRow]] = {
@@ -315,7 +438,7 @@ class UnsafeRowDataSourceV2 extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceV2Reader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class UnsafeRowDataReaderFactory(start: Int, end: Int)
@@ -343,18 +466,18 @@ class UnsafeRowDataReaderFactory(start: Int, end: Int)
 
 class SchemaRequiredDataSource extends DataSourceV2 with ReadSupportWithSchema {
 
-  class Reader(val readSchema: StructType) extends DataSourceV2Reader {
+  class Reader(val readSchema: StructType) extends DataSourceReader {
     override def createDataReaderFactories(): JList[DataReaderFactory[Row]] =
       java.util.Collections.emptyList()
   }
 
-  override def createReader(schema: StructType, options: DataSourceV2Options): DataSourceV2Reader =
+  override def createReader(schema: StructType, options: DataSourceOptions): DataSourceReader =
     new Reader(schema)
 }
 
 class BatchDataSourceV2 extends DataSourceV2 with ReadSupport {
 
-  class Reader extends DataSourceV2Reader with SupportsScanColumnarBatch {
+  class Reader extends DataSourceReader with SupportsScanColumnarBatch {
     override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
 
     override def createBatchDataReaderFactories(): JList[DataReaderFactory[ColumnarBatch]] = {
@@ -362,7 +485,7 @@ class BatchDataSourceV2 extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceV2Reader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class BatchDataReaderFactory(start: Int, end: Int)
@@ -406,7 +529,7 @@ class BatchDataReaderFactory(start: Int, end: Int)
 
 class PartitionAwareDataSource extends DataSourceV2 with ReadSupport {
 
-  class Reader extends DataSourceV2Reader with SupportsReportPartitioning {
+  class Reader extends DataSourceReader with SupportsReportPartitioning {
     override def readSchema(): StructType = new StructType().add("a", "int").add("b", "int")
 
     override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
@@ -428,7 +551,7 @@ class PartitionAwareDataSource extends DataSourceV2 with ReadSupport {
     }
   }
 
-  override def createReader(options: DataSourceV2Options): DataSourceV2Reader = new Reader
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class SpecificDataReaderFactory(i: Array[Int], j: Array[Int])

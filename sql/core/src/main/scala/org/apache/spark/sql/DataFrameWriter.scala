@@ -243,7 +243,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val ds = cls.newInstance()
       ds match {
         case ws: WriteSupport =>
-          val options = new DataSourceV2Options((extraOptions ++
+          val options = new DataSourceOptions((extraOptions ++
             DataSourceV2Utils.extractSessionConfigs(
               ds = ds.asInstanceOf[DataSourceV2],
               conf = df.sparkSession.sessionState.conf)).asJava)
