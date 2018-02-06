@@ -1694,7 +1694,7 @@ def from_arrow_schema(arrow_schema):
          for field in arrow_schema])
 
 
-def _correct_date_of_dataframe_from_arrow(pdf, schema):
+def _check_dataframe_convert_date(pdf, schema):
     """ Correct date type value to use datetime.date.
 
     Pandas DataFrame created from PyArrow uses datetime64[ns] for date type values, but we should

@@ -1923,7 +1923,7 @@ class DataFrame(object):
 
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
-                from pyspark.sql.types import _correct_date_of_dataframe_from_arrow, \
+                from pyspark.sql.types import _check_dataframe_convert_date, \
                     _check_dataframe_localize_timestamps
                 from pyspark.sql.utils import require_minimum_pyarrow_version
                 import pyarrow
@@ -1932,7 +1932,7 @@ class DataFrame(object):
                 if tables:
                     table = pyarrow.concat_tables(tables)
                     pdf = table.to_pandas()
-                    pdf = _correct_date_of_dataframe_from_arrow(pdf, self.schema)
+                    pdf = _check_dataframe_convert_date(pdf, self.schema)
                     return _check_dataframe_localize_timestamps(pdf, timezone)
                 else:
                     return pd.DataFrame.from_records([], columns=self.columns)
