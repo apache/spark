@@ -69,7 +69,7 @@ def worker(sock):
     return exit_code
 
 
-def manager():
+def manager(parent_port):
     # Create a new process group to corral our children
     os.setpgid(0, 0)
 
@@ -79,11 +79,16 @@ def manager():
     listen_sock.listen(max(1024, SOMAXCONN))
     listen_host, listen_port = listen_sock.getsockname()
 
+    socket_to_parent = socket.socket(AF_INET, SOCK_STREAM)
+    socket_to_parent.connect(('127.0.0.1', parent_port))
+    outfile = socket_to_parent.makefile(mode="wb")
+    write_int(listen_port, outfile)
+    outfile.flush()
+    outfile.close()
+    socket_to_parent.close()
+    
     # re-open stdin/stdout in 'wb' mode
     stdin_bin = os.fdopen(sys.stdin.fileno(), 'rb', 4)
-    stdout_bin = os.fdopen(sys.stdout.fileno(), 'wb', 4)
-    write_int(listen_port, stdout_bin)
-    stdout_bin.flush()
 
     def shutdown(code):
         signal.signal(SIGTERM, SIG_DFL)
@@ -177,4 +182,13 @@ def manager():
 
 
 if __name__ == '__main__':
-    manager()
+    if len(sys.argv) < 2:
+        print >> sys.stderr, "No parent port number specified"
+        sys.exit(1)
+    try:
+        parent_port = int(sys.argv[1])
+    except ValueError:
+        print >> sys.stderr, "Non-numeric port number specified"
+        sys.exit(1)
+        
+    manager(parent_port)

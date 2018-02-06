@@ -18,7 +18,7 @@
 package org.apache.spark.api.python
 
 import java.io.{DataInputStream, DataOutputStream, InputStream, OutputStreamWriter}
-import java.net.{InetAddress, ServerSocket, Socket, SocketException}
+import java.net._
 import java.nio.charset.StandardCharsets
 import java.util.Arrays
 
@@ -181,8 +181,13 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       }
 
       try {
+        // get a server socket so that the launched daemon can tell us its server port
+        val serverSocket = new ServerSocket(0, 0, InetAddress.getByAddress(Array(127, 0, 0, 1)))
+        val serverPort = serverSocket.getLocalPort
+
         // Create and start the daemon
-        val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", daemonModule))
+        val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", daemonModule,
+          serverPort.toString))
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)
         workerEnv.put("PYTHONPATH", pythonPath)
@@ -190,8 +195,19 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         workerEnv.put("PYTHONUNBUFFERED", "YES")
         daemon = pb.start()
 
+        // get the local port of the daemon's server socket,
+        // but don't wait forever for the daemon to connect
+        serverSocket.setSoTimeout(10000)
+        val socketToDaemon = serverSocket.accept()
+        val streamFromDaemon = new DataInputStream(socketToDaemon.getInputStream)
+        daemonPort = streamFromDaemon.readInt()
+
+        // we're done receiving data from daemon
+        streamFromDaemon.close()
+        socketToDaemon.close()
+        serverSocket.close()
+
         val in = new DataInputStream(daemon.getInputStream)
-        daemonPort = in.readInt()
 
         // Redirect daemon stdout and stderr
         redirectStreamsToStderr(in, daemon.getErrorStream)

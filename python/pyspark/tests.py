@@ -1794,17 +1794,34 @@ class DaemonTests(unittest.TestCase):
         return True
 
     def do_termination_test(self, terminator):
+        from socket import socket, AF_INET, SOCK_STREAM, SOMAXCONN
         from subprocess import Popen, PIPE
         from errno import ECONNREFUSED
+
+        # Create a listening socket on the AF_INET loopback interface
+        listen_sock = socket(AF_INET, SOCK_STREAM)
+        listen_sock.bind(('127.0.0.1', 0))
+        listen_sock.listen(max(1024, SOMAXCONN))
+        listen_host, listen_port = listen_sock.getsockname()
 
         # start daemon
         daemon_path = os.path.join(os.path.dirname(__file__), "daemon.py")
         python_exec = sys.executable or os.environ.get("PYSPARK_PYTHON")
-        daemon = Popen([python_exec, daemon_path], stdin=PIPE, stdout=PIPE)
+        daemon = Popen([python_exec, daemon_path, str(listen_port)], stdin=PIPE, stdout=PIPE)
+
+        # get a connection to the daemon we just launched
+        listen_sock.settimeout(10)
+        (sock, _) = listen_sock.accept()
+        infile = sock.makefile(mode='rb')
 
         # read the port number
-        port = read_int(daemon.stdout)
+        port = read_int(infile)
 
+        # done with this connection to the daemon
+        infile.close()
+        sock.close()
+        listen_sock.close()
+        
         # daemon should accept connections
         self.assertTrue(self.connect(port))
 
