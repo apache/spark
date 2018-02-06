@@ -98,9 +98,9 @@ trait MesosSchedulerUtils extends Logging {
       new MesosSchedulerDriver(scheduler, fwInfoBuilder.build(), masterUrl)
     }
   }
-  
+
   def buildCredentials(
-      conf: SparkConf, 
+      conf: SparkConf,
       fwInfoBuilder: Protos.FrameworkInfo.Builder): Protos.Credential.Builder = {
     val credBuilder = Credential.newBuilder()
     conf.getOption("spark.mesos.principal")
