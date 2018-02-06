@@ -23,7 +23,6 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
@@ -38,14 +37,13 @@ case class DataSourceV2Relation(
     source: DataSourceV2,
     options: Map[String, String],
     path: Option[String] = None,
-    table: Option[TableIdentifier] = None,
     projection: Option[Seq[AttributeReference]] = None,
     filters: Option[Seq[Expression]] = None,
     userSchema: Option[StructType] = None) extends LeafNode with MultiInstanceRelation {
 
   override def simpleString: String = {
     "DataSourceV2Relation(" +
-      s"source=$sourceName${path.orElse(table).map(loc => s"($loc)").getOrElse("")}, " +
+      s"source=$sourceName${path.map(loc => s"($loc)").getOrElse("")}, " +
       s"schema=[${output.map(a => s"$a ${a.dataType.simpleString}").mkString(", ")}], " +
       s"filters=[${pushedFilters.mkString(", ")}] options=$options)"
   }
@@ -75,16 +73,6 @@ case class DataSourceV2Relation(
         updatedOptions.put("path", p)
       case None =>
         updatedOptions.remove("path")
-    }
-
-    table.map { ident =>
-      updatedOptions.put("table", ident.table)
-      ident.database match {
-        case Some(db) =>
-          updatedOptions.put("database", db)
-        case None =>
-          updatedOptions.remove("database")
-      }
     }
 
     new DataSourceOptions(options.asJava)
