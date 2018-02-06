@@ -34,8 +34,8 @@ import org.apache.spark.scheduler.OutputCommitCoordinator;
 public interface DataWriterFactory<T> extends Serializable {
 
   /**
-   * Returns whether Spark should use the {@link OutputCommitCoordinator} to ensure that only one
-   * attempt for each task commits.
+   * Returns whether Spark should use the {@link org.apache.spark.scheduler.OutputCommitCoordinator}
+   * to ensure that only one attempt for each task commits.
    *
    * @return true if commit coordinator should be used, false otherwise.
    */
