@@ -24,6 +24,7 @@ import java.util.Arrays
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.util.Random
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -180,10 +181,16 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         return
       }
 
+      var serverSocket: ServerSocket = null
       try {
         // get a server socket so that the launched daemon can tell us its server port
-        val serverSocket = new ServerSocket(0, 0, InetAddress.getByAddress(Array(127, 0, 0, 1)))
+        serverSocket = new ServerSocket(0, 0, InetAddress.getByAddress(Array(127, 0, 0, 1)))
         val serverPort = serverSocket.getLocalPort
+
+        // generate an 'auth token' for the daemon to pass back to us. This will
+        // allow us to confirm that the we are truly communicating with the newly
+        // launched daemon
+        val expectedAuthToken = (new Random()).nextInt()
 
         // Create and start the daemon
         val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", daemonModule,
@@ -193,19 +200,32 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         workerEnv.put("PYTHONPATH", pythonPath)
         // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
         workerEnv.put("PYTHONUNBUFFERED", "YES")
+        workerEnv.put("PYSPARK_DAEMON_TOKEN", expectedAuthToken.toString)
         daemon = pb.start()
 
         // get the local port of the daemon's server socket,
         // but don't wait forever for the daemon to connect
         serverSocket.setSoTimeout(10000)
-        val socketToDaemon = serverSocket.accept()
-        val streamFromDaemon = new DataInputStream(socketToDaemon.getInputStream)
-        daemonPort = streamFromDaemon.readInt()
+        var socketToDaemon: Socket = null
+        var streamFromDaemon: DataInputStream = null
+        try {
+          socketToDaemon = serverSocket.accept()
+          streamFromDaemon = new DataInputStream(socketToDaemon.getInputStream)
+          val actualAuthToken = streamFromDaemon.readInt()
+          if (actualAuthToken != expectedAuthToken) {
+            throw new SparkException(
+              s"Some process other than $daemonModule attempted to connect to worker factory")
+          }
+          daemonPort = streamFromDaemon.readInt()
+        } finally {
+          if (streamFromDaemon != null) {
+            streamFromDaemon.close()
+          }
+          if (socketToDaemon != null) {
+            socketToDaemon.close()
+          }
 
-        // we're done receiving data from daemon
-        streamFromDaemon.close()
-        socketToDaemon.close()
-        serverSocket.close()
+        }
 
         val in = new DataInputStream(daemon.getInputStream)
 
@@ -238,6 +258,10 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
           } else {
             throw e
           }
+      } finally {
+        if (serverSocket != null) {
+          serverSocket.close()
+        }
       }
 
       // Important: don't close daemon's stdin (daemon.getOutputStream) so it can correctly

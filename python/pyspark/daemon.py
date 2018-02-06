@@ -69,7 +69,7 @@ def worker(sock):
     return exit_code
 
 
-def manager(parent_port):
+def manager(parent_port, token):
     # Create a new process group to corral our children
     os.setpgid(0, 0)
 
@@ -82,12 +82,13 @@ def manager(parent_port):
     socket_to_parent = socket.socket(AF_INET, SOCK_STREAM)
     socket_to_parent.connect(('127.0.0.1', parent_port))
     outfile = socket_to_parent.makefile(mode="wb")
+    write_int(token, outfile)
     write_int(listen_port, outfile)
     outfile.flush()
     outfile.close()
     socket_to_parent.close()
     
-    # re-open stdin/stdout in 'wb' mode
+    # re-open stdin in 'wb' mode
     stdin_bin = os.fdopen(sys.stdin.fileno(), 'rb', 4)
 
     def shutdown(code):
@@ -188,7 +189,17 @@ if __name__ == '__main__':
     try:
         parent_port = int(sys.argv[1])
     except ValueError:
-        print >> sys.stderr, "Non-numeric port number specified"
+        print >> sys.stderr, "Non-numeric port number specified:", sys.argv[1]
+        sys.exit(1)
+
+    token_string = os.environ.get("PYSPARK_DAEMON_TOKEN")
+    if token_string is None:
+        print >> sys.stderr, "PYSPARK_DAEMON_TOKEN environment variable is not set"
+        sys.exit(1)
+    try:
+        token = int(token_string)
+    except ValueError:
+        print >> sys.stderr, "Non-numeric value set in environment variable PYSPARK_DAEMON_TOKEN:", token_string
         sys.exit(1)
         
-    manager(parent_port)
+    manager(parent_port, token)
