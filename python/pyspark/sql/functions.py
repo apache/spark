@@ -1705,8 +1705,8 @@ def unhex(col):
 @ignore_unicode_prefix
 @since(1.5)
 def length(col):
-    """Computes the character length of a given string or number of bytes of a binary string.
-    The length of character strings include the trailing spaces. The length of binary strings
+    """Computes the character length of string data or number of bytes of binary data.
+    The length of character data includes the trailing spaces. The length of binary data
     includes binary zeros.
 
     >>> spark.createDataFrame([('ABC ',)], ['a']).select(length('a').alias('length')).collect()

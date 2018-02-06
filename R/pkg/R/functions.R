@@ -1026,9 +1026,9 @@ setMethod("last_day",
           })
 
 #' @details
-#' \code{length}: Computes the character length of a given string or number of bytes
-#' of a binary string. The length of character strings include the trailing spaces.
-#' The length of binary strings includes binary zeros.
+#' \code{length}: Computes the character length of a string data or number of bytes
+#' of a binary data. The length of string data includes the trailing spaces.
+#' The length of binary data includes binary zeros.
 #'
 #' @rdname column_string_functions
 #' @aliases length length,Column-method
