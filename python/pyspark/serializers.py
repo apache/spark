@@ -249,12 +249,13 @@ class ArrowStreamPandasSerializer(Serializer):
         super(ArrowStreamPandasSerializer, self).__init__()
         self._timezone = timezone
 
-    def arrow_to_pandas(self, pa_array, type):
-        from pyspark.sql.types import _check_series_convert_date, _check_series_localize_timestamps
+    def arrow_to_pandas(self, arrow_column):
+        from pyspark.sql.types import from_arrow_type, \
+            _check_series_convert_date, _check_series_localize_timestamps
 
-        s = pa_array.toPandas()
-        s = check_series_convert_date(s, type)
-        s = check_series_localize_timestamps(s, self._timezone)
+        s = arrow_column.to_pandas()
+        s = _check_series_convert_date(s, from_arrow_type(arrow_column.type))
+        s = _check_series_localize_timestamps(s, self._timezone)
         return s
 
     def dump_stream(self, iterator, stream):
@@ -283,8 +284,7 @@ class ArrowStreamPandasSerializer(Serializer):
         reader = pa.open_stream(stream)
 
         for batch in reader:
-            yield [self.arrow_to_pandas(c, c.type)
-                   for c in pa.Table.from_batches([batch]).itercolumns()]
+            yield [self.arrow_to_pandas(c) for c in pa.Table.from_batches([batch]).itercolumns()]
 
     def __repr__(self):
         return "ArrowStreamPandasSerializer"

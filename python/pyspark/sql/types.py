@@ -1695,10 +1695,8 @@ def from_arrow_schema(arrow_schema):
          for field in arrow_schema])
 
 
-def _check_series_convert_date(series, arrow_type):
-    import pyarrow.types as types
-
-    if types.is_date32(arrow_type):
+def _check_series_convert_date(series, data_type):
+    if type(data_type) == DateType:
         return series.dt.date
     else:
         return series
@@ -1714,8 +1712,7 @@ def _check_dataframe_convert_date(pdf, schema):
     :param schema: a Spark schema of the pandas.DataFrame
     """
     for field in schema:
-        if type(field.dataType) == DateType:
-            pdf[field.name] = pdf[field.name].dt.date
+        pdf[field.name] = _check_series_convert_date(pdf[field.name], field.dataType)
     return pdf
 
 
