@@ -3922,6 +3922,15 @@ class ScalarPandasUDF(ReusedSQLTestCase):
         res = df.select(str_f(col('str')))
         self.assertEquals(df.collect(), res.collect())
 
+    def test_vectorized_udf_string_in_udf(self):
+        from pyspark.sql.functions import pandas_udf, col
+        import pandas as pd
+        df = self.spark.range(10)
+        str_f = pandas_udf(lambda x: pd.Series(map(str, x)), StringType())
+        actual = df.select(str_f(col('id')))
+        expected = df.select(col('id').cast('string'))
+        self.assertEquals(expected.collect(), actual.collect())
+
     def test_vectorized_udf_datatype_string(self):
         from pyspark.sql.functions import pandas_udf, col
         df = self.spark.range(10).select(
