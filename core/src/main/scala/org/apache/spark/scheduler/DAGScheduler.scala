@@ -1021,8 +1021,9 @@ class DAGScheduler(
       // For ShuffleMapTask, serialize and broadcast (rdd, shuffleDep).
       // For ResultTask, serialize and broadcast (rdd, func).
       var taskBinaryBytes: Array[Byte] = null
-      // Add synchronized block to avoid rdd deserialized from taskBinaryBytes has diff checkpoint
-      // status with the rdd when create ShuffleMapTask or ResultTask.
+      // taskBinaryBytes and partitions are both effected by the checkpoint status. We need
+      // this synchronization in case another concurrent job is checkpointing this RDD, so we get a
+      // consistent view of both variables.
       RDDCheckpointData.synchronized {
         taskBinaryBytes = stage match {
           case stage: ShuffleMapStage =>
