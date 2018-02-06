@@ -4243,7 +4243,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
-class GroupbyApplyPandasUDFTests(ReusedSQLTestCase):
+class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def data(self):
@@ -4412,7 +4412,7 @@ class GroupbyApplyPandasUDFTests(ReusedSQLTestCase):
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
-class GroupbyAggPandasUDFTests(ReusedSQLTestCase):
+class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def data(self):
