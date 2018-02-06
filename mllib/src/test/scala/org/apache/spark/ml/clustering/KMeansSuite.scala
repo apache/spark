@@ -179,6 +179,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(predictionsMap(Vectors.dense(-1.0, 1.0)) ==
       predictionsMap(Vectors.dense(-100.0, 90.0)))
 
+    model.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
   }
 
   test("read/write") {
