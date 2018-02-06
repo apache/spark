@@ -787,7 +787,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
         val df = spark.range(10).cache()
         df.queryExecution.executedPlan.foreach {
-          case i: InMemoryTableScanExec => assert(i.supportsBatch == vectorized)
+          case i: InMemoryTableScanExec =>
+            assert(i.supportsBatch == vectorized && i.supportCodegen == vectorized)
           case _ =>
         }
       }
