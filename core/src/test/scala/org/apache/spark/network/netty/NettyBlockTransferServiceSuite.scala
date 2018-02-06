@@ -77,6 +77,21 @@ class NettyBlockTransferServiceSuite
     verifyServicePort(expectedPort = service0.port + 1, actualPort = service1.port)
   }
 
+  test("can bind to two max specific ports") {
+    service0 = createService(port = 65535)
+    service1 = createService(port = 65535)
+    verifyServicePort(expectedPort = 65535, actualPort = service0.port)
+    // see `Utils.userPort` the user port to try when trying to bind a service,
+    // the max privileged port is 1024.
+    verifyServicePort(expectedPort = 1024, actualPort = service1.port)
+  }
+
+  test("can't bind to a privileged port") {
+    intercept[IllegalArgumentException] {
+      createService(port = 23)
+    }
+  }
+
   private def verifyServicePort(expectedPort: Int, actualPort: Int): Unit = {
     actualPort should be >= expectedPort
     // avoid testing equality in case of simultaneous tests
