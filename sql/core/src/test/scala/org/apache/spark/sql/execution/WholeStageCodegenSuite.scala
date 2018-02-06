@@ -137,7 +137,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     val dsStringFilter = dsString.filter(_ == "1")
     val planString = dsStringFilter.queryExecution.executedPlan
     assert(planString.collect {
-      case WholeStageCodegenExec(FilterExec(_, i: InMemoryTableScanExec)) if !i.supportsBatch => ()
+      case i: InMemoryTableScanExec if !i.supportsBatch => ()
     }.length == 1)
     assert(dsStringFilter.collect() === Array("1"))
   }
