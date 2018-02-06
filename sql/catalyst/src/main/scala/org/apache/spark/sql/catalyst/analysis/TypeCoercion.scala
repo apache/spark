@@ -21,7 +21,6 @@ import javax.annotation.Nullable
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -29,6 +28,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.UTF8String.LongWrapper
 
 
 /**
@@ -329,10 +330,10 @@ object TypeCoercion {
 
       // For integralType should not convert to double which will cause precision loss.
       case a @ BinaryArithmetic(left @ StringType(), right @ IntegralType()) =>
-        a.makeCopy(Array(Cast(left, DecimalType.forType(LongType)),
+        a.makeCopy(Array(Cast(left, DecimalType.SYSTEM_DEFAULT),
           Cast(right, DecimalType.forType(LongType))))
       case a @ BinaryArithmetic(left @ IntegralType(), right @ StringType()) =>
-        a.makeCopy(Array(Cast(left, DecimalType.forType(LongType)),
+        a.makeCopy(Array(Cast(left, DecimalType.SYSTEM_DEFAULT),
           Cast(right, DecimalType.forType(LongType))))
 
       case a @ BinaryArithmetic(left @ StringType(), right)
