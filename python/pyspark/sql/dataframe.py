@@ -1923,7 +1923,8 @@ class DataFrame(object):
 
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
-                from pyspark.sql.types import _check_dataframe_localize_timestamps
+                from pyspark.sql.types import _check_dataframe_convert_date, \
+                    _check_dataframe_localize_timestamps
                 from pyspark.sql.utils import require_minimum_pyarrow_version
                 import pyarrow
                 require_minimum_pyarrow_version()
@@ -1931,6 +1932,7 @@ class DataFrame(object):
                 if tables:
                     table = pyarrow.concat_tables(tables)
                     pdf = table.to_pandas()
+                    pdf = _check_dataframe_convert_date(pdf, self.schema)
                     return _check_dataframe_localize_timestamps(pdf, timezone)
                 else:
                     return pd.DataFrame.from_records([], columns=self.columns)
@@ -2009,7 +2011,6 @@ def _to_corrected_pandas_type(dt):
     """
     When converting Spark SQL records to Pandas DataFrame, the inferred data type may be wrong.
     This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
-    NOTE: DateType is inferred incorrectly as 'object', TimestampType is correct with datetime64[ns]
     """
     import numpy as np
     if type(dt) == ByteType:
@@ -2020,8 +2021,6 @@ def _to_corrected_pandas_type(dt):
         return np.int32
     elif type(dt) == FloatType:
         return np.float32
-    elif type(dt) == DateType:
-        return 'datetime64[ns]'
     else:
         return None
 

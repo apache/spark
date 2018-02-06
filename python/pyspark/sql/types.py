@@ -1694,6 +1694,21 @@ def from_arrow_schema(arrow_schema):
          for field in arrow_schema])
 
 
+def _check_dataframe_convert_date(pdf, schema):
+    """ Correct date type value to use datetime.date.
+
+    Pandas DataFrame created from PyArrow uses datetime64[ns] for date type values, but we should
+    use datetime.date to match the behavior with when Arrow optimization is disabled.
+
+    :param pdf: pandas.DataFrame
+    :param schema: a Spark schema of the pandas.DataFrame
+    """
+    for field in schema:
+        if type(field.dataType) == DateType:
+            pdf[field.name] = pdf[field.name].dt.date
+    return pdf
+
+
 def _check_dataframe_localize_timestamps(pdf, timezone):
     """
     Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone
