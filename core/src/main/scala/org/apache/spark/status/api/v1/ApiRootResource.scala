@@ -93,7 +93,6 @@ private[spark] trait UIRoot {
       .status(Response.Status.SERVICE_UNAVAILABLE)
       .build()
   }
-
   def securityManager: SecurityManager
 }
 
@@ -156,6 +155,14 @@ private[v1] class NotFoundException(msg: String) extends WebApplicationException
       .status(Response.Status.NOT_FOUND)
       .entity(ErrorWrapper(msg))
       .build()
+)
+
+private[v1] class ServiceUnavailable(msg: String) extends WebApplicationException(
+  new ServiceUnavailableException(msg),
+  Response
+    .status(Response.Status.SERVICE_UNAVAILABLE)
+    .entity(ErrorWrapper(msg))
+    .build()
 )
 
 private[v1] class BadParameterException(msg: String) extends WebApplicationException(

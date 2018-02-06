@@ -19,7 +19,7 @@ package org.apache.spark.status.api.v1
 import java.io.OutputStream
 import java.util.{List => JList}
 import java.util.zip.ZipOutputStream
-import javax.ws.rs.{GET, Path, PathParam, Produces, QueryParam}
+import javax.ws.rs._
 import javax.ws.rs.core.{MediaType, Response, StreamingOutput}
 
 import scala.util.control.NonFatal
@@ -54,46 +54,25 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @GET
   @Path("executors/{executorId}/threads")
   def threadDump(@PathParam("executorId") executorId: String): Response = withUI { ui =>
-    val safeExecutorId =
-      Option(UIUtils.stripXSS(executorId)).map { executorId =>
-        UIUtils.decodeURLParameter(executorId)
-      }.getOrElse {
-        throw new IllegalArgumentException(s"Missing executorId parameter")
-      }
-
     def isAllDigits(x: String) = x.forall(Character.isDigit)
 
     if (executorId != SparkContext.DRIVER_IDENTIFIER && !isAllDigits(executorId)) {
-      Response.serverError()
-        .entity(s"Invalid executorId: neither '${SparkContext.DRIVER_IDENTIFIER}' nor number.")
-        .status(Response.Status.BAD_REQUEST)
-        .build()
-    } else {
-      ui.store.asOption(ui.store.executorSummary(executorId)).map { executorSummary =>
-        if (executorSummary.isActive) {
-          ui.sc match {
-            case Some(sc) => sc.getExecutorThreadDump(safeExecutorId)
-              .map(Response.ok(_).build())
-              .getOrElse(Response.serverError()
-                .entity("No stack traces are available.")
-                .status(Response.Status.NOT_FOUND)
-                .build())
-            case None => Response.serverError()
-              .entity("Thread dumps not available through the history server.")
-              .status(Response.Status.SERVICE_UNAVAILABLE)
-              .build()
+      throw new BadParameterException(
+        s"Invalid executorId: neither '${SparkContext.DRIVER_IDENTIFIER}' nor number.")
+    }
+
+    val safeSparkContext = ui.sc.getOrElse {
+      throw new ServiceUnavailable("Thread dumps not available through the history server.")
+    }
+
+    ui.store.asOption(ui.store.executorSummary(executorId)) match {
+      case Some(executorSummary) if executorSummary.isActive =>
+          val safeThreadDump = safeSparkContext.getExecutorThreadDump(executorId).getOrElse {
+            throw new NotFoundException("No thread dump is available.")
           }
-        } else {
-          Response.serverError()
-            .entity("Executor is already dead.")
-            .status(Response.Status.BAD_REQUEST)
-            .build()
-        }
-      }.getOrElse(Response.serverError()
-        .entity("Executor does not exist.")
-        .status(Response.Status.NOT_FOUND)
-        .build()
-      )
+          return Response.ok(safeThreadDump).build()
+      case Some(_) => throw new BadParameterException("Executor is already dead.")
+      case _ => throw new NotFoundException("Executor does not exist.")
     }
   }
 
