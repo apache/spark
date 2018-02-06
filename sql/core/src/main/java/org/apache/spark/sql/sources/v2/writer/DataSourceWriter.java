@@ -20,16 +20,16 @@ package org.apache.spark.sql.sources.v2.writer;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SaveMode;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
+import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.WriteSupport;
 import org.apache.spark.sql.streaming.OutputMode;
 import org.apache.spark.sql.types.StructType;
 
 /**
  * A data source writer that is returned by
- * {@link WriteSupport#createWriter(String, StructType, SaveMode, DataSourceV2Options)}/
- * {@link org.apache.spark.sql.sources.v2.streaming.StreamWriteSupport#createStreamWriter(
- * String, StructType, OutputMode, DataSourceV2Options)}.
+ * {@link WriteSupport#createWriter(String, StructType, SaveMode, DataSourceOptions)}/
+ * {@link StreamWriteSupport#createStreamWriter(
+ * String, StructType, OutputMode, DataSourceOptions)}.
  * It can mix in various writing optimization interfaces to speed up the data saving. The actual
  * writing logic is delegated to {@link DataWriter}.
  *
@@ -52,7 +52,7 @@ import org.apache.spark.sql.types.StructType;
  * Please refer to the documentation of commit/abort methods for detailed specifications.
  */
 @InterfaceStability.Evolving
-public interface DataSourceV2Writer {
+public interface DataSourceWriter {
 
   /**
    * Creates a writer factory which will be serialized and sent to executors.
@@ -61,6 +61,14 @@ public interface DataSourceV2Writer {
    * submitted.
    */
   DataWriterFactory<Row> createWriterFactory();
+
+  /**
+   * Handles a commit message on receiving from a successful data writer.
+   *
+   * If this method fails (by throwing an exception), this writing job is considered to to have been
+   * failed, and {@link #abort(WriterCommitMessage[])} would be called.
+   */
+  default void onDataWriterCommit(WriterCommitMessage message) {}
 
   /**
    * Commits this writing job with a list of commit messages. The commit messages are collected from
@@ -78,8 +86,10 @@ public interface DataSourceV2Writer {
   void commit(WriterCommitMessage[] messages);
 
   /**
-   * Aborts this writing job because some data writers are failed and keep failing when retry, or
-   * the Spark job fails with some unknown reasons, or {@link #commit(WriterCommitMessage[])} fails.
+   * Aborts this writing job because some data writers are failed and keep failing when retry,
+   * or the Spark job fails with some unknown reasons,
+   * or {@link #onDataWriterCommit(WriterCommitMessage)} fails,
+   * or {@link #commit(WriterCommitMessage[])} fails.
    *
    * If this method fails (by throwing an exception), the underlying data source may require manual
    * cleanup.

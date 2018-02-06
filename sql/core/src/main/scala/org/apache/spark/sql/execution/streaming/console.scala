@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming.sources.ConsoleWriter
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
-import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
-import org.apache.spark.sql.sources.v2.streaming.StreamWriteSupport
-import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2}
+import org.apache.spark.sql.sources.v2.writer.StreamWriteSupport
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -40,7 +40,7 @@ class ConsoleSinkProvider extends DataSourceV2
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceV2Options): StreamWriter = {
+      options: DataSourceOptions): StreamWriter = {
     new ConsoleWriter(schema, options)
   }
 

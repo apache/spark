@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.streaming.reader;
+package org.apache.spark.sql.sources.v2.reader.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
-import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
+import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
 
 import java.util.Optional;
 
 /**
- * A mix-in interface for {@link DataSourceV2Reader}. Data source readers can implement this
+ * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
  * interface to allow reading in a continuous processing mode stream.
  *
  * Implementations must ensure each reader factory output is a {@link ContinuousDataReader}.
@@ -33,7 +33,7 @@ import java.util.Optional;
  * DataSource V1 APIs. This extension will be removed once we get rid of V1 completely.
  */
 @InterfaceStability.Evolving
-public interface ContinuousReader extends BaseStreamingSource, DataSourceV2Reader {
+public interface ContinuousReader extends BaseStreamingSource, DataSourceReader {
     /**
      * Merge partitioned offsets coming from {@link ContinuousDataReader} instances for each
      * partition to a single global offset.
@@ -51,12 +51,12 @@ public interface ContinuousReader extends BaseStreamingSource, DataSourceV2Reade
      * start from the first record after the provided offset, or from an implementation-defined
      * inferred starting point if no offset is provided.
      */
-    void setOffset(Optional<Offset> start);
+    void setStartOffset(Optional<Offset> start);
 
     /**
      * Return the specified or inferred start offset for this reader.
      *
-     * @throws IllegalStateException if setOffset has not been called
+     * @throws IllegalStateException if setStartOffset has not been called
      */
     Offset getStartOffset();
 

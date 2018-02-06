@@ -19,15 +19,15 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.v2.streaming.writer.StreamWriter
-import org.apache.spark.sql.sources.v2.writer.{DataSourceV2Writer, DataWriterFactory, SupportsWriteInternalRow, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, DataWriterFactory, SupportsWriteInternalRow, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 
 /**
- * A [[DataSourceV2Writer]] used to hook V2 stream writers into a microbatch plan. It implements
+ * A [[DataSourceWriter]] used to hook V2 stream writers into a microbatch plan. It implements
  * the non-streaming interface, forwarding the batch ID determined at construction to a wrapped
  * streaming writer.
  */
-class MicroBatchWriter(batchId: Long, writer: StreamWriter) extends DataSourceV2Writer {
+class MicroBatchWriter(batchId: Long, writer: StreamWriter) extends DataSourceWriter {
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     writer.commit(batchId, messages)
   }
@@ -38,7 +38,7 @@ class MicroBatchWriter(batchId: Long, writer: StreamWriter) extends DataSourceV2
 }
 
 class InternalRowMicroBatchWriter(batchId: Long, writer: StreamWriter)
-  extends DataSourceV2Writer with SupportsWriteInternalRow {
+  extends DataSourceWriter with SupportsWriteInternalRow {
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
     writer.commit(batchId, messages)
   }
