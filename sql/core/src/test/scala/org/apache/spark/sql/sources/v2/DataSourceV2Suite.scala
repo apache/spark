@@ -24,7 +24,7 @@ import test.org.apache.spark.sql.sources.v2._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
@@ -315,6 +315,24 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     checkAnswer(q4, Row(1))
     val reader4 = getReader(q4)
     assert(reader4.requiredSchema.fieldNames === Seq("i"))
+  }
+
+  test("SPARK-23315: get output from canonicalized data source v2 related plans") {
+    def checkCanonicalizedOutput(df: DataFrame, numOutput: Int): Unit = {
+      val logical = df.queryExecution.optimizedPlan.collect {
+        case d: DataSourceV2Relation => d
+      }.head
+      assert(logical.canonicalized.output.length == numOutput)
+
+      val physical = df.queryExecution.executedPlan.collect {
+        case d: DataSourceV2ScanExec => d
+      }.head
+      assert(physical.canonicalized.output.length == numOutput)
+    }
+
+    val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+    checkCanonicalizedOutput(df, 2)
+    checkCanonicalizedOutput(df.select('i), 1)
   }
 }
 
