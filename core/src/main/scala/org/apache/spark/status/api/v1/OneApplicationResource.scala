@@ -53,26 +53,25 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
 
   @GET
   @Path("executors/{executorId}/threads")
-  def threadDump(@PathParam("executorId") executorId: String): Response = withUI { ui =>
-    def isAllDigits(x: String) = x.forall(Character.isDigit)
+  def threadDump(@PathParam("executorId") executorId: String): Array[ThreadStackTrace] =
+    withUI { ui =>
+      if (executorId != SparkContext.DRIVER_IDENTIFIER && !executorId.forall(Character.isDigit)) {
+        throw new BadParameterException(
+          s"Invalid executorId: neither '${SparkContext.DRIVER_IDENTIFIER}' nor number.")
+      }
 
-    if (executorId != SparkContext.DRIVER_IDENTIFIER && !isAllDigits(executorId)) {
-      throw new BadParameterException(
-        s"Invalid executorId: neither '${SparkContext.DRIVER_IDENTIFIER}' nor number.")
-    }
+      val safeSparkContext = ui.sc.getOrElse {
+        throw new ServiceUnavailable("Thread dumps not available through the history server.")
+      }
 
-    val safeSparkContext = ui.sc.getOrElse {
-      throw new ServiceUnavailable("Thread dumps not available through the history server.")
-    }
-
-    ui.store.asOption(ui.store.executorSummary(executorId)) match {
-      case Some(executorSummary) if executorSummary.isActive =>
-          val safeThreadDump = safeSparkContext.getExecutorThreadDump(executorId).getOrElse {
-            throw new NotFoundException("No thread dump is available.")
-          }
-          return Response.ok(safeThreadDump).build()
-      case Some(_) => throw new BadParameterException("Executor is already dead.")
-      case _ => throw new NotFoundException("Executor does not exist.")
+      ui.store.asOption(ui.store.executorSummary(executorId)) match {
+        case Some(executorSummary) if executorSummary.isActive =>
+            val safeThreadDump = safeSparkContext.getExecutorThreadDump(executorId).getOrElse {
+              throw new NotFoundException("No thread dump is available.")
+            }
+            return safeThreadDump
+        case Some(_) => throw new BadParameterException("Executor is not active.")
+        case _ => throw new NotFoundException("Executor does not exist.")
     }
   }
 
