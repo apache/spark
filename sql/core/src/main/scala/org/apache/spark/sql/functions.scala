@@ -2267,7 +2267,7 @@ object functions {
   }
 
   /**
-   * Computes the character length of a given string or number of bytes or a binary string.
+   * Computes the character length of a given string or number of bytes of a binary string.
    * The length of character strings include the trailing spaces. The length of binary strings
    * includes binary zeros.
    *
