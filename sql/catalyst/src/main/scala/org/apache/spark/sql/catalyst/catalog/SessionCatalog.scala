@@ -988,8 +988,11 @@ class SessionCatalog(
   // -------------------------------------------------------
 
   /**
-   * Create a metastore function in the database specified in `funcDefinition`.
+   * Create a function in the database specified in `funcDefinition`.
    * If no such database is specified, create it in the current database.
+   *
+   * @param ignoreIfExists: When true, ignore if the function with the specified name exists
+   *                        in the specified database.
    */
   def createFunction(funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit = {
     val db = formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
@@ -1061,7 +1064,7 @@ class SessionCatalog(
   }
 
   /**
-   * Check if the specified function exists.
+   * Check if the function with the specified name exists
    */
   def functionExists(name: FunctionIdentifier): Boolean = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
