@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.regex.Pattern
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.{DataSourceV2, SessionConfigSupport}
 
@@ -54,5 +55,31 @@ private[sql] object DataSourceV2Utils extends Logging {
       }
 
     case _ => Map.empty
+  }
+
+  def overwriteAndIfNotExists(mode: SaveMode): (Boolean, Boolean) = {
+    mode match {
+      case SaveMode.Ignore =>
+        (false, true)
+      case SaveMode.Append =>
+        (false, false)
+      case SaveMode.Overwrite =>
+        (true, false)
+      case SaveMode.ErrorIfExists =>
+        (true, true)
+    }
+  }
+
+  def saveMode(overwrite: Boolean, ifNotExists: Boolean): SaveMode = {
+    (overwrite, ifNotExists) match {
+      case (false, true) =>
+        SaveMode.Ignore
+      case (false, false) =>
+        SaveMode.Append
+      case (true, false) =>
+        SaveMode.Overwrite
+      case (true, true) =>
+        SaveMode.ErrorIfExists
+    }
   }
 }

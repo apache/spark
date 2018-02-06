@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
@@ -392,6 +393,9 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
         case LogicalRelation(_: InsertableRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, Nil)
+        case relation: DataSourceV2Relation =>
+          val tableName = relation.table.map(_.toString).orElse(relation.path).getOrElse("unknown")
+          preprocess(i, tableName, Nil)
         case _ => i
       }
   }

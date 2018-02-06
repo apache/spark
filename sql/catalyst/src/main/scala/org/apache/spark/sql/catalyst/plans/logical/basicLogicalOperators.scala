@@ -368,8 +368,8 @@ case class InsertIntoTable(
     overwrite: Boolean,
     ifPartitionNotExists: Boolean)
   extends LogicalPlan {
-  // IF NOT EXISTS is only valid in INSERT OVERWRITE
-  assert(overwrite || !ifPartitionNotExists)
+  // overwrite=false and ifPartitionNotExists=false are used to pass mode=Ignore
+
   // IF NOT EXISTS is only valid in static partitions
   assert(partition.values.forall(_.nonEmpty) || !ifPartitionNotExists)
 

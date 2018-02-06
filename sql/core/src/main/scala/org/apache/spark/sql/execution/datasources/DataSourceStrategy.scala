@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils, WriteToDataSourceV2}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -144,6 +145,14 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
     case InsertIntoTable(l @ LogicalRelation(_: InsertableRelation, _, _, _),
         parts, query, overwrite, false) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
+
+    case InsertIntoTable(rel: DataSourceV2Relation, _, query, overwrite, ifNotExists) =>
+      val writer = rel.writer(query.schema, DataSourceV2Utils.saveMode(overwrite, ifNotExists))
+      if (writer.isDefined) {
+        WriteToDataSourceV2(writer.get, query)
+      } else {
+        NoopCommand()
+      }
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
       if provider.isDefined && provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>

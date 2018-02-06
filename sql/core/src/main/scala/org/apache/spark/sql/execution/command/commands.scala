@@ -46,6 +46,12 @@ trait RunnableCommand extends Command {
   def run(sparkSession: SparkSession): Seq[Row]
 }
 
+case class NoopCommand() extends RunnableCommand {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    Seq.empty[Row]
+  }
+}
+
 /**
  * A physical operator that executes the run method of a `RunnableCommand` and
  * saves the result to prevent multiple executions.

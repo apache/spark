@@ -146,7 +146,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     Seq(classOf[SchemaRequiredDataSource], classOf[JavaSchemaRequiredDataSource]).foreach { cls =>
       withClue(cls.getName) {
         val e = intercept[AnalysisException](spark.read.format(cls.getName).load())
-        assert(e.message.contains("A schema needs to be specified"))
+        assert(e.message.contains("requires a user-supplied schema"))
 
         val schema = new StructType().add("i", "int").add("s", "string")
         val df = spark.read.format(cls.getName).schema(schema).load()
@@ -255,6 +255,22 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
         checkAnswer(
           spark.read.format(cls.getName).option("path", path).load(),
           spark.range(5).select('id, -'id))
+      }
+    }
+  }
+
+  test("SPARK-23321: test preprocess table insertion is applied") {
+    Seq(classOf[SimpleWritableDataSource]).foreach { cls =>
+      withTempPath { file =>
+        val path = file.getCanonicalPath
+        assert(spark.read.format(cls.getName).option("path", path).load().collect().isEmpty)
+
+        // attempt to write more columns than the table contains
+        val e = intercept[AnalysisException] {
+          spark.range(10).select('id, -'id, 'id * 'id)
+              .write.format(cls.getName).option("path", path).save()
+        }
+        assert(e.message.contains("data to be inserted have the same number of columns"))
       }
     }
   }
