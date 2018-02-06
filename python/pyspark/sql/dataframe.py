@@ -667,7 +667,7 @@ class DataFrame(object):
         else:
             raise TypeError("numPartitions should be an int or Column")
 
-    @since("2.3.0")
+    @since("2.4.0")
     def repartitionByRange(self, numPartitions, *cols):
         """
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
