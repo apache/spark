@@ -77,7 +77,7 @@ case class CreateHiveTableAsSelectCommand(
           sparkSession.sessionState.catalog.getTableMetadata(tableDesc.identifier),
           Map.empty,
           query,
-          overwrite = false,
+          overwrite = true,
           ifPartitionNotExists = false,
           outputColumns = outputColumns).run(sparkSession, child)
       } catch {

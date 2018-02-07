@@ -437,7 +437,8 @@ case class DataSource(
   }
 
   /**
-   * Writes the given [[LogicalPlan]] out in this [[FileFormat]].
+   * Creates a command node to write the given [[LogicalPlan]] out to the given [[FileFormat]].
+   * The returned command is unresolved and need to be analyzed.
    */
   private def planForWritingFileFormat(
       format: FileFormat, mode: SaveMode, data: LogicalPlan): InsertIntoHadoopFsRelationCommand = {
