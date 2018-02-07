@@ -27,6 +27,39 @@ import org.apache.spark.annotation.InterfaceStability;
 /**
  * An immutable string-to-string map in which keys are case-insensitive. This is used to represent
  * data source options.
+ *
+ * Each data source implementation can define its own options and teach its users how to set them.
+ * Spark doesn't have any restrictions about what options a data source should or should not have.
+ * Instead Spark defines some standard options that data sources can optionally adopt. It's possible
+ * that some options are very common and many data sources use them. However different data
+ * sources may define the common options(key and meaning) differently, which is quite confusing to
+ * end users.
+ *
+ * The standard options defined by Spark:
+ * <table>
+ *   <tr>
+ *     <th><b>Option key</b></th>
+ *     <th><b>Option value</b></th>
+ *   </tr>
+ *   <tr>
+ *     <td>path</td>
+ *     <td>A comma separated paths string of the data files/directories, like
+ *     <code>path1,/absolute/file2,path3/*</code>. Each path can either be relative or absolute,
+ *     points to either file or directory, and can contain wildcards. This option is commonly used
+ *     by file-based data sources.</td>
+ *   </tr>
+ *   <tr>
+ *     <td>table</td>
+ *     <td>A table name string representing the table name directly without any interpretation.
+ *     For example, <code>db.tbl</code> means a table called "db.tbl", not a table called "tbl"
+ *     inside database "db". <code>`t$bl@`</code> means a table called "`t$bl@`", not "t$bl@".</td>
+ *   </tr>
+ *   <tr>
+ *     <td>database</td>
+ *     <td>A database name string representing the database name directly without any
+ *     interpretation, which is very similar to the table name option.</td>
+ *   </tr>
+ * </table>
  */
 @InterfaceStability.Evolving
 public class DataSourceOptions {
@@ -96,5 +129,21 @@ public class DataSourceOptions {
     String lcaseKey = toLowerCase(key);
     return keyLowerCasedMap.containsKey(lcaseKey) ?
       Double.parseDouble(keyLowerCasedMap.get(lcaseKey)) : defaultValue;
+  }
+
+  public static final String KEY_PATH = "path";
+  public static final String KEY_TABLE = "table";
+  public static final String KEY_DATABASE = "database";
+
+  public Optional<String> getPath() {
+    return get(KEY_PATH);
+  }
+
+  public Optional<String> getTableName() {
+    return get(KEY_TABLE);
+  }
+
+  public Optional<String> getDatabaseName() {
+    return get(KEY_DATABASE);
   }
 }

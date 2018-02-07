@@ -79,4 +79,14 @@ class DataSourceOptionsSuite extends SparkFunSuite {
       options.getDouble("foo", 0.1d)
     }
   }
+
+  test("standard options") {
+    val options = new DataSourceOptions(Map(
+      DataSourceOptions.KEY_PATH -> "abc",
+      DataSourceOptions.KEY_TABLE -> "tbl").asJava)
+
+    assert(options.getPath.get() == "abc")
+    assert(options.getTableName.get() == "tbl")
+    assert(!options.getDatabaseName.isPresent)
+  }
 }
