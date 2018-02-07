@@ -185,6 +185,10 @@
     <paranamer.version>2.8</paranamer.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.0.0</commons-crypto.version>
+    <!--
+    If you are changing Arrow version specification, please check ./python/pyspark/sql/utils.py,
+    ./python/run-tests.py and ./python/setup.py too.
+    -->
     <arrow.version>0.8.0</arrow.version>
 
     <test.java.home>${java.home}</test.java.home>
