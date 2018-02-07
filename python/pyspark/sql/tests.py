@@ -4523,7 +4523,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
         return weighted_mean
 
     def test_manual(self):
-        from pyspark.sql.functions import pandas_udf, col, array
+        from pyspark.sql.functions import pandas_udf, array
 
         df = self.data
         sum_udf = self.pandas_agg_sum_udf
