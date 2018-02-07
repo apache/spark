@@ -1776,7 +1776,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
 
 ## Upgrading From Spark SQL 2.2 to 2.3
 
-  - Since Spark 2.3, Spark supports a vectorized ORC reader with a new ORC file format for ORC files and Hive ORC tables. To do that, the following configurations are newly added or change their default values.
+  - Since Spark 2.3, Spark supports a vectorized ORC reader with a new ORC file format for ORC files. To do that, the following configurations are newly added or change their default values.
 
     - New configurations
 
@@ -1803,14 +1803,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
         <td><code>true</code></td>
         <td>Enables filter pushdown for ORC files. It is <code>false</code> by default prior to Spark 2.3.</td>
       </tr>
-      <tr>
-        <td><code>spark.sql.hive.convertMetastoreOrc</code></td>
-        <td><code>true</code></td>
-        <td>Enable the Spark's ORC support, which can be configured by <code>spark.sql.orc.impl</code>, instead of Hive SerDe when reading from and writing to Hive ORC tables. It is <code>false</code> by default prior to Spark 2.3.</td>
-      </tr>
     </table>
-
-    - Since Apache ORC 1.4.1 is a standalone library providing a subset of Hive ORC related configurations, see <a href="https://orc.apache.org/docs/hive-config.html">Hive Configuration</a> of Apache ORC project for a full list of supported ORC configurations.
 
     - Note that `convertMetastoreOrc` works like `convertMetastoreParquet`. While converting Hive tables into Spark data source tables, Spark ignores table properties. For table-level storage properties, you can use `CREATE TABLE ... USING HIVE` syntax.
 
