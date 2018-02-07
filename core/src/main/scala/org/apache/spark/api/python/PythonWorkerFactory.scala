@@ -182,7 +182,8 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       try {
         // Create and start the daemon
-        val pb = new ProcessBuilder(Arrays.asList(pythonExec, "-m", daemonModule))
+        val command = Arrays.asList(pythonExec, "-m", daemonModule)
+        val pb = new ProcessBuilder(command)
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)
         workerEnv.put("PYTHONPATH", pythonPath)
@@ -194,7 +195,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         try {
           daemonPort = in.readInt()
         } catch {
-          case exc: EOFException =>
+          case _: EOFException =>
             throw new IOException(s"No port number in $daemonModule's stdout")
         }
 
@@ -202,8 +203,13 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         // note: this does not cover the case where the port number
         // is arbitrary data but is also coincidentally within range
         if (daemonPort < 1 || daemonPort > 0xffff) {
-          throw new IOException(s"Bad port number in $daemonModule's stdout: " +
-            f"0x$daemonPort%08x")
+          val exceptionMessage = f"""
+               |Bad data in  $daemonModule's standard output.
+               |Expected valid port number, got 0x$daemonPort%08x.
+               |PYTHONPATH set to '$pythonPath'
+               |Python command is '${command.asScala.mkString(" ")}'
+               |Check if you have a sitecustomize.py module in your python installation."""
+          throw new IOException(exceptionMessage.stripMargin)
         }
 
         // Redirect daemon stdout and stderr
