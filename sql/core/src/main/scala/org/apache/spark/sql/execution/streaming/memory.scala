@@ -149,12 +149,12 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   private def generateDebugString(
-      blocks: Seq[UnsafeRow],
+      rows: Seq[UnsafeRow],
       startOrdinal: Int,
       endOrdinal: Int): String = {
     val fromRow = encoder.resolveAndBind().fromRow _
     s"MemoryBatch [$startOrdinal, $endOrdinal]: " +
-        s"${blocks.map(row => fromRow(row)).mkString(", ")}"
+        s"${rows.map(row => fromRow(row)).mkString(", ")}"
   }
 
   override def commit(end: OffsetV2): Unit = synchronized {
