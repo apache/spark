@@ -1913,6 +1913,9 @@ class DataFrame(object):
         0    2  Alice
         1    5    Bob
         """
+        from pyspark.sql.utils import require_minimum_pandas_version
+        require_minimum_pandas_version()
+
         import pandas as pd
 
         if self.sql_ctx.getConf("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
