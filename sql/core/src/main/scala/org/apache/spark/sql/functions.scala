@@ -2267,7 +2267,9 @@ object functions {
   }
 
   /**
-   * Computes the length of a given string or binary column.
+   * Computes the character length of a given string or number of bytes of a binary string.
+   * The length of character strings include the trailing spaces. The length of binary strings
+   * includes binary zeros.
    *
    * @group string_funcs
    * @since 1.5.0
