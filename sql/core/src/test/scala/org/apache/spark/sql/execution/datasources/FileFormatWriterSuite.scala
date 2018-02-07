@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -29,6 +30,24 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
       val partFiles = path.listFiles()
         .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
       assert(partFiles.length === 2)
+    }
+  }
+
+  test("SPARK-23271 empty dataframe when saved in parquet should write a metadata only file") {
+    withTempDir { inputPath =>
+      withTempPath { outputPath =>
+        val anySchema = StructType(StructField("anyName", StringType) :: Nil)
+        val df = spark.read.schema(anySchema).csv(inputPath.toString)
+        df.write.parquet(outputPath.toString)
+        val partFiles = outputPath.listFiles()
+          .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+        assert(partFiles.length === 1)
+
+        // Now read the file.
+        val  df1 = spark.read.parquet(outputPath.toString)
+        checkAnswer(df1, Seq.empty[Row])
+        assert(df1.schema.equals(anySchema))
+      }
     }
   }
 

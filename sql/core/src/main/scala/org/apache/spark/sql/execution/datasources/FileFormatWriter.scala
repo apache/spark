@@ -190,9 +190,13 @@ object FileFormatWriter extends Logging {
           global = false,
           child = plan).execute()
       }
-      val ret = new Array[WriteTaskResult](rdd.partitions.length)
+
+      // SPARK-23271 If we are attempting to write a zero partition rdd, change the number of
+      // partition to 1 to make sure we at least set up one write task to write the metadata.
+      val finalRdd = if (rdd.partitions.length == 0) rdd.repartition(1) else rdd
+      val ret = new Array[WriteTaskResult](finalRdd.partitions.length)
       sparkSession.sparkContext.runJob(
-        rdd,
+        finalRdd,
         (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
           executeTask(
             description = description,
@@ -202,7 +206,7 @@ object FileFormatWriter extends Logging {
             committer,
             iterator = iter)
         },
-        0 until rdd.partitions.length,
+        0 until finalRdd.partitions.length,
         (index, res: WriteTaskResult) => {
           committer.onTaskCommit(res.commitMsg)
           ret(index) = res
