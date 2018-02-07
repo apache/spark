@@ -270,16 +270,17 @@ class MicroBatchExecution(
             }
           case s: MicroBatchReader =>
             updateStatusMessage(s"Getting offsets from $s")
-            reportTimeTaken("getOffset") {
-            // Once v1 streaming source execution is gone, we can refactor this away.
-            // For now, we set the range here to get the source to infer the available end offset,
-            // get that offset, and then set the range again when we later execute.
-            s.setOffsetRange(
-              toJava(availableOffsets.get(s).map(off => s.deserializeOffset(off.json))),
-              Optional.empty())
-
-              (s, Some(s.getEndOffset))
+            reportTimeTaken("setOffsetRange") {
+              // Once v1 streaming source execution is gone, we can refactor this away.
+              // For now, we set the range here to get the source to infer the available end offset,
+              // get that offset, and then set the range again when we later execute.
+              s.setOffsetRange(
+                toJava(availableOffsets.get(s).map(off => s.deserializeOffset(off.json))),
+                Optional.empty())
             }
+
+            val currentOffset = reportTimeTaken("getEndOffset") { s.getEndOffset() }
+            (s, Option(currentOffset))
         }.toMap
         availableOffsets ++= latestOffsets.filter { case (_, o) => o.nonEmpty }.mapValues(_.get)
 
@@ -401,10 +402,14 @@ class MicroBatchExecution(
         case (reader: MicroBatchReader, available)
           if committedOffsets.get(reader).map(_ != available).getOrElse(true) =>
           val current = committedOffsets.get(reader).map(off => reader.deserializeOffset(off.json))
+          val availableV2: OffsetV2 = available match {
+            case v1: SerializedOffset => reader.deserializeOffset(v1.json)
+            case v2: OffsetV2 => v2
+          }
           reader.setOffsetRange(
             toJava(current),
-            Optional.of(available.asInstanceOf[OffsetV2]))
-          logDebug(s"Retrieving data from $reader: $current -> $available")
+            Optional.of(availableV2))
+          logDebug(s"Retrieving data from $reader: $current -> $availableV2")
           Some(reader ->
             new StreamingDataSourceV2Relation(reader.readSchema().toAttributes, reader))
         case _ => None
