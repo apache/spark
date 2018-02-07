@@ -224,7 +224,6 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
           if (socketToDaemon != null) {
             socketToDaemon.close()
           }
-
         }
 
         val in = new DataInputStream(daemon.getInputStream)
