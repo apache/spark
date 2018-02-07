@@ -1715,7 +1715,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def getRDDStorageInfo(filter: RDD[_] => Boolean): Array[RDDInfo] = {
     assertNotStopped()
     val rddInfos = persistentRdds.values.filter(filter).map(RDDInfo.fromRdd).toArray
-    StorageUtils.updateRddInfo(rddInfos, getExecutorStorageStatus)
+    StorageUtils.updateRddInfo(rddInfos, env.blockManager.master.getStorageStatus)
     rddInfos.filter(_.isCached)
   }
 
@@ -1725,17 +1725,6 @@ class SparkContext(config: SparkConf) extends Logging {
    * @note This does not necessarily mean the caching or computation was successful.
    */
   def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
-
-  /**
-   * :: DeveloperApi ::
-   * Return information about blocks stored in all of the slaves
-   */
-  @DeveloperApi
-  @deprecated("This method may change or be removed in a future release.", "2.2.0")
-  def getExecutorStorageStatus: Array[StorageStatus] = {
-    assertNotStopped()
-    env.blockManager.master.getStorageStatus
-  }
 
   /**
    * :: DeveloperApi ::

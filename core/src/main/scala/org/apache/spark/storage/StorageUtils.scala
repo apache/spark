@@ -24,19 +24,15 @@ import scala.collection.mutable
 
 import sun.nio.ch.DirectBuffer
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 
 /**
- * :: DeveloperApi ::
  * Storage information for each BlockManager.
  *
  * This class assumes BlockId and BlockStatus are immutable, such that the consumers of this
  * class cannot mutate the source of the information. Accesses are not thread-safe.
  */
-@DeveloperApi
-@deprecated("This class may be removed or made private in a future release.", "2.2.0")
-class StorageStatus(
+private [spark] class StorageStatus(
     val blockManagerId: BlockManagerId,
     val maxMemory: Long,
     val maxOnHeapMem: Option[Long],
@@ -46,7 +42,7 @@ class StorageStatus(
    * Internal representation of the blocks stored in this block manager.
    *
    * We store RDD blocks and non-RDD blocks separately to allow quick retrievals of RDD blocks.
-   * These collections should only be mutated through the add/update/removeBlock methods.
+   * These collections should only be mutated through the addBlock method.
    */
   private val _rddBlocks = new mutable.HashMap[Int, mutable.Map[BlockId, BlockStatus]]
   private val _nonRddBlocks = new mutable.HashMap[BlockId, BlockStatus]
@@ -87,9 +83,6 @@ class StorageStatus(
    */
   def rddBlocks: Map[BlockId, BlockStatus] = _rddBlocks.flatMap { case (_, blocks) => blocks }
 
-  /** Return the blocks that belong to the given RDD stored in this block manager. */
-  def rddBlocksById(rddId: Int): Map[BlockId, BlockStatus] = _rddBlocks.getOrElse(rddId, Map.empty)
-
   /** Add the given block to this storage status. If it already exists, overwrite it. */
   private[spark] def addBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
     updateStorageInfo(blockId, blockStatus)
@@ -98,46 +91,6 @@ class StorageStatus(
         _rddBlocks.getOrElseUpdate(rddId, new mutable.HashMap)(blockId) = blockStatus
       case _ =>
         _nonRddBlocks(blockId) = blockStatus
-    }
-  }
-
-  /** Update the given block in this storage status. If it doesn't already exist, add it. */
-  private[spark] def updateBlock(blockId: BlockId, blockStatus: BlockStatus): Unit = {
-    addBlock(blockId, blockStatus)
-  }
-
-  /** Remove the given block from this storage status. */
-  private[spark] def removeBlock(blockId: BlockId): Option[BlockStatus] = {
-    updateStorageInfo(blockId, BlockStatus.empty)
-    blockId match {
-      case RDDBlockId(rddId, _) =>
-        // Actually remove the block, if it exists
-        if (_rddBlocks.contains(rddId)) {
-          val removed = _rddBlocks(rddId).remove(blockId)
-          // If the given RDD has no more blocks left, remove the RDD
-          if (_rddBlocks(rddId).isEmpty) {
-            _rddBlocks.remove(rddId)
-          }
-          removed
-        } else {
-          None
-        }
-      case _ =>
-        _nonRddBlocks.remove(blockId)
-    }
-  }
-
-  /**
-   * Return whether the given block is stored in this block manager in O(1) time.
-   *
-   * @note This is much faster than `this.blocks.contains`, which is O(blocks) time.
-   */
-  def containsBlock(blockId: BlockId): Boolean = {
-    blockId match {
-      case RDDBlockId(rddId, _) =>
-        _rddBlocks.get(rddId).exists(_.contains(blockId))
-      case _ =>
-        _nonRddBlocks.contains(blockId)
     }
   }
 
@@ -154,20 +107,6 @@ class StorageStatus(
         _nonRddBlocks.get(blockId)
     }
   }
-
-  /**
-   * Return the number of blocks stored in this block manager in O(RDDs) time.
-   *
-   * @note This is much faster than `this.blocks.size`, which is O(blocks) time.
-   */
-  def numBlocks: Int = _nonRddBlocks.size + numRddBlocks
-
-  /**
-   * Return the number of RDD blocks stored in this block manager in O(RDDs) time.
-   *
-   * @note This is much faster than `this.rddBlocks.size`, which is O(RDD blocks) time.
-   */
-  def numRddBlocks: Int = _rddBlocks.values.map(_.size).sum
 
   /**
    * Return the number of blocks that belong to the given RDD in O(1) time.
@@ -316,19 +255,4 @@ private[spark] object StorageUtils extends Logging {
       rddInfo.diskSize = diskSize
     }
   }
-
-  /**
-   * Return a mapping from block ID to its locations for each block that belongs to the given RDD.
-   */
-  def getRddBlockLocations(rddId: Int, statuses: Seq[StorageStatus]): Map[BlockId, Seq[String]] = {
-    val blockLocations = new mutable.HashMap[BlockId, mutable.ListBuffer[String]]
-    statuses.foreach { status =>
-      status.rddBlocksById(rddId).foreach { case (bid, _) =>
-        val location = status.blockManagerId.hostPort
-        blockLocations.getOrElseUpdate(bid, mutable.ListBuffer.empty) += location
-      }
-    }
-    blockLocations
-  }
-
 }
