@@ -25,6 +25,7 @@ import java.util.Locale
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
@@ -68,7 +69,6 @@ private[spark] class EventLoggingListener(
 
   private val shouldCompress = sparkConf.get(EVENT_LOG_COMPRESS)
   private val shouldOverwrite = sparkConf.get(EVENT_LOG_OVERWRITE)
-  private val shouldLogBlockUpdates = sparkConf.get(EVENT_LOG_BLOCK_UPDATES)
   private val testing = sparkConf.get(EVENT_LOG_TESTING)
   private val outputBufferSize = sparkConf.get(EVENT_LOG_OUTPUT_BUFFER_SIZE).toInt
   private val fileSystem = Utils.getHadoopFileSystem(logBaseDir, hadoopConf)
@@ -81,6 +81,9 @@ private[spark] class EventLoggingListener(
   private val compressionCodecName = compressionCodec.map { c =>
     CompressionCodec.getShortName(c.getClass.getName)
   }
+  private val blockUpdateSampleFraction = sparkConf.get(EVENT_LOG_BLOCK_UPDATES_FRACTION)
+  private val executorMetricsUpdateSampleFraction =
+    sparkConf.get(EVENT_LOG_EXECUTOR_METRICS_UPDATES_FRACTION)
 
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
@@ -228,14 +231,23 @@ private[spark] class EventLoggingListener(
     logEvent(event, flushLogger = true)
   }
 
+  // Only sampled logging when fraction greater than zero, fraction equals 1 means logging all
   override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {
-    if (shouldLogBlockUpdates) {
-      logEvent(event, flushLogger = true)
+    if (blockUpdateSampleFraction > 0) {
+      if (Random.nextDouble < blockUpdateSampleFraction) {
+        logEvent(event)
+      }
     }
   }
 
-  // No-op because logging every update would be overkill
-  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = { }
+  // Only sampled logging when fraction greater than zero
+  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
+    if (executorMetricsUpdateSampleFraction > 0) {
+      if (Random.nextDouble < executorMetricsUpdateSampleFraction) {
+        logEvent(event)
+      }
+    }
+  }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     if (event.logEvent) {
