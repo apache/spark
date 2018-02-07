@@ -3715,10 +3715,10 @@ class PandasUDFTests(ReusedSQLTestCase):
         self.assertEqual(foo.returnType, schema)
         self.assertEqual(foo.evalType, PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF)
 
-        @pandas_udf(returnType='v double', functionType=PandasUDFType.SCALAR)
+        @pandas_udf(returnType='double', functionType=PandasUDFType.SCALAR)
         def foo(x):
             return x
-        self.assertEqual(foo.returnType, schema)
+        self.assertEqual(foo.returnType, schema[0].dataType)
         self.assertEqual(foo.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
         @pandas_udf(returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
@@ -3755,7 +3755,7 @@ class PandasUDFTests(ReusedSQLTestCase):
                 @pandas_udf(returnType=PandasUDFType.GROUPED_MAP)
                 def foo(df):
                     return df
-            with self.assertRaisesRegexp(ValueError, 'Invalid returnType'):
+            with self.assertRaisesRegexp(TypeError, 'Invalid returnType'):
                 @pandas_udf(returnType='double', functionType=PandasUDFType.GROUPED_MAP)
                 def foo(df):
                     return df
