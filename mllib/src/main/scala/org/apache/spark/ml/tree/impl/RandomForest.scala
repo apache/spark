@@ -1003,11 +1003,10 @@ private[spark] object RandomForest extends Logging {
       }
 
       // Calculate the number of samples for finding splits
-      val requiredSamples: Long = (samplesFractionForFindSplits(metadata) * metadata.numExamples.toDouble).toLong
+      val numSamples: Int = (samplesFractionForFindSplits(metadata) * metadata.numExamples).toInt
 
       // add zero value count and get complete statistics
-      val valueCountMap: Map[Double, Int] = partValueCountMap + (0.0 -> (requiredSamples.toInt - partNumSamples))
-      val numSamples: Int = requiredSamples.toInt
+      val valueCountMap: Map[Double, Int] = partValueCountMap + (0.0 -> (numSamples - partNumSamples))
 
       // sort distinct values
       val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray
@@ -1152,10 +1151,10 @@ private[spark] object RandomForest extends Logging {
   }
 
   /**
-    * Calculate the subsample fraction for finding splits
-    * @param metadata decision tree metadata
-    * @return subsample fraction
-    */
+   * Calculate the subsample fraction for finding splits
+   * @param metadata decision tree metadata
+   * @return subsample fraction
+   */
   private def samplesFractionForFindSplits(
       metadata: DecisionTreeMetadata): Double = {
     // Calculate the number of samples for approximate quantile calculation.
