@@ -44,7 +44,7 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
         assert(partFiles.length === 1)
 
         // Now read the file.
-        val  df1 = spark.read.parquet(outputPath.toString)
+        val df1 = spark.read.parquet(outputPath.toString)
         checkAnswer(df1, Seq.empty[Row])
         assert(df1.schema.equals(anySchema))
       }
