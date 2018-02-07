@@ -20,7 +20,6 @@ package org.apache.spark.sql.sources.v2.writer;
 import java.io.Serializable;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.scheduler.OutputCommitCoordinator;
 
 /**
  * A factory of {@link DataWriter} returned by {@link DataSourceWriter#createWriterFactory()},
