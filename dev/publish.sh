@@ -22,9 +22,9 @@ make_dist() {
   hadoop_name="hadoop-palantir"
   artifact_name="spark-dist_2.11-${hadoop_name}"
   file_name="spark-dist-${version}-${hadoop_name}.tgz"
-  ./dev/make-distribution.sh --name "hadoop-palantir" --tgz "$@" $build_flags
+  ./dev/make-distribution.sh --name "hadoop-palantir" --tgz "$@" $build_flags | tee -a "$CIRCLE_ARTIFACTS/publish.log"
   curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T $file_name "https://api.bintray.com/content/palantir/releases/spark/${version}/org/apache/spark/${artifact_name}/${version}/${artifact_name}-${version}.tgz"
 }
 
 publish_artifacts | tee -a "$CIRCLE_ARTIFACTS/publish.log"
-make_dist "${PALANTIR_FLAGS[*]}" --clean | tee -a "$CIRCLE_ARTIFACTS/publish.log"
+make_dist "${PALANTIR_FLAGS[*]}" --clean
