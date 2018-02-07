@@ -3670,6 +3670,21 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(pdf_col_names, df.columns)
         self.assertEqual(pdf_col_names, df_arrow.columns)
 
+    def test_timestamp_dst(self):
+        """
+        SPARK-23314: Test daylight saving time
+        """
+        import pandas as pd
+        import datetime
+        # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
+        dt = datetime.datetime(2015, 11, 1, 1, 29, 30)
+        pdf_1 = pd.DataFrame({'time': [dt]})
+        pdf_2 = self.spark.createDataFrame([dt], 'timestamp').toDF('time').toPandas()
+        pdf_3 = self.spark.createDataFrame(pdf_1).toPandas()
+
+        self.assertPandasEqual(pdf_1, pdf_2)
+        self.assertPandasEqual(pdf_1, pdf_3)
+
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
