@@ -150,6 +150,7 @@
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.4</commons.httpclient.version>
     <commons.httpcore.version>4.4.8</commons.httpcore.version>
+  
     <!--  commons-httpclient/commons-httpclient-->
     <httpclient.classic.version>3.1</httpclient.classic.version>
     <commons.math3.version>3.4.1</commons.math3.version>
