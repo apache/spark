@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, Expression, NamedExpression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeSet, Expression, NamedExpression, PredicateHelper}
 import org.apache.spark.sql.catalyst.optimizer.RemoveRedundantProject
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -81,35 +81,45 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] with PredicateHel
 
     // TODO: add more push down rules.
 
-    // TODO: nested fields pruning
-    def pushDownRequiredColumns(plan: LogicalPlan, requiredByParent: Seq[Attribute]): Unit = {
-      plan match {
-        case Project(projectList, child) =>
-          val required = projectList.filter(requiredByParent.contains).flatMap(_.references)
-          pushDownRequiredColumns(child, required)
-
-        case Filter(condition, child) =>
-          val required = requiredByParent ++ condition.references
-          pushDownRequiredColumns(child, required)
-
-        case DataSourceV2Relation(fullOutput, reader) => reader match {
-          case r: SupportsPushDownRequiredColumns =>
-            // Match original case of attributes.
-            val attrMap = AttributeMap(fullOutput.zip(fullOutput))
-            val requiredColumns = requiredByParent.map(attrMap)
-            r.pruneColumns(requiredColumns.toStructType)
-          case _ =>
-        }
-
-        // TODO: there may be more operators can be used to calculate required columns, we can add
-        // more and more in the future.
-        case _ => plan.children.foreach(child => pushDownRequiredColumns(child, child.output))
-      }
-    }
-
-    pushDownRequiredColumns(filterPushed, filterPushed.output)
+    val columnPruned = pushDownRequiredColumns(filterPushed, filterPushed.outputSet)
     // After column pruning, we may have redundant PROJECT nodes in the query plan, remove them.
-    RemoveRedundantProject(filterPushed)
+    RemoveRedundantProject(columnPruned)
+  }
+
+  // TODO: nested fields pruning
+  private def pushDownRequiredColumns(
+      plan: LogicalPlan, requiredByParent: AttributeSet): LogicalPlan = {
+    plan match {
+      case p @ Project(projectList, child) =>
+        val required = projectList.flatMap(_.references)
+        p.copy(child = pushDownRequiredColumns(child, AttributeSet(required)))
+
+      case f @ Filter(condition, child) =>
+        val required = requiredByParent ++ condition.references
+        f.copy(child = pushDownRequiredColumns(child, required))
+
+      case relation: DataSourceV2Relation => relation.reader match {
+        case reader: SupportsPushDownRequiredColumns =>
+          // TODO: Enable the below assert after we make `DataSourceV2Relation` immutable. Fow now
+          // it's possible that the mutable reader being updated by someone else, and we need to
+          // always call `reader.pruneColumns` here to correct it.
+          // assert(relation.output.toStructType == reader.readSchema(),
+          //  "Schema of data source reader does not match the relation plan.")
+
+          val requiredColumns = relation.output.filter(requiredByParent.contains)
+          reader.pruneColumns(requiredColumns.toStructType)
+
+          val nameToAttr = relation.output.map(_.name).zip(relation.output).toMap
+          val newOutput = reader.readSchema().map(_.name).map(nameToAttr)
+          relation.copy(output = newOutput)
+
+        case _ => relation
+      }
+
+      // TODO: there may be more operators that can be used to calculate the required columns. We
+      // can add more and more in the future.
+      case _ => plan.mapChildren(c => pushDownRequiredColumns(c, c.outputSet))
+    }
   }
 
   /**

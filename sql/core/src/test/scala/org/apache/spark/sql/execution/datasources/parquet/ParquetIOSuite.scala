@@ -653,7 +653,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       spark.createDataFrame(data).repartition(1).write.parquet(dir.getCanonicalPath)
       val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0);
       {
-        val reader = new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
+        val conf = sqlContext.conf
+        val reader = new VectorizedParquetRecordReader(
+          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, null)
           val result = mutable.ArrayBuffer.empty[(Int, String)]
@@ -662,7 +664,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
             val v = (row.getInt(0), row.getString(1))
             result += v
           }
-          assert(data == result)
+          assert(data.toSet == result.toSet)
         } finally {
           reader.close()
         }
@@ -670,7 +672,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Project just one column
       {
-        val reader = new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
+        val conf = sqlContext.conf
+        val reader = new VectorizedParquetRecordReader(
+          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, ("_2" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String)]
@@ -678,7 +682,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
             val row = reader.getCurrentValue.asInstanceOf[InternalRow]
             result += row.getString(0)
           }
-          assert(data.map(_._2) == result)
+          assert(data.map(_._2).toSet == result.toSet)
         } finally {
           reader.close()
         }
@@ -686,7 +690,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Project columns in opposite order
       {
-        val reader = new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
+        val conf = sqlContext.conf
+        val reader = new VectorizedParquetRecordReader(
+          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, ("_2" :: "_1" :: Nil).asJava)
           val result = mutable.ArrayBuffer.empty[(String, Int)]
@@ -695,7 +701,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
             val v = (row.getString(0), row.getInt(1))
             result += v
           }
-          assert(data.map { x => (x._2, x._1) } == result)
+          assert(data.map { x => (x._2, x._1) }.toSet == result.toSet)
         } finally {
           reader.close()
         }
@@ -703,7 +709,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       // Empty projection
       {
-        val reader = new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
+        val conf = sqlContext.conf
+        val reader = new VectorizedParquetRecordReader(
+          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         try {
           reader.initialize(file, List[String]().asJava)
           var result = 0
@@ -742,8 +750,9 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
       dataTypes.zip(constantValues).foreach { case (dt, v) =>
         val schema = StructType(StructField("pcol", dt) :: Nil)
-        val vectorizedReader =
-          new VectorizedParquetRecordReader(sqlContext.conf.offHeapColumnVectorEnabled)
+        val conf = sqlContext.conf
+        val vectorizedReader = new VectorizedParquetRecordReader(
+          null, conf.offHeapColumnVectorEnabled, conf.parquetVectorizedReaderBatchSize)
         val partitionValues = new GenericInternalRow(Array(v))
         val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
 

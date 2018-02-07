@@ -28,8 +28,8 @@ import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{StreamingRelation, StreamingRelationV2}
 import org.apache.spark.sql.sources.StreamSourceProvider
-import org.apache.spark.sql.sources.v2.DataSourceV2Options
-import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.DataSourceOptions
+import org.apache.spark.sql.sources.v2.reader.{ContinuousReadSupport, MicroBatchReadSupport}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -118,7 +118,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * to be used to parse timestamps in the JSON/CSV data sources or partition values.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -129,12 +129,12 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
   }
 
   /**
-   * Adds input options for the underlying data source.
+   * (Java-specific) Adds input options for the underlying data source.
    *
    * You can set the following option(s):
    * <ul>
    * <li>`timeZone` (default session local timezone): sets the string that indicates a timezone
-   * to be used to parse timestamps in the JSON/CSV datasources or partition values.</li>
+   * to be used to parse timestamps in the JSON/CSV data sources or partition values.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -158,7 +158,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
     }
 
     val ds = DataSource.lookupDataSource(source, sparkSession.sqlContext.conf).newInstance()
-    val options = new DataSourceV2Options(extraOptions.asJava)
+    val options = new DataSourceOptions(extraOptions.asJava)
     // We need to generate the V1 data source so we can pass it to the V2 relation as a shim.
     // We can't be sure at this point whether we'll actually want to use V2, since we don't know the
     // writer or whether the query is continuous.

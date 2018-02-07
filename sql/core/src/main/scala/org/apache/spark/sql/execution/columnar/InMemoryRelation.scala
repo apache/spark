@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Statistics}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.LongAccumulator
@@ -62,8 +62,8 @@ case class InMemoryRelation(
     @transient child: SparkPlan,
     tableName: Option[String])(
     @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
-    val batchStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator,
-    statsOfPlanToCache: Statistics = null)
+    val sizeInBytesStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator,
+    statsOfPlanToCache: Statistics)
   extends logical.LeafNode with MultiInstanceRelation {
 
   override protected def innerChildren: Seq[SparkPlan] = Seq(child)
@@ -73,11 +73,16 @@ case class InMemoryRelation(
   @transient val partitionStatistics = new PartitionStatistics(output)
 
   override def computeStats(): Statistics = {
-    if (batchStats.value == 0L) {
-      // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache
-      statsOfPlanToCache
+    if (sizeInBytesStats.value == 0L) {
+      // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache.
+      // Note that we should drop the hint info here. We may cache a plan whose root node is a hint
+      // node. When we lookup the cache with a semantically same plan without hint info, the plan
+      // returned by cache lookup should not have hint info. If we lookup the cache with a
+      // semantically same plan with a different hint info, `CacheManager.useCachedData` will take
+      // care of it and retain the hint info in the lookup input plan.
+      statsOfPlanToCache.copy(hints = HintInfo())
     } else {
-      Statistics(sizeInBytes = batchStats.value.longValue)
+      Statistics(sizeInBytes = sizeInBytesStats.value.longValue)
     }
   }
 
@@ -122,7 +127,7 @@ case class InMemoryRelation(
             rowCount += 1
           }
 
-          batchStats.add(totalSize)
+          sizeInBytesStats.add(totalSize)
 
           val stats = InternalRow.fromSeq(
             columnBuilders.flatMap(_.columnStats.collectedStatistics))
@@ -144,7 +149,7 @@ case class InMemoryRelation(
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
       newOutput, useCompression, batchSize, storageLevel, child, tableName)(
-        _cachedColumnBuffers, batchStats, statsOfPlanToCache)
+        _cachedColumnBuffers, sizeInBytesStats, statsOfPlanToCache)
   }
 
   override def newInstance(): this.type = {
@@ -156,12 +161,12 @@ case class InMemoryRelation(
       child,
       tableName)(
         _cachedColumnBuffers,
-        batchStats,
+        sizeInBytesStats,
         statsOfPlanToCache).asInstanceOf[this.type]
   }
 
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 
   override protected def otherCopyArgs: Seq[AnyRef] =
-    Seq(_cachedColumnBuffers, batchStats, statsOfPlanToCache)
+    Seq(_cachedColumnBuffers, sizeInBytesStats, statsOfPlanToCache)
 }

@@ -29,10 +29,9 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2}
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.streaming.MicroBatchReadSupport
-import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
 import org.apache.spark.util.{ManualClock, SystemClock}
 
@@ -44,14 +43,14 @@ class RateSourceProviderV2 extends DataSourceV2 with MicroBatchReadSupport with 
   override def createMicroBatchReader(
       schema: Optional[StructType],
       checkpointLocation: String,
-      options: DataSourceV2Options): MicroBatchReader = {
+      options: DataSourceOptions): MicroBatchReader = {
     new RateStreamMicroBatchReader(options)
   }
 
   override def shortName(): String = "ratev2"
 }
 
-class RateStreamMicroBatchReader(options: DataSourceV2Options)
+class RateStreamMicroBatchReader(options: DataSourceOptions)
   extends MicroBatchReader {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
@@ -123,7 +122,7 @@ class RateStreamMicroBatchReader(options: DataSourceV2Options)
     RateStreamOffset(Serialization.read[Map[Int, ValueRunTimeMsPair]](json))
   }
 
-  override def createReadTasks(): java.util.List[ReadTask[Row]] = {
+  override def createDataReaderFactories(): java.util.List[DataReaderFactory[Row]] = {
     val startMap = start.partitionToValueAndRunTimeMs
     val endMap = end.partitionToValueAndRunTimeMs
     endMap.keys.toSeq.map { part =>
@@ -139,7 +138,7 @@ class RateStreamMicroBatchReader(options: DataSourceV2Options)
         outTimeMs += msPerPartitionBetweenRows
       }
 
-      RateStreamBatchTask(packedRows).asInstanceOf[ReadTask[Row]]
+      RateStreamBatchTask(packedRows).asInstanceOf[DataReaderFactory[Row]]
     }.toList.asJava
   }
 
@@ -147,7 +146,7 @@ class RateStreamMicroBatchReader(options: DataSourceV2Options)
   override def stop(): Unit = {}
 }
 
-case class RateStreamBatchTask(vals: Seq[(Long, Long)]) extends ReadTask[Row] {
+case class RateStreamBatchTask(vals: Seq[(Long, Long)]) extends DataReaderFactory[Row] {
   override def createDataReader(): DataReader[Row] = new RateStreamBatchReader(vals)
 }
 

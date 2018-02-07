@@ -15,27 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.python
+package org.apache.spark.sql.sources.v2.reader.streaming;
 
-import org.apache.spark.api.python.PythonFunction
-import org.apache.spark.sql.catalyst.expressions.{Expression, NonSQLExpression, Unevaluable, UserDefinedExpression}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.sources.v2.reader.DataReader;
 
 /**
- * A serialized version of a Python lambda function.
+ * A variation on {@link DataReader} for use with streaming in continuous processing mode.
  */
-case class PythonUDF(
-    name: String,
-    func: PythonFunction,
-    dataType: DataType,
-    children: Seq[Expression],
-    evalType: Int,
-    udfDeterministic: Boolean)
-  extends Expression with Unevaluable with NonSQLExpression with UserDefinedExpression {
-
-  override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
-
-  override def toString: String = s"$name(${children.mkString(", ")})"
-
-  override def nullable: Boolean = true
+@InterfaceStability.Evolving
+public interface ContinuousDataReader<T> extends DataReader<T> {
+    /**
+     * Get the offset of the current record, or the start offset if no records have been read.
+     *
+     * The execution engine will call this method along with get() to keep track of the current
+     * offset. When an epoch ends, the offset of the previous record in each partition will be saved
+     * as a restart checkpoint.
+     */
+    PartitionOffset getOffset();
 }

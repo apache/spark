@@ -23,12 +23,10 @@ import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.{HashMap, HashSet}
-import scala.xml.{Elem, Node, Unparsed}
+import scala.xml.{Node, Unparsed}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
-import org.apache.spark.SparkConf
-import org.apache.spark.internal.config._
 import org.apache.spark.scheduler.TaskLocality
 import org.apache.spark.status._
 import org.apache.spark.status.api.v1._
@@ -1018,6 +1016,11 @@ private object ApiHelper {
       case Some(v) => Option(v)
       case _ => throw new IllegalArgumentException(s"Invalid sort column: $sortColumn")
     }
+  }
+
+  def lastStageNameAndDescription(store: AppStatusStore, job: JobData): (String, String) = {
+    val stage = store.asOption(store.lastStageAttempt(job.stageIds.max))
+    (stage.map(_.name).getOrElse(""), stage.flatMap(_.description).getOrElse(job.name))
   }
 
 }

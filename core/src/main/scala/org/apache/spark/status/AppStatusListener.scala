@@ -211,6 +211,31 @@ private[spark] class AppStatusListener(
     updateBlackListStatus(event.executorId, true)
   }
 
+  override def onExecutorBlacklistedForStage(
+      event: SparkListenerExecutorBlacklistedForStage): Unit = {
+    Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
+      val now = System.nanoTime()
+      val esummary = stage.executorSummary(event.executorId)
+      esummary.isBlacklisted = true
+      maybeUpdate(esummary, now)
+    }
+  }
+
+  override def onNodeBlacklistedForStage(event: SparkListenerNodeBlacklistedForStage): Unit = {
+    val now = System.nanoTime()
+
+    // Implicitly blacklist every available executor for the stage associated with this node
+    Option(liveStages.get((event.stageId, event.stageAttemptId))).foreach { stage =>
+      liveExecutors.values.foreach { exec =>
+        if (exec.hostname == event.hostId) {
+          val esummary = stage.executorSummary(exec.executorId)
+          esummary.isBlacklisted = true
+          maybeUpdate(esummary, now)
+        }
+      }
+    }
+  }
+
   override def onExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Unit = {
     updateBlackListStatus(event.executorId, false)
   }
@@ -850,8 +875,8 @@ private[spark] class AppStatusListener(
       return
     }
 
-    val toDelete = KVUtils.viewToSeq(kvstore.view(classOf[JobDataWrapper]),
-        countToDelete.toInt) { j =>
+    val view = kvstore.view(classOf[JobDataWrapper]).index("completionTime").first(0L)
+    val toDelete = KVUtils.viewToSeq(view, countToDelete.toInt) { j =>
       j.info.status != JobExecutionStatus.RUNNING && j.info.status != JobExecutionStatus.UNKNOWN
     }
     toDelete.foreach { j => kvstore.delete(j.getClass(), j.info.jobId) }
@@ -863,8 +888,8 @@ private[spark] class AppStatusListener(
       return
     }
 
-    val stages = KVUtils.viewToSeq(kvstore.view(classOf[StageDataWrapper]),
-        countToDelete.toInt) { s =>
+    val view = kvstore.view(classOf[StageDataWrapper]).index("completionTime").first(0L)
+    val stages = KVUtils.viewToSeq(view, countToDelete.toInt) { s =>
       s.info.status != v1.StageStatus.ACTIVE && s.info.status != v1.StageStatus.PENDING
     }
 
@@ -920,8 +945,9 @@ private[spark] class AppStatusListener(
     val countToDelete = calculateNumberToRemove(stage.savedTasks.get(), maxTasksPerStage).toInt
     if (countToDelete > 0) {
       val stageKey = Array(stage.info.stageId, stage.info.attemptNumber)
-      val view = kvstore.view(classOf[TaskDataWrapper]).index("stage").first(stageKey)
-        .last(stageKey)
+      val view = kvstore.view(classOf[TaskDataWrapper])
+        .index(TaskIndexNames.COMPLETION_TIME)
+        .parent(stageKey)
 
       // Try to delete finished tasks only.
       val toDelete = KVUtils.viewToSeq(view, countToDelete) { t =>

@@ -30,6 +30,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -718,7 +719,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
                 logError("User class threw exception: " + cause, cause)
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
-                  "User class threw exception: " + cause)
+                  "User class threw exception: " + StringUtils.stringifyException(cause))
             }
             sparkContextPromise.tryFailure(e.getCause())
         } finally {

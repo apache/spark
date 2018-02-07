@@ -460,6 +460,7 @@ private[spark] object HiveUtils extends Logging {
     case (decimal: java.math.BigDecimal, DecimalType()) =>
       // Hive strips trailing zeros so use its toString
       HiveDecimal.create(decimal).toString
+    case (other, _ : UserDefinedType[_]) => other.toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
 
