@@ -194,7 +194,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           ds = ds, conf = sparkSession.sessionState.conf)
         Dataset.ofRows(sparkSession, DataSourceV2Relation(
-          ds, extraOptions.toMap ++ sessionOptions, path = extraOptions.get("path"),
+          ds, extraOptions.toMap ++ sessionOptions,
           userSchema = userSpecifiedSchema))
 
       } else {

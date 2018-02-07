@@ -36,16 +36,14 @@ import org.apache.spark.sql.types.StructType
 case class DataSourceV2Relation(
     source: DataSourceV2,
     options: Map[String, String],
-    path: Option[String] = None,
     projection: Option[Seq[AttributeReference]] = None,
     filters: Option[Seq[Expression]] = None,
     userSchema: Option[StructType] = None) extends LeafNode with MultiInstanceRelation {
 
   override def simpleString: String = {
-    "DataSourceV2Relation(" +
-      s"source=$sourceName${path.map(loc => s"($loc)").getOrElse("")}, " +
+    s"DataSourceV2Relation(source=$sourceName, " +
       s"schema=[${output.map(a => s"$a ${a.dataType.simpleString}").mkString(", ")}], " +
-      s"filters=[${pushedFilters.mkString(", ")}] options=$options)"
+      s"filters=[${pushedFilters.mkString(", ")}], options=$options)"
   }
 
   override lazy val schema: StructType = reader.readSchema()
@@ -67,13 +65,6 @@ case class DataSourceV2Relation(
     // ensure path and table options are set correctly
     val updatedOptions = new mutable.HashMap[String, String]
     updatedOptions ++= options
-
-    path match {
-      case Some(p) =>
-        updatedOptions.put("path", p)
-      case None =>
-        updatedOptions.remove("path")
-    }
 
     new DataSourceOptions(options.asJava)
   }
