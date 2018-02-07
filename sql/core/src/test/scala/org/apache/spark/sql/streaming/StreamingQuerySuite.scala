@@ -17,25 +17,27 @@
 
 package org.apache.spark.sql.streaming
 
+import java.{util => ju}
+import java.util.Optional
 import java.util.concurrent.CountDownLatch
 
 import org.apache.commons.lang3.RandomStringUtils
-import org.mockito.Mockito._
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.reader.DataReaderFactory
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.ManualClock
 
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging with MockitoSugar {
 
@@ -206,19 +208,29 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
     /** Custom MemoryStream that waits for manual clock to reach a time */
     val inputData = new MemoryStream[Int](0, sqlContext) {
-      // getOffset should take 50 ms the first time it is called
-      override def getOffset: Option[Offset] = {
-        val offset = super.getOffset
-        if (offset.nonEmpty) {
-          clock.waitTillTime(1050)
+
+      private def dataAdded: Boolean = currentOffset.offset != -1
+
+      // setOffsetRange should take 50 ms the first time it is called after data is added
+      override def setOffsetRange(start: Optional[OffsetV2], end: Optional[OffsetV2]): Unit = {
+        synchronized {
+          if (dataAdded) clock.waitTillTime(1050)
+          super.setOffsetRange(start, end)
         }
-        offset
+      }
+
+      // getEndOffset should take 100 ms the first time it is called after data is added
+      override def getEndOffset(): OffsetV2 = synchronized {
+        if (dataAdded) clock.waitTillTime(1150)
+        super.getEndOffset()
       }
 
       // getBatch should take 100 ms the first time it is called
-      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        if (start.isEmpty) clock.waitTillTime(1150)
-        super.getBatch(start, end)
+      override def createUnsafeRowReaderFactories(): ju.List[DataReaderFactory[UnsafeRow]] = {
+        synchronized {
+          clock.waitTillTime(1350)
+          super.createUnsafeRowReaderFactories()
+        }
       }
     }
 
@@ -258,39 +270,44 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
-      // Test status and progress while offset is being fetched
+      // Test status and progress when setOffsetRange is being called
       AddData(inputData, 1, 2),
-      AdvanceManualClock(1000), // time = 1000 to start new trigger, will block on getOffset
+      AdvanceManualClock(1000), // time = 1000 to start new trigger, will block on setOffsetRange
       AssertStreamExecThreadIsWaitingForTime(1050),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message.startsWith("Getting offsets from")),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
-      // Test status and progress while batch is being fetched
-      AdvanceManualClock(50), // time = 1050 to unblock getOffset
+      AdvanceManualClock(50), // time = 1050 to unblock setOffsetRange
       AssertClockTime(1050),
-      AssertStreamExecThreadIsWaitingForTime(1150),      // will block on getBatch that needs 1150
+      AssertStreamExecThreadIsWaitingForTime(1150), // will block on getEndOffset that needs 1150
+      AssertOnQuery(_.status.isDataAvailable === false),
+      AssertOnQuery(_.status.isTriggerActive === true),
+      AssertOnQuery(_.status.message.startsWith("Getting offsets from")),
+      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
+
+      AdvanceManualClock(100), // time = 1150 to unblock getEndOffset
+      AssertClockTime(1150),
+      AssertStreamExecThreadIsWaitingForTime(1350), // will block on createReadTasks that needs 1350
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message === "Processing new data"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
-      // Test status and progress while batch is being processed
-      AdvanceManualClock(100), // time = 1150 to unblock getBatch
-      AssertClockTime(1150),
-      AssertStreamExecThreadIsWaitingForTime(1500), // will block in Spark job that needs 1500
+      AdvanceManualClock(200), // time = 1350 to unblock createReadTasks
+      AssertClockTime(1350),
+      AssertStreamExecThreadIsWaitingForTime(1500), // will block on map task that needs 1500
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message === "Processing new data"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
       // Test status and progress while batch processing has completed
-      AssertOnQuery { _ => clock.getTimeMillis() === 1150 },
-      AdvanceManualClock(350), // time = 1500 to unblock job
+      AdvanceManualClock(150), // time = 1500 to unblock map task
       AssertClockTime(1500),
       CheckAnswer(2),
-      AssertStreamExecThreadIsWaitingForTime(2000),
+      AssertStreamExecThreadIsWaitingForTime(2000),  // will block until the next trigger
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
@@ -307,10 +324,11 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(progress.numInputRows === 2)
         assert(progress.processedRowsPerSecond === 4.0)
 
-        assert(progress.durationMs.get("getOffset") === 50)
-        assert(progress.durationMs.get("getBatch") === 100)
+        assert(progress.durationMs.get("setOffsetRange") === 50)
+        assert(progress.durationMs.get("getEndOffset") === 100)
         assert(progress.durationMs.get("queryPlanning") === 0)
         assert(progress.durationMs.get("walCommit") === 0)
+        assert(progress.durationMs.get("addBatch") === 350)
         assert(progress.durationMs.get("triggerExecution") === 500)
 
         assert(progress.sources.length === 1)
