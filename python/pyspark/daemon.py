@@ -87,7 +87,7 @@ def manager(parent_port, token):
     outfile.flush()
     outfile.close()
     socket_to_parent.close()
-    
+
     # re-open stdin in 'wb' mode
     stdin_bin = os.fdopen(sys.stdin.fileno(), 'rb', 4)
 
@@ -199,7 +199,8 @@ if __name__ == '__main__':
     try:
         token = int(token_string)
     except ValueError:
-        print >> sys.stderr, "Non-numeric value set in environment variable PYSPARK_DAEMON_TOKEN:", token_string
+        print >> sys.stderr, \
+            "Non-numeric value set in environment variable PYSPARK_DAEMON_TOKEN:", token_string
         sys.exit(1)
-        
+
     manager(parent_port, token)

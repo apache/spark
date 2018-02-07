@@ -1807,12 +1807,12 @@ class DaemonTests(unittest.TestCase):
         # set the token that the daemon will use to prove it is the daemon we launched
         expected_token = -99
         myEnv = os.environ.copy()
-        myEnv["PYSPARK_DAEMON_TOKEN"] = str(expected_token)        
+        myEnv["PYSPARK_DAEMON_TOKEN"] = str(expected_token)
 
         # start daemon
         daemon_path = os.path.join(os.path.dirname(__file__), "daemon.py")
         python_exec = sys.executable or os.environ.get("PYSPARK_PYTHON")
-        daemon = Popen([python_exec, daemon_path, str(listen_port)], stdin=PIPE, stdout=PIPE, \
+        daemon = Popen([python_exec, daemon_path, str(listen_port)], stdin=PIPE, stdout=PIPE,
                        env=myEnv)
 
         # get a connection to the daemon we just launched
@@ -1830,7 +1830,7 @@ class DaemonTests(unittest.TestCase):
         infile.close()
         sock.close()
         listen_sock.close()
-        
+
         # daemon should accept connections
         self.assertTrue(self.connect(port))
 
