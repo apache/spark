@@ -39,6 +39,9 @@ case class DataSourceV2ScanExec(
     @transient reader: DataSourceReader)
   extends LeafExecNode with DataSourceReaderHolder with ColumnarBatchScan {
 
+  override val nodeName: String =
+    s"Scan DataSourceV2 ${fullOutput.map(_.name).mkString("[", ",", "]")}"
+
   override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2ScanExec]
 
   override def outputPartitioning: physical.Partitioning = reader match {
