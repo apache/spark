@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
 import org.apache.spark.sql.sources.v2.reader._
 
 case class DataSourceV2Relation(
-    fullOutput: Seq[AttributeReference],
+    output: Seq[AttributeReference],
     reader: DataSourceReader)
   extends LeafNode with MultiInstanceRelation with DataSourceReaderHolder {
 
@@ -37,7 +37,7 @@ case class DataSourceV2Relation(
   }
 
   override def newInstance(): DataSourceV2Relation = {
-    copy(fullOutput = fullOutput.map(_.newInstance()))
+    copy(output = output.map(_.newInstance()))
   }
 }
 
@@ -46,8 +46,8 @@ case class DataSourceV2Relation(
  * to the non-streaming relation.
  */
 class StreamingDataSourceV2Relation(
-    fullOutput: Seq[AttributeReference],
-    reader: DataSourceReader) extends DataSourceV2Relation(fullOutput, reader) {
+    output: Seq[AttributeReference],
+    reader: DataSourceReader) extends DataSourceV2Relation(output, reader) {
   override def isStreaming: Boolean = true
 }
 

@@ -2825,6 +2825,7 @@ class Dataset[T] private[sql](
    *
    * At least one partition-by expression must be specified.
    * When no explicit sort order is specified, "ascending nulls first" is assumed.
+   * Note, the rows are not sorted in each partition of the resulting Dataset.
    *
    * @group typedrel
    * @since 2.3.0
@@ -2848,6 +2849,7 @@ class Dataset[T] private[sql](
    *
    * At least one partition-by expression must be specified.
    * When no explicit sort order is specified, "ascending nulls first" is assumed.
+   * Note, the rows are not sorted in each partition of the resulting Dataset.
    *
    * @group typedrel
    * @since 2.3.0

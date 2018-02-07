@@ -141,19 +141,6 @@ private[spark] class IndexShuffleBlockResolver(
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexTmp = Utils.tempFileWith(indexFile)
     try {
-      val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexTmp)))
-      Utils.tryWithSafeFinally {
-        // We take in lengths of each block, need to convert it to offsets.
-        var offset = 0L
-        out.writeLong(offset)
-        for (length <- lengths) {
-          offset += length
-          out.writeLong(offset)
-        }
-      } {
-        out.close()
-      }
-
       val dataFile = getDataFile(shuffleId, mapId)
       // There is only one IndexShuffleBlockResolver per executor, this synchronization make sure
       // the following check and rename are atomic.
@@ -166,10 +153,22 @@ private[spark] class IndexShuffleBlockResolver(
           if (dataTmp != null && dataTmp.exists()) {
             dataTmp.delete()
           }
-          indexTmp.delete()
         } else {
           // This is the first successful attempt in writing the map outputs for this task,
           // so override any existing index and data files with the ones we wrote.
+          val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexTmp)))
+          Utils.tryWithSafeFinally {
+            // We take in lengths of each block, need to convert it to offsets.
+            var offset = 0L
+            out.writeLong(offset)
+            for (length <- lengths) {
+              offset += length
+              out.writeLong(offset)
+            }
+          } {
+            out.close()
+          }
+
           if (indexFile.exists()) {
             indexFile.delete()
           }
