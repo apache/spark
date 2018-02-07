@@ -1810,7 +1810,9 @@ working with timestamps in `pandas_udf`s to get the best performance, see
       </tr>
     </table>
 
-    - Since Apache ORC 1.4.1 is a standalone library providing a subset of Hive ORC related configurations, you can use ORC configuration name and Hive configuration name. To see a full list of supported ORC configurations, see <a href="https://orc.apache.org/docs/hive-config.html">Hive Configuration</a> of Apache ORC project.
+    - Since Apache ORC 1.4.1 is a standalone library providing a subset of Hive ORC related configurations, see <a href="https://orc.apache.org/docs/hive-config.html">Hive Configuration</a> of Apache ORC project for a full list of supported ORC configurations.
+
+    - Note that `convertMetastoreOrc` works like `convertMetastoreParquet`. While converting Hive tables into Spark data source tables, Spark ignores table properties. For table-level storage properties, you can use `CREATE TABLE ... USING HIVE` syntax.
 
   - Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the referenced columns only include the internal corrupt record column (named `_corrupt_record` by default). For example, `spark.read.schema(schema).json(file).filter($"_corrupt_record".isNotNull).count()` and `spark.read.schema(schema).json(file).select("_corrupt_record").show()`. Instead, you can cache or save the parsed results and then send the same query. For example, `val df = spark.read.schema(schema).json(file).cache()` and then `df.filter($"_corrupt_record".isNotNull).count()`.
   - The `percentile_approx` function previously accepted numeric type input and output double type results. Now it supports date type, timestamp type and numeric types as input types. The result type is also changed to be the same as the input type, which is more reasonable for percentiles.
