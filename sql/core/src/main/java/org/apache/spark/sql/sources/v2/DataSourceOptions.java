@@ -36,7 +36,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * end users.
  *
  * The standard options defined by Spark:
- * <table>
+ * <table summary="standard data source options">
  *   <tr>
  *     <th><b>Option key</b></th>
  *     <th><b>Option value</b></th>
@@ -52,7 +52,7 @@ import org.apache.spark.annotation.InterfaceStability;
  *     <td>table</td>
  *     <td>A table name string representing the table name directly without any interpretation.
  *     For example, <code>db.tbl</code> means a table called "db.tbl", not a table called "tbl"
- *     inside database "db". <code>`t$bl@`</code> means a table called "`t$bl@`", not "t$bl@".</td>
+ *     inside database "db". <code>`t*b.l`</code> means a table called "`t*b.l", not "t*b.l".</td>
  *   </tr>
  *   <tr>
  *     <td>database</td>
