@@ -589,6 +589,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Nil)
   }
 
+  test("SPARK-23274: except between two projects without references used in filter") {
+    val df = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
+    val df1 = df.filter($"a" === 1)
+    val df2 = df.filter($"a" === 2)
+    checkAnswer(df1.select("b").except(df2.select("b")), Row(3) :: Nil)
+    checkAnswer(df1.select("b").except(df2.select("c")), Row(2) :: Nil)
+  }
+
   test("except distinct - SQL compliance") {
     val df_left = Seq(1, 2, 2, 3, 3, 4).toDF("id")
     val df_right = Seq(1, 3).toDF("id")
@@ -1253,6 +1261,34 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
                          " value | 1   \n" +
                          "only showing top 1 row\n"
     assert(testData.select($"*").showString(1, vertical = true) === expectedAnswer)
+  }
+
+  test("SPARK-23023 Cast rows to strings in showString") {
+    val df1 = Seq(Seq(1, 2, 3, 4)).toDF("a")
+    assert(df1.showString(10) ===
+      s"""+------------+
+         ||           a|
+         |+------------+
+         ||[1, 2, 3, 4]|
+         |+------------+
+         |""".stripMargin)
+    val df2 = Seq(Map(1 -> "a", 2 -> "b")).toDF("a")
+    assert(df2.showString(10) ===
+      s"""+----------------+
+         ||               a|
+         |+----------------+
+         ||[1 -> a, 2 -> b]|
+         |+----------------+
+         |""".stripMargin)
+    val df3 = Seq(((1, "a"), 0), ((2, "b"), 0)).toDF("a", "b")
+    assert(df3.showString(10) ===
+      s"""+------+---+
+         ||     a|  b|
+         |+------+---+
+         ||[1, a]|  0|
+         ||[2, b]|  0|
+         |+------+---+
+         |""".stripMargin)
   }
 
   test("SPARK-7327 show with empty dataFrame") {

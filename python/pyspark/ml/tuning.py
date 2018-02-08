@@ -31,6 +31,28 @@ __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainVa
            'TrainValidationSplitModel']
 
 
+def _parallelFitTasks(est, train, eva, validation, epm):
+    """
+    Creates a list of callables which can be called from different threads to fit and evaluate
+    an estimator in parallel. Each callable returns an `(index, metric)` pair.
+
+    :param est: Estimator, the estimator to be fit.
+    :param train: DataFrame, training data set, used for fitting.
+    :param eva: Evaluator, used to compute `metric`
+    :param validation: DataFrame, validation data set, used for evaluation.
+    :param epm: Sequence of ParamMap, params maps to be used during fitting & evaluation.
+    :return: (int, float), an index into `epm` and the associated metric value.
+    """
+    modelIter = est.fitMultiple(train, epm)
+
+    def singleTask():
+        index, model = next(modelIter)
+        metric = eva.evaluate(model.transform(validation, epm[index]))
+        return index, metric
+
+    return [singleTask] * len(epm)
+
+
 class ParamGridBuilder(object):
     r"""
     Builder for a param grid used in grid search-based model selection.
@@ -266,15 +288,9 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
             validation = df.filter(condition).cache()
             train = df.filter(~condition).cache()
 
-            def singleTrain(paramMap):
-                model = est.fit(train, paramMap)
-                # TODO: duplicate evaluator to take extra params from input
-                metric = eva.evaluate(model.transform(validation, paramMap))
-                return metric
-
-            currentFoldMetrics = pool.map(singleTrain, epm)
-            for j in range(numModels):
-                metrics[j] += (currentFoldMetrics[j] / nFolds)
+            tasks = _parallelFitTasks(est, train, eva, validation, epm)
+            for j, metric in pool.imap_unordered(lambda f: f(), tasks):
+                metrics[j] += (metric / nFolds)
             validation.unpersist()
             train.unpersist()
 
@@ -523,13 +539,11 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
         validation = df.filter(condition).cache()
         train = df.filter(~condition).cache()
 
-        def singleTrain(paramMap):
-            model = est.fit(train, paramMap)
-            metric = eva.evaluate(model.transform(validation, paramMap))
-            return metric
-
+        tasks = _parallelFitTasks(est, train, eva, validation, epm)
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
-        metrics = pool.map(singleTrain, epm)
+        metrics = [None] * numModels
+        for j, metric in pool.imap_unordered(lambda f: f(), tasks):
+            metrics[j] = metric
         train.unpersist()
         validation.unpersist()
 

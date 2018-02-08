@@ -854,6 +854,22 @@ class JDBCSuite extends SparkFunSuite
     assert(derby.getTableExistsQuery(table) == defaultQuery)
   }
 
+  test("truncate table query by jdbc dialect") {
+    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
+    val h2 = JdbcDialects.get(url)
+    val derby = JdbcDialects.get("jdbc:derby:db")
+    val table = "weblogs"
+    val defaultQuery = s"TRUNCATE TABLE $table"
+    val postgresQuery = s"TRUNCATE TABLE ONLY $table"
+    assert(MySQL.getTruncateQuery(table) == defaultQuery)
+    assert(Postgres.getTruncateQuery(table) == postgresQuery)
+    assert(db2.getTruncateQuery(table) == defaultQuery)
+    assert(h2.getTruncateQuery(table) == defaultQuery)
+    assert(derby.getTruncateQuery(table) == defaultQuery)
+  }
+
   test("Test DataFrame.where for Date and Timestamp") {
     // Regression test for bug SPARK-11788
     val timestamp = java.sql.Timestamp.valueOf("2001-02-20 11:22:33.543543");
@@ -1064,10 +1080,10 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("unsupported types") {
-    var e = intercept[SparkException] {
+    var e = intercept[SQLException] {
       spark.read.jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties()).collect()
     }.getMessage
-    assert(e.contains("java.lang.UnsupportedOperationException: unimplemented"))
+    assert(e.contains("Unsupported type TIMESTAMP_WITH_TIMEZONE"))
     e = intercept[SQLException] {
       spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY", new Properties()).collect()
     }.getMessage

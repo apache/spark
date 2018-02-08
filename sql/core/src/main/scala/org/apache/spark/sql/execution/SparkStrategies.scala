@@ -22,6 +22,7 @@ import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -31,8 +32,10 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.sources.MemoryPlanV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.types.StructType
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -88,23 +91,58 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * Select the proper physical plan for join based on joining keys and size of logical plan.
    *
    * At first, uses the [[ExtractEquiJoinKeys]] pattern to find joins where at least some of the
-   * predicates can be evaluated by matching join keys. If found,  Join implementations are chosen
+   * predicates can be evaluated by matching join keys. If found, join implementations are chosen
    * with the following precedence:
    *
-   * - Broadcast: We prefer to broadcast the join side with an explicit broadcast hint(e.g. the
-   *     user applied the [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame).
-   *     If both sides have the broadcast hint, we prefer to broadcast the side with a smaller
-   *     estimated physical size. If neither one of the sides has the broadcast hint,
-   *     we only broadcast the join side if its estimated physical size that is smaller than
-   *     the user-configurable [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold.
+   * - Broadcast hash join (BHJ):
+   *     BHJ is not supported for full outer join. For right outer join, we only can broadcast the
+   *     left side. For left outer, left semi, left anti and the internal join type ExistenceJoin,
+   *     we only can broadcast the right side. For inner like join, we can broadcast both sides.
+   *     Normally, BHJ can perform faster than the other join algorithms when the broadcast side is
+   *     small. However, broadcasting tables is a network-intensive operation. It could cause OOM
+   *     or perform worse than the other join algorithms, especially when the build/broadcast side
+   *     is big.
+   *
+   *     For the supported cases, users can specify the broadcast hint (e.g. the user applied the
+   *     [[org.apache.spark.sql.functions.broadcast()]] function to a DataFrame) and session-based
+   *     [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold to adjust whether BHJ is used and
+   *     which join side is broadcast.
+   *
+   *     1) Broadcast the join side with the broadcast hint, even if the size is larger than
+   *     [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]]. If both sides have the hint (only when the type
+   *     is inner like join), the side with a smaller estimated physical size will be broadcast.
+   *     2) Respect the [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold and broadcast the side
+   *     whose estimated physical size is smaller than the threshold. If both sides are below the
+   *     threshold, broadcast the smaller side. If neither is smaller, BHJ is not used.
+   *
    * - Shuffle hash join: if the average size of a single partition is small enough to build a hash
    *     table.
+   *
    * - Sort merge: if the matching join keys are sortable.
    *
    * If there is no joining keys, Join implementations are chosen with the following precedence:
-   * - BroadcastNestedLoopJoin: if one side of the join could be broadcasted
-   * - CartesianProduct: for Inner join
-   * - BroadcastNestedLoopJoin
+   * - BroadcastNestedLoopJoin (BNLJ):
+   *     BNLJ supports all the join types but the impl is OPTIMIZED for the following scenarios:
+   *     For right outer join, the left side is broadcast. For left outer, left semi, left anti
+   *     and the internal join type ExistenceJoin, the right side is broadcast. For inner like
+   *     joins, either side is broadcast.
+   *
+   *     Like BHJ, users still can specify the broadcast hint and session-based
+   *     [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold to impact which side is broadcast.
+   *
+   *     1) Broadcast the join side with the broadcast hint, even if the size is larger than
+   *     [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]]. If both sides have the hint (i.e., just for
+   *     inner-like join), the side with a smaller estimated physical size will be broadcast.
+   *     2) Respect the [[SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] threshold and broadcast the side
+   *     whose estimated physical size is smaller than the threshold. If both sides are below the
+   *     threshold, broadcast the smaller side. If neither is smaller, BNLJ is not used.
+   *
+   * - CartesianProduct: for inner like join, CartesianProduct is the fallback option.
+   *
+   * - BroadcastNestedLoopJoin (BNLJ):
+   *     For the other join types, BNLJ is the fallback option. Here, we just pick the broadcast
+   *     side with the broadcast hint. If neither side has a hint, we broadcast the side with
+   *     the smaller estimated physical size.
    */
   object JoinSelection extends Strategy with PredicateHelper {
 
@@ -137,8 +175,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
 
     private def canBuildRight(joinType: JoinType): Boolean = joinType match {
-      case _: InnerLike | LeftOuter | LeftSemi | LeftAnti => true
-      case j: ExistenceJoin => true
+      case _: InnerLike | LeftOuter | LeftSemi | LeftAnti | _: ExistenceJoin => true
       case _ => false
     }
 
@@ -156,45 +193,65 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       def smallerSide =
         if (right.stats.sizeInBytes <= left.stats.sizeInBytes) BuildRight else BuildLeft
 
-      val buildRight = canBuildRight && right.stats.hints.broadcast
-      val buildLeft = canBuildLeft && left.stats.hints.broadcast
-
-      if (buildRight && buildLeft) {
+      if (canBuildRight && canBuildLeft) {
         // Broadcast smaller side base on its estimated physical size
         // if both sides have broadcast hint
         smallerSide
-      } else if (buildRight) {
+      } else if (canBuildRight) {
         BuildRight
-      } else if (buildLeft) {
+      } else if (canBuildLeft) {
         BuildLeft
-      } else if (canBuildRight && canBuildLeft) {
+      } else {
         // for the last default broadcast nested loop join
         smallerSide
-      } else {
-        throw new AnalysisException("Can not decide which side to broadcast for this join")
       }
+    }
+
+    private def canBroadcastByHints(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
+      : Boolean = {
+      val buildLeft = canBuildLeft(joinType) && left.stats.hints.broadcast
+      val buildRight = canBuildRight(joinType) && right.stats.hints.broadcast
+      buildLeft || buildRight
+    }
+
+    private def broadcastSideByHints(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
+      : BuildSide = {
+      val buildLeft = canBuildLeft(joinType) && left.stats.hints.broadcast
+      val buildRight = canBuildRight(joinType) && right.stats.hints.broadcast
+      broadcastSide(buildLeft, buildRight, left, right)
+    }
+
+    private def canBroadcastBySizes(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
+      : Boolean = {
+      val buildLeft = canBuildLeft(joinType) && canBroadcast(left)
+      val buildRight = canBuildRight(joinType) && canBroadcast(right)
+      buildLeft || buildRight
+    }
+
+    private def broadcastSideBySizes(joinType: JoinType, left: LogicalPlan, right: LogicalPlan)
+      : BuildSide = {
+      val buildLeft = canBuildLeft(joinType) && canBroadcast(left)
+      val buildRight = canBuildRight(joinType) && canBroadcast(right)
+      broadcastSide(buildLeft, buildRight, left, right)
     }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
       // --- BroadcastHashJoin --------------------------------------------------------------------
 
+      // broadcast hints were specified
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-        if (canBuildRight(joinType) && right.stats.hints.broadcast) ||
-          (canBuildLeft(joinType) && left.stats.hints.broadcast) =>
-        val buildSide = broadcastSide(canBuildLeft(joinType), canBuildRight(joinType), left, right)
+        if canBroadcastByHints(joinType, left, right) =>
+        val buildSide = broadcastSideByHints(joinType, left, right)
         Seq(joins.BroadcastHashJoinExec(
           leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
 
+      // broadcast hints were not specified, so need to infer it from size and configuration.
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-        if canBuildRight(joinType) && canBroadcast(right) =>
+        if canBroadcastBySizes(joinType, left, right) =>
+        val buildSide = broadcastSideBySizes(joinType, left, right)
         Seq(joins.BroadcastHashJoinExec(
-          leftKeys, rightKeys, joinType, BuildRight, condition, planLater(left), planLater(right)))
-
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
-        if canBuildLeft(joinType) && canBroadcast(left) =>
-        Seq(joins.BroadcastHashJoinExec(
-          leftKeys, rightKeys, joinType, BuildLeft, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
 
       // --- ShuffledHashJoin ---------------------------------------------------------------------
 
@@ -221,29 +278,26 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // --- Without joining keys ------------------------------------------------------------
 
-      // Pick BroadcastNestedLoopJoin if one side could be broadcasted
+      // Pick BroadcastNestedLoopJoin if one side could be broadcast
       case j @ logical.Join(left, right, joinType, condition)
-        if (canBuildRight(joinType) && right.stats.hints.broadcast) ||
-          (canBuildLeft(joinType) && left.stats.hints.broadcast) =>
-        val buildSide = broadcastSide(canBuildLeft(joinType), canBuildRight(joinType), left, right)
+          if canBroadcastByHints(joinType, left, right) =>
+        val buildSide = broadcastSideByHints(joinType, left, right)
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
       case j @ logical.Join(left, right, joinType, condition)
-          if canBuildRight(joinType) && canBroadcast(right) =>
+          if canBroadcastBySizes(joinType, left, right) =>
+        val buildSide = broadcastSideBySizes(joinType, left, right)
         joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), BuildRight, joinType, condition) :: Nil
-      case j @ logical.Join(left, right, joinType, condition)
-          if canBuildLeft(joinType) && canBroadcast(left) =>
-        joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), BuildLeft, joinType, condition) :: Nil
+          planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
       // Pick CartesianProduct for InnerJoin
       case logical.Join(left, right, _: InnerLike, condition) =>
         joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
 
       case logical.Join(left, right, joinType, condition) =>
-        val buildSide = broadcastSide(canBuildLeft = true, canBuildRight = true, left, right)
+        val buildSide = broadcastSide(
+          left.stats.hints.broadcast, right.stats.hints.broadcast, left, right)
         // This join could be very slow or OOM
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
@@ -269,9 +323,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
+        if (aggregateExpressions.exists(PythonUDF.isGroupAggPandasUDF)) {
+          throw new AnalysisException(
+            "Streaming aggregation doesn't support group aggregate pandas UDF")
+        }
+
         aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
-          aggregateExpressions,
+          aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
           rewrittenResultExpressions,
           planLater(child))
 
@@ -314,8 +373,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object Aggregation extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case PhysicalAggregation(
-          groupingExpressions, aggregateExpressions, resultExpressions, child) =>
+      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
+        if aggExpressions.forall(expr => expr.isInstanceOf[AggregateExpression]) =>
+        val aggregateExpressions = aggExpressions.map(expr =>
+          expr.asInstanceOf[AggregateExpression])
 
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggregateExpressions.partition(_.isDistinct)
@@ -343,6 +404,21 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
 
         aggregateOperator
+
+      case PhysicalAggregation(groupingExpressions, aggExpressions, resultExpressions, child)
+        if aggExpressions.forall(expr => expr.isInstanceOf[PythonUDF]) =>
+        val udfExpressions = aggExpressions.map(expr => expr.asInstanceOf[PythonUDF])
+
+        Seq(execution.python.AggregateInPandasExec(
+          groupingExpressions,
+          udfExpressions,
+          resultExpressions,
+          planLater(child)))
+
+      case PhysicalAggregation(_, _, _, _) =>
+        // If cannot match the two cases above, then it's an error
+        throw new AnalysisException(
+          "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
 
       case _ => Nil
     }
@@ -374,6 +450,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         StreamingRelationExec(s.sourceName, s.output) :: Nil
       case s: StreamingExecutionRelation =>
         StreamingRelationExec(s.toString, s.output) :: Nil
+      case s: StreamingRelationV2 =>
+        StreamingRelationExec(s.sourceName, s.output) :: Nil
       case _ => Nil
     }
   }
@@ -399,10 +477,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case d: DataWritingCommand => DataWritingCommandExec(d, planLater(d.query)) :: Nil
       case r: RunnableCommand => ExecutedCommandExec(r) :: Nil
 
       case MemoryPlan(sink, output) =>
         val encoder = RowEncoder(sink.schema)
+        LocalTableScanExec(output, sink.allData.map(r => encoder.toRow(r).copy())) :: Nil
+      case MemoryPlanV2(sink, output) =>
+        val encoder = RowEncoder(StructType.fromAttributes(output))
         LocalTableScanExec(output, sink.allData.map(r => encoder.toRow(r).copy())) :: Nil
 
       case logical.Distinct(child) =>
@@ -474,10 +556,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
       case logical.Union(unionChildren) =>
         execution.UnionExec(unionChildren.map(planLater)) :: Nil
-      case g @ logical.Generate(generator, join, outer, _, _, child) =>
+      case g @ logical.Generate(generator, _, outer, _, _, child) =>
         execution.GenerateExec(
-          generator, join = join, outer = outer, g.qualifiedGeneratorOutput,
-          planLater(child)) :: Nil
+          generator, g.requiredChildOutput, outer,
+          g.qualifiedGeneratorOutput, planLater(child)) :: Nil
       case _: logical.OneRowRelation =>
         execution.RDDScanExec(Nil, singleRowRdd, "OneRowRelation") :: Nil
       case r: logical.Range =>

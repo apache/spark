@@ -348,10 +348,10 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   test("SPARK-22704: Least and greatest use less global variables") {
     val ctx1 = new CodegenContext()
     Least(Seq(Literal(1), Literal(1))).genCode(ctx1)
-    assert(ctx1.mutableStates.size == 1)
+    assert(ctx1.inlinedMutableStates.size == 1)
 
     val ctx2 = new CodegenContext()
     Greatest(Seq(Literal(1), Literal(1))).genCode(ctx2)
-    assert(ctx2.mutableStates.size == 1)
+    assert(ctx2.inlinedMutableStates.size == 1)
   }
 }

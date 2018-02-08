@@ -47,7 +47,7 @@ class RowBasedHashMapGenerator(
     val generatedKeySchema: String =
       s"new org.apache.spark.sql.types.StructType()" +
         groupingKeySchema.map { key =>
-          val keyName = ctx.addReferenceMinorObj(key.name)
+          val keyName = ctx.addReferenceObj("keyName", key.name)
           key.dataType match {
             case d: DecimalType =>
               s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
@@ -60,7 +60,7 @@ class RowBasedHashMapGenerator(
     val generatedValueSchema: String =
       s"new org.apache.spark.sql.types.StructType()" +
         bufferSchema.map { key =>
-          val keyName = ctx.addReferenceMinorObj(key.name)
+          val keyName = ctx.addReferenceObj("keyName", key.name)
           key.dataType match {
             case d: DecimalType =>
               s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(

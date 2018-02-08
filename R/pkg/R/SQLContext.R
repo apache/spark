@@ -727,7 +727,9 @@ read.jdbc <- function(url, tableName,
 #' @param schema The data schema defined in structType or a DDL-formatted string, this is
 #'               required for file-based streaming data source
 #' @param ... additional external data source specific named options, for instance \code{path} for
-#'        file-based streaming data source
+#'        file-based streaming data source. \code{timeZone} to indicate a timezone to be used to 
+#'        parse timestamps in the JSON/CSV data sources or partition values; If it isn't set, it
+#'        uses the default value, session local timezone.
 #' @return SparkDataFrame
 #' @rdname read.stream
 #' @name read.stream

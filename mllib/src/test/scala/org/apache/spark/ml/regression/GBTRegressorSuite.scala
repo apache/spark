@@ -19,22 +19,20 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.util.Utils
 
 /**
  * Test suite for [[GBTRegressor]].
  */
-class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
-  with DefaultReadWriteTest {
+class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
 
   import GBTRegressorSuite.compareAPIs
   import testImplicits._
@@ -91,11 +89,14 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     val model = gbt.fit(df)
 
     MLTestingUtils.checkCopyAndUids(gbt, model)
-    val preds = model.transform(df)
-    val predictions = preds.select("prediction").rdd.map(_.getDouble(0))
-    // Checks based on SPARK-8736 (to ensure it is not doing classification)
-    assert(predictions.max() > 2)
-    assert(predictions.min() < -1)
+
+    testTransformerByGlobalCheckFunc[(Double, Vector)](df, model, "prediction") {
+      case rows: Seq[Row] =>
+        val predictions = rows.map(_.getDouble(0))
+        // Checks based on SPARK-8736 (to ensure it is not doing classification)
+        assert(predictions.max > 2)
+        assert(predictions.min < -1)
+    }
   }
 
   test("Checkpointing") {

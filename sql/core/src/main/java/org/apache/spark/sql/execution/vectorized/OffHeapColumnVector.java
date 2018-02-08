@@ -60,7 +60,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   private long nulls;
   private long data;
 
-  // Set iff the type is array.
+  // Only set if type is Array or Map.
   private long lengthData;
   private long offsetData;
 
@@ -110,7 +110,6 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public void putNull(int rowId) {
     Platform.putByte(null, nulls + rowId, (byte) 1);
     ++numNulls;
-    anyNullsSet = true;
   }
 
   @Override
@@ -119,13 +118,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     for (int i = 0; i < count; ++i, ++offset) {
       Platform.putByte(null, offset, (byte) 1);
     }
-    anyNullsSet = true;
     numNulls += count;
   }
 
   @Override
   public void putNotNulls(int rowId, int count) {
-    if (!anyNullsSet) return;
+    if (!hasNull()) return;
     long offset = nulls + rowId;
     for (int i = 0; i < count; ++i, ++offset) {
       Platform.putByte(null, offset, (byte) 0);
@@ -532,7 +530,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   protected void reserveInternal(int newCapacity) {
     int oldCapacity = (nulls == 0L) ? 0 : capacity;
-    if (isArray()) {
+    if (isArray() || type instanceof MapType) {
       this.lengthData =
           Platform.reallocateMemory(lengthData, oldCapacity * 4, newCapacity * 4);
       this.offsetData =

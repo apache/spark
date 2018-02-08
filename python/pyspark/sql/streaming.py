@@ -490,6 +490,23 @@ class DataStreamReader(OptionUtils):
         else:
             raise TypeError("path can be only a single string")
 
+    @since(2.3)
+    def orc(self, path):
+        """Loads a ORC file stream, returning the result as a :class:`DataFrame`.
+
+        .. note:: Evolving.
+
+        >>> orc_sdf = spark.readStream.schema(sdf_schema).orc(tempfile.mkdtemp())
+        >>> orc_sdf.isStreaming
+        True
+        >>> orc_sdf.schema == sdf_schema
+        True
+        """
+        if isinstance(path, basestring):
+            return self._df(self._jreader.orc(path))
+        else:
+            raise TypeError("path can be only a single string")
+
     @since(2.0)
     def parquet(self, path):
         """Loads a Parquet file stream, returning the result as a :class:`DataFrame`.
@@ -543,7 +560,7 @@ class DataStreamReader(OptionUtils):
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
-            columnNameOfCorruptRecord=None, multiLine=None):
+            columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -555,17 +572,17 @@ class DataStreamReader(OptionUtils):
         :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param sep: sets the single character as a separator for each field and value.
+        :param sep: sets a single character as a separator for each field and value.
                     If None is set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
                          it uses the default value, ``UTF-8``.
-        :param quote: sets the single character used for escaping quoted values where the
+        :param quote: sets a single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
                       value, ``"``. If you would like to turn off quotations, you need to set an
                       empty string.
-        :param escape: sets the single character used for escaping quotes inside an already
+        :param escape: sets a single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``.
-        :param comment: sets the single character used for skipping lines beginning with this
+        :param comment: sets a single character used for skipping lines beginning with this
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
                        default value, ``false``.
@@ -621,6 +638,10 @@ class DataStreamReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param multiLine: parse one record, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
+        :param charToEscapeQuoteEscaping: sets a single character used for escaping the escape for
+                                          the quote character. If None is set, the default value is
+                                          escape character when escape and quote characters are
+                                          different, ``\0`` otherwise..
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
@@ -636,7 +657,8 @@ class DataStreamReader(OptionUtils):
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
-            columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine)
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:
@@ -764,35 +786,54 @@ class DataStreamWriter(object):
 
     @keyword_only
     @since(2.0)
-    def trigger(self, processingTime=None, once=None):
+    def trigger(self, processingTime=None, once=None, continuous=None):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
 
         .. note:: Evolving.
 
         :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
+                               Set a trigger that runs a query periodically based on the processing
+                               time. Only one trigger can be set.
+        :param once: if set to True, set a trigger that processes only one batch of data in a
+                     streaming query then terminates the query. Only one trigger can be set.
 
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(processingTime='5 seconds')
         >>> # trigger the query for just once batch of data
         >>> writer = sdf.writeStream.trigger(once=True)
+        >>> # trigger the query for execution every 5 seconds
+        >>> writer = sdf.writeStream.trigger(continuous='5 seconds')
         """
+        params = [processingTime, once, continuous]
+
+        if params.count(None) == 3:
+            raise ValueError('No trigger provided')
+        elif params.count(None) < 2:
+            raise ValueError('Multiple triggers not allowed.')
+
         jTrigger = None
         if processingTime is not None:
-            if once is not None:
-                raise ValueError('Multiple triggers not allowed.')
             if type(processingTime) != str or len(processingTime.strip()) == 0:
                 raise ValueError('Value for processingTime must be a non empty string. Got: %s' %
                                  processingTime)
             interval = processingTime.strip()
             jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.ProcessingTime(
                 interval)
+
         elif once is not None:
             if once is not True:
                 raise ValueError('Value for once must be True. Got: %s' % once)
             jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Once()
+
         else:
-            raise ValueError('No trigger provided')
+            if type(continuous) != str or len(continuous.strip()) == 0:
+                raise ValueError('Value for continuous must be a non empty string. Got: %s' %
+                                 continuous)
+            interval = continuous.strip()
+            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Continuous(
+                interval)
+
         self._jwrite = self._jwrite.trigger(jTrigger)
         return self
 

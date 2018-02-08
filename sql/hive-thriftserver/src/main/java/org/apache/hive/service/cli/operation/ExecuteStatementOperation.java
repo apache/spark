@@ -73,7 +73,7 @@ public abstract class ExecuteStatementOperation extends Operation {
     if (isOperationLogEnabled) {
       if (operationLog == null) {
         LOG.warn("Failed to get current OperationLog object of Operation: " +
-                getHandle().getHandleIdentifier());
+          getHandle().getHandleIdentifier());
         isOperationLogEnabled = false;
         return;
       }

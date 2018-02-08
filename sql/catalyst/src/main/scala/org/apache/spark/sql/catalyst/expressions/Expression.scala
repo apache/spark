@@ -119,8 +119,7 @@ abstract class Expression extends TreeNode[Expression] {
     // TODO: support whole stage codegen too
     if (eval.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
       val setIsNull = if (eval.isNull != "false" && eval.isNull != "true") {
-        val globalIsNull = ctx.freshName("globalIsNull")
-        ctx.addMutableState(ctx.JAVA_BOOLEAN, globalIsNull)
+        val globalIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull
         eval.isNull = globalIsNull
         s"$globalIsNull = $localIsNull;"

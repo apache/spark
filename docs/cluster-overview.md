@@ -52,11 +52,8 @@ The system currently supports three cluster managers:
 * [Apache Mesos](running-on-mesos.html) -- a general cluster manager that can also run Hadoop MapReduce
   and service applications.
 * [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2.
-* [Kubernetes (experimental)](https://github.com/apache-spark-on-k8s/spark) -- In addition to the above,
-there is experimental support for Kubernetes. Kubernetes is an open-source platform
-for providing container-centric infrastructure. Kubernetes support is being actively
-developed in an [apache-spark-on-k8s](https://github.com/apache-spark-on-k8s/) Github organization. 
-For documentation, refer to that project's README.
+* [Kubernetes](running-on-kubernetes.html) -- an open-source system for automating deployment, scaling,
+  and management of containerized applications.
 
 A third-party project (not supported by the Spark project) exists to add support for
 [Nomad](https://github.com/hashicorp/nomad-spark) as a cluster manager.

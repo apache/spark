@@ -183,8 +183,9 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val ctx = new CodegenContext
     RegExpReplace(Literal("100"), Literal("(\\d+)"), Literal("num")).genCode(ctx)
     // four global variables (lastRegex, pattern, lastReplacement, and lastReplacementInUTF8)
-    // are always required
-    assert(ctx.mutableStates.length == 4)
+    // are always required, which are allocated in type-based global array
+    assert(ctx.inlinedMutableStates.length == 0)
+    assert(ctx.mutableStateInitCode.length == 4)
   }
 
   test("RegexExtract") {

@@ -368,6 +368,20 @@ class DataFrame(object):
         jdf = self._jdf.checkpoint(eager)
         return DataFrame(jdf, self.sql_ctx)
 
+    @since(2.3)
+    def localCheckpoint(self, eager=True):
+        """Returns a locally checkpointed version of this Dataset. Checkpointing can be used to
+        truncate the logical plan of this DataFrame, which is especially useful in iterative
+        algorithms where the plan may grow exponentially. Local checkpoints are stored in the
+        executors using the caching subsystem and therefore they are not reliable.
+
+        :param eager: Whether to checkpoint this DataFrame immediately
+
+        .. note:: Experimental
+        """
+        jdf = self._jdf.localCheckpoint(eager)
+        return DataFrame(jdf, self.sql_ctx)
+
     @since(2.1)
     def withWatermark(self, eventTime, delayThreshold):
         """Defines an event time watermark for this :class:`DataFrame`. A watermark tracks a point
@@ -804,6 +818,29 @@ class DataFrame(object):
         ['age', 'name']
         """
         return [f.name for f in self.schema.fields]
+
+    @since(2.3)
+    def colRegex(self, colName):
+        """
+        Selects column based on the column name specified as a regex and returns it
+        as :class:`Column`.
+
+        :param colName: string, column name specified as a regex.
+
+        >>> df = spark.createDataFrame([("a", 1), ("b", 2), ("c",  3)], ["Col1", "Col2"])
+        >>> df.select(df.colRegex("`(Col1)?+.+`")).show()
+        +----+
+        |Col2|
+        +----+
+        |   1|
+        |   2|
+        |   3|
+        +----+
+        """
+        if not isinstance(colName, basestring):
+            raise ValueError("colName should be provided as string")
+        jc = self._jdf.colRegex(colName)
+        return Column(jc)
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -1350,7 +1387,8 @@ class DataFrame(object):
         """ Return a new :class:`DataFrame` containing rows in this frame
         but not in another frame.
 
-        This is equivalent to `EXCEPT` in SQL.
+        This is equivalent to `EXCEPT DISTINCT` in SQL.
+
         """
         return DataFrame(getattr(self._jdf, "except")(other._jdf), self.sql_ctx)
 
@@ -1530,16 +1568,6 @@ class DataFrame(object):
         +----+------+-----+
 
         >>> df4.na.replace('Alice', None).show()
-        +----+------+----+
-        | age|height|name|
-        +----+------+----+
-        |  10|    80|null|
-        |   5|  null| Bob|
-        |null|  null| Tom|
-        |null|  null|null|
-        +----+------+----+
-
-        >>> df4.na.replace('Alice').show()
         +----+------+----+
         | age|height|name|
         +----+------+----+
@@ -1791,11 +1819,15 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` by adding a column or replacing the
         existing column that has the same name.
 
+        The column expression must be an expression over this DataFrame; attempting to add
+        a column from some other dataframe will raise an error.
+
         :param colName: string, name of the new column.
         :param col: a :class:`Column` expression for the new column.
 
         >>> df.withColumn('age2', df.age + 2).collect()
         [Row(age=2, name=u'Alice', age2=4), Row(age=5, name=u'Bob', age2=7)]
+
         """
         assert isinstance(col, Column), "col should be Column"
         return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
@@ -1881,6 +1913,9 @@ class DataFrame(object):
         0    2  Alice
         1    5    Bob
         """
+        from pyspark.sql.utils import require_minimum_pandas_version
+        require_minimum_pandas_version()
+
         import pandas as pd
 
         if self.sql_ctx.getConf("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
@@ -1891,12 +1926,16 @@ class DataFrame(object):
 
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
-                from pyspark.sql.types import _check_dataframe_localize_timestamps
+                from pyspark.sql.types import _check_dataframe_convert_date, \
+                    _check_dataframe_localize_timestamps
+                from pyspark.sql.utils import require_minimum_pyarrow_version
                 import pyarrow
+                require_minimum_pyarrow_version()
                 tables = self._collectAsArrow()
                 if tables:
                     table = pyarrow.concat_tables(tables)
                     pdf = table.to_pandas()
+                    pdf = _check_dataframe_convert_date(pdf, self.schema)
                     return _check_dataframe_localize_timestamps(pdf, timezone)
                 else:
                     return pd.DataFrame.from_records([], columns=self.columns)
@@ -1975,7 +2014,6 @@ def _to_corrected_pandas_type(dt):
     """
     When converting Spark SQL records to Pandas DataFrame, the inferred data type may be wrong.
     This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
-    NOTE: DateType is inferred incorrectly as 'object', TimestampType is correct with datetime64[ns]
     """
     import numpy as np
     if type(dt) == ByteType:
@@ -1986,8 +2024,6 @@ def _to_corrected_pandas_type(dt):
         return np.int32
     elif type(dt) == FloatType:
         return np.float32
-    elif type(dt) == DateType:
-        return 'datetime64[ns]'
     else:
         return None
 
@@ -2011,7 +2047,7 @@ class DataFrameNaFunctions(object):
 
     fill.__doc__ = DataFrame.fillna.__doc__
 
-    def replace(self, to_replace, value=None, subset=None):
+    def replace(self, to_replace, value, subset=None):
         return self.df.replace(to_replace, value, subset)
 
     replace.__doc__ = DataFrame.replace.__doc__

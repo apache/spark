@@ -62,7 +62,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Fix session local timezone to America/Los_Angeles for those timezone sensitive tests
     // (timestamp_*)
     TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, "America/Los_Angeles")
-    RuleExecutor.resetTime()
+    RuleExecutor.resetMetrics()
   }
 
   override def afterAll() {
@@ -76,7 +76,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       TestHive.setConf(SQLConf.SESSION_LOCAL_TIMEZONE, originalSessionLocalTimeZone)
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
-      logInfo(RuleExecutor.dumpTimeSpent())
+      logWarning(RuleExecutor.dumpTimeSpent())
     } finally {
       super.afterAll()
     }

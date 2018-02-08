@@ -123,6 +123,15 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     }
   }
 
+  test("Bucketizer should only drop NaN in input columns, with handleInvalid=skip") {
+    val df = spark.createDataFrame(Seq((2.3, 3.0), (Double.NaN, 3.0), (6.7, Double.NaN)))
+      .toDF("a", "b")
+    val splits = Array(Double.NegativeInfinity, 3.0, Double.PositiveInfinity)
+    val bucketizer = new Bucketizer().setInputCol("a").setOutputCol("x").setSplits(splits)
+    bucketizer.setHandleInvalid("skip")
+    assert(bucketizer.transform(df).count() == 2)
+  }
+
   test("Bucket continuous features, with NaN splits") {
     val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity, Double.NaN)
     withClue("Invalid NaN split was not caught during Bucketizer initialization") {
@@ -207,8 +216,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
 
-    assert(bucketizer1.isBucketizeMultipleColumns())
-
     bucketizer1.transform(dataFrame).select("result1", "expected1", "result2", "expected2")
     BucketizerSuite.checkBucketResults(bucketizer1.transform(dataFrame),
       Seq("result1", "result2"),
@@ -223,8 +230,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("feature"))
       .setOutputCols(Array("result"))
       .setSplitsArray(Array(splits(0)))
-
-    assert(bucketizer2.isBucketizeMultipleColumns())
 
     withClue("Invalid feature value -0.9 was not caught as an invalid feature!") {
       intercept[SparkException] {
@@ -259,8 +264,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
 
-    assert(bucketizer.isBucketizeMultipleColumns())
-
     BucketizerSuite.checkBucketResults(bucketizer.transform(dataFrame),
       Seq("result1", "result2"),
       Seq("expected1", "expected2"))
@@ -285,8 +288,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("feature1", "feature2"))
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
-
-    assert(bucketizer.isBucketizeMultipleColumns())
 
     bucketizer.setHandleInvalid("keep")
     BucketizerSuite.checkBucketResults(bucketizer.transform(dataFrame),
@@ -326,7 +327,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("myInputCol"))
       .setOutputCols(Array("myOutputCol"))
       .setSplitsArray(Array(Array(0.1, 0.8, 0.9)))
-    assert(t.isBucketizeMultipleColumns())
     testDefaultReadWrite(t)
   }
 
@@ -338,8 +338,6 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("feature1", "feature2"))
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(Array(Array(-0.5, 0.0, 0.5), Array(-0.5, 0.0, 0.5)))
-
-    assert(bucket.isBucketizeMultipleColumns())
 
     val pl = new Pipeline()
       .setStages(Array(bucket))
@@ -392,15 +390,27 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     }
   }
 
-  test("Both inputCol and inputCols are set") {
-    val bucket = new Bucketizer()
-      .setInputCol("feature1")
-      .setOutputCol("result")
-      .setSplits(Array(-0.5, 0.0, 0.5))
-      .setInputCols(Array("feature1", "feature2"))
+  test("assert exception is thrown if both multi-column and single-column params are set") {
+    val df = Seq((0.5, 0.3), (0.5, -0.4)).toDF("feature1", "feature2")
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("inputCol", "feature1"),
+      ("inputCols", Array("feature1", "feature2")))
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("inputCol", "feature1"),
+      ("outputCol", "result1"), ("splits", Array(-0.5, 0.0, 0.5)),
+      ("outputCols", Array("result1", "result2")))
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("inputCol", "feature1"),
+      ("outputCol", "result1"), ("splits", Array(-0.5, 0.0, 0.5)),
+      ("splitsArray", Array(Array(-0.5, 0.0, 0.5), Array(-0.5, 0.0, 0.5))))
 
-    // When both are set, we ignore `inputCols` and just map the column specified by `inputCol`.
-    assert(bucket.isBucketizeMultipleColumns() == false)
+    // this should fail because at least one of inputCol and inputCols must be set
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("outputCol", "feature1"),
+      ("splits", Array(-0.5, 0.0, 0.5)))
+
+    // the following should fail because not all the params are set
+    ParamsSuite.testExclusiveParams(new Bucketizer, df, ("inputCol", "feature1"),
+      ("outputCol", "result1"))
+    ParamsSuite.testExclusiveParams(new Bucketizer, df,
+      ("inputCols", Array("feature1", "feature2")),
+      ("outputCols", Array("result1", "result2")))
   }
 }
 

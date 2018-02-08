@@ -69,7 +69,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   private float[] floatData;
   private double[] doubleData;
 
-  // Only set if type is Array.
+  // Only set if type is Array or Map.
   private int[] arrayLengths;
   private int[] arrayOffsets;
 
@@ -107,7 +107,6 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   public void putNull(int rowId) {
     nulls[rowId] = (byte)1;
     ++numNulls;
-    anyNullsSet = true;
   }
 
   @Override
@@ -115,13 +114,12 @@ public final class OnHeapColumnVector extends WritableColumnVector {
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)1;
     }
-    anyNullsSet = true;
     numNulls += count;
   }
 
   @Override
   public void putNotNulls(int rowId, int count) {
-    if (!anyNullsSet) return;
+    if (!hasNull()) return;
     for (int i = 0; i < count; ++i) {
       nulls[rowId + i] = (byte)0;
     }
@@ -505,7 +503,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
-    if (isArray()) {
+    if (isArray() || type instanceof MapType) {
       int[] newLengths = new int[newCapacity];
       int[] newOffsets = new int[newCapacity];
       if (this.arrayLengths != null) {

@@ -32,7 +32,7 @@ import org.apache.spark.sql.types.{AtomicType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
- * Try to replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
+ * Replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
  */
 class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def maybeSQLFile(u: UnresolvedRelation): Boolean = {
