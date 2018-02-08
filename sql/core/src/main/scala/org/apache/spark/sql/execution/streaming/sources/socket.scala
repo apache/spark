@@ -200,7 +200,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
   }
 
   /** Stop this source. */
-  def stop(): Unit = synchronized {
+  override def stop(): Unit = synchronized {
     if (socket != null) {
       try {
         // Unfortunately, BufferedReader.readLine() cannot be interrupted, so the only way to
