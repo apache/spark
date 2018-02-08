@@ -54,6 +54,7 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
       case _ => new InternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
     }
 
+    val useCommitCoordinator = writer.useCommitCoordinator
     val rdd = query.execute()
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)
 
@@ -74,7 +75,7 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
             DataWritingSparkTask.runContinuous(writeTask, context, iter)
         case _ =>
           (context: TaskContext, iter: Iterator[InternalRow]) =>
-            DataWritingSparkTask.run(writeTask, context, iter, writer.useCommitCoordinator)
+            DataWritingSparkTask.run(writeTask, context, iter, useCommitCoordinator)
       }
 
       sparkContext.runJob(
