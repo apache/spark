@@ -74,7 +74,7 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
             DataWritingSparkTask.runContinuous(writeTask, context, iter)
         case _ =>
           (context: TaskContext, iter: Iterator[InternalRow]) =>
-            DataWritingSparkTask.run(writeTask, context, iter)
+            DataWritingSparkTask.run(writeTask, context, iter, writer.useCommitCoordinator)
       }
 
       sparkContext.runJob(
@@ -117,7 +117,8 @@ object DataWritingSparkTask extends Logging {
   def run(
       writeTask: DataWriterFactory[InternalRow],
       context: TaskContext,
-      iter: Iterator[InternalRow]): WriterCommitMessage = {
+      iter: Iterator[InternalRow],
+      useCommitCoordinator: Boolean): WriterCommitMessage = {
     val stageId = context.stageId()
     val partId = context.partitionId()
     val attemptId = context.attemptNumber()
@@ -127,7 +128,7 @@ object DataWritingSparkTask extends Logging {
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
       iter.foreach(dataWriter.write)
 
-      val msg = if (writeTask.useCommitCoordinator) {
+      val msg = if (useCommitCoordinator) {
         val coordinator = SparkEnv.get.outputCommitCoordinator
         val commitAuthorized = coordinator.canCommit(context.stageId(), partId, attemptId)
         if (commitAuthorized) {
