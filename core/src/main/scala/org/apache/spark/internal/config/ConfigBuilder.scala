@@ -235,7 +235,9 @@ private[spark] case class ConfigBuilder(key: String) {
   }
 
   def fallbackConf[T](fallback: ConfigEntry[T]): ConfigEntry[T] = {
-    new FallbackConfigEntry(key, _alternatives, _doc, _public, fallback)
+    val entry = new FallbackConfigEntry(key, _alternatives, _doc, _public, fallback)
+    _onCreate.foreach(_(entry))
+    entry
   }
 
   def regexConf: TypedConfigBuilder[Regex] = {

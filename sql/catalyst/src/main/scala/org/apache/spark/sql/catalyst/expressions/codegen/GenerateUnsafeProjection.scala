@@ -36,7 +36,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case NullType => true
     case t: AtomicType => true
     case _: CalendarIntervalType => true
-    case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
+    case t: StructType => t.forall(field => canSupport(field.dataType))
     case t: ArrayType if canSupport(t.elementType) => true
     case MapType(kt, vt, _) if canSupport(kt) && canSupport(vt) => true
     case udt: UserDefinedType[_] => canSupport(udt.sqlType)
@@ -49,25 +49,18 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       input: String,
       fieldTypes: Seq[DataType],
       bufferHolder: String): String = {
+    // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
+    val tmpInput = ctx.freshName("tmpInput")
     val fieldEvals = fieldTypes.zipWithIndex.map { case (dt, i) =>
-      val javaType = ctx.javaType(dt)
-      val isNullVar = ctx.freshName("isNull")
-      val valueVar = ctx.freshName("value")
-      val defaultValue = ctx.defaultValue(dt)
-      val readValue = ctx.getValue(input, dt, i.toString)
-      val code =
-        s"""
-          boolean $isNullVar = $input.isNullAt($i);
-          $javaType $valueVar = $isNullVar ? $defaultValue : $readValue;
-        """
-      ExprCode(code, isNullVar, valueVar)
+      ExprCode("", s"$tmpInput.isNullAt($i)", ctx.getValue(tmpInput, dt, i.toString))
     }
 
     s"""
-      if ($input instanceof UnsafeRow) {
-        ${writeUnsafeData(ctx, s"((UnsafeRow) $input)", bufferHolder)}
+      final InternalRow $tmpInput = $input;
+      if ($tmpInput instanceof UnsafeRow) {
+        ${writeUnsafeData(ctx, s"((UnsafeRow) $tmpInput)", bufferHolder)}
       } else {
-        ${writeExpressionsToBuffer(ctx, input, fieldEvals, fieldTypes, bufferHolder)}
+        ${writeExpressionsToBuffer(ctx, tmpInput, fieldEvals, fieldTypes, bufferHolder)}
       }
     """
   }
@@ -80,9 +73,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       bufferHolder: String,
       isTopLevel: Boolean = false): String = {
     val rowWriterClass = classOf[UnsafeRowWriter].getName
-    val rowWriter = ctx.freshName("rowWriter")
-    ctx.addMutableState(rowWriterClass, rowWriter,
-      s"$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});")
+    val rowWriter = ctx.addMutableState(rowWriterClass, "rowWriter",
+      v => s"$v = new $rowWriterClass($bufferHolder, ${inputs.length});")
 
     val resetWriter = if (isTopLevel) {
       // For top level row writer, it always writes to the beginning of the global buffer holder,
@@ -167,9 +159,20 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         }
     }
 
+    val writeFieldsCode = if (isTopLevel && (row == null || ctx.currentVars != null)) {
+      // TODO: support whole stage codegen
+      writeFields.mkString("\n")
+    } else {
+      assert(row != null, "the input row name cannot be null when generating code to write it.")
+      ctx.splitExpressions(
+        expressions = writeFields,
+        funcName = "writeFields",
+        arguments = Seq("InternalRow" -> row))
+    }
+
     s"""
       $resetWriter
-      ${ctx.splitExpressions(row, writeFields)}
+      $writeFieldsCode
     """.trim
   }
 
@@ -179,13 +182,13 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       input: String,
       elementType: DataType,
       bufferHolder: String): String = {
+    // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
+    val tmpInput = ctx.freshName("tmpInput")
     val arrayWriterClass = classOf[UnsafeArrayWriter].getName
-    val arrayWriter = ctx.freshName("arrayWriter")
-    ctx.addMutableState(arrayWriterClass, arrayWriter,
-      s"$arrayWriter = new $arrayWriterClass();")
+    val arrayWriter = ctx.addMutableState(arrayWriterClass, "arrayWriter",
+      v => s"$v = new $arrayWriterClass();")
     val numElements = ctx.freshName("numElements")
     val index = ctx.freshName("index")
-    val element = ctx.freshName("element")
 
     val et = elementType match {
       case udt: UserDefinedType[_] => udt.sqlType
@@ -201,6 +204,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }
 
     val tmpCursor = ctx.freshName("tmpCursor")
+    val element = ctx.getValue(tmpInput, et, index)
     val writeElement = et match {
       case t: StructType =>
         s"""
@@ -233,17 +237,17 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val primitiveTypeName = if (ctx.isPrimitiveType(jt)) ctx.primitiveTypeName(et) else ""
     s"""
-      if ($input instanceof UnsafeArrayData) {
-        ${writeUnsafeData(ctx, s"((UnsafeArrayData) $input)", bufferHolder)}
+      final ArrayData $tmpInput = $input;
+      if ($tmpInput instanceof UnsafeArrayData) {
+        ${writeUnsafeData(ctx, s"((UnsafeArrayData) $tmpInput)", bufferHolder)}
       } else {
-        final int $numElements = $input.numElements();
+        final int $numElements = $tmpInput.numElements();
         $arrayWriter.initialize($bufferHolder, $numElements, $elementOrOffsetSize);
 
         for (int $index = 0; $index < $numElements; $index++) {
-          if ($input.isNullAt($index)) {
+          if ($tmpInput.isNullAt($index)) {
             $arrayWriter.setNull$primitiveTypeName($index);
           } else {
-            final $jt $element = ${ctx.getValue(input, et, index)};
             $writeElement
           }
         }
@@ -258,19 +262,16 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       keyType: DataType,
       valueType: DataType,
       bufferHolder: String): String = {
-    val keys = ctx.freshName("keys")
-    val values = ctx.freshName("values")
+    // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
+    val tmpInput = ctx.freshName("tmpInput")
     val tmpCursor = ctx.freshName("tmpCursor")
-
 
     // Writes out unsafe map according to the format described in `UnsafeMapData`.
     s"""
-      if ($input instanceof UnsafeMapData) {
-        ${writeUnsafeData(ctx, s"((UnsafeMapData) $input)", bufferHolder)}
+      final MapData $tmpInput = $input;
+      if ($tmpInput instanceof UnsafeMapData) {
+        ${writeUnsafeData(ctx, s"((UnsafeMapData) $tmpInput)", bufferHolder)}
       } else {
-        final ArrayData $keys = $input.keyArray();
-        final ArrayData $values = $input.valueArray();
-
         // preserve 8 bytes to write the key array numBytes later.
         $bufferHolder.grow(8);
         $bufferHolder.cursor += 8;
@@ -278,11 +279,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         // Remember the current cursor so that we can write numBytes of key array later.
         final int $tmpCursor = $bufferHolder.cursor;
 
-        ${writeArrayToBuffer(ctx, keys, keyType, bufferHolder)}
+        ${writeArrayToBuffer(ctx, s"$tmpInput.keyArray()", keyType, bufferHolder)}
         // Write the numBytes of key array into the first 8 bytes.
         Platform.putLong($bufferHolder.buffer, $tmpCursor - 8, $bufferHolder.cursor - $tmpCursor);
 
-        ${writeArrayToBuffer(ctx, values, valueType, bufferHolder)}
+        ${writeArrayToBuffer(ctx, s"$tmpInput.valueArray()", valueType, bufferHolder)}
       }
     """
   }
@@ -315,13 +316,12 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ => true
     }
 
-    val result = ctx.freshName("result")
-    ctx.addMutableState("UnsafeRow", result, s"$result = new UnsafeRow(${expressions.length});")
+    val result = ctx.addMutableState("UnsafeRow", "result",
+      v => s"$v = new UnsafeRow(${expressions.length});")
 
-    val holder = ctx.freshName("holder")
     val holderClass = classOf[BufferHolder].getName
-    ctx.addMutableState(holderClass, holder,
-      s"$holder = new $holderClass($result, ${numVarLenFields * 32});")
+    val holder = ctx.addMutableState(holderClass, "holder",
+      v => s"$v = new $holderClass($result, ${numVarLenFields * 32});")
 
     val resetBufferHolder = if (numVarLenFields == 0) {
       ""

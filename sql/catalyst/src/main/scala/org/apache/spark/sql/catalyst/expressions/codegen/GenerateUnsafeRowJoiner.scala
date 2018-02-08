@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
@@ -51,6 +54,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
   }
 
   def create(schema1: StructType, schema2: StructType): UnsafeRowJoiner = {
+    val ctx = new CodegenContext
     val offset = Platform.BYTE_ARRAY_OFFSET
     val getLong = "Platform.getLong"
     val putLong = "Platform.putLong"
@@ -66,7 +70,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
 
     // --------------------- copy bitset from row 1 and row 2 --------------------------- //
     val copyBitset = Seq.tabulate(outputBitsetWords) { i =>
-      val bits = if (bitset1Remainder > 0) {
+      val bits = if (bitset1Remainder > 0 && bitset2Words != 0) {
         if (i < bitset1Words - 1) {
           s"$getLong(obj1, offset1 + ${i * 8})"
         } else if (i == bitset1Words - 1) {
@@ -88,8 +92,14 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
           s"$getLong(obj2, offset2 + ${(i - bitset1Words) * 8})"
         }
       }
-      s"$putLong(buf, ${offset + i * 8}, $bits);"
-    }.mkString("\n")
+      s"$putLong(buf, ${offset + i * 8}, $bits);\n"
+    }
+
+    val copyBitsets = ctx.splitExpressions(
+      expressions = copyBitset,
+      funcName = "copyBitsetFunc",
+      arguments = ("java.lang.Object", "obj1") :: ("long", "offset1") ::
+                  ("java.lang.Object", "obj2") :: ("long", "offset2") :: Nil)
 
     // --------------------- copy fixed length portion from row 1 ----------------------- //
     var cursor = offset + outputBitsetWords * 8
@@ -142,7 +152,9 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
       } else {
         // Number of bytes to increase for the offset. Note that since in UnsafeRow we store the
         // offset in the upper 32 bit of the words, we can just shift the offset to the left by
-        // 32 and increment that amount in place.
+        // 32 and increment that amount in place. However, we need to handle the important special
+        // case of a null field, in which case the offset should be zero and should not have a
+        // shift added to it.
         val shift =
           if (i < schema1.size) {
             s"${(outputBitsetWords - bitset1Words + schema2.size) * 8}L"
@@ -150,11 +162,55 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
             s"(${(outputBitsetWords - bitset2Words + schema1.size) * 8}L + numBytesVariableRow1)"
           }
         val cursor = offset + outputBitsetWords * 8 + i * 8
+        // UnsafeRow is a little underspecified, so in what follows we'll treat UnsafeRowWriter's
+        // output as a de-facto specification for the internal layout of data.
+        //
+        // Null-valued fields will always have a data offset of 0 because
+        // UnsafeRowWriter.setNullAt(ordinal) sets the null bit and stores 0 to in field's
+        // position in the fixed-length section of the row. As a result, we must NOT add
+        // `shift` to the offset for null fields.
+        //
+        // We could perform a null-check here by inspecting the null-tracking bitmap, but doing
+        // so could be expensive and will add significant bloat to the generated code. Instead,
+        // we'll rely on the invariant "stored offset == 0 for variable-length data type implies
+        // that the field's value is null."
+        //
+        // To establish that this invariant holds, we'll prove that a non-null field can never
+        // have a stored offset of 0. There are two cases to consider:
+        //
+        //   1. The non-null field's data is of non-zero length: reading this field's value
+        //      must read data from the variable-length section of the row, so the stored offset
+        //      will actually be used in address calculation and must be correct. The offsets
+        //      count bytes from the start of the UnsafeRow so these offsets will always be
+        //      non-zero because the storage of the offsets themselves takes up space at the
+        //      start of the row.
+        //   2. The non-null field's data is of zero length (i.e. its data is empty). In this
+        //      case, we have to worry about the possibility that an arbitrary offset value was
+        //      stored because we never actually read any bytes using this offset and therefore
+        //      would not crash if it was incorrect. The variable-sized data writing paths in
+        //      UnsafeRowWriter unconditionally calls setOffsetAndSize(ordinal, numBytes) with
+        //      no special handling for the case where `numBytes == 0`. Internally,
+        //      setOffsetAndSize computes the offset without taking the size into account. Thus
+        //      the stored offset is the same non-zero offset that would be used if the field's
+        //      dataSize was non-zero (and in (1) above we've shown that case behaves as we
+        //      expect).
+        //
+        // Thus it is safe to perform `existingOffset != 0` checks here in the place of
+        // more expensive null-bit checks.
         s"""
-           |$putLong(buf, $cursor, $getLong(buf, $cursor) + ($shift << 32));
+           |existingOffset = $getLong(buf, $cursor);
+           |if (existingOffset != 0) {
+           |    $putLong(buf, $cursor, existingOffset + ($shift << 32));
+           |}
          """.stripMargin
       }
-    }.mkString("\n")
+    }
+
+    val updateOffsets = ctx.splitExpressions(
+      expressions = updateOffset,
+      funcName = "copyBitsetFunc",
+      arguments = ("long", "numBytesVariableRow1") :: Nil,
+      makeSplitFunction = (s: String) => "long existingOffset;\n" + s)
 
     // ------------------------ Finally, put everything together  --------------------------- //
     val codeBody = s"""
@@ -165,6 +221,8 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |class SpecificUnsafeRowJoiner extends ${classOf[UnsafeRowJoiner].getName} {
        |  private byte[] buf = new byte[64];
        |  private UnsafeRow out = new UnsafeRow(${schema1.size + schema2.size});
+       |
+       |  ${ctx.declareAddedFunctions()}
        |
        |  public UnsafeRow join(UnsafeRow row1, UnsafeRow row2) {
        |    // row1: ${schema1.size} fields, $bitset1Words words in bitset
@@ -180,12 +238,13 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    final java.lang.Object obj2 = row2.getBaseObject();
        |    final long offset2 = row2.getBaseOffset();
        |
-       |    $copyBitset
+       |    $copyBitsets
        |    $copyFixedLengthRow1
        |    $copyFixedLengthRow2
        |    $copyVariableLengthRow1
        |    $copyVariableLengthRow2
-       |    $updateOffset
+       |    long existingOffset;
+       |    $updateOffsets
        |
        |    out.pointTo(buf, sizeInBytes);
        |

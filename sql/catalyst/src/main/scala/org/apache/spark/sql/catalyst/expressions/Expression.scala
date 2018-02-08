@@ -104,13 +104,44 @@ abstract class Expression extends TreeNode[Expression] {
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
-      val ve = doGenCode(ctx, ExprCode("", isNull, value))
-      if (ve.code.nonEmpty) {
+      val eval = doGenCode(ctx, ExprCode("", isNull, value))
+      reduceCodeSize(ctx, eval)
+      if (eval.code.nonEmpty) {
         // Add `this` in the comment.
-        ve.copy(code = s"${ctx.registerComment(this.toString)}\n" + ve.code.trim)
+        eval.copy(code = s"${ctx.registerComment(this.toString)}\n" + eval.code.trim)
       } else {
-        ve
+        eval
       }
+    }
+  }
+
+  private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
+    // TODO: support whole stage codegen too
+    if (eval.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+      val setIsNull = if (eval.isNull != "false" && eval.isNull != "true") {
+        val globalIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "globalIsNull")
+        val localIsNull = eval.isNull
+        eval.isNull = globalIsNull
+        s"$globalIsNull = $localIsNull;"
+      } else {
+        ""
+      }
+
+      val javaType = ctx.javaType(dataType)
+      val newValue = ctx.freshName("value")
+
+      val funcName = ctx.freshName(nodeName)
+      val funcFullName = ctx.addNewFunction(funcName,
+        s"""
+           |private $javaType $funcName(InternalRow ${ctx.INPUT_ROW}) {
+           |  ${eval.code.trim}
+           |  $setIsNull
+           |  return ${eval.value};
+           |}
+           """.stripMargin)
+
+      eval.value = newValue
+      eval.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
     }
   }
 

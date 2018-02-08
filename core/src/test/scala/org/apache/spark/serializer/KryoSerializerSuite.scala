@@ -199,7 +199,7 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     def check[T: ClassTag](t: T) {
       assert(ser.deserialize[T](ser.serialize(t)) === t)
       // Check that very long ranges don't get written one element at a time
-      assert(ser.serialize(t).limit < 100)
+      assert(ser.serialize(t).limit() < 100)
     }
     check(1 to 1000000)
     check(1 to 1000000 by 2)

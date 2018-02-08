@@ -44,6 +44,7 @@ struct<>
 -- !query 4 output
 
 
+
 -- !query 5
 select current_date, current_timestamp from ttf1
 -- !query 5 schema
@@ -61,6 +62,7 @@ create temporary view ttf2 as select * from values
 -- !query 6 schema
 struct<>
 -- !query 6 output
+
 
 
 -- !query 7

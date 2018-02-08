@@ -41,7 +41,35 @@ import org.apache.spark.sql.types._
 
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
-   test("Hive serde tables should fallback to HDFS for size estimation") {
+
+  test("size estimation for relations is based on row size * number of rows") {
+    val dsTbl = "rel_est_ds_table"
+    val hiveTbl = "rel_est_hive_table"
+    withTable(dsTbl, hiveTbl) {
+      spark.range(1000L).write.format("parquet").saveAsTable(dsTbl)
+      spark.range(1000L).write.format("hive").saveAsTable(hiveTbl)
+
+      Seq(dsTbl, hiveTbl).foreach { tbl =>
+        sql(s"ANALYZE TABLE $tbl COMPUTE STATISTICS")
+        val catalogStats = getCatalogStatistics(tbl)
+        withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+          val relationStats = spark.table(tbl).queryExecution.optimizedPlan.stats
+          assert(relationStats.sizeInBytes == catalogStats.sizeInBytes)
+          assert(relationStats.rowCount.isEmpty)
+        }
+        spark.sessionState.catalog.refreshTable(TableIdentifier(tbl))
+        withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+          val relationStats = spark.table(tbl).queryExecution.optimizedPlan.stats
+          // Due to compression in parquet files, in this test, file size is smaller than
+          // in-memory size.
+          assert(catalogStats.sizeInBytes < relationStats.sizeInBytes)
+          assert(catalogStats.rowCount == relationStats.rowCount)
+        }
+      }
+    }
+  }
+
+  test("Hive serde tables should fallback to HDFS for size estimation") {
     withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
       withTable("csv_table") {
         withTempDir { tempDir =>
@@ -185,6 +213,27 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("SPARK-22745 - read Hive's statistics for partition") {
+    val tableName = "hive_stats_part_table"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2017-01-01') SELECT * FROM src")
+      var partition = spark.sessionState.catalog
+        .getPartition(TableIdentifier(tableName), Map("ds" -> "2017-01-01"))
+
+      assert(partition.stats.get.sizeInBytes == 5812)
+      assert(partition.stats.get.rowCount.isEmpty)
+
+      hiveClient
+        .runSqlHive(s"ANALYZE TABLE $tableName PARTITION (ds='2017-01-01') COMPUTE STATISTICS")
+      partition = spark.sessionState.catalog
+        .getPartition(TableIdentifier(tableName), Map("ds" -> "2017-01-01"))
+
+      assert(partition.stats.get.sizeInBytes == 5812)
+      assert(partition.stats.get.rowCount == Some(500))
+    }
+  }
+
   test("SPARK-21079 - analyze table with location different than that of individual partitions") {
     val tableName = "analyzeTable_part"
     withTable(tableName) {
@@ -324,15 +373,6 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       createPartition("2010-01-02", 10, "SELECT '1', 'A' from src")
       createPartition("2010-01-02", 11,
         "SELECT '1', 'A' from src UNION ALL SELECT '1', 'A' from src")
-
-      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS NOSCAN")
-
-      assertPartitionStats("2010-01-01", "10", rowCount = None, sizeInBytes = 2000)
-      assertPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000)
-      assert(queryStats("2010-01-02", "10") === None)
-      assert(queryStats("2010-01-02", "11") === None)
-
-      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS NOSCAN")
 
       assertPartitionStats("2010-01-01", "10", rowCount = None, sizeInBytes = 2000)
       assertPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000)
@@ -603,7 +643,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
        """.stripMargin)
     sql(s"INSERT INTO TABLE $tabName SELECT * FROM src")
     if (analyzedBySpark) sql(s"ANALYZE TABLE $tabName COMPUTE STATISTICS")
-    // This is to mimic the scenario in which Hive genrates statistics before we reading it
+    // This is to mimic the scenario in which Hive generates statistics before we read it
     if (analyzedByHive) hiveClient.runSqlHive(s"ANALYZE TABLE $tabName COMPUTE STATISTICS")
     val describeResult1 = hiveClient.runSqlHive(s"DESCRIBE FORMATTED $tabName")
 
@@ -1331,5 +1371,23 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
       sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=$tmp")
     }
 
+  }
+
+  test("Deals with wrong Hive's statistics (zero rowCount)") {
+    withTable("maybe_big") {
+      sql("CREATE TABLE maybe_big (c1 bigint)" +
+        "TBLPROPERTIES ('numRows'='0', 'rawDataSize'='60000000000', 'totalSize'='8000000000000')")
+
+      val catalogTable = getCatalogTable("maybe_big")
+
+      val properties = catalogTable.ignoredProperties
+      assert(properties("totalSize").toLong > 0)
+      assert(properties("rawDataSize").toLong > 0)
+      assert(properties("numRows").toLong == 0)
+
+      val catalogStats = catalogTable.stats.get
+      assert(catalogStats.sizeInBytes > 0)
+      assert(catalogStats.rowCount.isEmpty)
+    }
   }
 }

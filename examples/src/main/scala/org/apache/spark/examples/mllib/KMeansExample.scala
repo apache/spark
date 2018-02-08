@@ -43,7 +43,7 @@ object KMeansExample {
 
     // Evaluate clustering by computing Within Set Sum of Squared Errors
     val WSSSE = clusters.computeCost(parsedData)
-    println("Within Set Sum of Squared Errors = " + WSSSE)
+    println(s"Within Set Sum of Squared Errors = $WSSSE")
 
     // Save and load model
     clusters.save(sc, "target/org/apache/spark/KMeansExample/KMeansModel")

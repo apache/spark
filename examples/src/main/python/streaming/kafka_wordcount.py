@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""
+r"""
  Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
  Usage: kafka_wordcount.py <zk> <topic>
 
