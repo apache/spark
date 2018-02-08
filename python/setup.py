@@ -100,6 +100,11 @@ if (in_spark):
               file=sys.stderr)
         exit(-1)
 
+# If you are changing the versions here, please also change ./python/pyspark/sql/utils.py and
+# ./python/run-tests.py. In case of Arrow, you should also check ./pom.xml.
+_minimum_pandas_version = "0.19.2"
+_minimum_pyarrow_version = "0.8.0"
+
 try:
     # We copy the shell script to be under pyspark/python/pyspark so that the launcher scripts
     # find it where expected. The rest of the files aren't copied because they are accessed
@@ -201,7 +206,10 @@ try:
         extras_require={
             'ml': ['numpy>=1.7'],
             'mllib': ['numpy>=1.7'],
-            'sql': ['pandas>=0.19.2', 'pyarrow>=0.8.0']
+            'sql': [
+                'pandas>=%s' % _minimum_pandas_version,
+                'pyarrow>=%s' % _minimum_pyarrow_version,
+            ]
         },
         classifiers=[
             'Development Status :: 5 - Production/Stable',
