@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.sources
 
 import java.io.{IOException, OutputStreamWriter}
 import java.net.ServerSocket
@@ -25,18 +25,19 @@ import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
+
 import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.execution.streaming.sources.{TextSocketOffset, TextSocketSourceProvider}
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.sources.v2.DataSourceV2Options
-import org.apache.spark.sql.sources.v2.streaming.reader.MicroBatchReader
+import org.apache.spark.sql.execution.streaming.LongOffset
+import org.apache.spark.sql.sources.v2.DataSourceOptions
+import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
 class TextSocketStreamSuite extends StreamTest with SharedSQLContext with BeforeAndAfterEach {
-  import testImplicits._
 
   override def afterEach() {
     sqlContext.streams.active.foreach(_.stop())
@@ -45,10 +46,6 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       serverThread.join()
       serverThread = null
     }
-    if (source != null) {
-      source.stop()
-      source = null
-    }
     if (batchReader != null) {
       batchReader.stop()
       batchReader = null
@@ -56,54 +53,14 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
   }
 
   private var serverThread: ServerThread = null
-  private var source: Source = null
   private var batchReader: MicroBatchReader = null
-
-  test("basic usage") {
-    serverThread = new ServerThread()
-    serverThread.start()
-
-    val provider = new TextSocketSourceProvider
-    val parameters = Map("host" -> "localhost", "port" -> serverThread.port.toString)
-    val schema = provider.sourceSchema(sqlContext, None, "", parameters)._2
-    assert(schema === StructType(StructField("value", StringType) :: Nil))
-
-    source = provider.createSource(sqlContext, "", None, "", parameters)
-
-    failAfter(streamingTimeout) {
-      serverThread.enqueue("hello")
-      while (source.getOffset.isEmpty) {
-        Thread.sleep(10)
-      }
-      withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
-        val offset1 = source.getOffset.get
-        val batch1 = source.getBatch(None, offset1)
-        assert(batch1.as[String].collect().toSeq === Seq("hello"))
-
-        serverThread.enqueue("world")
-        while (source.getOffset.get === offset1) {
-          Thread.sleep(10)
-        }
-        val offset2 = source.getOffset.get
-        val batch2 = source.getBatch(Some(offset1), offset2)
-        assert(batch2.as[String].collect().toSeq === Seq("world"))
-
-        val both = source.getBatch(None, offset2)
-        assert(both.as[String].collect().sorted.toSeq === Seq("hello", "world"))
-      }
-
-      // Try stopping the source to make sure this does not block forever.
-      source.stop()
-      source = null
-    }
-  }
 
   test("V2 basic usage") {
     serverThread = new ServerThread()
     serverThread.start()
 
     val provider = new TextSocketSourceProvider
-    val options = new DataSourceV2Options(
+    val options = new DataSourceOptions(
       Map("host" -> "localhost", "port" -> serverThread.port.toString).asJava)
     batchReader = provider.createMicroBatchReader(Optional.empty(), "", options)
 
@@ -113,14 +70,14 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     failAfter(streamingTimeout) {
       serverThread.enqueue("hello")
       batchReader.setOffsetRange(Optional.empty(), Optional.empty())
-      while (batchReader.getEndOffset.asInstanceOf[TextSocketOffset].offset == -1L) {
+      while (batchReader.getEndOffset.asInstanceOf[LongOffset].offset == -1L) {
         batchReader.setOffsetRange(Optional.empty(), Optional.empty())
         Thread.sleep(10)
       }
       withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
         val offset1 = batchReader.getEndOffset
         val batch1 = new ListBuffer[Row]
-        batchReader.createReadTasks().asScala.map(_.createDataReader()).foreach { r =>
+        batchReader.createDataReaderFactories().asScala.map(_.createDataReader()).foreach { r =>
           while (r.next()) {
             batch1.append(r.get())
           }
@@ -134,7 +91,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
         }
         val offset2 = batchReader.getEndOffset
         val batch2 = new ListBuffer[Row]
-        batchReader.createReadTasks().asScala.map(_.createDataReader()).foreach { r =>
+        batchReader.createDataReaderFactories().asScala.map(_.createDataReader()).foreach { r =>
           while (r.next()) {
             batch2.append(r.get())
           }
@@ -143,7 +100,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
 
         batchReader.setOffsetRange(Optional.empty(), Optional.of(offset2))
         val both = new ListBuffer[Row]
-        batchReader.createReadTasks().asScala.map(_.createDataReader()).foreach { r =>
+        batchReader.createDataReaderFactories().asScala.map(_.createDataReader()).foreach { r =>
           while (r.next()) {
             both.append(r.get())
           }
@@ -162,50 +119,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     serverThread.start()
 
     val provider = new TextSocketSourceProvider
-    val parameters = Map("host" -> "localhost", "port" -> serverThread.port.toString,
-      "includeTimestamp" -> "true")
-    val schema = provider.sourceSchema(sqlContext, None, "", parameters)._2
-    assert(schema === StructType(StructField("value", StringType) ::
-      StructField("timestamp", TimestampType) :: Nil))
-
-    source = provider.createSource(sqlContext, "", None, "", parameters)
-
-    failAfter(streamingTimeout) {
-      serverThread.enqueue("hello")
-      while (source.getOffset.isEmpty) {
-        Thread.sleep(10)
-      }
-      withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
-        val offset1 = source.getOffset.get
-        val batch1 = source.getBatch(None, offset1)
-        val batch1Seq = batch1.as[(String, Timestamp)].collect().toSeq
-        assert(batch1Seq.map(_._1) === Seq("hello"))
-        val batch1Stamp = batch1Seq(0)._2
-
-        serverThread.enqueue("world")
-        while (source.getOffset.get === offset1) {
-          Thread.sleep(10)
-        }
-        val offset2 = source.getOffset.get
-        val batch2 = source.getBatch(Some(offset1), offset2)
-        val batch2Seq = batch2.as[(String, Timestamp)].collect().toSeq
-        assert(batch2Seq.map(_._1) === Seq("world"))
-        val batch2Stamp = batch2Seq(0)._2
-        assert(!batch2Stamp.before(batch1Stamp))
-      }
-
-      // Try stopping the source to make sure this does not block forever.
-      source.stop()
-      source = null
-    }
-  }
-
-  test("V2 timestamped usage") {
-    serverThread = new ServerThread()
-    serverThread.start()
-
-    val provider = new TextSocketSourceProvider
-    val options = new DataSourceV2Options(Map("host" -> "localhost",
+    val options = new DataSourceOptions(Map("host" -> "localhost",
       "port" -> serverThread.port.toString, "includeTimestamp" -> "true").asJava)
     batchReader = provider.createMicroBatchReader(Optional.empty(), "", options)
 
@@ -216,14 +130,14 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     failAfter(streamingTimeout) {
       serverThread.enqueue("hello")
       batchReader.setOffsetRange(Optional.empty(), Optional.empty())
-      while (batchReader.getEndOffset.asInstanceOf[TextSocketOffset].offset == -1L) {
+      while (batchReader.getEndOffset.asInstanceOf[LongOffset].offset == -1L) {
         batchReader.setOffsetRange(Optional.empty(), Optional.empty())
         Thread.sleep(10)
       }
       withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
         val offset1 = batchReader.getEndOffset
         val batch1 = new ListBuffer[Row]
-        batchReader.createReadTasks().asScala.map(_.createDataReader()).foreach { r =>
+        batchReader.createDataReaderFactories().asScala.map(_.createDataReader()).foreach { r =>
           while (r.next()) {
             batch1.append(r.get())
           }
@@ -238,7 +152,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
         }
         val offset2 = batchReader.getEndOffset
         val batch2 = new ListBuffer[Row]
-        batchReader.createReadTasks().asScala.map(_.createDataReader()).foreach { r =>
+        batchReader.createDataReaderFactories().asScala.map(_.createDataReader()).foreach { r =>
           while (r.next()) {
             batch2.append(r.get())
           }
@@ -257,25 +171,16 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
   test("params not given") {
     val provider = new TextSocketSourceProvider
     intercept[AnalysisException] {
-      provider.sourceSchema(sqlContext, None, "", Map())
+      provider.createMicroBatchReader(Optional.empty(), "",
+        new DataSourceOptions(Map.empty[String, String].asJava))
     }
     intercept[AnalysisException] {
       provider.createMicroBatchReader(Optional.empty(), "",
-        new DataSourceV2Options(Map.empty[String, String].asJava))
-    }
-    intercept[AnalysisException] {
-      provider.sourceSchema(sqlContext, None, "", Map("host" -> "localhost"))
+        new DataSourceOptions(Map("host" -> "localhost").asJava))
     }
     intercept[AnalysisException] {
       provider.createMicroBatchReader(Optional.empty(), "",
-        new DataSourceV2Options(Map("host" -> "localhost").asJava))
-    }
-    intercept[AnalysisException] {
-      provider.sourceSchema(sqlContext, None, "", Map("port" -> "1234"))
-    }
-    intercept[AnalysisException] {
-      provider.createMicroBatchReader(Optional.empty(), "",
-        new DataSourceV2Options(Map("port" -> "1234").asJava))
+        new DataSourceOptions(Map("port" -> "1234").asJava))
     }
   }
 
@@ -283,10 +188,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     val provider = new TextSocketSourceProvider
     val params = Map("host" -> "localhost", "port" -> "1234", "includeTimestamp" -> "fasle")
     intercept[AnalysisException] {
-      provider.sourceSchema(sqlContext, None, "", params)
-    }
-    intercept[AnalysisException] {
-      val a = new DataSourceV2Options(params.asJava)
+      val a = new DataSourceOptions(params.asJava)
       provider.createMicroBatchReader(Optional.empty(), "", a)
     }
   }
@@ -298,19 +200,10 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       StructField("area", StringType) :: Nil)
     val params = Map("host" -> "localhost", "port" -> "1234")
     val exception = intercept[AnalysisException] {
-      provider.sourceSchema(
-        sqlContext, Some(userSpecifiedSchema),
-        "",
-        params)
+      provider.createMicroBatchReader(
+        Optional.of(userSpecifiedSchema), "", new DataSourceOptions(params.asJava))
     }
     assert(exception.getMessage.contains(
-      "socket source does not support a user-specified schema"))
-
-    val exception1 = intercept[AnalysisException] {
-      provider.createMicroBatchReader(
-        Optional.of(userSpecifiedSchema), "", new DataSourceV2Options(params.asJava))
-    }
-    assert(exception1.getMessage.contains(
       "socket source does not support a user-specified schema"))
   }
 
@@ -318,37 +211,8 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     val provider = new TextSocketSourceProvider
     val parameters = Map("host" -> "localhost", "port" -> "0")
     intercept[IOException] {
-      source = provider.createSource(sqlContext, "", None, "", parameters)
-    }
-    intercept[IOException] {
       batchReader = provider.createMicroBatchReader(
-        Optional.empty(), "", new DataSourceV2Options(parameters.asJava))
-    }
-  }
-
-  test("input row metrics") {
-    serverThread = new ServerThread()
-    serverThread.start()
-
-    val provider = new TextSocketSourceProvider
-    val parameters = Map("host" -> "localhost", "port" -> serverThread.port.toString)
-    source = provider.createSource(sqlContext, "", None, "", parameters)
-
-    failAfter(streamingTimeout) {
-      serverThread.enqueue("hello")
-      while (source.getOffset.isEmpty) {
-        Thread.sleep(10)
-      }
-      withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
-        val batch = source.getBatch(None, source.getOffset.get).as[String]
-        batch.collect()
-        val numRowsMetric =
-          batch.queryExecution.executedPlan.collectLeaves().head.metrics.get("numOutputRows")
-        assert(numRowsMetric.nonEmpty)
-        assert(numRowsMetric.get.value === 1)
-      }
-      source.stop()
-      source = null
+        Optional.empty(), "", new DataSourceOptions(parameters.asJava))
     }
   }
 

@@ -30,22 +30,18 @@ import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.streaming.LongOffset
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
-import org.apache.spark.sql.sources.v2.reader.{DataReader, ReadTask}
-import org.apache.spark.sql.sources.v2.streaming.MicroBatchReadSupport
-import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset => V2Offset}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2}
+import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
-object TextSocketSource {
+object TextSocketMicroBatchReader {
   val SCHEMA_REGULAR = StructType(StructField("value", StringType) :: Nil)
   val SCHEMA_TIMESTAMP = StructType(StructField("value", StringType) ::
     StructField("timestamp", TimestampType) :: Nil)
   val DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-}
-
-case class TextSocketOffset(offset: Long) extends V2Offset {
-  override def json(): String = offset.toString
 }
 
 /**
@@ -54,11 +50,10 @@ case class TextSocketOffset(offset: Long) extends V2Offset {
  * reasons, including no support for fault recovery and keeping all of the text read in memory
  * forever.
  */
-class TextSocketMicroBatchReader(options: DataSourceV2Options)
-  extends MicroBatchReader with Logging {
+class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchReader with Logging {
 
-  private var startOffset: TextSocketOffset = _
-  private var endOffset: TextSocketOffset = _
+  private var startOffset: Offset = _
+  private var endOffset: Offset = _
 
   private val host: String = options.get("host").get()
   private val port: Int = options.get("port").get().toInt
@@ -77,10 +72,10 @@ class TextSocketMicroBatchReader(options: DataSourceV2Options)
   private val batches = new ListBuffer[(String, Timestamp)]
 
   @GuardedBy("this")
-  private var currentOffset: Long = -1L
+  private var currentOffset: LongOffset = LongOffset(-1L)
 
   @GuardedBy("this")
-  private var lastOffsetCommitted: Long = -1L
+  private var lastOffsetCommitted: LongOffset = LongOffset(-1L)
 
   initialize()
 
@@ -102,7 +97,7 @@ class TextSocketMicroBatchReader(options: DataSourceV2Options)
             TextSocketMicroBatchReader.this.synchronized {
               val newData = (line,
                 Timestamp.valueOf(
-                  TextSocketSource.DATE_FORMAT.format(Calendar.getInstance().getTime()))
+                  TextSocketMicroBatchReader.DATE_FORMAT.format(Calendar.getInstance().getTime()))
               )
               currentOffset += 1
               batches.append(newData)
@@ -117,40 +112,44 @@ class TextSocketMicroBatchReader(options: DataSourceV2Options)
   }
 
   override def setOffsetRange(
-      start: Optional[V2Offset],
-      end: Optional[V2Offset]): Unit = synchronized {
-    startOffset = start.orElse(TextSocketOffset(-1L)).asInstanceOf[TextSocketOffset]
-    endOffset = end.orElse(TextSocketOffset(currentOffset)).asInstanceOf[TextSocketOffset]
+      start: Optional[Offset],
+      end: Optional[Offset]): Unit = synchronized {
+    startOffset = start.orElse(LongOffset(-1L))
+    endOffset = end.orElse(currentOffset)
   }
 
-  override def getStartOffset(): V2Offset = {
+  override def getStartOffset(): Offset = {
     Option(startOffset).getOrElse(throw new IllegalStateException("start offset not set"))
   }
 
-  override def getEndOffset(): V2Offset = {
+  override def getEndOffset(): Offset = {
     Option(endOffset).getOrElse(throw new IllegalStateException("end offset not set"))
   }
 
-  override def deserializeOffset(json: String): V2Offset = {
-    TextSocketOffset(json.toLong)
+  override def deserializeOffset(json: String): Offset = {
+    LongOffset(json.toLong)
   }
 
   override def readSchema(): StructType = {
     val includeTimestamp = options.getBoolean("includeTimestamp", false)
-    if (includeTimestamp) TextSocketSource.SCHEMA_TIMESTAMP else TextSocketSource.SCHEMA_REGULAR
+    if (includeTimestamp) {
+      TextSocketMicroBatchReader.SCHEMA_TIMESTAMP
+    } else {
+      TextSocketMicroBatchReader.SCHEMA_REGULAR
+    }
   }
 
-  override def createReadTasks(): JList[ReadTask[Row]] = {
+  override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
     assert(startOffset != null && endOffset != null,
       "start offset and end offset should already be set before create read tasks.")
 
-    val startOrdinal = startOffset.offset.toInt + 1
-    val endOrdinal = endOffset.offset.toInt + 1
+    val startOrdinal = LongOffset.convert(startOffset).get.offset.toInt + 1
+    val endOrdinal = LongOffset.convert(endOffset).get.offset.toInt + 1
 
     // Internal buffer only holds the batches after lastOffsetCommitted
     val rawList = synchronized {
-      val sliceStart = startOrdinal - lastOffsetCommitted.toInt - 1
-      val sliceEnd = endOrdinal - lastOffsetCommitted.toInt - 1
+      val sliceStart = startOrdinal - lastOffsetCommitted.offset.toInt - 1
+      val sliceEnd = endOrdinal - lastOffsetCommitted.offset.toInt - 1
       batches.slice(sliceStart, sliceEnd)
     }
 
@@ -165,7 +164,7 @@ class TextSocketMicroBatchReader(options: DataSourceV2Options)
 
     (0 until numPartitions).map { i =>
       val slice = slices(i)
-      new ReadTask[Row] {
+      new DataReaderFactory[Row] {
         override def createDataReader(): DataReader[Row] = new DataReader[Row] {
           private var currentIdx = -1
 
@@ -184,17 +183,20 @@ class TextSocketMicroBatchReader(options: DataSourceV2Options)
     }.toList.asJava
   }
 
-  override def commit(end: V2Offset): Unit = synchronized {
-    val newOffset = end.asInstanceOf[TextSocketOffset]
+  override def commit(end: Offset): Unit = synchronized {
+    val newOffset = LongOffset.convert(end).getOrElse(
+      sys.error(s"TextSocketStream.commit() received an offset ($end) that did not " +
+        s"originate with an instance of this class")
+    )
 
-    val offsetDiff = (newOffset.offset - lastOffsetCommitted).toInt
+    val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 
     if (offsetDiff < 0) {
       sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
     }
 
     batches.trimStart(offsetDiff)
-    lastOffsetCommitted = newOffset.offset
+    lastOffsetCommitted = newOffset
   }
 
   /** Stop this source. */
@@ -241,7 +243,7 @@ class TextSocketSourceProvider extends DataSourceV2
   override def createMicroBatchReader(
       schema: Optional[StructType],
       checkpointLocation: String,
-      options: DataSourceV2Options): MicroBatchReader = {
+      options: DataSourceOptions): MicroBatchReader = {
     checkParameters(options.asMap().asScala.toMap)
     if (schema.isPresent) {
       throw new AnalysisException("The socket source does not support a user-specified schema.")
