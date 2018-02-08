@@ -2860,7 +2860,7 @@ class SQLTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     ImportError,
-                    '(Pandas >= .* must be installed|No module named pandas)'):
+                    "(Pandas >= .* must be installed|No module named '?pandas'?)"):
                 import pandas as pd
                 from datetime import datetime
                 pdf = pd.DataFrame({"ts": [datetime(2017, 10, 31, 1, 1, 1)],
