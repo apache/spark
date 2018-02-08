@@ -27,9 +27,9 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, WriteToDataSourceV2}
 import org.apache.spark.sql.execution.streaming.sources.{InternalRowMicroBatchWriter, MicroBatchWriter}
-import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceOptions, MicroBatchReadSupport, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupport, StreamWriteSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset => OffsetV2}
 import org.apache.spark.sql.sources.v2.writer.SupportsWriteInternalRow
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
@@ -410,12 +410,13 @@ class MicroBatchExecution(
           }
           reader.setOffsetRange(toJava(current), Optional.of(availableV2))
           logDebug(s"Retrieving data from $reader: $current -> $availableV2")
-          Some(reader -> new StreamingDataSourceV2Relation(
+          Some(reader -> new DataSourceV2Relation(
             reader.readSchema().toAttributes,
             // Provide a fake value here just in case something went wrong, e.g. the reader gives
             // a wrong `equals` implementation.
             readerToDataSourceMap.getOrElse(reader, FakeDataSourceV2),
-            reader))
+            reader,
+            isStreaming = true))
         case _ => None
       }
     }
