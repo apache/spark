@@ -141,7 +141,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
         query.processAllAvailable()
       }
       assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.getMessage === "error")
+      assert(e.getCause.getCause.getCause.getMessage === "error")
       assert(query.isActive === false)
 
       val allEvents = ForeachSinkSuite.allEvents()
@@ -253,6 +253,32 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
         s"recentProgress[${query.recentProgress.toList}] doesn't contain correct metrics")
     } finally {
       query.stop()
+    }
+  }
+
+  testQuietly("foreach does not reuse writers") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[Int]
+      val query = input.toDS().repartition(1).writeStream
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .foreach(new TestForeachWriter() {
+          override def process(value: Int): Unit = {
+            super.process(this.hashCode())
+          }
+        }).start()
+      input.addData(0)
+      query.processAllAvailable()
+      input.addData(0)
+      query.processAllAvailable()
+
+      val allEvents = ForeachSinkSuite.allEvents()
+      assert(allEvents.size === 2)
+      assert(allEvents(0)(1).isInstanceOf[ForeachSinkSuite.Process[Int]])
+      val firstWriterId = allEvents(0)(1).asInstanceOf[ForeachSinkSuite.Process[Int]].value
+      assert(allEvents(1)(1).isInstanceOf[ForeachSinkSuite.Process[Int]])
+      assert(
+        allEvents(1)(1).asInstanceOf[ForeachSinkSuite.Process[Int]].value != firstWriterId,
+        "writer was reused!")
     }
   }
 }
