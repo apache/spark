@@ -3677,11 +3677,14 @@ class ArrowTests(ReusedSQLTestCase):
         # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
         dt = datetime.datetime(2015, 11, 1, 1, 29, 30)
         pdf_1 = pd.DataFrame({'time': [dt]})
-        pdf_2 = self.spark.createDataFrame([dt], 'timestamp').toDF('time').toPandas()
-        pdf_3 = self.spark.createDataFrame(pdf_1).toPandas()
+        df_2 = self.spark.createDataFrame([dt], 'timestamp').toDF('time')
+        df_3 = self.spark.createDataFrame(pdf_1)
 
-        self.assertPandasEqual(pdf_1, pdf_2)
-        self.assertPandasEqual(pdf_1, pdf_3)
+        self.assertPandasEqual(pdf_1, df_2.toPandas())
+        self.assertPandasEqual(pdf_1, df_3.toPandas())
+
+        self.assertEqual(dt, df_2.collect()[0].time)
+        self.assertEqual(dt, df_3.collect()[0].time)
 
 
 @unittest.skipIf(
