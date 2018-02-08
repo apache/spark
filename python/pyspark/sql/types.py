@@ -1759,28 +1759,26 @@ def _check_series_convert_timestamps_internal(s, timezone):
     from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if is_datetime64_dtype(s.dtype):
+        # tz_localize with ambiguous=False has the same behavior of pytz.localize
+        # >>> import datetime
+        # >>> import pandas as pd
+        # >>> import pytz
+        # >>>
+        # >>> t = datetime.datetime(2015, 11, 1, 1, 23, 24)
+        # >>> ts = pd.Series([t])
+        # >>> tz = pytz.timezone('America/New_York')
+        # >>>
+        # >>> ts.dt.tz_localize(tz, ambiguous=False)
+        # 0   2015-11-01 01:23:24-05:00
+        # dtype: datetime64[ns, America/New_York]
+        # >>>
+        # >>> ts.dt.tz_localize(tz, ambiguous=True)
+        # 0   2015-11-01 01:23:24-04:00
+        # dtype: datetime64[ns, America/New_York]
+        # >>>
+        # >>> str(tz.localize(t))
+        # '2015-11-01 01:23:24-05:00'
         tz = timezone or _get_local_timezone()
-        """
-        tz_localize with ambiguous=False has the same behavior of pytz.localize
-        >>> import datetime
-        >>> import pandas as pd
-        >>> import pytz
-        >>>
-        >>> t = datetime.datetime(2015, 11, 1, 1, 23, 24)
-        >>> ts = pd.Series([t])
-        >>> tz = pytz.timezone('America/New_York')
-        >>>
-        >>> ts.dt.tz_localize(tz, ambiguous=False)
-        >>> 0   2015-11-01 01:23:24-05:00
-        >>> dtype: datetime64[ns, America/New_York]
-        >>>
-        >>> ts.dt.tz_localize(tz, ambiguous=True)
-        >>> 0   2015-11-01 01:23:24-04:00
-        >>> dtype: datetime64[ns, America/New_York]
-        >>>
-        >>> str(tz.localize(t))
-        >>> '2015-11-01 01:23:24-05:00'
-        """
         return s.dt.tz_localize(tz, ambiguous=False).dt.tz_convert('UTC')
     elif is_datetime64tz_dtype(s.dtype):
         return s.dt.tz_convert('UTC')

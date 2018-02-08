@@ -3670,10 +3670,8 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(pdf_col_names, df.columns)
         self.assertEqual(pdf_col_names, df_arrow.columns)
 
+    # Regression test for SPARK-23314
     def test_timestamp_dst(self):
-        """
-        SPARK-23314: Test daylight saving time
-        """
         import pandas as pd
         import datetime
         # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
@@ -4326,6 +4324,17 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(expected.collect(), res1.collect())
         self.assertEquals(expected.collect(), res2.collect())
 
+    # Regression test for SPARK-23314
+    def test_timestamp_dst(self):
+        import datetime
+        from pyspark.sql.functions import pandas_udf
+        # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
+        dt = datetime.datetime(2015, 11, 1, 1, 29, 30)
+        df = spark.createDataFrame([dt], 'timestamp').toDF('time')
+        foo_udf = pandas_udf(lambda dt: dt, 'timestamp')
+        result = df.withColumn('time', foo_udf(df.time))
+        self.assertEquals(df.collect(), result.collect())
+
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
@@ -4496,6 +4505,17 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
                 df.groupby('id').apply(f).collect()
+
+    # Regression test for SPARK-23314
+    def test_timestamp_dst(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
+        dt = datetime.datetime(2015, 11, 1, 1, 29, 30)
+        df = spark.createDataFrame([dt], 'timestamp').toDF('time')
+        foo_udf = pandas_udf(lambda pdf: pdf, 'time timestamp', PandasUDFType.GROUPED_MAP)
+        result = df.groupby('time').apply(foo_udf)
+        self.assertPandasEqual(df.toPandas(), result.toPandas())
 
 
 @unittest.skipIf(
