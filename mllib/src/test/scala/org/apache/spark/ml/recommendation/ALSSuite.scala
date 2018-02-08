@@ -596,13 +596,11 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       case (colName, sqlType) =>
         MLTestingUtils.checkNumericTypesALS(als, spark, colName, sqlType) {
           (ex, act) =>
-            ex.userFactors.first().getSeq[Float](1) === act.userFactors.first.getSeq[Float](1)
-        } { (ex, act, _) =>
-          testTransformerByGlobalCheckFunc[Float](_: DataFrame, act, "prediction") {
-            case actRows: Seq[Row] =>
-              ex.transform(_: DataFrame).select("prediction").first.getDouble(0) ~==
-                actRows(0).getDouble(0) absTol 1e-6
-          }
+            ex.userFactors.first().getSeq[Float](1) === act.userFactors.first().getSeq[Float](1)
+        } { (ex, act, df) =>
+          ex.transform(df).selectExpr("cast(prediction as double)").first().getDouble(0) ~==
+            act.transform(df).selectExpr("cast(prediction as double)").first().getDouble(0) absTol
+              1e-6
         }
     }
     // check user/item ids falling outside of Int range
