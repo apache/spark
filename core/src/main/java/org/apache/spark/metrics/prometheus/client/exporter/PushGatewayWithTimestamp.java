@@ -209,55 +209,6 @@ public class PushGatewayWithTimestamp {
     }
 
 
-    /**
-     * Pushes all metrics in a registry, replacing all those with the same job and instance.
-     * <p>
-     * This uses the PUT HTTP method.
-     * @deprecated use {@link #push(CollectorRegistry, String, Map)}
-     */
-    @Deprecated
-    public void push(CollectorRegistry registry, String job, String instance) throws IOException {
-        push(registry, job, Collections.singletonMap("instance", instance));
-    }
-
-    /**
-     * Pushes all metrics in a Collector, replacing all those with the same job and instance.
-     * <p>
-     * This is useful for pushing a single Gauge.
-     * <p>
-     * This uses the PUT HTTP method.
-     * @deprecated use {@link #push(Collector, String, Map)}
-     */
-    @Deprecated
-    public void push(Collector collector, String job, String instance) throws IOException {
-        push(collector, job, Collections.singletonMap("instance", instance));
-    }
-
-    /**
-     * Pushes all metrics in a Collector,
-     * replacing only previously pushed metrics of the same name.
-     * <p>
-     * This is useful for pushing a single Gauge.
-     * <p>
-     * This uses the POST HTTP method.
-     * @deprecated use {@link #pushAdd(Collector, String, Map)}
-     */
-    @Deprecated
-    public void pushAdd(Collector collector, String job, String instance) throws IOException {
-        pushAdd(collector, job, Collections.singletonMap("instance", instance));
-    }
-
-    /**
-     * Deletes metrics from the Pushgateway.
-     * <p>
-     * This uses the DELETE HTTP method.
-     * @deprecated use {@link #delete(String, Map)}
-     */
-    @Deprecated
-    public void delete(String job, String instance) throws IOException {
-        delete(job, Collections.singletonMap("instance", instance));
-    }
-
     void doRequest(CollectorRegistry registry, String job, Map<String,
             String> groupingKey, String method, String timestamp) throws IOException {
         String url = address + "/metrics/job/" + URLEncoder.encode(job, "UTF-8");
