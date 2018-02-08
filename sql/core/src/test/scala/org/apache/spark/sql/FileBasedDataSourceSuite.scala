@@ -106,7 +106,6 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         assert(df1.schema.equals(df.schema.asNullable))
       }
     }
-
   }
 
   allFileBasedDataSources.foreach { format =>
