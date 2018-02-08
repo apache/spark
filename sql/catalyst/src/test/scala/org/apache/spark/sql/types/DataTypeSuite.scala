@@ -134,6 +134,15 @@ class DataTypeSuite extends SparkFunSuite {
     assert(mapped === expected)
   }
 
+  test("fieldNames and names returns field names") {
+    val struct = StructType(
+      StructField("a", LongType) :: StructField("b", FloatType) :: Nil)
+
+    assert(struct.fieldNames === Seq("a", "b"))
+    assert(struct.names === Seq("a", "b"))
+    assert(struct.fieldNames === struct.names)
+  }
+
   test("merge where right contains type conflict") {
     val left = StructType(
       StructField("a", LongType) ::
