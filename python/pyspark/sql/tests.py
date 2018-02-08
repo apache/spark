@@ -2243,11 +2243,6 @@ class SQLTests(ReusedSQLTestCase):
                .replace(False, True).first())
         self.assertTupleEqual(row, (True, True))
 
-        # replace list while value is not given (default to None)
-        row = self.spark.createDataFrame(
-            [(u'Alice', 10, 80.0)], schema).replace(["Alice", "Bob"]).first()
-        self.assertTupleEqual(row, (None, 10, 80.0))
-
         # replace string with None and then drop None rows
         row = self.spark.createDataFrame(
             [(u'Alice', 10, 80.0)], schema).replace(u'Alice', None).dropna()
@@ -2282,6 +2277,12 @@ class SQLTests(ReusedSQLTestCase):
         with self.assertRaises(ValueError):
             self.spark.createDataFrame(
                 [(u'Alice', 10, 80.1)], schema).replace({u"Alice": u"Bob", 10: 20}).first()
+
+        with self.assertRaisesRegexp(
+                TypeError,
+                'value argument is required when to_replace is not a dictionary.'):
+            self.spark.createDataFrame(
+                [(u'Alice', 10, 80.0)], schema).replace(["Alice", "Bob"]).first()
 
     def test_capture_analysis_exception(self):
         self.assertRaises(AnalysisException, lambda: self.spark.sql("select abc"))
