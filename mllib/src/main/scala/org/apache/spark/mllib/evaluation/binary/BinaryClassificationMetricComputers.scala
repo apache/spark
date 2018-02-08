@@ -60,7 +60,7 @@ private[evaluation] object Recall extends BinaryClassificationMetricComputer {
 }
 
 
-/** False Omission Rate. Defined as 0.0 when there are no positive examples. */
+/** False Omission Rate by threshold. Defined as 0.0 when there are no positive examples. */
 private[evaluation] object FalseOmissionRate extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double = {
     val totalNegatives = c.numTrueNegatives + c.numFalseNegatives
@@ -72,7 +72,7 @@ private[evaluation] object FalseOmissionRate extends BinaryClassificationMetricC
   }
 }
 
-/** False Discovery Rate. Defined as 0.0 when there are no positive examples. */
+/** False Discovery Rate  by threshold. Defined as 0.0 when there are no positive examples. */
 private[evaluation] object FalseDiscoveryRate extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double = {
     if (c.numPositives == 0) {
@@ -83,7 +83,7 @@ private[evaluation] object FalseDiscoveryRate extends BinaryClassificationMetric
   }
 }
 
-/** Negative Predictive Value. Defined as 0.0 when there are no positive examples. */
+/** Negative Predictive Value by threshold. Defined as 0.0 when there are no positive examples. */
 private[evaluation] object NegativePredictiveValue extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double = {
     val totalNegatives = c.numTrueNegatives + c.numFalseNegatives
@@ -95,7 +95,7 @@ private[evaluation] object NegativePredictiveValue extends BinaryClassificationM
   }
 }
 
-/** False Negative Rate. Defined as 0.0 when there are no positive examples. */
+/** False Negative Rate by threshold. Defined as 0.0 when there are no positive examples. */
 private[evaluation] object FalseNegativeRate extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double = {
     if (c.numNegatives == 0) {
@@ -107,7 +107,7 @@ private[evaluation] object FalseNegativeRate extends BinaryClassificationMetricC
 }
 
 
-/** True Negative Rate. Defined as 0.0 when there are no positive examples. */
+/** True Negative Rate by threshold. Defined as 0.0 when there are no positive examples. */
 private[evaluation] object TrueNegativeRate extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double = {
     if (c.numNegatives == 0) {
