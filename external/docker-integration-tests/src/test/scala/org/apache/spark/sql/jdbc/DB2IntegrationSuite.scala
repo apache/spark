@@ -25,10 +25,8 @@ import org.scalatest.Ignore
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{BooleanType, ByteType, ShortType, StructType}
-import org.apache.spark.tags.DockerTest
 
 
-@DockerTest
 @Ignore // AMPLab Jenkins needs to be updated before shared memory works on docker
 class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {

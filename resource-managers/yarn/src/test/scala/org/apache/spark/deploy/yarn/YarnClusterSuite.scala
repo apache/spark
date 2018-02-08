@@ -40,14 +40,12 @@ import org.apache.spark.launcher._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
   SparkListenerExecutorAdded}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
-import org.apache.spark.tags.ExtendedYarnTest
 import org.apache.spark.util.Utils
 
 /**
  * Integration tests for YARN; these tests use a mini Yarn cluster to run Spark-on-YARN
  * applications.
  */
-@ExtendedYarnTest
 class YarnClusterSuite extends BaseYarnClusterSuite {
 
   override def newYarnConfig(): YarnConfiguration = new YarnConfiguration()
