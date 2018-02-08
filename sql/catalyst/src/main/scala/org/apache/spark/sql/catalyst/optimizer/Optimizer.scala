@@ -400,13 +400,24 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
     // Push down deterministic projection through UNION ALL
     case p @ Project(projectList, Union(children)) =>
       assert(children.nonEmpty)
-      if (projectList.forall(_.deterministic)) {
-        val newFirstChild = Project(projectList, children.head)
+      val (deterministicList, nonDeterministic) = projectList.partition(_.deterministic)
+
+      if (deterministicList.nonEmpty) {
+        val newFirstChild = Project(deterministicList, children.head)
         val newOtherChildren = children.tail.map { child =>
           val rewrites = buildRewrites(children.head, child)
-          Project(projectList.map(pushToRight(_, rewrites)), child)
+          Project(deterministicList.map(pushToRight(_, rewrites)), child)
         }
-        Union(newFirstChild +: newOtherChildren)
+        val newUnion = Union(newFirstChild +: newOtherChildren)
+        if(nonDeterministic.nonEmpty) {
+           val newProjectList = projectList.collect {
+            case a: Alias if a.deterministic => a.toAttribute
+            case x => x
+          }
+          Project(newProjectList, newUnion)
+        } else {
+          newUnion
+        }
       } else {
         p
       }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{Literal, Rand}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -75,6 +75,58 @@ class SetOperationSuite extends PlanTest {
       Union(testRelation.select('a) ::
         testRelation2.select('d) ::
         testRelation3.select('g) :: Nil).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-23356 union: expressions in project list are addition to each side") {
+    val unionQuery = testUnion.select(('a + 1).as("aa"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.select(('a + 1).as("aa")) ::
+        testRelation2.select(('d + 1).as("aa")) ::
+        testRelation3.select(('g + 1).as("aa")) :: Nil).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-23356 union: expressions in project list are attribute addition to each side") {
+    val unionQuery = testUnion.select(('a + 'b).as("ab"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.select(('a + 'b).as("ab")) ::
+        testRelation2.select(('d + 'e).as("ab")) ::
+        testRelation3.select(('g + 'h).as("ab")) :: Nil).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-23356 union: project to each side with non-deterministic expression") {
+    val unionQuery = testUnion.select('a, Rand(10).as("rnd"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.select('a) ::
+        testRelation2.select('d) ::
+        testRelation3.select('g) :: Nil).select('a, Rand(10).as("rnd")).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-23356 union: project to each side with non-deterministic expression of alias") {
+    val unionQuery = testUnion.select('a.as("aa"), Rand(10).as("rnd"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.select('a.as("aa")) ::
+        testRelation2.select('d.as("aa")) ::
+        testRelation3.select('g.as("aa")) :: Nil)
+        .select('aa, Rand(10).as("rnd")).analyze
+    comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("SPARK-23356 union: with non-deterministic expression and addition expression") {
+    val unionQuery = testUnion.select(('a + 'b).as("ab"), Rand(10).as("rnd"))
+    val unionOptimized = Optimize.execute(unionQuery.analyze)
+    val unionCorrectAnswer =
+      Union(testRelation.select(('a + 'b).as("ab")) ::
+        testRelation2.select(('d + 'e).as("ab")) ::
+        testRelation3.select(('g + 'h).as("ab")) :: Nil)
+        .select('ab, Rand(10).as("rnd")).analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
   }
 
