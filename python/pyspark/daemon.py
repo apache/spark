@@ -29,7 +29,7 @@ from socket import AF_INET, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.worker import main as worker_main
-from pyspark.serializers import read_int, write_int
+from pyspark.serializers import read_int, write_int, write_long
 
 
 def compute_real_exit_code(exit_code):
@@ -82,13 +82,13 @@ def manager(parent_port, token):
     socket_to_parent = socket.socket(AF_INET, SOCK_STREAM)
     socket_to_parent.connect(('127.0.0.1', parent_port))
     outfile = socket_to_parent.makefile(mode="wb")
-    write_int(token, outfile)
+    write_long(token, outfile)
     write_int(listen_port, outfile)
     outfile.flush()
     outfile.close()
     socket_to_parent.close()
 
-    # re-open stdin in 'wb' mode
+    # re-open stdin in 'rb' mode
     stdin_bin = os.fdopen(sys.stdin.fileno(), 'rb', 4)
 
     def shutdown(code):
@@ -197,7 +197,7 @@ if __name__ == '__main__':
         print >> sys.stderr, "PYSPARK_DAEMON_TOKEN environment variable is not set"
         sys.exit(1)
     try:
-        token = int(token_string)
+        token = long(token_string)
     except ValueError:
         print >> sys.stderr, \
             "Non-numeric value set in environment variable PYSPARK_DAEMON_TOKEN:", token_string
