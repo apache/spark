@@ -119,10 +119,10 @@ class JavaParams(JavaWrapper, Params):
         Transforms the embedded params to the companion Java object.
         """
         for param in self.params:
-            if param in self._paramMap:
+            if self.isSet(param):
                 pair = self._make_java_param_pair(param, self._paramMap[param])
                 self._java_obj.set(pair)
-            if param in self._defaultParamMap:
+            if self.hasDefault(param):
                 pair = self._make_java_param_pair(param, self._defaultParamMap[param])
                 self._java_obj.setDefaultPair(pair)
 
