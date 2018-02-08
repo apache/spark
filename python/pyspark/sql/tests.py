@@ -4333,7 +4333,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import pandas_udf
         # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
         dt = datetime.datetime(2015, 11, 1, 1, 29, 30)
-        df = spark.createDataFrame([dt], 'timestamp').toDF('time')
+        df = self.spark.createDataFrame([dt], 'timestamp').toDF('time')
         foo_udf = pandas_udf(lambda dt: dt, 'timestamp')
         result = df.withColumn('time', foo_udf(df.time))
         self.assertEquals(df.collect(), result.collect())
@@ -4515,7 +4515,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
 
         # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
         dt = datetime.datetime(2015, 11, 1, 1, 29, 30)
-        df = spark.createDataFrame([dt], 'timestamp').toDF('time')
+        df = self.spark.createDataFrame([dt], 'timestamp').toDF('time')
         foo_udf = pandas_udf(lambda pdf: pdf, 'time timestamp', PandasUDFType.GROUPED_MAP)
         result = df.groupby('time').apply(foo_udf)
         self.assertPandasEqual(df.toPandas(), result.toPandas())
