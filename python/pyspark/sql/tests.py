@@ -3673,18 +3673,17 @@ class ArrowTests(ReusedSQLTestCase):
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
         import pandas as pd
-        import datetime
         # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
-        dt = datetime.datetime(2015, 11, 1, 1, 29, 30)
-        pdf_1 = pd.DataFrame({'time': [dt]})
-        df_2 = self.spark.createDataFrame([dt], 'timestamp').toDF('time')
-        df_3 = self.spark.createDataFrame(pdf_1)
+        dt = [datetime.datetime(2015, 11, 1, 0, 30),
+              datetime.datetime(2015, 11, 1, 1, 30),
+              datetime.datetime(2015, 11, 1, 2, 30)]
+        pdf = pd.DataFrame({'time': dt})
 
-        self.assertPandasEqual(pdf_1, df_2.toPandas())
-        self.assertPandasEqual(pdf_1, df_3.toPandas())
+        df_from_python = self.spark.createDataFrame(dt, 'timestamp').toDF('time')
+        df_from_pandas = self.spark.createDataFrame(pdf)
 
-        self.assertEqual(dt, df_2.collect()[0].time)
-        self.assertEqual(dt, df_3.collect()[0].time)
+        self.assertPandasEqual(pdf, df_from_python.toPandas())
+        self.assertPandasEqual(pdf, df_from_pandas.toPandas())
 
 
 @unittest.skipIf(
@@ -4329,12 +4328,13 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
-        import datetime
         from pyspark.sql.functions import pandas_udf
         # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
-        dt = datetime.datetime(2015, 11, 1, 1, 29, 30)
-        df = self.spark.createDataFrame([dt], 'timestamp').toDF('time')
-        foo_udf = pandas_udf(lambda dt: dt, 'timestamp')
+        dt = [datetime.datetime(2015, 11, 1, 0, 30),
+              datetime.datetime(2015, 11, 1, 1, 30),
+              datetime.datetime(2015, 11, 1, 2, 30)]
+        df = self.spark.createDataFrame(dt, 'timestamp').toDF('time')
+        foo_udf = pandas_udf(lambda x: x, 'timestamp')
         result = df.withColumn('time', foo_udf(df.time))
         self.assertEquals(df.collect(), result.collect())
 
@@ -4512,12 +4512,13 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
-
         # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
-        dt = datetime.datetime(2015, 11, 1, 1, 29, 30)
-        df = self.spark.createDataFrame([dt], 'timestamp').toDF('time')
+        dt = [datetime.datetime(2015, 11, 1, 0, 30),
+              datetime.datetime(2015, 11, 1, 1, 30),
+              datetime.datetime(2015, 11, 1, 2, 30)]
+        df = self.spark.createDataFrame(dt, 'timestamp').toDF('time')
         foo_udf = pandas_udf(lambda pdf: pdf, 'time timestamp', PandasUDFType.GROUPED_MAP)
-        result = df.groupby('time').apply(foo_udf)
+        result = df.groupby('time').apply(foo_udf).sort('time')
         self.assertPandasEqual(df.toPandas(), result.toPandas())
 
 
