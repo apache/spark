@@ -230,6 +230,10 @@ def _create_batch(series, timezone):
             s = _check_series_convert_timestamps_internal(s.fillna(0), timezone)
             # TODO: need cast after Arrow conversion, ns values cause error with pandas 0.19.2
             return pa.Array.from_pandas(s, mask=mask).cast(t, safe=False)
+        elif t is not None and pa.types.is_string(t) and sys.version < '3':
+            # TODO: need decode before converting to Arrow in Python 2
+            return pa.Array.from_pandas(s.apply(
+                lambda v: v.decode("utf-8") if isinstance(v, str) else v), mask=mask, type=t)
         return pa.Array.from_pandas(s, mask=mask, type=t)
 
     arrs = [create_array(s, t) for s, t in series]
@@ -267,12 +271,15 @@ class ArrowStreamPandasSerializer(Serializer):
         """
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
-        from pyspark.sql.types import _check_dataframe_localize_timestamps
+        from pyspark.sql.types import from_arrow_schema, _check_dataframe_convert_date, \
+            _check_dataframe_localize_timestamps
         import pyarrow as pa
         reader = pa.open_stream(stream)
+        schema = from_arrow_schema(reader.schema)
         for batch in reader:
-            # NOTE: changed from pa.Columns.to_pandas, timezone issue in conversion fixed in 0.7.1
-            pdf = _check_dataframe_localize_timestamps(batch.to_pandas(), self._timezone)
+            pdf = batch.to_pandas()
+            pdf = _check_dataframe_convert_date(pdf, schema)
+            pdf = _check_dataframe_localize_timestamps(pdf, self._timezone)
             yield [c for _, c in pdf.iteritems()]
 
     def __repr__(self):

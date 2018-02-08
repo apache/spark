@@ -35,13 +35,11 @@ import org.apache.spark.sql.types.StructType
  * Physical plan node for scanning data from a data source.
  */
 case class DataSourceV2ScanExec(
-    fullOutput: Seq[AttributeReference],
+    output: Seq[AttributeReference],
     @transient reader: DataSourceReader)
   extends LeafExecNode with DataSourceReaderHolder with ColumnarBatchScan {
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2ScanExec]
-
-  override def producedAttributes: AttributeSet = AttributeSet(fullOutput)
 
   override def outputPartitioning: physical.Partitioning = reader match {
     case s: SupportsReportPartitioning =>
