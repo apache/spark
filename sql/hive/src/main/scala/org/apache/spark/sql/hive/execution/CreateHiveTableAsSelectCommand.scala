@@ -44,7 +44,8 @@ case class CreateHiveTableAsSelectCommand(
   private val tableIdentifier = tableDesc.identifier
 
   override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
-    if (sparkSession.sessionState.catalog.tableExists(tableIdentifier)) {
+    val catalog = sparkSession.sessionState.catalog
+    if (catalog.tableExists(tableIdentifier)) {
       assert(mode != SaveMode.Overwrite,
         s"Expect the table $tableIdentifier has been dropped when the save mode is Overwrite")
 
@@ -68,14 +69,16 @@ case class CreateHiveTableAsSelectCommand(
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
       assert(tableDesc.schema.isEmpty)
-      sparkSession.sessionState.catalog.createTable(
-        tableDesc.copy(schema = query.schema), ignoreIfExists = false)
+      catalog.createTable(tableDesc.copy(schema = query.schema), ignoreIfExists = false)
 
       try {
+        // Read back the metadata of the table which was created just now.
+        val createdTableMeta = catalog.getTableMetadata(tableDesc.identifier)
+        // For CTAS, there is no static partition values to insert.
+        val partition = createdTableMeta.partitionColumnNames.map(_ -> None).toMap
         InsertIntoHiveTable(
-          // Read back the metadata of the table which was created just now.
-          sparkSession.sessionState.catalog.getTableMetadata(tableDesc.identifier),
-          Map.empty,
+          createdTableMeta,
+          partition,
           query,
           overwrite = true,
           ifPartitionNotExists = false,
@@ -83,8 +86,7 @@ case class CreateHiveTableAsSelectCommand(
       } catch {
         case NonFatal(e) =>
           // drop the created table.
-          sparkSession.sessionState.catalog.dropTable(tableIdentifier, ignoreIfNotExists = true,
-            purge = false)
+          catalog.dropTable(tableIdentifier, ignoreIfNotExists = true, purge = false)
           throw e
       }
     }
