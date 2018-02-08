@@ -25,10 +25,9 @@ import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ListBuffer
-
 import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.execution.streaming.sources.{TextSocketOffset, TextSocketSourceProvider}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.sources.v2.DataSourceV2Options
 import org.apache.spark.sql.sources.v2.streaming.reader.MicroBatchReader
