@@ -25,6 +25,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
 class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
@@ -85,6 +86,26 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
         val df = spark.read.format(format).load(path)
         assert(df.schema.sameType(emptyDf.schema))
         checkAnswer(df, emptyDf)
+      }
+    }
+  }
+
+  Seq("orc", "parquet").foreach { format =>
+    test(s"SPARK-23271 empty RDD when saved should write a metadata only file - $format") {
+      withTempDir { inputPath =>
+        withTempPath { outputPath =>
+          val anySchema = StructType(StructField("anyName", StringType) :: Nil)
+          val df = spark.read.schema(anySchema).csv(inputPath.toString)
+          df.write.format(format).save(outputPath.toString)
+          val partFiles = outputPath.listFiles()
+            .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+          assert(partFiles.length === 1)
+
+          // Now read the file.
+          val df1 = spark.read.format(format).load(outputPath.toString)
+          checkAnswer(df1, Seq.empty[Row])
+          assert(df1.schema.equals(anySchema))
+        }
       }
     }
   }

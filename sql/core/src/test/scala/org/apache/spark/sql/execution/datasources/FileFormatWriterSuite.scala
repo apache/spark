@@ -33,24 +33,6 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-23271 empty dataframe when saved in parquet should write a metadata only file") {
-    withTempDir { inputPath =>
-      withTempPath { outputPath =>
-        val anySchema = StructType(StructField("anyName", StringType) :: Nil)
-        val df = spark.read.schema(anySchema).csv(inputPath.toString)
-        df.write.parquet(outputPath.toString)
-        val partFiles = outputPath.listFiles()
-          .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
-        assert(partFiles.length === 1)
-
-        // Now read the file.
-        val df1 = spark.read.parquet(outputPath.toString)
-        checkAnswer(df1, Seq.empty[Row])
-        assert(df1.schema.equals(anySchema))
-      }
-    }
-  }
-
   test("SPARK-22252: FileFormatWriter should respect the input query schema") {
     withTable("t1", "t2", "t3", "t4") {
       spark.range(1).select('id as 'col1, 'id as 'col2).write.saveAsTable("t1")
