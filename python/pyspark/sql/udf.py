@@ -112,30 +112,30 @@ class UserDefinedFunction(object):
             else:
                 self._returnType_placeholder = _parse_datatype_string(self._returnType)
 
-        if self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+        if self.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
+            try:
+                to_arrow_type(self._returnType_placeholder)
+            except TypeError:
+                raise NotImplementedError(
+                    "Invalid returnType with scalar Pandas UDFs: %s is "
+                    "not supported" % str(self._returnType_placeholder))
+        elif self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
             if isinstance(self._returnType_placeholder, StructType):
                 try:
                     to_arrow_schema(self._returnType_placeholder)
                 except TypeError:
                     raise NotImplementedError(
-                        "Invalid returnType with a grouped map Pandas UDF: "
+                        "Invalid returnType with grouped map Pandas UDFs: "
                         "%s is not supported" % str(self._returnType_placeholder))
             else:
-                raise TypeError("Invalid returnType for a grouped map Pandas "
-                                "UDF: returnType must be a StructType.")
-        elif self.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
-            try:
-                to_arrow_type(self._returnType_placeholder)
-            except TypeError:
-                raise NotImplementedError(
-                    "Invalid returnType with a scalar Pandas UDF: %s is "
-                    "not supported" % str(self._returnType_placeholder))
+                raise TypeError("Invalid returnType for grouped map Pandas "
+                                "UDFs: returnType must be a StructType.")
         elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
             try:
                 to_arrow_type(self._returnType_placeholder)
             except TypeError:
                 raise NotImplementedError(
-                    "Invalid returnType with a grouped aggregate Pandas UDF: "
+                    "Invalid returnType with grouped aggregate Pandas UDFs: "
                     "%s is not supported" % str(self._returnType_placeholder))
 
         return self._returnType_placeholder

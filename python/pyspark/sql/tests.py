@@ -3718,7 +3718,7 @@ class PandasUDFTests(ReusedSQLTestCase):
         @pandas_udf(returnType='double', functionType=PandasUDFType.SCALAR)
         def foo(x):
             return x
-        self.assertEqual(foo.returnType, schema[0].dataType)
+        self.assertEqual(foo.returnType, DoubleType())
         self.assertEqual(foo.evalType, PythonEvalType.SQL_SCALAR_PANDAS_UDF)
 
         @pandas_udf(returnType=schema, functionType=PandasUDFType.GROUPED_MAP)
@@ -4032,7 +4032,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
-                    'Invalid returnType.*a scalar Pandas UDF.*MapType'):
+                    'Invalid returnType.*scalar Pandas UDF.*MapType'):
                 pandas_udf(lambda x: x * 1.0, MapType(LongType(), LongType()))
 
     def test_vectorized_udf_return_scalar(self):
@@ -4072,13 +4072,13 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
-                    'Invalid returnType.*a scalar Pandas UDF.*MapType'):
+                    'Invalid returnType.*scalar Pandas UDF.*MapType'):
                 pandas_udf(lambda x: x, MapType(StringType(), IntegerType()))
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
-                    'Invalid returnType.*a scalar Pandas UDF.*BinaryType'):
+                    'Invalid returnType.*scalar Pandas UDF.*BinaryType'):
                 pandas_udf(lambda x: x, BinaryType())
 
     def test_vectorized_udf_dates(self):
@@ -4296,7 +4296,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
             .withColumn("vs", array([lit(i) for i in range(20, 30)])) \
             .withColumn("v", explode(col('vs'))).drop('vs')
 
-    def test_simple(self):
+    def test_supported_types(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType, array, col
         df = self.data.withColumn("arr", array(col("id")))
 
@@ -4412,7 +4412,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
-                    'Invalid returnType.*a grouped map Pandas UDF.*MapType'):
+                    'Invalid returnType.*grouped map Pandas UDF.*MapType'):
                 pandas_udf(
                     lambda pdf: pdf,
                     'id long, v map<int, int>',
@@ -4448,7 +4448,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
-                    'Invalid returnType.*a grouped map Pandas UDF.*MapType'):
+                    'Invalid returnType.*grouped map Pandas UDF.*MapType'):
                 pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
 
         schema = StructType(
@@ -4457,7 +4457,7 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     NotImplementedError,
-                    'Invalid returnType.*a grouped map Pandas UDF.*ArrayType.*TimestampType'):
+                    'Invalid returnType.*grouped map Pandas UDF.*ArrayType.*TimestampType'):
                 pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
 
 
@@ -4590,9 +4590,10 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(NotImplementedError, 'not supported'):
-                @pandas_udf(ArrayType(ArrayType(TimestampType())), PandasUDFType.GROUPED_AGG)
-                def mean_and_std_udf(v):
-                    return v
+                pandas_udf(
+                    lambda x: x,
+                    ArrayType(ArrayType(TimestampType())),
+                    PandasUDFType.GROUPED_AGG)
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(NotImplementedError, 'not supported'):
