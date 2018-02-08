@@ -53,21 +53,15 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val EVENT_LOG_BLOCK_UPDATES_FRACTION =
-    ConfigBuilder("spark.eventLog.logBlockUpdates.fraction")
-      .doc("Expected number of times each blockUpdated event is chosen to log, " +
-        "fraction must be [0, 1]. 0 by default, means disabled")
-      .doubleConf
-      .checkValue(_ >= 0, "The fraction must not be negative")
-      .createWithDefault(0.0)
+  private[spark] val EVENT_LOG_BLOCK_UPDATES =
+    ConfigBuilder("spark.eventLog.logBlockUpdates.enabled")
+      .booleanConf
+      .createWithDefault(false)
 
-  private[spark] val EVENT_LOG_EXECUTOR_METRICS_UPDATES_FRACTION =
-    ConfigBuilder("spark.eventLog.logExecutorMetricsUpdates.fraction")
-      .doc("Expected number of times each executorMetricsUpdate event is chosen to log, " +
-        "fraction must be [0, 1]. 0 by default, means disabled")
-      .doubleConf
-      .checkValue(_ >= 0, "The fraction must not be negative")
-      .createWithDefault(0.0)
+  private[spark] val EVENT_LOG_EXECUTOR_METRICS_UPDATES =
+    ConfigBuilder("spark.eventLog.logExecutorMetricsUpdates.enabled")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val EVENT_LOG_TESTING =
     ConfigBuilder("spark.eventLog.testing")

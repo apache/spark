@@ -22,7 +22,6 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
-import scala.util.Try
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
@@ -681,10 +680,7 @@ private[spark] object SparkConf extends Logging {
     DRIVER_MEMORY_OVERHEAD.key -> Seq(
       AlternateConfig("spark.yarn.driver.memoryOverhead", "2.3")),
     EXECUTOR_MEMORY_OVERHEAD.key -> Seq(
-      AlternateConfig("spark.yarn.executor.memoryOverhead", "2.3")),
-    EVENT_LOG_BLOCK_UPDATES_FRACTION.key -> Seq(
-      AlternateConfig("spark.eventLog.logBlockUpdates.enabled", "2.3",
-        v => if (Try(v.toBoolean).getOrElse(false)) "1.0" else "0.0"))
+      AlternateConfig("spark.yarn.executor.memoryOverhead", "2.3"))
   )
 
   /**

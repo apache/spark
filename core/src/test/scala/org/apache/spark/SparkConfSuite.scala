@@ -339,15 +339,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     }
   }
 
-  test("test deprecated conf spark.eventLog.logBlockUpdates.enabled") {
-    val conf = new SparkConf()
-    conf.set("spark.eventLog.logBlockUpdates.enabled", "true")
-    assert(conf.getDouble("spark.eventLog.logBlockUpdates.fraction", 0.5) === 1.0)
-    conf.set("spark.eventLog.logBlockUpdates.enabled", "false")
-    assert(conf.getDouble("spark.eventLog.logBlockUpdates.fraction", 0.5) === 0.0)
-    conf.set("spark.eventLog.logBlockUpdates.fraction", "0.3")
-    assert(conf.getDouble("spark.eventLog.logBlockUpdates.fraction", 0.5) === 0.3)
-  }
 }
 
 class Class1 {}
