@@ -24,7 +24,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
@@ -139,6 +139,21 @@ case class DataSourceV2Relation(
         support
       case _ =>
         throw new AnalysisException(s"Data source is not writable: $sourceName")
+    }
+  }
+
+  override def doCanonicalize(): LogicalPlan = {
+    val c = super.doCanonicalize().asInstanceOf[DataSourceV2Relation]
+
+    // override output with canonicalized output to avoid attempting to configure a reader
+    var id = -1
+    val canonicalOutput: Seq[AttributeReference] = this.output.map { attr =>
+      id += 1
+      attr.withExprId(ExprId(id)).canonicalized.asInstanceOf[AttributeReference]
+    }
+
+    new DataSourceV2Relation(c.source, c.options) {
+      override lazy val output: Seq[AttributeReference] = canonicalOutput
     }
   }
 
