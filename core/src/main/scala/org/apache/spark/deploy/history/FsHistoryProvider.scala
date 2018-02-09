@@ -24,7 +24,7 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.util.Try
+import scala.util.{Success, Try}
 import scala.xml.Node
 
 import com.fasterxml.jackson.annotation.JsonIgnore
@@ -395,6 +395,52 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
+  val APP_GRP = "appId"
+  val ATTEMPT_GRP = "attemptId"
+  val appIdRegex = """(application_\d+_\d+)_(\d+).*""".r(APP_GRP, ATTEMPT_GRP)
+  private def updateAppList(statuses: Seq[FileStatus]) = {
+    statuses.foreach { fstat =>
+      logInfo(s"Processing file status $fstat")
+      val logPath = fstat.getPath
+      appIdRegex
+        .findAllMatchIn(logPath.getName)
+        .foreach { m =>
+          val appId = m.group(APP_GRP)
+          val attemptId = m.group(ATTEMPT_GRP)
+
+          Try(load(appId)).recover {
+            case e: NoSuchElementException =>
+              logInfo(s"Gernerating application event for $appId from $fstat")
+              val attemptInfo = ApplicationAttemptInfo(
+                Some(attemptId),
+                // timestamp will be refined during replay
+                new Date(fstat.getModificationTime),
+                new Date(fstat.getModificationTime),
+                new Date(fstat.getModificationTime),
+                1000,
+                fstat.getOwner,
+                false,
+                "2.3.0-tbd-by-replay"
+              )
+              val appInfo = new ApplicationInfoWrapper(
+                new ApplicationInfo(appId, "tbd-by-replay-" + logPath.getName,
+                  None, None, None, None, Seq(attemptInfo)),
+                List(new AttemptInfoWrapper(attemptInfo, logPath.toString, fstat.getLen,
+                  None, None, None, None)))
+
+              synchronized {
+                activeUIs.get((appId, Some(attemptId))).foreach { ui =>
+                  ui.invalidate()
+                  ui.ui.store.close()
+                }
+              }
+              listing.write(appInfo)
+              Success(appInfo)
+          }
+        }
+    }
+  }
+
   /**
    * Builds the application list based on the current contents of the log directory.
    * Tries to reuse as much of the data already in memory as possible, by not reading
@@ -445,7 +491,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       if (updated.nonEmpty) {
         logDebug(s"New/updated attempts found: ${updated.size} ${updated.map(_.getPath)}")
       }
-
+      updateAppList(updated)
       val tasks = updated.map { entry =>
         try {
           replayExecutor.submit(new Runnable {
