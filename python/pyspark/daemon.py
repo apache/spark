@@ -184,23 +184,23 @@ def manager(parent_port, token):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print >> sys.stderr, "No parent port number specified"
+        sys.stderr.write("No parent port number specified\n")
         sys.exit(1)
     try:
         parent_port = int(sys.argv[1])
     except ValueError:
-        print >> sys.stderr, "Non-numeric port number specified:", sys.argv[1]
+        sys.stderr.write("Non-numeric port number specified: %s\n" % sys.argv[1])
         sys.exit(1)
 
     token_string = os.environ.get("PYSPARK_DAEMON_TOKEN")
     if token_string is None:
-        print >> sys.stderr, "PYSPARK_DAEMON_TOKEN environment variable is not set"
+        sys.stderr.write("PYSPARK_DAEMON_TOKEN environment variable is not set\n")
         sys.exit(1)
     try:
-        token = long(token_string)
+        # works for long values too
+        token = int(token_string)
     except ValueError:
-        print >> sys.stderr, \
-            "Non-numeric value set in environment variable PYSPARK_DAEMON_TOKEN:", token_string
+        sys.stderr.write("Non-numeric value set in environment variable PYSPARK_DAEMON_TOKEN: %s\n" % token_string)
         sys.exit(1)
 
     manager(parent_port, token)
