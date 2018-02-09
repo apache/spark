@@ -209,7 +209,7 @@ public class PushGatewayWithTimestamp {
     }
 
 
-    void doRequest(CollectorRegistry registry, String job, Map<String,
+    private void doRequest(CollectorRegistry registry, String job, Map<String,
             String> groupingKey, String method, String timestamp) throws IOException {
         String url = address + "/metrics/job/" + URLEncoder.encode(job, "UTF-8");
         if (groupingKey != null) {
@@ -249,7 +249,6 @@ public class PushGatewayWithTimestamp {
         } catch (Exception ex) {
             logger.error("Sending metrics failed due to: ", ex);
         }
-
         finally {
             connection.disconnect();
         }

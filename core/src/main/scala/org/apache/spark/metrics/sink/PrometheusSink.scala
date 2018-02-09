@@ -89,12 +89,10 @@ private[spark] class PrometheusSink(
         case _ => Map("role" -> role)
       }
 
-
       pushGateway.pushAdd(pushRegistry, job, groupingKey.asJava,
         s"${System.currentTimeMillis}")
 
     }
-
   }
 
   val DEFAULT_PUSH_PERIOD: Int = 10
@@ -145,7 +143,6 @@ private[spark] class PrometheusSink(
 
   override def start(): Unit = {
     sparkMetricExports.register(pushRegistry)
-
     reporter.start(pollPeriod, pollUnit)
   }
 

@@ -15,12 +15,18 @@ package org.apache.spark.metrics.prometheus.client.exporter;
 
 import java.io.IOException;
 import java.io.Writer;
+import java.util.Collections;
 import java.util.Enumeration;
+import java.util.List;
 
 import io.prometheus.client.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Writing {@link Collector.MetricFamilySamples}
+ * into the format expected by Prometheus {@see http://prometheus.io/docs/instrumenting/exposition_formats/}
+ */
 public class TextFormatWithTimestamp {
     private static final Logger logger = LoggerFactory.getLogger(TextFormatWithTimestamp.class);
 
@@ -29,121 +35,120 @@ public class TextFormatWithTimestamp {
      */
     public static final String CONTENT_TYPE_004 = "text/plain; version=0.0.4; charset=utf-8";
 
-    private static StringBuilder jsonMessageLogBuilder = new StringBuilder();
-
+    /**
+     * Write out the text version 0.0.4 of the given MetricFamilySamples.
+     */
     public static void write004(Writer writer,
-                                Enumeration<Collector.MetricFamilySamples> mfs)throws IOException {
+                                Enumeration<Collector.MetricFamilySamples> mfs) throws IOException {
         write004(writer, mfs, null);
     }
 
     /**
-     * Write out the text version 0.0.4 of the given MetricFamilySamples.
+     * Enriches the given MetricFamilySamples with provided timestamp and
+     * writes it out in text version 0.0.4.
      */
-    public static void write004(Writer writer,Enumeration<Collector.MetricFamilySamples> mfs,
+    public static void write004(Writer writer, Enumeration<Collector.MetricFamilySamples> mfs,
                                 String timestamp) throws IOException {
-    /* See http://prometheus.io/docs/instrumenting/exposition_formats/
-     * for the output format specification. */
-    while(mfs.hasMoreElements()) {
-        Collector.MetricFamilySamples metricFamilySamples = mfs.nextElement();
+        String payload = buildTextFormat(mfs, timestamp);
 
-        logger.debug("Metrics data");
-        logger.debug(metricFamilySamples.toString());
-        logger.debug("Logging metrics as a json format:");
+        logger.debug("Metrics data (pushgateway payload): \n{}", payload);
 
+        writer.write(payload);
+    }
 
-        writer.write("# HELP ");
-        appendToJsonMessageLogBuilder("# HELP ");
-        writer.write(metricFamilySamples.name);
-        appendToJsonMessageLogBuilder(metricFamilySamples.name);
-        writer.write(' ');
-        appendToJsonMessageLogBuilder(' ');
-        writeEscapedHelp(writer, metricFamilySamples.help);
-        writer.write('\n');
-        appendToJsonMessageLogBuilder('\n');
+    /**
+     * Converts the given {@link Collector.MetricFamilySamples} collection into text version 0.0.4
+     * according to {@see http://prometheus.io/docs/instrumenting/exposition_formats/}
+     */
+    protected static String buildTextFormat(Enumeration<Collector.MetricFamilySamples> mfs, String timestamp) {
+        StringBuilder textFormatBuilder = new StringBuilder();
 
-        writer.write("# TYPE ");
-        appendToJsonMessageLogBuilder("# TYPE ");
-        writer.write(metricFamilySamples.name);
-        appendToJsonMessageLogBuilder(metricFamilySamples.name);
-        writer.write(' ');
-        appendToJsonMessageLogBuilder(' ');
-        writer.write(typeString(metricFamilySamples.type));
-        appendToJsonMessageLogBuilder(typeString(metricFamilySamples.type));
-        writer.write('\n');
-        appendToJsonMessageLogBuilder('\n');
+        for (Collector.MetricFamilySamples metricFamilySamples : Collections.list(mfs)) {
+            appendHelp(textFormatBuilder, metricFamilySamples.name, metricFamilySamples.help);
+            appendType(textFormatBuilder, metricFamilySamples.name, metricFamilySamples.type);
 
-        for (Collector.MetricFamilySamples.Sample sample: metricFamilySamples.samples) {
-            writer.write(sample.name);
-            appendToJsonMessageLogBuilder(sample.name);
-            if (sample.labelNames.size() > 0) {
-                writer.write('{');
-                appendToJsonMessageLogBuilder('{');
-                for (int i = 0; i < sample.labelNames.size(); ++i) {
-                    writer.write(sample.labelNames.get(i));
-                    appendToJsonMessageLogBuilder(sample.labelNames.get(i));
-                    writer.write("=\"");
-                    appendToJsonMessageLogBuilder("=\"");
-                    writeEscapedLabelValue(writer, sample.labelValues.get(i));
-                    writer.write("\",");
-                    appendToJsonMessageLogBuilder("\",");
-                }
-                writer.write('}');
-                appendToJsonMessageLogBuilder('}');
+            for (Collector.MetricFamilySamples.Sample sample : metricFamilySamples.samples) {
+                textFormatBuilder.append('\n');
+                appendMetricSample(textFormatBuilder, sample);
+                appendTimestamp(textFormatBuilder, timestamp);
             }
-            writer.write(' ');
-            appendToJsonMessageLogBuilder(' ');
-            writer.write(Collector.doubleToGoString(sample.value));
-            appendToJsonMessageLogBuilder(Collector.doubleToGoString(sample.value));
-            if(timestamp != null && !timestamp.isEmpty()) {
-                writer.write(" " + timestamp);
-                appendToJsonMessageLogBuilder(" " + timestamp);
-            }
-            writer.write('\n');
-            appendToJsonMessageLogBuilder('\n');
+
+            textFormatBuilder.append('\n');
         }
-        logger.debug("JSON: "+ jsonMessageLogBuilder);
+
+        return textFormatBuilder.toString();
+    }
+
+    private static void appendHelp(StringBuilder sb, String metricsFamilyName, String help) {
+        sb.append("# HELP ").append(metricsFamilyName).append(' ');
+        appendEscapedHelp(sb, help);
+    }
+
+    private static void appendType(StringBuilder sb, String metricsFamilyName, Collector.Type type) {
+        sb.append('\n');
+        sb.append("# TYPE ").append(metricsFamilyName).append(' ');
+        sb.append(typeString(type));
+    }
+
+    private static void appendLabels(StringBuilder sb, List<String> labels, List<String> values) {
+        sb.append('{');
+        for (int i = 0; i < labels.size(); ++i) {
+            if (i != 0) {
+                sb.append(',');
+            }
+
+            sb.append(labels.get(i)).append("=\"");
+            appendEscapedLabelValue(sb, values.get(i));
+            sb.append('\"');
+        }
+        sb.append('}');
+    }
+
+    private static void appendMetricSample(StringBuilder sb, Collector.MetricFamilySamples.Sample sample) {
+        sb.append(sample.name);
+        if (sample.labelNames.size() > 0) {
+            appendLabels(sb, sample.labelNames, sample.labelValues);
+        }
+        sb.append(' ').append(Collector.doubleToGoString(sample.value));
+    }
+
+    private static void appendTimestamp(StringBuilder sb, String timestamp) {
+        if (timestamp != null && !timestamp.isEmpty()) {
+            sb.append(" ").append(timestamp);
         }
     }
 
-    private static void writeEscapedHelp(Writer writer, String s) throws IOException {
+    private static void appendEscapedHelp(StringBuilder sb, String s) {
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             switch (c) {
                 case '\\':
-
-                    writer.append("\\\\");
-                    appendToJsonMessageLogBuilder("\\\\");
+                    sb.append("\\\\");
                     break;
                 case '\n':
-                    writer.append("\\n");
-                    appendToJsonMessageLogBuilder("\\n");
+                    sb.append("\\n");
                     break;
                 default:
-                    writer.append(c);
-                    appendToJsonMessageLogBuilder(c);
+                    sb.append(c);
             }
         }
     }
 
-    private static void writeEscapedLabelValue(Writer writer, String s) throws IOException {
+    private static void appendEscapedLabelValue(StringBuilder sb, String s) {
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             switch (c) {
                 case '\\':
-                    writer.append("\\\\");
-                    appendToJsonMessageLogBuilder("\\\\");
+                    sb.append("\\\\");
                     break;
                 case '\"':
-                    writer.append("\\\"");
-                    appendToJsonMessageLogBuilder("\\\"");
+                    sb.append("\\\"");
                     break;
                 case '\n':
-                    writer.append("\\n");
-                    appendToJsonMessageLogBuilder("\\n");
+                    sb.append("\\n");
                     break;
                 default:
-                    writer.append(c);
-                    appendToJsonMessageLogBuilder(c);
+                    sb.append(c);
             }
         }
     }
@@ -160,18 +165,6 @@ public class TextFormatWithTimestamp {
                 return "histogram";
             default:
                 return "untyped";
-        }
-    }
-
-    private static void appendToJsonMessageLogBuilder(String msg) {
-        if (logger.isDebugEnabled()) {
-            jsonMessageLogBuilder.append(msg);
-        }
-    }
-
-    private static void appendToJsonMessageLogBuilder(char c) {
-        if (logger.isDebugEnabled()) {
-            jsonMessageLogBuilder.append(c);
         }
     }
 }
