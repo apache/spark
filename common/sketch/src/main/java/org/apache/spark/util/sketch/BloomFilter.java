@@ -34,7 +34,7 @@ import java.io.OutputStream;
  *   <li>{@link String}</li>
  * </ul>
  * The false positive probability ({@code FPP}) of a Bloom filter is defined as the probability that
- * {@linkplain #mightContain(Object)} will erroneously return {@code true} for an object that hasu
+ * {@linkplain #mightContain(Object)} will erroneously return {@code true} for an object that has
  * not actually been put in the {@code BloomFilter}.
  *
  * The implementation is largely based on the {@code BloomFilter} class from Guava.

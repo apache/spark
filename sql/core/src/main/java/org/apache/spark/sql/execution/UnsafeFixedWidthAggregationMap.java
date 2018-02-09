@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution;
 import java.io.IOException;
 
 import org.apache.spark.SparkEnv;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection;
@@ -29,7 +30,6 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
-import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter;
 
 /**
  * Unsafe-based HashMap for performing aggregations where the aggregated values are fixed-width.
@@ -238,8 +238,8 @@ public final class UnsafeFixedWidthAggregationMap {
       SparkEnv.get().blockManager(),
       SparkEnv.get().serializerManager(),
       map.getPageSizeBytes(),
-      SparkEnv.get().conf().getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
-        UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
+      (int) SparkEnv.get().conf().get(
+        package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD()),
       map);
   }
 }

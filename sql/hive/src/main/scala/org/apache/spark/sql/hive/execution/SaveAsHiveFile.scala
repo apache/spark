@@ -51,21 +51,32 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       hadoopConf: Configuration,
       fileSinkConf: FileSinkDesc,
       outputLocation: String,
+      allColumns: Seq[Attribute],
       customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty,
       partitionAttributes: Seq[Attribute] = Nil): Set[String] = {
 
-    val isCompressed = hadoopConf.get("hive.exec.compress.output", "false").toBoolean
+    val isCompressed =
+      fileSinkConf.getTableInfo.getOutputFileFormatClassName.toLowerCase(Locale.ROOT) match {
+        case formatName if formatName.endsWith("orcoutputformat") =>
+          // For ORC,"mapreduce.output.fileoutputformat.compress",
+          // "mapreduce.output.fileoutputformat.compress.codec", and
+          // "mapreduce.output.fileoutputformat.compress.type"
+          // have no impact because it uses table properties to store compression information.
+          false
+        case _ => hadoopConf.get("hive.exec.compress.output", "false").toBoolean
+    }
+
     if (isCompressed) {
-      // Please note that isCompressed, "mapreduce.output.fileoutputformat.compress",
-      // "mapreduce.output.fileoutputformat.compress.codec", and
-      // "mapreduce.output.fileoutputformat.compress.type"
-      // have no impact on ORC because it uses table properties to store compression information.
       hadoopConf.set("mapreduce.output.fileoutputformat.compress", "true")
       fileSinkConf.setCompressed(true)
       fileSinkConf.setCompressCodec(hadoopConf
         .get("mapreduce.output.fileoutputformat.compress.codec"))
       fileSinkConf.setCompressType(hadoopConf
         .get("mapreduce.output.fileoutputformat.compress.type"))
+    } else {
+      // Set compression by priority
+      HiveOptions.getHiveWriteCompression(fileSinkConf.getTableInfo, sparkSession.sessionState.conf)
+        .foreach { case (compression, codec) => hadoopConf.set(compression, codec) }
     }
 
     val committer = FileCommitProtocol.instantiate(
@@ -78,7 +89,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       plan = plan,
       fileFormat = new HiveFileFormat(fileSinkConf),
       committer = committer,
-      outputSpec = FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations),
+      outputSpec =
+        FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, allColumns),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,

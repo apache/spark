@@ -139,7 +139,7 @@ private[streaming] class FileBasedWriteAheadLog(
     def readFile(file: String): Iterator[ByteBuffer] = {
       logDebug(s"Creating log reader with $file")
       val reader = new FileBasedWriteAheadLogReader(file, hadoopConf)
-      CompletionIterator[ByteBuffer, Iterator[ByteBuffer]](reader, reader.close _)
+      CompletionIterator[ByteBuffer, Iterator[ByteBuffer]](reader, () => reader.close())
     }
     if (!closeFileAfterWrite) {
       logFilesToRead.iterator.map(readFile).flatten.asJava

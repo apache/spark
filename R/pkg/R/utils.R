@@ -736,15 +736,6 @@ splitString <- function(input) {
   Filter(nzchar, unlist(strsplit(input, ",|\\s")))
 }
 
-convertToJSaveMode <- function(mode) {
- allModes <- c("append", "overwrite", "error", "ignore")
- if (!(mode %in% allModes)) {
-   stop('mode should be one of "append", "overwrite", "error", "ignore"')  # nolint
- }
- jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
- jmode
-}
-
 varargsToJProperties <- function(...) {
   pairs <- list(...)
   props <- newJObject("java.util.Properties")
@@ -918,4 +909,17 @@ hadoop_home_set <- function() {
 
 windows_with_hadoop <- function() {
   !is_windows() || hadoop_home_set()
+}
+
+# get0 not supported before R 3.2.0
+getOne <- function(x, envir, inherits = TRUE, ifnotfound = NULL) {
+  mget(x[1L], envir = envir, inherits = inherits, ifnotfound = list(ifnotfound))[[1L]]
+}
+
+# Returns a vector of parent directories, traversing up count times, starting with a full path
+# eg. traverseParentDirs("/Users/user/Library/Caches/spark/spark2.2", 1) should return
+# this "/Users/user/Library/Caches/spark/spark2.2"
+# and  "/Users/user/Library/Caches/spark"
+traverseParentDirs <- function(x, count) {
+  if (dirname(x) == x || count <= 0) x else c(x, Recall(dirname(x), count - 1))
 }

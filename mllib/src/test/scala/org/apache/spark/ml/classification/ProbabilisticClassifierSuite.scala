@@ -80,6 +80,24 @@ class ProbabilisticClassifierSuite extends SparkFunSuite {
       new TestProbabilisticClassificationModel("myuid", 2, 2).setThresholds(Array(-0.1, 0.1))
     }
   }
+
+  test("normalizeToProbabilitiesInPlace") {
+    val vec1 = Vectors.dense(1.0, 2.0, 3.0).toDense
+    ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(vec1)
+    assert(vec1 ~== Vectors.dense(1.0 / 6, 2.0 / 6, 3.0 / 6) relTol 1e-3)
+
+    // all-0 input test
+    val vec2 = Vectors.dense(0.0, 0.0, 0.0).toDense
+    intercept[IllegalArgumentException] {
+      ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(vec2)
+    }
+
+    // negative input test
+    val vec3 = Vectors.dense(1.0, -1.0, 2.0).toDense
+    intercept[IllegalArgumentException] {
+      ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(vec3)
+    }
+  }
 }
 
 object ProbabilisticClassifierSuite {

@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
+import java.io.Closeable
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
@@ -51,6 +55,14 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       throw new AnalysisException(
         s"Text data source supports only a string column, but you have ${tpe.simpleString}.")
     }
+  }
+
+  override def isSplitable(
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      path: Path): Boolean = {
+    val textOptions = new TextOptions(options)
+    super.isSplitable(sparkSession, options, path) && !textOptions.wholeText
   }
 
   override def inferSchema(
@@ -97,14 +109,26 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
     assert(
       requiredSchema.length <= 1,
       "Text data source only produces a single data column named \"value\".")
-
+    val textOptions = new TextOptions(options)
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    (file: PartitionedFile) => {
-      val reader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
-      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => reader.close()))
+    readToUnsafeMem(broadcastedHadoopConf, requiredSchema, textOptions.wholeText)
+  }
 
+  private def readToUnsafeMem(
+      conf: Broadcast[SerializableConfiguration],
+      requiredSchema: StructType,
+      wholeTextMode: Boolean): (PartitionedFile) => Iterator[UnsafeRow] = {
+
+    (file: PartitionedFile) => {
+      val confValue = conf.value.value
+      val reader = if (!wholeTextMode) {
+        new HadoopFileLinesReader(file, confValue)
+      } else {
+        new HadoopFileWholeTextReader(file, confValue)
+      }
+      Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => reader.close()))
       if (requiredSchema.isEmpty) {
         val emptyUnsafeRow = new UnsafeRow(0)
         reader.map(_ => emptyUnsafeRow)

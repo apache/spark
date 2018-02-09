@@ -18,9 +18,14 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
-import java.nio.file.Files
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 
-import org.apache.spark.TestUtils
+import scala.sys.process._
+
+import org.apache.hadoop.conf.Configuration
+
+import org.apache.spark.{SecurityManager, SparkConf, TestUtils}
 import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
@@ -40,7 +45,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   private val tmpDataDir = Utils.createTempDir(namePrefix = "test-data")
   // For local test, you can set `sparkTestingDir` to a static value like `/tmp/test-spark`, to
   // avoid downloading Spark of different versions in each run.
-  private val sparkTestingDir = Utils.createTempDir(namePrefix = "test-spark")
+  private val sparkTestingDir = new File("/tmp/test-spark")
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
 
   override def afterAll(): Unit = {
@@ -50,12 +55,29 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     super.afterAll()
   }
 
+  private def tryDownloadSpark(version: String, path: String): Unit = {
+    // Try mirrors a few times until one succeeds
+    for (i <- 0 until 3) {
+      // we don't retry on a failure to get mirror url. If we can't get a mirror url,
+      // the test fails (getStringFromUrl will throw an exception)
+      val preferredMirror =
+        getStringFromUrl("https://www.apache.org/dyn/closer.lua?preferred=true")
+      val filename = s"spark-$version-bin-hadoop2.7.tgz"
+      val url = s"$preferredMirror/spark/spark-$version/$filename"
+      logInfo(s"Downloading Spark $version from $url")
+      try {
+        getFileFromUrl(url, path, filename)
+        return
+      } catch {
+        case ex: Exception => logWarning(s"Failed to download Spark $version from $url", ex)
+      }
+    }
+    fail(s"Unable to download Spark $version")
+  }
+
+
   private def downloadSpark(version: String): Unit = {
-    import scala.sys.process._
-
-    val url = s"https://d3kbcqa49mib13.cloudfront.net/spark-$version-bin-hadoop2.7.tgz"
-
-    Seq("wget", url, "-q", "-P", sparkTestingDir.getCanonicalPath).!
+    tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
 
     val downloaded = new File(sparkTestingDir, s"spark-$version-bin-hadoop2.7.tgz").getCanonicalPath
     val targetDir = new File(sparkTestingDir, s"spark-$version").getCanonicalPath
@@ -71,39 +93,70 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     new File(tmpDataDir, name).getCanonicalPath
   }
 
+  private def getFileFromUrl(urlString: String, targetDir: String, filename: String): Unit = {
+    val conf = new SparkConf
+    // if the caller passes the name of an existing file, we want doFetchFile to write over it with
+    // the contents from the specified url.
+    conf.set("spark.files.overwrite", "true")
+    val securityManager = new SecurityManager(conf)
+    val hadoopConf = new Configuration
+
+    val outDir = new File(targetDir)
+    if (!outDir.exists()) {
+      outDir.mkdirs()
+    }
+
+    // propagate exceptions up to the caller of getFileFromUrl
+    Utils.doFetchFile(urlString, outDir, filename, conf, securityManager, hadoopConf)
+  }
+
+  private def getStringFromUrl(urlString: String): String = {
+    val contentFile = File.createTempFile("string-", ".txt")
+    contentFile.deleteOnExit()
+
+    // exceptions will propagate to the caller of getStringFromUrl
+    getFileFromUrl(urlString, contentFile.getParent, contentFile.getName)
+
+    val contentPath = Paths.get(contentFile.toURI)
+    new String(Files.readAllBytes(contentPath), StandardCharsets.UTF_8)
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 
     val tempPyFile = File.createTempFile("test", ".py")
+    // scalastyle:off line.size.limit
     Files.write(tempPyFile.toPath,
       s"""
         |from pyspark.sql import SparkSession
+        |import os
         |
         |spark = SparkSession.builder.enableHiveSupport().getOrCreate()
         |version_index = spark.conf.get("spark.sql.test.version.index", None)
         |
         |spark.sql("create table data_source_tbl_{} using json as select 1 i".format(version_index))
         |
-        |spark.sql("create table hive_compatible_data_source_tbl_" + version_index + \\
-        |          " using parquet as select 1 i")
+        |spark.sql("create table hive_compatible_data_source_tbl_{} using parquet as select 1 i".format(version_index))
         |
         |json_file = "${genDataDir("json_")}" + str(version_index)
         |spark.range(1, 2).selectExpr("cast(id as int) as i").write.json(json_file)
-        |spark.sql("create table external_data_source_tbl_" + version_index + \\
-        |          "(i int) using json options (path '{}')".format(json_file))
+        |spark.sql("create table external_data_source_tbl_{}(i int) using json options (path '{}')".format(version_index, json_file))
         |
         |parquet_file = "${genDataDir("parquet_")}" + str(version_index)
         |spark.range(1, 2).selectExpr("cast(id as int) as i").write.parquet(parquet_file)
-        |spark.sql("create table hive_compatible_external_data_source_tbl_" + version_index + \\
-        |          "(i int) using parquet options (path '{}')".format(parquet_file))
+        |spark.sql("create table hive_compatible_external_data_source_tbl_{}(i int) using parquet options (path '{}')".format(version_index, parquet_file))
         |
         |json_file2 = "${genDataDir("json2_")}" + str(version_index)
         |spark.range(1, 2).selectExpr("cast(id as int) as i").write.json(json_file2)
-        |spark.sql("create table external_table_without_schema_" + version_index + \\
-        |          " using json options (path '{}')".format(json_file2))
+        |spark.sql("create table external_table_without_schema_{} using json options (path '{}')".format(version_index, json_file2))
+        |
+        |parquet_file2 = "${genDataDir("parquet2_")}" + str(version_index)
+        |spark.range(1, 3).selectExpr("1 as i", "cast(id as int) as p", "1 as j").write.parquet(os.path.join(parquet_file2, "p=1"))
+        |spark.sql("create table tbl_with_col_overlap_{} using parquet options(path '{}')".format(version_index, parquet_file2))
         |
         |spark.sql("create view v_{} as select 1 i".format(version_index))
       """.stripMargin.getBytes("utf8"))
+    // scalastyle:on line.size.limit
 
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
       val sparkHome = new File(sparkTestingDir, s"spark-$version")
@@ -142,7 +195,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   // Tests the latest version of every release line.
-  val testingVersions = Seq("2.0.2", "2.1.1", "2.2.0")
+  val testingVersions = Seq("2.0.2", "2.1.2", "2.2.0")
 
   protected var spark: SparkSession = _
 
@@ -151,6 +204,7 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
       .enableHiveSupport()
       .getOrCreate()
     spark = session
+    import session.implicits._
 
     testingVersions.indices.foreach { index =>
       Seq(
@@ -192,6 +246,22 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
 
       // test permanent view
       checkAnswer(sql(s"select i from v_$index"), Row(1))
+
+      // SPARK-22356: overlapped columns between data and partition schema in data source tables
+      val tbl_with_col_overlap = s"tbl_with_col_overlap_$index"
+      // For Spark 2.2.0 and 2.1.x, the behavior is different from Spark 2.0.
+      if (testingVersions(index).startsWith("2.1") || testingVersions(index) == "2.2.0") {
+        spark.sql("msck repair table " + tbl_with_col_overlap)
+        assert(spark.table(tbl_with_col_overlap).columns === Array("i", "j", "p"))
+        checkAnswer(spark.table(tbl_with_col_overlap), Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
+        assert(sql("desc " + tbl_with_col_overlap).select("col_name")
+          .as[String].collect().mkString(",").contains("i,j,p"))
+      } else {
+        assert(spark.table(tbl_with_col_overlap).columns === Array("i", "p", "j"))
+        checkAnswer(spark.table(tbl_with_col_overlap), Row(1, 1, 1) :: Row(1, 1, 1) :: Nil)
+        assert(sql("desc " + tbl_with_col_overlap).select("col_name")
+          .as[String].collect().mkString(",").contains("i,p,j"))
+      }
     }
   }
 }

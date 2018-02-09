@@ -19,12 +19,15 @@ package org.apache.spark.sql.streaming
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingDeduplicateExec}
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.functions._
 
-class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
+class DeduplicateSuite extends StateStoreMetricsTest
+    with BeforeAndAfterAll
+    with StatefulOperatorTest {
 
   import testImplicits._
 
@@ -41,6 +44,8 @@ class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
       AddData(inputData, "a"),
       CheckLastBatch("a"),
       assertNumStateRows(total = 1, updated = 1),
+      AssertOnQuery(sq =>
+        checkChildOutputHashPartitioning[StreamingDeduplicateExec](sq, Seq("value"))),
       AddData(inputData, "a"),
       CheckLastBatch(),
       assertNumStateRows(total = 1, updated = 0),
@@ -58,6 +63,8 @@ class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
       AddData(inputData, "a" -> 1),
       CheckLastBatch("a" -> 1),
       assertNumStateRows(total = 1, updated = 1),
+      AssertOnQuery(sq =>
+        checkChildOutputHashPartitioning[StreamingDeduplicateExec](sq, Seq("_1"))),
       AddData(inputData, "a" -> 2), // Dropped
       CheckLastBatch(),
       assertNumStateRows(total = 1, updated = 0),

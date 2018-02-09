@@ -118,7 +118,7 @@ class DiskStoreSuite extends SparkFunSuite {
     val chunks = chunkedByteBuffer.chunks
     assert(chunks.size === 2)
     for (chunk <- chunks) {
-      assert(chunk.limit === 10 * 1024)
+      assert(chunk.limit() === 10 * 1024)
     }
 
     val e = intercept[IllegalArgumentException]{

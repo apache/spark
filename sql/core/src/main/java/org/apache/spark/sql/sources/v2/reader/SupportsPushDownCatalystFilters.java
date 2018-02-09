@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.catalyst.expressions.Expression;
 
 /**
- * A mix-in interface for {@link DataSourceV2Reader}. Data source readers can implement this
+ * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
  * interface to push down arbitrary expressions as predicates to the data source.
  * This is an experimental and unstable interface as {@link Expression} is not public and may get
  * changed in the future Spark versions.
@@ -31,13 +30,19 @@ import org.apache.spark.sql.catalyst.expressions.Expression;
  * {@link SupportsPushDownFilters}, Spark will ignore {@link SupportsPushDownFilters} and only
  * process this interface.
  */
-@InterfaceStability.Evolving
-@Experimental
 @InterfaceStability.Unstable
-public interface SupportsPushDownCatalystFilters {
+public interface SupportsPushDownCatalystFilters extends DataSourceReader {
 
   /**
    * Pushes down filters, and returns unsupported filters.
    */
   Expression[] pushCatalystFilters(Expression[] filters);
+
+  /**
+   * Returns the catalyst filters that are pushed in {@link #pushCatalystFilters(Expression[])}.
+   * It's possible that there is no filters in the query and
+   * {@link #pushCatalystFilters(Expression[])} is never called, empty array should be returned for
+   * this case.
+   */
+  Expression[] pushedCatalystFilters();
 }

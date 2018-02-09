@@ -7,6 +7,29 @@ description: MLlib migration guides from before Spark SPARK_VERSION_SHORT
 
 The migration guide for the current Spark version is kept on the [MLlib Guide main page](ml-guide.html#migration-guide).
 
+## From 2.1 to 2.2
+
+### Breaking changes
+
+There are no breaking changes.
+
+### Deprecations and changes of behavior
+
+**Deprecations**
+
+There are no deprecations.
+
+**Changes of behavior**
+
+* [SPARK-19787](https://issues.apache.org/jira/browse/SPARK-19787):
+ Default value of `regParam` changed from `1.0` to `0.1` for `ALS.train` method (marked `DeveloperApi`).
+ **Note** this does _not affect_ the `ALS` Estimator or Model, nor MLlib's `ALS` class.
+* [SPARK-14772](https://issues.apache.org/jira/browse/SPARK-14772):
+ Fixed inconsistency between Python and Scala APIs for `Param.copy` method.
+* [SPARK-11569](https://issues.apache.org/jira/browse/SPARK-11569):
+ `StringIndexer` now handles `NULL` values in the same way as unseen values. Previously an exception
+ would always be thrown regardless of the setting of the `handleInvalid` parameter.
+ 
 ## From 2.0 to 2.1
 
 ### Breaking changes

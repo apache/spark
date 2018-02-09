@@ -43,10 +43,10 @@ public abstract class ShuffleClient implements Closeable {
    * @param execId the executor id.
    * @param blockIds block ids to fetch.
    * @param listener the listener to receive block fetching status.
-   * @param tempShuffleFileManager TempShuffleFileManager to create and clean temp shuffle files.
-   *                               If it's not <code>null</code>, the remote blocks will be streamed
-   *                               into temp shuffle files to reduce the memory usage, otherwise,
-   *                               they will be kept in memory.
+   * @param tempFileManager TempFileManager to create and clean temp files.
+   *                        If it's not <code>null</code>, the remote blocks will be streamed
+   *                        into temp shuffle files to reduce the memory usage, otherwise,
+   *                        they will be kept in memory.
    */
   public abstract void fetchBlocks(
       String host,
@@ -54,7 +54,7 @@ public abstract class ShuffleClient implements Closeable {
       String execId,
       String[] blockIds,
       BlockFetchingListener listener,
-      TempShuffleFileManager tempShuffleFileManager);
+      TempFileManager tempFileManager);
 
   /**
    * Get the shuffle MetricsSet from ShuffleClient, this will be used in MetricsSystem to

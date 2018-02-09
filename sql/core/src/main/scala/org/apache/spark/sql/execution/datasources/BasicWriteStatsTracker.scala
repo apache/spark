@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.FileNotFoundException
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -41,23 +44,34 @@ case class BasicWriteTaskStats(
 
 /**
  * Simple [[WriteTaskStatsTracker]] implementation that produces [[BasicWriteTaskStats]].
- * @param hadoopConf
  */
 class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
-  extends WriteTaskStatsTracker {
+  extends WriteTaskStatsTracker with Logging {
 
   private[this] var numPartitions: Int = 0
   private[this] var numFiles: Int = 0
+  private[this] var submittedFiles: Int = 0
   private[this] var numBytes: Long = 0L
   private[this] var numRows: Long = 0L
 
-  private[this] var curFile: String = null
+  private[this] var curFile: Option[String] = None
 
-
-  private def getFileSize(filePath: String): Long = {
+  /**
+   * Get the size of the file expected to have been written by a worker.
+   * @param filePath path to the file
+   * @return the file size or None if the file was not found.
+   */
+  private def getFileSize(filePath: String): Option[Long] = {
     val path = new Path(filePath)
     val fs = path.getFileSystem(hadoopConf)
-    fs.getFileStatus(path).getLen()
+    try {
+      Some(fs.getFileStatus(path).getLen())
+    } catch {
+      case e: FileNotFoundException =>
+        // may arise against eventually consistent object stores
+        logDebug(s"File $path is not yet visible", e)
+        None
+    }
   }
 
 
@@ -70,12 +84,19 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   }
 
   override def newFile(filePath: String): Unit = {
-    if (numFiles > 0) {
-      // we assume here that we've finished writing to disk the previous file by now
-      numBytes += getFileSize(curFile)
+    statCurrentFile()
+    curFile = Some(filePath)
+    submittedFiles += 1
+  }
+
+  private def statCurrentFile(): Unit = {
+    curFile.foreach { path =>
+      getFileSize(path).foreach { len =>
+        numBytes += len
+        numFiles += 1
+      }
+      curFile = None
     }
-    curFile = filePath
-    numFiles += 1
   }
 
   override def newRow(row: InternalRow): Unit = {
@@ -83,8 +104,18 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   }
 
   override def getFinalStats(): WriteTaskStats = {
-    if (numFiles > 0) {
-      numBytes += getFileSize(curFile)
+    statCurrentFile()
+
+    // Reports bytesWritten and recordsWritten to the Spark output metrics.
+    Option(TaskContext.get()).map(_.taskMetrics().outputMetrics).foreach { outputMetrics =>
+      outputMetrics.setBytesWritten(numBytes)
+      outputMetrics.setRecordsWritten(numRows)
+    }
+
+    if (submittedFiles != numFiles) {
+      logInfo(s"Expected $submittedFiles files, but only saw $numFiles. " +
+        "This could be due to the output format not writing empty files, " +
+        "or files being not immediately visible in the filesystem.")
     }
     BasicWriteTaskStats(numPartitions, numFiles, numBytes, numRows)
   }

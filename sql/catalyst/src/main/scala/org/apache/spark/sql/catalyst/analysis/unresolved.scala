@@ -294,7 +294,7 @@ case class UnresolvedStar(target: Option[Seq[String]]) extends Star with Unevalu
     } else {
       val from = input.inputSet.map(_.name).mkString(", ")
       val targetString = target.get.mkString(".")
-      throw new AnalysisException(s"cannot resolve '$targetString.*' give input columns '$from'")
+      throw new AnalysisException(s"cannot resolve '$targetString.*' given input columns '$from'")
     }
   }
 

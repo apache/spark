@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
 
 import org.codehaus.commons.compiler.CompileException
-import org.codehaus.janino.JaninoRuntimeException
+import org.codehaus.janino.InternalCompilerException
 
 import org.apache.spark.{broadcast, SparkEnv}
 import org.apache.spark.internal.Logging
@@ -94,7 +94,21 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /** Specifies how data is partitioned across different nodes in the cluster. */
   def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
 
-  /** Specifies any partition requirements on the input data for this operator. */
+  /**
+   * Specifies the data distribution requirements of all the children for this operator. By default
+   * it's [[UnspecifiedDistribution]] for each child, which means each child can have any
+   * distribution.
+   *
+   * If an operator overwrites this method, and specifies distribution requirements(excluding
+   * [[UnspecifiedDistribution]] and [[BroadcastDistribution]]) for more than one child, Spark
+   * guarantees that the outputs of these children will have same number of partitions, so that the
+   * operator can safely zip partitions of these children's result RDDs. Some operators can leverage
+   * this guarantee to satisfy some interesting requirement, e.g., non-broadcast joins can specify
+   * HashClusteredDistribution(a,b) for its left child, and specify HashClusteredDistribution(c,d)
+   * for its right child, then it's guaranteed that left and right child are co-partitioned by
+   * a,b/c,d, which means tuples of same value are in the partitions of same index, e.g.,
+   * (a=1,b=2) and (c=1,d=2) are both in the second partition of left and right child.
+   */
   def requiredChildDistribution: Seq[Distribution] =
     Seq.fill(children.size)(UnspecifiedDistribution)
 
@@ -111,6 +125,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Concrete implementations of SparkPlan should override `doExecute`.
    */
   final def execute(): RDD[InternalRow] = executeQuery {
+    if (isCanonicalizedPlan) {
+      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+    }
     doExecute()
   }
 
@@ -121,6 +138,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Concrete implementations of SparkPlan should override `doExecuteBroadcast`.
    */
   final def executeBroadcast[T](): broadcast.Broadcast[T] = executeQuery {
+    if (isCanonicalizedPlan) {
+      throw new IllegalStateException("A canonicalized plan is not supposed to be executed.")
+    }
     doExecuteBroadcast()
   }
 
@@ -223,7 +243,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * UnsafeRow is highly compressible (at least 8 bytes for any column), the byte array is also
    * compressed.
    */
-  private def getByteArrayRdd(n: Int = -1): RDD[Array[Byte]] = {
+  private def getByteArrayRdd(n: Int = -1): RDD[(Long, Array[Byte])] = {
     execute().mapPartitionsInternal { iter =>
       var count = 0
       val buffer = new Array[Byte](4 << 10)  // 4K
@@ -239,7 +259,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       out.writeInt(-1)
       out.flush()
       out.close()
-      Iterator(bos.toByteArray)
+      Iterator((count, bos.toByteArray))
     }
   }
 
@@ -274,10 +294,17 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val byteArrayRdd = getByteArrayRdd()
 
     val results = ArrayBuffer[InternalRow]()
-    byteArrayRdd.collect().foreach { bytes =>
-      decodeUnsafeRows(bytes).foreach(results.+=)
+    byteArrayRdd.collect().foreach { countAndBytes =>
+      decodeUnsafeRows(countAndBytes._2).foreach(results.+=)
     }
     results.toArray
+  }
+
+  private[spark] def executeCollectIterator(): (Long, Iterator[InternalRow]) = {
+    val countsAndBytes = getByteArrayRdd().collect()
+    val total = countsAndBytes.map(_._1).sum
+    val rows = countsAndBytes.iterator.flatMap(countAndBytes => decodeUnsafeRows(countAndBytes._2))
+    (total, rows)
   }
 
   /**
@@ -286,7 +313,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * @note Triggers multiple jobs (one for each partition).
    */
   def executeToIterator(): Iterator[InternalRow] = {
-    getByteArrayRdd().toLocalIterator.flatMap(decodeUnsafeRows)
+    getByteArrayRdd().map(_._2).toLocalIterator.flatMap(decodeUnsafeRows)
   }
 
   /**
@@ -307,7 +334,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       return new Array[InternalRow](0)
     }
 
-    val childRDD = getByteArrayRdd(n)
+    val childRDD = getByteArrayRdd(n).map(_._2)
 
     val buf = new ArrayBuffer[InternalRow]
     val totalParts = childRDD.partitions.length
@@ -324,8 +351,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         if (buf.isEmpty) {
           numPartsToTry = partsScanned * limitScaleUpFactor
         } else {
-          // the left side of max is >=1 whenever partsScanned >= 2
-          numPartsToTry = Math.max((1.5 * n * partsScanned / buf.size).toInt - partsScanned, 1)
+          val left = n - buf.size
+          // As left > 0, numPartsToTry is always >= 1
+          numPartsToTry = Math.ceil(1.5 * left * partsScanned / buf.size).toInt
           numPartsToTry = Math.min(numPartsToTry, partsScanned * limitScaleUpFactor)
         }
       }
@@ -372,7 +400,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     try {
       GeneratePredicate.generate(expression, inputSchema)
     } catch {
-      case _ @ (_: JaninoRuntimeException | _: CompileException) if codeGenFallBack =>
+      case _ @ (_: InternalCompilerException | _: CompileException) if codeGenFallBack =>
         genInterpretedPredicate(expression, inputSchema)
     }
   }

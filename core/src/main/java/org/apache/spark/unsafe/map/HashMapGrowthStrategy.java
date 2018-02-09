@@ -17,6 +17,8 @@
 
 package org.apache.spark.unsafe.map;
 
+import org.apache.spark.unsafe.array.ByteArrayMethods;
+
 /**
  * Interface that defines how we can grow the size of a hash map when it is over a threshold.
  */
@@ -31,9 +33,7 @@ public interface HashMapGrowthStrategy {
 
   class Doubling implements HashMapGrowthStrategy {
 
-    // Some JVMs can't allocate arrays of length Integer.MAX_VALUE; actual max is somewhat
-    // smaller. Be conservative and lower the cap a little.
-    private static final int ARRAY_MAX = Integer.MAX_VALUE - 8;
+    private static final int ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
 
     @Override
     public int nextCapacity(int currentCapacity) {

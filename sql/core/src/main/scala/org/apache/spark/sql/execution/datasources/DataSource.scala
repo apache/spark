@@ -36,8 +36,10 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
@@ -85,7 +87,8 @@ case class DataSource(
 
   case class SourceInfo(name: String, schema: StructType, partitionColumns: Seq[String])
 
-  lazy val providingClass: Class[_] = DataSource.lookupDataSource(className)
+  lazy val providingClass: Class[_] =
+    DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
   private val equality = sparkSession.sessionState.conf.resolver
@@ -472,7 +475,8 @@ case class DataSource(
       query = data,
       mode = mode,
       catalogTable = catalogTable,
-      fileIndex = fileIndex)
+      fileIndex = fileIndex,
+      outputColumns = data.output)
   }
 
   /**
@@ -526,6 +530,7 @@ object DataSource extends Logging {
     val csv = classOf[CSVFileFormat].getCanonicalName
     val libsvm = "org.apache.spark.ml.source.libsvm.LibSVMFileFormat"
     val orc = "org.apache.spark.sql.hive.orc.OrcFileFormat"
+    val nativeOrc = classOf[OrcFileFormat].getCanonicalName
 
     Map(
       "org.apache.spark.sql.jdbc" -> jdbc,
@@ -542,6 +547,8 @@ object DataSource extends Logging {
       "org.apache.spark.sql.execution.datasources.parquet.DefaultSource" -> parquet,
       "org.apache.spark.sql.hive.orc.DefaultSource" -> orc,
       "org.apache.spark.sql.hive.orc" -> orc,
+      "org.apache.spark.sql.execution.datasources.orc.DefaultSource" -> nativeOrc,
+      "org.apache.spark.sql.execution.datasources.orc" -> nativeOrc,
       "org.apache.spark.ml.source.libsvm.DefaultSource" -> libsvm,
       "org.apache.spark.ml.source.libsvm" -> libsvm,
       "com.databricks.spark.csv" -> csv
@@ -557,8 +564,16 @@ object DataSource extends Logging {
     "org.apache.spark.Logging")
 
   /** Given a provider name, look up the data source class definition. */
-  def lookupDataSource(provider: String): Class[_] = {
-    val provider1 = backwardCompatibilityMap.getOrElse(provider, provider)
+  def lookupDataSource(provider: String, conf: SQLConf): Class[_] = {
+    val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
+      case name if name.equalsIgnoreCase("orc") &&
+          conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native" =>
+        classOf[OrcFileFormat].getCanonicalName
+      case name if name.equalsIgnoreCase("orc") &&
+          conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "hive" =>
+        "org.apache.spark.sql.hive.orc.OrcFileFormat"
+      case name => name
+    }
     val provider2 = s"$provider1.DefaultSource"
     val loader = Utils.getContextOrSparkClassLoader
     val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
@@ -573,10 +588,11 @@ object DataSource extends Logging {
                 // Found the data source using fully qualified path
                 dataSource
               case Failure(error) =>
-                if (provider1.toLowerCase(Locale.ROOT) == "orc" ||
-                  provider1.startsWith("org.apache.spark.sql.hive.orc")) {
+                if (provider1.startsWith("org.apache.spark.sql.hive.orc")) {
                   throw new AnalysisException(
-                    "The ORC data source must be used with Hive support enabled")
+                    "Hive built-in ORC data source must be used with Hive support enabled. " +
+                    "Please use the native ORC data source by setting 'spark.sql.orc.impl' to " +
+                    "'native'")
                 } else if (provider1.toLowerCase(Locale.ROOT) == "avro" ||
                   provider1 == "com.databricks.spark.avro") {
                   throw new AnalysisException(

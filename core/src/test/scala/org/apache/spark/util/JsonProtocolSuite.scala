@@ -96,6 +96,9 @@ class JsonProtocolSuite extends SparkFunSuite {
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)))
     }
+    val blockUpdated =
+      SparkListenerBlockUpdated(BlockUpdatedInfo(BlockManagerId("Stars",
+        "In your multitude...", 300), RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100L, 0L))
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -120,6 +123,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(nodeBlacklisted, nodeBlacklistedJsonString)
     testEvent(nodeUnblacklisted, nodeUnblacklistedJsonString)
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
+    testEvent(blockUpdated, blockUpdatedJsonString)
   }
 
   test("Dependent Classes") {
@@ -2004,6 +2008,29 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |      ]
       |    }
       |  ]
+      |}
+    """.stripMargin
+
+  private val blockUpdatedJsonString =
+    """
+      |{
+      |  "Event": "SparkListenerBlockUpdated",
+      |  "Block Updated Info": {
+      |    "Block Manager ID": {
+      |      "Executor ID": "Stars",
+      |      "Host": "In your multitude...",
+      |      "Port": 300
+      |    },
+      |    "Block ID": "rdd_0_0",
+      |    "Storage Level": {
+      |      "Use Disk": false,
+      |      "Use Memory": true,
+      |      "Deserialized": true,
+      |      "Replication": 1
+      |    },
+      |    "Memory Size": 100,
+      |    "Disk Size": 0
+      |  }
       |}
     """.stripMargin
 

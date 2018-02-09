@@ -26,19 +26,19 @@ import scala.xml._
 
 import org.apache.commons.lang3.StringEscapeUtils
 
-import org.apache.spark.scheduler.StageInfo
+import org.apache.spark.status.AppStatusStore
+import org.apache.spark.status.api.v1
 import org.apache.spark.ui._
-import org.apache.spark.ui.jobs.UIData.StageUIData
 import org.apache.spark.util.Utils
 
 private[ui] class StageTableBase(
+    store: AppStatusStore,
     request: HttpServletRequest,
-    stages: Seq[StageInfo],
+    stages: Seq[v1.StageData],
     tableHeaderID: String,
     stageTag: String,
     basePath: String,
     subPath: String,
-    progressListener: JobProgressListener,
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     isFailedStage: Boolean) {
@@ -79,12 +79,12 @@ private[ui] class StageTableBase(
 
   val toNodeSeq = try {
     new StagePagedTable(
+      store,
       stages,
       tableHeaderID,
       stageTag,
       basePath,
       subPath,
-      progressListener,
       isFairScheduler,
       killEnabled,
       currentTime,
@@ -106,13 +106,13 @@ private[ui] class StageTableBase(
 }
 
 private[ui] class StageTableRowData(
-    val stageInfo: StageInfo,
-    val stageData: Option[StageUIData],
+    val stage: v1.StageData,
+    val option: Option[v1.StageData],
     val stageId: Int,
     val attemptId: Int,
     val schedulingPool: String,
     val descriptionOption: Option[String],
-    val submissionTime: Long,
+    val submissionTime: Date,
     val formattedSubmissionTime: String,
     val duration: Long,
     val formattedDuration: String,
@@ -126,19 +126,20 @@ private[ui] class StageTableRowData(
     val shuffleWriteWithUnit: String)
 
 private[ui] class MissingStageTableRowData(
-    stageInfo: StageInfo,
+    stageInfo: v1.StageData,
     stageId: Int,
     attemptId: Int) extends StageTableRowData(
-  stageInfo, None, stageId, attemptId, "", None, 0, "", -1, "", 0, "", 0, "", 0, "", 0, "")
+  stageInfo, None, stageId, attemptId, "", None, new Date(0), "", -1, "", 0, "", 0, "", 0, "", 0,
+    "")
 
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StagePagedTable(
-    stages: Seq[StageInfo],
+    store: AppStatusStore,
+    stages: Seq[v1.StageData],
     tableHeaderId: String,
     stageTag: String,
     basePath: String,
     subPath: String,
-    listener: JobProgressListener,
     isFairScheduler: Boolean,
     killEnabled: Boolean,
     currentTime: Long,
@@ -164,8 +165,8 @@ private[ui] class StagePagedTable(
     parameterOtherTable.mkString("&")
 
   override val dataSource = new StageDataSource(
+    store,
     stages,
-    listener,
     currentTime,
     pageSize,
     sortColumn,
@@ -274,10 +275,10 @@ private[ui] class StagePagedTable(
   }
 
   private def rowContent(data: StageTableRowData): Seq[Node] = {
-    data.stageData match {
+    data.option match {
       case None => missingStageRow(data.stageId)
       case Some(stageData) =>
-        val info = data.stageInfo
+        val info = data.stage
 
         {if (data.attemptId > 0) {
           <td>{data.stageId} (retry {data.attemptId})</td>
@@ -301,8 +302,8 @@ private[ui] class StagePagedTable(
         <td>{data.formattedDuration}</td>
         <td class="progress-cell">
           {UIUtils.makeProgressBar(started = stageData.numActiveTasks,
-          completed = stageData.completedIndices.size, failed = stageData.numFailedTasks,
-          skipped = 0, reasonToNumKilled = stageData.reasonToNumKilled, total = info.numTasks)}
+          completed = stageData.numCompleteTasks, failed = stageData.numFailedTasks,
+          skipped = 0, reasonToNumKilled = stageData.killedTasksSummary, total = info.numTasks)}
         </td>
         <td>{data.inputReadWithUnit}</td>
         <td>{data.outputWriteWithUnit}</td>
@@ -318,7 +319,7 @@ private[ui] class StagePagedTable(
     }
   }
 
-  private def failureReasonHtml(s: StageInfo): Seq[Node] = {
+  private def failureReasonHtml(s: v1.StageData): Seq[Node] = {
     val failureReason = s.failureReason.getOrElse("")
     val isMultiline = failureReason.indexOf('\n') >= 0
     // Display the first line by default
@@ -344,7 +345,7 @@ private[ui] class StagePagedTable(
     <td valign="middle">{failureReasonSummary}{details}</td>
   }
 
-  private def makeDescription(s: StageInfo, descriptionOption: Option[String]): Seq[Node] = {
+  private def makeDescription(s: v1.StageData, descriptionOption: Option[String]): Seq[Node] = {
     val basePathUri = UIUtils.prependBaseUri(basePath)
 
     val killLink = if (killEnabled) {
@@ -368,8 +369,8 @@ private[ui] class StagePagedTable(
     val nameLinkUri = s"$basePathUri/stages/stage?id=${s.stageId}&attempt=${s.attemptId}"
     val nameLink = <a href={nameLinkUri} class="name-link">{s.name}</a>
 
-    val cachedRddInfos = s.rddInfos.filter(_.numCachedPartitions > 0)
-    val details = if (s.details.nonEmpty) {
+    val cachedRddInfos = store.rddList().filter { rdd => s.rddIds.contains(rdd.id) }
+    val details = if (s.details != null && s.details.nonEmpty) {
       <span onclick="this.parentNode.querySelector('.stage-details').classList.toggle('collapsed')"
             class="expand-details">
         +details
@@ -404,14 +405,14 @@ private[ui] class StagePagedTable(
 }
 
 private[ui] class StageDataSource(
-    stages: Seq[StageInfo],
-    listener: JobProgressListener,
+    store: AppStatusStore,
+    stages: Seq[v1.StageData],
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean) extends PagedDataSource[StageTableRowData](pageSize) {
-  // Convert StageInfo to StageTableRowData which contains the final contents to show in the table
-  // so that we can avoid creating duplicate contents during sorting the data
+  // Convert v1.StageData to StageTableRowData which contains the final contents to show in the
+  // table so that we can avoid creating duplicate contents during sorting the data
   private val data = stages.map(stageRow).sorted(ordering(sortColumn, desc))
 
   private var _slicedStageIds: Set[Int] = _
@@ -424,57 +425,46 @@ private[ui] class StageDataSource(
     r
   }
 
-  private def stageRow(s: StageInfo): StageTableRowData = {
-    val stageDataOption = listener.stageIdToData.get((s.stageId, s.attemptId))
+  private def stageRow(stageData: v1.StageData): StageTableRowData = {
+    val description = stageData.description.getOrElse("")
 
-    if (stageDataOption.isEmpty) {
-      return new MissingStageTableRowData(s, s.stageId, s.attemptId)
-    }
-    val stageData = stageDataOption.get
-
-    val description = stageData.description
-
-    val formattedSubmissionTime = s.submissionTime match {
-      case Some(t) => UIUtils.formatDate(new Date(t))
+    val formattedSubmissionTime = stageData.submissionTime match {
+      case Some(t) => UIUtils.formatDate(t)
       case None => "Unknown"
     }
-    val finishTime = s.completionTime.getOrElse(currentTime)
+    val finishTime = stageData.completionTime.map(_.getTime()).getOrElse(currentTime)
 
     // The submission time for a stage is misleading because it counts the time
     // the stage waits to be launched. (SPARK-10930)
-    val taskLaunchTimes =
-      stageData.taskData.values.map(_.taskInfo.launchTime).filter(_ > 0)
-    val duration: Option[Long] =
-      if (taskLaunchTimes.nonEmpty) {
-        val startTime = taskLaunchTimes.min
-        if (finishTime > startTime) {
-          Some(finishTime - startTime)
-        } else {
-          Some(currentTime - startTime)
-        }
+    val duration = stageData.firstTaskLaunchedTime.map { date =>
+      val time = date.getTime()
+      if (finishTime > time) {
+        finishTime - time
       } else {
         None
+        currentTime - time
       }
+    }
     val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
 
     val inputRead = stageData.inputBytes
     val inputReadWithUnit = if (inputRead > 0) Utils.bytesToString(inputRead) else ""
     val outputWrite = stageData.outputBytes
     val outputWriteWithUnit = if (outputWrite > 0) Utils.bytesToString(outputWrite) else ""
-    val shuffleRead = stageData.shuffleReadTotalBytes
+    val shuffleRead = stageData.shuffleReadBytes
     val shuffleReadWithUnit = if (shuffleRead > 0) Utils.bytesToString(shuffleRead) else ""
     val shuffleWrite = stageData.shuffleWriteBytes
     val shuffleWriteWithUnit = if (shuffleWrite > 0) Utils.bytesToString(shuffleWrite) else ""
 
 
     new StageTableRowData(
-      s,
-      stageDataOption,
-      s.stageId,
-      s.attemptId,
+      stageData,
+      Some(stageData),
+      stageData.stageId,
+      stageData.attemptId,
       stageData.schedulingPool,
-      description,
-      s.submissionTime.getOrElse(0),
+      stageData.description,
+      stageData.submissionTime.getOrElse(new Date(0)),
       formattedSubmissionTime,
       duration.getOrElse(-1),
       formattedDuration,
@@ -496,7 +486,7 @@ private[ui] class StageDataSource(
     val ordering: Ordering[StageTableRowData] = sortColumn match {
       case "Stage Id" => Ordering.by(_.stageId)
       case "Pool Name" => Ordering.by(_.schedulingPool)
-      case "Description" => Ordering.by(x => (x.descriptionOption, x.stageInfo.name))
+      case "Description" => Ordering.by(x => (x.descriptionOption, x.stage.name))
       case "Submitted" => Ordering.by(_.submissionTime)
       case "Duration" => Ordering.by(_.duration)
       case "Input" => Ordering.by(_.inputRead)

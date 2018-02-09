@@ -57,42 +57,38 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
       case _ => true
     }.unzip
     val exprVals = ctx.generateExpressions(validExpr, useSubexprElimination)
-    val projectionCodes = exprVals.zip(index).map {
+
+    // 4-tuples: (code for projection, isNull variable name, value variable name, column index)
+    val projectionCodes: Seq[(String, String, String, Int)] = exprVals.zip(index).map {
       case (ev, i) =>
         val e = expressions(i)
+        val value = ctx.addMutableState(ctx.javaType(e.dataType), "value")
         if (e.nullable) {
-          val isNull = s"isNull_$i"
-          val value = s"value_$i"
-          ctx.addMutableState("boolean", isNull, s"$isNull = true;")
-          ctx.addMutableState(ctx.javaType(e.dataType), value,
-            s"$value = ${ctx.defaultValue(e.dataType)};")
-          s"""
-            ${ev.code}
-            $isNull = ${ev.isNull};
-            $value = ${ev.value};
-           """
+          val isNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "isNull")
+          (s"""
+              |${ev.code}
+              |$isNull = ${ev.isNull};
+              |$value = ${ev.value};
+            """.stripMargin, isNull, value, i)
         } else {
-          val value = s"value_$i"
-          ctx.addMutableState(ctx.javaType(e.dataType), value,
-            s"$value = ${ctx.defaultValue(e.dataType)};")
-          s"""
-            ${ev.code}
-            $value = ${ev.value};
-           """
+          (s"""
+              |${ev.code}
+              |$value = ${ev.value};
+            """.stripMargin, ev.isNull, value, i)
         }
     }
 
     // Evaluate all the subexpressions.
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
-    val updates = validExpr.zip(index).map {
-      case (e, i) =>
-        val ev = ExprCode("", s"isNull_$i", s"value_$i")
+    val updates = validExpr.zip(projectionCodes).map {
+      case (e, (_, isNull, value, i)) =>
+        val ev = ExprCode("", isNull, value)
         ctx.updateColumn("mutableRow", e.dataType, i, ev, e.nullable)
     }
 
-    val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)
-    val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
+    val allProjections = ctx.splitExpressionsWithCurrentInputs(projectionCodes.map(_._1))
+    val allUpdates = ctx.splitExpressionsWithCurrentInputs(updates)
 
     val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
@@ -142,7 +138,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
       new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
-    val c = CodeGenerator.compile(code)
-    c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
+    val (clazz, _) = CodeGenerator.compile(code)
+    clazz.generate(ctx.references.toArray).asInstanceOf[MutableProjection]
   }
 }
