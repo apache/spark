@@ -40,30 +40,56 @@ case class ForeachWriterProvider[T: Encoder](writer: ForeachWriter[T]) extends S
     val encoder = encoderFor[T].resolveAndBind(
       schema.toAttributes,
       SparkSession.getActiveSession.get.sessionState.analyzer)
-    ForeachInternalWriter(writer, encoder)
+    new StreamWriter with SupportsWriteInternalRow {
+      override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+      override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+
+      override def createInternalRowWriterFactory(): DataWriterFactory[InternalRow] = {
+        val byteStream = new ByteArrayOutputStream()
+        val objectStream = new ObjectOutputStream(byteStream)
+        objectStream.writeObject(writer)
+        ForeachWriterFactory(byteStream.toByteArray, encoder)
+      }
+    }
   }
 }
 
-case class ForeachInternalWriter[T: Encoder](
-    writer: ForeachWriter[T], encoder: ExpressionEncoder[T])
-    extends StreamWriter with SupportsWriteInternalRow {
-  override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
-  override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
-
-  override def createInternalRowWriterFactory(): DataWriterFactory[InternalRow] = {
-    ForeachWriterFactory(writer, encoder)
-  }
-}
-
-case class ForeachWriterFactory[T: Encoder](writer: ForeachWriter[T], encoder: ExpressionEncoder[T])
+case class ForeachWriterFactory[T: Encoder](
+    serializedWriter: Array[Byte],
+    encoder: ExpressionEncoder[T])
     extends DataWriterFactory[InternalRow] {
   override def createDataWriter(partitionId: Int, attemptNumber: Int): ForeachDataWriter[T] = {
-    new ForeachDataWriter(writer, encoder, partitionId)
+    new ForeachDataWriter(serializedWriter, encoder, partitionId)
   }
 }
 
+/**
+ * A [[DataWriter]] for the foreach sink.
+ *
+ * Note that [[ForeachWriter]] has the following lifecycle, and (as was true in the V1 sink API)
+ * assumes that it's never reused:
+ *  * [create writer]
+ *  * open(partitionId, batchId)
+ *  * if open() returned true: write, write, write, ...
+ *  * close()
+ * while DataSourceV2 writers have a slightly different lifecycle and will be reused for multiple
+ * epochs in the continuous processing engine:
+ *  * [create writer]
+ *  * write, write, write, ...
+ *  * commit()
+ *
+ * The bulk of the implementation here is a shim between these two models.
+ *
+ * @param serializedWriter a serialized version of the user-provided [[ForeachWriter]]
+ * @param encoder encoder from [[Row]] to the type param [[T]]
+ * @param partitionId the ID of the partition this data writer is responsible for
+ *
+ * @tparam T the type of data to be handled by the writer
+ */
 class ForeachDataWriter[T : Encoder](
-    private var writer: ForeachWriter[T], encoder: ExpressionEncoder[T], partitionId: Int)
+    serializedWriter: Array[Byte],
+    encoder: ExpressionEncoder[T],
+    partitionId: Int)
     extends DataWriter[InternalRow] {
   private val initialEpochId: Long = {
     // Start with the microbatch ID. If it's not there, we're in continuous execution,
@@ -74,28 +100,23 @@ class ForeachDataWriter[T : Encoder](
       case batch => batch.toLong
     }
   }
-  private var currentEpochId = initialEpochId
 
-  // The lifecycle of the ForeachWriter is incompatible with the lifecycle of DataSourceV2 writers.
-  // Unfortunately, we cannot migrate ForeachWriter, as its implementations live in user code. So
-  // we need a small state machine to shim between them.
+  // A small state machine representing the lifecycle of the underlying ForeachWriter.
   //  * CLOSED means close() has been called.
-  //  * OPENED
+  //  * OPENED means open() was called and returned true.
+  //  * OPENED_SKIP_PROCESSING means open() was called and returned false.
   private object WriterState extends Enumeration {
     type WriterState = Value
     val CLOSED, OPENED, OPENED_SKIP_PROCESSING = Value
   }
   import WriterState._
 
-  private var state = CLOSED
+  private var writer: ForeachWriter[T] = _
+  private var state: WriterState = _
+  private var currentEpochId = initialEpochId
 
   private def openAndSetState(epochId: Long) = {
-    // Create a new writer by roundtripping through the serialization for compatibility.
-    // In the old API, a writer instantiation would never get reused.
-    val byteStream = new ByteArrayOutputStream()
-    val objectStream = new ObjectOutputStream(byteStream)
-    objectStream.writeObject(writer)
-    writer = new ObjectInputStream(new ByteArrayInputStream(byteStream.toByteArray)).readObject()
+    writer = new ObjectInputStream(new ByteArrayInputStream(serializedWriter)).readObject()
       .asInstanceOf[ForeachWriter[T]]
 
     writer.open(partitionId, epochId) match {
@@ -132,4 +153,7 @@ class ForeachDataWriter[T : Encoder](
   override def abort(): Unit = {}
 }
 
+/**
+ * An empty [[WriterCommitMessage]]. [[ForeachWriter]] implementations have no global coordination.
+ */
 case object ForeachWriterCommitMessage extends WriterCommitMessage
