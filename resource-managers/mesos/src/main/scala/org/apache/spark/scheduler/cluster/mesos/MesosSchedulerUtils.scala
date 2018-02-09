@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 import java.util.{List => JList}
 import java.util.concurrent.CountDownLatch
 
@@ -109,11 +109,11 @@ trait MesosSchedulerUtils extends Logging {
         conf.getOption("spark.mesos.principal.file")
           .orElse(Option(conf.getenv("SPARK_MESOS_PRINCIPAL_FILE")))
           .map { principalFile =>
-              Files.toString(new File(principalFile), Charset.forName("UTF-8"))
+            Files.toString(new File(principalFile), StandardCharsets.UTF_8)
           }
       ).foreach { principal =>
-         fwInfoBuilder.setPrincipal(principal)
-         credBuilder.setPrincipal(principal)
+          fwInfoBuilder.setPrincipal(principal)
+          credBuilder.setPrincipal(principal)
     }
     conf.getOption("spark.mesos.secret")
       .orElse(Option(conf.getenv("SPARK_MESOS_SECRET")))
@@ -121,10 +121,10 @@ trait MesosSchedulerUtils extends Logging {
         conf.getOption("spark.mesos.secret.file")
          .orElse(Option(conf.getenv("SPARK_MESOS_SECRET_FILE")))
          .map { secretFile =>
-           Files.toString(new File(secretFile), Charset.forName("UTF-8"))
+           Files.toString(new File(secretFile), StandardCharsets.UTF_8)
          }
       ).foreach { secret =>
-         credBuilder.setSecret(secret)
+          credBuilder.setSecret(secret)
     }
     if (credBuilder.hasSecret && !fwInfoBuilder.hasPrincipal) {
       throw new SparkException(

@@ -20,7 +20,6 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.io.{File, FileNotFoundException}
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.Map
 import scala.language.reflectiveCalls
 
 import com.google.common.io.Files
@@ -269,7 +268,7 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     conf.set("spark.mesos.principal.file", "/tmp/does-not-exist")
 
     intercept[FileNotFoundException] {
-      val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+      utils.buildCredentials(conf, FrameworkInfo.newBuilder())
     }
   }
 
@@ -296,7 +295,7 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     val conf = new SparkConfWithEnv(Map("SPARK_MESOS_PRINCIPAL_FILE" -> "/tmp/does-not-exist"))
 
     intercept[FileNotFoundException] {
-      val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+      utils.buildCredentials(conf, FrameworkInfo.newBuilder())
     }
   }
 
@@ -333,7 +332,7 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
     conf.set("spark.mesos.secret.file", "/tmp/does-not-exist")
 
     intercept[FileNotFoundException] {
-      val credBuilder = utils.buildCredentials(conf, FrameworkInfo.newBuilder())
+      utils.buildCredentials(conf, FrameworkInfo.newBuilder())
     }
   }
 

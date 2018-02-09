@@ -90,7 +90,18 @@ Depending on your deployment environment you may wish to create a single set of 
 
 Framework credentials may be specified in a variety of ways depending on your deployment environment and security requirements.  The most simple way is to specify the `spark.mesos.principal` and `spark.mesos.secret` values directly in your Spark configuration.  Alternatively you may specify these values indirectly by instead specifying `spark.mesos.principal.file` and `spark.mesos.secret.file`, these settings point to files containing the principal and secret.  These files must be plaintext files in UTF-8 encoding.  Combined with appropriate file ownership and mode/ACLs this provides a more secure way to specify these credentials.
 
-Additionally if you prefer to use environment variables you can specify all of the above via environment variables instead, the environment variable names are simply the configuration settings uppercased with `.` replaced with `_` e.g. `SPARK_MESOS_PRINCIPAL`.  Please note that if you specify multiple ways to obtain the credentials the direct specifications are used in preference to the indirect specifications.
+Additionally if you prefer to use environment variables you can specify all of the above via environment variables instead, the environment variable names are simply the configuration settings uppercased with `.` replaced with `_` e.g. `SPARK_MESOS_PRINCIPAL`.
+
+### Credential Specification Preference Order
+
+Please note that if you specify multiple ways to obtain the credentials then the following preference order applies.  Spark will use the first valid value found and any subsequent values are ignored:
+
+- `spark.mesos.principal` configuration setting
+- `SPARK_MESOS_PRINCIPAL` environment variable
+- `spark.mesos.principal.file` configuration setting
+- `SPARK_MESOS_PRINCIPAL_FILE` environment variable
+
+An equivalent order applies for the secret.  Essentially we prefer the configuration to be specified directly rather than indirectly by files, and we prefer that configuration settings are used over environment variables.
 
 ## Uploading Spark Package
 
