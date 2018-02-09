@@ -1709,6 +1709,15 @@ def _check_dataframe_convert_date(pdf, schema):
     return pdf
 
 
+def _get_local_timezone():
+    """ Get local timezone from environment vi pytz, or dateutil. """
+    from pyspark.sql.utils import require_minimum_pandas_version
+    require_minimum_pandas_version()
+
+    import os
+    return os.environ.get('TZ', 'dateutil/:')
+
+
 def _check_dataframe_localize_timestamps(pdf, timezone):
     """
     Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone
@@ -1721,7 +1730,7 @@ def _check_dataframe_localize_timestamps(pdf, timezone):
     require_minimum_pandas_version()
 
     from pandas.api.types import is_datetime64tz_dtype
-    tz = timezone or 'tzlocal()'
+    tz = timezone or _get_local_timezone()
     for column, series in pdf.iteritems():
         # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
         if is_datetime64tz_dtype(series.dtype):
@@ -1744,7 +1753,7 @@ def _check_series_convert_timestamps_internal(s, timezone):
     from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if is_datetime64_dtype(s.dtype):
-        tz = timezone or 'tzlocal()'
+        tz = timezone or _get_local_timezone()
         return s.dt.tz_localize(tz).dt.tz_convert('UTC')
     elif is_datetime64tz_dtype(s.dtype):
         return s.dt.tz_convert('UTC')
@@ -1766,15 +1775,13 @@ def _check_series_convert_timestamps_localize(s, from_timezone, to_timezone):
 
     import pandas as pd
     from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
-    from_tz = from_timezone or 'tzlocal()'
-    to_tz = to_timezone or 'tzlocal()'
+    from_tz = from_timezone or _get_local_timezone()
+    to_tz = to_timezone or _get_local_timezone()
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if is_datetime64tz_dtype(s.dtype):
         return s.dt.tz_convert(to_tz).dt.tz_localize(None)
     elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
-        # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
-        return s.apply(lambda ts: ts.tz_localize(from_tz).tz_convert(to_tz).tz_localize(None)
-                       if ts is not pd.NaT else pd.NaT)
+        return s.dt.tz_localize(from_tz).dt.tz_convert(to_tz).dt.tz_localize(None)
     else:
         return s
 

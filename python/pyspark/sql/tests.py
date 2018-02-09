@@ -3415,7 +3415,9 @@ class ArrowTests(ReusedSQLTestCase):
                     (u"b", 2, 20, 0.4, 4.0, Decimal("4.0"),
                      date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
                     (u"c", 3, 30, 0.8, 6.0, Decimal("6.0"),
-                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
+                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3)),
+                    (u"d", 4, 30, 1.0, 8.0, Decimal("8.0"),
+                     date(2100, 4, 4), datetime(2100, 4, 4, 4, 4, 4))]
 
     @classmethod
     def tearDownClass(cls):
@@ -4124,7 +4126,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         data = [(0, datetime(1969, 1, 1, 1, 1, 1)),
                 (1, datetime(2012, 2, 2, 2, 2, 2)),
                 (2, None),
-                (3, datetime(2100, 3, 3, 3, 3, 3))]
+                (3, datetime(2100, 4, 4, 4, 4, 4))]
 
         df = self.spark.createDataFrame(data, schema=schema)
 
@@ -4206,7 +4208,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         data = [(1, datetime(1969, 1, 1, 1, 1, 1)),
                 (2, datetime(2012, 2, 2, 2, 2, 2)),
                 (3, None),
-                (4, datetime(2100, 3, 3, 3, 3, 3))]
+                (4, datetime(2100, 4, 4, 4, 4, 4))]
         df = self.spark.createDataFrame(data, schema=schema)
 
         f_timestamp_copy = pandas_udf(lambda ts: ts, TimestampType())
