@@ -187,3 +187,21 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 }
 
+class MemoryStreamDataReaderFactory(records: Array[UnsafeRow])
+    extends DataReaderFactory[UnsafeRow] {
+  override def createDataReader(): DataReader[UnsafeRow] = {
+    new DataReader[UnsafeRow] {
+      private var currentIndex = -1
+
+      override def next(): Boolean = {
+        // Return true as long as the new index is in the array.
+        currentIndex += 1
+        currentIndex < records.length
+      }
+
+      override def get(): UnsafeRow = records(currentIndex)
+
+      override def close(): Unit = {}
+    }
+  }
+}

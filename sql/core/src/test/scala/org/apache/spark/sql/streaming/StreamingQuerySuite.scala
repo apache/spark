@@ -576,8 +576,9 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         q3.processAllAvailable()
       }
       assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.isInstanceOf[IllegalStateException])
-      assert(e.getMessage.contains("StreamingQuery cannot be used in executors"))
+      assert(e.getCause.getCause.getCause.isInstanceOf[IllegalStateException])
+      assert(e.getCause.getCause.getCause.getMessage.contains(
+        "StreamingQuery cannot be used in executors"))
     } finally {
       q1.stop()
       q2.stop()
