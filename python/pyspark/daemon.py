@@ -200,7 +200,8 @@ if __name__ == '__main__':
         # works for long values too
         token = int(token_string)
     except ValueError:
-        sys.stderr.write("Non-numeric value set in environment variable PYSPARK_DAEMON_TOKEN: %s\n" % token_string)
+        sys.stderr.write("Non-numeric value set in environment variable PYSPARK_DAEMON_TOKEN: %s\n"
+                         % token_string)
         sys.exit(1)
 
     manager(parent_port, token)
