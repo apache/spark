@@ -103,11 +103,6 @@ case class DataSourceV2Relation(
     (newReader, remainingFilters, pushedFilters)
   }
 
-  def writer(dfSchema: StructType, mode: SaveMode): Option[DataSourceWriter] = {
-    val writer = asWriteSupport.createWriter(UUID.randomUUID.toString, dfSchema, mode, v2Options)
-    if (writer.isPresent) Some(writer.get()) else None
-  }
-
   private lazy val asReadSupport: ReadSupport = {
     source match {
       case support: ReadSupport =>
@@ -130,15 +125,6 @@ case class DataSourceV2Relation(
           s"Data source does not support user-supplied schema: $sourceName")
       case _ =>
         throw new AnalysisException(s"Data source is not readable: $sourceName")
-    }
-  }
-
-  private lazy val asWriteSupport: WriteSupport = {
-    source match {
-      case support: WriteSupport =>
-        support
-      case _ =>
-        throw new AnalysisException(s"Data source is not writable: $sourceName")
     }
   }
 
