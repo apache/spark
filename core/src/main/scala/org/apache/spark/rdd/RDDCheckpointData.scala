@@ -43,10 +43,10 @@ private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient private 
   import CheckpointState._
 
   // The checkpoint state of the associated RDD.
-  protected[spark] var cpState = Initialized
+  protected var cpState = Initialized
 
   // The RDD that contains our checkpointed data
-  private[spark] var cpRDD: Option[CheckpointRDD[T]] = None
+  private var cpRDD: Option[CheckpointRDD[T]] = None
 
   // TODO: are we sure we need to use a global lock in the following methods?
 
@@ -88,7 +88,7 @@ private[spark] abstract class RDDCheckpointData[T: ClassTag](@transient private 
    * Subclasses should override this method to define custom checkpointing behavior.
    * @return the checkpoint RDD created in the process.
    */
-  protected[spark] def doCheckpoint(): CheckpointRDD[T]
+  protected def doCheckpoint(): CheckpointRDD[T]
 
   /**
    * Return the RDD that contains our checkpointed data.
