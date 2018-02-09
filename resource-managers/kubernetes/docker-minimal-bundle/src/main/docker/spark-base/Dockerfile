@@ -33,7 +33,7 @@ COPY jars /opt/spark/jars
 COPY bin /opt/spark/bin
 COPY sbin /opt/spark/sbin
 COPY conf /opt/spark/conf
-COPY dockerfiles/spark-base/entrypoint.sh /opt/
+COPY kubernetes/docker/spark-base/entrypoint.sh /opt/
 
 ENV SPARK_HOME /opt/spark
 
