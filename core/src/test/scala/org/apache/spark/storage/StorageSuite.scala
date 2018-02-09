@@ -74,20 +74,6 @@ class StorageSuite extends SparkFunSuite {
     assert(status.rddBlocks.contains(RDDBlockId(2, 2)))
     assert(status.rddBlocks.contains(RDDBlockId(2, 3)))
     assert(status.rddBlocks.contains(RDDBlockId(2, 4)))
-    assert(status.memUsedByRdd(0) === 10L)
-    assert(status.memUsedByRdd(1) === 100L)
-    assert(status.memUsedByRdd(2) === 30L)
-    assert(status.diskUsedByRdd(0) === 20L)
-    assert(status.diskUsedByRdd(1) === 200L)
-    assert(status.diskUsedByRdd(2) === 80L)
-    assert(status.rddStorageLevel(0) === Some(memAndDisk))
-    assert(status.rddStorageLevel(1) === Some(memAndDisk))
-    assert(status.rddStorageLevel(2) === Some(memAndDisk))
-
-    // Verify default values for RDDs that don't exist
-    assert(status.memUsedByRdd(10) === 0L)
-    assert(status.diskUsedByRdd(10) === 0L)
-    assert(status.rddStorageLevel(10) === None)
   }
 
   test("storage status getBlock") {
@@ -140,22 +126,6 @@ class StorageSuite extends SparkFunSuite {
     val info0 = new RDDInfo(0, "0", 10, memAndDisk, Seq(3))
     val info1 = new RDDInfo(1, "1", 3, memAndDisk, Seq(4))
     Seq(info0, info1)
-  }
-
-  test("StorageUtils.updateRddInfo") {
-    val storageStatuses = stockStorageStatuses
-    val rddInfos = stockRDDInfos
-    StorageUtils.updateRddInfo(rddInfos, storageStatuses)
-    assert(rddInfos(0).storageLevel === memAndDisk)
-    assert(rddInfos(0).numCachedPartitions === 5)
-    assert(rddInfos(0).memSize === 5L)
-    assert(rddInfos(0).diskSize === 10L)
-    assert(rddInfos(0).externalBlockStoreSize === 0L)
-    assert(rddInfos(1).storageLevel === memAndDisk)
-    assert(rddInfos(1).numCachedPartitions === 3)
-    assert(rddInfos(1).memSize === 3L)
-    assert(rddInfos(1).diskSize === 6L)
-    assert(rddInfos(1).externalBlockStoreSize === 0L)
   }
 
   private val offheap = StorageLevel.OFF_HEAP

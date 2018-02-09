@@ -1715,7 +1715,13 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def getRDDStorageInfo(filter: RDD[_] => Boolean): Array[RDDInfo] = {
     assertNotStopped()
     val rddInfos = persistentRdds.values.filter(filter).map(RDDInfo.fromRdd).toArray
-    StorageUtils.updateRddInfo(rddInfos, env.blockManager.master.getStorageStatus)
+    rddInfos.foreach { rddInfo =>
+      val rddId = rddInfo.id
+      val rddStorageInfo = statusStore.rdd(rddId)
+      rddInfo.numCachedPartitions = rddStorageInfo.numCachedPartitions
+      rddInfo.memSize = rddStorageInfo.memoryUsed
+      rddInfo.diskSize = rddStorageInfo.diskUsed
+    }
     rddInfos.filter(_.isCached)
   }
 

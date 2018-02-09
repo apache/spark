@@ -365,7 +365,7 @@ class SingletonReplSuite extends SparkFunSuite {
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
-    assertContains("res: Int = 20", output)
+    assertContains("res: Int = 10", output)
   }
 
   test("should clone and clean line object in ClosureCleaner") {
