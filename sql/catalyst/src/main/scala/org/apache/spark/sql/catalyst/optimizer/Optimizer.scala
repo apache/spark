@@ -730,6 +730,9 @@ object EliminateSorts extends Rule[LogicalPlan] {
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) child else s.copy(order = newOrders)
+    case Sort(orders, true, child) if child.isSorted && child.sortedOrder.get.zip(orders).forall {
+        case (s1, s2) => s1.satisfies(s2) } =>
+      child
   }
 }
 

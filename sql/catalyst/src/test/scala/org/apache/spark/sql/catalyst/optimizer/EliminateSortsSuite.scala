@@ -37,7 +37,8 @@ class EliminateSortsSuite extends PlanTest {
     val batches =
       Batch("Eliminate Sorts", FixedPoint(10),
         FoldablePropagation,
-        EliminateSorts) :: Nil
+        EliminateSorts,
+        CollapseProject) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -82,5 +83,17 @@ class EliminateSortsSuite extends PlanTest {
       x.select('a.as('x), Year(CurrentDate()).as('y), 'b).orderBy('x.asc, 'b.desc))
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("remove redundant order by") {
+    val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
+    val unnecessaryReordered = orderedPlan.select('a).orderBy('a.asc, 'b.desc_nullsFirst)
+    val optimized = Optimize.execute(analyzer.execute(unnecessaryReordered))
+    val correctAnswer = analyzer.execute(orderedPlan.select('a))
+    comparePlans(Optimize.execute(optimized), correctAnswer)
+    val reorderedDifferently = orderedPlan.select('a).orderBy('a.asc, 'b.desc)
+    val nonOptimized = Optimize.execute(analyzer.execute(reorderedDifferently))
+    val correctAnswerNonOptimized = analyzer.execute(reorderedDifferently)
+    comparePlans(nonOptimized, correctAnswerNonOptimized)
   }
 }

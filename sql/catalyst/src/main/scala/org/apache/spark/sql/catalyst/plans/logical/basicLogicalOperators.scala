@@ -43,11 +43,12 @@ case class ReturnAnswer(child: LogicalPlan) extends UnaryNode {
  * This node is inserted at the top of a subquery when it is optimized. This makes sure we can
  * recognize a subquery as such, and it allows us to write subquery aware transformations.
  */
-case class Subquery(child: LogicalPlan) extends UnaryNode {
+case class Subquery(child: LogicalPlan) extends KeepOrderUnaryNode {
   override def output: Seq[Attribute] = child.output
 }
 
-case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extends UnaryNode {
+case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
+    extends KeepOrderUnaryNode {
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
   override def maxRows: Option[Long] = child.maxRows
 
@@ -125,7 +126,7 @@ case class Generate(
 }
 
 case class Filter(condition: Expression, child: LogicalPlan)
-  extends UnaryNode with PredicateHelper {
+  extends KeepOrderUnaryNode with PredicateHelper {
   override def output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
@@ -469,6 +470,7 @@ case class Sort(
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
+  override def sortedOrder: Option[Seq[SortOrder]] = Some(order)
 }
 
 /** Factory for constructing new `Range` nodes. */
@@ -728,7 +730,7 @@ object Limit {
  *
  * See [[Limit]] for more information.
  */
-case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends KeepOrderUnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = {
     limitExpr match {
@@ -764,7 +766,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
 case class SubqueryAlias(
     alias: String,
     child: LogicalPlan)
-  extends UnaryNode {
+  extends KeepOrderUnaryNode {
 
   override def doCanonicalize(): LogicalPlan = child.canonicalized
 
@@ -867,6 +869,11 @@ case class RepartitionByExpression(
 
   override def maxRows: Option[Long] = child.maxRows
   override def shuffle: Boolean = true
+
+  override def sortedOrder: Option[Seq[SortOrder]] = partitioning match {
+    case RangePartitioning(sortedOrder, _) => Some(sortedOrder)
+    case _ => None
+  }
 }
 
 /**
