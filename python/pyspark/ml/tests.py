@@ -1632,11 +1632,10 @@ class KMeansTests(SparkSessionTestCase):
         df = self.spark.createDataFrame(data, ["features"])
         kmeans = KMeans(k=3, seed=1, distanceMeasure="cosine")
         model = kmeans.fit(df)
-        result = model.transform(df).rdd.collectAsMap()
-        self.assertTrue(result[Vectors.dense([1.0, 1.0])] == result[Vectors.dense([10.0, 10.0])])
-        self.assertTrue(result[Vectors.dense([1.0, 0.5])] == result[Vectors.dense([10.0, 4.4])])
-        self.assertTrue(result[Vectors.dense([-1.0, 1.0])] ==
-                        result[Vectors.dense([-100.0, 90.0])])
+        result = model.transform(df).collect()
+        self.assertTrue(result[0].prediction == result[1].prediction)
+        self.assertTrue(result[2].prediction == result[3].prediction)
+        self.assertTrue(result[4].prediction == result[5].prediction)
 
 
 class OneVsRestTests(SparkSessionTestCase):
