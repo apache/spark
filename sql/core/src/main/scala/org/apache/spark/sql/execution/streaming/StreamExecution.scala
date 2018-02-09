@@ -565,6 +565,7 @@ abstract class StreamExecution(
 
 object StreamExecution {
   val QUERY_ID_KEY = "sql.streaming.queryId"
+  val BATCH_ID_KEY = "sql.streaming.batchId"
 }
 
 /**

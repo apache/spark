@@ -134,7 +134,6 @@ class ForeachDataWriter[T : Encoder](
         case OPENED_SKIP_PROCESSING => ()
         case CLOSED =>
           // First record of a new epoch, so we need to open a new writer for it.
-          currentEpochId += 1
           openAndSetState(currentEpochId)
           writer.process(encoder.fromRow(record))
       }
@@ -146,7 +145,13 @@ class ForeachDataWriter[T : Encoder](
   }
 
   override def commit(): WriterCommitMessage = {
-    writer.close(null)
+    // Close if the writer got opened for this epoch.
+    state match {
+      case CLOSED => ()
+      case _ => writer.close(null)
+    }
+    state = CLOSED
+    currentEpochId += 1
     ForeachWriterCommitMessage
   }
 
