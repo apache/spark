@@ -84,7 +84,7 @@ private[spark] class IndexShuffleBlockResolver(
    */
   private def checkIndexAndDataFile(index: File, data: File, blocks: Int): Array[Long] = {
     // the index file should have `block + 1` longs as offset.
-    if (index.length() != (blocks + 1) * 8) {
+    if (index.length() != (blocks + 1) * 8L) {
       return null
     }
     val lengths = new Array[Long](blocks)
