@@ -1963,8 +1963,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
     - The configuration `spark.sql.decimalOperations.allowPrecisionLoss` has been introduced. It defaults to `true`, which means the new behavior described here; if set to `false`, Spark uses previous rules, ie. it doesn't adjust the needed scale to represent the values and it returns NULL if an exact representation of the value is not possible.
   - In PySpark, `df.replace` does not allow to omit `value` when `to_replace` is not a dictionary. Previously, `value` could be omitted in the other cases and had `None` by default, which is counterintuitive and error prone.
 
- - Since Spark 2.3, writing an empty dataframe (a dataframe with 0 partitions) in parquet or orc format, creates a format specific metadata only file. In prior versions the metadata only file was not created. As a result, subsequent attempt to read from this directory fails with AnalysisException while inferring schema of the file. For example : df.write.format("parquet").save("outDir")
-followed by df.read.format("parquet").load("outDir") results in AnalysisException in prior versions.
+ - Since Spark 2.3, writing an empty dataframe to a directory launches at least one write task, even if physically the dataframe has no partition. This introduces a small behavior change that for self-describing file formats like Parquet and Orc, Spark creates a metadata-only file in the target directory when writing an empty dataframe, so that schema inference can still work if users read that directory later. The new behavior is more reasonable and more consistent regarding writing empty dataframe.
 
 ## Upgrading From Spark SQL 2.1 to 2.2
 
