@@ -28,11 +28,10 @@ import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySe
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SparkSession, SQLContext}
-import org.apache.spark.sql.execution.streaming.{Offset, Sink, Source}
+import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options}
-import org.apache.spark.sql.sources.v2.streaming.{ContinuousReadSupport, ContinuousWriteSupport}
-import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -46,7 +45,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     with StreamSinkProvider
     with RelationProvider
     with CreatableRelationProvider
-    with ContinuousWriteSupport
+    with StreamWriteSupport
     with ContinuousReadSupport
     with Logging {
   import KafkaSourceProvider._
@@ -109,7 +108,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   override def createContinuousReader(
       schema: Optional[StructType],
       metadataPath: String,
-      options: DataSourceV2Options): KafkaContinuousReader = {
+      options: DataSourceOptions): KafkaContinuousReader = {
     val parameters = options.asMap().asScala.toMap
     validateStreamOptions(parameters)
     // Each running query should use its own group id. Otherwise, the query may be only assigned
@@ -223,11 +222,11 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     }
   }
 
-  override def createContinuousWriter(
+  override def createStreamWriter(
       queryId: String,
       schema: StructType,
       mode: OutputMode,
-      options: DataSourceV2Options): Optional[ContinuousWriter] = {
+      options: DataSourceOptions): StreamWriter = {
     import scala.collection.JavaConverters._
 
     val spark = SparkSession.getActiveSession.get
@@ -238,7 +237,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     KafkaWriter.validateQuery(
       schema.toAttributes, new java.util.HashMap[String, Object](producerParams.asJava), topic)
 
-    Optional.of(new KafkaContinuousWriter(topic, producerParams, schema))
+    new KafkaStreamWriter(topic, producerParams, schema)
   }
 
   private def strategy(caseInsensitiveParams: Map[String, String]) =
@@ -307,7 +306,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
       throw new IllegalArgumentException(
         s"Kafka option '${ConsumerConfig.GROUP_ID_CONFIG}' is not supported as " +
-          s"user-specified consumer groups is not used to track offsets.")
+          s"user-specified consumer groups are not used to track offsets.")
     }
 
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.AUTO_OFFSET_RESET_CONFIG}")) {
@@ -335,7 +334,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     {
       throw new IllegalArgumentException(
         s"Kafka option '${ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG}' is not supported as "
-          + "value are deserialized as byte arrays with ByteArrayDeserializer. Use DataFrame "
+          + "values are deserialized as byte arrays with ByteArrayDeserializer. Use DataFrame "
           + "operations to explicitly deserialize the values.")
     }
 

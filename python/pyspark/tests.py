@@ -1239,6 +1239,13 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', checkCode=True).collect)
         self.assertEqual([], rdd.pipe('grep 4').collect())
 
+    def test_pipe_unicode(self):
+        # Regression test for SPARK-20947
+        data = [u'\u6d4b\u8bd5', '1']
+        rdd = self.sc.parallelize(data)
+        result = rdd.pipe('cat').collect()
+        self.assertEqual(data, result)
+
 
 class ProfilerTests(PySparkTestCase):
 

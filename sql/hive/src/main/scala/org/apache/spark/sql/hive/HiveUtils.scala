@@ -109,7 +109,7 @@ private[spark] object HiveUtils extends Logging {
     .doc("When set to true, the built-in ORC reader and writer are used to process " +
       "ORC tables created by using the HiveQL syntax, instead of Hive serde.")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val HIVE_METASTORE_SHARED_PREFIXES = buildConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
@@ -460,6 +460,7 @@ private[spark] object HiveUtils extends Logging {
     case (decimal: java.math.BigDecimal, DecimalType()) =>
       // Hive strips trailing zeros so use its toString
       HiveDecimal.create(decimal).toString
+    case (other, _ : UserDefinedType[_]) => other.toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
 

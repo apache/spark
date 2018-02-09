@@ -1852,6 +1852,7 @@ class ImageReaderTest(SparkSessionTestCase):
         self.assertEqual(len(array), first_row[1])
         self.assertEqual(ImageSchema.toImage(array, origin=first_row[0]), first_row)
         self.assertEqual(df.schema, ImageSchema.imageSchema)
+        self.assertEqual(df.schema["image"].dataType, ImageSchema.columnSchema)
         expected = {'CV_8UC3': 16, 'Undefined': -1, 'CV_8U': 0, 'CV_8UC1': 0, 'CV_8UC4': 24}
         self.assertEqual(ImageSchema.ocvTypes, expected)
         expected = ['origin', 'height', 'width', 'nChannels', 'mode', 'data']

@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""
+r"""
  Counts words in UTF8 encoded, '\n' delimited text received from the network.
  Usage: structured_network_wordcount.py <hostname> <port>
    <hostname> and <port> describe the TCP server that Structured Streaming

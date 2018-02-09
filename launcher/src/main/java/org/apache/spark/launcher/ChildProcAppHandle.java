@@ -48,14 +48,16 @@ class ChildProcAppHandle extends AbstractAppHandle {
 
   @Override
   public synchronized void kill() {
-    disconnect();
-    if (childProc != null) {
-      if (childProc.isAlive()) {
-        childProc.destroyForcibly();
+    if (!isDisposed()) {
+      setState(State.KILLED);
+      disconnect();
+      if (childProc != null) {
+        if (childProc.isAlive()) {
+          childProc.destroyForcibly();
+        }
+        childProc = null;
       }
-      childProc = null;
     }
-    setState(State.KILLED);
   }
 
   void setChildProc(Process childProc, String loggerName, InputStream logStream) {
@@ -94,8 +96,6 @@ class ChildProcAppHandle extends AbstractAppHandle {
         return;
       }
 
-      disconnect();
-
       int ec;
       try {
         ec = proc.exitValue();
@@ -104,20 +104,15 @@ class ChildProcAppHandle extends AbstractAppHandle {
         ec = 1;
       }
 
-      State currState = getState();
-      State newState = null;
       if (ec != 0) {
+        State currState = getState();
         // Override state with failure if the current state is not final, or is success.
         if (!currState.isFinal() || currState == State.FINISHED) {
-          newState = State.FAILED;
+          setState(State.FAILED, true);
         }
-      } else if (!currState.isFinal()) {
-        newState = State.LOST;
       }
 
-      if (newState != null) {
-        setState(newState, true);
-      }
+      dispose();
     }
   }
 

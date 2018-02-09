@@ -17,6 +17,7 @@
 
 package org.apache.spark.unsafe;
 
+import org.apache.spark.unsafe.memory.HeapMemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
@@ -133,5 +134,26 @@ public class PlatformUtilSuite {
       Platform.getByte(offheap.getBaseObject(), offheap.getBaseOffset()),
       MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
     MemoryAllocator.UNSAFE.free(offheap);
+  }
+
+  @Test
+  public void heapMemoryReuse() {
+    MemoryAllocator heapMem = new HeapMemoryAllocator();
+    // The size is less than `HeapMemoryAllocator.POOLING_THRESHOLD_BYTES`,allocate new memory every time.
+    MemoryBlock onheap1 = heapMem.allocate(513);
+    Object obj1 = onheap1.getBaseObject();
+    heapMem.free(onheap1);
+    MemoryBlock onheap2 = heapMem.allocate(514);
+    Assert.assertNotEquals(obj1, onheap2.getBaseObject());
+
+    // The size is greater than `HeapMemoryAllocator.POOLING_THRESHOLD_BYTES`,
+    // reuse the previous memory which has released.
+    MemoryBlock onheap3 = heapMem.allocate(1024 * 1024 + 1);
+    Assert.assertEquals(onheap3.size(), 1024 * 1024 + 1);
+    Object obj3 = onheap3.getBaseObject();
+    heapMem.free(onheap3);
+    MemoryBlock onheap4 = heapMem.allocate(1024 * 1024 + 7);
+    Assert.assertEquals(onheap4.size(), 1024 * 1024 + 7);
+    Assert.assertEquals(obj3, onheap4.getBaseObject());
   }
 }

@@ -244,7 +244,10 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     for (i <- 0 until testOutputCopies) {
       // Shift values by i so that they're different in the output
       val alteredOutput = testOutput.map(b => (b + i).toByte)
-      channel.write(ByteBuffer.wrap(alteredOutput))
+      val buffer = ByteBuffer.wrap(alteredOutput)
+      while (buffer.hasRemaining) {
+        channel.write(buffer)
+      }
     }
     channel.close()
     file.close()

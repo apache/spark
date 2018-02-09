@@ -217,6 +217,7 @@ class LauncherServer implements Closeable {
         break;
       }
     }
+
     unref();
   }
 
@@ -237,6 +238,7 @@ class LauncherServer implements Closeable {
         };
         ServerConnection clientConnection = new ServerConnection(client, timeout);
         Thread clientThread = factory.newThread(clientConnection);
+        clientConnection.setConnectionThread(clientThread);
         synchronized (clients) {
           clients.add(clientConnection);
         }
@@ -285,14 +287,19 @@ class LauncherServer implements Closeable {
     }
   }
 
-  private class ServerConnection extends LauncherConnection {
+  class ServerConnection extends LauncherConnection {
 
     private TimerTask timeout;
-    private AbstractAppHandle handle;
+    private volatile Thread connectionThread;
+    private volatile AbstractAppHandle handle;
 
     ServerConnection(Socket socket, TimerTask timeout) throws IOException {
       super(socket);
       this.timeout = timeout;
+    }
+
+    void setConnectionThread(Thread t) {
+      this.connectionThread = t;
     }
 
     @Override
@@ -313,7 +320,7 @@ class LauncherServer implements Closeable {
         } else {
           if (handle == null) {
             throw new IllegalArgumentException("Expected hello, got: " +
-            msg != null ? msg.getClass().getName() : null);
+              msg != null ? msg.getClass().getName() : null);
           }
           if (msg instanceof SetAppId) {
             SetAppId set = (SetAppId) msg;
@@ -331,6 +338,9 @@ class LauncherServer implements Closeable {
           timeout.cancel();
         }
         close();
+        if (handle != null) {
+          handle.dispose();
+        }
       } finally {
         timeoutTimer.purge();
       }
@@ -338,16 +348,42 @@ class LauncherServer implements Closeable {
 
     @Override
     public void close() throws IOException {
+      if (!isOpen()) {
+        return;
+      }
+
       synchronized (clients) {
         clients.remove(this);
       }
+
       super.close();
-      if (handle != null) {
-        if (!handle.getState().isFinal()) {
-          LOG.log(Level.WARNING, "Lost connection to spark application.");
-          handle.setState(SparkAppHandle.State.LOST);
+    }
+
+    /**
+     * Wait for the remote side to close the connection so that any pending data is processed.
+     * This ensures any changes reported by the child application take effect.
+     *
+     * This method allows a short period for the above to happen (same amount of time as the
+     * connection timeout, which is configurable). This should be fine for well-behaved
+     * applications, where they close the connection arond the same time the app handle detects the
+     * app has finished.
+     *
+     * In case the connection is not closed within the grace period, this method forcefully closes
+     * it and any subsequent data that may arrive will be ignored.
+     */
+    public void waitForClose() throws IOException {
+      Thread connThread = this.connectionThread;
+      if (Thread.currentThread() != connThread) {
+        try {
+          connThread.join(getConnectionTimeout());
+        } catch (InterruptedException ie) {
+          // Ignore.
         }
-        handle.disconnect();
+
+        if (connThread.isAlive()) {
+          LOG.log(Level.WARNING, "Timed out waiting for child connection to close.");
+          close();
+        }
       }
     }
 

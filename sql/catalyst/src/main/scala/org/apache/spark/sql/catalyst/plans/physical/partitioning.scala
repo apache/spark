@@ -153,7 +153,7 @@ case class BroadcastDistribution(mode: BroadcastMode) extends Distribution {
  *   1. number of partitions.
  *   2. if it can satisfy a given distribution.
  */
-sealed trait Partitioning {
+trait Partitioning {
   /** Returns the number of partitions that the data is split across */
   val numPartitions: Int
 

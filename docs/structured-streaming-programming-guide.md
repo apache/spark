@@ -1101,6 +1101,21 @@ streamingDf.join(staticDf, "type", "right_join")  # right outer join with a stat
 {% endhighlight %}
 
 </div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+staticDf <- read.df(...)
+streamingDf <- read.stream(...)
+joined <- merge(streamingDf, staticDf, sort = FALSE)  # inner equi-join with a static DF
+joined <- join(
+            staticDf,
+            streamingDf, 
+            streamingDf$value == staticDf$value,
+            "right_outer")  # right outer join with a static DF
+{% endhighlight %}
+
+</div>
 </div>
 
 Note that stream-static joins are not stateful, so no state management is necessary.
@@ -1228,6 +1243,30 @@ impressionsWithWatermark.join(
 {% endhighlight %}
 
 </div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+impressions <- read.stream(...)
+clicks <- read.stream(...)
+
+# Apply watermarks on event-time columns
+impressionsWithWatermark <- withWatermark(impressions, "impressionTime", "2 hours")
+clicksWithWatermark <- withWatermark(clicks, "clickTime", "3 hours")
+
+# Join with event-time constraints
+joined <- join(
+  impressionsWithWatermark,
+  clicksWithWatermark,
+  expr(
+    paste(
+      "clickAdId = impressionAdId AND",
+      "clickTime >= impressionTime AND",
+      "clickTime <= impressionTime + interval 1 hour"
+)))
+
+{% endhighlight %}
+
+</div>
 </div>
 
 ##### Outer Joins with Watermarking
@@ -1288,11 +1327,38 @@ impressionsWithWatermark.join(
 {% endhighlight %}
 
 </div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+joined <- join(
+  impressionsWithWatermark,
+  clicksWithWatermark,
+  expr(
+    paste(
+      "clickAdId = impressionAdId AND",
+      "clickTime >= impressionTime AND",
+      "clickTime <= impressionTime + interval 1 hour"),
+  "left_outer"                 # can be "inner", "left_outer", "right_outer"
+))
+
+{% endhighlight %}
+
+</div>
 </div>
 
-However, note that the outer NULL results will be generated with a delay (depends on the specified
-watermark delay and the time range condition) because the engine has to wait for that long to ensure
+
+There are a few points to note regarding outer joins.
+
+- *The outer NULL results will be generated with a delay that depends on the specified watermark
+delay and the time range condition.* This is because the engine has to wait for that long to ensure
 there were no matches and there will be no more matches in future.
+
+- In the current implementation in the micro-batch engine, watermarks are advanced at the end of a
+micro-batch, and the next micro-batch uses the updated watermark to clean up state and output
+outer results. Since we trigger a micro-batch only when there is new data to be processed, the
+generation of the outer result may get delayed if there no new data being received in the stream.
+*In short, if any of the two input streams being joined does not receive data for a while, the
+outer (both cases, left or right) output may get delayed.*
 
 ##### Support matrix for joins in streaming queries
 
@@ -1441,13 +1507,27 @@ streamingDf
 {% highlight python %}
 streamingDf = spark.readStream. ...
 
-// Without watermark using guid column
+# Without watermark using guid column
 streamingDf.dropDuplicates("guid")
 
-// With watermark using guid and eventTime columns
+# With watermark using guid and eventTime columns
 streamingDf \
   .withWatermark("eventTime", "10 seconds") \
   .dropDuplicates("guid", "eventTime")
+{% endhighlight %}
+
+</div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+streamingDf <- read.stream(...)
+
+# Without watermark using guid column
+streamingDf <- dropDuplicates(streamingDf, "guid")
+
+# With watermark using guid and eventTime columns
+streamingDf <- withWatermark(streamingDf, "eventTime", "10 seconds")
+streamingDf <- dropDuplicates(streamingDf, "guid", "eventTime")
 {% endhighlight %}
 
 </div>

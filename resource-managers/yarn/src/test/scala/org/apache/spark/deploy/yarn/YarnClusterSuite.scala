@@ -45,8 +45,7 @@ import org.apache.spark.util.Utils
 
 /**
  * Integration tests for YARN; these tests use a mini Yarn cluster to run Spark-on-YARN
- * applications, and require the Spark assembly to be built before they can be successfully
- * run.
+ * applications.
  */
 @ExtendedYarnTest
 class YarnClusterSuite extends BaseYarnClusterSuite {
@@ -152,7 +151,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Python application in yarn-cluster mode using " +
-    " spark.yarn.appMasterEnv to override local envvar") {
+    "spark.yarn.appMasterEnv to override local envvar") {
     testPySpark(
       clientMode = false,
       extraConf = Map(
@@ -381,7 +380,9 @@ private object YarnClusterDriver extends Logging with Matchers {
 
       // Verify that the config archive is correctly placed in the classpath of all containers.
       val confFile = "/" + Client.SPARK_CONF_FILE
-      assert(getClass().getResource(confFile) != null)
+      if (conf.getOption(SparkLauncher.DEPLOY_MODE) == Some("cluster")) {
+        assert(getClass().getResource(confFile) != null)
+      }
       val configFromExecutors = sc.parallelize(1 to 4, 4)
         .map { _ => Option(getClass().getResource(confFile)).map(_.toString).orNull }
         .collect()
