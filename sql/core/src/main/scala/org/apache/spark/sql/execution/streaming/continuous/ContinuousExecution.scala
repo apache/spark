@@ -37,7 +37,7 @@ import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, Parti
 import org.apache.spark.sql.sources.v2.writer.StreamWriteSupport
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.{Clock, Utils}
+import org.apache.spark.util.{Clock, ShutdownHookManager, Utils}
 
 class ContinuousExecution(
     sparkSession: SparkSession,
@@ -80,6 +80,10 @@ class ContinuousExecution(
   }
 
   override protected def runActivatedStream(sparkSessionForStream: SparkSession): Unit = {
+    ShutdownHookManager.addShutdownHook { () =>
+      logInfo("Invoking stop() from shutdown hook")
+      queryExecutionThread.interrupt()
+    }
     val stateUpdate = new UnaryOperator[State] {
       override def apply(s: State) = s match {
         // If we ended the query to reconfigure, reset the state to active.
