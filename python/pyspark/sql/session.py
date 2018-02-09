@@ -37,6 +37,7 @@ from pyspark.sql.types import Row, DataType, StringType, StructType, TimestampTy
     _make_type_verifier, _infer_schema, _has_nulltype, _merge_type, _create_converter, \
     _parse_datatype_string
 from pyspark.sql.utils import install_exception_handler
+from pyspark.util import _exception_message
 
 __all__ = ["SparkSession"]
 
@@ -666,8 +667,9 @@ class SparkSession(object):
                 try:
                     return self._create_from_pandas_with_arrow(data, schema, timezone)
                 except Exception as e:
-                    warnings.warn("Arrow will not be used in createDataFrame: %s" % str(e))
                     # Fallback to create DataFrame without arrow if raise some exception
+                    warnings.warn(
+                        "Arrow will not be used in createDataFrame: %s" % _exception_message(e))
             data = self._convert_from_pandas(data, schema, timezone)
 
         if isinstance(schema, StructType):
