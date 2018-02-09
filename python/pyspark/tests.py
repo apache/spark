@@ -63,7 +63,7 @@ from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.rdd import RDD
 from pyspark.files import SparkFiles
-from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
+from pyspark.serializers import read_int, read_long, BatchedSerializer, MarshalSerializer, PickleSerializer, \
     CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer, \
     PairDeserializer, CartesianDeserializer, AutoBatchedSerializer, AutoSerializer, \
     FlattenedValuesSerializer
@@ -1821,7 +1821,7 @@ class DaemonTests(unittest.TestCase):
         infile = sock.makefile(mode='rb')
 
         # read the token and port number
-        actual_token = read_int(infile)
+        actual_token = read_long(infile)
         if actual_token != expected_token:
             self.fail("Daemon did not return expected auth token")
         port = read_int(infile)
