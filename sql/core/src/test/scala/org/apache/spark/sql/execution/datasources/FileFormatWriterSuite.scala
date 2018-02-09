@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
