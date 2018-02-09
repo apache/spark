@@ -419,6 +419,8 @@ class ParamTests(PySparkTestCase):
         algo.setInitSteps(10)
         self.assertEqual(algo.getInitSteps(), 10)
         self.assertEqual(algo.getDistanceMeasure(), "euclidean")
+        algo.setDistanceMeasure("cosine")
+        self.assertEqual(algo.getDistanceMeasure(), "cosine")
 
     def test_hasseed(self):
         noSeedSpecd = TestParams()
@@ -1628,8 +1630,7 @@ class KMeansTests(SparkSessionTestCase):
                 (Vectors.dense([1.0, 0.5]),), (Vectors.dense([10.0, 4.4]),),
                 (Vectors.dense([-1.0, 1.0]),), (Vectors.dense([-100.0, 90.0]),)]
         df = self.spark.createDataFrame(data, ["features"])
-        kmeans = KMeans(k=3, seed=1)
-        kmeans.setDistanceMeasure("cosine")
+        kmeans = KMeans(k=3, seed=1, distanceMeasure="cosine")
         model = kmeans.fit(df)
         result = model.transform(df).rdd.collectAsMap()
         self.assertTrue(result[Vectors.dense([1.0, 1.0])] == result[Vectors.dense([10.0, 10.0])])
