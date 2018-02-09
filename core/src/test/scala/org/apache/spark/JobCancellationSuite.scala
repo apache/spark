@@ -23,11 +23,9 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
-
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
-
-import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -323,38 +321,52 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
   test("Interruptible iterator of shuffle reader") {
     import JobCancellationSuite._
-    sc = new SparkContext("local[2]", "test")
+    val numSlice = 2
+    sc = new SparkContext(s"local[$numSlice]", "test")
 
-    val f = sc.parallelize(1 to 1000, 2).map { i => (i, i) }
+    val f = sc.parallelize(1 to 1000, numSlice).map { i => (i, i) }
       .repartitionAndSortWithinPartitions(new HashPartitioner(2))
       .mapPartitions { iter =>
         taskStartedSemaphore.release()
-        // Small delay to ensure that foreach is cancelled if task is killed
-        Thread.sleep(1000)
         iter
-      }.foreachAsync { _ =>
+      }.foreachAsync { x =>
+        if ( x._1 >= 10) { // this block of code is partially executed.
+          taskCancelledSemaphore.acquire()
+        }
         executionOfInterruptibleCounter.getAndIncrement()
     }
 
     val sem = new Semaphore(0)
+    val taskCompletedSem = new Semaphore(0)
     Future {
       taskStartedSemaphore.acquire()
       f.cancel()
       sem.release()
     }
 
+    sc.addSparkListener(new SparkListener {
+      override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+        // release taskCancelledSemaphore when cancelTasks event has been posted
+        if (stageCompleted.stageInfo.stageId == 1) {
+          taskCancelledSemaphore.release(1000)
+        }
+      }
+
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+        if (taskEnd.stageId == 1) { // make sure task ends
+          taskCompletedSem.release()
+        }
+      }
+    })
+
     sem.acquire()
-
     val e = intercept[SparkException] { f.get() }.getCause
-
-    assert(executionOfInterruptibleCounter.get() === 0)
     assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
 
-    // Small delay to ensure tasks are actually finished or killed
-    Thread.sleep(2000)
-    assert(executionOfInterruptibleCounter.get() === 0)
-
-  }
+    taskCompletedSem.acquire(numSlice)
+    // 11 as |1..10| + |501|(another partition)
+    assert(executionOfInterruptibleCounter.get() <= 11)
+ }
 
   def testCount() {
     // Cancel before launching any tasks
