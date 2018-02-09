@@ -63,7 +63,7 @@ private[spark] class MesosHadoopDelegationTokenManager(
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
       val rt = tokenManager.obtainDelegationTokens(hadoopConf, creds)
       logInfo(s"Initialized tokens: ${SparkHadoopUtil.get.dumpTokens(creds)}")
-      (SparkHadoopUtil.get.serialize(creds), SparkHadoopUtil.getDateOfNextUpdate(rt, 0.75))
+      (SparkHadoopUtil.get.serialize(creds), SparkHadoopUtil.nextCredentialRenewalTime(rt, conf))
     } catch {
       case e: Exception =>
         logError(s"Failed to fetch Hadoop delegation tokens $e")
@@ -105,7 +105,8 @@ private[spark] class MesosHadoopDelegationTokenManager(
             case e: Exception =>
               // Log the error and try to write new tokens back in an hour
               logWarning("Couldn't broadcast tokens, trying again in an hour", e)
-              credentialRenewerThread.schedule(this, 1, TimeUnit.HOURS)
+              credentialRenewerThread.schedule(this,
+                conf.get(config.CREDENTIALS_RENEWAL_RETRY_WAIT), TimeUnit.SECONDS)
               return
           }
           scheduleRenewal(this)
@@ -135,7 +136,7 @@ private[spark] class MesosHadoopDelegationTokenManager(
         "related configurations in the target services.")
       currTime
     } else {
-      SparkHadoopUtil.getDateOfNextUpdate(nextRenewalTime, 0.75)
+      SparkHadoopUtil.nextCredentialRenewalTime(nextRenewalTime, conf)
     }
     logInfo(s"Time of next renewal is in ${timeOfNextRenewal - System.currentTimeMillis()} ms")
 
