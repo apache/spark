@@ -341,8 +341,6 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
   }
 }
 
-
-
 /** A global object to collect events in the executor */
 object ForeachSinkSuite {
 
