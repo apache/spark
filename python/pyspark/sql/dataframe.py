@@ -27,7 +27,7 @@ else:
 
 import warnings
 
-from pyspark import copy_func, since
+from pyspark import copy_func, since, _NoValue
 from pyspark.rdd import RDD, _load_from_socket, ignore_unicode_prefix
 from pyspark.serializers import ArrowSerializer, BatchedSerializer, PickleSerializer, \
     UTF8Deserializer
@@ -1532,7 +1532,7 @@ class DataFrame(object):
             return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
 
     @since(1.4)
-    def replace(self, to_replace, value=None, subset=None):
+    def replace(self, to_replace, value=_NoValue, subset=None):
         """Returns a new :class:`DataFrame` replacing a value with another value.
         :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
         aliases of each other.
@@ -1545,8 +1545,8 @@ class DataFrame(object):
 
         :param to_replace: bool, int, long, float, string, list or dict.
             Value to be replaced.
-            If the value is a dict, then `value` is ignored and `to_replace` must be a
-            mapping between a value and a replacement.
+            If the value is a dict, then `value` is ignored or can be omitted, and `to_replace`
+            must be a mapping between a value and a replacement.
         :param value: bool, int, long, float, string, list or None.
             The replacement value must be a bool, int, long, float, string or None. If `value` is a
             list, `value` should be of the same length and type as `to_replace`.
@@ -1577,6 +1577,16 @@ class DataFrame(object):
         |null|  null|null|
         +----+------+----+
 
+        >>> df4.na.replace({'Alice': None}).show()
+        +----+------+----+
+        | age|height|name|
+        +----+------+----+
+        |  10|    80|null|
+        |   5|  null| Bob|
+        |null|  null| Tom|
+        |null|  null|null|
+        +----+------+----+
+
         >>> df4.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
         +----+------+----+
         | age|height|name|
@@ -1587,6 +1597,12 @@ class DataFrame(object):
         |null|  null|null|
         +----+------+----+
         """
+        if value is _NoValue:
+            if isinstance(to_replace, dict):
+                value = None
+            else:
+                raise TypeError("value argument is required when to_replace is not a dictionary.")
+
         # Helper functions
         def all_of(types):
             """Given a type or tuple of types and a sequence of xs
@@ -2047,7 +2063,7 @@ class DataFrameNaFunctions(object):
 
     fill.__doc__ = DataFrame.fillna.__doc__
 
-    def replace(self, to_replace, value, subset=None):
+    def replace(self, to_replace, value=_NoValue, subset=None):
         return self.df.replace(to_replace, value, subset)
 
     replace.__doc__ = DataFrame.replace.__doc__
