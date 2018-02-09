@@ -28,18 +28,15 @@ import org.apache.kafka.common.serialization.{ByteArrayDeserializer, ByteArraySe
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SparkSession, SQLContext}
-import org.apache.spark.sql.execution.streaming.{Sink, Source}
+import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.{ContinuousReadSupport, MicroBatchReadSupport}
-import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader
-import org.apache.spark.sql.sources.v2.writer.StreamWriteSupport
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions, MicroBatchReadSupport, StreamWriteSupport}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
 /**
- * The provider class for the [[KafkaSource]]. This provider is designed such that it throws
+ * The provider class for all Kafka readers and writers. It is designed such that it throws
  * IllegalArgumentException when the Kafka Dataset is created, so that it can catch
  * missing options even before the query is started.
  */
@@ -56,27 +53,13 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
   override def shortName(): String = "kafka"
 
   /**
-   * Returns the name and schema of the source. In addition, it also verifies whether the options
-   * are correct and sufficient to create the [[KafkaSource]] when the query is started.
-   */
-  def sourceSchema(
-      sqlContext: SQLContext,
-      schema: Option[StructType],
-      providerName: String,
-      parameters: Map[String, String]): (String, StructType) = {
-    validateStreamOptions(parameters)
-    require(schema.isEmpty, "Kafka source has a fixed schema and cannot be set with a custom one")
-    (shortName(), KafkaOffsetReader.kafkaSchema)
-  }
-
-  /**
-   * Creates a [[MicroBatchReader]] to read batches of data from this data source in a
-   * streaming query.
+   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader]] to read batches
+   * of Kafka data in a micro-batch streaming query.
    */
   def createMicroBatchReader(
       schema: Optional[StructType],
       metadataPath: String,
-      options: DataSourceOptions): MicroBatchReader = {
+      options: DataSourceOptions): KafkaMicroBatchReader = {
 
     val parameters = options.asMap().asScala.toMap
     validateStreamOptions(parameters)
@@ -111,6 +94,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       failOnDataLoss(caseInsensitiveParams))
   }
 
+  /**
+   * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.ContinuousDataReader]] to read
+   * Kafka data in a continuous streaming query.
+   */
   override def createContinuousReader(
       schema: Optional[StructType],
       metadataPath: String,
