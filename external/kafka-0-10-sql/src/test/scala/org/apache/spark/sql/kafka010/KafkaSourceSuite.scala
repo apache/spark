@@ -42,7 +42,6 @@ import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
-import org.apache.spark.util.Utils
 
 abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 
@@ -113,7 +112,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
         "Cannot add data when there is no query for finding the active kafka source")
 
       val sources = query.get.logicalPlan.collect {
-        case StreamingExecutionRelation(source: KafkaSource, _) => source
+        case StreamingExecutionRelation(source: KafkaMicroBatchReader, _) => source
       } ++ (query.get.lastExecution match {
         case null => Seq()
         case e => e.logical.collect {
@@ -303,94 +302,75 @@ class KafkaMicroBatchSourceSuite extends KafkaSourceSuiteBase {
     )
   }
 
-  testWithUninterruptibleThread(
-    "deserialization of initial offset with Spark 2.1.0") {
-    withTempDir { metadataPath =>
-      val topic = newTopic
-      testUtils.createTopic(topic, partitions = 3)
-
-      val provider = new KafkaSourceProvider
-      val parameters = Map(
-        "kafka.bootstrap.servers" -> testUtils.brokerAddress,
-        "subscribe" -> topic
-      )
-      val source = provider.createSource(spark.sqlContext, metadataPath.getAbsolutePath, None,
-        "", parameters)
-      source.getOffset.get // Write initial offset
-
-      // Make sure Spark 2.1.0 will throw an exception when reading the new log
-      intercept[java.lang.IllegalArgumentException] {
-        // Simulate how Spark 2.1.0 reads the log
-        Utils.tryWithResource(new FileInputStream(metadataPath.getAbsolutePath + "/0")) { in =>
-          val length = in.read()
-          val bytes = new Array[Byte](length)
-          in.read(bytes)
-          KafkaSourceOffset(SerializedOffset(new String(bytes, UTF_8)))
-        }
-      }
-    }
-  }
-
-  testWithUninterruptibleThread("deserialization of initial offset written by Spark 2.1.0") {
+  test("deserialization of initial offset written by Spark 2.1.0") {
     withTempDir { metadataPath =>
       val topic = "kafka-initial-offset-2-1-0"
       testUtils.createTopic(topic, partitions = 3)
+      testUtils.sendMessages(topic, Array("0", "1", "2"), Some(0))
+      testUtils.sendMessages(topic, Array("0", "10", "20"), Some(1))
+      testUtils.sendMessages(topic, Array("0", "100", "200"), Some(2))
 
-      val provider = new KafkaSourceProvider
-      val parameters = Map(
-        "kafka.bootstrap.servers" -> testUtils.brokerAddress,
-        "subscribe" -> topic
-      )
-
+      // Copy the initial offset file into the right location inside the checkpoint root directory
+      // such that the Kafka source can read it for initial offsets.
       val from = new File(
         getClass.getResource("/kafka-source-initial-offset-version-2.1.0.bin").toURI).toPath
-      val to = Paths.get(s"${metadataPath.getAbsolutePath}/0")
+      val to = Paths.get(s"${metadataPath.getAbsolutePath}/sources/0/0")
+      Files.createDirectories(to.getParent)
       Files.copy(from, to)
 
-      val source = provider.createSource(
-        spark.sqlContext, metadataPath.toURI.toString, None, "", parameters)
-      val deserializedOffset = source.getOffset.get
-      val referenceOffset = KafkaSourceOffset((topic, 0, 0L), (topic, 1, 0L), (topic, 2, 0L))
-      assert(referenceOffset == deserializedOffset)
+      val df = spark
+        .readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", topic)
+        .option("startingOffsets", s"earliest")
+        .load()
+        .selectExpr("CAST(value AS STRING)")
+        .as[String]
+        .map(_.toInt)
+
+      // Test that the query starts from the expected initial offset (i.e. read older offsets,
+      // even though startingOffsets is latest).
+      testStream(df)(
+        StartStream(checkpointLocation = metadataPath.getAbsolutePath),
+        AddKafkaData(Set(topic), 1000),
+        CheckAnswer(0, 1, 2, 10, 20, 200, 1000))
     }
   }
 
-  testWithUninterruptibleThread("deserialization of initial offset written by future version") {
+  test("deserialization of initial offset written by future version") {
     withTempDir { metadataPath =>
-      val futureMetadataLog =
-        new HDFSMetadataLog[KafkaSourceOffset](sqlContext.sparkSession,
-          metadataPath.getAbsolutePath) {
-          override def serialize(metadata: KafkaSourceOffset, out: OutputStream): Unit = {
-            out.write(0)
-            val writer = new BufferedWriter(new OutputStreamWriter(out, UTF_8))
-            writer.write(s"v99999\n${metadata.json}")
-            writer.flush
-          }
-        }
-
-      val topic = newTopic
+      val topic = "kafka-initial-offset-future-version"
       testUtils.createTopic(topic, partitions = 3)
-      val offset = KafkaSourceOffset((topic, 0, 0L), (topic, 1, 0L), (topic, 2, 0L))
-      futureMetadataLog.add(0, offset)
 
-      val provider = new KafkaSourceProvider
-      val parameters = Map(
-        "kafka.bootstrap.servers" -> testUtils.brokerAddress,
-        "subscribe" -> topic
-      )
-      val source = provider.createSource(spark.sqlContext, metadataPath.getAbsolutePath, None,
-        "", parameters)
+      // Copy the initial offset file into the right location inside the checkpoint root directory
+      // such that the Kafka source can read it for initial offsets.
+      val from = new File(
+        getClass.getResource("/kafka-source-initial-offset-future-version.bin").toURI).toPath
+      val to = Paths.get(s"${metadataPath.getAbsolutePath}/sources/0/0")
+      Files.createDirectories(to.getParent)
+      Files.copy(from, to)
 
-      val e = intercept[java.lang.IllegalStateException] {
-        source.getOffset.get // Read initial offset
-      }
+      val df = spark
+        .readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", topic)
+        .load()
+        .selectExpr("CAST(value AS STRING)")
+        .as[String]
+        .map(_.toInt)
 
-      Seq(
-        s"maximum supported log version is v${KafkaSource.VERSION}, but encountered v99999",
-        "produced by a newer version of Spark and cannot be read by this version"
-      ).foreach { message =>
-        assert(e.getMessage.contains(message))
-      }
+      testStream(df)(
+        StartStream(checkpointLocation = metadataPath.getAbsolutePath),
+        ExpectFailure[IllegalStateException](e => {
+          Seq(
+            s"maximum supported log version is v1, but encountered v99999",
+            "produced by a newer version of Spark and cannot be read by this version"
+          ).foreach { message =>
+            assert(e.toString.contains(message))
+          }
+        }))
     }
   }
 

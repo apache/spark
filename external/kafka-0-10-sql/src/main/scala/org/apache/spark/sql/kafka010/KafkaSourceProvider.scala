@@ -31,7 +31,8 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode, SparkSessio
 import org.apache.spark.sql.execution.streaming.{Sink, Source}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.ContinuousReadSupport
+import org.apache.spark.sql.sources.v2.reader.{ContinuousReadSupport, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader
 import org.apache.spark.sql.sources.v2.writer.StreamWriteSupport
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.streaming.OutputMode
@@ -43,12 +44,12 @@ import org.apache.spark.sql.types.StructType
  * missing options even before the query is started.
  */
 private[kafka010] class KafkaSourceProvider extends DataSourceRegister
-    with StreamSourceProvider
     with StreamSinkProvider
     with RelationProvider
     with CreatableRelationProvider
     with StreamWriteSupport
     with ContinuousReadSupport
+    with MicroBatchReadSupport
     with Logging {
   import KafkaSourceProvider._
 
@@ -58,7 +59,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
    * Returns the name and schema of the source. In addition, it also verifies whether the options
    * are correct and sufficient to create the [[KafkaSource]] when the query is started.
    */
-  override def sourceSchema(
+  def sourceSchema(
       sqlContext: SQLContext,
       schema: Option[StructType],
       providerName: String,
@@ -68,12 +69,16 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     (shortName(), KafkaOffsetReader.kafkaSchema)
   }
 
-  override def createSource(
-      sqlContext: SQLContext,
+  /**
+   * Creates a [[MicroBatchReader]] to read batches of data from this data source in a
+   * streaming query.
+   */
+  def createMicroBatchReader(
+      schema: Optional[StructType],
       metadataPath: String,
-      schema: Option[StructType],
-      providerName: String,
-      parameters: Map[String, String]): Source = {
+      options: DataSourceOptions): MicroBatchReader = {
+
+    val parameters = options.asMap().asScala.toMap
     validateStreamOptions(parameters)
     // Each running query should use its own group id. Otherwise, the query may be only assigned
     // partial data since Kafka will assign partitions to multiple consumers having the same group
@@ -97,11 +102,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       parameters,
       driverGroupIdPrefix = s"$uniqueGroupId-driver")
 
-    new KafkaSource(
-      sqlContext,
+    new KafkaMicroBatchReader(
       kafkaOffsetReader,
       kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
-      parameters,
+      options,
       metadataPath,
       startingStreamOffsets,
       failOnDataLoss(caseInsensitiveParams))
@@ -410,7 +414,26 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private[kafka010] val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
   private[kafka010] val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
+
   val TOPIC_OPTION_KEY = "topic"
+
+  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE =
+    """
+      |Some data may have been lost because they are not available in Kafka any more; either the
+      | data was aged out by Kafka or the topic may have been deleted before all the data in the
+      | topic was processed. If you want your streaming query to fail on such cases, set the source
+      | option "failOnDataLoss" to "true".
+    """.stripMargin
+
+  val INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE =
+    """
+      |Some data may have been lost because they are not available in Kafka any more; either the
+      | data was aged out by Kafka or the topic may have been deleted before all the data in the
+      | topic was processed. If you don't want your streaming query to fail on such cases, set the
+      | source option "failOnDataLoss" to "false".
+    """.stripMargin
+
+
 
   private val deserClassName = classOf[ByteArrayDeserializer].getName
 
