@@ -539,7 +539,7 @@ case class DescribeTableCommand(
         throw new AnalysisException(
           s"DESC PARTITION is not allowed on a temporary view: ${table.identifier}")
       }
-      describeSchema(catalog.lookupRelation(table).schema, result, header = false)
+      describeSchema(catalog.lookupRelation(table).schema, result, header = true)
     } else {
       val metadata = catalog.getTableMetadata(table)
       if (metadata.schema.isEmpty) {
@@ -547,7 +547,7 @@ case class DescribeTableCommand(
         // inferred at runtime. We should still support it.
         describeSchema(sparkSession.table(metadata.identifier).schema, result, header = false)
       } else {
-        describeSchema(metadata.schema, result, header = false)
+        describeSchema(metadata.schema, result, header = true)
       }
 
       describePartitionInfo(metadata, result)
