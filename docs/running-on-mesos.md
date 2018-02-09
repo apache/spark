@@ -448,14 +448,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.principal</code></td>
   <td>(none)</td>
   <td>
-    Set the principal with which Spark framework will use to authenticate with Mesos.  You can also specify this via the environment variable `SPARK_MESOS_PRINCIPAL`
+    Set the principal with which Spark framework will use to authenticate with Mesos.  You can also specify this via the environment variable `SPARK_MESOS_PRINCIPAL`.
   </td>
 </tr>
 <tr>
   <td><code>spark.mesos.principal.file</code></td>
   <td>(none)</td>
   <td>
-    Set the file containing the principal with which Spark framework will use to authenticate with Mesos.  Allows specifying the principal indirectly in more security conscious deployments.  The file must be readable by the user launching the job and be UTF-8 encoded plaintext.  You can also specify this via the environment variable `SPARK_MESOS_PRINCIPAL_FILE`
+    Set the file containing the principal with which Spark framework will use to authenticate with Mesos.  Allows specifying the principal indirectly in more security conscious deployments.  The file must be readable by the user launching the job and be UTF-8 encoded plaintext.  You can also specify this via the environment variable `SPARK_MESOS_PRINCIPAL_FILE`.
   </td>
 </tr>
 <tr>
@@ -463,7 +463,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Set the secret with which Spark framework will use to authenticate with Mesos. Used, for example, when
-    authenticating with the registry.  You can also specify this via the environment variable `SPARK_MESOS_SECRET`
+    authenticating with the registry.  You can also specify this via the environment variable `SPARK_MESOS_SECRET`.
   </td>
 </tr>
 <tr>
@@ -471,7 +471,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Set the file containing the secret with which Spark framework will use to authenticate with Mesos. Used, for example, when
-    authenticating with the registry.  Allows for specifying the secret indirectly in more security conscious deployments.  The file must be readable by the user launching the job and be UTF-8 encoded plaintext.  You can also specify this via the environment variable `SPARK_MESOS_SECRET_FILE`
+    authenticating with the registry.  Allows for specifying the secret indirectly in more security conscious deployments.  The file must be readable by the user launching the job and be UTF-8 encoded plaintext.  You can also specify this via the environment variable `SPARK_MESOS_SECRET_FILE`.
   </td>
 </tr>
 <tr>
