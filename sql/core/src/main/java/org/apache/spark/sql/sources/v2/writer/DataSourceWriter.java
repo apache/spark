@@ -63,7 +63,7 @@ public interface DataSourceWriter {
   DataWriterFactory<Row> createWriterFactory();
 
   /**
-   * Returns whether Spark should use the commit coordinator to ensure that only one attempt for
+   * Returns whether Spark should use the commit coordinator to ensure that at most one attempt for
    * each task commits.
    *
    * @return true if commit coordinator should be used, false otherwise.
