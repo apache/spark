@@ -33,7 +33,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
     namespace: String,
     kubernetesAppId: String,
     launchTime: Long,
-    mainAppResource: MainAppResource,
+    mainAppResource: Option[MainAppResource],
     appName: String,
     mainClass: String,
     appArgs: Array[String],
@@ -55,12 +55,12 @@ private[spark] class DriverConfigurationStepsOrchestrator(
 
   def getAllConfigurationSteps(): Seq[DriverConfigurationStep] = {
     val additionalMainAppJar = mainAppResource match {
-      case JavaMainAppResource(resource) if resource != SparkLauncher.NO_RESOURCE =>
+      case Some(JavaMainAppResource(resource)) =>
         Option(resource)
       case _ => Option.empty
     }
     val additionalMainAppPythonFile = mainAppResource match {
-      case PythonMainAppResource(resource) if resource != SparkLauncher.NO_RESOURCE =>
+      case Some(PythonMainAppResource(resource)) =>
         Option(resource)
       case _ => Option.empty
     }
@@ -109,7 +109,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
         submissionSparkConf)
 
     val pythonStep = mainAppResource match {
-      case PythonMainAppResource(mainPyResource) =>
+      case Some(PythonMainAppResource(mainPyResource)) =>
         Option(new PythonStep(mainPyResource, additionalPythonFiles, filesDownloadPath))
       case _ => Option.empty[DriverConfigurationStep]
     }

@@ -32,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 private[spark] case class ClientArguments(
-     mainAppResource: MainAppResource,
+     mainAppResource: Option[MainAppResource],
      otherPyFiles: Seq[String],
      mainClass: String,
      driverArgs: Array[String])
@@ -58,11 +58,9 @@ private[spark] object ClientArguments {
         val invalid = other.mkString(" ")
         throw new RuntimeException(s"Unknown arguments: $invalid")
     }
-    require(mainAppResource.isDefined,
-        "Main app resource must be defined by either --primary-py-file or --primary-java-resource.")
     require(mainClass.isDefined, "Main class must be specified via --main-class")
     ClientArguments(
-        mainAppResource.get,
+        mainAppResource,
         otherPyFiles,
         mainClass.get,
         driverArgs.toArray)
