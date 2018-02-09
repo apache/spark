@@ -34,6 +34,7 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.unsafe.sort.*;
@@ -98,10 +99,20 @@ public final class UnsafeKVExternalSorter {
         numElementsForSpillThreshold,
         canUseRadixSort);
     } else {
-      // The array will be used to do in-place sort, which require half of the space to be empty.
-      // Note: each record in the map takes two entries in the array, one is record pointer,
-      // another is the key prefix.
-      assert(map.numKeys() * 2 <= map.getArray().size() / 2);
+      // `BytesToBytesMap`'s point array is only guaranteed to hold all the distinct keys, but
+      // `UnsafeInMemorySorter`'s point array need to hold all the entries. Since `BytesToBytesMap`
+      // can have duplicated keys, here we need a check to make sure the point array can hold
+      // all the entries in `BytesToBytesMap`.
+      final LongArray pointArray;
+      // The point array will be used to do in-place sort, which require half of the space to be
+      // empty. Note: each record in the map takes two entries in the point array, one is record
+      // pointer, another is the key prefix.
+      if (map.numValues() > map.getArray().size() / 4) {
+        pointArray = map.allocateArray(map.numValues() * 4);
+      } else {
+        pointArray = map.getArray();
+      }
+
       // During spilling, the array in map will not be used, so we can borrow that and use it
       // as the underlying array for in-memory sorter (it's always large enough).
       // Since we will not grow the array, it's fine to pass `null` as consumer.
@@ -110,7 +121,7 @@ public final class UnsafeKVExternalSorter {
         taskMemoryManager,
         comparatorSupplier.get(),
         prefixComparator,
-        map.getArray(),
+        pointArray,
         canUseRadixSort);
 
       // We cannot use the destructive iterator here because we are reusing the existing memory
