@@ -54,7 +54,7 @@ object PushDownOperatorsToDataSource extends Rule[LogicalPlan] {
       }
 
       val newRelation = relation.copy(
-        projection = Some(projection.asInstanceOf[Seq[AttributeReference]]),
+        projection = projection.asInstanceOf[Seq[AttributeReference]],
         filters = Some(filters))
 
       // Add a Filter for any filters that could not be pushed

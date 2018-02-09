@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ExprId}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
@@ -33,12 +33,14 @@ import org.apache.spark.sql.types.StructType
 case class DataSourceV2Relation(
     source: DataSourceV2,
     options: Map[String, String],
-    projection: Option[Seq[AttributeReference]] = None,
+    projection: Seq[AttributeReference],
     filters: Option[Seq[Expression]] = None,
     userSchema: Option[StructType] = None) extends LeafNode with MultiInstanceRelation {
 
+  import DataSourceV2Relation._
+
   override def simpleString: String = {
-    s"DataSourceV2Relation(source=$sourceName, " +
+    s"DataSourceV2Relation(source=${source.name}, " +
       s"schema=[${output.map(a => s"$a ${a.dataType.simpleString}").mkString(", ")}], " +
       s"filters=[${pushedFilters.mkString(", ")}], options=$options)"
   }
@@ -46,34 +48,14 @@ case class DataSourceV2Relation(
   override lazy val schema: StructType = reader.readSchema()
 
   override lazy val output: Seq[AttributeReference] = {
-    projection match {
-      case Some(attrs) =>
-        // use the projection attributes to avoid assigning new ids. fields that are not projected
-        // will be assigned new ids, which is okay because they are not projected.
-        val attrMap = attrs.map(a => a.name -> a).toMap
-        schema.map(f => attrMap.getOrElse(f.name,
-          AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()))
-      case _ =>
-        schema.toAttributes
-    }
+    // use the projection attributes to avoid assigning new ids. fields that are not projected
+    // will be assigned new ids, which is okay because they are not projected.
+    val attrMap = projection.map(a => a.name -> a).toMap
+    schema.map(f => attrMap.getOrElse(f.name,
+      AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()))
   }
 
-  private lazy val v2Options: DataSourceOptions = {
-    // ensure path and table options are set correctly
-    val updatedOptions = new mutable.HashMap[String, String]
-    updatedOptions ++= options
-
-    new DataSourceOptions(options.asJava)
-  }
-
-  private val sourceName: String = {
-    source match {
-      case registered: DataSourceRegister =>
-        registered.shortName()
-      case _ =>
-        source.getClass.getSimpleName
-    }
-  }
+  private lazy val v2Options: DataSourceOptions = makeV2Options(options)
 
   lazy val (
       reader: DataSourceReader,
@@ -81,14 +63,12 @@ case class DataSourceV2Relation(
       pushedFilters: Seq[Expression]) = {
     val newReader = userSchema match {
       case Some(s) =>
-        asReadSupportWithSchema.createReader(s, v2Options)
+        source.asReadSupportWithSchema.createReader(s, v2Options)
       case _ =>
-        asReadSupport.createReader(v2Options)
+        source.asReadSupport.createReader(v2Options)
     }
 
-    projection.foreach { attrs =>
-      DataSourceV2Relation.pushRequiredColumns(newReader, attrs.toStructType)
-    }
+    DataSourceV2Relation.pushRequiredColumns(newReader, projection.toStructType)
 
     val (remainingFilters, pushedFilters) = filters match {
       case Some(filterSeq) =>
@@ -100,42 +80,14 @@ case class DataSourceV2Relation(
     (newReader, remainingFilters, pushedFilters)
   }
 
-  private lazy val asReadSupport: ReadSupport = {
-    source match {
-      case support: ReadSupport =>
-        support
-      case _: ReadSupportWithSchema =>
-        // this method is only called if there is no user-supplied schema. if there is no
-        // user-supplied schema and ReadSupport was not implemented, throw a helpful exception.
-        throw new AnalysisException(s"Data source requires a user-supplied schema: $sourceName")
-      case _ =>
-        throw new AnalysisException(s"Data source is not readable: $sourceName")
-    }
-  }
-
-  private lazy val asReadSupportWithSchema: ReadSupportWithSchema = {
-    source match {
-      case support: ReadSupportWithSchema =>
-        support
-      case _: ReadSupport =>
-        throw new AnalysisException(
-          s"Data source does not support user-supplied schema: $sourceName")
-      case _ =>
-        throw new AnalysisException(s"Data source is not readable: $sourceName")
-    }
-  }
-
   override def doCanonicalize(): LogicalPlan = {
     val c = super.doCanonicalize().asInstanceOf[DataSourceV2Relation]
 
     // override output with canonicalized output to avoid attempting to configure a reader
-    var id = -1
-    val canonicalOutput: Seq[AttributeReference] = this.output.map { attr =>
-      id += 1
-      attr.withExprId(ExprId(id)).canonicalized.asInstanceOf[AttributeReference]
-    }
+    val canonicalOutput: Seq[AttributeReference] = this.output
+        .map(a => QueryPlan.normalizeExprId(a, projection))
 
-    new DataSourceV2Relation(c.source, c.options) {
+    new DataSourceV2Relation(c.source, c.options, c.projection) {
       override lazy val output: Seq[AttributeReference] = canonicalOutput
     }
   }
@@ -150,7 +102,7 @@ case class DataSourceV2Relation(
   override def newInstance(): DataSourceV2Relation = {
     // projection is used to maintain id assignment.
     // if projection is not set, use output so the copy is not equal to the original
-    copy(projection = Some(projection.getOrElse(output).map(_.newInstance())))
+    copy(projection = projection.map(_.newInstance()))
   }
 }
 
@@ -170,6 +122,68 @@ case class StreamingDataSourceV2Relation(
 }
 
 object DataSourceV2Relation {
+  private implicit class SourceHelpers(source: DataSourceV2) {
+    def asReadSupport: ReadSupport = {
+      source match {
+        case support: ReadSupport =>
+          support
+        case _: ReadSupportWithSchema =>
+          // this method is only called if there is no user-supplied schema. if there is no
+          // user-supplied schema and ReadSupport was not implemented, throw a helpful exception.
+          throw new AnalysisException(s"Data source requires a user-supplied schema: $name")
+        case _ =>
+          throw new AnalysisException(s"Data source is not readable: $name")
+      }
+    }
+
+    def asReadSupportWithSchema: ReadSupportWithSchema = {
+      source match {
+        case support: ReadSupportWithSchema =>
+          support
+        case _: ReadSupport =>
+          throw new AnalysisException(
+            s"Data source does not support user-supplied schema: $name")
+        case _ =>
+          throw new AnalysisException(s"Data source is not readable: $name")
+      }
+    }
+
+    def name: String = {
+      source match {
+        case registered: DataSourceRegister =>
+          registered.shortName()
+        case _ =>
+          source.getClass.getSimpleName
+      }
+    }
+  }
+
+  private def makeV2Options(options: Map[String, String]): DataSourceOptions = {
+    new DataSourceOptions(options.asJava)
+  }
+
+  private def schema(
+      source: DataSourceV2,
+      v2Options: DataSourceOptions,
+      userSchema: Option[StructType]): StructType = {
+    val reader = userSchema match {
+      case Some(s) =>
+        source.asReadSupportWithSchema.createReader(s, v2Options)
+      case _ =>
+        source.asReadSupport.createReader(v2Options)
+    }
+    reader.readSchema()
+  }
+
+  def create(
+      source: DataSourceV2,
+      options: Map[String, String],
+      filters: Option[Seq[Expression]] = None,
+      userSchema: Option[StructType] = None): DataSourceV2Relation = {
+    val projection = schema(source, makeV2Options(options), userSchema).toAttributes
+    DataSourceV2Relation(source, options, projection, filters, userSchema)
+  }
+
   private def pushRequiredColumns(reader: DataSourceReader, struct: StructType): Unit = {
     reader match {
       case projectionSupport: SupportsPushDownRequiredColumns =>

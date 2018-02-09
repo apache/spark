@@ -193,7 +193,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       if (ds.isInstanceOf[ReadSupport] || ds.isInstanceOf[ReadSupportWithSchema]) {
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           ds = ds, conf = sparkSession.sessionState.conf)
-        Dataset.ofRows(sparkSession, DataSourceV2Relation(
+        Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
           ds, extraOptions.toMap ++ sessionOptions,
           userSchema = userSpecifiedSchema))
 
