@@ -22,6 +22,7 @@ import java.lang.{ Long => JLong }
 import java.util.{ Arrays, HashMap => JHashMap, Map => JMap }
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
+import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -34,7 +35,7 @@ import org.apache.kafka.common.serialization.StringDeserializer
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
@@ -551,76 +552,6 @@ class DirectKafkaStreamSuite
       Map(new TopicPartition(topic, 0) -> 5L, new TopicPartition(topic, 1) -> 10L))
   }
 
-  test("use backpressure.initialRate with backpressure") {
-    val topic = "backpressureInitialRate"
-    val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
-    val sparkConf = new SparkConf()
-      // Safe, even with streaming, because we're using the direct API.
-      // Using 1 core is useful to make the test more predictable.
-      .setMaster("local[1]")
-      .setAppName(this.getClass.getSimpleName)
-      .set("spark.streaming.backpressure.enabled", "true")
-      .set("spark.streaming.kafka.maxRatePerPartition", "1000")
-      .set("spark.streaming.backpressure.initialRate", "500")
-
-    val messages = Map("foo" -> 5000)
-    kafkaTestUtils.sendMessages(topic, messages)
-
-    ssc = new StreamingContext(sparkConf, Milliseconds(500))
-
-    val kafkaStream = withClue("Error creating direct stream") {
-      new DirectKafkaInputDStream[String, String](
-        ssc,
-        preferredHosts,
-        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
-        new DefaultPerPartitionConfig(sparkConf)
-      )
-    }
-    kafkaStream.start()
-
-    val input = Map(new TopicPartition(topic, 0) -> 1000L)
-
-    assert(kafkaStream.maxMessagesPerPartition(input).flatMap(_.headOption).contains(
-      new TopicPartition(topic, 0) -> 250)) // we run for half a second
-
-    kafkaStream.stop()
-  }
-
-  test("backpressure.initialRate should honor maxRatePerPartition") {
-    val topic = "backpressureInitialRate"
-    val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
-    val sparkConf = new SparkConf()
-      // Safe, even with streaming, because we're using the direct API.
-      // Using 1 core is useful to make the test more predictable.
-      .setMaster("local[1]")
-      .setAppName(this.getClass.getSimpleName)
-      .set("spark.streaming.backpressure.enabled", "true")
-      .set("spark.streaming.kafka.maxRatePerPartition", "300")
-      .set("spark.streaming.backpressure.initialRate", "1000")
-
-    val messages = Map("foo" -> 5000)
-    kafkaTestUtils.sendMessages(topic, messages)
-
-    ssc = new StreamingContext(sparkConf, Milliseconds(500))
-
-    val kafkaStream = withClue("Error creating direct stream") {
-      new DirectKafkaInputDStream[String, String](
-        ssc,
-        preferredHosts,
-        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
-        new DefaultPerPartitionConfig(sparkConf)
-      )
-    }
-    kafkaStream.start()
-
-    val input = Map(new TopicPartition(topic, 0) -> 1000L)
-
-    assert(kafkaStream.maxMessagesPerPartition(input).flatMap(_.headOption).contains(
-      new TopicPartition(topic, 0) -> 150L)) // we run for half a second
-
-    kafkaStream.stop()
-  }
-
   test("using rate controller") {
     val topic = "backpressure"
     kafkaTestUtils.createTopic(topic, 1)
@@ -685,6 +616,51 @@ class DirectKafkaStreamSuite
     }
 
     ssc.stop()
+  }
+
+  test("backpressure.initialRate should honor maxRatePerPartition") {
+    backpressureTest(maxRatePerPartition = 1000, initialRate = 500, maxMessagesPerPartition = 250)
+  }
+
+  test("use backpressure.initialRate with backpressure") {
+    backpressureTest(maxRatePerPartition = 300, initialRate = 1000, maxMessagesPerPartition = 150)
+  }
+
+  private def backpressureTest(maxRatePerPartition: Int,
+                               initialRate: Int,
+                               maxMessagesPerPartition: Int) = {
+    val topic = UUID.randomUUID().toString
+    val kafkaParams = getKafkaParams("auto.offset.reset" -> "earliest")
+    val sparkConf = new SparkConf()
+      // Safe, even with streaming, because we're using the direct API.
+      // Using 1 core is useful to make the test more predictable.
+      .setMaster("local[1]")
+      .setAppName(this.getClass.getSimpleName)
+      .set("spark.streaming.backpressure.enabled", "true")
+      .set("spark.streaming.backpressure.initialRate", initialRate.toString)
+      .set("spark.streaming.kafka.maxRatePerPartition", maxRatePerPartition.toString)
+
+    val messages = Map("foo" -> 5000)
+    kafkaTestUtils.sendMessages(topic, messages)
+
+    ssc = new StreamingContext(sparkConf, Milliseconds(500))
+
+    val kafkaStream = withClue("Error creating direct stream") {
+      new DirectKafkaInputDStream[String, String](
+        ssc,
+        preferredHosts,
+        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
+        new DefaultPerPartitionConfig(sparkConf)
+      )
+    }
+    kafkaStream.start()
+
+    val input = Map(new TopicPartition(topic, 0) -> 1000L)
+
+    assert(kafkaStream.maxMessagesPerPartition(input).get ==
+      Map(new TopicPartition(topic, 0) -> maxMessagesPerPartition)) // we run for half a second
+
+    kafkaStream.stop()
   }
 
   /** Get the generated offset ranges from the DirectKafkaStream */
