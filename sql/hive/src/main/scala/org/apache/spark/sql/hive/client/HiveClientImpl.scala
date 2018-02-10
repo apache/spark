@@ -598,8 +598,22 @@ private[hive] class HiveClientImpl(
       db: String,
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withHiveState {
-    val hiveTable = toHiveTable(getTable(db, table), Some(userName))
-    shim.alterPartitions(client, table, newParts.map { p => toHivePartition(p, hiveTable) }.asJava)
+    // Note: Before altering table partitions in Hive, you *must* set the current database
+    // to the one that contains the table of interest. Otherwise you will end up with the
+    // most helpful error message ever: "Unable to alter partition. alter is not possible."
+    // See HIVE-2742 for more detail.
+    val original = state.getCurrentDatabase
+    if (databaseExists(db)) {
+      state.setCurrentDatabase(db)
+    } else {
+      throw new NoSuchDatabaseException(db)
+    }
+    try {
+      val hiveTable = toHiveTable(getTable(db, table), Some(userName))
+      shim.alterPartitions(client, table, newParts.map { toHivePartition(_, hiveTable) }.asJava)
+    } finally {
+      state.setCurrentDatabase(original)
+    }
   }
 
   /**
