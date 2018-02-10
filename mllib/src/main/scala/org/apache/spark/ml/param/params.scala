@@ -865,7 +865,7 @@ trait Params extends Identifiable with Serializable {
   }
 
   /** Internal param map for user-supplied values. */
-  private val paramMap: ParamMap = ParamMap.empty
+  private[ml] val paramMap: ParamMap = ParamMap.empty
 
   /** Internal param map for default values. */
   private val defaultParamMap: ParamMap = ParamMap.empty
