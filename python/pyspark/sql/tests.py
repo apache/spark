@@ -2887,7 +2887,6 @@ class SQLTests(ReusedSQLTestCase):
             self.spark.conf.set('spark.sql.session.timeZone', tz)
 
             df = self.spark.createDataFrame(pdf)
-            df.show()
             self.assertPandasEqual(pdf, df.toPandas())
         finally:
             del os.environ['TZ']
