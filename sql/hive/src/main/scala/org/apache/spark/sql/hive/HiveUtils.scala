@@ -304,7 +304,7 @@ private[spark] object HiveUtils extends Logging {
         throw new IllegalArgumentException(
           "Builtin jars can only be used when hive execution version == hive metastore version. " +
             s"Execution: $builtinHiveVersion != Metastore: $hiveMetastoreVersion. " +
-            "Specify a vaild path to the correct hive jars using $HIVE_METASTORE_JARS " +
+            s"Specify a valid path to the correct hive jars using ${HIVE_METASTORE_JARS.key} " +
             s"or change ${HIVE_METASTORE_VERSION.key} to $builtinHiveVersion.")
       }
 
@@ -324,7 +324,7 @@ private[spark] object HiveUtils extends Logging {
       if (jars.length == 0) {
         throw new IllegalArgumentException(
           "Unable to locate hive jars to connect to metastore. " +
-            "Please set spark.sql.hive.metastore.jars.")
+            s"Please set ${HIVE_METASTORE_JARS.key}.")
       }
 
       logInfo(
