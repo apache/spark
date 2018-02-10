@@ -2868,6 +2868,34 @@ class SQLTests(ReusedSQLTestCase):
                                     "d": [pd.Timestamp.now().date()]})
                 self.spark.createDataFrame(pdf)
 
+    # Regression test for SPARK-23360
+    @unittest.skipIf(not _have_pandas, _pandas_requirement_message)
+    def test_create_dateframe_from_pandas_with_dst(self):
+        import pandas as pd
+        from datetime import datetime
+
+        pdf = pd.DataFrame({'time': [datetime(2015, 10, 31, 22, 30)]})
+
+        df = self.spark.createDataFrame(pdf)
+        self.assertPandasEqual(pdf, df.toPandas())
+
+        orig_env_tz = os.environ.get('TZ', None)
+        orig_session_tz = self.spark.conf.get('spark.sql.session.timeZone')
+        try:
+            tz = 'America/Los_Angeles'
+            os.environ['TZ'] = tz
+            time.tzset()
+            self.spark.conf.set('spark.sql.session.timeZone', tz)
+
+            df = self.spark.createDataFrame(pdf)
+            self.assertPandasEqual(pdf, df.toPandas())
+        finally:
+            del os.environ['TZ']
+            if orig_env_tz is not None:
+                os.environ['TZ'] = orig_env_tz
+            time.tzset()
+            self.spark.conf.set('spark.sql.session.timeZone', orig_session_tz)
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
