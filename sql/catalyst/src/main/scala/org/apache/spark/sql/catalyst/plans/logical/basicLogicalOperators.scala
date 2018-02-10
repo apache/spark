@@ -470,7 +470,7 @@ case class Sort(
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
-  override def sortedOrder: Option[Seq[SortOrder]] = Some(order)
+  override def sortedOrder: Seq[SortOrder] = order
 }
 
 /** Factory for constructing new `Range` nodes. */
@@ -524,6 +524,8 @@ case class Range(
   override def computeStats(): Statistics = {
     Statistics(sizeInBytes = LongType.defaultSize * numElements)
   }
+
+  override def sortedOrder: Seq[SortOrder] = output.map(a => SortOrder(a, Descending))
 }
 
 case class Aggregate(
@@ -746,7 +748,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends KeepOr
  *
  * See [[Limit]] for more information.
  */
-case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
+case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends KeepOrderUnaryNode {
   override def output: Seq[Attribute] = child.output
 
   override def maxRowsPerPartition: Option[Long] = {
@@ -870,9 +872,9 @@ case class RepartitionByExpression(
   override def maxRows: Option[Long] = child.maxRows
   override def shuffle: Boolean = true
 
-  override def sortedOrder: Option[Seq[SortOrder]] = partitioning match {
-    case RangePartitioning(sortedOrder, _) => Some(sortedOrder)
-    case _ => None
+  override def sortedOrder: Seq[SortOrder] = partitioning match {
+    case RangePartitioning(sortedOrder, _) => sortedOrder
+    case _ => Nil
   }
 }
 

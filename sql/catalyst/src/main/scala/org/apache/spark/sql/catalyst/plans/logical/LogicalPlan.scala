@@ -223,9 +223,7 @@ abstract class LogicalPlan
   /**
    * If the current plan contains sorted data, it contains the sorted order.
    */
-  def sortedOrder: Option[Seq[SortOrder]] = None
-
-  final def isSorted: Boolean = sortedOrder.isDefined
+  def sortedOrder: Seq[SortOrder] = Nil
 }
 
 /**
@@ -283,5 +281,5 @@ abstract class BinaryNode extends LogicalPlan {
 }
 
 abstract class KeepOrderUnaryNode extends UnaryNode {
-  override final def sortedOrder: Option[Seq[SortOrder]] = child.sortedOrder
+  override final def sortedOrder: Seq[SortOrder] = child.sortedOrder
 }
