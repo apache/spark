@@ -160,6 +160,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ALLOW_NESTEDJOIN_FALLBACK = buildConf("spark.sql.join.broadcastJoinFallback.enabled")
+    .internal()
+    .doc("When true (default), if the other options are not available, fallback to try and use " +
+      "BroadcastNestedLoopJoin as join strategy. This can cause OOM which can be a problem " +
+      "in some scenarios, eg. when running the thriftserver. Turn to false to disable it: an " +
+      "AnalysisException will be thrown.")
+    .booleanConf
+    .createWithDefault(true)
+
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
     .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
@@ -1368,6 +1377,8 @@ class SQLConf extends Serializable with Logging {
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
+
+  def allowNestedJoinFallback: Boolean = getConf(ALLOW_NESTEDJOIN_FALLBACK)
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
