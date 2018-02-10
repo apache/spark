@@ -18,10 +18,9 @@
 package org.apache.spark.streaming.kafka
 
 import java.io.File
-import java.util.Arrays
+import java.util.{ Arrays, UUID }
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicLong
-import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -464,9 +463,11 @@ class DirectKafkaStreamSuite
     backpressureTest(maxRatePerPartition = 300, initialRate = 1000, maxMessagesPerPartition = 150)
   }
 
-  private def backpressureTest(maxRatePerPartition: Int,
-                               initialRate: Int,
-                               maxMessagesPerPartition: Int) = {
+  private def backpressureTest(
+      maxRatePerPartition: Int,
+      initialRate: Int,
+      maxMessagesPerPartition: Int) = {
+
     val topic = UUID.randomUUID().toString
     val topicPartitions = Set(TopicAndPartition(topic, 0))
     kafkaTestUtils.createTopic(topic, 1)
