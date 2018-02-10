@@ -1787,7 +1787,9 @@ def _check_series_convert_timestamps_localize(s, from_timezone, to_timezone):
     if is_datetime64tz_dtype(s.dtype):
         return s.dt.tz_convert(to_tz).dt.tz_localize(None)
     elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
-        return s.dt.tz_localize(from_tz).dt.tz_convert(to_tz).dt.tz_localize(None)
+        # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
+        return s.apply(lambda ts: ts.tz_localize(from_tz).tz_convert(to_tz).tz_localize(None)
+                       if ts is not pd.NaT else pd.NaT)
     else:
         return s
 
