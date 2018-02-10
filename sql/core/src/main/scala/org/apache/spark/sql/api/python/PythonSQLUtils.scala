@@ -36,15 +36,15 @@ private[sql] object PythonSQLUtils {
   /**
    * Python Callable function to convert ArrowPayloads into a [[DataFrame]].
    *
-   * @param payloadRDD A JavaRDD of ArrowPayloads.
+   * @param arrowStreamRDD A JavaRDD of Arrow data in stream protocol.
    * @param schemaString JSON Formatted Schema for ArrowPayloads.
    * @param sqlContext The active [[SQLContext]].
    * @return The converted [[DataFrame]].
    */
-  def arrowPayloadToDataFrame(
-      payloadRDD: JavaRDD[Array[Byte]],
+  def arrowStreamToDataFrame(
+      arrowStreamRDD: JavaRDD[Array[Byte]],
       schemaString: String,
       sqlContext: SQLContext): DataFrame = {
-    ArrowConverters.toDataFrame(payloadRDD, schemaString, sqlContext)
+    ArrowConverters.toDataFrame(arrowStreamRDD, schemaString, sqlContext)
   }
 }

@@ -501,7 +501,7 @@ class SparkSession(object):
         to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
-        from pyspark.serializers import ArrowSerializer, _create_batch
+        from pyspark.serializers import ArrowSerializer, FramedSerializer, _create_batch
         from pyspark.sql.types import from_arrow_schema, to_arrow_type, TimestampType
         from pyspark.sql.utils import require_minimum_pandas_version, \
             require_minimum_pyarrow_version
@@ -539,9 +539,18 @@ class SparkSession(object):
                 struct.names[i] = name
             schema = struct
 
+        class ArrowFramedSerializer(FramedSerializer):
+
+            def dumps(self, batch):
+                import io
+                sink = io.BytesIO()
+                serializer = ArrowSerializer()
+                serializer.dump_stream([batch], sink)
+                return sink.getvalue()
+
         # Create the Spark DataFrame directly from the Arrow data and schema
-        jrdd = self._sc._serialize_to_jvm(batches, len(batches), ArrowSerializer())
-        jdf = self._jvm.PythonSQLUtils.arrowPayloadToDataFrame(
+        jrdd = self._sc._serialize_to_jvm(batches, len(batches), ArrowFramedSerializer())
+        jdf = self._jvm.PythonSQLUtils.arrowStreamToDataFrame(
             jrdd, schema.json(), self._wrapped._jsqlContext)
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema

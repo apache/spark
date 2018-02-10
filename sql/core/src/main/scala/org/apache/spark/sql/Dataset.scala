@@ -46,7 +46,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowPayload, ArrowPayloadStreamWriter}
+import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowBatchStreamWriter}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
@@ -3234,58 +3234,38 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Collect a Dataset as ArrowPayload byte arrays and serve to PySpark.
+   * Collect a Dataset as Arrow batches and serve stream to PySpark.
    */
   private[sql] def collectAsArrowToPython(): Array[Any] = {
+
     withAction("collectAsArrowToPython", queryExecution) { plan =>
-      //val iter = toArrowPayload.collect().iterator.map(_.asPythonSerializable)
 
       PythonRDD.serveToStream("serve-Arrow") { out =>
-        val payloadWriter = new ArrowPayloadStreamWriter(schema, out)
+        val batchWriter = new ArrowBatchStreamWriter(schema, out)
 
-        /*
-        val payloadRDD = toArrowPayload
-        val results = new Array[Array[ArrowPayload]](payloadRDD.partitions.size)
-        sparkSession.sparkContext.runJob[ArrowPayload, Array[ArrowPayload]](
-          payloadRDD,
-          (ctx: TaskContext, it: Iterator[ArrowPayload]) => it.toArray,
-          0 until payloadRDD.partitions.length,
-          (index, res) => results(index) = res)
-        val payloads = Array.concat(results: _*)
-        */
+        val arrowBatchRDD = toArrowBatches(plan)
 
-        val payloadRDD = toArrowPayload(plan)
-
-        val results = new Array[Array[ArrowPayload]](payloadRDD.partitions.size - 1)
+        val results = new Array[Array[Array[Byte]]](arrowBatchRDD.partitions.size - 1)
         var lastIndex = -1
 
-        def handlePartitionPayloads(index: Int, payloads: Array[ArrowPayload]): Unit = {
+        def handlePartitionBatches(index: Int, arrowBatches: Array[Array[Byte]]): Unit = {
           if (index - 1 == lastIndex) {
-            payloadWriter.writePayloads(payloads.iterator)
+            batchWriter.writeBatches(arrowBatches.iterator)
             lastIndex += 1
             while (lastIndex < results.length && results(lastIndex) != null) {
-              payloadWriter.writePayloads(results(lastIndex).iterator)
+              batchWriter.writeBatches(results(lastIndex).iterator)
               lastIndex += 1
             }
           } else {
-            results(index - 1) = payloads
+            results(index - 1) = arrowBatches
           }
         }
 
         sparkSession.sparkContext.runJob(
-          payloadRDD,
-          (ctx: TaskContext, it: Iterator[ArrowPayload]) => it.toArray,
-          0 until payloadRDD.partitions.length,
-          handlePartitionPayloads)
-          //(_: Int, payloads: Array[ArrowPayload]) => payloadWriter.writePayloads(payloads.iterator))
-
-        //ArrowConverters.writePayloadsToStream(out, schema, toArrowPayload.collect().iterator)
-
-        /*val payloadWriter = new ArrowPayloadStreamWriter(schema, out)
-        toArrowPayload.foreachPartition { payloadIter =>
-          payloadWriter.writePayloads(payloadIter)
-        }
-        payloadWriter.close()*/
+          arrowBatchRDD,
+          (ctx: TaskContext, it: Iterator[Array[Byte]]) => it.toArray,
+          0 until arrowBatchRDD.partitions.length,
+          handlePartitionBatches)
       }
     }
   }
@@ -3394,19 +3374,19 @@ class Dataset[T] private[sql](
   }
 
   /** Convert to an RDD of ArrowPayload byte arrays */
-  private[sql] def toArrowPayload(plan: SparkPlan): RDD[ArrowPayload] = {
+  private[sql] def toArrowBatches(plan: SparkPlan): RDD[Array[Byte]] = {
     val schemaCaptured = this.schema
     val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
     plan.execute().mapPartitionsInternal { iter =>
       val context = TaskContext.get()
-      ArrowConverters.toPayloadIterator(
+      ArrowConverters.toBatchIterator(
         iter, schemaCaptured, maxRecordsPerBatch, timeZoneId, context)
     }
   }
 
   // This is only used in tests, for now.
-  private[sql] def toArrowPayload: RDD[ArrowPayload] = {
-    toArrowPayload(queryExecution.executedPlan)
+  private[sql] def toArrowBatches: RDD[Array[Byte]] = {
+    toArrowBatches(queryExecution.executedPlan)
   }
 }
