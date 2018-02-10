@@ -1710,10 +1710,16 @@ def _check_dataframe_convert_date(pdf, schema):
 
 
 def _get_local_timezone():
-    """ Get local timezone from environment vi pytz, or dateutil. """
-    from pyspark.sql.utils import require_minimum_pandas_version
-    require_minimum_pandas_version()
+    """ Get local timezone using pytz with environment variable, or dateutil.
 
+    If there is a 'TZ' environment variable, pass it to pandas to use pytz and use it as timezone
+    string, otherwise use the special word 'dateutil/:' which means that pandas uses dateutil and
+    it reads system configuration to know the system local timezone.
+
+    See also:
+    - https://github.com/pandas-dev/pandas/blob/0.19.x/pandas/tslib.pyx#L1753
+    - https://github.com/dateutil/dateutil/blob/2.6.1/dateutil/tz/tz.py#L1338
+    """
     import os
     return os.environ.get('TZ', 'dateutil/:')
 
