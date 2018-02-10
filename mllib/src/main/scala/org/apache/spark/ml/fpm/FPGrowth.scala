@@ -159,7 +159,7 @@ class FPGrowth @Since("2.2.0") (
 
   private def genericFit[T: ClassTag](dataset: Dataset[_]): FPGrowthModel = {
     val data = dataset.select($(itemsCol))
-    val items = data.where(col($(itemsCol)).isNotNull).rdd.map(r => r.getSeq[T](0).toArray)
+    val items = data.where(col($(itemsCol)).isNotNull).rdd.map(r => r.getSeq[Any](0).toArray)
     val mllibFP = new MLlibFPGrowth().setMinSupport($(minSupport))
     if (isSet(numPartitions)) {
       mllibFP.setNumPartitions($(numPartitions))
