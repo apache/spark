@@ -107,8 +107,10 @@ public final class UnsafeKVExternalSorter {
       // The point array will be used to do in-place sort, which require half of the space to be
       // empty. Note: each record in the map takes two entries in the point array, one is record
       // pointer, another is the key prefix.
+      // TODO: It's possible to change UnsafeInMemorySorter to have multiple entries with same key,
+      // so that we can always reuse the point array.
       if (map.numValues() > map.getArray().size() / 4) {
-        pointArray = map.allocateArray(map.numValues() * 4);
+        pointArray = map.allocateArray(map.numValues() * 4L);
       } else {
         pointArray = map.getArray();
       }
