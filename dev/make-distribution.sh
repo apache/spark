@@ -82,6 +82,9 @@ while (( "$#" )); do
       shift
       continue
       ;;
+    -*)
+      break
+      ;;
     *)
       echo "Error: $1 is not supported"
       exit_with_usage
