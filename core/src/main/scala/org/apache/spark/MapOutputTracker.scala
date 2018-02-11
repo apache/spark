@@ -31,6 +31,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.shuffle.MetadataFetchFailedException
@@ -280,6 +281,15 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
+  protected def supportsContinuousBlockBulkFetch: Boolean = {
+    // continuousBlockBulkFetch only happens in SparkSQL, it uses UnsafeRowSerializer,
+    // which supports relocation of serialized objects, so we only consider compression
+    val compressionEnabled: Boolean = conf.getBoolean("spark.shuffle.compress", true)
+    val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
+    !compressionEnabled ||
+      CompressionCodec.supportsConcatenationOfSerializedStreams(compressionCodec)
+  }
+
   // For testing
   def getMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
       : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
@@ -327,8 +337,6 @@ private[spark] class MapOutputTrackerMaster(
 
   /** Whether to compute locality preferences for reduce tasks */
   private val shuffleLocalityEnabled = conf.getBoolean("spark.shuffle.reduceLocality.enabled", true)
-
-  private val adaptiveEnabled = conf.getBoolean("spark.sql.adaptive.enabled", false)
 
   // Number of map and reduce tasks above which we do not assign preferred locations based on map
   // output sizes. We limit the size of jobs for which assign preferred locations as computing the
@@ -642,7 +650,7 @@ private[spark] class MapOutputTrackerMaster(
       case Some (shuffleStatus) =>
         shuffleStatus.withMapStatuses { statuses =>
           MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses,
-            adaptiveEnabled)
+            supportsContinuousBlockBulkFetch)
         }
       case None =>
         Seq.empty
@@ -666,8 +674,6 @@ private[spark] class MapOutputTrackerMaster(
  */
 private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
 
-  private val adaptiveEnabled = conf.getBoolean("spark.sql.adaptive.enabled", false)
-
   val mapStatuses: Map[Int, Array[MapStatus]] =
     new ConcurrentHashMap[Int, Array[MapStatus]]().asScala
 
@@ -680,7 +686,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     val statuses = getStatuses(shuffleId)
     try {
       MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses,
-        adaptiveEnabled)
+        supportsContinuousBlockBulkFetch)
     } catch {
       case e: MetadataFetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
@@ -855,6 +861,7 @@ private[spark] object MapOutputTracker extends Logging {
    * @param startPartition Start of map output partition ID range (included in range)
    * @param endPartition End of map output partition ID range (excluded from range)
    * @param statuses List of map statuses, indexed by map ID.
+   * @param continuousBlockBulkFetch if true, merge contiguous partitions in one IO
    * @return A sequence of 2-item tuples, where the first item in the tuple is a BlockManagerId,
    *         and the second item is a sequence of (shuffle block ID, shuffle block size) tuples
    *         describing the shuffle blocks that are stored at that block manager.
@@ -864,7 +871,7 @@ private[spark] object MapOutputTracker extends Logging {
       startPartition: Int,
       endPartition: Int,
       statuses: Array[MapStatus],
-      useContinuousFetch: Boolean): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+      continuousBlockBulkFetch: Boolean): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     assert (statuses != null)
     val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(BlockId, Long)]]
     for ((status, mapId) <- statuses.zipWithIndex) {
@@ -873,7 +880,7 @@ private[spark] object MapOutputTracker extends Logging {
         logError(errorMessage)
         throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage)
       } else {
-        if (!useContinuousFetch) {
+        if (!continuousBlockBulkFetch) {
           for (part <- startPartition until endPartition) {
             splitsByAddress.getOrElseUpdate(status.location, ArrayBuffer()) +=
               ((ShuffleBlockId(shuffleId, mapId, part), status.getSizeForBlock(part)))
