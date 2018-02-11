@@ -85,6 +85,9 @@ private[sql] class JSONOptions(
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
+  /** Standard charset name. For example UTF-8, UTF-16 and UTF-32 */
+  val charset = parameters.get("charset")
+
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
     factory.configure(JsonParser.Feature.ALLOW_COMMENTS, allowComments)
