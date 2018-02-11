@@ -147,32 +147,32 @@ class BinaryClassificationMetrics @Since("1.3.0") (
    * Returns the (threshold, False omission rate) curve.
    */
   def forByThreshold(): RDD[(Double, Double)] = createCurve(FalseOmissionRate)
- 
-   /**
+
+  /**
    * Returns the (threshold, False discovery rate) curve.
    */
   def fdrByThreshold(): RDD[(Double, Double)] = createCurve(FalseDiscoveryRate)
- 
- /**
+
+  /**
    * Returns the (threshold, Negative predictive value) curve.
    */
   def npvByThreshold(): RDD[(Double, Double)] = createCurve(NegativePredictiveValue)
- 
- /**
+
+  /**
    * Returns the (threshold, False Negative rate) curve.
    */
   def fnrByThreshold(): RDD[(Double, Double)] = createCurve(FalseNegativeRate)
-  
+
   /**
    * Returns the (threshold, True Negative rate) curve.
    */
   def specificityByThreshold(): RDD[(Double, Double)] = createCurve(TrueNegativeRate)
- 
+
    /**
    * Returns the (threshold, False positive rate) curve.
    */
   def fprByThreshold(): RDD[(Double, Double)] = createCurve(FalsePositiveRate)
- 
+
 
  private lazy val (
     cumulativeCounts: RDD[(Double, BinaryLabelCounter)],
