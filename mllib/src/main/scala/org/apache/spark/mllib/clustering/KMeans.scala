@@ -761,6 +761,7 @@ private[spark] class CosineDistanceMeasure extends DistanceMeasure {
    * @return the cosine distance between the two input vectors
    */
   override def distance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
+    assert(v1.norm > 0 && v2.norm > 0, "Cosine distance is not defined for zero-length vectors.")
     1 - dot(v1.vector, v2.vector) / v1.norm / v2.norm
   }
 
