@@ -44,7 +44,6 @@ import org.apache.spark.storage.StorageLevel
  * In most cases, use [[DirectKafkaInputDStream.preferConsistent]]
  * Use [[DirectKafkaInputDStream.preferBrokers]] if your executors are on same nodes as brokers.
  * @param useConsumerCache whether to use a consumer from a per-jvm cache
- * @param compacted whether any of the topics have log compaction enabled
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value
  */
