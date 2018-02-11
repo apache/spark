@@ -18,6 +18,7 @@ package org.apache.spark.status.api.v1
 
 import java.util.zip.ZipOutputStream
 import javax.servlet.ServletContext
+import javax.servlet.http.HttpServletRequest
 import javax.ws.rs._
 import javax.ws.rs.core.{Context, Response}
 
@@ -40,164 +41,16 @@ import org.apache.spark.ui.SparkUI
  * HistoryServerSuite.
  */
 @Path("/v1")
-private[v1] class ApiRootResource extends UIRootFromServletContext {
+private[v1] class ApiRootResource extends ApiRequestContext {
 
   @Path("applications")
-  def getApplicationList(): ApplicationListResource = {
-    new ApplicationListResource(uiRoot)
-  }
+  def applicationList(): Class[ApplicationListResource] = classOf[ApplicationListResource]
 
   @Path("applications/{appId}")
-  def getApplication(): OneApplicationResource = {
-    new OneApplicationResource(uiRoot)
-  }
-
-  @Path("applications/{appId}/{attemptId}/jobs")
-  def getJobs(
-      @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): AllJobsResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
-      new AllJobsResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/jobs")
-  def getJobs(@PathParam("appId") appId: String): AllJobsResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
-      new AllJobsResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/jobs/{jobId: \\d+}")
-  def getJob(@PathParam("appId") appId: String): OneJobResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
-      new OneJobResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/{attemptId}/jobs/{jobId: \\d+}")
-  def getJob(
-      @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): OneJobResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
-      new OneJobResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/executors")
-  def getExecutors(@PathParam("appId") appId: String): ExecutorListResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
-      new ExecutorListResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/allexecutors")
-  def getAllExecutors(@PathParam("appId") appId: String): AllExecutorListResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
-      new AllExecutorListResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/{attemptId}/executors")
-  def getExecutors(
-      @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): ExecutorListResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
-      new ExecutorListResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/{attemptId}/allexecutors")
-  def getAllExecutors(
-      @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): AllExecutorListResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
-      new AllExecutorListResource(ui)
-    }
-  }
-
-
-  @Path("applications/{appId}/stages")
-  def getStages(@PathParam("appId") appId: String): AllStagesResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
-      new AllStagesResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/{attemptId}/stages")
-  def getStages(
-      @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): AllStagesResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
-      new AllStagesResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/stages/{stageId: \\d+}")
-  def getStage(@PathParam("appId") appId: String): OneStageResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
-      new OneStageResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/{attemptId}/stages/{stageId: \\d+}")
-  def getStage(
-      @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): OneStageResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
-      new OneStageResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/storage/rdd")
-  def getRdds(@PathParam("appId") appId: String): AllRDDResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
-      new AllRDDResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/{attemptId}/storage/rdd")
-  def getRdds(
-      @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): AllRDDResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
-      new AllRDDResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/storage/rdd/{rddId: \\d+}")
-  def getRdd(@PathParam("appId") appId: String): OneRDDResource = {
-    uiRoot.withSparkUI(appId, None) { ui =>
-      new OneRDDResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/{attemptId}/storage/rdd/{rddId: \\d+}")
-  def getRdd(
-      @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): OneRDDResource = {
-    uiRoot.withSparkUI(appId, Some(attemptId)) { ui =>
-      new OneRDDResource(ui)
-    }
-  }
-
-  @Path("applications/{appId}/logs")
-  def getEventLogs(
-      @PathParam("appId") appId: String): EventLogDownloadResource = {
-    new EventLogDownloadResource(uiRoot, appId, None)
-  }
-
-  @Path("applications/{appId}/{attemptId}/logs")
-  def getEventLogs(
-      @PathParam("appId") appId: String,
-      @PathParam("attemptId") attemptId: String): EventLogDownloadResource = {
-    new EventLogDownloadResource(uiRoot, appId, Some(attemptId))
-  }
+  def application(): Class[OneApplicationResource] = classOf[OneApplicationResource]
 
   @Path("version")
-  def getVersion(): VersionResource = {
-    new VersionResource(uiRoot)
-  }
+  def version(): VersionInfo = new VersionInfo(org.apache.spark.SPARK_VERSION)
 
 }
 
@@ -220,7 +73,13 @@ private[spark] object ApiRootResource {
  * interface needed for them all to expose application info as json.
  */
 private[spark] trait UIRoot {
-  def getSparkUI(appKey: String): Option[SparkUI]
+  /**
+   * Runs some code with the current SparkUI instance for the app / attempt.
+   *
+   * @throws NoSuchElementException If the app / attempt pair does not exist.
+   */
+  def withSparkUI[T](appId: String, attemptId: Option[String])(fn: SparkUI => T): T
+
   def getApplicationInfoList: Iterator[ApplicationInfo]
   def getApplicationInfo(appId: String): Option[ApplicationInfo]
 
@@ -233,19 +92,6 @@ private[spark] trait UIRoot {
       .entity("Event logs are only available through the history server.")
       .status(Response.Status.SERVICE_UNAVAILABLE)
       .build()
-  }
-
-  /**
-   * Get the spark UI with the given appID, and apply a function
-   * to it.  If there is no such app, throw an appropriate exception
-   */
-  def withSparkUI[T](appId: String, attemptId: Option[String])(f: SparkUI => T): T = {
-    val appKey = attemptId.map(appId + "/" + _).getOrElse(appId)
-    getSparkUI(appKey) match {
-      case Some(ui) =>
-        f(ui)
-      case None => throw new NotFoundException("no such app: " + appId)
-    }
   }
   def securityManager: SecurityManager
 }
@@ -263,12 +109,45 @@ private[v1] object UIRootFromServletContext {
   }
 }
 
-private[v1] trait UIRootFromServletContext {
+private[v1] trait ApiRequestContext {
   @Context
-  var servletContext: ServletContext = _
+  protected var servletContext: ServletContext = _
+
+  @Context
+  protected var httpRequest: HttpServletRequest = _
 
   def uiRoot: UIRoot = UIRootFromServletContext.getUiRoot(servletContext)
+
 }
+
+/**
+ * Base class for resource handlers that use app-specific data. Abstracts away dealing with
+ * application and attempt IDs, and finding the app's UI.
+ */
+private[v1] trait BaseAppResource extends ApiRequestContext {
+
+  @PathParam("appId") protected[this] var appId: String = _
+  @PathParam("attemptId") protected[this] var attemptId: String = _
+
+  protected def withUI[T](fn: SparkUI => T): T = {
+    try {
+      uiRoot.withSparkUI(appId, Option(attemptId)) { ui =>
+        val user = httpRequest.getRemoteUser()
+        if (!ui.securityManager.checkUIViewPermissions(user)) {
+          throw new ForbiddenException(raw"""user "$user" is not authorized""")
+        }
+        fn(ui)
+      }
+    } catch {
+      case _: NoSuchElementException =>
+        val appKey = Option(attemptId).map(appId + "/" + _).getOrElse(appId)
+        throw new NotFoundException(s"no such app: $appKey")
+    }
+  }
+}
+
+private[v1] class ForbiddenException(msg: String) extends WebApplicationException(
+  Response.status(Response.Status.FORBIDDEN).entity(msg).build())
 
 private[v1] class NotFoundException(msg: String) extends WebApplicationException(
   new NoSuchElementException(msg),

@@ -39,7 +39,7 @@ private[evaluation] object AreaUnderCurve {
   /**
    * Returns the area under the given curve.
    *
-   * @param curve a RDD of ordered 2D points stored in pairs representing a curve
+   * @param curve an RDD of ordered 2D points stored in pairs representing a curve
    */
   def of(curve: RDD[(Double, Double)]): Double = {
     curve.sliding(2).aggregate(0.0)(

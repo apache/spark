@@ -60,8 +60,8 @@ public class JavaLogisticRegressionWithElasticNetExample {
     LogisticRegressionModel mlrModel = mlr.fit(training);
 
     // Print the coefficients and intercepts for logistic regression with multinomial family
-    System.out.println("Multinomial coefficients: "
-            + lrModel.coefficientMatrix() + "\nMultinomial intercepts: " + mlrModel.interceptVector());
+    System.out.println("Multinomial coefficients: " + lrModel.coefficientMatrix()
+      + "\nMultinomial intercepts: " + mlrModel.interceptVector());
     // $example off$
 
     spark.stop();

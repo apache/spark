@@ -101,14 +101,15 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
 
   def testColumnType[JvmType](columnType: ColumnType[JvmType]): Unit = {
 
-    val buffer = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE).order(ByteOrder.nativeOrder())
     val proj = UnsafeProjection.create(Array[DataType](columnType.dataType))
     val converter = CatalystTypeConverters.createToScalaConverter(columnType.dataType)
     val seq = (0 until 4).map(_ => proj(makeRandomRow(columnType)).copy())
+    val totalSize = seq.map(_.getSizeInBytes).sum
+    val bufferSize = Math.max(DEFAULT_BUFFER_SIZE, totalSize)
 
     test(s"$columnType append/extract") {
-      buffer.rewind()
-      seq.foreach(columnType.append(_, 0, buffer))
+      val buffer = ByteBuffer.allocate(bufferSize).order(ByteOrder.nativeOrder())
+      seq.foreach(r => columnType.append(columnType.getField(r, 0), buffer))
 
       buffer.rewind()
       seq.foreach { row =>
@@ -142,5 +143,19 @@ class ColumnTypeSuite extends SparkFunSuite with Logging {
     assertResult(LARGE_DECIMAL(19, 0)) {
       ColumnType(DecimalType(19, 0))
     }
+  }
+
+  test("show type name in type mismatch error") {
+    val invalidType = new DataType {
+        override def defaultSize: Int = 1
+        override private[spark] def asNullable: DataType = this
+        override def typeName: String = "invalid type name"
+    }
+
+    val message = intercept[java.lang.Exception] {
+      ColumnType(invalidType)
+    }.getMessage
+
+    assert(message.contains("Unsupported type: invalid type name"))
   }
 }

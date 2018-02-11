@@ -15,17 +15,17 @@
 # limitations under the License.
 #
 
-FROM ubuntu:precise
+FROM ubuntu:xenial
 
 # Upgrade package index
-# install a few other useful packages plus Open Jdk 7
+# install a few other useful packages plus Open Jdk 8
 # Remove unneeded /var/lib/apt/lists/* after install to reduce the
 # docker image size (by ~30MB)
 RUN apt-get update && \
-    apt-get install -y less openjdk-7-jre-headless net-tools vim-tiny sudo openssh-server && \
+    apt-get install -y less openjdk-8-jre-headless iproute2 vim-tiny sudo openssh-server && \
     rm -rf /var/lib/apt/lists/*
 
-ENV SCALA_VERSION 2.11.7
+ENV SCALA_VERSION 2.11.8
 ENV CDH_VERSION cdh4
 ENV SCALA_HOME /opt/scala-$SCALA_VERSION
 ENV SPARK_HOME /opt/spark

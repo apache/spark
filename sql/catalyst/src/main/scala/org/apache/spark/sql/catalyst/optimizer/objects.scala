@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 
@@ -65,7 +66,7 @@ object EliminateSerialization extends Rule[LogicalPlan] {
 
 /**
  * Combines two adjacent [[TypedFilter]]s, which operate on same type object in condition, into one,
- * mering the filter functions into one conjunctive function.
+ * merging the filter functions into one conjunctive function.
  */
 object CombineTypedFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -94,5 +95,17 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
         input => f1.asInstanceOf[Any => Boolean].apply(input) &&
           f2.asInstanceOf[Any => Boolean].apply(input)
     }
+  }
+}
+
+/**
+ * Removes MapObjects when the following conditions are satisfied
+ *   1. Mapobject(... lambdavariable(..., false) ...), which means types for input and output
+ *      are primitive types with non-nullable
+ *   2. no custom collection class specified representation of data item.
+ */
+object EliminateMapObjects extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+     case MapObjects(_, _, _, LambdaVariable(_, _, _, false), inputData, None) => inputData
   }
 }

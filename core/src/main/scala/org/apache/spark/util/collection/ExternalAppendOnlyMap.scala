@@ -30,7 +30,6 @@ import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.{DeserializationStream, Serializer, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockManager}
 import org.apache.spark.util.CompletionIterator
@@ -192,12 +191,19 @@ class ExternalAppendOnlyMap[K, V, C](
    * It will be called by TaskMemoryManager when there is not enough memory for the task.
    */
   override protected[this] def forceSpill(): Boolean = {
-    assert(readingIterator != null)
-    val isSpilled = readingIterator.spill()
-    if (isSpilled) {
-      currentMap = null
+    if (readingIterator != null) {
+      val isSpilled = readingIterator.spill()
+      if (isSpilled) {
+        currentMap = null
+      }
+      isSpilled
+    } else if (currentMap.size > 0) {
+      spill(currentMap)
+      currentMap = new SizeTrackingAppendOnlyMap[K, C]
+      true
+    } else {
+      false
     }
-    isSpilled
   }
 
   /**
@@ -457,7 +463,7 @@ class ExternalAppendOnlyMap[K, V, C](
 
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
-    private var deserializeStream = nextBatchStream()
+    private var deserializeStream: DeserializationStream = null
     private var nextItem: (K, C) = null
     private var objectsRead = 0
 
@@ -522,7 +528,11 @@ class ExternalAppendOnlyMap[K, V, C](
     override def hasNext: Boolean = {
       if (nextItem == null) {
         if (deserializeStream == null) {
-          return false
+          // In case of deserializeStream has not been initialized
+          deserializeStream = nextBatchStream()
+          if (deserializeStream == null) {
+            return false
+          }
         }
         nextItem = readNextItem()
       }
@@ -530,19 +540,18 @@ class ExternalAppendOnlyMap[K, V, C](
     }
 
     override def next(): (K, C) = {
-      val item = if (nextItem == null) readNextItem() else nextItem
-      if (item == null) {
+      if (!hasNext) {
         throw new NoSuchElementException
       }
+      val item = nextItem
       nextItem = null
       item
     }
 
     private def cleanup() {
       batchIndex = batchOffsets.length  // Prevent reading any other batch
-      val ds = deserializeStream
-      if (ds != null) {
-        ds.close()
+      if (deserializeStream != null) {
+        deserializeStream.close()
         deserializeStream = null
       }
       if (fileStream != null) {

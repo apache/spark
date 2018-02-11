@@ -27,7 +27,7 @@ best fitting the original data points.
 [pool adjacent violators algorithm](http://doi.org/10.1198/TECH.2010.10111)
 which uses an approach to
 [parallelizing isotonic regression](http://doi.org/10.1007/978-3-642-99789-1_10).
-The training input is a RDD of tuples of three double values that represent
+The training input is an RDD of tuples of three double values that represent
 label, feature and weight in this order. Additionally IsotonicRegression algorithm has one
 optional parameter called $isotonic$ defaulting to true.
 This argument specifies if the isotonic regression is

@@ -40,6 +40,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => FilterApi.eq(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.eq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
     // Binary.fromString and Binary.fromByteArray don't accept null values
     case StringType =>
       (n: String, v: Any) => FilterApi.eq(
@@ -62,6 +63,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => FilterApi.notEq(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.notEq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
     case StringType =>
       (n: String, v: Any) => FilterApi.notEq(
         binaryColumn(n),
@@ -81,6 +83,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => FilterApi.lt(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.lt(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
     case StringType =>
       (n: String, v: Any) =>
         FilterApi.lt(binaryColumn(n),
@@ -99,6 +102,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => FilterApi.ltEq(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.ltEq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
     case StringType =>
       (n: String, v: Any) =>
         FilterApi.ltEq(binaryColumn(n),
@@ -117,6 +121,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => FilterApi.gt(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.gt(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
     case StringType =>
       (n: String, v: Any) =>
         FilterApi.gt(binaryColumn(n),
@@ -135,6 +140,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => FilterApi.gtEq(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.gtEq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
     case StringType =>
       (n: String, v: Any) =>
         FilterApi.gtEq(binaryColumn(n),
@@ -145,23 +151,14 @@ private[parquet] object ParquetFilters {
   }
 
   /**
-   * Returns a map from name of the column to the data type, if predicate push down applies
-   * (i.e. not an optional field).
-   *
-   * SPARK-11955: The optional fields will have metadata StructType.metadataKeyForOptionalField.
-   * These fields only exist in one side of merged schemas. Due to that, we can't push down filters
-   * using such fields, otherwise Parquet library will throw exception (PARQUET-389).
-   * Here we filter out such fields.
+   * Returns a map from name of the column to the data type, if predicate push down applies.
    */
   private def getFieldMap(dataType: DataType): Map[String, DataType] = dataType match {
     case StructType(fields) =>
       // Here we don't flatten the fields in the nested schema but just look up through
       // root fields. Currently, accessing to nested fields does not push down filters
       // and it does not support to create filters for them.
-      fields.filter { f =>
-        !f.metadata.contains(StructType.metadataKeyForOptionalField) ||
-          !f.metadata.getBoolean(StructType.metadataKeyForOptionalField)
-      }.map(f => f.name -> f.dataType).toMap
+      fields.map(f => f.name -> f.dataType).toMap
     case _ => Map.empty[String, DataType]
   }
 
@@ -169,7 +166,14 @@ private[parquet] object ParquetFilters {
    * Converts data sources filters to Parquet filter predicates.
    */
   def createFilter(schema: StructType, predicate: sources.Filter): Option[FilterPredicate] = {
-    val dataTypeOf = getFieldMap(schema)
+    val nameToType = getFieldMap(schema)
+
+    // Parquet does not allow dots in the column name because dots are used as a column path
+    // delimiter. Since Parquet 1.8.2 (PARQUET-389), Parquet accepts the filter predicates
+    // with missing columns. The incorrect results could be got from Parquet when we push down
+    // filters for the column having dots in the names. Thus, we do not push down such filters.
+    // See SPARK-20364.
+    def canMakeFilterOn(name: String): Boolean = nameToType.contains(name) && !name.contains(".")
 
     // NOTE:
     //
@@ -187,30 +191,30 @@ private[parquet] object ParquetFilters {
     // Probably I missed something and obviously this should be changed.
 
     predicate match {
-      case sources.IsNull(name) if dataTypeOf.contains(name) =>
-        makeEq.lift(dataTypeOf(name)).map(_(name, null))
-      case sources.IsNotNull(name) if dataTypeOf.contains(name) =>
-        makeNotEq.lift(dataTypeOf(name)).map(_(name, null))
+      case sources.IsNull(name) if canMakeFilterOn(name) =>
+        makeEq.lift(nameToType(name)).map(_(name, null))
+      case sources.IsNotNull(name) if canMakeFilterOn(name) =>
+        makeNotEq.lift(nameToType(name)).map(_(name, null))
 
-      case sources.EqualTo(name, value) if dataTypeOf.contains(name) =>
-        makeEq.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.Not(sources.EqualTo(name, value)) if dataTypeOf.contains(name) =>
-        makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.EqualTo(name, value) if canMakeFilterOn(name) =>
+        makeEq.lift(nameToType(name)).map(_(name, value))
+      case sources.Not(sources.EqualTo(name, value)) if canMakeFilterOn(name) =>
+        makeNotEq.lift(nameToType(name)).map(_(name, value))
 
-      case sources.EqualNullSafe(name, value) if dataTypeOf.contains(name) =>
-        makeEq.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.Not(sources.EqualNullSafe(name, value)) if dataTypeOf.contains(name) =>
-        makeNotEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.EqualNullSafe(name, value) if canMakeFilterOn(name) =>
+        makeEq.lift(nameToType(name)).map(_(name, value))
+      case sources.Not(sources.EqualNullSafe(name, value)) if canMakeFilterOn(name) =>
+        makeNotEq.lift(nameToType(name)).map(_(name, value))
 
-      case sources.LessThan(name, value) if dataTypeOf.contains(name) =>
-        makeLt.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.LessThanOrEqual(name, value) if dataTypeOf.contains(name) =>
-        makeLtEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.LessThan(name, value) if canMakeFilterOn(name) =>
+        makeLt.lift(nameToType(name)).map(_(name, value))
+      case sources.LessThanOrEqual(name, value) if canMakeFilterOn(name) =>
+        makeLtEq.lift(nameToType(name)).map(_(name, value))
 
-      case sources.GreaterThan(name, value) if dataTypeOf.contains(name) =>
-        makeGt.lift(dataTypeOf(name)).map(_(name, value))
-      case sources.GreaterThanOrEqual(name, value) if dataTypeOf.contains(name) =>
-        makeGtEq.lift(dataTypeOf(name)).map(_(name, value))
+      case sources.GreaterThan(name, value) if canMakeFilterOn(name) =>
+        makeGt.lift(nameToType(name)).map(_(name, value))
+      case sources.GreaterThanOrEqual(name, value) if canMakeFilterOn(name) =>
+        makeGtEq.lift(nameToType(name)).map(_(name, value))
 
       case sources.And(lhs, rhs) =>
         // At here, it is not safe to just convert one side if we do not understand the

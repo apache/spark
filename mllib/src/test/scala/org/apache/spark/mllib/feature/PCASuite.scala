@@ -48,4 +48,10 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext {
     }
     assert(pca.explainedVariance ~== explainedVariance relTol 1e-8)
   }
+
+  test("memory cost computation") {
+    assert(PCAUtil.memoryCost(10, 100) < Int.MaxValue)
+    // check overflowing
+    assert(PCAUtil.memoryCost(40000, 60000) > Int.MaxValue)
+  }
 }

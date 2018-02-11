@@ -23,10 +23,7 @@ import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
-import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
-
-import static org.apache.spark.launcher.SparkSubmitOptionParser.*;
 
 public class SparkSubmitOptionParserSuite extends BaseSuite {
 
@@ -47,7 +44,7 @@ public class SparkSubmitOptionParserSuite extends BaseSuite {
         count++;
         verify(parser).handle(eq(optNames[0]), eq(value));
         verify(parser, times(count)).handle(anyString(), anyString());
-        verify(parser, times(count)).handleExtraArgs(eq(Collections.<String>emptyList()));
+        verify(parser, times(count)).handleExtraArgs(eq(Collections.emptyList()));
       }
     }
 
@@ -57,9 +54,9 @@ public class SparkSubmitOptionParserSuite extends BaseSuite {
         parser.parse(Arrays.asList(name));
         count++;
         switchCount++;
-        verify(parser, times(switchCount)).handle(eq(switchNames[0]), same((String) null));
+        verify(parser, times(switchCount)).handle(eq(switchNames[0]), same(null));
         verify(parser, times(count)).handle(anyString(), any(String.class));
-        verify(parser, times(count)).handleExtraArgs(eq(Collections.<String>emptyList()));
+        verify(parser, times(count)).handleExtraArgs(eq(Collections.emptyList()));
       }
     }
   }
@@ -83,7 +80,7 @@ public class SparkSubmitOptionParserSuite extends BaseSuite {
     List<String> args = Arrays.asList(parser.MASTER + "=" + parser.MASTER);
     parser.parse(args);
     verify(parser).handle(eq(parser.MASTER), eq(parser.MASTER));
-    verify(parser).handleExtraArgs(eq(Collections.<String>emptyList()));
+    verify(parser).handleExtraArgs(eq(Collections.emptyList()));
   }
 
   private static class DummyParser extends SparkSubmitOptionParser {

@@ -19,11 +19,11 @@ package org.apache.spark.sql.hive.execution;
 
 import org.apache.hadoop.hive.ql.exec.UDF;
 
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 public class UDFToListInt extends UDF {
-    public List<Integer> evaluate(Object o) {
-        return Arrays.asList(1, 2, 3);
-    }
+  public ArrayList<Integer> evaluate(Object o) {
+    return new ArrayList<>(Arrays.asList(1, 2, 3));
+  }
 }

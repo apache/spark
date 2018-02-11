@@ -20,15 +20,15 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
  * An analyzer rule that replaces [[UnresolvedInlineTable]] with [[LocalRelation]].
  */
-object ResolveInlineTables extends Rule[LogicalPlan] {
+case class ResolveInlineTables(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case table: UnresolvedInlineTable if table.expressionsResolved =>
       validateInputDimension(table)
@@ -95,11 +95,12 @@ object ResolveInlineTables extends Rule[LogicalPlan] {
       InternalRow.fromSeq(row.zipWithIndex.map { case (e, ci) =>
         val targetType = fields(ci).dataType
         try {
-          if (e.dataType.sameType(targetType)) {
-            e.eval()
+          val castedExpr = if (e.dataType.sameType(targetType)) {
+            e
           } else {
-            Cast(e, targetType).eval()
+            cast(e, targetType)
           }
+          castedExpr.eval()
         } catch {
           case NonFatal(ex) =>
             table.failAnalysis(s"failed to evaluate expression ${e.sql}: ${ex.getMessage}")

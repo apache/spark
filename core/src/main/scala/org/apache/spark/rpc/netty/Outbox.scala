@@ -45,7 +45,7 @@ private[netty] case class OneWayOutboxMessage(content: ByteBuffer) extends Outbo
 
   override def onFailure(e: Throwable): Unit = {
     e match {
-      case e1: RpcEnvStoppedException => logWarning(e1.getMessage)
+      case e1: RpcEnvStoppedException => logDebug(e1.getMessage)
       case e1: Throwable => logWarning(s"Failed to send one-way RPC.", e1)
     }
   }
@@ -56,7 +56,7 @@ private[netty] case class RpcOutboxMessage(
     content: ByteBuffer,
     _onFailure: (Throwable) => Unit,
     _onSuccess: (TransportClient, ByteBuffer) => Unit)
-  extends OutboxMessage with RpcResponseCallback {
+  extends OutboxMessage with RpcResponseCallback with Logging {
 
   private var client: TransportClient = _
   private var requestId: Long = _
@@ -67,8 +67,11 @@ private[netty] case class RpcOutboxMessage(
   }
 
   def onTimeout(): Unit = {
-    require(client != null, "TransportClient has not yet been set.")
-    client.removeRpcRequest(requestId)
+    if (client != null) {
+      client.removeRpcRequest(requestId)
+    } else {
+      logError("Ask timeout before connecting successfully")
+    }
   }
 
   override def onFailure(e: Throwable): Unit = {

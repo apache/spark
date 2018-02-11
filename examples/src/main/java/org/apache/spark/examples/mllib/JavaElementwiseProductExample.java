@@ -25,12 +25,10 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.feature.ElementwiseProduct;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 // $example off$
-import org.apache.spark.api.java.function.VoidFunction;
 
 public class JavaElementwiseProductExample {
   public static void main(String[] args) {
@@ -43,35 +41,18 @@ public class JavaElementwiseProductExample {
     JavaRDD<Vector> data = jsc.parallelize(Arrays.asList(
       Vectors.dense(1.0, 2.0, 3.0), Vectors.dense(4.0, 5.0, 6.0)));
     Vector transformingVector = Vectors.dense(0.0, 1.0, 2.0);
-    final ElementwiseProduct transformer = new ElementwiseProduct(transformingVector);
+    ElementwiseProduct transformer = new ElementwiseProduct(transformingVector);
 
     // Batch transform and per-row transform give the same results:
     JavaRDD<Vector> transformedData = transformer.transform(data);
-    JavaRDD<Vector> transformedData2 = data.map(
-      new Function<Vector, Vector>() {
-        @Override
-        public Vector call(Vector v) {
-          return transformer.transform(v);
-        }
-      }
-    );
+    JavaRDD<Vector> transformedData2 = data.map(transformer::transform);
     // $example off$
 
     System.out.println("transformedData: ");
-    transformedData.foreach(new VoidFunction<Vector>() {
-      @Override
-      public void call(Vector vector) throws Exception {
-        System.out.println(vector.toString());
-      }
-    });
+    transformedData.foreach(System.out::println);
 
     System.out.println("transformedData2: ");
-    transformedData2.foreach(new VoidFunction<Vector>() {
-      @Override
-      public void call(Vector vector) throws Exception {
-        System.out.println(vector.toString());
-      }
-    });
+    transformedData2.foreach(System.out::println);
 
     jsc.stop();
   }

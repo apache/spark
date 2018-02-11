@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
@@ -68,10 +68,11 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
     val cv = new CountVectorizer()
       .setInputCol("words")
       .setOutputCol("features")
-      .fit(df)
-    assert(cv.vocabulary.toSet === Set("a", "b", "c", "d", "e"))
+    val cvm = cv.fit(df)
+    MLTestingUtils.checkCopyAndUids(cv, cvm)
+    assert(cvm.vocabulary.toSet === Set("a", "b", "c", "d", "e"))
 
-    cv.transform(df).select("features", "expected").collect().foreach {
+    cvm.transform(df).select("features", "expected").collect().foreach {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }
@@ -113,6 +114,78 @@ class CountVectorizerSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(cvModel3.vocabulary === Array("a", "b"))
 
     cvModel3.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+  }
+
+  test("CountVectorizer maxDF") {
+    val df = Seq(
+      (0, split("a b c d"), Vectors.sparse(3, Seq((0, 1.0), (1, 1.0), (2, 1.0)))),
+      (1, split("a b c"), Vectors.sparse(3, Seq((0, 1.0), (1, 1.0)))),
+      (2, split("a b"), Vectors.sparse(3, Seq((0, 1.0)))),
+      (3, split("a"), Vectors.sparse(3, Seq()))
+    ).toDF("id", "words", "expected")
+
+    // maxDF: ignore terms with count more than 3
+    val cvModel = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMaxDF(3)
+      .fit(df)
+    assert(cvModel.vocabulary === Array("b", "c", "d"))
+
+    cvModel.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+
+    // maxDF: ignore terms with freq > 0.75
+    val cvModel2 = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMaxDF(0.75)
+      .fit(df)
+    assert(cvModel2.vocabulary === Array("b", "c", "d"))
+
+    cvModel2.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+  }
+
+  test("CountVectorizer using both minDF and maxDF") {
+    // Ignore terms with count more than 3 AND less than 2
+    val df = Seq(
+      (0, split("a b c d"), Vectors.sparse(2, Seq((0, 1.0), (1, 1.0)))),
+      (1, split("a b c"), Vectors.sparse(2, Seq((0, 1.0), (1, 1.0)))),
+      (2, split("a b"), Vectors.sparse(2, Seq((0, 1.0)))),
+      (3, split("a"), Vectors.sparse(2, Seq()))
+    ).toDF("id", "words", "expected")
+
+    val cvModel = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMinDF(2)
+      .setMaxDF(3)
+      .fit(df)
+    assert(cvModel.vocabulary === Array("b", "c"))
+
+    cvModel.transform(df).select("features", "expected").collect().foreach {
+      case Row(features: Vector, expected: Vector) =>
+        assert(features ~== expected absTol 1e-14)
+    }
+
+    // Ignore terms with frequency higher than 0.75 AND less than 0.5
+    val cvModel2 = new CountVectorizer()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setMinDF(0.5)
+      .setMaxDF(0.75)
+      .fit(df)
+    assert(cvModel2.vocabulary === Array("b", "c"))
+
+    cvModel2.transform(df).select("features", "expected").collect().foreach {
       case Row(features: Vector, expected: Vector) =>
         assert(features ~== expected absTol 1e-14)
     }

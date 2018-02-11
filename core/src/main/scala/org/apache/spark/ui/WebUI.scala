@@ -56,8 +56,8 @@ private[spark] abstract class WebUI(
   private val className = Utils.getFormattedClassName(this)
 
   def getBasePath: String = basePath
-  def getTabs: Seq[WebUITab] = tabs.toSeq
-  def getHandlers: Seq[ServletContextHandler] = handlers.toSeq
+  def getTabs: Seq[WebUITab] = tabs
+  def getHandlers: Seq[ServletContextHandler] = handlers
   def getSecurityManager: SecurityManager = securityManager
 
   /** Attach a tab to this UI, along with all of its attached pages. */
@@ -91,23 +91,13 @@ private[spark] abstract class WebUI(
   /** Attach a handler to this UI. */
   def attachHandler(handler: ServletContextHandler) {
     handlers += handler
-    serverInfo.foreach { info =>
-      info.rootHandler.addHandler(handler)
-      if (!handler.isStarted) {
-        handler.start()
-      }
-    }
+    serverInfo.foreach(_.addHandler(handler))
   }
 
   /** Detach a handler from this UI. */
   def detachHandler(handler: ServletContextHandler) {
     handlers -= handler
-    serverInfo.foreach { info =>
-      info.rootHandler.removeHandler(handler)
-      if (handler.isStarted) {
-        handler.stop()
-      }
-    }
+    serverInfo.foreach(_.removeHandler(handler))
   }
 
   /**
@@ -133,8 +123,8 @@ private[spark] abstract class WebUI(
   def initialize(): Unit
 
   /** Bind to the HTTP server behind this web interface. */
-  def bind() {
-    assert(!serverInfo.isDefined, s"Attempted to bind $className more than once!")
+  def bind(): Unit = {
+    assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
     try {
       val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
       serverInfo = Some(startJettyServer(host, port, sslOptions, handlers, conf, name))
@@ -153,7 +143,7 @@ private[spark] abstract class WebUI(
   def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
 
   /** Stop the server behind this web interface. Only valid after bind(). */
-  def stop() {
+  def stop(): Unit = {
     assert(serverInfo.isDefined,
       s"Attempted to stop $className before binding to a server!")
     serverInfo.get.stop()

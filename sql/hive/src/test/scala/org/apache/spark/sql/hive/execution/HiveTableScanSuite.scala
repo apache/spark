@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.hive.MetastoreRelation
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
@@ -82,21 +81,22 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
   }
 
   test("Spark-4959 Attributes are case sensitive when using a select query from a projection") {
-    sql("create table spark_4959 (col1 string)")
-    sql("""insert into table spark_4959 select "hi" from src limit 1""")
-    table("spark_4959").select(
-      'col1.as("CaseSensitiveColName"),
-      'col1.as("CaseSensitiveColName2")).createOrReplaceTempView("spark_4959_2")
+    withTable("spark_4959") {
+      sql("create table spark_4959 (col1 string)")
+      sql("""insert into table spark_4959 select "hi" from src limit 1""")
+      table("spark_4959").select(
+        'col1.as("CaseSensitiveColName"),
+        'col1.as("CaseSensitiveColName2")).createOrReplaceTempView("spark_4959_2")
 
-    assert(sql("select CaseSensitiveColName from spark_4959_2").head() === Row("hi"))
-    assert(sql("select casesensitivecolname from spark_4959_2").head() === Row("hi"))
+      assert(sql("select CaseSensitiveColName from spark_4959_2").head() === Row("hi"))
+      assert(sql("select casesensitivecolname from spark_4959_2").head() === Row("hi"))
+    }
   }
 
   private def checkNumScannedPartitions(stmt: String, expectedNumParts: Int): Unit = {
     val plan = sql(stmt).queryExecution.sparkPlan
     val numPartitions = plan.collectFirst {
-      case p: HiveTableScanExec =>
-        p.relation.getHiveQlPartitions(p.partitionPruningPred).length
+      case p: HiveTableScanExec => p.rawPartitions.length
     }.getOrElse(0)
     assert(numPartitions == expectedNumParts)
   }
@@ -166,16 +166,30 @@ class HiveTableScanSuite extends HiveComparisonTest with SQLTestUtils with TestH
              |PARTITION (p1='a',p2='c',p3='c',p4='d',p5='e')
              |SELECT v.id
            """.stripMargin)
-        val plan = sql(
-          s"""
-             |SELECT * FROM $table
-           """.stripMargin).queryExecution.sparkPlan
-        val relation = plan.collectFirst {
-          case p: HiveTableScanExec => p.relation
-        }.get
-        val tableCols = relation.hiveQlTable.getCols
-        relation.getHiveQlPartitions().foreach(p => assert(p.getCols.size == tableCols.size))
+        val scan = getHiveTableScanExec(s"SELECT * FROM $table")
+        val numDataCols = scan.relation.dataCols.length
+        scan.rawPartitions.foreach(p => assert(p.getCols.size == numDataCols))
       }
     }
+  }
+
+  test("HiveTableScanExec canonicalization for different orders of partition filters") {
+    val table = "hive_tbl_part"
+    withTable(table) {
+      sql(
+        s"""
+           |CREATE TABLE $table (id int)
+           |PARTITIONED BY (a int, b int)
+         """.stripMargin)
+      val scan1 = getHiveTableScanExec(s"SELECT * FROM $table WHERE a = 1 AND b = 2")
+      val scan2 = getHiveTableScanExec(s"SELECT * FROM $table WHERE b = 2 AND a = 1")
+      assert(scan1.sameResult(scan2))
+    }
+  }
+
+  private def getHiveTableScanExec(query: String): HiveTableScanExec = {
+    sql(query).queryExecution.sparkPlan.collectFirst {
+      case p: HiveTableScanExec => p
+    }.get
   }
 }

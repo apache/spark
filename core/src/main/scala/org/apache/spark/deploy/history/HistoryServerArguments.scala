@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
- * Command-line parser for the master.
+ * Command-line parser for the [[HistoryServer]].
  */
 private[history] class HistoryServerArguments(conf: SparkConf, args: Array[String])
   extends Logging {

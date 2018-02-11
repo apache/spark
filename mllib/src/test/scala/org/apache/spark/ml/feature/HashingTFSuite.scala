@@ -30,6 +30,7 @@ import org.apache.spark.util.Utils
 class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   import testImplicits._
+  import HashingTFSuite.murmur3FeatureIdx
 
   test("params") {
     ParamsSuite.checkParams(new HashingTF)
@@ -77,7 +78,12 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     testDefaultReadWrite(t)
   }
 
-  private def murmur3FeatureIdx(numFeatures: Int)(term: Any): Int = {
+}
+
+object HashingTFSuite {
+
+  private[feature] def murmur3FeatureIdx(numFeatures: Int)(term: Any): Int = {
     Utils.nonNegativeMod(MLlibHashingTF.murmur3Hash(term), numFeatures)
   }
+
 }

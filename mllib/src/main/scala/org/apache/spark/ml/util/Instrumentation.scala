@@ -87,12 +87,16 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   /**
    * Logs the value with customized name field.
    */
-  def logNamedValue(name: String, num: Long): Unit = {
-    log(compact(render(name -> num)))
+  def logNamedValue(name: String, value: String): Unit = {
+    log(compact(render(name -> value)))
+  }
+
+  def logNamedValue(name: String, value: Long): Unit = {
+    log(compact(render(name -> value)))
   }
 
   /**
-   * Logs the successful completion of the training session and the value of the learned model.
+   * Logs the successful completion of the training session.
    */
   def logSuccess(model: Model[_]): Unit = {
     log(s"training finished")

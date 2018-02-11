@@ -23,7 +23,7 @@ import java.util.Arrays;
 import java.util.List;
 
 public class UDFToListString extends UDF {
-    public List<String> evaluate(Object o) {
-        return Arrays.asList("data1", "data2", "data3");
-    }
+  public List<String> evaluate(Object o) {
+    return Arrays.asList("data1", "data2", "data3");
+  }
 }

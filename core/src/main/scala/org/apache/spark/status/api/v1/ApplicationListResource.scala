@@ -20,16 +20,16 @@ import java.util.{Date, List => JList}
 import javax.ws.rs.{DefaultValue, GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.deploy.history.ApplicationHistoryInfo
-
 @Produces(Array(MediaType.APPLICATION_JSON))
-private[v1] class ApplicationListResource(uiRoot: UIRoot) {
+private[v1] class ApplicationListResource extends ApiRequestContext {
 
   @GET
   def appList(
       @QueryParam("status") status: JList[ApplicationStatus],
       @DefaultValue("2010-01-01") @QueryParam("minDate") minDate: SimpleDateParam,
       @DefaultValue("3000-01-01") @QueryParam("maxDate") maxDate: SimpleDateParam,
+      @DefaultValue("2010-01-01") @QueryParam("minEndDate") minEndDate: SimpleDateParam,
+      @DefaultValue("3000-01-01") @QueryParam("maxEndDate") maxEndDate: SimpleDateParam,
       @QueryParam("limit") limit: Integer)
   : Iterator[ApplicationInfo] = {
 
@@ -43,38 +43,25 @@ private[v1] class ApplicationListResource(uiRoot: UIRoot) {
       // keep the app if *any* attempts fall in the right time window
       ((!anyRunning && includeCompleted) || (anyRunning && includeRunning)) &&
       app.attempts.exists { attempt =>
-        val start = attempt.startTime.getTime
-        start >= minDate.timestamp && start <= maxDate.timestamp
+        isAttemptInRange(attempt, minDate, maxDate, minEndDate, maxEndDate, anyRunning)
       }
     }.take(numApps)
   }
-}
 
-private[spark] object ApplicationsListResource {
-  def appHistoryInfoToPublicAppInfo(app: ApplicationHistoryInfo): ApplicationInfo = {
-    new ApplicationInfo(
-      id = app.id,
-      name = app.name,
-      coresGranted = None,
-      maxCores = None,
-      coresPerExecutor = None,
-      memoryPerExecutorMB = None,
-      attempts = app.attempts.map { internalAttemptInfo =>
-        new ApplicationAttemptInfo(
-          attemptId = internalAttemptInfo.attemptId,
-          startTime = new Date(internalAttemptInfo.startTime),
-          endTime = new Date(internalAttemptInfo.endTime),
-          duration =
-            if (internalAttemptInfo.endTime > 0) {
-              internalAttemptInfo.endTime - internalAttemptInfo.startTime
-            } else {
-              0
-            },
-          lastUpdated = new Date(internalAttemptInfo.lastUpdated),
-          sparkUser = internalAttemptInfo.sparkUser,
-          completed = internalAttemptInfo.completed
-        )
-      }
-    )
+  private def isAttemptInRange(
+      attempt: ApplicationAttemptInfo,
+      minStartDate: SimpleDateParam,
+      maxStartDate: SimpleDateParam,
+      minEndDate: SimpleDateParam,
+      maxEndDate: SimpleDateParam,
+      anyRunning: Boolean): Boolean = {
+    val startTimeOk = attempt.startTime.getTime >= minStartDate.timestamp &&
+      attempt.startTime.getTime <= maxStartDate.timestamp
+    // If the maxEndDate is in the past, exclude all running apps.
+    val endTimeOkForRunning = anyRunning && (maxEndDate.timestamp > System.currentTimeMillis())
+    val endTimeOkForCompleted = !anyRunning && (attempt.endTime.getTime >= minEndDate.timestamp &&
+      attempt.endTime.getTime <= maxEndDate.timestamp)
+    val endTimeOk = endTimeOkForRunning || endTimeOkForCompleted
+    startTimeOk && endTimeOk
   }
 }

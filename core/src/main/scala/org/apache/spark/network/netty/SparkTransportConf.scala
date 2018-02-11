@@ -17,6 +17,8 @@
 
 package org.apache.spark.network.netty
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.network.util.{ConfigProvider, TransportConf}
 
@@ -58,6 +60,10 @@ object SparkTransportConf {
 
     new TransportConf(module, new ConfigProvider {
       override def get(name: String): String = conf.get(name)
+      override def get(name: String, defaultValue: String): String = conf.get(name, defaultValue)
+      override def getAll(): java.lang.Iterable[java.util.Map.Entry[String, String]] = {
+        conf.getAll.toMap.asJava.entrySet()
+      }
     })
   }
 

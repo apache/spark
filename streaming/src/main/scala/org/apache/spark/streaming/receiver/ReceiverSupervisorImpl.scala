@@ -18,8 +18,8 @@
 package org.apache.spark.streaming.receiver
 
 import java.nio.ByteBuffer
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -159,7 +159,9 @@ private[streaming] class ReceiverSupervisorImpl(
     logDebug(s"Pushed block $blockId in ${(System.currentTimeMillis - time)} ms")
     val numRecords = blockStoreResult.numRecords
     val blockInfo = ReceivedBlockInfo(streamId, numRecords, metadataOption, blockStoreResult)
-    trackerEndpoint.askWithRetry[Boolean](AddBlock(blockInfo))
+    if (!trackerEndpoint.askSync[Boolean](AddBlock(blockInfo))) {
+      throw new SparkException("Failed to add block to receiver tracker.")
+    }
     logDebug(s"Reported block $blockId")
   }
 
@@ -175,6 +177,12 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   override protected def onStop(message: String, error: Option[Throwable]) {
+    receivedBlockHandler match {
+      case handler: WriteAheadLogBasedBlockHandler =>
+        // Write ahead log should be closed.
+        handler.stop()
+      case _ =>
+    }
     registeredBlockGenerators.asScala.foreach { _.stop() }
     env.rpcEnv.stop(endpoint)
   }
@@ -182,13 +190,13 @@ private[streaming] class ReceiverSupervisorImpl(
   override protected def onReceiverStart(): Boolean = {
     val msg = RegisterReceiver(
       streamId, receiver.getClass.getSimpleName, host, executorId, endpoint)
-    trackerEndpoint.askWithRetry[Boolean](msg)
+    trackerEndpoint.askSync[Boolean](msg)
   }
 
   override protected def onReceiverStop(message: String, error: Option[Throwable]) {
     logInfo("Deregistering receiver " + streamId)
     val errorString = error.map(Throwables.getStackTraceAsString).getOrElse("")
-    trackerEndpoint.askWithRetry[Boolean](DeregisterReceiver(streamId, message, errorString))
+    trackerEndpoint.askSync[Boolean](DeregisterReceiver(streamId, message, errorString))
     logInfo("Stopped receiver " + streamId)
   }
 

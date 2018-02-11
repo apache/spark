@@ -47,7 +47,14 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
   def evaluateEstimate(hll: HyperLogLogPlusPlus, buffer: InternalRow, cardinality: Int): Unit = {
     val estimate = hll.eval(buffer).asInstanceOf[Long].toDouble
     val error = math.abs((estimate / cardinality.toDouble) - 1.0d)
-    assert(error < hll.trueRsd * 3.0d, "Error should be within 3 std. errors.")
+    assert(error < hll.hllppHelper.trueRsd * 3.0d, "Error should be within 3 std. errors.")
+  }
+
+  test("test invalid parameter relativeSD") {
+    // `relativeSD` should be at most 39%.
+    intercept[IllegalArgumentException] {
+      new HyperLogLogPlusPlus(new BoundReference(0, IntegerType, true), relativeSD = 0.4)
+    }
   }
 
   test("add nulls") {
@@ -76,14 +83,14 @@ class HyperLogLogPlusPlusSuite extends SparkFunSuite {
         val estimate = hll.eval(buffer).asInstanceOf[Long].toDouble
         val cardinality = c(n)
         val error = math.abs((estimate / cardinality.toDouble) - 1.0d)
-        assert(error < hll.trueRsd * 3.0d, "Error should be within 3 std. errors.")
+        assert(error < hll.hllppHelper.trueRsd * 3.0d, "Error should be within 3 std. errors.")
     }
   }
 
   test("deterministic cardinality estimation") {
     val repeats = 10
     testCardinalityEstimates(
-      Seq(0.1, 0.05, 0.025, 0.01),
+      Seq(0.1, 0.05, 0.025, 0.01, 0.001),
       Seq(100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000).map(_ * repeats),
       i => i / repeats,
       i => i / repeats)

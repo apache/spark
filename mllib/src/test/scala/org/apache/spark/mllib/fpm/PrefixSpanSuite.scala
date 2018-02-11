@@ -360,6 +360,49 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
     compareResults(expected, model.freqSequences.collect())
   }
 
+  test("PrefixSpan pre-processing's cleaning test") {
+
+    // One item per itemSet
+    val itemToInt1 = (4 to 5).zipWithIndex.toMap
+    val sequences1 = Seq(
+      Array(Array(4), Array(1), Array(2), Array(5), Array(2), Array(4), Array(5)),
+      Array(Array(6), Array(7), Array(8)))
+    val rdd1 = sc.parallelize(sequences1, 2).cache()
+
+    val cleanedSequence1 = PrefixSpan.toDatabaseInternalRepr(rdd1, itemToInt1).collect()
+
+    val expected1 = Array(Array(0, 4, 0, 5, 0, 4, 0, 5, 0))
+      .map(_.map(x => if (x == 0) 0 else itemToInt1(x) + 1))
+
+    compareInternalSequences(expected1, cleanedSequence1)
+
+    // Multi-item sequence
+    val itemToInt2 = (4 to 6).zipWithIndex.toMap
+    val sequences2 = Seq(
+      Array(Array(4, 5), Array(1, 6, 2), Array(2), Array(5), Array(2), Array(4), Array(5, 6, 7)),
+      Array(Array(8, 9), Array(1, 2)))
+    val rdd2 = sc.parallelize(sequences2, 2).cache()
+
+    val cleanedSequence2 = PrefixSpan.toDatabaseInternalRepr(rdd2, itemToInt2).collect()
+
+    val expected2 = Array(Array(0, 4, 5, 0, 6, 0, 5, 0, 4, 0, 5, 6, 0))
+      .map(_.map(x => if (x == 0) 0 else itemToInt2(x) + 1))
+
+    compareInternalSequences(expected2, cleanedSequence2)
+
+    // Emptied sequence
+    val itemToInt3 = (10 to 10).zipWithIndex.toMap
+    val sequences3 = Seq(
+      Array(Array(4, 5), Array(1, 6, 2), Array(2), Array(5), Array(2), Array(4), Array(5, 6, 7)),
+      Array(Array(8, 9), Array(1, 2)))
+    val rdd3 = sc.parallelize(sequences3, 2).cache()
+
+    val cleanedSequence3 = PrefixSpan.toDatabaseInternalRepr(rdd3, itemToInt3).collect()
+    val expected3 = Array[Array[Int]]()
+
+    compareInternalSequences(expected3, cleanedSequence3)
+  }
+
   test("model save/load") {
     val sequences = Seq(
       Array(Array(1, 2), Array(3)),
@@ -407,6 +450,14 @@ class PrefixSpanSuite extends SparkFunSuite with MLlibTestSparkContext {
       actualValue: Array[(Array[Int], Long)]): Unit = {
     val expectedSet = expectedValue.map(x => (x._1.toSeq, x._2)).toSet
     val actualSet = actualValue.map(x => (x._1.toSeq, x._2)).toSet
+    assert(expectedSet === actualSet)
+  }
+
+  private def compareInternalSequences(
+      expectedValue: Array[Array[Int]],
+      actualValue: Array[Array[Int]]): Unit = {
+    val expectedSet = expectedValue.map(x => x.toSeq).toSet
+    val actualSet = actualValue.map(x => x.toSeq).toSet
     assert(expectedSet === actualSet)
   }
 }

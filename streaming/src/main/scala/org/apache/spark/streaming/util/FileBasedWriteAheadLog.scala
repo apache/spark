@@ -139,7 +139,7 @@ private[streaming] class FileBasedWriteAheadLog(
     def readFile(file: String): Iterator[ByteBuffer] = {
       logDebug(s"Creating log reader with $file")
       val reader = new FileBasedWriteAheadLogReader(file, hadoopConf)
-      CompletionIterator[ByteBuffer, Iterator[ByteBuffer]](reader, reader.close _)
+      CompletionIterator[ByteBuffer, Iterator[ByteBuffer]](reader, () => reader.close())
     }
     if (!closeFileAfterWrite) {
       logFilesToRead.iterator.map(readFile).flatten.asJava
@@ -189,7 +189,9 @@ private[streaming] class FileBasedWriteAheadLog(
           val f = Future { deleteFile(logInfo) }(executionContext)
           if (waitForCompletion) {
             import scala.concurrent.duration._
+            // scalastyle:off awaitready
             Await.ready(f, 1 second)
+            // scalastyle:on awaitready
           }
         } catch {
           case e: RejectedExecutionException =>
@@ -203,10 +205,12 @@ private[streaming] class FileBasedWriteAheadLog(
 
   /** Stop the manager, close any open log writer */
   def close(): Unit = synchronized {
-    if (currentLogWriter != null) {
-      currentLogWriter.close()
+    if (!executionContext.isShutdown) {
+      if (currentLogWriter != null) {
+        currentLogWriter.close()
+      }
+      executionContext.shutdown()
     }
-    executionContext.shutdown()
     logInfo("Stopped write ahead log manager")
   }
 

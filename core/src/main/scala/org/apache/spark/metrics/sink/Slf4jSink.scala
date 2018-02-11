@@ -17,7 +17,7 @@
 
 package org.apache.spark.metrics.sink
 
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{MetricRegistry, Slf4jReporter}
@@ -42,7 +42,7 @@ private[spark] class Slf4jSink(
   }
 
   val pollUnit: TimeUnit = Option(property.getProperty(SLF4J_KEY_UNIT)) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
+    case Some(s) => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT))
     case None => TimeUnit.valueOf(SLF4J_DEFAULT_UNIT)
   }
 

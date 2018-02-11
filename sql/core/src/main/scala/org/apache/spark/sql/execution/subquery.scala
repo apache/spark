@@ -144,16 +144,13 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
         ScalarSubquery(
           SubqueryExec(s"subquery${subquery.exprId.id}", executedPlan),
           subquery.exprId)
-      case expressions.PredicateSubquery(query, Seq(e: Expression), _, exprId) =>
-        val executedPlan = new QueryExecution(sparkSession, query).executedPlan
-        InSubquery(e, SubqueryExec(s"subquery${exprId.id}", executedPlan), exprId)
     }
   }
 }
 
 
 /**
- * Find out duplicated exchanges in the spark plan, then use the same exchange for all the
+ * Find out duplicated subqueries in the spark plan, then use the same subquery result for all the
  * references.
  */
 case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
@@ -162,7 +159,7 @@ case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
     if (!conf.exchangeReuseEnabled) {
       return plan
     }
-    // Build a hash map using schema of exchanges to avoid O(N*N) sameResult calls.
+    // Build a hash map using schema of subqueries to avoid O(N*N) sameResult calls.
     val subqueries = mutable.HashMap[StructType, ArrayBuffer[SubqueryExec]]()
     plan transformAllExpressions {
       case sub: ExecSubqueryExpression =>

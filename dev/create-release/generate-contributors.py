@@ -33,14 +33,14 @@ PREVIOUS_RELEASE_TAG = os.environ.get("PREVIOUS_RELEASE_TAG", "v1.1.0")
 while not tag_exists(RELEASE_TAG):
     RELEASE_TAG = raw_input("Please provide a valid release tag: ")
 while not tag_exists(PREVIOUS_RELEASE_TAG):
-    print "Please specify the previous release tag."
-    PREVIOUS_RELEASE_TAG = raw_input(\
-      "For instance, if you are releasing v1.2.0, you should specify v1.1.0: ")
+    print("Please specify the previous release tag.")
+    PREVIOUS_RELEASE_TAG = raw_input(
+        "For instance, if you are releasing v1.2.0, you should specify v1.1.0: ")
 
 # Gather commits found in the new tag but not in the old tag.
 # This filters commits based on both the git hash and the PR number.
 # If either is present in the old tag, then we ignore the commit.
-print "Gathering new commits between tags %s and %s" % (PREVIOUS_RELEASE_TAG, RELEASE_TAG)
+print("Gathering new commits between tags %s and %s" % (PREVIOUS_RELEASE_TAG, RELEASE_TAG))
 release_commits = get_commits(RELEASE_TAG)
 previous_release_commits = get_commits(PREVIOUS_RELEASE_TAG)
 previous_release_hashes = set()
@@ -62,17 +62,20 @@ if not new_commits:
     sys.exit("There are no new commits between %s and %s!" % (PREVIOUS_RELEASE_TAG, RELEASE_TAG))
 
 # Prompt the user for confirmation that the commit range is correct
-print "\n=================================================================================="
-print "JIRA server: %s" % JIRA_API_BASE
-print "Release tag: %s" % RELEASE_TAG
-print "Previous release tag: %s" % PREVIOUS_RELEASE_TAG
-print "Number of commits in this range: %s" % len(new_commits)
+print("\n==================================================================================")
+print("JIRA server: %s" % JIRA_API_BASE)
+print("Release tag: %s" % RELEASE_TAG)
+print("Previous release tag: %s" % PREVIOUS_RELEASE_TAG)
+print("Number of commits in this range: %s" % len(new_commits))
 print
+
+
 def print_indented(_list):
-    for x in _list: print "  %s" % x
+    for x in _list:
+        print("  %s" % x)
 if yesOrNoPrompt("Show all commits?"):
     print_indented(new_commits)
-print "==================================================================================\n"
+print("==================================================================================\n")
 if not yesOrNoPrompt("Does this look correct?"):
     sys.exit("Ok, exiting")
 
@@ -82,45 +85,76 @@ maintenance = []
 reverts = []
 nojiras = []
 filtered_commits = []
+
+
 def is_release(commit_title):
-    return re.findall("\[release\]", commit_title.lower()) or\
-      "preparing spark release" in commit_title.lower() or\
-      "preparing development version" in commit_title.lower() or\
-      "CHANGES.txt" in commit_title
+    return re.findall("\[release\]", commit_title.lower()) or \
+        "preparing spark release" in commit_title.lower() or \
+        "preparing development version" in commit_title.lower() or \
+        "CHANGES.txt" in commit_title
+
+
 def is_maintenance(commit_title):
-    return "maintenance" in commit_title.lower() or\
-      "manually close" in commit_title.lower()
+    return "maintenance" in commit_title.lower() or \
+        "manually close" in commit_title.lower()
+
+
 def has_no_jira(commit_title):
     return not re.findall("SPARK-[0-9]+", commit_title.upper())
+
+
 def is_revert(commit_title):
     return "revert" in commit_title.lower()
+
+
 def is_docs(commit_title):
-    return re.findall("docs*", commit_title.lower()) or\
-      "programming guide" in commit_title.lower()
+    return re.findall("docs*", commit_title.lower()) or \
+        "programming guide" in commit_title.lower()
+
+
 for c in new_commits:
     t = c.get_title()
-    if not t: continue
-    elif is_release(t): releases.append(c)
-    elif is_maintenance(t): maintenance.append(c)
-    elif is_revert(t): reverts.append(c)
-    elif is_docs(t): filtered_commits.append(c) # docs may not have JIRA numbers
-    elif has_no_jira(t): nojiras.append(c)
-    else: filtered_commits.append(c)
+    if not t:
+        continue
+    elif is_release(t):
+        releases.append(c)
+    elif is_maintenance(t):
+        maintenance.append(c)
+    elif is_revert(t):
+        reverts.append(c)
+    elif is_docs(t):
+        filtered_commits.append(c)  # docs may not have JIRA numbers
+    elif has_no_jira(t):
+        nojiras.append(c)
+    else:
+        filtered_commits.append(c)
 
 # Warn against ignored commits
 if releases or maintenance or reverts or nojiras:
-    print "\n=================================================================================="
-    if releases: print "Found %d release commits" % len(releases)
-    if maintenance: print "Found %d maintenance commits" % len(maintenance)
-    if reverts: print "Found %d revert commits" % len(reverts)
-    if nojiras: print "Found %d commits with no JIRA" % len(nojiras)
-    print "* Warning: these commits will be ignored.\n"
+    print("\n==================================================================================")
+    if releases:
+        print("Found %d release commits" % len(releases))
+    if maintenance:
+        print("Found %d maintenance commits" % len(maintenance))
+    if reverts:
+        print("Found %d revert commits" % len(reverts))
+    if nojiras:
+        print("Found %d commits with no JIRA" % len(nojiras))
+    print("* Warning: these commits will be ignored.\n")
     if yesOrNoPrompt("Show ignored commits?"):
-        if releases: print "Release (%d)" % len(releases); print_indented(releases)
-        if maintenance: print "Maintenance (%d)" % len(maintenance); print_indented(maintenance)
-        if reverts: print "Revert (%d)" % len(reverts); print_indented(reverts)
-        if nojiras: print "No JIRA (%d)" % len(nojiras); print_indented(nojiras)
-    print "==================== Warning: the above commits will be ignored ==================\n"
+        if releases:
+            print("Release (%d)" % len(releases))
+            print_indented(releases)
+        if maintenance:
+            print("Maintenance (%d)" % len(maintenance))
+            print_indented(maintenance)
+        if reverts:
+            print("Revert (%d)" % len(reverts))
+            print_indented(reverts)
+        if nojiras:
+            print("No JIRA (%d)" % len(nojiras))
+            print_indented(nojiras)
+    print("==================== Warning: the above commits will be ignored ==================\n")
 prompt_msg = "%d commits left to process after filtering. Ok to proceed?" % len(filtered_commits)
 if not yesOrNoPrompt(prompt_msg):
     sys.exit("Ok, exiting.")
@@ -147,9 +181,9 @@ invalid_authors = {}
 # }
 #
 author_info = {}
-jira_options = { "server": JIRA_API_BASE }
-jira_client = JIRA(options = jira_options)
-print "\n=========================== Compiling contributor list ==========================="
+jira_options = {"server": JIRA_API_BASE}
+jira_client = JIRA(options=jira_options)
+print("\n=========================== Compiling contributor list ===========================")
 for commit in filtered_commits:
     _hash = commit.get_hash()
     title = commit.get_title()
@@ -168,8 +202,9 @@ for commit in filtered_commits:
     # Parse components from the commit title, if any
     commit_components = find_components(title, _hash)
     # Populate or merge an issue into author_info[author]
+
     def populate(issue_type, components):
-        components = components or [CORE_COMPONENT] # assume core if no components provided
+        components = components or [CORE_COMPONENT]  # assume core if no components provided
         if author not in author_info:
             author_info[author] = {}
         if issue_type not in author_info[author]:
@@ -182,17 +217,17 @@ for commit in filtered_commits:
             jira_issue = jira_client.issue(issue)
             jira_type = jira_issue.fields.issuetype.name
             jira_type = translate_issue_type(jira_type, issue, warnings)
-            jira_components = [translate_component(c.name, _hash, warnings)\
-              for c in jira_issue.fields.components]
+            jira_components = [translate_component(c.name, _hash, warnings)
+                               for c in jira_issue.fields.components]
             all_components = set(jira_components + commit_components)
             populate(jira_type, all_components)
         except Exception as e:
-            print "Unexpected error:", e
+            print("Unexpected error:", e)
     # For docs without an associated JIRA, manually add it ourselves
     if is_docs(title) and not issues:
         populate("documentation", commit_components)
-    print "  Processed commit %s authored by %s on %s" % (_hash, author, date)
-print "==================================================================================\n"
+    print("  Processed commit %s authored by %s on %s" % (_hash, author, date))
+print("==================================================================================\n")
 
 # Write to contributors file ordered by author names
 # Each line takes the format " * Author name -- semi-colon delimited contributions"
@@ -215,8 +250,8 @@ for author in authors:
     # Otherwise, group contributions by issue types instead of modules
     # e.g. Bug fixes in MLlib, Core, and Streaming; documentation in YARN
     else:
-        contributions = ["%s in %s" % (issue_type, nice_join(comps)) \
-          for issue_type, comps in author_info[author].items()]
+        contributions = ["%s in %s" % (issue_type, nice_join(comps))
+                         for issue_type, comps in author_info[author].items()]
         contribution = "; ".join(contributions)
     # Do not use python's capitalize() on the whole string to preserve case
     assert contribution
@@ -226,11 +261,11 @@ for author in authors:
     # E.g. andrewor14/SPARK-3425/SPARK-1157/SPARK-6672
     if author in invalid_authors and invalid_authors[author]:
         author = author + "/" + "/".join(invalid_authors[author])
-    #line = " * %s -- %s" % (author, contribution)
+    # line = " * %s -- %s" % (author, contribution)
     line = author
     contributors_file.write(line + "\n")
 contributors_file.close()
-print "Contributors list is successfully written to %s!" % contributors_file_name
+print("Contributors list is successfully written to %s!" % contributors_file_name)
 
 # Prompt the user to translate author names if necessary
 if invalid_authors:
@@ -241,8 +276,8 @@ if invalid_authors:
 
 # Log any warnings encountered in the process
 if warnings:
-    print "\n============ Warnings encountered while creating the contributor list ============"
-    for w in warnings: print w
-    print "Please correct these in the final contributors list at %s." % contributors_file_name
-    print "==================================================================================\n"
-
+    print("\n============ Warnings encountered while creating the contributor list ============")
+    for w in warnings:
+        print(w)
+    print("Please correct these in the final contributors list at %s." % contributors_file_name)
+    print("==================================================================================\n")

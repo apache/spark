@@ -18,19 +18,23 @@
 package org.apache.spark
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
-import java.net.{URI, URL}
+import java.net.{HttpURLConnection, URI, URL}
 import java.nio.charset.StandardCharsets
-import java.nio.file.Paths
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.util.Arrays
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.{CountDownLatch, TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream}
+import javax.net.ssl._
+import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.sys.process.{Process, ProcessLogger}
+import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
-import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
@@ -54,8 +58,8 @@ private[spark] object TestUtils {
   def createJarWithClasses(
       classNames: Seq[String],
       toStringValue: String = "",
-      classNamesWithBase: Seq[(String, String)] = Seq(),
-      classpathUrls: Seq[URL] = Seq()): URL = {
+      classNamesWithBase: Seq[(String, String)] = Seq.empty,
+      classpathUrls: Seq[URL] = Seq.empty): URL = {
     val tempDir = Utils.createTempDir()
     val files1 = for (name <- classNames) yield {
       createCompiledClass(name, tempDir, toStringValue, classpathUrls = classpathUrls)
@@ -93,7 +97,10 @@ private[spark] object TestUtils {
     val jarStream = new JarOutputStream(jarFileStream, new java.util.jar.Manifest())
 
     for (file <- files) {
-      val jarEntry = new JarEntry(Paths.get(directoryPrefix.getOrElse(""), file.getName).toString)
+      // The `name` for the argument in `JarEntry` should use / for its separator. This is
+      // ZIP specification.
+      val prefix = directoryPrefix.map(d => s"$d/").getOrElse("")
+      val jarEntry = new JarEntry(prefix + file.getName)
       jarStream.putNextEntry(jarEntry)
 
       val in = new FileInputStream(file)
@@ -130,7 +137,7 @@ private[spark] object TestUtils {
     val options = if (classpathUrls.nonEmpty) {
       Seq("-classpath", classpathUrls.map { _.getFile }.mkString(File.pathSeparator))
     } else {
-      Seq()
+      Seq.empty
     }
     compiler.getTask(null, null, null, options.asJava, null, Arrays.asList(sourceFile)).call()
 
@@ -153,7 +160,7 @@ private[spark] object TestUtils {
       destDir: File,
       toStringValue: String = "",
       baseClass: String = null,
-      classpathUrls: Seq[URL] = Seq()): File = {
+      classpathUrls: Seq[URL] = Seq.empty): File = {
     val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
     val sourceFile = new JavaSourceFromString(className,
       "public class " + className + extendsText + " implements java.io.Serializable {" +
@@ -182,11 +189,78 @@ private[spark] object TestUtils {
     assert(spillListener.numSpilledStages == 0, s"expected $identifier to not spill, but did")
   }
 
+  /**
+   * Test if a command is available.
+   */
+  def testCommandAvailable(command: String): Boolean = {
+    val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
+    attempt.isSuccess && attempt.get == 0
+  }
+
+  /**
+   * Returns the response code from an HTTP(S) URL.
+   */
+  def httpResponseCode(
+      url: URL,
+      method: String = "GET",
+      headers: Seq[(String, String)] = Nil): Int = {
+    val connection = url.openConnection().asInstanceOf[HttpURLConnection]
+    connection.setRequestMethod(method)
+    headers.foreach { case (k, v) => connection.setRequestProperty(k, v) }
+
+    // Disable cert and host name validation for HTTPS tests.
+    if (connection.isInstanceOf[HttpsURLConnection]) {
+      val sslCtx = SSLContext.getInstance("SSL")
+      val trustManager = new X509TrustManager {
+        override def getAcceptedIssuers(): Array[X509Certificate] = null
+        override def checkClientTrusted(x509Certificates: Array[X509Certificate], s: String) {}
+        override def checkServerTrusted(x509Certificates: Array[X509Certificate], s: String) {}
+      }
+      val verifier = new HostnameVerifier() {
+        override def verify(hostname: String, session: SSLSession): Boolean = true
+      }
+      sslCtx.init(null, Array(trustManager), new SecureRandom())
+      connection.asInstanceOf[HttpsURLConnection].setSSLSocketFactory(sslCtx.getSocketFactory())
+      connection.asInstanceOf[HttpsURLConnection].setHostnameVerifier(verifier)
+    }
+
+    try {
+      connection.connect()
+      connection.getResponseCode()
+    } finally {
+      connection.disconnect()
+    }
+  }
+
+  /**
+   * Wait until at least `numExecutors` executors are up, or throw `TimeoutException` if the waiting
+   * time elapsed before `numExecutors` executors up. Exposed for testing.
+   *
+   * @param numExecutors the number of executors to wait at least
+   * @param timeout time to wait in milliseconds
+   */
+  private[spark] def waitUntilExecutorsUp(
+      sc: SparkContext,
+      numExecutors: Int,
+      timeout: Long): Unit = {
+    val finishTime = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeout)
+    while (System.nanoTime() < finishTime) {
+      if (sc.statusTracker.getExecutorInfos.length > numExecutors) {
+        return
+      }
+      // Sleep rather than using wait/notify, because this is used only for testing and wait/notify
+      // add overhead in the general case.
+      Thread.sleep(10)
+    }
+    throw new TimeoutException(
+      s"Can't find $numExecutors executors before $timeout milliseconds elapsed")
+  }
+
 }
 
 
 /**
- * A [[SparkListener]] that detects whether spills have occurred in Spark jobs.
+ * A `SparkListener` that detects whether spills have occurred in Spark jobs.
  */
 private class SpillListener extends SparkListener {
   private val stageIdToTaskMetrics = new mutable.HashMap[Int, ArrayBuffer[TaskMetrics]]

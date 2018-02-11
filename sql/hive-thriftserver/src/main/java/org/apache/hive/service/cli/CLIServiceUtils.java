@@ -38,7 +38,7 @@ public class CLIServiceUtils {
    * Convert a SQL search pattern into an equivalent Java Regex.
    *
    * @param pattern input which may contain '%' or '_' wildcard characters, or
-   * these characters escaped using {@link #getSearchStringEscape()}.
+   * these characters escaped using {@code getSearchStringEscape()}.
    * @return replace %/_ with regex search characters, also handle escaped
    * characters.
    */

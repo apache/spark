@@ -19,8 +19,10 @@ import os
 import sys
 import gc
 from tempfile import NamedTemporaryFile
+import threading
 
 from pyspark.cloudpickle import print_exec
+from pyspark.util import _exception_message
 
 if sys.version < '3':
     import cPickle as pickle
@@ -82,7 +84,8 @@ class Broadcast(object):
         except pickle.PickleError:
             raise
         except Exception as e:
-            msg = "Could not serialize broadcast: " + e.__class__.__name__ + ": " + e.message
+            msg = "Could not serialize broadcast: %s: %s" \
+                  % (e.__class__.__name__, _exception_message(e))
             print_exec(sys.stderr)
             raise pickle.PicklingError(msg)
         f.close()
@@ -135,6 +138,24 @@ class Broadcast(object):
             raise Exception("Broadcast can only be serialized in driver")
         self._pickle_registry.add(self)
         return _from_id, (self._jbroadcast.id(),)
+
+
+class BroadcastPickleRegistry(threading.local):
+    """ Thread-local registry for broadcast variables that have been pickled
+    """
+
+    def __init__(self):
+        self.__dict__.setdefault("_registry", set())
+
+    def __iter__(self):
+        for bcast in self._registry:
+            yield bcast
+
+    def add(self, bcast):
+        self._registry.add(bcast)
+
+    def clear(self):
+        self._registry.clear()
 
 
 if __name__ == "__main__":

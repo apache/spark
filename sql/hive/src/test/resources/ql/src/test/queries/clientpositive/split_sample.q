@@ -1,14 +1,14 @@
 USE default;
 
 set hive.input.format=org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
-set mapred.max.split.size=300;
-set mapred.min.split.size=300;
-set mapred.min.split.size.per.node=300;
-set mapred.min.split.size.per.rack=300;
+set mapreduce.input.fileinputformat.split.maxsize=300;
+set mapreduce.input.fileinputformat.split.minsize=300;
+set mapreduce.input.fileinputformat.split.minsize.per.node=300;
+set mapreduce.input.fileinputformat.split.minsize.per.rack=300;
 set hive.merge.smallfiles.avgsize=1;
 
 -- INCLUDE_HADOOP_MAJOR_VERSIONS(0.20)
--- This test sets mapred.max.split.size=300 and hive.merge.smallfiles.avgsize=1
+-- This test sets mapreduce.input.fileinputformat.split.maxsize=300 and hive.merge.smallfiles.avgsize=1
 -- in an attempt to force the generation of multiple splits and multiple output files.
 -- However, Hadoop 0.20 is incapable of generating splits smaller than the block size
 -- when using CombineFileInputFormat, so only one split is generated. This has a
@@ -72,10 +72,10 @@ select t1.key as k1, t2.key as k from ss_src1 tablesample(80 percent) t1 full ou
 
 -- shrink last split
 explain select count(1) from ss_src2 tablesample(1 percent);
-set mapred.max.split.size=300000;
-set mapred.min.split.size=300000;
-set mapred.min.split.size.per.node=300000;
-set mapred.min.split.size.per.rack=300000;
+set mapreduce.input.fileinputformat.split.maxsize=300000;
+set mapreduce.input.fileinputformat.split.minsize=300000;
+set mapreduce.input.fileinputformat.split.minsize.per.node=300000;
+set mapreduce.input.fileinputformat.split.minsize.per.rack=300000;
 select count(1) from ss_src2 tablesample(1 percent);
 select count(1) from ss_src2 tablesample(50 percent);
 

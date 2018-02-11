@@ -21,7 +21,6 @@ import org.apache.spark.sql.*;
 import org.apache.spark.sql.streaming.StreamingQuery;
 
 import java.util.Arrays;
-import java.util.Iterator;
 
 /**
  * Counts words in UTF8 encoded, '\n' delimited text received from the network.
@@ -61,13 +60,9 @@ public final class JavaStructuredNetworkWordCount {
       .load();
 
     // Split the lines into words
-    Dataset<String> words = lines.as(Encoders.STRING())
-      .flatMap(new FlatMapFunction<String, String>() {
-        @Override
-        public Iterator<String> call(String x) {
-          return Arrays.asList(x.split(" ")).iterator();
-        }
-    }, Encoders.STRING());
+    Dataset<String> words = lines.as(Encoders.STRING()).flatMap(
+        (FlatMapFunction<String, String>) x -> Arrays.asList(x.split(" ")).iterator(),
+        Encoders.STRING());
 
     // Generate running word count
     Dataset<Row> wordCounts = words.groupBy("value").count();

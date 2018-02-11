@@ -18,7 +18,6 @@
 package org.apache.spark.examples.streaming;
 
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -72,32 +71,17 @@ public class JavaStatefulNetworkWordCount {
     JavaReceiverInputDStream<String> lines = ssc.socketTextStream(
             args[0], Integer.parseInt(args[1]), StorageLevels.MEMORY_AND_DISK_SER_2);
 
-    JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
-      @Override
-      public Iterator<String> call(String x) {
-        return Arrays.asList(SPACE.split(x)).iterator();
-      }
-    });
+    JavaDStream<String> words = lines.flatMap(x -> Arrays.asList(SPACE.split(x)).iterator());
 
-    JavaPairDStream<String, Integer> wordsDstream = words.mapToPair(
-        new PairFunction<String, String, Integer>() {
-          @Override
-          public Tuple2<String, Integer> call(String s) {
-            return new Tuple2<>(s, 1);
-          }
-        });
+    JavaPairDStream<String, Integer> wordsDstream = words.mapToPair(s -> new Tuple2<>(s, 1));
 
     // Update the cumulative count function
     Function3<String, Optional<Integer>, State<Integer>, Tuple2<String, Integer>> mappingFunc =
-        new Function3<String, Optional<Integer>, State<Integer>, Tuple2<String, Integer>>() {
-          @Override
-          public Tuple2<String, Integer> call(String word, Optional<Integer> one,
-              State<Integer> state) {
-            int sum = one.orElse(0) + (state.exists() ? state.get() : 0);
-            Tuple2<String, Integer> output = new Tuple2<>(word, sum);
-            state.update(sum);
-            return output;
-          }
+        (word, one, state) -> {
+          int sum = one.orElse(0) + (state.exists() ? state.get() : 0);
+          Tuple2<String, Integer> output = new Tuple2<>(word, sum);
+          state.update(sum);
+          return output;
         };
 
     // DStream made of get cumulative counts that get updated in every batch

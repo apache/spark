@@ -74,6 +74,10 @@ class BlockManagerSlaveEndpoint(
 
     case TriggerThreadDump =>
       context.reply(Utils.getThreadDump())
+
+    case ReplicateBlock(blockId, replicas, maxReplicas) =>
+      context.reply(blockManager.replicateBlock(blockId, replicas.toSet, maxReplicas))
+
   }
 
   private def doAsync[T](actionMessage: String, context: RpcCallContext)(body: => T) {
@@ -81,13 +85,13 @@ class BlockManagerSlaveEndpoint(
       logDebug(actionMessage)
       body
     }
-    future.onSuccess { case response =>
-      logDebug("Done " + actionMessage + ", response is " + response)
+    future.foreach { response =>
+      logDebug(s"Done $actionMessage, response is $response")
       context.reply(response)
-      logDebug("Sent response: " + response + " to " + context.senderAddress)
+      logDebug(s"Sent response: $response to ${context.senderAddress}")
     }
-    future.onFailure { case t: Throwable =>
-      logError("Error in " + actionMessage, t)
+    future.failed.foreach { t =>
+      logError(s"Error in $actionMessage", t)
       context.sendFailure(t)
     }
   }

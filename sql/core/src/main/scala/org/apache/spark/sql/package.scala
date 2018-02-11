@@ -17,8 +17,8 @@
 
 package org.apache.spark
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.execution.{SparkPlan, SparkStrategy}
+import org.apache.spark.annotation.{DeveloperApi, InterfaceStability}
+import org.apache.spark.sql.execution.SparkStrategy
 
 /**
  * Allows the execution of relational queries, including those expressed in SQL using Spark.
@@ -40,6 +40,7 @@ package object sql {
    * [[org.apache.spark.sql.sources]]
    */
   @DeveloperApi
+  @InterfaceStability.Unstable
   type Strategy = SparkStrategy
 
   type DataFrame = Dataset[Row]

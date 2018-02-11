@@ -28,13 +28,15 @@ import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
 
 /**
- * Helper methods to load, save and pre-process data used in ML Lib.
+ * Helper methods to load, save and pre-process data used in MLLib.
  */
 @Since("0.8.0")
 object MLUtils extends Logging {
@@ -102,6 +104,25 @@ object MLUtils extends Logging {
       .map(parseLibSVMRecord)
   }
 
+  private[spark] def parseLibSVMFile(
+      sparkSession: SparkSession, paths: Seq[String]): RDD[(Double, Array[Int], Array[Double])] = {
+    val lines = sparkSession.baseRelationToDataFrame(
+      DataSource.apply(
+        sparkSession,
+        paths = paths,
+        className = classOf[TextFileFormat].getName
+      ).resolveRelation(checkFilesExist = false))
+      .select("value")
+
+    import lines.sqlContext.implicits._
+
+    lines.select(trim($"value").as("line"))
+      .filter(not((length($"line") === 0).or($"line".startsWith("#"))))
+      .as[String]
+      .rdd
+      .map(MLUtils.parseLibSVMRecord)
+  }
+
   private[spark] def parseLibSVMRecord(line: String): (Double, Array[Int], Array[Double]) = {
     val items = line.split(' ')
     val label = items.head.toDouble
@@ -119,7 +140,7 @@ object MLUtils extends Logging {
     while (i < indicesLength) {
       val current = indices(i)
       require(current > previous, s"indices should be one-based and in ascending order;"
-        + " found current=$current, previous=$previous; line=\"$line\"")
+        + s""" found current=$current, previous=$previous; line="$line"""")
       previous = current
       i += 1
     }
@@ -149,7 +170,7 @@ object MLUtils extends Logging {
    * Save labeled data in LIBSVM format.
    * @param data an RDD of LabeledPoint to be saved
    * @param dir directory to save the data
-   * @see [[org.apache.spark.mllib.util.MLUtils#loadLibSVMFile]]
+   * @see `org.apache.spark.mllib.util.MLUtils.loadLibSVMFile`
    */
   @Since("1.0.0")
   def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {
@@ -213,7 +234,7 @@ object MLUtils extends Logging {
   }
 
   /**
-   * Version of [[kFold()]] taking a Long seed.
+   * Version of `kFold()` taking a Long seed.
    */
   @Since("2.0.0")
   def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Long): Array[(RDD[T], RDD[T])] = {
@@ -262,7 +283,7 @@ object MLUtils extends Logging {
    * @param dataset input dataset
    * @param cols a list of vector columns to be converted. New vector columns will be ignored. If
    *             unspecified, all old vector columns will be converted except nested ones.
-   * @return the input [[DataFrame]] with old vector columns converted to the new vector type
+   * @return the input `DataFrame` with old vector columns converted to the new vector type
    */
   @Since("2.0.0")
   @varargs
@@ -314,7 +335,7 @@ object MLUtils extends Logging {
    * @param dataset input dataset
    * @param cols a list of vector columns to be converted. Old vector columns will be ignored. If
    *             unspecified, all new vector columns will be converted except nested ones.
-   * @return the input [[DataFrame]] with new vector columns converted to the old vector type
+   * @return the input `DataFrame` with new vector columns converted to the old vector type
    */
   @Since("2.0.0")
   @varargs
@@ -366,7 +387,7 @@ object MLUtils extends Logging {
    * @param dataset input dataset
    * @param cols a list of matrix columns to be converted. New matrix columns will be ignored. If
    *             unspecified, all old matrix columns will be converted except nested ones.
-   * @return the input [[DataFrame]] with old matrix columns converted to the new matrix type
+   * @return the input `DataFrame` with old matrix columns converted to the new matrix type
    */
   @Since("2.0.0")
   @varargs
@@ -416,7 +437,7 @@ object MLUtils extends Logging {
    * @param dataset input dataset
    * @param cols a list of matrix columns to be converted. Old matrix columns will be ignored. If
    *             unspecified, all new matrix columns will be converted except nested ones.
-   * @return the input [[DataFrame]] with new matrix columns converted to the old matrix type
+   * @return the input `DataFrame` with new matrix columns converted to the old matrix type
    */
   @Since("2.0.0")
   @varargs

@@ -128,7 +128,7 @@ class InternalMapWithStateDStream[K: ClassTag, V: ClassTag, S: ClassTag, E: Clas
     super.initialize(time)
   }
 
-  /** Method that generates a RDD for the given time */
+  /** Method that generates an RDD for the given time */
   override def compute(validTime: Time): Option[RDD[MapWithStateRDDRecord[K, S, E]]] = {
     // Get the previous state or create a new empty state RDD
     val prevStateRDD = getOrCompute(validTime - slideDuration) match {

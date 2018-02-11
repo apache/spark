@@ -67,7 +67,8 @@ class PartiallySerializedBlockSuite
       spy
     }
 
-    val serializer = serializerManager.getSerializer(implicitly[ClassTag[T]]).newInstance()
+    val serializer = serializerManager
+      .getSerializer(implicitly[ClassTag[T]], autoPick = true).newInstance()
     val redirectableOutputStream = Mockito.spy(new RedirectableOutputStream)
     redirectableOutputStream.setOutputStream(bbos)
     val serializationStream = Mockito.spy(serializer.serializeStream(redirectableOutputStream))
@@ -144,7 +145,7 @@ class PartiallySerializedBlockSuite
     try {
       TaskContext.setTaskContext(TaskContext.empty())
       val partiallySerializedBlock = partiallyUnroll((1 to 10).iterator, 2)
-      TaskContext.get().asInstanceOf[TaskContextImpl].markTaskCompleted()
+      TaskContext.get().asInstanceOf[TaskContextImpl].markTaskCompleted(None)
       Mockito.verify(partiallySerializedBlock.getUnrolledChunkedByteBuffer).dispose()
       Mockito.verifyNoMoreInteractions(memoryStore)
     } finally {
@@ -182,7 +183,8 @@ class PartiallySerializedBlockSuite
       Mockito.verifyNoMoreInteractions(memoryStore)
       Mockito.verify(partiallySerializedBlock.getUnrolledChunkedByteBuffer, atLeastOnce).dispose()
 
-      val serializer = serializerManager.getSerializer(implicitly[ClassTag[T]]).newInstance()
+      val serializer = serializerManager
+        .getSerializer(implicitly[ClassTag[T]], autoPick = true).newInstance()
       val deserialized =
         serializer.deserializeStream(new ByteBufferInputStream(bbos.toByteBuffer)).asIterator.toSeq
       assert(deserialized === items)

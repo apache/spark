@@ -38,6 +38,8 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
   // identical, of length 3
   @transient var densePoints1: DataFrame = _
   @transient var sparsePoints1: DataFrame = _
+  @transient var densePoints1TestInvalid: DataFrame = _
+  @transient var sparsePoints1TestInvalid: DataFrame = _
   @transient var point1maxes: Array[Double] = _
 
   // identical, of length 2
@@ -55,11 +57,19 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
       Vectors.dense(0.0, 1.0, 2.0),
       Vectors.dense(0.0, 0.0, -1.0),
       Vectors.dense(1.0, 3.0, 2.0))
+    val densePoints1SeqTestInvalid = densePoints1Seq ++ Seq(
+      Vectors.dense(10.0, 2.0, 0.0),
+      Vectors.dense(0.0, 10.0, 2.0),
+      Vectors.dense(1.0, 3.0, 10.0))
     val sparsePoints1Seq = Seq(
       Vectors.sparse(3, Array(0, 1), Array(1.0, 2.0)),
       Vectors.sparse(3, Array(1, 2), Array(1.0, 2.0)),
       Vectors.sparse(3, Array(2), Array(-1.0)),
       Vectors.sparse(3, Array(0, 1, 2), Array(1.0, 3.0, 2.0)))
+    val sparsePoints1SeqTestInvalid = sparsePoints1Seq ++ Seq(
+      Vectors.sparse(3, Array(0, 1), Array(10.0, 2.0)),
+      Vectors.sparse(3, Array(1, 2), Array(10.0, 2.0)),
+      Vectors.sparse(3, Array(0, 1, 2), Array(1.0, 3.0, 10.0)))
     point1maxes = Array(1.0, 3.0, 2.0)
 
     val densePoints2Seq = Seq(
@@ -88,6 +98,8 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
 
     densePoints1 = densePoints1Seq.map(FeatureData).toDF()
     sparsePoints1 = sparsePoints1Seq.map(FeatureData).toDF()
+    densePoints1TestInvalid = densePoints1SeqTestInvalid.map(FeatureData).toDF()
+    sparsePoints1TestInvalid = sparsePoints1SeqTestInvalid.map(FeatureData).toDF()
     densePoints2 = densePoints2Seq.map(FeatureData).toDF()
     sparsePoints2 = sparsePoints2Seq.map(FeatureData).toDF()
     badPoints = badPointsSeq.map(FeatureData).toDF()
@@ -114,8 +126,7 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
     val vectorIndexer = getIndexer
     val model = vectorIndexer.fit(densePoints1) // vectors of length 3
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(vectorIndexer, model)
 
     model.transform(densePoints1) // should work
     model.transform(sparsePoints1) // should work
@@ -218,6 +229,33 @@ class VectorIndexerSuite extends SparkFunSuite with MLlibTestSparkContext
     checkCategoryMaps(densePoints1, maxCategories = 2, categoricalFeatures = Set(0))
     checkCategoryMaps(densePoints1, maxCategories = 3, categoricalFeatures = Set(0, 2))
     checkCategoryMaps(densePoints2, maxCategories = 2, categoricalFeatures = Set(1, 3))
+  }
+
+  test("handle invalid") {
+    for ((points, pointsTestInvalid) <- Seq((densePoints1, densePoints1TestInvalid),
+      (sparsePoints1, sparsePoints1TestInvalid))) {
+      val vectorIndexer = getIndexer.setMaxCategories(4).setHandleInvalid("error")
+      val model = vectorIndexer.fit(points)
+      intercept[SparkException] {
+        model.transform(pointsTestInvalid).collect()
+      }
+      val vectorIndexer1 = getIndexer.setMaxCategories(4).setHandleInvalid("skip")
+      val model1 = vectorIndexer1.fit(points)
+      val invalidTransformed1 = model1.transform(pointsTestInvalid).select("indexed")
+        .collect().map(_(0))
+      val transformed1 = model1.transform(points).select("indexed").collect().map(_(0))
+      assert(transformed1 === invalidTransformed1)
+
+      val vectorIndexer2 = getIndexer.setMaxCategories(4).setHandleInvalid("keep")
+      val model2 = vectorIndexer2.fit(points)
+      val invalidTransformed2 = model2.transform(pointsTestInvalid).select("indexed")
+        .collect().map(_(0))
+      assert(invalidTransformed2 === transformed1 ++ Array(
+        Vectors.dense(2.0, 2.0, 0.0),
+        Vectors.dense(0.0, 4.0, 2.0),
+        Vectors.dense(1.0, 3.0, 3.0))
+      )
+    }
   }
 
   test("Maintain sparsity for sparse vectors") {

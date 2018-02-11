@@ -68,7 +68,8 @@ public final class UnsafeMapData extends MapData {
     // Read the numBytes of key array from the first 8 bytes.
     final long keyArraySize = Platform.getLong(baseObject, baseOffset);
     assert keyArraySize >= 0 : "keyArraySize (" + keyArraySize + ") should >= 0";
-    assert keyArraySize <= Integer.MAX_VALUE : "keyArraySize (" + keyArraySize + ") should <= Integer.MAX_VALUE";
+    assert keyArraySize <= Integer.MAX_VALUE :
+      "keyArraySize (" + keyArraySize + ") should <= Integer.MAX_VALUE";
     final int valueArraySize = sizeInBytes - (int)keyArraySize - 8;
     assert valueArraySize >= 0 : "valueArraySize (" + valueArraySize + ") should >= 0";
 

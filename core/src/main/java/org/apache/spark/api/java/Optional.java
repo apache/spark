@@ -18,6 +18,7 @@
 package org.apache.spark.api.java;
 
 import java.io.Serializable;
+import java.util.Objects;
 
 import com.google.common.base.Preconditions;
 
@@ -52,8 +53,8 @@ import com.google.common.base.Preconditions;
  *   <li>{@link #isPresent()}</li>
  * </ul>
  *
- * <p>{@code java.util.Optional} itself is not used at this time because the
- * project does not require Java 8. Using {@code com.google.common.base.Optional}
+ * <p>{@code java.util.Optional} itself was not used because at the time, the
+ * project did not require Java 8. Using {@code com.google.common.base.Optional}
  * has in the past caused serious library version conflicts with Guava that can't
  * be resolved by shading. Hence this work-alike clone.</p>
  *
@@ -171,7 +172,7 @@ public final class Optional<T> implements Serializable {
       return false;
     }
     Optional<?> other = (Optional<?>) obj;
-    return value == null ? other.value == null : value.equals(other.value);
+    return Objects.equals(value, other.value);
   }
 
   @Override

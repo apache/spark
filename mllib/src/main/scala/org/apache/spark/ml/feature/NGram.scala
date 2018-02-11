@@ -41,7 +41,7 @@ class NGram @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   def this() = this(Identifiable.randomUID("ngram"))
 
   /**
-   * Minimum n-gram length, >= 1.
+   * Minimum n-gram length, greater than or equal to 1.
    * Default: 2, bigram features
    * @group param
    */

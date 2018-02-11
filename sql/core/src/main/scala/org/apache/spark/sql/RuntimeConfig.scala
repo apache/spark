@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql.internal.SQLConf
 
 
 /**
- * Runtime configuration interface for Spark. To access this, use [[SparkSession.conf]].
+ * Runtime configuration interface for Spark. To access this, use `SparkSession.conf`.
  *
  * Options set here are automatically propagated to the Hadoop configuration during I/O.
  *
  * @since 2.0.0
  */
+@InterfaceStability.Stable
 class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
 
   /**
@@ -36,6 +38,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: String): Unit = {
+    requireNonStaticConf(key)
     sqlConf.setConfString(key, value)
   }
 
@@ -45,6 +48,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: Boolean): Unit = {
+    requireNonStaticConf(key)
     set(key, value.toString)
   }
 
@@ -54,13 +58,15 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def set(key: String, value: Long): Unit = {
+    requireNonStaticConf(key)
     set(key, value.toString)
   }
 
   /**
    * Returns the value of Spark runtime configuration property for the given key.
    *
-   * @throws NoSuchElementException if the key is not set and does not have a default value
+   * @throws java.util.NoSuchElementException if the key is not set and does not have a default
+   *                                          value
    * @since 2.0.0
    */
   @throws[NoSuchElementException]("if the key is not set")
@@ -122,6 +128,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    * @since 2.0.0
    */
   def unset(key: String): Unit = {
+    requireNonStaticConf(key)
     sqlConf.unsetConf(key)
   }
 
@@ -132,4 +139,9 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
     sqlConf.contains(key)
   }
 
+  private def requireNonStaticConf(key: String): Unit = {
+    if (SQLConf.staticConfKeys.contains(key)) {
+      throw new AnalysisException(s"Cannot modify the value of a static config: $key")
+    }
+  }
 }

@@ -22,7 +22,7 @@ import java.lang.reflect.Modifier
 import scala.reflect.{classTag, ClassTag}
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Cast}
@@ -36,6 +36,7 @@ import org.apache.spark.sql.types._
  * @since 1.6.0
  */
 @Experimental
+@InterfaceStability.Evolving
 object Encoders {
 
   /**
@@ -164,9 +165,9 @@ object Encoders {
    * (Scala-specific) Creates an encoder that serializes objects of type T using generic Java
    * serialization. This encoder maps T into a single byte array (binary) field.
    *
-   * Note that this is extremely inefficient and should only be used as the last resort.
-   *
    * T must be publicly accessible.
+   *
+   * @note This is extremely inefficient and should only be used as the last resort.
    *
    * @since 1.6.0
    */
@@ -176,9 +177,9 @@ object Encoders {
    * Creates an encoder that serializes objects of type T using generic Java serialization.
    * This encoder maps T into a single byte array (binary) field.
    *
-   * Note that this is extremely inefficient and should only be used as the last resort.
-   *
    * T must be publicly accessible.
+   *
+   * @note This is extremely inefficient and should only be used as the last resort.
    *
    * @since 1.6.0
    */

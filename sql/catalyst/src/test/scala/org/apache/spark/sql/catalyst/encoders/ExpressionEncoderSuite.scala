@@ -24,7 +24,7 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ClosureCleaner
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -65,8 +66,6 @@ case class RepeatedData(
     mapField: scala.collection.Map[Int, Long],
     mapFieldNull: scala.collection.Map[Int, java.lang.Long],
     structField: PrimitiveData)
-
-case class SpecificCollection(l: List[Int])
 
 /** For testing Kryo serialization based encoder. */
 class KryoSerializable(val value: Int) {
@@ -107,10 +106,18 @@ class UDTForCaseClass extends UserDefinedType[UDTCaseClass] {
   }
 }
 
+case class PrimitiveValueClass(wrapped: Int) extends AnyVal
+case class ReferenceValueClass(wrapped: ReferenceValueClass.Container) extends AnyVal
+object ReferenceValueClass {
+  case class Container(data: Int)
+}
+
 class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   OuterScopes.addOuterScope(this)
 
-  implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = ExpressionEncoder()
+  implicit def encoder[T : TypeTag]: ExpressionEncoder[T] = verifyNotLeakingReflectionObjects {
+    ExpressionEncoder()
+  }
 
   // test flat encoders
   encodeDecodeTest(false, "primitive boolean")
@@ -290,6 +297,17 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
     ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
   }
 
+  encodeDecodeTest(
+    PrimitiveValueClass(42), "primitive value class")
+
+  encodeDecodeTest(
+    ReferenceValueClass(ReferenceValueClass.Container(1)), "reference value class")
+
+  encodeDecodeTest(Option(31), "option of int")
+  encodeDecodeTest(Option.empty[Int], "empty option of int")
+  encodeDecodeTest(Option("abc"), "option of string")
+  encodeDecodeTest(Option.empty[String], "empty option of string")
+
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
   test("nullable of encoder schema") {
@@ -328,17 +346,39 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
     }
   }
 
-  test("null check for map key") {
+  test("nullable of encoder serializer") {
+    def checkNullable[T: Encoder](nullable: Boolean): Unit = {
+      assert(encoderFor[T].serializer.forall(_.nullable === nullable))
+    }
+
+    // test for flat encoders
+    checkNullable[Int](false)
+    checkNullable[Option[Int]](true)
+    checkNullable[java.lang.Integer](true)
+    checkNullable[String](true)
+  }
+
+  test("null check for map key: String") {
     val encoder = ExpressionEncoder[Map[String, Int]]()
     val e = intercept[RuntimeException](encoder.toRow(Map(("a", 1), (null, 2))))
+    assert(e.getMessage.contains("Cannot use null as map key"))
+  }
+
+  test("null check for map key: Integer") {
+    val encoder = ExpressionEncoder[Map[Integer, String]]()
+    val e = intercept[RuntimeException](encoder.toRow(Map((1, "a"), (null, "b"))))
     assert(e.getMessage.contains("Cannot use null as map key"))
   }
 
   private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
       testName: String): Unit = {
-    test(s"encode/decode for $testName: $input") {
+    testAndVerifyNotLeakingReflectionObjects(s"encode/decode for $testName: $input") {
       val encoder = implicitly[ExpressionEncoder[T]]
+
+      // Make sure encoder is serializable.
+      ClosureCleaner.clean((s: String) => encoder.getClass.getName)
+
       val row = encoder.toRow(input)
       val schema = encoder.schema.toAttributes
       val boundEncoder = encoder.resolveAndBind()
@@ -406,6 +446,30 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
              |${boundEncoder.deserializer.treeString}
          """.stripMargin)
       }
+    }
+  }
+
+  /**
+   * Verify the size of scala.reflect.runtime.JavaUniverse.undoLog before and after `func` to
+   * ensure we don't leak Scala reflection garbage.
+   *
+   * @see org.apache.spark.sql.catalyst.ScalaReflection.cleanUpReflectionObjects
+   */
+  private def verifyNotLeakingReflectionObjects[T](func: => T): T = {
+    def undoLogSize: Int = {
+      scala.reflect.runtime.universe
+        .asInstanceOf[scala.reflect.runtime.JavaUniverse].undoLog.log.size
+    }
+
+    val previousUndoLogSize = undoLogSize
+    val r = func
+    assert(previousUndoLogSize == undoLogSize)
+    r
+  }
+
+  private def testAndVerifyNotLeakingReflectionObjects(testName: String)(testFun: => Any) {
+    test(testName) {
+      verifyNotLeakingReflectionObjects(testFun)
     }
   }
 }

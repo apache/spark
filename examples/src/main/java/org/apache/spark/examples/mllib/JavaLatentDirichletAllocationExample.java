@@ -25,7 +25,6 @@ import scala.Tuple2;
 
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.clustering.DistributedLDAModel;
 import org.apache.spark.mllib.clustering.LDA;
 import org.apache.spark.mllib.clustering.LDAModel;
@@ -44,28 +43,17 @@ public class JavaLatentDirichletAllocationExample {
     // Load and parse the data
     String path = "data/mllib/sample_lda_data.txt";
     JavaRDD<String> data = jsc.textFile(path);
-    JavaRDD<Vector> parsedData = data.map(
-      new Function<String, Vector>() {
-        public Vector call(String s) {
-          String[] sarray = s.trim().split(" ");
-          double[] values = new double[sarray.length];
-          for (int i = 0; i < sarray.length; i++) {
-            values[i] = Double.parseDouble(sarray[i]);
-          }
-          return Vectors.dense(values);
-        }
+    JavaRDD<Vector> parsedData = data.map(s -> {
+      String[] sarray = s.trim().split(" ");
+      double[] values = new double[sarray.length];
+      for (int i = 0; i < sarray.length; i++) {
+        values[i] = Double.parseDouble(sarray[i]);
       }
-    );
+      return Vectors.dense(values);
+    });
     // Index documents with unique IDs
     JavaPairRDD<Long, Vector> corpus =
-      JavaPairRDD.fromJavaRDD(parsedData.zipWithIndex().map(
-        new Function<Tuple2<Vector, Long>, Tuple2<Long, Vector>>() {
-          public Tuple2<Long, Vector> call(Tuple2<Vector, Long> doc_id) {
-            return doc_id.swap();
-          }
-        }
-      )
-    );
+      JavaPairRDD.fromJavaRDD(parsedData.zipWithIndex().map(Tuple2::swap));
     corpus.cache();
 
     // Cluster the documents into three topics using LDA

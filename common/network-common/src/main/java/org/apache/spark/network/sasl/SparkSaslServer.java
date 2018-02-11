@@ -27,13 +27,13 @@ import javax.security.sasl.RealmCallback;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
+import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.base64.Base64;
 import org.slf4j.Logger;
@@ -154,7 +154,7 @@ public class SparkSaslServer implements SaslEncryptionBackend {
    */
   private class DigestCallbackHandler implements CallbackHandler {
     @Override
-    public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+    public void handle(Callback[] callbacks) throws UnsupportedCallbackException {
       for (Callback callback : callbacks) {
         if (callback instanceof NameCallback) {
           logger.trace("SASL server callback: setting username");
@@ -187,14 +187,31 @@ public class SparkSaslServer implements SaslEncryptionBackend {
   /* Encode a byte[] identifier as a Base64-encoded string. */
   public static String encodeIdentifier(String identifier) {
     Preconditions.checkNotNull(identifier, "User cannot be null if SASL is enabled");
-    return Base64.encode(Unpooled.wrappedBuffer(identifier.getBytes(StandardCharsets.UTF_8)))
-      .toString(StandardCharsets.UTF_8);
+    return getBase64EncodedString(identifier);
   }
 
   /** Encode a password as a base64-encoded char[] array. */
   public static char[] encodePassword(String password) {
     Preconditions.checkNotNull(password, "Password cannot be null if SASL is enabled");
-    return Base64.encode(Unpooled.wrappedBuffer(password.getBytes(StandardCharsets.UTF_8)))
-      .toString(StandardCharsets.UTF_8).toCharArray();
+    return getBase64EncodedString(password).toCharArray();
+  }
+
+  /** Return a Base64-encoded string. */
+  private static String getBase64EncodedString(String str) {
+    ByteBuf byteBuf = null;
+    ByteBuf encodedByteBuf = null;
+    try {
+      byteBuf = Unpooled.wrappedBuffer(str.getBytes(StandardCharsets.UTF_8));
+      encodedByteBuf = Base64.encode(byteBuf);
+      return encodedByteBuf.toString(StandardCharsets.UTF_8);
+    } finally {
+      // The release is called to suppress the memory leak error messages raised by netty.
+      if (byteBuf != null) {
+        byteBuf.release();
+        if (encodedByteBuf != null) {
+          encodedByteBuf.release();
+        }
+      }
+    }
   }
 }

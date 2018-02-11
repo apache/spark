@@ -28,7 +28,6 @@ import java.util.Random;
 import java.util.Set;
 
 public class HiveHasherSuite {
-  private final static HiveHasher hasher = new HiveHasher();
 
   @Test
   public void testKnownIntegerInputs() {

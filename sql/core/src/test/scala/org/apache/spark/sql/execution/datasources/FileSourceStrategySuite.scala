@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.File
+import java.io._
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.zip.GZIPOutputStream
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path, RawLocalFileSystem}
@@ -41,7 +42,7 @@ import org.apache.spark.util.Utils
 class FileSourceStrategySuite extends QueryTest with SharedSQLContext with PredicateHelper {
   import testImplicits._
 
-  protected override val sparkConf = new SparkConf().set("spark.default.parallelism", "1")
+  protected override def sparkConf = super.sparkConf.set("spark.default.parallelism", "1")
 
   test("unpartitioned table, single partition") {
     val table =
@@ -140,16 +141,17 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "4",
         SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1") {
       checkScan(table.select('c1)) { partitions =>
-        // Files should be laid out [(file1), (file2, file3), (file4, file5), (file6)]
-        assert(partitions.size == 4, "when checking partitions")
-        assert(partitions(0).files.size == 1, "when checking partition 1")
+        // Files should be laid out [(file1, file6), (file2, file3), (file4, file5)]
+        assert(partitions.size == 3, "when checking partitions")
+        assert(partitions(0).files.size == 2, "when checking partition 1")
         assert(partitions(1).files.size == 2, "when checking partition 2")
         assert(partitions(2).files.size == 2, "when checking partition 3")
-        assert(partitions(3).files.size == 1, "when checking partition 4")
 
-        // First partition reads (file1)
+        // First partition reads (file1, file6)
         assert(partitions(0).files(0).start == 0)
         assert(partitions(0).files(0).length == 2)
+        assert(partitions(0).files(1).start == 0)
+        assert(partitions(0).files(1).length == 1)
 
         // Second partition reads (file2, file3)
         assert(partitions(1).files(0).start == 0)
@@ -162,10 +164,6 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
         assert(partitions(2).files(0).length == 1)
         assert(partitions(2).files(1).start == 0)
         assert(partitions(2).files(1).length == 1)
-
-        // Final partition reads (file6)
-        assert(partitions(3).files(0).start == 0)
-        assert(partitions(3).files(0).length == 1)
       }
 
       checkPartitionSchema(StructType(Nil))
@@ -189,7 +187,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     checkDataFilters(Set.empty)
 
     // Only one file should be read.
-    checkScan(table.where("p1 = 1 AND c1 = 1 AND (p1 + c1) = 1")) { partitions =>
+    checkScan(table.where("p1 = 1 AND c1 = 1 AND (p1 + c1) = 2")) { partitions =>
       assert(partitions.size == 1, "when checking partitions")
       assert(partitions.head.files.size == 1, "when checking files in partition 1")
       assert(partitions.head.files.head.partitionValues.getInt(0) == 1,
@@ -216,7 +214,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
       checkDataFilters(Set.empty)
 
       // Only one file should be read.
-      checkScan(table.where("P1 = 1 AND C1 = 1 AND (P1 + C1) = 1")) { partitions =>
+      checkScan(table.where("P1 = 1 AND C1 = 1 AND (P1 + C1) = 2")) { partitions =>
         assert(partitions.size == 1, "when checking partitions")
         assert(partitions.head.files.size == 1, "when checking files in partition 1")
         assert(partitions.head.files.head.partitionValues.getInt(0) == 1,
@@ -234,13 +232,17 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           "p1=1/file1" -> 10,
           "p1=2/file2" -> 10))
 
-    val df = table.where("p1 = 1 AND (p1 + c1) = 2 AND c1 = 1")
+    val df1 = table.where("p1 = 1 AND (p1 + c1) = 2 AND c1 = 1")
     // Filter on data only are advisory so we have to reevaluate.
-    assert(getPhysicalFilters(df) contains resolve(df, "c1 = 1"))
-    // Need to evalaute filters that are not pushed down.
-    assert(getPhysicalFilters(df) contains resolve(df, "(p1 + c1) = 2"))
+    assert(getPhysicalFilters(df1) contains resolve(df1, "c1 = 1"))
     // Don't reevaluate partition only filters.
-    assert(!(getPhysicalFilters(df) contains resolve(df, "p1 = 1")))
+    assert(!(getPhysicalFilters(df1) contains resolve(df1, "p1 = 1")))
+
+    val df2 = table.where("(p1 + c2) = 2 AND c1 = 1")
+    // Filter on data only are advisory so we have to reevaluate.
+    assert(getPhysicalFilters(df2) contains resolve(df2, "c1 = 1"))
+    // Need to evaluate filters that are not pushed down.
+    assert(getPhysicalFilters(df2) contains resolve(df2, "(p1 + c2) = 2"))
   }
 
   test("bucketed table") {
@@ -392,9 +394,9 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           util.stringToFile(file, fileName)
         }
 
-        val fileCatalog = new ListingFileCatalog(
+        val fileCatalog = new InMemoryFileIndex(
           sparkSession = spark,
-          paths = Seq(new Path(tempDir)),
+          rootPathsSpecified = Seq(new Path(tempDir)),
           parameters = Map.empty[String, String],
           partitionSchema = None)
         // This should not fail.
@@ -438,6 +440,51 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
       val df1 = df.where("a = 0").groupBy("b").agg("c" -> "sum")
       val df2 = df.where("a = 1").groupBy("b").agg("c" -> "sum")
       checkAnswer(df1.join(df2, "b"), Row(0, 6, 12) :: Row(1, 4, 8) :: Row(2, 10, 5) :: Nil)
+    }
+  }
+
+  test("spark.files.ignoreCorruptFiles should work in SQL") {
+    val inputFile = File.createTempFile("input-", ".gz")
+    try {
+      // Create a corrupt gzip file
+      val byteOutput = new ByteArrayOutputStream()
+      val gzip = new GZIPOutputStream(byteOutput)
+      try {
+        gzip.write(Array[Byte](1, 2, 3, 4))
+      } finally {
+        gzip.close()
+      }
+      val bytes = byteOutput.toByteArray
+      val o = new FileOutputStream(inputFile)
+      try {
+        // It's corrupt since we only write half of bytes into the file.
+        o.write(bytes.take(bytes.length / 2))
+      } finally {
+        o.close()
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val e = intercept[SparkException] {
+          spark.read.text(inputFile.toURI.toString).collect()
+        }
+        assert(e.getCause.isInstanceOf[EOFException])
+        assert(e.getCause.getMessage === "Unexpected end of input stream")
+      }
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        assert(spark.read.text(inputFile.toURI.toString).collect().isEmpty)
+      }
+    } finally {
+      inputFile.delete()
+    }
+  }
+
+  test("[SPARK-18753] keep pushed-down null literal as a filter in Spark-side post-filter") {
+    val ds = Seq(Tuple1(Some(true)), Tuple1(None), Tuple1(Some(false))).toDS()
+    withTempPath { p =>
+      val path = p.getAbsolutePath
+      ds.write.parquet(path)
+      val readBack = spark.read.parquet(path).filter($"_1" === "true")
+      val filtered = ds.filter($"_1" === "true").toDF()
+      checkAnswer(readBack, filtered)
     }
   }
 
@@ -506,7 +553,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
 
     if (buckets > 0) {
       val bucketed = df.queryExecution.analyzed transform {
-        case l @ LogicalRelation(r: HadoopFsRelation, _, _) =>
+        case l @ LogicalRelation(r: HadoopFsRelation, _, _, _) =>
           l.copy(relation =
             r.copy(bucketSpec =
               Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil)))(r.sparkSession))

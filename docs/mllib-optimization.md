@@ -116,7 +116,7 @@ is a stochastic gradient. Here `$S$` is the sampled subset of size `$|S|=$ miniB
 $\cdot n$`.
 
 In each iteration, the sampling over the distributed dataset
-([RDD](programming-guide.html#resilient-distributed-datasets-rdds)), as well as the
+([RDD](rdd-programming-guide.html#resilient-distributed-datasets-rdds)), as well as the
 computation of the sum of the partial results from each worker machine is performed by the
 standard spark routines.
 

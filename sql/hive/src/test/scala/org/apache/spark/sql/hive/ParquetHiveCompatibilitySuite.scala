@@ -45,7 +45,7 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
   private def testParquetHiveCompatibility(row: Row, hiveTypes: String*): Unit = {
     withTable("parquet_compat") {
       withTempPath { dir =>
-        val path = dir.getCanonicalPath
+        val path = dir.toURI.toString
 
         // Hive columns are always nullable, so here we append a all-null row.
         val rows = row :: Row(Seq.fill(row.length)(null): _*) :: Nil

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.columnar.compression
 
 import org.apache.spark.sql.execution.columnar._
-import org.apache.spark.sql.types.AtomicType
+import org.apache.spark.sql.types.{AtomicType, DataType}
 
 class TestCompressibleColumnBuilder[T <: AtomicType](
     override val columnStats: ColumnStats,
@@ -40,5 +40,12 @@ object TestCompressibleColumnBuilder {
     val builder = new TestCompressibleColumnBuilder(columnStats, columnType, Seq(scheme))
     builder.initialize(0, "", useCompression = true)
     builder
+  }
+}
+
+object ColumnBuilderHelper {
+  def apply(
+      dataType: DataType, batchSize: Int, name: String, useCompression: Boolean): ColumnBuilder = {
+    ColumnBuilder(dataType, batchSize, name, useCompression)
   }
 }

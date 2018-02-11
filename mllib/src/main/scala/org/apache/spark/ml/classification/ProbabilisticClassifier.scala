@@ -93,7 +93,7 @@ abstract class ProbabilisticClassificationModel[
   /**
    * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
    * parameters:
-   *  - predicted labels as [[predictionCol]] of type [[Double]]
+   *  - predicted labels as [[predictionCol]] of type `Double`
    *  - raw predictions (confidences) as [[rawPredictionCol]] of type `Vector`
    *  - probability of each class as [[probabilityCol]] of type `Vector`.
    *
@@ -158,13 +158,15 @@ abstract class ProbabilisticClassificationModel[
    * doing the computation in-place.
    * These predictions are also called class conditional probabilities.
    *
-   * This internal method is used to implement [[transform()]] and output [[probabilityCol]].
+   * This internal method is used to implement `transform()` and output [[probabilityCol]].
    *
    * @return Estimated class conditional probabilities (modified input vector)
    */
   protected def raw2probabilityInPlace(rawPrediction: Vector): Vector
 
-  /** Non-in-place version of [[raw2probabilityInPlace()]] */
+  /**
+   * Non-in-place version of `raw2probabilityInPlace()`
+   */
   protected def raw2probability(rawPrediction: Vector): Vector = {
     val probs = rawPrediction.copy
     raw2probabilityInPlace(probs)
@@ -182,7 +184,7 @@ abstract class ProbabilisticClassificationModel[
    * Predict the probability of each class given the features.
    * These predictions are also called class conditional probabilities.
    *
-   * This internal method is used to implement [[transform()]] and output [[probabilityCol]].
+   * This internal method is used to implement `transform()` and output [[probabilityCol]].
    *
    * @return Estimated class conditional probabilities
    */
@@ -228,21 +230,23 @@ private[ml] object ProbabilisticClassificationModel {
    * Normalize a vector of raw predictions to be a multinomial probability vector, in place.
    *
    * The input raw predictions should be nonnegative.
-   * The output vector sums to 1, unless the input vector is all-0 (in which case the output is
-   * all-0 too).
+   * The output vector sums to 1.
    *
    * NOTE: This is NOT applicable to all models, only ones which effectively use class
    *       instance counts for raw predictions.
+   *
+   * @throws IllegalArgumentException if the input vector is all-0 or including negative values
    */
   def normalizeToProbabilitiesInPlace(v: DenseVector): Unit = {
+    v.values.foreach(value => require(value >= 0,
+      "The input raw predictions should be nonnegative."))
     val sum = v.values.sum
-    if (sum != 0) {
-      var i = 0
-      val size = v.size
-      while (i < size) {
-        v.values(i) /= sum
-        i += 1
-      }
+    require(sum > 0, "Can't normalize the 0-vector.")
+    var i = 0
+    val size = v.size
+    while (i < size) {
+      v.values(i) /= sum
+      i += 1
     }
   }
 }

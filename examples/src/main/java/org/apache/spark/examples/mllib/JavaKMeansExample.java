@@ -22,7 +22,6 @@ import org.apache.spark.api.java.JavaSparkContext;
 
 // $example on$
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.clustering.KMeans;
 import org.apache.spark.mllib.clustering.KMeansModel;
 import org.apache.spark.mllib.linalg.Vector;
@@ -39,18 +38,14 @@ public class JavaKMeansExample {
     // Load and parse data
     String path = "data/mllib/kmeans_data.txt";
     JavaRDD<String> data = jsc.textFile(path);
-    JavaRDD<Vector> parsedData = data.map(
-      new Function<String, Vector>() {
-        public Vector call(String s) {
-          String[] sarray = s.split(" ");
-          double[] values = new double[sarray.length];
-          for (int i = 0; i < sarray.length; i++) {
-            values[i] = Double.parseDouble(sarray[i]);
-          }
-          return Vectors.dense(values);
-        }
+    JavaRDD<Vector> parsedData = data.map(s -> {
+      String[] sarray = s.split(" ");
+      double[] values = new double[sarray.length];
+      for (int i = 0; i < sarray.length; i++) {
+        values[i] = Double.parseDouble(sarray[i]);
       }
-    );
+      return Vectors.dense(values);
+    });
     parsedData.cache();
 
     // Cluster the data into two classes using KMeans

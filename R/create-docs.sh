@@ -20,7 +20,7 @@
 # Script to create API docs and vignettes for SparkR
 # This requires `devtools`, `knitr` and `rmarkdown` to be installed on the machine.
 
-# After running this script the html docs can be found in 
+# After running this script the html docs can be found in
 # $SPARK_HOME/R/pkg/html
 # The vignettes can be found in
 # $SPARK_HOME/R/pkg/vignettes/sparkr_vignettes.html
@@ -29,18 +29,19 @@ set -o pipefail
 set -e
 
 # Figure out where the script is
-export FWDIR="$(cd "`dirname "$0"`"; pwd)"
-export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+export FWDIR="$(cd "`dirname "${BASH_SOURCE[0]}"`"; pwd)"
+export SPARK_HOME="$(cd "`dirname "${BASH_SOURCE[0]}"`"/..; pwd)"
 
 # Required for setting SPARK_SCALA_VERSION
-. "${SPARK_HOME}"/bin/load-spark-env.sh
+. "${SPARK_HOME}/bin/load-spark-env.sh"
 
 echo "Using Scala $SPARK_SCALA_VERSION"
 
-pushd $FWDIR
+pushd "$FWDIR" > /dev/null
+. "$FWDIR/find-r.sh"
 
 # Install the package (this will also generate the Rd files)
-./install-dev.sh
+. "$FWDIR/install-dev.sh"
 
 # Now create HTML files
 
@@ -48,25 +49,8 @@ pushd $FWDIR
 mkdir -p pkg/html
 pushd pkg/html
 
-Rscript -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); library(knitr); knit_rd("SparkR", links = tools::findHTMLlinks(paste(libDir, "SparkR", sep="/")))'
+"$R_SCRIPT_PATH/Rscript" -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); library(knitr); knit_rd("SparkR", links = tools::findHTMLlinks(paste(libDir, "SparkR", sep="/")))'
 
 popd
-
-# Find Spark jars.
-if [ -f "${SPARK_HOME}/RELEASE" ]; then
-  SPARK_JARS_DIR="${SPARK_HOME}/jars"
-else
-  SPARK_JARS_DIR="${SPARK_HOME}/assembly/target/scala-$SPARK_SCALA_VERSION/jars"
-fi
-
-# Only create vignettes if Spark JARs exist
-if [ -d "$SPARK_JARS_DIR" ]; then
-  # render creates SparkR vignettes
-  Rscript -e 'library(rmarkdown); paths <- .libPaths(); .libPaths(c("lib", paths)); Sys.setenv(SPARK_HOME=tools::file_path_as_absolute("..")); render("pkg/vignettes/sparkr-vignettes.Rmd"); .libPaths(paths)'
-
-  find pkg/vignettes/. -not -name '.' -not -name '*.Rmd' -not -name '*.md' -not -name '*.pdf' -not -name '*.html' -delete
-else
-  echo "Skipping R vignettes as Spark JARs not found in $SPARK_HOME"
-fi
 
 popd

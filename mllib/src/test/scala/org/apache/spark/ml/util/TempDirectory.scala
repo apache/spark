@@ -30,7 +30,9 @@ trait TempDirectory extends BeforeAndAfterAll { self: Suite =>
 
   private var _tempDir: File = _
 
-  /** Returns the temporary directory as a [[File]] instance. */
+  /**
+   * Returns the temporary directory as a `File` instance.
+   */
   protected def tempDir: File = _tempDir
 
   override def beforeAll(): Unit = {

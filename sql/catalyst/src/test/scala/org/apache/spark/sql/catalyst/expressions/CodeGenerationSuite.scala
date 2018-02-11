@@ -25,8 +25,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.objects.{CreateExternalRow, GetExternalRowField, ValidateExternalType}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.expressions.objects._
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -71,13 +71,13 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq.fill(length)(true)
 
-    if (!checkResult(actual, expected)) {
+    if (actual != expected) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
 
   test("SPARK-13242: case-when expression with large number of branches (or cases)") {
-    val cases = 50
+    val cases = 500
     val clauses = 20
 
     // Generate an individual case
@@ -88,13 +88,30 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       (condition, Literal(n))
     }
 
-    val expression = CaseWhen((1 to cases).map(generateCase(_)))
+    val expression = CaseWhen((1 to cases).map(generateCase))
 
     val plan = GenerateMutableProjection.generate(Seq(expression))
-    val input = new GenericInternalRow(Array[Any](UTF8String.fromString(s"${clauses}:${cases}")))
+    val input = new GenericInternalRow(Array[Any](UTF8String.fromString(s"$clauses:$cases")))
     val actual = plan(input).toSeq(Seq(expression.dataType))
 
-    assert(actual(0) == cases)
+    assert(actual.head == cases)
+  }
+
+  test("SPARK-22543: split large if expressions into blocks due to JVM code size limit") {
+    var strExpr: Expression = Literal("abc")
+    for (_ <- 1 to 150) {
+      strExpr = Decode(Encode(strExpr, "utf-8"), "utf-8")
+    }
+
+    val expressions = Seq(If(EqualTo(strExpr, strExpr), strExpr, strExpr))
+    val plan = GenerateMutableProjection.generate(expressions)
+    val actual = plan(null).toSeq(expressions.map(_.dataType))
+    assert(actual.length == 1)
+    val expected = UTF8String.fromString("abc")
+
+    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+    }
   }
 
   test("SPARK-14793: split wide array creation into blocks due to JVM code size limit") {
@@ -102,9 +119,10 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expressions = Seq(CreateArray(List.fill(length)(EqualTo(Literal(1), Literal(1)))))
     val plan = GenerateMutableProjection.generate(expressions)
     val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
-    val expected = Seq(new GenericArrayData(Seq.fill(length)(true)))
+    assert(actual.length == 1)
+    val expected = UnsafeArrayData.fromPrimitiveArray(Array.fill(length)(true))
 
-    if (!checkResult(actual, expected)) {
+    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -116,12 +134,11 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
         case (expr, i) => Seq(Literal(i), expr)
       }))
     val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType)).map {
-      case m: ArrayBasedMapData => ArrayBasedMapData.toScalaMap(m)
-    }
-    val expected = (0 until length).map((_, true)).toMap :: Nil
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+    assert(actual.length == 1)
+    val expected = ArrayBasedMapData((0 until length).toArray, Array.fill(length)(true))
 
-    if (!checkResult(actual, expected)) {
+    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -133,7 +150,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq(InternalRow(Seq.fill(length)(true): _*))
 
-    if (!checkResult(actual, expected)) {
+    if (!checkResult(actual, expected, expressions.head.dataType)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -146,9 +163,10 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       }))
     val plan = GenerateMutableProjection.generate(expressions)
     val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
-    val expected = Seq(InternalRow(Seq.fill(length)(true): _*))
+    assert(actual.length == 1)
+    val expected = InternalRow(Seq.fill(length)(true): _*)
 
-    if (!checkResult(actual, expected)) {
+    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -161,7 +179,7 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
     val expected = Seq(Row.fromSeq(Seq.fill(length)(1)))
 
-    if (!checkResult(actual, expected)) {
+    if (actual != expected) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -178,7 +196,24 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val expected = Seq.fill(length)(
       DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-07-24 07:00:00")))
 
-    if (!checkResult(actual, expected)) {
+    if (actual != expected) {
+      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+    }
+  }
+
+  test("SPARK-22226: group splitted expressions into one method per nested class") {
+    val length = 10000
+    val expressions = Seq.fill(length) {
+      ToUTCTimestamp(
+        Literal.create(Timestamp.valueOf("2017-10-10 00:00:00"), TimestampType),
+        Literal.create("PST", StringType))
+    }
+    val plan = GenerateMutableProjection.generate(expressions)
+    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+    val expected = Seq.fill(length)(
+      DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2017-10-10 07:00:00")))
+
+    if (actual != expected) {
       fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
     }
   }
@@ -294,5 +329,111 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-17160: field names are properly escaped by AssertTrue") {
     GenerateUnsafeProjection.generate(AssertTrue(Cast(Literal("\""), BooleanType)) :: Nil)
+  }
+
+  test("should not apply common subexpression elimination on conditional expressions") {
+    val row = InternalRow(null)
+    val bound = BoundReference(0, IntegerType, true)
+    val assertNotNull = AssertNotNull(bound, Nil)
+    val expr = If(IsNull(bound), Literal(1), Add(assertNotNull, assertNotNull))
+    val projection = GenerateUnsafeProjection.generate(
+      Seq(expr), subexpressionEliminationEnabled = true)
+    // should not throw exception
+    projection(row)
+  }
+
+  test("SPARK-22543: split large predicates into blocks due to JVM code size limit") {
+    val length = 600
+
+    val input = new GenericInternalRow(length)
+    val utf8Str = UTF8String.fromString(s"abc")
+    for (i <- 0 until length) {
+      input.update(i, utf8Str)
+    }
+
+    var exprOr: Expression = Literal(false)
+    for (i <- 0 until length) {
+      exprOr = Or(EqualTo(BoundReference(i, StringType, true), Literal(s"c$i")), exprOr)
+    }
+
+    val planOr = GenerateMutableProjection.generate(Seq(exprOr))
+    val actualOr = planOr(input).toSeq(Seq(exprOr.dataType))
+    assert(actualOr.length == 1)
+    val expectedOr = false
+
+    if (!checkResult(actualOr.head, expectedOr, exprOr.dataType)) {
+      fail(s"Incorrect Evaluation: expressions: $exprOr, actual: $actualOr, expected: $expectedOr")
+    }
+
+    var exprAnd: Expression = Literal(true)
+    for (i <- 0 until length) {
+      exprAnd = And(EqualTo(BoundReference(i, StringType, true), Literal(s"c$i")), exprAnd)
+    }
+
+    val planAnd = GenerateMutableProjection.generate(Seq(exprAnd))
+    val actualAnd = planAnd(input).toSeq(Seq(exprAnd.dataType))
+    assert(actualAnd.length == 1)
+    val expectedAnd = false
+
+    if (!checkResult(actualAnd.head, expectedAnd, exprAnd.dataType)) {
+      fail(
+        s"Incorrect Evaluation: expressions: $exprAnd, actual: $actualAnd, expected: $expectedAnd")
+    }
+  }
+
+  test("SPARK-22696: CreateExternalRow should not use global variables") {
+    val ctx = new CodegenContext
+    val schema = new StructType().add("a", IntegerType).add("b", StringType)
+    CreateExternalRow(Seq(Literal(1), Literal("x")), schema).genCode(ctx)
+    assert(ctx.inlinedMutableStates.isEmpty)
+  }
+
+  test("SPARK-22696: InitializeJavaBean should not use global variables") {
+    val ctx = new CodegenContext
+    InitializeJavaBean(Literal.fromObject(new java.util.LinkedList[Int]),
+      Map("add" -> Literal(1))).genCode(ctx)
+    assert(ctx.inlinedMutableStates.isEmpty)
+  }
+
+  test("SPARK-22716: addReferenceObj should not add mutable states") {
+    val ctx = new CodegenContext
+    val foo = new Object()
+    ctx.addReferenceObj("foo", foo)
+    assert(ctx.inlinedMutableStates.isEmpty)
+  }
+
+  test("SPARK-18016: define mutable states by using an array") {
+    val ctx1 = new CodegenContext
+    for (i <- 1 to CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 10) {
+      ctx1.addMutableState(ctx1.JAVA_INT, "i", v => s"$v = $i;")
+    }
+    assert(ctx1.inlinedMutableStates.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)
+    // When the number of primitive type mutable states is over the threshold, others are
+    // allocated into an array
+    assert(ctx1.arrayCompactedMutableStates.get(ctx1.JAVA_INT).get.arrayNames.size == 1)
+    assert(ctx1.mutableStateInitCode.size == CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD + 10)
+
+    val ctx2 = new CodegenContext
+    for (i <- 1 to CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10) {
+      ctx2.addMutableState("InternalRow[]", "r", v => s"$v = new InternalRow[$i];")
+    }
+    // When the number of non-primitive type mutable states is over the threshold, others are
+    // allocated into a new array
+    assert(ctx2.inlinedMutableStates.isEmpty)
+    assert(ctx2.arrayCompactedMutableStates.get("InternalRow[]").get.arrayNames.size == 2)
+    assert(ctx2.arrayCompactedMutableStates("InternalRow[]").getCurrentIndex == 10)
+    assert(ctx2.mutableStateInitCode.size == CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT + 10)
+  }
+
+  test("SPARK-22750: addImmutableStateIfNotExists") {
+    val ctx = new CodegenContext
+    val mutableState1 = "field1"
+    val mutableState2 = "field2"
+    ctx.addImmutableStateIfNotExists("int", mutableState1)
+    ctx.addImmutableStateIfNotExists("int", mutableState1)
+    ctx.addImmutableStateIfNotExists("String", mutableState2)
+    ctx.addImmutableStateIfNotExists("int", mutableState1)
+    ctx.addImmutableStateIfNotExists("String", mutableState2)
+    assert(ctx.inlinedMutableStates.length == 2)
   }
 }

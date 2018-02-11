@@ -32,7 +32,7 @@ object GraphLoader extends Logging {
    * id and a target id. Skips lines that begin with `#`.
    *
    * If desired the edges can be automatically oriented in the positive
-   * direction (source Id < target Id) by setting `canonicalOrientation` to
+   * direction (source Id is less than target Id) by setting `canonicalOrientation` to
    * true.
    *
    * @example Loads a file in the following format:

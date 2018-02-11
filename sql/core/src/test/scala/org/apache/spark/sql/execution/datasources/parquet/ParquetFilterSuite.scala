@@ -32,7 +32,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{AccumulatorContext, LongAccumulator}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
 
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
@@ -45,8 +45,28 @@ import org.apache.spark.util.{AccumulatorContext, LongAccumulator}
  *
  * 2. `Tuple1(Option(x))` is used together with `AnyVal` types like `Int` to ensure the inferred
  *    data type is nullable.
+ *
+ * NOTE:
+ *
+ * This file intendedly enables record-level filtering explicitly. If new test cases are
+ * dependent on this configuration, don't forget you better explicitly set this configuration
+ * within the test.
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContext {
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    // Note that there are many tests here that require record-level filtering set to be true.
+    spark.conf.set(SQLConf.PARQUET_RECORD_FILTER_ENABLED.key, "true")
+  }
+
+  override def afterEach(): Unit = {
+    try {
+      spark.conf.unset(SQLConf.PARQUET_RECORD_FILTER_ENABLED.key)
+    } finally {
+      super.afterEach()
+    }
+  }
 
   private def checkFilterPredicate(
       df: DataFrame,
@@ -64,7 +84,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
         var maybeRelation: Option[HadoopFsRelation] = None
         val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters, LogicalRelation(relation: HadoopFsRelation, _, _)) =>
+          case PhysicalOperation(_, filters,
+                                 LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
             maybeRelation = Some(relation)
             filters
         }.flatten.reduceLeftOption(_ && _)
@@ -367,76 +388,36 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
   }
 
 
-  test("SPARK-11103: Filter applied on merged Parquet schema with new column fails") {
+  test("Filter applied on merged Parquet schema with new column should work") {
     import testImplicits._
-    Seq("true", "false").map { vectorized =>
+    Seq("true", "false").foreach { vectorized =>
       withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
         SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
         SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
         withTempPath { dir =>
-          val pathOne = s"${dir.getCanonicalPath}/table1"
-          (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathOne)
-          val pathTwo = s"${dir.getCanonicalPath}/table2"
-          (1 to 3).map(i => (i, i.toString)).toDF("c", "b").write.parquet(pathTwo)
+          val path1 = s"${dir.getCanonicalPath}/table1"
+          (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path1)
+          val path2 = s"${dir.getCanonicalPath}/table2"
+          (1 to 3).map(i => (i, i.toString)).toDF("c", "b").write.parquet(path2)
 
-          // If the "c = 1" filter gets pushed down, this query will throw an exception which
-          // Parquet emits. This is a Parquet issue (PARQUET-389).
-          val df = spark.read.parquet(pathOne, pathTwo).filter("c = 1").selectExpr("c", "b", "a")
+          // No matter "c = 1" gets pushed down or not, this query should work without exception.
+          val df = spark.read.parquet(path1, path2).filter("c = 1").selectExpr("c", "b", "a")
           checkAnswer(
             df,
             Row(1, "1", null))
 
-          // The fields "a" and "c" only exist in one Parquet file.
-          assert(df.schema("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-          assert(df.schema("c").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-
-          val pathThree = s"${dir.getCanonicalPath}/table3"
-          df.write.parquet(pathThree)
-
-          // We will remove the temporary metadata when writing Parquet file.
-          val schema = spark.read.parquet(pathThree).schema
-          assert(schema.forall(!_.metadata.contains(StructType.metadataKeyForOptionalField)))
-
-          val pathFour = s"${dir.getCanonicalPath}/table4"
+          val path3 = s"${dir.getCanonicalPath}/table3"
           val dfStruct = sparkContext.parallelize(Seq((1, 1))).toDF("a", "b")
-          dfStruct.select(struct("a").as("s")).write.parquet(pathFour)
+          dfStruct.select(struct("a").as("s")).write.parquet(path3)
 
-          val pathFive = s"${dir.getCanonicalPath}/table5"
+          val path4 = s"${dir.getCanonicalPath}/table4"
           val dfStruct2 = sparkContext.parallelize(Seq((1, 1))).toDF("c", "b")
-          dfStruct2.select(struct("c").as("s")).write.parquet(pathFive)
+          dfStruct2.select(struct("c").as("s")).write.parquet(path4)
 
-          // If the "s.c = 1" filter gets pushed down, this query will throw an exception which
-          // Parquet emits.
-          val dfStruct3 = spark.read.parquet(pathFour, pathFive).filter("s.c = 1")
+          // No matter "s.c = 1" gets pushed down or not, this query should work without exception.
+          val dfStruct3 = spark.read.parquet(path3, path4).filter("s.c = 1")
             .selectExpr("s")
           checkAnswer(dfStruct3, Row(Row(null, 1)))
-
-          // The fields "s.a" and "s.c" only exist in one Parquet file.
-          val field = dfStruct3.schema("s").dataType.asInstanceOf[StructType]
-          assert(field("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-          assert(field("c").metadata.getBoolean(StructType.metadataKeyForOptionalField))
-
-          val pathSix = s"${dir.getCanonicalPath}/table6"
-          dfStruct3.write.parquet(pathSix)
-
-          // We will remove the temporary metadata when writing Parquet file.
-          val forPathSix = spark.read.parquet(pathSix).schema
-          assert(forPathSix.forall(!_.metadata.contains(StructType.metadataKeyForOptionalField)))
-
-          // sanity test: make sure optional metadata field is not wrongly set.
-          val pathSeven = s"${dir.getCanonicalPath}/table7"
-          (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathSeven)
-          val pathEight = s"${dir.getCanonicalPath}/table8"
-          (4 to 6).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathEight)
-
-          val df2 = spark.read.parquet(pathSeven, pathEight).filter("a = 1").selectExpr("a", "b")
-          checkAnswer(
-            df2,
-            Row(1, "1"))
-
-          // The fields "a" and "b" exist in both two Parquet files. No metadata is set.
-          assert(!df2.schema("a").metadata.contains(StructType.metadataKeyForOptionalField))
-          assert(!df2.schema("b").metadata.contains(StructType.metadataKeyForOptionalField))
         }
       }
     }
@@ -531,7 +512,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
     }
   }
 
-  test("Fiters should be pushed down for vectorized Parquet reader at row group level") {
+  test("Filters should be pushed down for vectorized Parquet reader at row group level") {
     import testImplicits._
 
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
@@ -540,22 +521,109 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         val path = s"${dir.getCanonicalPath}/table"
         (1 to 1024).map(i => (101, i)).toDF("a", "b").write.parquet(path)
 
-        Seq(("true", (x: Long) => x == 0), ("false", (x: Long) => x > 0)).map { case (push, func) =>
-          withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> push) {
-            val accu = new LongAccumulator
-            accu.register(sparkContext, Some("numRowGroups"))
+        Seq(true, false).foreach { enablePushDown =>
+          withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> enablePushDown.toString) {
+            val accu = new NumRowGroupsAcc
+            sparkContext.register(accu)
 
             val df = spark.read.parquet(path).filter("a < 100")
-            df.foreachPartition(_.foreach(v => accu.add(0)))
+            df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
             df.collect
 
-            val numRowGroups = AccumulatorContext.lookForAccumulatorByName("numRowGroups")
-            assert(numRowGroups.isDefined)
-            assert(func(numRowGroups.get.asInstanceOf[LongAccumulator].value))
+            if (enablePushDown) {
+              assert(accu.value == 0)
+            } else {
+              assert(accu.value > 0)
+            }
             AccumulatorContext.remove(accu.id)
           }
         }
       }
     }
   }
+
+  test("SPARK-17213: Broken Parquet filter push-down for string columns") {
+    withTempPath { dir =>
+      import testImplicits._
+
+      val path = dir.getCanonicalPath
+      // scalastyle:off nonascii
+      Seq("a", "é").toDF("name").write.parquet(path)
+      // scalastyle:on nonascii
+
+      assert(spark.read.parquet(path).where("name > 'a'").count() == 1)
+      assert(spark.read.parquet(path).where("name >= 'a'").count() == 2)
+
+      // scalastyle:off nonascii
+      assert(spark.read.parquet(path).where("name < 'é'").count() == 1)
+      assert(spark.read.parquet(path).where("name <= 'é'").count() == 2)
+      // scalastyle:on nonascii
+    }
+  }
+
+  test("SPARK-20364: Disable Parquet predicate pushdown for fields having dots in the names") {
+    import testImplicits._
+
+    Seq(true, false).foreach { vectorized =>
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
+          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> true.toString,
+          SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+        withTempPath { path =>
+          Seq(Some(1), None).toDF("col.dots").write.parquet(path.getAbsolutePath)
+          val readBack = spark.read.parquet(path.getAbsolutePath).where("`col.dots` IS NOT NULL")
+          assert(readBack.count() == 1)
+        }
+      }
+    }
+  }
+
+  test("Filters should be pushed down for Parquet readers at row group level") {
+    import testImplicits._
+
+    withSQLConf(
+      // Makes sure disabling 'spark.sql.parquet.recordFilter' still enables
+      // row group level filtering.
+      SQLConf.PARQUET_RECORD_FILTER_ENABLED.key -> "false",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+      withTempPath { path =>
+        val data = (1 to 1024)
+        data.toDF("a").coalesce(1)
+          .write.option("parquet.block.size", 512)
+          .parquet(path.getAbsolutePath)
+        val df = spark.read.parquet(path.getAbsolutePath).filter("a == 500")
+        // Here, we strip the Spark side filter and check the actual results from Parquet.
+        val actual = stripSparkFilter(df).collect().length
+        // Since those are filtered at row group level, the result count should be less
+        // than the total length but should not be a single record.
+        // Note that, if record level filtering is enabled, it should be a single record.
+        // If no filter is pushed down to Parquet, it should be the total length of data.
+        assert(actual > 1 && actual < data.length)
+      }
+    }
+  }
+}
+
+class NumRowGroupsAcc extends AccumulatorV2[Integer, Integer] {
+  private var _sum = 0
+
+  override def isZero: Boolean = _sum == 0
+
+  override def copy(): AccumulatorV2[Integer, Integer] = {
+    val acc = new NumRowGroupsAcc()
+    acc._sum = _sum
+    acc
+  }
+
+  override def reset(): Unit = _sum = 0
+
+  override def add(v: Integer): Unit = _sum += v
+
+  override def merge(other: AccumulatorV2[Integer, Integer]): Unit = other match {
+    case a: NumRowGroupsAcc => _sum += a._sum
+    case _ => throw new UnsupportedOperationException(
+      s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+  }
+
+  override def value: Integer = _sum
 }

@@ -23,13 +23,19 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.internal.SQLConf
 
 class InferFiltersFromConstraintsSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("InferFilters", FixedPoint(5), InferFiltersFromConstraints) ::
-      Batch("PredicatePushdown", FixedPoint(5), PushPredicateThroughJoin) ::
-      Batch("CombineFilters", FixedPoint(5), CombineFilters) :: Nil
+    val batches =
+      Batch("InferAndPushDownFilters", FixedPoint(100),
+        PushPredicateThroughJoin,
+        PushDownPredicate,
+        InferFiltersFromConstraints,
+        CombineFilters,
+        SimplifyBinaryComparison,
+        BooleanSimplification) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -119,5 +125,71 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       .join(y.where(IsNotNull('a) && 'a.attr > 5), Inner, Some("x.a".attr === "y.a".attr)).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("inner join with alias: alias contains multiple attributes") {
+    val t1 = testRelation.subquery('t1)
+    val t2 = testRelation.subquery('t2)
+
+    val originalQuery = t1.select('a, Coalesce(Seq('a, 'b)).as('int_col)).as("t")
+      .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
+      .analyze
+    val correctAnswer = t1
+      .where(IsNotNull('a) && IsNotNull(Coalesce(Seq('a, 'b))) && 'a === Coalesce(Seq('a, 'b)))
+      .select('a, Coalesce(Seq('a, 'b)).as('int_col)).as("t")
+      .join(t2.where(IsNotNull('a)), Inner,
+        Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("inner join with alias: alias contains single attributes") {
+    val t1 = testRelation.subquery('t1)
+    val t2 = testRelation.subquery('t2)
+
+    val originalQuery = t1.select('a, 'b.as('d)).as("t")
+      .join(t2, Inner, Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
+      .analyze
+    val correctAnswer = t1
+      .where(IsNotNull('a) && IsNotNull('b) &&'a === 'b)
+      .select('a, 'b.as('d)).as("t")
+      .join(t2.where(IsNotNull('a)), Inner,
+        Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
+      .analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("generate correct filters for alias that don't produce recursive constraints") {
+    val t1 = testRelation.subquery('t1)
+
+    val originalQuery = t1.select('a.as('x), 'b.as('y)).where('x === 1 && 'x === 'y).analyze
+    val correctAnswer =
+      t1.where('a === 1 && 'b === 1 && 'a === 'b && IsNotNull('a) && IsNotNull('b))
+        .select('a.as('x), 'b.as('y)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("No inferred filter when constraint propagation is disabled") {
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
+      val optimized = Optimize.execute(originalQuery)
+      comparePlans(optimized, originalQuery)
+    }
+  }
+
+  test("constraints should be inferred from aliased literals") {
+    val originalLeft = testRelation.subquery('left).as("left")
+    val optimizedLeft = testRelation.subquery('left).where(IsNotNull('a) && 'a === 2).as("left")
+
+    val right = Project(Seq(Literal(2).as("two")), testRelation.subquery('right)).as("right")
+    val condition = Some("left.a".attr === "right.two".attr)
+
+    val original = originalLeft.join(right, Inner, condition)
+    val correct = optimizedLeft.join(right, Inner, condition)
+
+    comparePlans(Optimize.execute(original.analyze), correct.analyze)
   }
 }

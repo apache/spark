@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.catalyst.rules
 
-import scala.collection.JavaConverters._
-
-import com.google.common.util.concurrent.AtomicLongMap
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
@@ -28,18 +24,16 @@ import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.util.Utils
 
 object RuleExecutor {
-  protected val timeMap = AtomicLongMap.create[String]()
-
-  /** Resets statistics about time spent running specific rules */
-  def resetTime(): Unit = timeMap.clear()
+  protected val queryExecutionMeter = QueryExecutionMetering()
 
   /** Dump statistics about time spent running specific rules. */
   def dumpTimeSpent(): String = {
-    val map = timeMap.asMap().asScala
-    val maxSize = map.keys.map(_.toString.length).max
-    map.toSeq.sortBy(_._2).reverseMap { case (k, v) =>
-      s"${k.padTo(maxSize, " ").mkString} $v"
-    }.mkString("\n", "\n", "")
+    queryExecutionMeter.dumpTimeSpent()
+  }
+
+  /** Resets statistics about time spent running specific rules */
+  def resetMetrics(): Unit = {
+    queryExecutionMeter.resetMetrics()
   }
 }
 
@@ -63,6 +57,13 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   /** Defines a sequence of rule batches, to be overridden by the implementation. */
   protected def batches: Seq[Batch]
 
+  /**
+   * Defines a check function that checks for structural integrity of the plan after the execution
+   * of each rule. For example, we can check whether a plan is still resolved after each rule in
+   * `Optimizer`, so we can catch rules that return invalid plans. The check function returns
+   * `false` if the given plan doesn't pass the structural integrity check.
+   */
+  protected def isPlanIntegral(plan: TreeType): Boolean = true
 
   /**
    * Executes the batches of rules defined by the subclass. The batches are executed serially
@@ -70,6 +71,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
    */
   def execute(plan: TreeType): TreeType = {
     var curPlan = plan
+    val queryExecutionMetrics = RuleExecutor.queryExecutionMeter
 
     batches.foreach { batch =>
       val batchStartPlan = curPlan
@@ -84,14 +86,24 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             val startTime = System.nanoTime()
             val result = rule(plan)
             val runTime = System.nanoTime() - startTime
-            RuleExecutor.timeMap.addAndGet(rule.ruleName, runTime)
 
             if (!result.fastEquals(plan)) {
+              queryExecutionMetrics.incNumEffectiveExecution(rule.ruleName)
+              queryExecutionMetrics.incTimeEffectiveExecutionBy(rule.ruleName, runTime)
               logTrace(
                 s"""
                   |=== Applying Rule ${rule.ruleName} ===
                   |${sideBySide(plan.treeString, result.treeString).mkString("\n")}
                 """.stripMargin)
+            }
+            queryExecutionMetrics.incExecutionTimeBy(rule.ruleName, runTime)
+            queryExecutionMetrics.incNumExecution(rule.ruleName)
+
+            // Run the structural integrity checker against the plan after each rule.
+            if (!isPlanIntegral(result)) {
+              val message = s"After applying rule ${rule.ruleName} in batch ${batch.name}, " +
+                "the structural integrity of the plan is broken."
+              throw new TreeNodeException(result, message, null)
             }
 
             result
@@ -121,9 +133,9 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
       if (!batchStartPlan.fastEquals(curPlan)) {
         logDebug(
           s"""
-          |=== Result of Batch ${batch.name} ===
-          |${sideBySide(plan.treeString, curPlan.treeString).mkString("\n")}
-        """.stripMargin)
+            |=== Result of Batch ${batch.name} ===
+            |${sideBySide(batchStartPlan.treeString, curPlan.treeString).mkString("\n")}
+          """.stripMargin)
       } else {
         logTrace(s"Batch ${batch.name} has no effect.")
       }

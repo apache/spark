@@ -31,7 +31,7 @@ class TableAlreadyExistsException(db: String, table: String)
   extends AnalysisException(s"Table or view '$table' already exists in database '$db'")
 
 class TempTableAlreadyExistsException(table: String)
-  extends AnalysisException(s"Temporary table '$table' already exists")
+  extends AnalysisException(s"Temporary view '$table' already exists")
 
 class PartitionAlreadyExistsException(db: String, table: String, spec: TablePartitionSpec)
   extends AnalysisException(
@@ -44,6 +44,3 @@ class PartitionsAlreadyExistException(db: String, table: String, specs: Seq[Tabl
 
 class FunctionAlreadyExistsException(db: String, func: String)
   extends AnalysisException(s"Function '$func' already exists in database '$db'")
-
-class TempFunctionAlreadyExistsException(func: String)
-  extends AnalysisException(s"Temporary function '$func' already exists")

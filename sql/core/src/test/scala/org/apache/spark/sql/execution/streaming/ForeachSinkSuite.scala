@@ -23,8 +23,10 @@ import scala.collection.mutable
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.ForeachWriter
-import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
+import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
@@ -44,49 +46,34 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
         .foreach(new TestForeachWriter())
         .start()
 
+      def verifyOutput(expectedVersion: Int, expectedData: Seq[Int]): Unit = {
+        import ForeachSinkSuite._
+
+        val events = ForeachSinkSuite.allEvents()
+        assert(events.size === 2) // one seq of events for each of the 2 partitions
+
+        // Verify both seq of events have an Open event as the first event
+        assert(events.map(_.head).toSet === Set(0, 1).map(p => Open(p, expectedVersion)))
+
+        // Verify all the Process event correspond to the expected data
+        val allProcessEvents = events.flatMap(_.filter(_.isInstanceOf[Process[_]]))
+        assert(allProcessEvents.toSet === expectedData.map { data => Process(data) }.toSet)
+
+        // Verify both seq of events have a Close event as the last event
+        assert(events.map(_.last).toSet === Set(Close(None), Close(None)))
+      }
+
       // -- batch 0 ---------------------------------------
+      ForeachSinkSuite.clear()
       input.addData(1, 2, 3, 4)
       query.processAllAvailable()
-
-      var expectedEventsForPartition0 = Seq(
-        ForeachSinkSuite.Open(partition = 0, version = 0),
-        ForeachSinkSuite.Process(value = 1),
-        ForeachSinkSuite.Process(value = 3),
-        ForeachSinkSuite.Close(None)
-      )
-      var expectedEventsForPartition1 = Seq(
-        ForeachSinkSuite.Open(partition = 1, version = 0),
-        ForeachSinkSuite.Process(value = 2),
-        ForeachSinkSuite.Process(value = 4),
-        ForeachSinkSuite.Close(None)
-      )
-
-      var allEvents = ForeachSinkSuite.allEvents()
-      assert(allEvents.size === 2)
-      assert(allEvents.toSet === Set(expectedEventsForPartition0, expectedEventsForPartition1))
-
-      ForeachSinkSuite.clear()
+      verifyOutput(expectedVersion = 0, expectedData = 1 to 4)
 
       // -- batch 1 ---------------------------------------
+      ForeachSinkSuite.clear()
       input.addData(5, 6, 7, 8)
       query.processAllAvailable()
-
-      expectedEventsForPartition0 = Seq(
-        ForeachSinkSuite.Open(partition = 0, version = 1),
-        ForeachSinkSuite.Process(value = 5),
-        ForeachSinkSuite.Process(value = 7),
-        ForeachSinkSuite.Close(None)
-      )
-      expectedEventsForPartition1 = Seq(
-        ForeachSinkSuite.Open(partition = 1, version = 1),
-        ForeachSinkSuite.Process(value = 6),
-        ForeachSinkSuite.Process(value = 8),
-        ForeachSinkSuite.Close(None)
-      )
-
-      allEvents = ForeachSinkSuite.allEvents()
-      assert(allEvents.size === 2)
-      assert(allEvents.toSet === Set(expectedEventsForPartition0, expectedEventsForPartition1))
+      verifyOutput(expectedVersion = 1, expectedData = 5 to 8)
 
       query.stop()
     }
@@ -136,7 +123,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
     }
   }
 
-  test("foreach with error") {
+  testQuietly("foreach with error") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
       val query = input.toDS().repartition(1).writeStream
@@ -148,15 +135,123 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
           }
         }).start()
       input.addData(1, 2, 3, 4)
-      query.processAllAvailable()
+
+      // Error in `process` should fail the Spark job
+      val e = intercept[StreamingQueryException] {
+        query.processAllAvailable()
+      }
+      assert(e.getCause.isInstanceOf[SparkException])
+      assert(e.getCause.getCause.getMessage === "error")
+      assert(query.isActive === false)
 
       val allEvents = ForeachSinkSuite.allEvents()
       assert(allEvents.size === 1)
       assert(allEvents(0)(0) === ForeachSinkSuite.Open(partition = 0, version = 0))
-      assert(allEvents(0)(1) ===  ForeachSinkSuite.Process(value = 1))
+      assert(allEvents(0)(1) === ForeachSinkSuite.Process(value = 1))
+
+      // `close` should be called with the error
       val errorEvent = allEvents(0)(2).asInstanceOf[ForeachSinkSuite.Close]
       assert(errorEvent.error.get.isInstanceOf[RuntimeException])
       assert(errorEvent.error.get.getMessage === "error")
+    }
+  }
+
+  test("foreach with watermark: complete") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"count".as[Long])
+      .map(_.toInt)
+      .repartition(1)
+
+    val query = windowedAggregation
+      .writeStream
+      .outputMode(OutputMode.Complete)
+      .foreach(new TestForeachWriter())
+      .start()
+    try {
+      inputData.addData(10, 11, 12)
+      query.processAllAvailable()
+
+      val allEvents = ForeachSinkSuite.allEvents()
+      assert(allEvents.size === 1)
+      val expectedEvents = Seq(
+        ForeachSinkSuite.Open(partition = 0, version = 0),
+        ForeachSinkSuite.Process(value = 3),
+        ForeachSinkSuite.Close(None)
+      )
+      assert(allEvents === Seq(expectedEvents))
+    } finally {
+      query.stop()
+    }
+  }
+
+  test("foreach with watermark: append") {
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"count".as[Long])
+      .map(_.toInt)
+      .repartition(1)
+
+    val query = windowedAggregation
+      .writeStream
+      .outputMode(OutputMode.Append)
+      .foreach(new TestForeachWriter())
+      .start()
+    try {
+      inputData.addData(10, 11, 12)
+      query.processAllAvailable()
+      inputData.addData(25) // Advance watermark to 15 seconds
+      query.processAllAvailable()
+      inputData.addData(25) // Evict items less than previous watermark
+      query.processAllAvailable()
+
+      // There should be 3 batches and only does the last batch contain a value.
+      val allEvents = ForeachSinkSuite.allEvents()
+      assert(allEvents.size === 3)
+      val expectedEvents = Seq(
+        Seq(
+          ForeachSinkSuite.Open(partition = 0, version = 0),
+          ForeachSinkSuite.Close(None)
+        ),
+        Seq(
+          ForeachSinkSuite.Open(partition = 0, version = 1),
+          ForeachSinkSuite.Close(None)
+        ),
+        Seq(
+          ForeachSinkSuite.Open(partition = 0, version = 2),
+          ForeachSinkSuite.Process(value = 3),
+          ForeachSinkSuite.Close(None)
+        )
+      )
+      assert(allEvents === expectedEvents)
+    } finally {
+      query.stop()
+    }
+  }
+
+  test("foreach sink should support metrics") {
+    val inputData = MemoryStream[Int]
+    val query = inputData.toDS()
+      .writeStream
+      .foreach(new TestForeachWriter())
+      .start()
+    try {
+      inputData.addData(10, 11, 12)
+      query.processAllAvailable()
+      val recentProgress = query.recentProgress.filter(_.numInputRows != 0).headOption
+      assert(recentProgress.isDefined && recentProgress.get.numInputRows === 3,
+        s"recentProgress[${query.recentProgress.toList}] doesn't contain correct metrics")
+    } finally {
       query.stop()
     }
   }

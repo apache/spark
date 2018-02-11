@@ -22,12 +22,15 @@ import shutil
 import signal
 import sys
 import threading
+import warnings
 from threading import RLock
 from tempfile import NamedTemporaryFile
 
+from py4j.protocol import Py4JError
+
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
-from pyspark.broadcast import Broadcast
+from pyspark.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
@@ -109,7 +112,7 @@ class SparkContext(object):
         ValueError:...
         """
         self._callsite = first_spark_call() or CallSite(None, None, None)
-        SparkContext._ensure_initialized(self, gateway=gateway)
+        SparkContext._ensure_initialized(self, gateway=gateway, conf=conf)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
                           conf, jsc, profiler_cls)
@@ -121,7 +124,18 @@ class SparkContext(object):
     def _do_init(self, master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
                  conf, jsc, profiler_cls):
         self.environment = environment or {}
-        self._conf = conf or SparkConf(_jvm=self._jvm)
+        # java gateway must have been launched at this point.
+        if conf is not None and conf._jconf is not None:
+            # conf has been initialized in JVM properly, so use conf directly. This represent the
+            # scenario that JVM has been launched before SparkConf is created (e.g. SparkContext is
+            # created and then stopped, and we create a new SparkConf and new SparkContext again)
+            self._conf = conf
+        else:
+            self._conf = SparkConf(_jvm=SparkContext._jvm)
+            if conf is not None:
+                for k, v in conf.getAll():
+                    self._conf.set(k, v)
+
         self._batchSize = batchSize  # -1 represents an unlimited batch size
         self._unbatched_serializer = serializer
         if batchSize == 0:
@@ -159,10 +173,8 @@ class SparkContext(object):
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
                 self.environment[varName] = v
-        if sys.version >= '3.3' and 'PYTHONHASHSEED' not in os.environ:
-            # disable randomness of hash of string in worker, if this is not
-            # launched by spark-submit
-            self.environment["PYTHONHASHSEED"] = "0"
+
+        self.environment["PYTHONHASHSEED"] = os.environ.get("PYTHONHASHSEED", "0")
 
         # Create the Java SparkContext through Py4J
         self._jsc = jsc or self._initialize_context(self._conf._jconf)
@@ -183,7 +195,7 @@ class SparkContext(object):
         # This allows other code to determine which Broadcast instances have
         # been pickled, so it can determine which Java broadcast objects to
         # send.
-        self._pickled_broadcast_vars = set()
+        self._pickled_broadcast_vars = BroadcastPickleRegistry()
 
         SparkFiles._sc = self
         root_dir = SparkFiles.getRootDirectory()
@@ -225,6 +237,32 @@ class SparkContext(object):
         if isinstance(threading.current_thread(), threading._MainThread):
             signal.signal(signal.SIGINT, signal_handler)
 
+    def __repr__(self):
+        return "<SparkContext master={master} appName={appName}>".format(
+            master=self.master,
+            appName=self.appName,
+        )
+
+    def _repr_html_(self):
+        return """
+        <div>
+            <p><b>SparkContext</b></p>
+
+            <p><a href="{sc.uiWebUrl}">Spark UI</a></p>
+
+            <dl>
+              <dt>Version</dt>
+                <dd><code>v{sc.version}</code></dd>
+              <dt>Master</dt>
+                <dd><code>{sc.master}</code></dd>
+              <dt>AppName</dt>
+                <dd><code>{sc.appName}</code></dd>
+            </dl>
+        </div>
+        """.format(
+            sc=self
+        )
+
     def _initialize_context(self, jconf):
         """
         Initialize SparkContext in function to allow subclass specific initialization
@@ -232,14 +270,14 @@ class SparkContext(object):
         return self._jvm.JavaSparkContext(jconf)
 
     @classmethod
-    def _ensure_initialized(cls, instance=None, gateway=None):
+    def _ensure_initialized(cls, instance=None, gateway=None, conf=None):
         """
         Checks whether a SparkContext is initialized or not.
         Throws error if a SparkContext is already running.
         """
         with SparkContext._lock:
             if not SparkContext._gateway:
-                SparkContext._gateway = gateway or launch_gateway()
+                SparkContext._gateway = gateway or launch_gateway(conf)
                 SparkContext._jvm = SparkContext._gateway.jvm
 
             if instance:
@@ -361,8 +399,19 @@ class SparkContext(object):
         Shut down the SparkContext.
         """
         if getattr(self, "_jsc", None):
-            self._jsc.stop()
-            self._jsc = None
+            try:
+                self._jsc.stop()
+            except Py4JError:
+                # Case: SPARK-18523
+                warnings.warn(
+                    'Unable to cleanly shutdown Spark JVM process.'
+                    ' It is possible that the process has crashed,'
+                    ' been killed or may also be in a zombie state.',
+                    RuntimeWarning
+                )
+                pass
+            finally:
+                self._jsc = None
         if getattr(self, "_accumulatorServer", None):
             self._accumulatorServer.shutdown()
             self._accumulatorServer = None
@@ -426,24 +475,30 @@ class SparkContext(object):
                 return xrange(getStart(split), getStart(split + 1), step)
 
             return self.parallelize([], numSlices).mapPartitionsWithIndex(f)
-        # Calling the Java parallelize() method with an ArrayList is too slow,
-        # because it sends O(n) Py4J commands.  As an alternative, serialized
-        # objects are written to a file and loaded through textFile().
+
+        # Make sure we distribute data evenly if it's smaller than self.batchSize
+        if "__len__" not in dir(c):
+            c = list(c)    # Make it a list so we can compute its length
+        batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
+        serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
+        jrdd = self._serialize_to_jvm(c, numSlices, serializer)
+        return RDD(jrdd, self, serializer)
+
+    def _serialize_to_jvm(self, data, parallelism, serializer):
+        """
+        Calling the Java parallelize() method with an ArrayList is too slow,
+        because it sends O(n) Py4J commands.  As an alternative, serialized
+        objects are written to a file and loaded through textFile().
+        """
         tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
         try:
-            # Make sure we distribute data evenly if it's smaller than self.batchSize
-            if "__len__" not in dir(c):
-                c = list(c)    # Make it a list so we can compute its length
-            batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
-            serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
-            serializer.dump_stream(c, tempFile)
+            serializer.dump_stream(data, tempFile)
             tempFile.close()
             readRDDFromFile = self._jvm.PythonRDD.readRDDFromFile
-            jrdd = readRDDFromFile(self._jsc, tempFile.name, numSlices)
+            return readRDDFromFile(self._jsc, tempFile.name, parallelism)
         finally:
             # readRDDFromFile eagerily reads the file so we can delete right after.
             os.unlink(tempFile.name)
-        return RDD(jrdd, self, serializer)
 
     def pickleFile(self, name, minPartitions=None):
         """
@@ -508,8 +563,8 @@ class SparkContext(object):
           ...
           (a-hdfs-path/part-nnnnn, its content)
 
-        NOTE: Small files are preferred, as each file will be loaded
-        fully in memory.
+        .. note:: Small files are preferred, as each file will be loaded
+            fully in memory.
 
         >>> dirPath = os.path.join(tempdir, "files")
         >>> os.mkdir(dirPath)
@@ -535,8 +590,8 @@ class SparkContext(object):
         in a key-value pair, where the key is the path of each file, the
         value is the content of each file.
 
-        Note: Small files are preferred, large file is also allowable, but
-        may cause bad performance.
+        .. note:: Small files are preferred, large file is also allowable, but
+            may cause bad performance.
         """
         minPartitions = minPartitions or self.defaultMinPartitions
         return RDD(self._jsc.binaryFiles(path, minPartitions), self,
@@ -890,6 +945,12 @@ class SparkContext(object):
         """
         return self._jsc.getLocalProperty(key)
 
+    def setJobDescription(self, value):
+        """
+        Set a human readable description of the current job.
+        """
+        self._jsc.setJobDescription(value)
+
     def sparkUser(self):
         """
         Get SPARK_USER for user who is running SparkContext.
@@ -942,12 +1003,20 @@ class SparkContext(object):
 
     def show_profiles(self):
         """ Print the profile stats to stdout """
-        self.profiler_collector.show_profiles()
+        if self.profiler_collector is not None:
+            self.profiler_collector.show_profiles()
+        else:
+            raise RuntimeError("'spark.python.profile' configuration must be set "
+                               "to 'true' to enable Python profile.")
 
     def dump_profiles(self, path):
         """ Dump the profile stats into directory `path`
         """
-        self.profiler_collector.dump_profiles(path)
+        if self.profiler_collector is not None:
+            self.profiler_collector.dump_profiles(path)
+        else:
+            raise RuntimeError("'spark.python.profile' configuration must be set "
+                               "to 'true' to enable Python profile.")
 
     def getConf(self):
         conf = SparkConf()
