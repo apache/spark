@@ -57,12 +57,7 @@ object OrcUtils extends Logging {
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     try {
       val reader = OrcFile.createReader(file, readerOptions)
-      val schema = reader.getSchema
-      if (schema.getFieldNames.size == 0) {
-        None
-      } else {
-        Some(schema)
-      }
+      Some(reader.getSchema)
     } catch {
       case e: org.apache.orc.FileFormatException =>
         if (ignoreCorruptFiles) {

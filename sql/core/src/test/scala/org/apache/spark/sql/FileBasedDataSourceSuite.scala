@@ -107,6 +107,29 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     }
   }
 
+  // Text and Parquet format does not allow wrting data frame with empty schema.
+  Seq("parquet", "text").foreach { format =>
+    test(s"SPARK-23372 writing empty dataframe should produce AnalysisException - $format") {
+      withTempPath { outputPath =>
+        intercept[AnalysisException] {
+          spark.emptyDataFrame.write.format(format).save(outputPath.toString)
+        }
+      }
+    }
+  }
+
+  // Formats excluding text and parquet allow writing empty data frames to files.
+  allFileBasedDataSources.filterNot(p => p == "text" || p == "parquet").foreach { format =>
+    test(s"SPARK-23372 writing empty dataframe and reading from it - $format") {
+      withTempPath { outputPath =>
+          spark.emptyDataFrame.write.format(format).save(outputPath.toString)
+          val df = spark.read.format(format).load(outputPath.toString)
+          checkAnswer(df, Seq.empty[Row])
+          assert(df.schema.equals(df.schema.asNullable))
+      }
+    }
+  }
+
   allFileBasedDataSources.foreach { format =>
     test(s"SPARK-22146 read files containing special characters using $format") {
       withTempDir { dir =>
