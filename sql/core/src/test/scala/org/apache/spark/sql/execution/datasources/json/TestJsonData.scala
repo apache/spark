@@ -22,6 +22,10 @@ import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 private[json] trait TestJsonData {
   protected def spark: SparkSession
 
+  def testFile(fileName: String): String = {
+    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
+  }
+
   def primitiveFieldAndType: Dataset[String] =
     spark.createDataset(spark.sparkContext.parallelize(
       """{"string":"this is a simple string.",
