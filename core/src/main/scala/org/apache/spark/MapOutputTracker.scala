@@ -284,10 +284,11 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   protected def supportsContinuousBlockBulkFetch: Boolean = {
     // continuousBlockBulkFetch only happens in SparkSQL, it uses UnsafeRowSerializer,
     // which supports relocation of serialized objects, so we only consider compression
+    val adaptiveEnabled: Boolean = conf.getBoolean("spark.sql.adaptive.enabled", false)
     val compressionEnabled: Boolean = conf.getBoolean("spark.shuffle.compress", true)
     val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
-    !compressionEnabled ||
-      CompressionCodec.supportsConcatenationOfSerializedStreams(compressionCodec)
+    adaptiveEnabled && (!compressionEnabled ||
+      CompressionCodec.supportsConcatenationOfSerializedStreams(compressionCodec))
   }
 
   // For testing
