@@ -99,20 +99,20 @@ public final class UnsafeKVExternalSorter {
         numElementsForSpillThreshold,
         canUseRadixSort);
     } else {
+      LongArray pointArray = map.getArray();
       // `BytesToBytesMap`'s point array is only guaranteed to hold all the distinct keys, but
       // `UnsafeInMemorySorter`'s point array need to hold all the entries. Since `BytesToBytesMap`
       // can have duplicated keys, here we need a check to make sure the point array can hold
       // all the entries in `BytesToBytesMap`.
-      final LongArray pointArray;
-      // The point array will be used to do in-place sort, which require half of the space to be
+      // The point array will be used to do in-place sort, which requires half of the space to be
       // empty. Note: each record in the map takes two entries in the point array, one is record
-      // pointer, another is the key prefix.
+      // pointer, another is key prefix. So the required size of point array is `numRecords * 4`.
       // TODO: It's possible to change UnsafeInMemorySorter to have multiple entries with same key,
       // so that we can always reuse the point array.
-      if (map.numValues() > map.getArray().size() / 4) {
+      if (map.numValues() > pointArray.size() / 4) {
+        // Here we ask the map to allocate memory, so that the memory manager won't ask the map
+        // to spill, if the memory is not enough.
         pointArray = map.allocateArray(map.numValues() * 4L);
-      } else {
-        pointArray = map.getArray();
       }
 
       // During spilling, the array in map will not be used, so we can borrow that and use it
