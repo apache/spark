@@ -1759,8 +1759,38 @@ def _check_series_convert_timestamps_internal(s, timezone):
     from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype
     # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
     if is_datetime64_dtype(s.dtype):
+        # When tz_localize a tz-naive timestamp, the result is ambiguous if the tz-naive
+        # timestamp is during the hour when the clock is adjusted backward during due to
+        # daylight saving time (dst).
+        # E.g., for America/New_York, the clock is adjusted backward on 2015-11-01 2:00 to
+        # 2015-11-01 1:00 from dst-time to standard time, and therefore, when tz_localize
+        # a tz-naive timestamp 2015-11-01 1:30 with America/New_York timezone, it can be either
+        # dst time (2015-01-01 1:30-0400) or standard time (2015-11-01 1:30-0500).
+        #
+        # Here we explicit choose to use standard time. This matches the default behavior of
+        # pytz.
+        #
+        # Here are some code to help understand this behavior:
+        # >>> import datetime
+        # >>> import pandas as pd
+        # >>> import pytz
+        # >>>
+        # >>> t = datetime.datetime(2015, 11, 1, 1, 30)
+        # >>> ts = pd.Series([t])
+        # >>> tz = pytz.timezone('America/New_York')
+        # >>>
+        # >>> ts.dt.tz_localize(tz, ambiguous=True)
+        # 0   2015-11-01 01:30:00-04:00
+        # dtype: datetime64[ns, America/New_York]
+        # >>>
+        # >>> ts.dt.tz_localize(tz, ambiguous=False)
+        # 0   2015-11-01 01:30:00-05:00
+        # dtype: datetime64[ns, America/New_York]
+        # >>>
+        # >>> str(tz.localize(t))
+        # '2015-11-01 01:30:00-05:00'
         tz = timezone or _get_local_timezone()
-        return s.dt.tz_localize(tz).dt.tz_convert('UTC')
+        return s.dt.tz_localize(tz, ambiguous=False).dt.tz_convert('UTC')
     elif is_datetime64tz_dtype(s.dtype):
         return s.dt.tz_convert('UTC')
     else:
@@ -1788,8 +1818,9 @@ def _check_series_convert_timestamps_localize(s, from_timezone, to_timezone):
         return s.dt.tz_convert(to_tz).dt.tz_localize(None)
     elif is_datetime64_dtype(s.dtype) and from_tz != to_tz:
         # `s.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
-        return s.apply(lambda ts: ts.tz_localize(from_tz).tz_convert(to_tz).tz_localize(None)
-                       if ts is not pd.NaT else pd.NaT)
+        return s.apply(
+            lambda ts: ts.tz_localize(from_tz, ambiguous=False).tz_convert(to_tz).tz_localize(None)
+            if ts is not pd.NaT else pd.NaT)
     else:
         return s
 
