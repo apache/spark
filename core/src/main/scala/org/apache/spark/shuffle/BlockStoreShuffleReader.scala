@@ -90,7 +90,6 @@ private[spark] class BlockStoreShuffleReader[K, C](
         dep.aggregator.get.combineValuesByKey(keyValuesIterator, context)
       }
     } else {
-      require(!dep.mapSideCombine, "Map-side combine without Aggregator specified!")
       interruptibleIter.asInstanceOf[Iterator[Product2[K, C]]]
     }
 
