@@ -22,9 +22,7 @@ import java.{ util => ju }
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord, KafkaConsumer }
 import org.apache.kafka.common.{ KafkaException, TopicPartition }
 
-import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-
 
 /**
  * Consumer of single topicpartition, intended for cached reuse.
@@ -83,7 +81,10 @@ class CachedKafkaConsumer[K, V] private(
         s"Failed to get records for $groupId $topic $partition $offset after polling for $timeout")
       record = buffer.next()
       assert(record.offset == offset,
-        s"Got wrong record for $groupId $topic $partition even after seeking to offset $offset")
+        s"Got wrong record for $groupId $topic $partition even after seeking to offset $offset " +
+          s"got offset ${record.offset} instead. If this is a compacted topic, consider enabling " +
+          "spark.streaming.kafka.allowNonConsecutiveOffsets"
+      )
     }
 
     nextOffset = offset + 1
@@ -133,8 +134,6 @@ class CachedKafkaConsumer[K, V] private(
     val p = consumer.poll(timeout)
     val r = p.records(topicPartition)
     logDebug(s"Polled ${p.partitions()}  ${r.size}")
-    import scala.collection.JavaConverters._
-    r.asScala.foreach { x => System.err.println(s"${x.offset} ${x.key} ${x.value}") }
     buffer = r.listIterator
   }
 

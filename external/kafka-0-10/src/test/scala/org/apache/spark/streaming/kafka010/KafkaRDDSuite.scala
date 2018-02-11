@@ -93,11 +93,11 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
     log.roll()
     logs.put(TopicAndPartition(topic, partition), log)
-    System.err.println(s"built cleaner for compacting logs for $dir")
+
     val cleaner = new LogCleaner(CleanerConfig(), logDirs = Array(dir), logs = logs)
     cleaner.startup()
     cleaner.awaitCleaned(topic, partition, log.activeSegment.baseOffset, 1000)
-    System.err.println("finished cleaning")
+
     cleaner.shutdown()
     mockTime.scheduler.shutdown()
   }
@@ -142,6 +142,10 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   test("compacted topic") {
+    val compactConf = sparkConf.clone()
+    compactConf.set("spark.streaming.kafka.allowNonConsecutiveOffsets", "true")
+    sc.stop()
+    sc = new SparkContext(compactConf)
     val topic = s"topiccompacted-${Random.nextInt}-${System.currentTimeMillis}"
 
     val messages = Array(
@@ -167,7 +171,6 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     props.put("segment.ms", "1")
     props.put("segment.bytes", "256")
     kafkaTestUtils.createTopic(topic, 1, props)
-    System.err.println(kafkaTestUtils.brokerLogDir + "/" + topic)
 
 
     val kafkaParams = getKafkaParams()
@@ -175,7 +178,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     val offsetRanges = Array(OffsetRange(topic, 0, 0, messages.size))
 
     val rdd = KafkaUtils.createRDD[String, String](
-      sc, kafkaParams, offsetRanges, preferredHosts, true
+      sc, kafkaParams, offsetRanges, preferredHosts
     ).map(m => m.key -> m.value)
 
     val received = rdd.collect.toSet
@@ -190,7 +193,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     assert(rdd.take(messages.size + 10).size === compactedMessages.size)
 
     val emptyRdd = KafkaUtils.createRDD[String, String](
-      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts, true)
+      sc, kafkaParams, Array(OffsetRange(topic, 0, 0, 0)), preferredHosts)
 
     assert(emptyRdd.isEmpty)
 
@@ -255,8 +258,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       kafkaParams,
       Array(OffsetRange("unused", 0, 1, 2)),
       ju.Collections.emptyMap[TopicPartition, String](),
-      true,
-      false)
+      true)
     val a3 = ExecutorCacheTaskLocation("a", "3")
     val a4 = ExecutorCacheTaskLocation("a", "4")
     val b1 = ExecutorCacheTaskLocation("b", "1")

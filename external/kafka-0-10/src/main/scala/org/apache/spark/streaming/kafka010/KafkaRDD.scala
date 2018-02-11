@@ -53,8 +53,7 @@ private[spark] class KafkaRDD[K, V](
     val kafkaParams: ju.Map[String, Object],
     val offsetRanges: Array[OffsetRange],
     val preferredHosts: ju.Map[TopicPartition, String],
-    useConsumerCache: Boolean,
-    compacted: Boolean
+    useConsumerCache: Boolean
 ) extends RDD[ConsumerRecord[K, V]](sc, Nil) with Logging with HasOffsetRanges {
 
   assert("none" ==
@@ -75,6 +74,8 @@ private[spark] class KafkaRDD[K, V](
     conf.getInt("spark.streaming.kafka.consumer.cache.maxCapacity", 64)
   private val cacheLoadFactor =
     conf.getDouble("spark.streaming.kafka.consumer.cache.loadFactor", 0.75).toFloat
+  private val compacted =
+    conf.getBoolean("spark.streaming.kafka.allowNonConsecutiveOffsets", false)
 
   override def persist(newLevel: StorageLevel): this.type = {
     logError("Kafka ConsumerRecord is not serializable. " +
@@ -284,7 +285,7 @@ private class KafkaRDDIterator[K, V](
 /**
  * An iterator that fetches messages directly from Kafka for the offsets in partition.
  * Uses a cached consumer where possible to take advantage of prefetching.
- * Intended for use on compacted topics only
+ * Intended for compacted topics, or other cases when non-consecutive offsets are ok.
  */
 private class CompactedKafkaRDDIterator[K, V](
     part: KafkaRDDPartition,
@@ -294,7 +295,7 @@ private class CompactedKafkaRDDIterator[K, V](
     pollTimeout: Long,
     initialCapacity: Int,
     maxCapacity: Int,
-    loadFactor: Float  
+    loadFactor: Float
   ) extends KafkaRDDIterator[K, V](
     part,
     context,
