@@ -886,14 +886,18 @@ trait Params extends Identifiable with Serializable {
    *
    * @param to the target instance, which should work with the same set of default Params as this
    *           source instance
+   * @param copyDefault whether to copy default Params. Default is `true`.
    * @param extra extra params to be copied to the target's `paramMap`
    * @return the target instance with param values copied
    */
-  protected def copyValues[T <: Params](to: T, extra: ParamMap = ParamMap.empty): T = {
+  protected def copyValues[T <: Params](
+      to: T,
+      extra: ParamMap = ParamMap.empty,
+      copyDefault: Boolean = true): T = {
     val map = paramMap ++ extra
     params.foreach { param =>
       // copy default Params
-      if (defaultParamMap.contains(param) && to.hasParam(param.name)) {
+      if (copyDefault && defaultParamMap.contains(param) && to.hasParam(param.name)) {
         to.defaultParamMap.put(to.getParam(param.name), defaultParamMap(param))
       }
       // copy explicitly set Params

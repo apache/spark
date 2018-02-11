@@ -62,6 +62,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
       s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
     (value: String) => supportedFamilyNames.contains(value.toLowerCase(Locale.ROOT)))
 
+  setDefault(family -> Gaussian.name)
+
   /** @group getParam */
   @Since("2.0.0")
   def getFamily: String = $(family)
@@ -84,6 +86,8 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
     "the relationship between the variance and mean of the distribution. " +
     "Only applicable to the Tweedie family. Supported values: 0 and [1, Inf).",
     (x: Double) => x >= 1.0 || x == 0.0)
+
+  setDefault(variancePower -> 0.0)
 
   /** @group getParam */
   @Since("2.2.0")
@@ -179,6 +183,11 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
       s"${supportedSolvers.mkString(", ")}. (Default irls)",
     ParamValidators.inArray[String](supportedSolvers))
 
+  setDefault(solver -> IRLS)
+  setDefault(maxIter -> 25)
+  setDefault(tol -> 1E-6)
+  setDefault(regParam -> 0.0)
+
   @Since("2.0.0")
   override def validateAndTransformSchema(
       schema: StructType,
@@ -256,7 +265,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setFamily(value: String): this.type = set(family, value)
-  setDefault(family -> Gaussian.name)
 
   /**
    * Sets the value of param [[variancePower]].
@@ -267,7 +275,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.2.0")
   def setVariancePower(value: Double): this.type = set(variancePower, value)
-  setDefault(variancePower -> 0.0)
 
   /**
    * Sets the value of param [[linkPower]].
@@ -304,7 +311,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-  setDefault(maxIter -> 25)
 
   /**
    * Sets the convergence tolerance of iterations.
@@ -315,7 +321,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setTol(value: Double): this.type = set(tol, value)
-  setDefault(tol -> 1E-6)
 
   /**
    * Sets the regularization parameter for L2 regularization.
@@ -331,7 +336,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
-  setDefault(regParam -> 0.0)
 
   /**
    * Sets the value of param [[weightCol]].
@@ -363,7 +367,6 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
    */
   @Since("2.0.0")
   def setSolver(value: String): this.type = set(solver, value)
-  setDefault(solver -> IRLS)
 
   /**
    * Sets the link prediction (linear predictor) column name.

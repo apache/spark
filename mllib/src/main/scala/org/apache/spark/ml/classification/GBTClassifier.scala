@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import org.json4s.{DefaultFormats, JObject}
+import org.json4s.{DefaultFormats, JInt, JObject, JString}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
@@ -343,6 +343,7 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
 
   private val numFeaturesKey: String = "numFeatures"
   private val numTreesKey: String = "numTrees"
+  private val impurityKey: String = "impurity"
 
   @Since("2.0.0")
   override def read: MLReader[GBTClassificationModel] = new GBTClassificationModelReader
@@ -356,8 +357,9 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
     override protected def saveImpl(path: String): Unit = {
 
       val extraMetadata: JObject = Map(
-        numFeaturesKey -> instance.numFeatures,
-        numTreesKey -> instance.getNumTrees)
+        numFeaturesKey -> JInt(instance.numFeatures),
+        numTreesKey -> JInt(instance.getNumTrees),
+        impurityKey -> JString(instance.getImpurity))
       EnsembleModelReadWrite.saveImpl(instance, path, sparkSession, extraMetadata)
     }
   }

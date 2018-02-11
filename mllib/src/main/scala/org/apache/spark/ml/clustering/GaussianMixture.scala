@@ -419,7 +419,8 @@ class GaussianMixture @Since("2.0.0") (
       new MultivariateGaussian(mean, cov)
     }
 
-    val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists)).setParent(this)
+    val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists),
+      extra = ParamMap.empty, copyDefault = false).setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
       $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood)
     model.setSummary(Some(summary))

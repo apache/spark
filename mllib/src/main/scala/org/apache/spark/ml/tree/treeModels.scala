@@ -333,7 +333,7 @@ private[ml] object DecisionTreeModelReadWrite {
 
     // Get impurity to construct ImpurityCalculator for each node
     val impurityType: String = {
-      val impurityJson: JValue = metadata.getParamValue("impurity")
+      val impurityJson: JValue = metadata.getMetadataValue("impurity")
       Param.jsonDecode[String](compact(render(impurityJson)))
     }
 
@@ -428,7 +428,7 @@ private[ml] object EnsembleModelReadWrite {
 
     // Get impurity to construct ImpurityCalculator for each node
     val impurityType: String = {
-      val impurityJson: JValue = metadata.getParamValue("impurity")
+      val impurityJson: JValue = metadata.getMetadataValue("impurity")
       Param.jsonDecode[String](compact(render(impurityJson)))
     }
 

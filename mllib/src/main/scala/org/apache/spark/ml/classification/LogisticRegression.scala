@@ -244,6 +244,16 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
   @Since("2.2.0")
   def getUpperBoundsOnIntercepts: Vector = $(upperBoundsOnIntercepts)
 
+  setDefault(regParam -> 0.0)
+  setDefault(elasticNetParam -> 0.0)
+  setDefault(maxIter -> 100)
+  setDefault(tol -> 1E-6)
+  setDefault(fitIntercept -> true)
+  setDefault(standardization -> true)
+  setDefault(threshold -> 0.5)
+  setDefault(aggregationDepth -> 2)
+  setDefault(family -> "auto")
+
   protected def usingBoundConstrainedOptimization: Boolean = {
     isSet(lowerBoundsOnCoefficients) || isSet(upperBoundsOnCoefficients) ||
       isSet(lowerBoundsOnIntercepts) || isSet(upperBoundsOnIntercepts)
@@ -291,7 +301,6 @@ class LogisticRegression @Since("1.2.0") (
    */
   @Since("1.2.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
-  setDefault(regParam -> 0.0)
 
   /**
    * Set the ElasticNet mixing parameter.
@@ -307,7 +316,6 @@ class LogisticRegression @Since("1.2.0") (
    */
   @Since("1.4.0")
   def setElasticNetParam(value: Double): this.type = set(elasticNetParam, value)
-  setDefault(elasticNetParam -> 0.0)
 
   /**
    * Set the maximum number of iterations.
@@ -317,7 +325,6 @@ class LogisticRegression @Since("1.2.0") (
    */
   @Since("1.2.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-  setDefault(maxIter -> 100)
 
   /**
    * Set the convergence tolerance of iterations.
@@ -328,7 +335,6 @@ class LogisticRegression @Since("1.2.0") (
    */
   @Since("1.4.0")
   def setTol(value: Double): this.type = set(tol, value)
-  setDefault(tol -> 1E-6)
 
   /**
    * Whether to fit an intercept term.
@@ -338,7 +344,6 @@ class LogisticRegression @Since("1.2.0") (
    */
   @Since("1.4.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
-  setDefault(fitIntercept -> true)
 
   /**
    * Sets the value of param [[family]].
@@ -348,7 +353,6 @@ class LogisticRegression @Since("1.2.0") (
    */
   @Since("2.1.0")
   def setFamily(value: String): this.type = set(family, value)
-  setDefault(family -> "auto")
 
   /**
    * Whether to standardize the training features before fitting the model.
@@ -362,11 +366,9 @@ class LogisticRegression @Since("1.2.0") (
    */
   @Since("1.5.0")
   def setStandardization(value: Boolean): this.type = set(standardization, value)
-  setDefault(standardization -> true)
 
   @Since("1.5.0")
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
-  setDefault(threshold -> 0.5)
 
   @Since("1.5.0")
   override def getThreshold: Double = super.getThreshold
@@ -397,7 +399,6 @@ class LogisticRegression @Since("1.2.0") (
    */
   @Since("2.1.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
-  setDefault(aggregationDepth -> 2)
 
   /**
    * Set the lower bounds on coefficients if fitting under bound constrained optimization.

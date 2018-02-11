@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.classification
 
-import org.json4s.{DefaultFormats, JObject}
+import org.json4s.{DefaultFormats, JInt, JObject, JString}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
@@ -293,9 +293,10 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
     override protected def saveImpl(path: String): Unit = {
       // Note: numTrees is not currently used, but could be nice to store for fast querying.
       val extraMetadata: JObject = Map(
-        "numFeatures" -> instance.numFeatures,
-        "numClasses" -> instance.numClasses,
-        "numTrees" -> instance.getNumTrees)
+        "numFeatures" -> JInt(instance.numFeatures),
+        "numClasses" -> JInt(instance.numClasses),
+        "numTrees" -> JInt(instance.getNumTrees),
+        "impurity" -> JString(instance.getImpurity))
       EnsembleModelReadWrite.saveImpl(instance, path, sparkSession, extraMetadata)
     }
   }

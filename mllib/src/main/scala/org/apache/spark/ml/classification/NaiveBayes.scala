@@ -41,6 +41,7 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
    */
   final val smoothing: DoubleParam = new DoubleParam(this, "smoothing", "The smoothing parameter.",
     ParamValidators.gtEq(0))
+  setDefault(smoothing -> 1.0)
 
   /** @group getParam */
   final def getSmoothing: Double = $(smoothing)
@@ -54,6 +55,7 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
   final val modelType: Param[String] = new Param[String](this, "modelType", "The model type " +
     "which is a string (case-sensitive). Supported options: multinomial (default) and bernoulli.",
     ParamValidators.inArray[String](NaiveBayes.supportedModelTypes.toArray))
+  setDefault(modelType -> NaiveBayes.Multinomial)
 
   /** @group getParam */
   final def getModelType: String = $(modelType)
@@ -91,7 +93,6 @@ class NaiveBayes @Since("1.5.0") (
    */
   @Since("1.5.0")
   def setSmoothing(value: Double): this.type = set(smoothing, value)
-  setDefault(smoothing -> 1.0)
 
   /**
    * Set the model type using a string (case-sensitive).
@@ -101,7 +102,6 @@ class NaiveBayes @Since("1.5.0") (
    */
   @Since("1.5.0")
   def setModelType(value: String): this.type = set(modelType, value)
-  setDefault(modelType -> NaiveBayes.Multinomial)
 
   /**
    * Sets the value of param [[weightCol]].

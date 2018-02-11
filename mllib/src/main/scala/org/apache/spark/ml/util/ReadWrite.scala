@@ -354,25 +354,39 @@ private[ml] object DefaultParamsReader {
       metadata: JValue,
       metadataJson: String) {
 
+    private def getValue(paramName: String, target: JValue): Seq[(String, JValue)] = {
+      implicit val format = DefaultFormats
+      target match {
+        case JObject(pairs) =>
+          pairs.filter { case (pName, jsonValue) =>
+            pName == paramName
+          }
+        case _ =>
+          throw new IllegalArgumentException(
+            s"Cannot recognize JSON metadata: $metadataJson.")
+      }
+    }
+
+    /**
+     * Get the JSON value of the given name from the metadata.
+     */
+    def getMetadataValue(metadataName: String): JValue = {
+      val values = getValue(metadataName, metadata)
+      assert(values.length == 1, s"Expected one instance of metadata '$metadataName' but found" +
+        s" ${values.length} in JSON Metadata: " + values.map(_.toString).mkString(", "))
+      values.head._2
+    }
+
     /**
      * Get the JSON value of the [[org.apache.spark.ml.param.Param]] of the given name.
      * This can be useful for getting a Param value before an instance of `Params`
      * is available.
      */
     def getParamValue(paramName: String): JValue = {
-      implicit val format = DefaultFormats
-      params match {
-        case JObject(pairs) =>
-          val values = pairs.filter { case (pName, jsonValue) =>
-            pName == paramName
-          }.map(_._2)
-          assert(values.length == 1, s"Expected one instance of Param '$paramName' but found" +
-            s" ${values.length} in JSON Params: " + pairs.map(_.toString).mkString(", "))
-          values.head
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Cannot recognize JSON metadata: $metadataJson.")
-      }
+      val values = getValue(paramName, params)
+      assert(values.length == 1, s"Expected one instance of Param '$paramName' but found" +
+        s" ${values.length} in JSON Params: " + values.map(_.toString).mkString(", "))
+      values.head._2
     }
   }
 
