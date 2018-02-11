@@ -99,31 +99,33 @@ public final class UnsafeKVExternalSorter {
         numElementsForSpillThreshold,
         canUseRadixSort);
     } else {
-      LongArray pointArray = map.getArray();
-      // `BytesToBytesMap`'s point array is only guaranteed to hold all the distinct keys, but
-      // `UnsafeInMemorySorter`'s point array need to hold all the entries. Since `BytesToBytesMap`
-      // can have duplicated keys, here we need a check to make sure the point array can hold
-      // all the entries in `BytesToBytesMap`.
-      // The point array will be used to do in-place sort, which requires half of the space to be
-      // empty. Note: each record in the map takes two entries in the point array, one is record
-      // pointer, another is key prefix. So the required size of point array is `numRecords * 4`.
+      // During spilling, the pointer array in `BytesToBytesMap` will not be used, so we can borrow
+      // that and use it as the pointer array for `UnsafeInMemorySorter`.
+      LongArray pointerArray = map.getArray();
+      // `BytesToBytesMap`'s pointer array is only guaranteed to hold all the distinct keys, but
+      // `UnsafeInMemorySorter`'s pointer array need to hold all the entries. Since
+      // `BytesToBytesMap` can have duplicated keys, here we need a check to make sure the pointer
+      // array can hold all the entries in `BytesToBytesMap`.
+      // The pointer array will be used to do in-place sort, which requires half of the space to be
+      // empty. Note: each record in the map takes two entries in the pointer array, one is record
+      // pointer, another is key prefix. So the required size of pointer array is `numRecords * 4`.
       // TODO: It's possible to change UnsafeInMemorySorter to have multiple entries with same key,
-      // so that we can always reuse the point array.
-      if (map.numValues() > pointArray.size() / 4) {
+      // so that we can always reuse the pointer array.
+      if (map.numValues() > pointerArray.size() / 4) {
         // Here we ask the map to allocate memory, so that the memory manager won't ask the map
         // to spill, if the memory is not enough.
-        pointArray = map.allocateArray(map.numValues() * 4L);
+        pointerArray = map.allocateArray(map.numValues() * 4L);
       }
 
-      // During spilling, the array in map will not be used, so we can borrow that and use it
-      // as the underlying array for in-memory sorter (it's always large enough).
-      // Since we will not grow the array, it's fine to pass `null` as consumer.
+      // Since the pointer array(either reuse the one in the map, or create a new one) is guaranteed
+      // to be large enough, it's fine to pass `null` as consumer because we won't allocate more
+      // memory.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
         null,
         taskMemoryManager,
         comparatorSupplier.get(),
         prefixComparator,
-        pointArray,
+        pointerArray,
         canUseRadixSort);
 
       // We cannot use the destructive iterator here because we are reusing the existing memory
