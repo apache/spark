@@ -2148,6 +2148,34 @@ class SQLTests(ReusedSQLTestCase):
         result = df.select(functions.expr("length(a)")).collect()[0].asDict()
         self.assertEqual(13, result["length(a)"])
 
+    def test_repartitionByRange_dataframe(self):
+        schema = StructType([
+            StructField("name", StringType(), True),
+            StructField("age", IntegerType(), True),
+            StructField("height", DoubleType(), True)])
+
+        df1 = self.spark.createDataFrame(
+            [(u'Bob', 27, 66.0), (u'Alice', 10, 10.0), (u'Bob', 10, 66.0)], schema)
+        df2 = self.spark.createDataFrame(
+            [(u'Alice', 10, 10.0), (u'Bob', 10, 66.0), (u'Bob', 27, 66.0)], schema)
+
+        # test repartitionByRange(numPartitions, *cols)
+        df3 = df1.repartitionByRange(2, "name", "age")
+        self.assertEqual(df3.rdd.getNumPartitions(), 2)
+        self.assertEqual(df3.rdd.first(), df2.rdd.first())
+        self.assertEqual(df3.rdd.take(3), df2.rdd.take(3))
+
+        # test repartitionByRange(numPartitions, *cols)
+        df4 = df1.repartitionByRange(3, "name", "age")
+        self.assertEqual(df4.rdd.getNumPartitions(), 3)
+        self.assertEqual(df4.rdd.first(), df2.rdd.first())
+        self.assertEqual(df4.rdd.take(3), df2.rdd.take(3))
+
+        # test repartitionByRange(*cols)
+        df5 = df1.repartitionByRange("name", "age")
+        self.assertEqual(df5.rdd.first(), df2.rdd.first())
+        self.assertEqual(df5.rdd.take(3), df2.rdd.take(3))
+
     def test_replace(self):
         schema = StructType([
             StructField("name", StringType(), True),
@@ -3670,6 +3698,21 @@ class ArrowTests(ReusedSQLTestCase):
         self.assertEqual(pdf_col_names, df.columns)
         self.assertEqual(pdf_col_names, df_arrow.columns)
 
+    # Regression test for SPARK-23314
+    def test_timestamp_dst(self):
+        import pandas as pd
+        # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
+        dt = [datetime.datetime(2015, 11, 1, 0, 30),
+              datetime.datetime(2015, 11, 1, 1, 30),
+              datetime.datetime(2015, 11, 1, 2, 30)]
+        pdf = pd.DataFrame({'time': dt})
+
+        df_from_python = self.spark.createDataFrame(dt, 'timestamp').toDF('time')
+        df_from_pandas = self.spark.createDataFrame(pdf)
+
+        self.assertPandasEqual(pdf, df_from_python.toPandas())
+        self.assertPandasEqual(pdf, df_from_pandas.toPandas())
+
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
@@ -4311,6 +4354,18 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         self.assertEquals(expected.collect(), res1.collect())
         self.assertEquals(expected.collect(), res2.collect())
 
+    # Regression test for SPARK-23314
+    def test_timestamp_dst(self):
+        from pyspark.sql.functions import pandas_udf
+        # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
+        dt = [datetime.datetime(2015, 11, 1, 0, 30),
+              datetime.datetime(2015, 11, 1, 1, 30),
+              datetime.datetime(2015, 11, 1, 2, 30)]
+        df = self.spark.createDataFrame(dt, 'timestamp').toDF('time')
+        foo_udf = pandas_udf(lambda x: x, 'timestamp')
+        result = df.withColumn('time', foo_udf(df.time))
+        self.assertEquals(df.collect(), result.collect())
+
 
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
@@ -4481,6 +4536,18 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
                 df.groupby('id').apply(f).collect()
+
+    # Regression test for SPARK-23314
+    def test_timestamp_dst(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+        # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am
+        dt = [datetime.datetime(2015, 11, 1, 0, 30),
+              datetime.datetime(2015, 11, 1, 1, 30),
+              datetime.datetime(2015, 11, 1, 2, 30)]
+        df = self.spark.createDataFrame(dt, 'timestamp').toDF('time')
+        foo_udf = pandas_udf(lambda pdf: pdf, 'time timestamp', PandasUDFType.GROUPED_MAP)
+        result = df.groupby('time').apply(foo_udf).sort('time')
+        self.assertPandasEqual(df.toPandas(), result.toPandas())
 
 
 @unittest.skipIf(
