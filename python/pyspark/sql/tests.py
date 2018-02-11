@@ -2148,6 +2148,34 @@ class SQLTests(ReusedSQLTestCase):
         result = df.select(functions.expr("length(a)")).collect()[0].asDict()
         self.assertEqual(13, result["length(a)"])
 
+    def test_repartitionByRange_dataframe(self):
+        schema = StructType([
+            StructField("name", StringType(), True),
+            StructField("age", IntegerType(), True),
+            StructField("height", DoubleType(), True)])
+
+        df1 = self.spark.createDataFrame(
+            [(u'Bob', 27, 66.0), (u'Alice', 10, 10.0), (u'Bob', 10, 66.0)], schema)
+        df2 = self.spark.createDataFrame(
+            [(u'Alice', 10, 10.0), (u'Bob', 10, 66.0), (u'Bob', 27, 66.0)], schema)
+
+        # test repartitionByRange(numPartitions, *cols)
+        df3 = df1.repartitionByRange(2, "name", "age")
+        self.assertEqual(df3.rdd.getNumPartitions(), 2)
+        self.assertEqual(df3.rdd.first(), df2.rdd.first())
+        self.assertEqual(df3.rdd.take(3), df2.rdd.take(3))
+
+        # test repartitionByRange(numPartitions, *cols)
+        df4 = df1.repartitionByRange(3, "name", "age")
+        self.assertEqual(df4.rdd.getNumPartitions(), 3)
+        self.assertEqual(df4.rdd.first(), df2.rdd.first())
+        self.assertEqual(df4.rdd.take(3), df2.rdd.take(3))
+
+        # test repartitionByRange(*cols)
+        df5 = df1.repartitionByRange("name", "age")
+        self.assertEqual(df5.rdd.first(), df2.rdd.first())
+        self.assertEqual(df5.rdd.take(3), df2.rdd.take(3))
+
     def test_replace(self):
         schema = StructType([
             StructField("name", StringType(), True),

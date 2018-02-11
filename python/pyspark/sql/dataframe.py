@@ -667,6 +667,51 @@ class DataFrame(object):
         else:
             raise TypeError("numPartitions should be an int or Column")
 
+    @since("2.4.0")
+    def repartitionByRange(self, numPartitions, *cols):
+        """
+        Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
+        resulting DataFrame is range partitioned.
+
+        ``numPartitions`` can be an int to specify the target number of partitions or a Column.
+        If it is a Column, it will be used as the first partitioning column. If not specified,
+        the default number of partitions is used.
+
+        At least one partition-by expression must be specified.
+        When no explicit sort order is specified, "ascending nulls first" is assumed.
+
+        >>> df.repartitionByRange(2, "age").rdd.getNumPartitions()
+        2
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+        >>> df.repartitionByRange(1, "age").rdd.getNumPartitions()
+        1
+        >>> data = df.repartitionByRange("age")
+        >>> df.show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        |  2|Alice|
+        |  5|  Bob|
+        +---+-----+
+        """
+        if isinstance(numPartitions, int):
+            if len(cols) == 0:
+                return ValueError("At least one partition-by expression must be specified.")
+            else:
+                return DataFrame(
+                    self._jdf.repartitionByRange(numPartitions, self._jcols(*cols)), self.sql_ctx)
+        elif isinstance(numPartitions, (basestring, Column)):
+            cols = (numPartitions,) + cols
+            return DataFrame(self._jdf.repartitionByRange(self._jcols(*cols)), self.sql_ctx)
+        else:
+            raise TypeError("numPartitions should be an int, string or Column")
+
     @since(1.3)
     def distinct(self):
         """Returns a new :class:`DataFrame` containing the distinct rows in this :class:`DataFrame`.
