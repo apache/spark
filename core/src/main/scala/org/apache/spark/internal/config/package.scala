@@ -520,4 +520,10 @@ package object config {
       .checkValue(v => v > 0, "The threshold should be positive.")
       .createWithDefault(10000000)
 
+  private[spark] val EXTRA_UI_TABS = ConfigBuilder("spark.extraUITabs")
+    .doc("Class names of UI tabs to add to SparkUI during initialization.")
+    .stringConf
+    .toSequence
+    .createOptional
+
 }

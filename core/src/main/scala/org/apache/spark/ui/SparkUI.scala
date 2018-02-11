@@ -17,12 +17,14 @@
 
 package org.apache.spark.ui
 
+import java.lang.reflect.Constructor
 import java.util.{Date, List => JList, ServiceLoader}
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{JobExecutionStatus, SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.{JobExecutionStatus, SecurityManager, SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.scheduler._
 import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1._
@@ -36,7 +38,7 @@ import org.apache.spark.util.Utils
 /**
  * Top level user interface for a Spark application.
  */
-private[spark] class SparkUI private (
+class SparkUI private (
     val store: AppStatusStore,
     val sc: Option[SparkContext],
     val conf: SparkConf,
@@ -75,9 +77,78 @@ private[spark] class SparkUI private (
     attachHandler(createRedirectHandler(
       "/stages/stage/kill", "/stages/", stagesTab.handleKillRequest,
       httpMethods = Set("GET", "POST")))
+    loadExtraUITabs()
   }
 
   initialize()
+
+  def loadExtraUITabs() {
+    try {
+      conf.get(EXTRA_UI_TABS).foreach { classNames =>
+        logInfo(s"Registering extra UITab $classNames")
+        val UITabs = instanceTabs(classOf[SparkUITab], classNames, this, store)
+        UITabs.foreach { tab => attachTab(tab)
+          logInfo(s"Registered extra UITab ${tab.getClass().getName()}")
+        }
+      }
+    } catch {
+      case e: Exception =>
+        try {
+          stop()
+        } finally {
+          throw new SparkException(s"Exception when registering extra UI Tab", e)
+        }
+    }
+  }
+
+  private def instanceTabs[T](
+      superClass: Class[T],
+      classes: Seq[String],
+      sparkUI: SparkUI,
+      store: AppStatusStore): Seq[T] = {
+    classes.flatMap { name =>
+      try {
+        val klass = Utils.classForName(name)
+        require(superClass.isAssignableFrom(klass),
+          s"$name is not a subclass of ${superClass.getName()}.")
+        val ctors = klass.getConstructors.asInstanceOf[Array[Constructor[T]]]
+        val ctorWithTwoArgs = ctors.find { c =>
+          c.getParameterTypes.sameElements(Array(classOf[SparkUI], classOf[AppStatusStore]))
+        }
+        lazy val ctorWithOneArgs = ctors.find { c =>
+          c.getParameterTypes.sameElements(Array(classOf[SparkUI]))
+        }
+        lazy val ctorWithZeroArgs = ctors.find { c =>
+          c.getParameterTypes.isEmpty
+        }
+        val tab: T = {
+          if (ctorWithTwoArgs.isDefined) {
+            ctorWithTwoArgs.get.newInstance(this, store)
+          } else if (ctorWithOneArgs.isDefined) {
+            ctorWithOneArgs.get.newInstance(this)
+          } else if (ctorWithZeroArgs.isDefined) {
+            ctorWithZeroArgs.get.newInstance()
+          } else {
+            throw new NoSuchMethodException()
+          }
+        }
+        Some(tab.asInstanceOf[T])
+      } catch {
+        case _: NoSuchMethodException =>
+          throw new SparkException(
+            s"$name did not have a zero-argument or a single-argument" +
+              " or a two-arguments constructor.")
+        case e: Exception =>
+          logInfo(s"SparkUITab $name not being initialized.", e)
+          e.getCause() match {
+            case uoe: UnsupportedOperationException =>
+              None
+            case null => throw e
+            case cause => throw cause
+          }
+      }
+    }
+  }
 
   def getSparkUser: String = {
     try {

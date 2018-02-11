@@ -23,6 +23,7 @@ import java.util.Locale
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
+import scala.xml.Node
 
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.mockito.Mockito.{mock, when}
@@ -31,6 +32,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
+import org.apache.spark.status.AppStatusStore
 import org.apache.spark.util.Utils
 
 class UISuite extends SparkFunSuite {
@@ -42,6 +44,19 @@ class UISuite extends SparkFunSuite {
   private def newSparkContext(): SparkContext = {
     val conf = new SparkConf()
       .setMaster("local")
+      .setAppName("test")
+      .set("spark.ui.enabled", "true")
+    val sc = new SparkContext(conf)
+    assert(sc.ui.isDefined)
+    sc
+  }
+
+  /**
+   * Create a test SparkContext with customer's SparkConf.
+   * And SparkUI must be enabled.
+   */
+  private def newSparkContextWithConf(conf: SparkConf): SparkContext = {
+    conf.setMaster("local")
       .setAppName("test")
       .set("spark.ui.enabled", "true")
     val sc = new SparkContext(conf)
@@ -307,4 +322,43 @@ class UISuite extends SparkFunSuite {
   def closeSocket(socket: ServerSocket): Unit = {
     if (socket != null) socket.close
   }
+
+  test("visibility of extra UI") {
+    withSpark(newSparkContextWithConf(new SparkConf().set("spark.extraUITabs",
+      "org.apache.spark.ui.TestUITab"))) { sc =>
+      // test if visible from http://localhost:4040
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        val html = Source.fromURL("http://localhost:4040/test").mkString
+        assert(html.toLowerCase(Locale.ROOT)
+          .contains("<td>spark.extrauitabs</td><td>org.apache.spark.ui.testuitab</td>"))
+      }
+    }
+  }
+}
+
+class TestUITab (
+    parent: SparkUI,
+    store: AppStatusStore) extends SparkUITab(parent, "test") {
+  attachPage(new TestUIPage(this, parent.conf, store))
+}
+
+class TestUIPage(
+    parent: TestUITab,
+    conf: SparkConf,
+    store: AppStatusStore) extends WebUIPage("") {
+
+  def render(request: HttpServletRequest): Seq[Node] = {
+    val appEnv = store.environmentInfo()
+    val sparkPropertiesTable = UIUtils.listingTable(propertyHeader, propertyRow,
+      Utils.redact(conf, appEnv.sparkProperties.toSeq), fixedWidth = true)
+    val content =
+      <div class="collapsible-table">
+        {sparkPropertiesTable}
+      </div>
+
+    UIUtils.headerSparkPage("Test", content, parent)
+  }
+
+  private def propertyHeader = Seq("Name", "Value")
+  private def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
 }
