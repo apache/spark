@@ -317,6 +317,11 @@ public class ReadAheadInputStream extends InputStream {
     if (n <= 0L) {
       return 0L;
     }
+    if (n <= activeBuffer.remaining()) {
+      // Only skipping from active buffer is sufficient
+      activeBuffer.position(toSkip + activeBuffer.position());
+      return n;
+    }
     stateChangeLock.lock();
     long skipped;
     try {
@@ -340,13 +345,9 @@ public class ReadAheadInputStream extends InputStream {
     if (available() >= n) {
       // we can skip from the internal buffers
       int toSkip = (int) n;
-      if (toSkip <= activeBuffer.remaining()) {
-        // Only skipping from active buffer is sufficient
-        activeBuffer.position(toSkip + activeBuffer.position());
-        return n;
-      }
       // We need to skip from both active buffer and read ahead buffer
       toSkip -= activeBuffer.remaining();
+      assert(toSkip > 0); // skipping from activeBuffer already handled.
       activeBuffer.position(0);
       activeBuffer.flip();
       readAheadBuffer.position(toSkip + readAheadBuffer.position());
