@@ -49,6 +49,33 @@ case class ScalaUDF(
     udfDeterministic: Boolean = true)
   extends Expression with ImplicitCastInputTypes with NonSQLExpression with UserDefinedExpression {
 
+  // The constructor for SPARK 2.1 and 2.2
+  def this(
+      function: AnyRef,
+      dataType: DataType,
+      children: Seq[Expression],
+      inputTypes: Seq[DataType],
+      udfName: Option[String]) = {
+    this(
+      function, dataType, children, inputTypes, udfName, nullable = true, udfDeterministic = true)
+  }
+
+  // The constructor for SPARK 2.0
+  def this(
+      function: AnyRef,
+      dataType: DataType,
+      children: Seq[Expression],
+      inputTypes: Seq[DataType]) = {
+    this(
+      function,
+      dataType,
+      children,
+      inputTypes,
+      udfName = None,
+      nullable = true,
+      udfDeterministic = true)
+  }
+
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
   override def toString: String =
