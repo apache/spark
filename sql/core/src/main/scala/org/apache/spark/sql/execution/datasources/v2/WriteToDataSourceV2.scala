@@ -135,7 +135,6 @@ object DataWritingSparkTask extends Logging {
         if (commitAuthorized) {
           logInfo(s"Writer for stage $stageId, task $partId.$attemptId is authorized to commit.")
           dataWriter.commit()
-
         } else {
           val message = s"Stage $stageId, task $partId.$attemptId: driver did not authorize commit"
           logInfo(message)

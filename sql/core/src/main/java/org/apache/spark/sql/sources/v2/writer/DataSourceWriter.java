@@ -89,10 +89,10 @@ public interface DataSourceWriter {
    * is undefined and @{@link #abort(WriterCommitMessage[])} may not be able to deal with it.
    *
    * Note that speculative execution may cause multiple tasks to run for a partition. By default,
-   * Spark uses the commit coordinator to allow only one attempt to commit. Implementations can
+   * Spark uses the commit coordinator to allow at most one attempt to commit. Implementations can
    * disable this behavior by overriding {@link #useCommitCoordinator()}. If disabled, multiple
-   * attempts may have committed successfully and all successful commit messages are passed to this
-   * commit method.
+   * attempts may have committed successfully and one successful commit message per task will be
+   * passed to this commit method. The remaining commit messages are ignored by Spark.
    */
   void commit(WriterCommitMessage[] messages);
 
