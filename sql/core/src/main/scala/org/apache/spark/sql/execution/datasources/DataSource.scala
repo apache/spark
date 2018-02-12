@@ -31,8 +31,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogUtils}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -435,10 +437,11 @@ case class DataSource(
   }
 
   /**
-   * Writes the given [[LogicalPlan]] out in this [[FileFormat]].
+   * Creates a command node to write the given [[LogicalPlan]] out to the given [[FileFormat]].
+   * The returned command is unresolved and need to be analyzed.
    */
   private def planForWritingFileFormat(
-      format: FileFormat, mode: SaveMode, data: LogicalPlan): LogicalPlan = {
+      format: FileFormat, mode: SaveMode, data: LogicalPlan): InsertIntoHadoopFsRelationCommand = {
     // Don't glob path for the write path.  The contracts here are:
     //  1. Only one output path can be specified on the write path;
     //  2. Output path must be a legal HDFS style file system path;
@@ -482,9 +485,24 @@ case class DataSource(
   /**
    * Writes the given [[LogicalPlan]] out to this [[DataSource]] and returns a [[BaseRelation]] for
    * the following reading.
+   *
+   * @param mode The save mode for this writing.
+   * @param data The input query plan that produces the data to be written. Note that this plan
+   *             is analyzed and optimized.
+   * @param outputColumns The original output columns of the input query plan. The optimizer may not
+   *                      preserve the output column's names' case, so we need this parameter
+   *                      instead of `data.output`.
+   * @param physicalPlan The physical plan of the input query plan. We should run the writing
+   *                     command with this physical plan instead of creating a new physical plan,
+   *                     so that the metrics can be correctly linked to the given physical plan and
+   *                     shown in the web UI.
    */
-  def writeAndRead(mode: SaveMode, data: LogicalPlan): BaseRelation = {
-    if (data.schema.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
+  def writeAndRead(
+      mode: SaveMode,
+      data: LogicalPlan,
+      outputColumns: Seq[Attribute],
+      physicalPlan: SparkPlan): BaseRelation = {
+    if (outputColumns.map(_.dataType).exists(_.isInstanceOf[CalendarIntervalType])) {
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
 
@@ -493,9 +511,23 @@ case class DataSource(
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
-        sparkSession.sessionState.executePlan(planForWritingFileFormat(format, mode, data)).toRdd
+        val cmd = planForWritingFileFormat(format, mode, data)
+        val resolvedPartCols = cmd.partitionColumns.map { col =>
+          // The partition columns created in `planForWritingFileFormat` should always be
+          // `UnresolvedAttribute` with a single name part.
+          assert(col.isInstanceOf[UnresolvedAttribute])
+          val unresolved = col.asInstanceOf[UnresolvedAttribute]
+          assert(unresolved.nameParts.length == 1)
+          val name = unresolved.nameParts.head
+          outputColumns.find(a => equality(a.name, name)).getOrElse {
+            throw new AnalysisException(
+              s"Unable to resolve $name given [${data.output.map(_.name).mkString(", ")}]")
+          }
+        }
+        val resolved = cmd.copy(partitionColumns = resolvedPartCols, outputColumns = outputColumns)
+        resolved.run(sparkSession, physicalPlan)
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
-        copy(userSpecifiedSchema = Some(data.schema.asNullable)).resolveRelation()
+        copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
     }
