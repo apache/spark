@@ -446,7 +446,8 @@ public class VectorizedColumnReader {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
-    if (column.dataType() == DataTypes.StringType || column.dataType() == DataTypes.BinaryType) {
+    if (column.dataType() == DataTypes.StringType || column.dataType() == DataTypes.BinaryType
+            || DecimalType.isByteArrayDecimalType(column.dataType())) {
       defColumn.readBinarys(num, column, rowId, maxDefLevel, data);
     } else if (column.dataType() == DataTypes.TimestampType) {
       if (!shouldConvertTimestamps()) {
