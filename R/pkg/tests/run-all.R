@@ -55,13 +55,23 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
 test_package("SparkR")
 
 if (identical(Sys.getenv("NOT_CRAN"), "true")) {
-  # set random seed for predictable results. mostly for base's sample() in tree and classification
-  set.seed(42)
-  # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
-  testthat:::run_tests("SparkR",
-                       file.path(sparkRDir, "pkg", "tests", "fulltests"),
-                       NULL,
-                       "summary")
+  if (identical(Sys.getenv("CONDA_TESTS"), "true")) {
+      # set random seed for predictable results. mostly for base's sample() in tree and classification
+      set.seed(42)
+      # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
+      testthat:::run_tests("SparkR",
+      file.path(sparkRDir, "pkg", "tests", "condatests"),
+      NULL,
+      "summary")
+  } else {
+      # set random seed for predictable results. mostly for base's sample() in tree and classification
+      set.seed(42)
+      # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
+      testthat:::run_tests("SparkR",
+      file.path(sparkRDir, "pkg", "tests", "fulltests"),
+      NULL,
+      "summary")
+  }
 }
 
 SparkR:::uninstallDownloadedSpark()
