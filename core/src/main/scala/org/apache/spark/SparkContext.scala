@@ -1717,10 +1717,10 @@ class SparkContext(config: SparkConf) extends Logging {
     val rddInfos = persistentRdds.values.filter(filter).map(RDDInfo.fromRdd).toArray
     rddInfos.foreach { rddInfo =>
       val rddId = rddInfo.id
-      val rddStorageInfo = statusStore.rdd(rddId)
-      rddInfo.numCachedPartitions = rddStorageInfo.numCachedPartitions
-      rddInfo.memSize = rddStorageInfo.memoryUsed
-      rddInfo.diskSize = rddStorageInfo.diskUsed
+      val rddStorageInfo = statusStore.asOption(statusStore.rdd(rddId))
+      rddInfo.numCachedPartitions = rddStorageInfo.map(_.numCachedPartitions).getOrElse(0)
+      rddInfo.memSize = rddStorageInfo.map(_.memoryUsed).getOrElse(0L)
+      rddInfo.diskSize = rddStorageInfo.map(_.diskUsed).getOrElse(0L)
     }
     rddInfos.filter(_.isCached)
   }
