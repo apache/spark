@@ -227,19 +227,19 @@ public class ReadAheadInputStream extends InputStream {
 
   private void waitForAsyncReadComplete() throws IOException {
     stateChangeLock.lock();
+    isWaiting.set(true);
     try {
-      while (readInProgress) {
-        isWaiting.set(true);
+      if (readInProgress) {
         asyncReadComplete.await();
-        isWaiting.set(false);
       }
+      assert(!readInProgress)
     } catch (InterruptedException e) {
       InterruptedIOException iio = new InterruptedIOException(e.getMessage());
       iio.initCause(e);
       throw iio;
     } finally {
-      stateChangeLock.unlock();
       isWaiting.set(false);
+      stateChangeLock.unlock();
     }
     checkReadException();
   }
