@@ -1169,7 +1169,7 @@ class JDBCSuite extends SparkFunSuite
       assert(df3.collect() === Array(Row(21519, 1234)))
     }
 
-  test("jdbc data source shouldn't have metadata in its schema") {
+  test("jdbc data source shouldn't have unnecessary metadata in its schema") {
     val schema = StructType(Seq(
       StructField("NAME", StringType, true), StructField("THEID", IntegerType, true)))
 
