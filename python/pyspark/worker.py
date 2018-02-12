@@ -116,7 +116,7 @@ def wrap_grouped_agg_pandas_udf(f, return_type):
     def wrapped(*series):
         import pandas as pd
         result = f(*series)
-        return pd.Series(result)
+        return pd.Series([result])
 
     return lambda *a: (wrapped(*a), arrow_return_type)
 

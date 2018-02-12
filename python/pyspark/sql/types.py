@@ -1638,6 +1638,8 @@ def to_arrow_type(dt):
         # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
         arrow_type = pa.timestamp('us', tz='UTC')
     elif type(dt) == ArrayType:
+        if type(dt.elementType) == TimestampType:
+            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
         arrow_type = pa.list_(to_arrow_type(dt.elementType))
     else:
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
@@ -1680,6 +1682,8 @@ def from_arrow_type(at):
     elif types.is_timestamp(at):
         spark_type = TimestampType()
     elif types.is_list(at):
+        if types.is_timestamp(at.value_type):
+            raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
         spark_type = ArrayType(from_arrow_type(at.value_type))
     else:
         raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
