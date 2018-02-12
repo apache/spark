@@ -28,7 +28,7 @@ import org.apache.spark.sql.types._
 
 class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
   // Single column of images named "image"
-  private lazy val imagePath = "../data/mllib/images"
+  private lazy val imagePath = "../../data/mllib/images"
 
   test("Smoke test: create basic ImageSchema dataframe") {
     val origin = "path"
@@ -82,6 +82,7 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("readImages test: read non image") {
     val df = readImages(imagePath + "/kittens/not-image.txt", null, false, 3, true, 1.0, 0)
+    assert(df.schema("image").dataType == columnSchema, "data do not fit ImageSchema")
     assert(df.count() === 0)
   }
 
@@ -111,7 +112,7 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("readImages test: with sparkSession") {
     val df = readImages(imagePath, sparkSession = spark, true, 3, true, 1.0, 0)
-    assert(df.count() === 7)
+    assert(df.count() === 8)
   }
 
   test("readImages partition test") {
@@ -126,7 +127,6 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("readImages partition test: = 0") {
     val df = readImages(imagePath, null, true, 0, true, 1.0, 0)
-    assert(df.rdd.getNumPartitions != 0)
     assert(df.rdd.getNumPartitions === spark.sparkContext.defaultParallelism)
   }
 
