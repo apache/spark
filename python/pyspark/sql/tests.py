@@ -50,6 +50,7 @@ else:
     import unittest
 
 from pyspark.util import _exception_message
+
 _pandas_requirement_message = None
 try:
     from pyspark.sql.utils import require_minimum_pandas_version
