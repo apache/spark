@@ -1941,7 +1941,7 @@ class DataFrame(object):
             timezone = None
 
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
-            should_fall_back = False
+            should_fallback = False
             try:
                 from pyspark.sql.types import to_arrow_schema
                 from pyspark.sql.utils import require_minimum_pyarrow_version
@@ -1950,11 +1950,11 @@ class DataFrame(object):
                 to_arrow_schema(self.schema)
             except Exception as e:
                 # Fallback to convert to Pandas DataFrame without arrow if raise some exception
-                should_fall_back = True
+                should_fallback = True
                 warnings.warn(
                     "Arrow will not be used in toPandas: %s" % _exception_message(e))
 
-            if not should_fall_back:
+            if not should_fallback:
                 import pyarrow
                 from pyspark.sql.types import _check_dataframe_convert_date, \
                     _check_dataframe_localize_timestamps
