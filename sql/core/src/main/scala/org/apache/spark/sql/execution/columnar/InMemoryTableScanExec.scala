@@ -61,6 +61,9 @@ case class InMemoryTableScanExec(
     }) && !WholeStageCodegenExec.isTooManyFields(conf, relation.schema)
   }
 
+  // TODO: revisit this. Shall we always turn off whole stage codegen if the output data are rows?
+  override def supportCodegen: Boolean = supportsBatch
+
   override protected def needsUnsafeRowConversion: Boolean = false
 
   private val columnIndices =
