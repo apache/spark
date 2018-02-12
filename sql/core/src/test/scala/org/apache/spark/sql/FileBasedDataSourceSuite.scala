@@ -123,9 +123,9 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     test(s"SPARK-23372 writing empty dataframe and reading from it - $format") {
       withTempPath { outputPath =>
           spark.emptyDataFrame.write.format(format).save(outputPath.toString)
-          val df = spark.read.format(format).load(outputPath.toString)
-          checkAnswer(df, Seq.empty[Row])
-          assert(df.schema.equals(df.schema.asNullable))
+          intercept[AnalysisException] {
+            val df = spark.read.format(format).load(outputPath.toString)
+          }
       }
     }
   }

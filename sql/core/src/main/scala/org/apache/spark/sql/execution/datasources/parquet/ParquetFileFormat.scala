@@ -69,7 +69,7 @@ class ParquetFileFormat
   override def toString: String = "Parquet"
 
   private def verifySchema(schema: StructType): Unit = {
-    if (schema.size < 1) {
+    if (schema.size == 0) {
       throw new AnalysisException(
         s"""
            |Parquet data source does not support writing empty groups.
