@@ -188,6 +188,9 @@ class OrcFileFormat
         if (enableVectorizedReader) {
           val batchReader = new OrcColumnarBatchReader(
             enableOffHeapColumnVector && taskContext.isDefined, copyToSpark, capacity)
+          val iter = new RecordReaderIterator(batchReader)
+          Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
+
           batchReader.initialize(fileSplit, taskAttemptContext)
           batchReader.initBatch(
             reader.getSchema,
@@ -196,8 +199,6 @@ class OrcFileFormat
             partitionSchema,
             file.partitionValues)
 
-          val iter = new RecordReaderIterator(batchReader)
-          Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
           iter.asInstanceOf[Iterator[InternalRow]]
         } else {
           val orcRecordReader = new OrcInputFormat[OrcStruct]
