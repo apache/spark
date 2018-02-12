@@ -1776,7 +1776,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
 
 ## Upgrading From Spark SQL 2.2 to 2.3
 
-  - Since Spark 2.3, Spark supports a vectorized ORC reader with a new ORC file format for ORC files. To do that, the following configurations are newly added or change their default values.
+  - Since Spark 2.3, Spark supports a vectorized ORC reader with a new ORC file format for ORC files. To do that, the following configurations are newly added or change their default values. For creating ORC tables, `USING ORC` or `USING HIVE` syntaxes are recommended.
 
     - New configurations
 
