@@ -239,6 +239,7 @@ public class ReadAheadInputStream extends InputStream {
       throw iio;
     } finally {
       stateChangeLock.unlock();
+      isWaiting.set(false);
     }
     checkReadException();
   }
