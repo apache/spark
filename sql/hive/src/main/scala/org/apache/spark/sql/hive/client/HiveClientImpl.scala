@@ -291,12 +291,16 @@ private[hive] class HiveClientImpl(
     state.err = stream
   }
 
-  override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
-    if (databaseExists(databaseName)) {
-      state.setCurrentDatabase(databaseName)
+  private def setCurrentDatabaseRaw(db: String): Unit = {
+    if (databaseExists(db)) {
+      state.setCurrentDatabase(db)
     } else {
-      throw new NoSuchDatabaseException(databaseName)
+      throw new NoSuchDatabaseException(db)
     }
+  }
+
+  override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
+    setCurrentDatabaseRaw(databaseName)
   }
 
   override def createDatabase(
@@ -603,12 +607,8 @@ private[hive] class HiveClientImpl(
     // most helpful error message ever: "Unable to alter partition. alter is not possible."
     // See HIVE-2742 for more detail.
     val original = state.getCurrentDatabase
-    if (databaseExists(db)) {
-      state.setCurrentDatabase(db)
-    } else {
-      throw new NoSuchDatabaseException(db)
-    }
     try {
+      setCurrentDatabaseRaw(db)
       val hiveTable = toHiveTable(getTable(db, table), Some(userName))
       shim.alterPartitions(client, table, newParts.map { toHivePartition(_, hiveTable) }.asJava)
     } finally {
