@@ -232,7 +232,7 @@ public class ReadAheadInputStream extends InputStream {
       if (readInProgress) {
         asyncReadComplete.await();
       }
-      assert(!readInProgress)
+      assert(!readInProgress);
     } catch (InterruptedException e) {
       InterruptedIOException iio = new InterruptedIOException(e.getMessage());
       iio.initCause(e);
@@ -319,7 +319,7 @@ public class ReadAheadInputStream extends InputStream {
     }
     if (n <= activeBuffer.remaining()) {
       // Only skipping from active buffer is sufficient
-      activeBuffer.position(toSkip + activeBuffer.position());
+      activeBuffer.position((int) n + activeBuffer.position());
       return n;
     }
     stateChangeLock.lock();
