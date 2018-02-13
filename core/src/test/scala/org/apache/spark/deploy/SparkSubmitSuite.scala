@@ -107,7 +107,6 @@ class SparkSubmitSuite
 
   override def beforeEach() {
     super.beforeEach()
-    System.setProperty("spark.testing", "true")
   }
 
   // scalastyle:off println
