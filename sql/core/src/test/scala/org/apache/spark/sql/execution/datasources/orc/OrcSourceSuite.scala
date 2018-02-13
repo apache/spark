@@ -20,9 +20,11 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io.File
 import java.util.Locale
 
+import org.apache.hadoop.fs.Path
 import org.apache.orc.OrcConf.COMPRESS
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -157,6 +159,25 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
         val expected = if (c == "UNCOMPRESSED") "NONE" else c
         assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
+      }
+    }
+  }
+
+  // This should be tested manually because it raises OOM intentionally
+  // in order to cause `Leaked filesystem connection`. The test suite dies, too.
+  ignore("SPARK-23399 Register a task completion listner first for OrcColumnarBatchReader") {
+    withSQLConf(SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE.key -> s"${Int.MaxValue}") {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        Seq(0).toDF("a").write.format("orc").save(new Path(basePath, "first").toString)
+        Seq(1).toDF("a").write.format("orc").save(new Path(basePath, "second").toString)
+        val df = spark.read.orc(
+          new Path(basePath, "first").toString,
+          new Path(basePath, "second").toString)
+        val e = intercept[SparkException] {
+          df.collect()
+        }
+        assert(e.getCause.isInstanceOf[OutOfMemoryError])
       }
     }
   }
