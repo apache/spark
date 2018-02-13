@@ -47,8 +47,7 @@ object TextSocketMicroBatchReader {
 /**
  * A MicroBatchReader that reads text lines through a TCP socket, designed only for tutorials and
  * debugging. This MicroBatchReader will *not* work in production applications due to multiple
- * reasons, including no support for fault recovery and keeping all of the text read in memory
- * forever.
+ * reasons, including no support for fault recovery.
  */
 class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchReader with Logging {
 
@@ -111,9 +110,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
     readThread.start()
   }
 
-  override def setOffsetRange(
-      start: Optional[Offset],
-      end: Optional[Offset]): Unit = synchronized {
+  override def setOffsetRange(start: Optional[Offset], end: Optional[Offset]): Unit = synchronized {
     startOffset = start.orElse(LongOffset(-1L))
     endOffset = end.orElse(currentOffset)
   }
@@ -131,8 +128,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
   }
 
   override def readSchema(): StructType = {
-    val includeTimestamp = options.getBoolean("includeTimestamp", false)
-    if (includeTimestamp) {
+    if (options.getBoolean("includeTimestamp", false)) {
       TextSocketMicroBatchReader.SCHEMA_TIMESTAMP
     } else {
       TextSocketMicroBatchReader.SCHEMA_REGULAR
@@ -213,26 +209,23 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
     }
   }
 
-  override def toString: String = s"TextSocketMicroBatchReader[host: $host, port: $port]"
+  override def toString: String = s"TextSocket[host: $host, port: $port]"
 }
 
 class TextSocketSourceProvider extends DataSourceV2
   with MicroBatchReadSupport with DataSourceRegister with Logging {
 
-  private def checkParameters(params: Map[String, String]): Unit = {
+  private def checkParameters(params: DataSourceOptions): Unit = {
     logWarning("The socket source should not be used for production applications! " +
       "It does not support recovery.")
-    if (!params.contains("host")) {
+    if (!params.get("host").isPresent) {
       throw new AnalysisException("Set a host to read from with option(\"host\", ...).")
     }
-    if (!params.contains("port")) {
+    if (!params.get("port").isPresent) {
       throw new AnalysisException("Set a port to read from with option(\"port\", ...).")
     }
     Try {
-      params.get("includeTimestamp")
-        .orElse(params.get("includetimestamp"))
-        .getOrElse("false")
-        .toBoolean
+      params.get("includeTimestamp").orElse("false").toBoolean
     } match {
       case Success(_) =>
       case Failure(_) =>
@@ -244,7 +237,7 @@ class TextSocketSourceProvider extends DataSourceV2
       schema: Optional[StructType],
       checkpointLocation: String,
       options: DataSourceOptions): MicroBatchReader = {
-    checkParameters(options.asMap().asScala.toMap)
+    checkParameters(options)
     if (schema.isPresent) {
       throw new AnalysisException("The socket source does not support a user-specified schema.")
     }
