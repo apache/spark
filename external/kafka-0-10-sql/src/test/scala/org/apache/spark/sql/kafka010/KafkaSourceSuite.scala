@@ -1005,7 +1005,10 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
 
   override def createSparkSession(): TestSparkSession = {
     // Set maxRetries to 3 to handle NPE from `poll` when deleting a topic
-    new TestSparkSession(new SparkContext("local[2,3]", "test-sql-context", sparkConf))
+    new TestSparkSession(new SparkContext(
+      "local[2,3]",
+      "test-KafkaSourceStressForDontFailOnDataLossSuite",
+      sparkConf))
   }
 
   override def beforeAll(): Unit = {
@@ -1114,7 +1117,9 @@ class KafkaSourceStressForDontFailOnDataLossSuite extends StreamTest with Shared
       }
     }
 
+    query.processAllAvailable()
     query.stop()
+    query.awaitTermination()
     // `failOnDataLoss` is `false`, we should not fail the query
     if (query.exception.nonEmpty) {
       throw query.exception.get
