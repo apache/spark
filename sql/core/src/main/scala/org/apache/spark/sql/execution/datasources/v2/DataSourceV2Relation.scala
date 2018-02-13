@@ -35,7 +35,7 @@ case class DataSourceV2Relation(
     options: Map[String, String],
     projection: Seq[AttributeReference],
     filters: Option[Seq[Expression]] = None,
-    userSchema: Option[StructType] = None) extends LeafNode with MultiInstanceRelation {
+    userSpecifiedSchema: Option[StructType] = None) extends LeafNode with MultiInstanceRelation {
 
   import DataSourceV2Relation._
 
@@ -61,7 +61,7 @@ case class DataSourceV2Relation(
       reader: DataSourceReader,
       unsupportedFilters: Seq[Expression],
       pushedFilters: Seq[Expression]) = {
-    val newReader = userSchema match {
+    val newReader = userSpecifiedSchema match {
       case Some(s) =>
         source.asReadSupportWithSchema.createReader(s, v2Options)
       case _ =>
@@ -179,9 +179,9 @@ object DataSourceV2Relation {
       source: DataSourceV2,
       options: Map[String, String],
       filters: Option[Seq[Expression]] = None,
-      userSchema: Option[StructType] = None): DataSourceV2Relation = {
-    val projection = schema(source, makeV2Options(options), userSchema).toAttributes
-    DataSourceV2Relation(source, options, projection, filters, userSchema)
+      userSpecifiedSchema: Option[StructType] = None): DataSourceV2Relation = {
+    val projection = schema(source, makeV2Options(options), userSpecifiedSchema).toAttributes
+    DataSourceV2Relation(source, options, projection, filters, userSpecifiedSchema)
   }
 
   private def pushRequiredColumns(reader: DataSourceReader, struct: StructType): Unit = {

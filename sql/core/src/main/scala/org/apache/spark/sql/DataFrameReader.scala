@@ -195,7 +195,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
           ds = ds, conf = sparkSession.sessionState.conf)
         Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
           ds, extraOptions.toMap ++ sessionOptions,
-          userSchema = userSpecifiedSchema))
+          userSpecifiedSchema = userSpecifiedSchema))
 
       } else {
         loadV1Source(paths: _*)
