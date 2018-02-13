@@ -292,10 +292,12 @@ private[hive] class HiveClientImpl(
   }
 
   private def setCurrentDatabaseRaw(db: String): Unit = {
-    if (databaseExists(db)) {
-      state.setCurrentDatabase(db)
-    } else {
-      throw new NoSuchDatabaseException(db)
+    if (state.getCurrentDatabase != db) {
+      if (databaseExists(db)) {
+        state.setCurrentDatabase(db)
+      } else {
+        throw new NoSuchDatabaseException(db)
+      }
     }
   }
 
