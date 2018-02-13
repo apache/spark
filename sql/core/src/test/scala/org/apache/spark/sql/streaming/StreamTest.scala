@@ -605,7 +605,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                 plan
                   .collect {
                     case StreamingExecutionRelation(s, _) => s
-                    case StreamingDataSourceV2Relation(_, r) => r
+                    case StreamingDataSourceV2Relation(_, _, r) => r
                   }
                   .zipWithIndex
                   .find(_._1 == source)

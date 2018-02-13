@@ -20,16 +20,16 @@ package org.apache.spark.sql.execution.streaming
 import java.util.Optional
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, Map => MutableMap}
+import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
 import org.apache.spark.sql.execution.streaming.sources.{InternalRowMicroBatchWriter, MicroBatchWriter}
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupport, StreamWriteSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset => OffsetV2}
 import org.apache.spark.sql.sources.v2.writer.SupportsWriteInternalRow
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
@@ -51,6 +51,8 @@ class MicroBatchExecution(
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
   @volatile protected var sources: Seq[BaseStreamingSource] = Seq.empty
+
+  private val readerToDataSourceMap = MutableMap.empty[MicroBatchReader, DataSourceV2]
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
@@ -77,31 +79,32 @@ class MicroBatchExecution(
       sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders.split(",")
 
     val _logicalPlan = analyzedPlan.transform {
-      case streamingRelation@StreamingRelation(dataSourceV1, sourceName, output) =>
-        toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
+      case s @ StreamingRelation(dsV1, sourceName, output) =>
+        toExecutionRelationMap.getOrElseUpdate(s, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-          val source = dataSourceV1.createSource(metadataPath)
+          val source = dsV1.createSource(metadataPath)
           nextSourceId += 1
-          logInfo(s"Using Source [$source] from DataSourceV1 named '$sourceName' [$dataSourceV1]")
+          logInfo(s"Using Source [$source] from DataSourceV1 named '$sourceName' [$dsV1]")
           StreamingExecutionRelation(source, output)(sparkSession)
         })
-      case s @ StreamingRelationV2(
-        dataSourceV2: MicroBatchReadSupport, sourceName, options, output, _) if
-          !disabledSources.contains(dataSourceV2.getClass.getCanonicalName) =>
+
+      case s @ StreamingRelationV2(dsV2: MicroBatchReadSupport, sourceName, options, output, _)
+          if !disabledSources.contains(dsV2.getClass.getCanonicalName) =>
         v2ToExecutionRelationMap.getOrElseUpdate(s, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-          val reader = dataSourceV2.createMicroBatchReader(
+          val reader = dsV2.createMicroBatchReader(
             Optional.empty(), // user specified schema
             metadataPath,
             new DataSourceOptions(options.asJava))
           nextSourceId += 1
-          logInfo(s"Using MicroBatchReader [$reader] from " +
-            s"DataSourceV2 named '$sourceName' [$dataSourceV2]")
+          readerToDataSourceMap(reader) = dsV2
+          logInfo(s"Using MicroBatchReader [$reader] from DataSourceV2 named '$sourceName' [$dsV2]")
           StreamingExecutionRelation(reader, output)(sparkSession)
         })
-      case s @ StreamingRelationV2(dataSourceV2, sourceName, _, output, v1Relation) =>
+
+      case s @ StreamingRelationV2(dsV2, sourceName, _, output, v1Relation) =>
         v2ToExecutionRelationMap.getOrElseUpdate(s, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
@@ -111,7 +114,7 @@ class MicroBatchExecution(
           }
           val source = v1Relation.get.dataSource.createSource(metadataPath)
           nextSourceId += 1
-          logInfo(s"Using Source [$source] from DataSourceV2 named '$sourceName' [$dataSourceV2]")
+          logInfo(s"Using Source [$source] from DataSourceV2 named '$sourceName' [$dsV2]")
           StreamingExecutionRelation(source, output)(sparkSession)
         })
     }
@@ -415,12 +418,14 @@ class MicroBatchExecution(
             case v1: SerializedOffset => reader.deserializeOffset(v1.json)
             case v2: OffsetV2 => v2
           }
-          reader.setOffsetRange(
-            toJava(current),
-            Optional.of(availableV2))
+          reader.setOffsetRange(toJava(current), Optional.of(availableV2))
           logDebug(s"Retrieving data from $reader: $current -> $availableV2")
-          Some(reader ->
-            new StreamingDataSourceV2Relation(reader.readSchema().toAttributes, reader))
+          Some(reader -> StreamingDataSourceV2Relation(
+            output = reader.readSchema().toAttributes,
+            // Provide a fake value here just in case something went wrong, e.g. the reader gives
+            // a wrong `equals` implementation.
+            source = readerToDataSourceMap.getOrElse(reader, FakeDataSourceV2),
+            reader = reader))
         case _ => None
       }
     }
@@ -508,3 +513,5 @@ class MicroBatchExecution(
     Optional.ofNullable(scalaOption.orNull)
   }
 }
+
+object FakeDataSourceV2 extends DataSourceV2

@@ -35,15 +35,14 @@ case class DataSourceV2Relation(
     options: Map[String, String],
     projection: Seq[AttributeReference],
     filters: Option[Seq[Expression]] = None,
-    userSpecifiedSchema: Option[StructType] = None) extends LeafNode with MultiInstanceRelation {
+    userSpecifiedSchema: Option[StructType] = None)
+  extends LeafNode with MultiInstanceRelation with DataSourceV2QueryPlan {
 
   import DataSourceV2Relation._
 
-  override def simpleString: String = {
-    s"DataSourceV2Relation(source=${source.name}, " +
-      s"schema=[${output.map(a => s"$a ${a.dataType.simpleString}").mkString(", ")}], " +
-      s"filters=[${pushedFilters.mkString(", ")}], options=$options)"
-  }
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2Relation]
+
+  override def simpleString: String = "Relation " + metadataString
 
   override lazy val schema: StructType = reader.readSchema()
 
@@ -107,16 +106,23 @@ case class DataSourceV2Relation(
 }
 
 /**
- * A specialization of DataSourceV2Relation with the streaming bit set to true. Otherwise identical
- * to the non-streaming relation.
+ * A specialization of [[DataSourceV2Relation]] with the streaming bit set to true.
+ *
+ * Note that, this plan has a mutable reader, so Spark won't apply operator push-down for this plan,
+ * to avoid making the plan mutable. We should consolidate this plan and [[DataSourceV2Relation]]
+ * after we figure out how to apply operator push-down for streaming data sources.
  */
 case class StreamingDataSourceV2Relation(
     output: Seq[AttributeReference],
+    source: DataSourceV2,
     reader: DataSourceReader)
-    extends LeafNode with DataSourceReaderHolder with MultiInstanceRelation {
+  extends LeafNode with MultiInstanceRelation with DataSourceV2QueryPlan {
+
   override def isStreaming: Boolean = true
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[StreamingDataSourceV2Relation]
+
+  override def simpleString: String = "Streaming Relation " + metadataString
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
