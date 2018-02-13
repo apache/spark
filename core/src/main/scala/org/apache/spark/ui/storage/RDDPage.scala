@@ -77,7 +77,7 @@ private[ui] class RDDPage(parent: SparkUITab, store: AppStatusStore) extends Web
         blockPageSize,
         blockSortColumn,
         blockSortDesc,
-        store.executorList(false))
+        store.executorList(true))
       _blockTable.table(page)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
