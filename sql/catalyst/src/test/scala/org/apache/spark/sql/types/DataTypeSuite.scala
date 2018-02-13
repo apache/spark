@@ -140,7 +140,6 @@ class DataTypeSuite extends SparkFunSuite {
 
     assert(struct.fieldNames === Seq("a", "b"))
     assert(struct.names === Seq("a", "b"))
-    assert(struct.fieldNames === struct.names)
   }
 
   test("merge where right contains type conflict") {

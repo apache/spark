@@ -107,7 +107,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   /**
    * Returns all field names in an array. This is an alias of `fieldNames`.
    *
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def names: Array[String] = fieldNames
 
