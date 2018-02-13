@@ -95,14 +95,14 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
     val e = intercept[IllegalArgumentException] {
       readImages(imagePath, null, true, 3, true, 1.1, 0)
     }
-    assert(e.getMessage.equals("requirement failed: sampleRatio should be between 0 and 1"))
+    assert(e.getMessage.contains("sampleRatio"))
   }
 
   test("readImages test: sampleRatio < 0") {
     val e = intercept[IllegalArgumentException] {
       readImages(imagePath, null, true, 3, true, -0.1, 0)
     }
-    assert(e.getMessage.equals("requirement failed: sampleRatio should be between 0 and 1"))
+    assert(e.getMessage.contains("sampleRatio"))
   }
 
   test("readImages test: sampleRatio = 0") {
