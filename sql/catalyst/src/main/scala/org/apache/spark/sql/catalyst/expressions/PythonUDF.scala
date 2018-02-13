@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.DataType
 object PythonUDF {
   private[this] val SCALAR_TYPES = Set(
     PythonEvalType.SQL_BATCHED_UDF,
-    PythonEvalType.SQL_PANDAS_SCALAR_UDF
+    PythonEvalType.SQL_SCALAR_PANDAS_UDF
   )
 
   def isScalarPythonUDF(e: Expression): Boolean = {
@@ -36,7 +36,7 @@ object PythonUDF {
 
   def isGroupAggPandasUDF(e: Expression): Boolean = {
     e.isInstanceOf[PythonUDF] &&
-      e.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF
+      e.asInstanceOf[PythonUDF].evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
   }
 }
 

@@ -1107,11 +1107,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       }
     }
 
-    // Note: Before altering table partitions in Hive, you *must* set the current database
-    // to the one that contains the table of interest. Otherwise you will end up with the
-    // most helpful error message ever: "Unable to alter partition. alter is not possible."
-    // See HIVE-2742 for more detail.
-    client.setCurrentDatabase(db)
     client.alterPartitions(db, table, withStatsProps)
   }
 

@@ -22,21 +22,23 @@ import java.io.Serializable;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A read task returned by {@link DataSourceV2Reader#createReadTasks()} and is responsible for
- * creating the actual data reader. The relationship between {@link ReadTask} and {@link DataReader}
+ * A reader factory returned by {@link DataSourceReader#createDataReaderFactories()} and is
+ * responsible for creating the actual data reader. The relationship between
+ * {@link DataReaderFactory} and {@link DataReader}
  * is similar to the relationship between {@link Iterable} and {@link java.util.Iterator}.
  *
- * Note that, the read task will be serialized and sent to executors, then the data reader will be
- * created on executors and do the actual reading. So {@link ReadTask} must be serializable and
- * {@link DataReader} doesn't need to be.
+ * Note that, the reader factory will be serialized and sent to executors, then the data reader
+ * will be created on executors and do the actual reading. So {@link DataReaderFactory} must be
+ * serializable and {@link DataReader} doesn't need to be.
  */
 @InterfaceStability.Evolving
-public interface ReadTask<T> extends Serializable {
+public interface DataReaderFactory<T> extends Serializable {
 
   /**
-   * The preferred locations where this read task can run faster, but Spark does not guarantee that
-   * this task will always run on these locations. The implementations should make sure that it can
-   * be run on any location. The location is a string representing the host name.
+   * The preferred locations where the data reader returned by this reader factory can run faster,
+   * but Spark does not guarantee to run the data reader on these locations.
+   * The implementations should make sure that it can be run on any location.
+   * The location is a string representing the host name.
    *
    * Note that if a host name cannot be recognized by Spark, it will be ignored as it was not in
    * the returned locations. By default this method returns empty string array, which means this
@@ -50,7 +52,7 @@ public interface ReadTask<T> extends Serializable {
   }
 
   /**
-   * Returns a data reader to do the actual reading work for this read task.
+   * Returns a data reader to do the actual reading work.
    *
    * If this method fails (by throwing an exception), the corresponding Spark task would fail and
    * get retried until hitting the maximum retry times.

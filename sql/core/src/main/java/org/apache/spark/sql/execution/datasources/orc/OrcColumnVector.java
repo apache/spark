@@ -24,6 +24,8 @@ import org.apache.orc.storage.ql.exec.vector.*;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.TimestampType;
+import org.apache.spark.sql.vectorized.ColumnarArray;
+import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -74,6 +76,11 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   @Override
   public void close() {
 
+  }
+
+  @Override
+  public boolean hasNull() {
+    return !baseData.noNulls;
   }
 
   @Override
@@ -146,23 +153,15 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   }
 
   @Override
-  public int getArrayLength(int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public int getArrayOffset(int rowId) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
+    if (isNullAt(rowId)) return null;
     BigDecimal data = decimalData.vector[getRowIndex(rowId)].getHiveDecimal().bigDecimalValue();
     return Decimal.apply(data, precision, scale);
   }
 
   @Override
   public UTF8String getUTF8String(int rowId) {
+    if (isNullAt(rowId)) return null;
     int index = getRowIndex(rowId);
     BytesColumnVector col = bytesData;
     return UTF8String.fromBytes(col.vector[index], col.start[index], col.length[index]);
@@ -170,6 +169,7 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
 
   @Override
   public byte[] getBinary(int rowId) {
+    if (isNullAt(rowId)) return null;
     int index = getRowIndex(rowId);
     byte[] binary = new byte[bytesData.length[index]];
     System.arraycopy(bytesData.vector[index], bytesData.start[index], binary, 0, binary.length);
@@ -177,7 +177,12 @@ public class OrcColumnVector extends org.apache.spark.sql.vectorized.ColumnVecto
   }
 
   @Override
-  public org.apache.spark.sql.vectorized.ColumnVector arrayData() {
+  public ColumnarArray getArray(int rowId) {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public ColumnarMap getMap(int rowId) {
     throw new UnsupportedOperationException();
   }
 

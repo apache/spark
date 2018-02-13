@@ -19,7 +19,7 @@ package org.apache.spark.ml.clustering
 
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
@@ -179,6 +179,19 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(predictionsMap(Vectors.dense(-1.0, 1.0)) ==
       predictionsMap(Vectors.dense(-100.0, 90.0)))
 
+    model.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+  }
+
+  test("KMeans with cosine distance is not supported for 0-length vectors") {
+    val model = new KMeans().setDistanceMeasure(DistanceMeasure.COSINE).setK(2)
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+      Vectors.dense(0.0, 0.0),
+      Vectors.dense(10.0, 10.0),
+      Vectors.dense(1.0, 0.5)
+    )).map(v => TestRow(v)))
+    val e = intercept[SparkException](model.fit(df))
+    assert(e.getCause.isInstanceOf[AssertionError])
+    assert(e.getCause.getMessage.contains("Cosine distance is not defined"))
   }
 
   test("read/write") {

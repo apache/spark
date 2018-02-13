@@ -98,6 +98,19 @@ class Analyzer(
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
+  def executeAndCheck(plan: LogicalPlan): LogicalPlan = {
+    val analyzed = execute(plan)
+    try {
+      checkAnalysis(analyzed)
+      EliminateBarriers(analyzed)
+    } catch {
+      case e: AnalysisException =>
+        val ae = new AnalysisException(e.message, e.line, e.startPosition, Option(analyzed))
+        ae.setStackTrace(e.getStackTrace)
+        throw ae
+    }
+  }
+
   override def execute(plan: LogicalPlan): LogicalPlan = {
     AnalysisContext.reset()
     try {
@@ -178,8 +191,7 @@ class Analyzer(
     Batch("Subquery", Once,
       UpdateOuterReferences),
     Batch("Cleanup", fixedPoint,
-      CleanupAliases,
-      EliminateBarriers)
+      CleanupAliases)
   )
 
   /**
@@ -1481,7 +1493,7 @@ class Analyzer(
           // to push down this ordering expression and can reference the original aggregate
           // expression instead.
           val needsPushDown = ArrayBuffer.empty[NamedExpression]
-          val evaluatedOrderings = resolvedAliasedOrdering.zip(sortOrder).map {
+          val evaluatedOrderings = resolvedAliasedOrdering.zip(unresolvedSortOrders).map {
             case (evaluated, order) =>
               val index = originalAggExprs.indexWhere {
                 case Alias(child, _) => child semanticEquals evaluated.child
@@ -2026,7 +2038,11 @@ class Analyzer(
           WindowExpression(wf, s.copy(frameSpecification = wf.frame))
         case we @ WindowExpression(e, s @ WindowSpecDefinition(_, o, UnspecifiedFrame))
           if e.resolved =>
-          val frame = SpecifiedWindowFrame.defaultWindowFrame(o.nonEmpty, acceptWindowFrame = true)
+          val frame = if (o.nonEmpty) {
+            SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
+          } else {
+            SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
+          }
           we.copy(windowSpec = s.copy(frameSpecification = frame))
       }
     }

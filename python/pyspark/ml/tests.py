@@ -418,6 +418,9 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(algo.getK(), 10)
         algo.setInitSteps(10)
         self.assertEqual(algo.getInitSteps(), 10)
+        self.assertEqual(algo.getDistanceMeasure(), "euclidean")
+        algo.setDistanceMeasure("cosine")
+        self.assertEqual(algo.getDistanceMeasure(), "cosine")
 
     def test_hasseed(self):
         noSeedSpecd = TestParams()
@@ -1620,6 +1623,21 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(s.k, 2)
 
 
+class KMeansTests(SparkSessionTestCase):
+
+    def test_kmeans_cosine_distance(self):
+        data = [(Vectors.dense([1.0, 1.0]),), (Vectors.dense([10.0, 10.0]),),
+                (Vectors.dense([1.0, 0.5]),), (Vectors.dense([10.0, 4.4]),),
+                (Vectors.dense([-1.0, 1.0]),), (Vectors.dense([-100.0, 90.0]),)]
+        df = self.spark.createDataFrame(data, ["features"])
+        kmeans = KMeans(k=3, seed=1, distanceMeasure="cosine")
+        model = kmeans.fit(df)
+        result = model.transform(df).collect()
+        self.assertTrue(result[0].prediction == result[1].prediction)
+        self.assertTrue(result[2].prediction == result[3].prediction)
+        self.assertTrue(result[4].prediction == result[5].prediction)
+
+
 class OneVsRestTests(SparkSessionTestCase):
 
     def test_copy(self):
@@ -1852,6 +1870,7 @@ class ImageReaderTest(SparkSessionTestCase):
         self.assertEqual(len(array), first_row[1])
         self.assertEqual(ImageSchema.toImage(array, origin=first_row[0]), first_row)
         self.assertEqual(df.schema, ImageSchema.imageSchema)
+        self.assertEqual(df.schema["image"].dataType, ImageSchema.columnSchema)
         expected = {'CV_8UC3': 16, 'Undefined': -1, 'CV_8U': 0, 'CV_8UC1': 0, 'CV_8UC4': 24}
         self.assertEqual(ImageSchema.ocvTypes, expected)
         expected = ['origin', 'height', 'width', 'nChannels', 'mode', 'data']

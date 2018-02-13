@@ -44,19 +44,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
 
-  def assertAnalyzed(): Unit = {
-    // Analyzer is invoked outside the try block to avoid calling it again from within the
-    // catch block below.
-    analyzed
-    try {
-      sparkSession.sessionState.analyzer.checkAnalysis(analyzed)
-    } catch {
-      case e: AnalysisException =>
-        val ae = new AnalysisException(e.message, e.line, e.startPosition, Option(analyzed))
-        ae.setStackTrace(e.getStackTrace)
-        throw ae
-    }
-  }
+  def assertAnalyzed(): Unit = analyzed
 
   def assertSupported(): Unit = {
     if (sparkSession.sessionState.conf.isUnsupportedOperationCheckEnabled) {
@@ -66,7 +54,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   lazy val analyzed: LogicalPlan = {
     SparkSession.setActiveSession(sparkSession)
-    sparkSession.sessionState.analyzer.execute(logical)
+    sparkSession.sessionState.analyzer.executeAndCheck(logical)
   }
 
   lazy val withCachedData: LogicalPlan = {

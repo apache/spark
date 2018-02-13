@@ -291,12 +291,18 @@ private[hive] class HiveClientImpl(
     state.err = stream
   }
 
-  override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
-    if (databaseExists(databaseName)) {
-      state.setCurrentDatabase(databaseName)
-    } else {
-      throw new NoSuchDatabaseException(databaseName)
+  private def setCurrentDatabaseRaw(db: String): Unit = {
+    if (state.getCurrentDatabase != db) {
+      if (databaseExists(db)) {
+        state.setCurrentDatabase(db)
+      } else {
+        throw new NoSuchDatabaseException(db)
+      }
     }
+  }
+
+  override def setCurrentDatabase(databaseName: String): Unit = withHiveState {
+    setCurrentDatabaseRaw(databaseName)
   }
 
   override def createDatabase(
@@ -598,8 +604,18 @@ private[hive] class HiveClientImpl(
       db: String,
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withHiveState {
-    val hiveTable = toHiveTable(getTable(db, table), Some(userName))
-    shim.alterPartitions(client, table, newParts.map { p => toHivePartition(p, hiveTable) }.asJava)
+    // Note: Before altering table partitions in Hive, you *must* set the current database
+    // to the one that contains the table of interest. Otherwise you will end up with the
+    // most helpful error message ever: "Unable to alter partition. alter is not possible."
+    // See HIVE-2742 for more detail.
+    val original = state.getCurrentDatabase
+    try {
+      setCurrentDatabaseRaw(db)
+      val hiveTable = toHiveTable(getTable(db, table), Some(userName))
+      shim.alterPartitions(client, table, newParts.map { toHivePartition(_, hiveTable) }.asJava)
+    } finally {
+      state.setCurrentDatabase(original)
+    }
   }
 
   /**
@@ -825,23 +841,19 @@ private[hive] class HiveClientImpl(
   }
 
   def reset(): Unit = withHiveState {
-    try {
-      client.getAllTables("default").asScala.foreach { t =>
-        logDebug(s"Deleting table $t")
-        val table = client.getTable("default", t)
-        client.getIndexes("default", t, 255).asScala.foreach { index =>
-          shim.dropIndex(client, "default", t, index.getIndexName)
-        }
-        if (!table.isIndexTable) {
-          client.dropTable("default", t)
-        }
+    client.getAllTables("default").asScala.foreach { t =>
+      logDebug(s"Deleting table $t")
+      val table = client.getTable("default", t)
+      client.getIndexes("default", t, 255).asScala.foreach { index =>
+        shim.dropIndex(client, "default", t, index.getIndexName)
       }
-      client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
-        logDebug(s"Dropping Database: $db")
-        client.dropDatabase(db, true, false, true)
+      if (!table.isIndexTable) {
+        client.dropTable("default", t)
       }
-    } finally {
-      runSqlHive("USE default")
+    }
+    client.getAllDatabases.asScala.filterNot(_ == "default").foreach { db =>
+      logDebug(s"Dropping Database: $db")
+      client.dropDatabase(db, true, false, true)
     }
   }
 }
