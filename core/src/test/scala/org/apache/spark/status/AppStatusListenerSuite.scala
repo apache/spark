@@ -273,6 +273,10 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(exec.info.isBlacklistedForStage === expectedBlacklistedFlag)
     }
 
+    check[ExecutorSummaryWrapper](execIds.head) { exec =>
+      assert(exec.info.blacklistedInStages === Set(stages.head.stageId))
+    }
+
     // Blacklisting node for stage
     time += 1
     listener.onNodeBlacklistedForStage(SparkListenerNodeBlacklistedForStage(
@@ -439,6 +443,10 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(stage.info.numCompleteTasks === pending.size)
     }
 
+    check[ExecutorSummaryWrapper](execIds.head) { exec =>
+      assert(exec.info.blacklistedInStages === Set())
+    }
+
     // Submit stage 2.
     time += 1
     stages.last.submissionTime = Some(time)
@@ -451,6 +459,19 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     check[StageDataWrapper](key(stages.last)) { stage =>
       assert(stage.info.status === v1.StageStatus.ACTIVE)
       assert(stage.info.submissionTime === Some(new Date(stages.last.submissionTime.get)))
+    }
+
+    // Blacklisting node for stage
+    time += 1
+    listener.onNodeBlacklistedForStage(SparkListenerNodeBlacklistedForStage(
+      time = time,
+      hostId = "1.example.com",
+      executorFailures = 1,
+      stageId = stages.last.stageId,
+      stageAttemptId = stages.last.attemptId))
+
+    check[ExecutorSummaryWrapper](execIds.head) { exec =>
+      assert(exec.info.blacklistedInStages === Set(stages.last.stageId))
     }
 
     // Start and fail all tasks of stage 2.
