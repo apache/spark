@@ -351,9 +351,11 @@ private[r] object RRunner {
       "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT)
     val rOptions = "--vanilla"
     val rLibDir = condaEnv.map { conda =>
-      (conda.condaEnvDir + "/lib/R/library") +: RUtils.sparkRPackagePath(isDriver = false)
+       RUtils.sparkRPackagePath(isDriver = false) :+ (conda.condaEnvDir + "/lib/R/library")
     }.getOrElse(RUtils.sparkRPackagePath(isDriver = false))
+    print(rLibDir + "\n")
     val rExecScript = RUtils.sparkRInstallLocation(rLibDir, "/SparkR/worker/" + script)
+    print(rExecScript)
     val pb = new ProcessBuilder(Arrays.asList(rCommand, rOptions, rExecScript))
     // Activate the conda environment by setting the right env variables if applicable.
     condaEnv.map(_.activatedEnvironment()).map(_.asJava).foreach(pb.environment().putAll)
