@@ -540,29 +540,7 @@ private[evaluation] object SquaredEuclideanSilhouette extends Silhouette {
  */
 private[evaluation] object CosineSilhouette extends Silhouette {
 
-  private[this] var kryoRegistrationPerformed: Boolean = false
-
   private[this] val normalizedFeaturesColName = "normalizedFeatures"
-
-  /**
-   * This method registers the class
-   * [[org.apache.spark.ml.evaluation.CosineSilhouette.ClusterStats]]
-   * for kryo serialization.
-   *
-   * @param sc `SparkContext` to be used
-   */
-  def registerKryoClasses(sc: SparkContext): Unit = {
-    if (!kryoRegistrationPerformed) {
-      sc.getConf.registerKryoClasses(
-        Array(
-          classOf[CosineSilhouette.ClusterStats]
-        )
-      )
-      kryoRegistrationPerformed = true
-    }
-  }
-
-  case class ClusterStats(normalizedFeatureSum: Vector, numOfPoints: Long)
 
   /**
    * The method takes the input dataset and computes the aggregated values
@@ -572,10 +550,9 @@ private[evaluation] object CosineSilhouette extends Silhouette {
    * @param predictionCol The name of the column which contains the predicted cluster id
    *                      for the point.
    * @return A [[scala.collection.immutable.Map]] which associates each cluster id to a
-   *         [[ClusterStats]] object (which contains the precomputed values `N` and
-   *         `$\Omega_{\Gamma}$`).
+   *         its statistics (ie. the precomputed values `N` and `$\Omega_{\Gamma}$`).
    */
-  def computeClusterStats(df: DataFrame, predictionCol: String): Map[Double, ClusterStats] = {
+  def computeClusterStats(df: DataFrame, predictionCol: String): Map[Double, (Vector, Long)] = {
     val numFeatures = df.select(col(normalizedFeaturesColName)).first().getAs[Vector](0).size
     val clustersStatsRDD = df.select(
       col(predictionCol).cast(DoubleType), col(normalizedFeaturesColName))
@@ -596,10 +573,6 @@ private[evaluation] object CosineSilhouette extends Silhouette {
 
     clustersStatsRDD
       .collectAsMap()
-      .mapValues {
-        case (normalizedFeaturesSum: DenseVector, numOfPoints: Long) =>
-          CosineSilhouette.ClusterStats(normalizedFeaturesSum, numOfPoints)
-      }
       .toMap
   }
 
@@ -612,19 +585,18 @@ private[evaluation] object CosineSilhouette extends Silhouette {
    * @param clusterId The id of the cluster the current point belongs to.
    */
   def computeSilhouetteCoefficient(
-      broadcastedClustersMap: Broadcast[Map[Double, ClusterStats]],
+      broadcastedClustersMap: Broadcast[Map[Double, (Vector, Long)]],
       normalizedFeatures: Vector,
       clusterId: Double): Double = {
 
     def compute(targetClusterId: Double): Double = {
-      val clusterStats = broadcastedClustersMap.value(targetClusterId)
-      1 - BLAS.dot(normalizedFeatures, clusterStats.normalizedFeatureSum) /
-        clusterStats.numOfPoints
+      val (normalizedFeatureSum, numOfPoints) = broadcastedClustersMap.value(targetClusterId)
+      1 - BLAS.dot(normalizedFeatures, normalizedFeatureSum) / numOfPoints
     }
 
     pointSilhouetteCoefficient(broadcastedClustersMap.value.keySet,
       clusterId,
-      broadcastedClustersMap.value(clusterId).numOfPoints,
+      broadcastedClustersMap.value(clusterId)._2,
       compute)
   }
 
@@ -641,8 +613,6 @@ private[evaluation] object CosineSilhouette extends Silhouette {
       dataset: Dataset[_],
       predictionCol: String,
       featuresCol: String): Double = {
-    registerKryoClasses(dataset.sparkSession.sparkContext)
-
     val normalizeFeatureUDF = udf {
       features: Vector => {
         val norm = Vectors.norm(features, 2.0)
