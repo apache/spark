@@ -165,7 +165,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
 
   // This should be tested manually because it raises OOM intentionally
   // in order to cause `Leaked filesystem connection`. The test suite dies, too.
-  ignore("SPARK-23399 Register a task completion listner first for OrcColumnarBatchReader") {
+  ignore("SPARK-23399 Register a task completion listener first for OrcColumnarBatchReader") {
     withSQLConf(SQLConf.ORC_VECTORIZED_READER_BATCH_SIZE.key -> s"${Int.MaxValue}") {
       withTempDir { dir =>
         val basePath = dir.getCanonicalPath
