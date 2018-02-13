@@ -270,7 +270,7 @@ public class ReadAheadInputStream extends InputStream {
       try {
         waitForAsyncReadComplete();
         if (!readAheadBuffer.hasRemaining()) {
-          // The first read or activeBuffer is skipped.
+          // The first read.
           readAsync();
           waitForAsyncReadComplete();
           if (isEndOfStream()) {
