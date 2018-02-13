@@ -95,6 +95,12 @@ private[spark] object RUtils {
     }
   }
 
+  /** Finds the rLibDir with SparkR installed on it. */
+  def sparkRInstallLocation(rLibDir: Seq[String], scriptPath: String): String = {
+    rLibDir.find( dir => new File(dir + scriptPath).exists)
+      .getOrElse(throw new SparkException("SparkR package not installed on executor."))
+  }
+
   /** Check if R is installed before running tests that use R commands. */
   def isRInstalled: Boolean = {
     try {
