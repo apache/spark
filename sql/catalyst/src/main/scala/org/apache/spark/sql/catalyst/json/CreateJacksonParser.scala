@@ -39,7 +39,7 @@ private[sql] object CreateJacksonParser extends Serializable {
     jsonFactory.createParser(new InputStreamReader(bain, "UTF-8"))
   }
 
-  def textInCharset(charset: Option[String])(jsonFactory: JsonFactory, record: Text): JsonParser = {
+  def text(jsonFactory: JsonFactory, record: Text, charset: Option[String] = None): JsonParser = {
     charset match {
       case Some(cs) =>
         val bain = new ByteArrayInputStream(record.getBytes, 0, record.getLength)
@@ -48,11 +48,7 @@ private[sql] object CreateJacksonParser extends Serializable {
         jsonFactory.createParser(record.getBytes, 0, record.getLength)
     }
   }
-
-  def text(jsonFactory: JsonFactory, record: Text): JsonParser = {
-    textInCharset(None)(jsonFactory, record)
-  }
-
+  
   def inputStream(jsonFactory: JsonFactory, record: InputStream): JsonParser = {
     jsonFactory.createParser(record)
   }
