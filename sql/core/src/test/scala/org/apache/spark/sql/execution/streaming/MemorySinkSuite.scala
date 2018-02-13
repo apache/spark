@@ -22,7 +22,7 @@ import scala.language.implicitConversions
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming.sources.{MemoryPlanV2, MemorySinkV2}
+import org.apache.spark.sql.execution.streaming.sources._
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -36,7 +36,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
   }
 
   private def addBatchFunc(
-      sink: MemorySinkV2,
+      sink: MemorySink,
       outputMode: OutputMode)(
       batchId: Long,
       vals: Seq[Int]): Unit = {
@@ -45,7 +45,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Append output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySinkV2
+    val sink = new MemorySink
     val addBatch = addBatchFunc(sink, OutputMode.Append()) _
 
     // Before adding data, check output
@@ -80,7 +80,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Update output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySinkV2
+    val sink = new MemorySink
     val addBatch = addBatchFunc(sink, OutputMode.Update()) _
 
     // Before adding data, check output
@@ -115,7 +115,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Complete output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySinkV2
+    val sink = new MemorySink
     val addBatch = addBatchFunc(sink, OutputMode.Complete()) _
 
     // Before adding data, check output
@@ -222,8 +222,8 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("MemoryPlan statistics") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySinkV2
-    val plan = new MemoryPlanV2(sink, schema.toAttributes)
+    val sink = new MemorySink
+    val plan = new MemoryPlan(sink, schema.toAttributes)
     val addBatch = addBatchFunc(sink, OutputMode.Append()) _
 
     // Before adding data, check output
@@ -295,6 +295,63 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
         .option("checkpointLocation", location)
         .start()
     }
+  }
+
+  test("data writer") {
+    val partition = 1234
+    val writer = new MemoryDataWriter(partition, OutputMode.Append())
+    writer.write(Row(1))
+    writer.write(Row(2))
+    writer.write(Row(44))
+    val msg = writer.commit()
+    assert(msg.data.map(_.getInt(0)) == Seq(1, 2, 44))
+    assert(msg.partition == partition)
+
+    // Buffer should be cleared, so repeated commits should give empty.
+    assert(writer.commit().data.isEmpty)
+  }
+
+  test("continuous writer") {
+    val sink = new MemorySink
+    val writer = new MemoryStreamWriter(sink, OutputMode.Append())
+    writer.commit(0,
+      Array(
+        MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
+        MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
+        MemoryWriterCommitMessage(2, Seq(Row(6), Row(7)))
+      ))
+    assert(sink.latestBatchId.contains(0))
+    assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7))
+    writer.commit(19,
+      Array(
+        MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))),
+        MemoryWriterCommitMessage(0, Seq(Row(33)))
+      ))
+    assert(sink.latestBatchId.contains(19))
+    assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(11, 22, 33))
+
+    assert(sink.allData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7, 11, 22, 33))
+  }
+
+  test("microbatch writer") {
+    val sink = new MemorySink
+    new MemoryWriter(sink, 0, OutputMode.Append()).commit(
+      Array(
+        MemoryWriterCommitMessage(0, Seq(Row(1), Row(2))),
+        MemoryWriterCommitMessage(1, Seq(Row(3), Row(4))),
+        MemoryWriterCommitMessage(2, Seq(Row(6), Row(7)))
+      ))
+    assert(sink.latestBatchId.contains(0))
+    assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7))
+    new MemoryWriter(sink, 19, OutputMode.Append()).commit(
+      Array(
+        MemoryWriterCommitMessage(3, Seq(Row(11), Row(22))),
+        MemoryWriterCommitMessage(0, Seq(Row(33)))
+      ))
+    assert(sink.latestBatchId.contains(19))
+    assert(sink.latestBatchData.map(_.getInt(0)).sorted == Seq(11, 22, 33))
+
+    assert(sink.allData.map(_.getInt(0)).sorted == Seq(1, 2, 3, 4, 6, 7, 11, 22, 33))
   }
 
   private def checkAnswer(rows: Seq[Row], expected: Seq[Int])(implicit schema: StructType): Unit = {
