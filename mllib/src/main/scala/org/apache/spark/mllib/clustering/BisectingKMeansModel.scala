@@ -44,6 +44,9 @@ class BisectingKMeansModel private[clustering] (
     @Since("2.4.0") val distanceMeasure: String
   ) extends Serializable with Saveable with Logging {
 
+  @Since("1.6.0")
+  def this(root: ClusteringTreeNode) = this(root, DistanceMeasure.EUCLIDEAN)
+
   private val distanceMeasureInstance: DistanceMeasure =
     DistanceMeasure.decodeFromString(distanceMeasure)
 
