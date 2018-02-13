@@ -157,6 +157,14 @@ private[v1] class NotFoundException(msg: String) extends WebApplicationException
       .build()
 )
 
+private[v1] class ServiceUnavailable(msg: String) extends WebApplicationException(
+  new ServiceUnavailableException(msg),
+  Response
+    .status(Response.Status.SERVICE_UNAVAILABLE)
+    .entity(ErrorWrapper(msg))
+    .build()
+)
+
 private[v1] class BadParameterException(msg: String) extends WebApplicationException(
   new IllegalArgumentException(msg),
   Response

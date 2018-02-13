@@ -348,6 +348,13 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td>A list of all active executors for the given application.</td>
   </tr>
   <tr>
+    <td><code>/applications/[app-id]/executors/[executor-id]/threads</code></td>
+    <td>
+      Stack traces of all the threads running within the given active executor.
+      Not available via the history server.
+    </td>
+  </tr>
+  <tr>
     <td><code>/applications/[app-id]/allexecutors</code></td>
     <td>A list of all(active and dead) executors for the given application.</td>
   </tr>

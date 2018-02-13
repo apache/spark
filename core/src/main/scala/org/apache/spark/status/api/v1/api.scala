@@ -316,3 +316,12 @@ class RuntimeInfo private[spark](
     val javaVersion: String,
     val javaHome: String,
     val scalaVersion: String)
+
+case class ThreadStackTrace(
+    val threadId: Long,
+    val threadName: String,
+    val threadState: Thread.State,
+    val stackTrace: String,
+    val blockedByThreadId: Option[Long],
+    val blockedByLock: String,
+    val holdingLocks: Seq[String])
