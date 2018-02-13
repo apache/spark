@@ -24,8 +24,8 @@ import scala.collection.mutable.{ArrayBuffer, Map => MutableMap}
 
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, WriteToDataSourceV2}
 import org.apache.spark.sql.execution.streaming.sources.{InternalRowMicroBatchWriter, MicroBatchWriter}
@@ -431,7 +431,11 @@ class MicroBatchExecution(
             s"Invalid batch: ${Utils.truncatedString(output, ",")} != " +
               s"${Utils.truncatedString(dataPlan.output, ",")}")
           replacements ++= output.zip(dataPlan.output)
-          dataPlan
+
+          val aliases = output.zip(dataPlan.output).map { case (to, from) =>
+            Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))
+          }
+          Project(aliases, dataPlan)
         }.getOrElse {
           LocalRelation(output, isStreaming = true)
         }
@@ -440,8 +444,6 @@ class MicroBatchExecution(
     // Rewire the plan to use the new attributes that were returned by the source.
     val replacementMap = AttributeMap(replacements)
     val newAttributePlan = newBatchesPlan transformAllExpressions {
-      case a: Attribute if replacementMap.contains(a) =>
-        replacementMap(a).withMetadata(a.metadata)
       case ct: CurrentTimestamp =>
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           ct.dataType)
