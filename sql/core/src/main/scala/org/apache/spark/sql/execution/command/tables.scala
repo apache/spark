@@ -304,45 +304,14 @@ case class LoadDataCommand(
       }
     }
 
-    val loadPath =
+    val loadPath = {
       if (isLocal) {
         val uri = Utils.resolveURI(path)
-        val file = new File(uri.getPath)
-        val exists = if (file.getAbsolutePath.contains("*")) {
-          val fileSystem = FileSystems.getDefault
-          val dir = file.getParentFile.getAbsolutePath
-          if (dir.contains("*")) {
-            throw new AnalysisException(
-              s"LOAD DATA input path allows only filename wildcard: $path")
-          }
-
-          // Note that special characters such as "*" on Windows are not allowed as a path.
-          // Calling `WindowsFileSystem.getPath` throws an exception if there are in the path.
-          val dirPath = fileSystem.getPath(dir)
-          val pathPattern = new File(dirPath.toAbsolutePath.toString, file.getName).toURI.getPath
-          val safePathPattern = if (Utils.isWindows) {
-            // On Windows, the pattern should not start with slashes for absolute file paths.
-            pathPattern.stripPrefix("/")
-          } else {
-            pathPattern
-          }
-          val files = new File(dir).listFiles()
-          if (files == null) {
-            false
-          } else {
-            val matcher = fileSystem.getPathMatcher("glob:" + safePathPattern)
-            files.exists(f => matcher.matches(fileSystem.getPath(f.getAbsolutePath)))
-          }
-        } else {
-          new File(file.getAbsolutePath).exists()
-        }
-        if (!exists) {
-          throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
-        }
         uri
-      } else {
+      }
+      else {
         val uri = new URI(path)
-        val hdfsUri = if (uri.getScheme() != null && uri.getAuthority() != null) {
+        if (uri.getScheme() != null && uri.getAuthority() != null) {
           uri
         } else {
           // Follow Hive's behavior:
@@ -370,7 +339,6 @@ case class LoadDataCommand(
             throw new AnalysisException(
               s"LOAD DATA: URI scheme is required for non-local input paths: '$path'")
           }
-
           // Follow Hive's behavior:
           // If LOCAL is not specified, and the path is relative,
           // then the path is interpreted relative to "/user/<username>"
@@ -382,14 +350,24 @@ case class LoadDataCommand(
           }
           new URI(scheme, authority, absolutePath, uri.getQuery(), uri.getFragment())
         }
-        val hadoopConf = sparkSession.sessionState.newHadoopConf()
-        val srcPath = new Path(hdfsUri)
-        val fs = srcPath.getFileSystem(hadoopConf)
-        if (!fs.exists(srcPath)) {
-          throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
-        }
-        hdfsUri
       }
+    }
+    val srcPath = new Path(loadPath)
+    val fs = srcPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+    // This handling is because while reoslving the invalid urls starting with file:///
+    // system throws IllegalArgumentException from globStatus api,so inorder to handle
+    // such scenarios this code is added in try catch block and after catching the
+    // run time exception a generic error will be displayed to the user.
+    try {
+      if (null == fs.globStatus(srcPath) || fs.globStatus(srcPath).isEmpty) {
+        throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
+      }
+    }
+    catch {
+      case e: IllegalArgumentException =>
+        log.warn(s"Exception while validating the load path $path ", e)
+        throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
+    }
 
     if (partition.nonEmpty) {
       catalog.loadPartition(
