@@ -208,7 +208,8 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
                |Expected valid port number, got 0x$daemonPort%08x.
                |PYTHONPATH set to '$pythonPath'
                |Python command is '${command.asScala.mkString(" ")}'
-               |Check if you have a sitecustomize.py module in your python installation."""
+               |One possibility is a sitecustomize.py module in your python installation
+               |that is printing to stdout"""
           throw new IOException(exceptionMessage.stripMargin)
         }
 
