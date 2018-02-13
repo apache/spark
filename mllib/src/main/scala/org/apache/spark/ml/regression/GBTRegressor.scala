@@ -18,7 +18,7 @@
 package org.apache.spark.ml.regression
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
-import org.json4s.{DefaultFormats, JObject}
+import org.json4s.{DefaultFormats, JInt, JObject, JString}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
@@ -287,8 +287,9 @@ object GBTRegressionModel extends MLReadable[GBTRegressionModel] {
 
     override protected def saveImpl(path: String): Unit = {
       val extraMetadata: JObject = Map(
-        "numFeatures" -> instance.numFeatures,
-        "numTrees" -> instance.getNumTrees)
+        "numFeatures" -> JInt(instance.numFeatures),
+        "numTrees" -> JInt(instance.getNumTrees),
+        "impurity" -> JString(instance.getImpurity))
       EnsembleModelReadWrite.saveImpl(instance, path, sparkSession, extraMetadata)
     }
   }

@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.hadoop.fs.Path
-import org.json4s.{DefaultFormats, JObject}
+import org.json4s.{DefaultFormats, JInt, JObject, JString}
 import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.Since
@@ -256,8 +256,9 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
 
     override protected def saveImpl(path: String): Unit = {
       val extraMetadata: JObject = Map(
-        "numFeatures" -> instance.numFeatures,
-        "numClasses" -> instance.numClasses)
+        "numFeatures" -> JInt(instance.numFeatures),
+        "numClasses" -> JInt(instance.numClasses),
+        "impurity" -> JString(instance.getImpurity))
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString

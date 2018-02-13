@@ -103,6 +103,17 @@ private[regression] trait LinearRegressionParams extends PredictorParams
   @Since("2.3.0")
   def getEpsilon: Double = $(epsilon)
 
+  setDefault(regParam -> 0.0)
+  setDefault(fitIntercept -> true)
+  setDefault(standardization -> true)
+  setDefault(elasticNetParam -> 0.0)
+  setDefault(maxIter -> 100)
+  setDefault(tol -> 1E-6)
+  setDefault(solver -> Auto)
+  setDefault(aggregationDepth -> 2)
+  setDefault(loss -> SquaredError)
+  setDefault(epsilon -> 1.35)
+
   override protected def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
@@ -188,7 +199,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.3.0")
   def setRegParam(value: Double): this.type = set(regParam, value)
-  setDefault(regParam -> 0.0)
 
   /**
    * Set if we should fit the intercept.
@@ -198,7 +208,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.5.0")
   def setFitIntercept(value: Boolean): this.type = set(fitIntercept, value)
-  setDefault(fitIntercept -> true)
 
   /**
    * Whether to standardize the training features before fitting the model.
@@ -214,7 +223,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.5.0")
   def setStandardization(value: Boolean): this.type = set(standardization, value)
-  setDefault(standardization -> true)
 
   /**
    * Set the ElasticNet mixing parameter.
@@ -230,7 +238,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.4.0")
   def setElasticNetParam(value: Double): this.type = set(elasticNetParam, value)
-  setDefault(elasticNetParam -> 0.0)
 
   /**
    * Set the maximum number of iterations.
@@ -240,7 +247,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.3.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
-  setDefault(maxIter -> 100)
 
   /**
    * Set the convergence tolerance of iterations.
@@ -251,7 +257,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.4.0")
   def setTol(value: Double): this.type = set(tol, value)
-  setDefault(tol -> 1E-6)
 
   /**
    * Whether to over-/under-sample training instances according to the given weights in weightCol.
@@ -280,7 +285,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("1.6.0")
   def setSolver(value: String): this.type = set(solver, value)
-  setDefault(solver -> Auto)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
@@ -292,7 +296,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("2.1.0")
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
-  setDefault(aggregationDepth -> 2)
 
   /**
    * Sets the value of param [[loss]].
@@ -302,7 +305,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("2.3.0")
   def setLoss(value: String): this.type = set(loss, value)
-  setDefault(loss -> SquaredError)
 
   /**
    * Sets the value of param [[epsilon]].
@@ -312,7 +314,6 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    */
   @Since("2.3.0")
   def setEpsilon(value: Double): this.type = set(epsilon, value)
-  setDefault(epsilon -> 1.35)
 
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = {
     // Extract the number of features before deciding optimization solver.

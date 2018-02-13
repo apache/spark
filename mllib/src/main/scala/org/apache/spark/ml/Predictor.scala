@@ -115,7 +115,7 @@ abstract class Predictor[
       case _ => labelCasted
     }
 
-    copyValues(train(casted).setParent(this))
+    copyValues(train(casted).setParent(this), extra = ParamMap.empty, copyDefault = false)
   }
 
   override def copy(extra: ParamMap): Learner

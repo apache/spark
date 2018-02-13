@@ -93,6 +93,14 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   @Since("1.5.0")
   def getInitSteps: Int = $(initSteps)
 
+  setDefault(
+    k -> 2,
+    maxIter -> 20,
+    initMode -> MLlibKMeans.K_MEANS_PARALLEL,
+    initSteps -> 2,
+    tol -> 1e-4,
+    distanceMeasure -> DistanceMeasure.EUCLIDEAN)
+
   /**
    * Validates and transforms the input schema.
    * @param schema input schema
@@ -264,14 +272,6 @@ class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends Estimator[KMeansModel] with KMeansParams with DefaultParamsWritable {
 
-  setDefault(
-    k -> 2,
-    maxIter -> 20,
-    initMode -> MLlibKMeans.K_MEANS_PARALLEL,
-    initSteps -> 2,
-    tol -> 1e-4,
-    distanceMeasure -> DistanceMeasure.EUCLIDEAN)
-
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeans = defaultCopy(extra)
 
@@ -339,7 +339,8 @@ class KMeans @Since("1.5.0") (
       .setEpsilon($(tol))
       .setDistanceMeasure($(distanceMeasure))
     val parentModel = algo.run(instances, Option(instr))
-    val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
+    val model = copyValues(new KMeansModel(uid, parentModel).setParent(this),
+      extra = ParamMap.empty, copyDefault = false)
     val summary = new KMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
 

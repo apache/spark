@@ -54,6 +54,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * Common params for ALS and ALSModel.
  */
 private[recommendation] trait ALSModelParams extends Params with HasPredictionCol {
+
   /**
    * Param for the column name for user ids. Ids must be integers. Other
    * numeric types are supported for this column, but will be cast to integers as long as they
@@ -124,6 +125,8 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
 
   /** @group expertGetParam */
   def getColdStartStrategy: String = $(coldStartStrategy).toLowerCase(Locale.ROOT)
+
+  setDefault(userCol -> "user", itemCol -> "item", coldStartStrategy -> "nan")
 }
 
 /**
@@ -235,10 +238,9 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
   def getFinalStorageLevel: String = $(finalStorageLevel)
 
   setDefault(rank -> 10, maxIter -> 10, regParam -> 0.1, numUserBlocks -> 10, numItemBlocks -> 10,
-    implicitPrefs -> false, alpha -> 1.0, userCol -> "user", itemCol -> "item",
+    implicitPrefs -> false, alpha -> 1.0,
     ratingCol -> "rating", nonnegative -> false, checkpointInterval -> 10,
-    intermediateStorageLevel -> "MEMORY_AND_DISK", finalStorageLevel -> "MEMORY_AND_DISK",
-    coldStartStrategy -> "nan")
+    intermediateStorageLevel -> "MEMORY_AND_DISK", finalStorageLevel -> "MEMORY_AND_DISK")
 
   /**
    * Validates and transforms the input schema.
