@@ -68,7 +68,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
           val safeThreadDump = safeSparkContext.getExecutorThreadDump(execId).getOrElse {
             throw new NotFoundException("No thread dump is available.")
           }
-          return safeThreadDump
+          safeThreadDump
       case Some(_) => throw new BadParameterException("Executor is not active.")
       case _ => throw new NotFoundException("Executor does not exist.")
     }
