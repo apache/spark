@@ -60,22 +60,6 @@ case class ScalaUDF(
       function, dataType, children, inputTypes, udfName, nullable = true, udfDeterministic = true)
   }
 
-  // The constructor for SPARK 2.0
-  def this(
-      function: AnyRef,
-      dataType: DataType,
-      children: Seq[Expression],
-      inputTypes: Seq[DataType]) = {
-    this(
-      function,
-      dataType,
-      children,
-      inputTypes,
-      udfName = None,
-      nullable = true,
-      udfDeterministic = true)
-  }
-
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
   override def toString: String =
