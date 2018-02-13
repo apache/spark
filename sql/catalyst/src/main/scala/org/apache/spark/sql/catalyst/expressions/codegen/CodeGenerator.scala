@@ -1227,7 +1227,10 @@ class CodegenContext {
   /**
    * Register a comment and return the corresponding place holder
    *
-   * @param placeholderId a string for a place holder
+   * @param placeholderId an optionally specified identifier for the comment's placeholder.
+   *                      The caller should make sure this identifier is unique within the
+   *                      compilation unit. If this argument is not specified, a fresh identifier
+   *                      will be automatically created and used as the placeholder.
    * @param force whether to force registering the comments
    */
   def registerComment(
