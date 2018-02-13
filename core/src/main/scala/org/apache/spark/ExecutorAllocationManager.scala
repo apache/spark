@@ -334,6 +334,10 @@ private[spark] class ExecutorAllocationManager(
 
       // If the new target has not changed, avoid sending a message to the cluster manager
       if (numExecutorsTarget < oldNumExecutorsTarget) {
+        // We lower the target number of executors but don't actively kill any yet.  We do this
+        // in case an executor just happens to get lost (eg., bad hardware, or the cluster manager
+        // preempts it) -- in that case, there is no point in trying to immediately  get a new
+        // executor, since we couldn't even use it yet.
         client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
         logDebug(s"Lowering target number of executors to $numExecutorsTarget (previously " +
           s"$oldNumExecutorsTarget) because not all requested executors are actually needed")
@@ -455,7 +459,12 @@ private[spark] class ExecutorAllocationManager(
     val executorsRemoved = if (testing) {
       executorIdsToBeRemoved
     } else {
-      client.killExecutors(executorIdsToBeRemoved)
+      // We don't want to change our target number of executors, because we already did that
+      // when the task backlog decreased.  Normally there wouldn't be any tasks running on these
+      // executors, but maybe the scheduler *just* decided to run a task there -- in that case,
+      // we don't want to count those failures.
+      client.killExecutors(executorIdsToBeRemoved, adjustTargetNumExecutors = false,
+        countFailures = false, force = false)
     }
     // [SPARK-21834] killExecutors api reduces the target number of executors.
     // So we need to update the target with desired value.
