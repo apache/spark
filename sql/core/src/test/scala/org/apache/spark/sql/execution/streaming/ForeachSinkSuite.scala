@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.io.Serializable
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable
@@ -26,7 +27,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.functions.{count, window}
-import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest}
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest, Trigger}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
@@ -141,7 +142,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
         query.processAllAvailable()
       }
       assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.getMessage === "error")
+      assert(e.getCause.getCause.getCause.getMessage === "error")
       assert(query.isActive === false)
 
       val allEvents = ForeachSinkSuite.allEvents()
@@ -253,6 +254,89 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
         s"recentProgress[${query.recentProgress.toList}] doesn't contain correct metrics")
     } finally {
       query.stop()
+    }
+  }
+
+  testQuietly("foreach does not reuse writers") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[Int]
+      val query = input.toDS().repartition(1).writeStream
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .foreach(new TestForeachWriter() {
+          override def process(value: Int): Unit = {
+            super.process(this.hashCode())
+          }
+        }).start()
+      input.addData(0)
+      query.processAllAvailable()
+      input.addData(0)
+      query.processAllAvailable()
+
+      val allEvents = ForeachSinkSuite.allEvents()
+      assert(allEvents.size === 2)
+      assert(allEvents(0)(1).isInstanceOf[ForeachSinkSuite.Process[Int]])
+      val firstWriterId = allEvents(0)(1).asInstanceOf[ForeachSinkSuite.Process[Int]].value
+      assert(allEvents(1)(1).isInstanceOf[ForeachSinkSuite.Process[Int]])
+      assert(
+        allEvents(1)(1).asInstanceOf[ForeachSinkSuite.Process[Int]].value != firstWriterId,
+        "writer was reused!")
+    }
+  }
+
+  testQuietly("foreach sink for continuous query") {
+    withTempDir { checkpointDir =>
+      val query = spark.readStream
+        .format("rate")
+        .option("numPartitions", "1")
+        .option("rowsPerSecond", "5")
+        .load()
+        .select('value.cast("INT"))
+        .map(r => r.getInt(0))
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .trigger(Trigger.Continuous(500))
+        .foreach(new TestForeachWriter with Serializable {
+          override def process(value: Int): Unit = {
+            super.process(this.hashCode())
+          }
+        }).start()
+      try {
+        // Wait until we get 3 epochs with at least 3 events in them. This means we'll see
+        // open, close, and at least 1 process.
+        eventually(timeout(streamingTimeout)) {
+          // Check
+          assert(ForeachSinkSuite.allEvents().count(_.size >= 3) === 3)
+        }
+
+        val allEvents = ForeachSinkSuite.allEvents().filter(_.size >= 3)
+        // Check open and close events.
+        allEvents(0).head match {
+          case ForeachSinkSuite.Open(0, _) =>
+          case e => assert(false, s"unexpected event $e")
+        }
+        allEvents(1).head match {
+          case ForeachSinkSuite.Open(0, _) =>
+          case e => assert(false, s"unexpected event $e")
+        }
+        allEvents(2).head match {
+          case ForeachSinkSuite.Open(0, _) =>
+          case e => assert(false, s"unexpected event $e")
+        }
+        assert(allEvents(0).last == ForeachSinkSuite.Close(None))
+        assert(allEvents(1).last == ForeachSinkSuite.Close(None))
+        assert(allEvents(2).last == ForeachSinkSuite.Close(None))
+
+        // Check the first Process event in each epoch, and also check the writer IDs
+        // we packed in to make sure none got reused.
+        val writerIds = (0 to 2).map { i =>
+          allEvents(i)(1).asInstanceOf[ForeachSinkSuite.Process[Int]].value
+        }
+        assert(
+          writerIds.toSet.size == 3,
+          s"writer was reused! expected 3 unique writers but saw $writerIds")
+      } finally {
+        query.stop()
+      }
     }
   }
 }
