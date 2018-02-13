@@ -610,7 +610,7 @@ class StandaloneDynamicAllocationSuite
    * we submit a request to kill them. This must be called before each kill request.
    */
   private def syncExecutors(sc: SparkContext): Unit = {
-    val driverExecutors = sc.getExecutorStorageStatus
+    val driverExecutors = sc.env.blockManager.master.getStorageStatus
       .map(_.blockManagerId.executorId)
       .filter { _ != SparkContext.DRIVER_IDENTIFIER}
     val masterExecutors = getExecutorIds(sc)
