@@ -68,7 +68,8 @@ class ExecutorStageSummary private[spark](
     val shuffleWrite : Long,
     val shuffleWriteRecords : Long,
     val memoryBytesSpilled : Long,
-    val diskBytesSpilled : Long)
+    val diskBytesSpilled : Long,
+    val isBlacklistedForStage: Boolean)
 
 class ExecutorSummary private[spark](
     val id: String,
@@ -94,7 +95,8 @@ class ExecutorSummary private[spark](
     val removeTime: Option[Date],
     val removeReason: Option[String],
     val executorLogs: Map[String, String],
-    val memoryMetrics: Option[MemoryMetrics])
+    val memoryMetrics: Option[MemoryMetrics],
+    val blacklistedInStages: Set[Int])
 
 class MemoryMetrics private[spark](
     val usedOnHeapStorageMemory: Long,

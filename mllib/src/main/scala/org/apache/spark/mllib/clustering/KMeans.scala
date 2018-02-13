@@ -310,8 +310,7 @@ class KMeans private (
         points.foreach { point =>
           val (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
           costAccum.add(cost)
-          val sum = sums(bestCenter)
-          axpy(1.0, point.vector, sum)
+          distanceMeasureInstance.updateClusterSum(point, sums(bestCenter))
           counts(bestCenter) += 1
         }
 
@@ -319,10 +318,9 @@ class KMeans private (
       }.reduceByKey { case ((sum1, count1), (sum2, count2)) =>
         axpy(1.0, sum2, sum1)
         (sum1, count1 + count2)
-      }.mapValues { case (sum, count) =>
-        scal(1.0 / count, sum)
-        new VectorWithNorm(sum)
-      }.collectAsMap()
+      }.collectAsMap().mapValues { case (sum, count) =>
+        distanceMeasureInstance.centroid(sum, count)
+      }
 
       bcCenters.destroy(blocking = false)
 
@@ -657,6 +655,26 @@ private[spark] abstract class DistanceMeasure extends Serializable {
       v1: VectorWithNorm,
       v2: VectorWithNorm): Double
 
+  /**
+   * Updates the value of `sum` adding the `point` vector.
+   * @param point a `VectorWithNorm` to be added to `sum` of a cluster
+   * @param sum the `sum` for a cluster to be updated
+   */
+  def updateClusterSum(point: VectorWithNorm, sum: Vector): Unit = {
+    axpy(1.0, point.vector, sum)
+  }
+
+  /**
+   * Returns a centroid for a cluster given its `sum` vector and its `count` of points.
+   *
+   * @param sum   the `sum` for a cluster
+   * @param count the number of points in the cluster
+   * @return the centroid of the cluster
+   */
+  def centroid(sum: Vector, count: Long): VectorWithNorm = {
+    scal(1.0 / count, sum)
+    new VectorWithNorm(sum)
+  }
 }
 
 @Since("2.4.0")
@@ -743,6 +761,30 @@ private[spark] class CosineDistanceMeasure extends DistanceMeasure {
    * @return the cosine distance between the two input vectors
    */
   override def distance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
+    assert(v1.norm > 0 && v2.norm > 0, "Cosine distance is not defined for zero-length vectors.")
     1 - dot(v1.vector, v2.vector) / v1.norm / v2.norm
+  }
+
+  /**
+   * Updates the value of `sum` adding the `point` vector.
+   * @param point a `VectorWithNorm` to be added to `sum` of a cluster
+   * @param sum the `sum` for a cluster to be updated
+   */
+  override def updateClusterSum(point: VectorWithNorm, sum: Vector): Unit = {
+    axpy(1.0 / point.norm, point.vector, sum)
+  }
+
+  /**
+   * Returns a centroid for a cluster given its `sum` vector and its `count` of points.
+   *
+   * @param sum   the `sum` for a cluster
+   * @param count the number of points in the cluster
+   * @return the centroid of the cluster
+   */
+  override def centroid(sum: Vector, count: Long): VectorWithNorm = {
+    scal(1.0 / count, sum)
+    val norm = Vectors.norm(sum, 2)
+    scal(1.0 / norm, sum)
+    new VectorWithNorm(sum, 1)
   }
 }

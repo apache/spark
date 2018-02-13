@@ -530,8 +530,6 @@ private[hive] class TestHiveSparkSession(
       // For some reason, RESET does not reset the following variables...
       // https://issues.apache.org/jira/browse/HIVE-9004
       metadataHive.runSqlHive("set hive.table.parameters.default=")
-      metadataHive.runSqlHive("set datanucleus.cache.collections=true")
-      metadataHive.runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
       metadataHive.runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
 
@@ -575,7 +573,7 @@ private[hive] class TestHiveQueryExecution(
     logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
     referencedTestTables.foreach(sparkSession.loadTestTable)
     // Proceed with analysis.
-    sparkSession.sessionState.analyzer.execute(logical)
+    sparkSession.sessionState.analyzer.executeAndCheck(logical)
   }
 }
 

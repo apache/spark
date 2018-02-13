@@ -589,6 +589,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Nil)
   }
 
+  test("SPARK-23274: except between two projects without references used in filter") {
+    val df = Seq((1, 2, 4), (1, 3, 5), (2, 2, 3), (2, 4, 5)).toDF("a", "b", "c")
+    val df1 = df.filter($"a" === 1)
+    val df2 = df.filter($"a" === 2)
+    checkAnswer(df1.select("b").except(df2.select("b")), Row(3) :: Nil)
+    checkAnswer(df1.select("b").except(df2.select("c")), Row(2) :: Nil)
+  }
+
   test("except distinct - SQL compliance") {
     val df_left = Seq(1, 2, 2, 3, 3, 4).toDF("id")
     val df_right = Seq(1, 3).toDF("id")

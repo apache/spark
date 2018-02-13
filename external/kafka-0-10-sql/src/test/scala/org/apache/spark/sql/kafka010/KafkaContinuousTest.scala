@@ -47,7 +47,8 @@ trait KafkaContinuousTest extends KafkaSourceTest {
     eventually(timeout(streamingTimeout)) {
       assert(
         query.lastExecution.logical.collectFirst {
-          case DataSourceV2Relation(_, r: KafkaContinuousReader) => r
+          case r: DataSourceV2Relation if r.reader.isInstanceOf[KafkaContinuousReader] =>
+            r.reader.asInstanceOf[KafkaContinuousReader]
         }.exists(_.knownPartitions.size == newCount),
         s"query never reconfigured to $newCount partitions")
     }

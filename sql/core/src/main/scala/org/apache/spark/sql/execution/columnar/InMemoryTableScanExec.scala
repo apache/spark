@@ -54,12 +54,15 @@ case class InMemoryTableScanExec(
   override val supportsBatch: Boolean = {
     // In the initial implementation, for ease of review
     // support only primitive data types and # of fields is less than wholeStageMaxNumFields
-    relation.schema.fields.forall(f => f.dataType match {
+    conf.cacheVectorizedReaderEnabled && relation.schema.fields.forall(f => f.dataType match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType |
            FloatType | DoubleType => true
       case _ => false
     }) && !WholeStageCodegenExec.isTooManyFields(conf, relation.schema)
   }
+
+  // TODO: revisit this. Shall we always turn off whole stage codegen if the output data are rows?
+  override def supportCodegen: Boolean = supportsBatch
 
   override protected def needsUnsafeRowConversion: Boolean = false
 
@@ -274,7 +277,7 @@ case class InMemoryTableScanExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {
-      WholeStageCodegenExec(this).execute()
+      WholeStageCodegenExec(this)(codegenStageId = 0).execute()
     } else {
       inputRDD
     }

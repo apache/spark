@@ -24,29 +24,40 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.streaming.continuous._
+import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.streaming.reader.ContinuousReader
+import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReader
 import org.apache.spark.sql.types.StructType
 
 /**
  * Physical plan node for scanning data from a data source.
  */
 case class DataSourceV2ScanExec(
-    fullOutput: Seq[AttributeReference],
-    @transient reader: DataSourceV2Reader)
-  extends LeafExecNode with DataSourceReaderHolder with ColumnarBatchScan {
+    output: Seq[AttributeReference],
+    @transient source: DataSourceV2,
+    @transient reader: DataSourceReader)
+  extends LeafExecNode with DataSourceV2QueryPlan with ColumnarBatchScan {
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2ScanExec]
 
-  override def producedAttributes: AttributeSet = AttributeSet(fullOutput)
+  override def simpleString: String = s"Scan $metadataString"
 
-  private lazy val readTasks: java.util.List[ReadTask[UnsafeRow]] = reader match {
-    case r: SupportsScanUnsafeRow => r.createUnsafeRowReadTasks()
+  override def outputPartitioning: physical.Partitioning = reader match {
+    case s: SupportsReportPartitioning =>
+      new DataSourcePartitioning(
+        s.outputPartitioning(), AttributeMap(output.map(a => a -> a.name)))
+
+    case _ => super.outputPartitioning
+  }
+
+  private lazy val readerFactories: java.util.List[DataReaderFactory[UnsafeRow]] = reader match {
+    case r: SupportsScanUnsafeRow => r.createUnsafeRowReaderFactories()
     case _ =>
-      reader.createReadTasks().asScala.map {
-        new RowToUnsafeRowReadTask(_, reader.readSchema()): ReadTask[UnsafeRow]
+      reader.createDataReaderFactories().asScala.map {
+        new RowToUnsafeRowDataReaderFactory(_, reader.readSchema()): DataReaderFactory[UnsafeRow]
       }.asJava
   }
 
@@ -54,18 +65,19 @@ case class DataSourceV2ScanExec(
     case r: SupportsScanColumnarBatch if r.enableBatchRead() =>
       assert(!reader.isInstanceOf[ContinuousReader],
         "continuous stream reader does not support columnar read yet.")
-      new DataSourceRDD(sparkContext, r.createBatchReadTasks()).asInstanceOf[RDD[InternalRow]]
+      new DataSourceRDD(sparkContext, r.createBatchDataReaderFactories())
+        .asInstanceOf[RDD[InternalRow]]
 
     case _: ContinuousReader =>
       EpochCoordinatorRef.get(
           sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
           sparkContext.env)
-        .askSync[Unit](SetReaderPartitions(readTasks.size()))
-      new ContinuousDataSourceRDD(sparkContext, sqlContext, readTasks)
+        .askSync[Unit](SetReaderPartitions(readerFactories.size()))
+      new ContinuousDataSourceRDD(sparkContext, sqlContext, readerFactories)
         .asInstanceOf[RDD[InternalRow]]
 
     case _ =>
-      new DataSourceRDD(sparkContext, readTasks).asInstanceOf[RDD[InternalRow]]
+      new DataSourceRDD(sparkContext, readerFactories).asInstanceOf[RDD[InternalRow]]
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
@@ -79,7 +91,7 @@ case class DataSourceV2ScanExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     if (supportsBatch) {
-      WholeStageCodegenExec(this).execute()
+      WholeStageCodegenExec(this)(codegenStageId = 0).execute()
     } else {
       val numOutputRows = longMetric("numOutputRows")
       inputRDD.map { r =>
@@ -90,14 +102,14 @@ case class DataSourceV2ScanExec(
   }
 }
 
-class RowToUnsafeRowReadTask(rowReadTask: ReadTask[Row], schema: StructType)
-  extends ReadTask[UnsafeRow] {
+class RowToUnsafeRowDataReaderFactory(rowReaderFactory: DataReaderFactory[Row], schema: StructType)
+  extends DataReaderFactory[UnsafeRow] {
 
-  override def preferredLocations: Array[String] = rowReadTask.preferredLocations
+  override def preferredLocations: Array[String] = rowReaderFactory.preferredLocations
 
   override def createDataReader: DataReader[UnsafeRow] = {
     new RowToUnsafeDataReader(
-      rowReadTask.createDataReader, RowEncoder.apply(schema).resolveAndBind())
+      rowReaderFactory.createDataReader, RowEncoder.apply(schema).resolveAndBind())
   }
 }
 

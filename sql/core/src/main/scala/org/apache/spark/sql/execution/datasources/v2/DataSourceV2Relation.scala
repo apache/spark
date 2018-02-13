@@ -17,15 +17,25 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
+import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
 
 case class DataSourceV2Relation(
-    fullOutput: Seq[AttributeReference],
-    reader: DataSourceV2Reader) extends LeafNode with DataSourceReaderHolder {
+    output: Seq[AttributeReference],
+    source: DataSourceV2,
+    reader: DataSourceReader,
+    override val isStreaming: Boolean)
+  extends LeafNode with MultiInstanceRelation with DataSourceV2QueryPlan {
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2Relation]
+
+  override def simpleString: String = {
+    val streamingHeader = if (isStreaming) "Streaming " else ""
+    s"${streamingHeader}Relation $metadataString"
+  }
 
   override def computeStats(): Statistics = reader match {
     case r: SupportsReportStatistics =>
@@ -33,20 +43,14 @@ case class DataSourceV2Relation(
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)
   }
-}
 
-/**
- * A specialization of DataSourceV2Relation with the streaming bit set to true. Otherwise identical
- * to the non-streaming relation.
- */
-class StreamingDataSourceV2Relation(
-    fullOutput: Seq[AttributeReference],
-    reader: DataSourceV2Reader) extends DataSourceV2Relation(fullOutput, reader) {
-  override def isStreaming: Boolean = true
+  override def newInstance(): DataSourceV2Relation = {
+    copy(output = output.map(_.newInstance()))
+  }
 }
 
 object DataSourceV2Relation {
-  def apply(reader: DataSourceV2Reader): DataSourceV2Relation = {
-    new DataSourceV2Relation(reader.readSchema().toAttributes, reader)
+  def apply(source: DataSourceV2, reader: DataSourceReader): DataSourceV2Relation = {
+    new DataSourceV2Relation(reader.readSchema().toAttributes, source, reader, isStreaming = false)
   }
 }
