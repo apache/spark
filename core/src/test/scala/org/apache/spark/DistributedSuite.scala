@@ -160,7 +160,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val data = sc.parallelize(1 to 1000, 10)
     val cachedData = data.persist(storageLevel)
     assert(cachedData.count === 1000)
-    assert(sc.getRDDStorageInfo.filter(_.id == cachedData.id).map(_.numCachedPartitions) ===
+    assert(sc.getRDDStorageInfo.filter(_.id == cachedData.id).map(_.numCachedPartitions).sum ===
       data.getNumPartitions)
     // Get all the locations of the first partition and try to fetch the partitions
     // from those locations.
