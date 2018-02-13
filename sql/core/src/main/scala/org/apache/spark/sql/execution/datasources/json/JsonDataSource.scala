@@ -125,7 +125,7 @@ object TextInputJsonDataSource extends JsonDataSource {
     val charset = parser.options.charset
 
     val safeParser = new FailureSafeParser[Text](
-      input => parser.parse(input, CreateJacksonParser.text(charset), textToUTF8String),
+      input => parser.parse(input, CreateJacksonParser.textInCharset(charset), textToUTF8String),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
