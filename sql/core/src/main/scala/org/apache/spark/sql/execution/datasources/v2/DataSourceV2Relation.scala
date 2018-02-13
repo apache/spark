@@ -20,14 +20,22 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
+import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
 
 case class DataSourceV2Relation(
     output: Seq[AttributeReference],
-    reader: DataSourceReader)
-  extends LeafNode with MultiInstanceRelation with DataSourceReaderHolder {
+    source: DataSourceV2,
+    reader: DataSourceReader,
+    override val isStreaming: Boolean)
+  extends LeafNode with MultiInstanceRelation with DataSourceV2QueryPlan {
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2Relation]
+
+  override def simpleString: String = {
+    val streamingHeader = if (isStreaming) "Streaming " else ""
+    s"${streamingHeader}Relation $metadataString"
+  }
 
   override def computeStats(): Statistics = reader match {
     case r: SupportsReportStatistics =>
@@ -41,18 +49,8 @@ case class DataSourceV2Relation(
   }
 }
 
-/**
- * A specialization of DataSourceV2Relation with the streaming bit set to true. Otherwise identical
- * to the non-streaming relation.
- */
-class StreamingDataSourceV2Relation(
-    output: Seq[AttributeReference],
-    reader: DataSourceReader) extends DataSourceV2Relation(output, reader) {
-  override def isStreaming: Boolean = true
-}
-
 object DataSourceV2Relation {
-  def apply(reader: DataSourceReader): DataSourceV2Relation = {
-    new DataSourceV2Relation(reader.readSchema().toAttributes, reader)
+  def apply(source: DataSourceV2, reader: DataSourceReader): DataSourceV2Relation = {
+    new DataSourceV2Relation(reader.readSchema().toAttributes, source, reader, isStreaming = false)
   }
 }

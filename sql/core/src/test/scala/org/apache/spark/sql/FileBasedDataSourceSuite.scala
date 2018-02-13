@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.io.FileNotFoundException
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -102,17 +104,27 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
       def testIgnoreMissingFiles(): Unit = {
         withTempDir { dir =>
           val basePath = dir.getCanonicalPath
+
           Seq("0").toDF("a").write.format(format).save(new Path(basePath, "first").toString)
           Seq("1").toDF("a").write.format(format).save(new Path(basePath, "second").toString)
+
           val thirdPath = new Path(basePath, "third")
+          val fs = thirdPath.getFileSystem(spark.sparkContext.hadoopConfiguration)
           Seq("2").toDF("a").write.format(format).save(thirdPath.toString)
+          val files = fs.listStatus(thirdPath).filter(_.isFile).map(_.getPath)
+
           val df = spark.read.format(format).load(
             new Path(basePath, "first").toString,
             new Path(basePath, "second").toString,
             new Path(basePath, "third").toString)
 
-          val fs = thirdPath.getFileSystem(spark.sparkContext.hadoopConfiguration)
+          // Make sure all data files are deleted and can't be opened.
+          files.foreach(f => fs.delete(f, false))
           assert(fs.delete(thirdPath, true))
+          for (f <- files) {
+            intercept[FileNotFoundException](fs.open(f))
+          }
+
           checkAnswer(df, Seq(Row("0"), Row("1")))
         }
       }
