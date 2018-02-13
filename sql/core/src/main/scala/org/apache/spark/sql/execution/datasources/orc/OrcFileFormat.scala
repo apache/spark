@@ -188,6 +188,9 @@ class OrcFileFormat
         if (enableVectorizedReader) {
           val batchReader = new OrcColumnarBatchReader(
             enableOffHeapColumnVector && taskContext.isDefined, copyToSpark, capacity)
+          // SPARK-23399 Register a task completion listener first to call `close()` in all cases.
+          // There is a possibility that `initialize` and `initBatch` hit some errors (like OOM)
+          // after opening a file.
           val iter = new RecordReaderIterator(batchReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
 
