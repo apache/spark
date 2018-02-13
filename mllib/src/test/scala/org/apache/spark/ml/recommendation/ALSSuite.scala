@@ -40,7 +40,8 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql.{DataFrame, Encoder, Row, SparkSession}
-import org.apache.spark.sql.functions.lit
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -585,6 +586,68 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
       allModelParamSettings, checkModelData)
   }
 
+  private def checkNumericTypesALS(
+      estimator: ALS,
+      spark: SparkSession,
+      column: String,
+      baseType: NumericType)
+      (check: (ALSModel, ALSModel) => Unit)
+      (check2: (ALSModel, ALSModel, DataFrame, Encoder[_]) => Unit): Unit = {
+    val dfs = genRatingsDFWithNumericCols(spark, column)
+    val df = dfs.find {
+      case (numericTypeWithEncoder, _) => numericTypeWithEncoder.numericType == baseType
+    } match {
+      case Some((_, df)) => df
+    }
+    val expected = estimator.fit(df)
+    val actuals = dfs.filter(_ != baseType).map(t => (t, estimator.fit(t._2)))
+    actuals.foreach { case (_, actual) => check(expected, actual) }
+    actuals.foreach { case (t, actual) => check2(expected, actual, t._2, t._1.encoder) }
+
+    val baseDF = dfs.find(_._1.numericType == baseType).get._2
+    val others = baseDF.columns.toSeq.diff(Seq(column)).map(col)
+    val cols = Seq(col(column).cast(StringType)) ++ others
+    val strDF = baseDF.select(cols: _*)
+    val thrown = intercept[IllegalArgumentException] {
+      estimator.fit(strDF)
+    }
+    assert(thrown.getMessage.contains(
+      s"$column must be of type NumericType but was actually of type StringType"))
+  }
+
+  private class NumericTypeWithEncoder[A](val numericType: NumericType)
+      (implicit val encoder: Encoder[(A, Int, Double)])
+
+  private def genRatingsDFWithNumericCols(
+      spark: SparkSession,
+      column: String) = {
+
+    import testImplicits._
+
+    val df = spark.createDataFrame(Seq(
+      (0, 10, 1.0),
+      (1, 20, 2.0),
+      (2, 30, 3.0),
+      (3, 40, 4.0),
+      (4, 50, 5.0)
+    )).toDF("user", "item", "rating")
+
+    val others = df.columns.toSeq.diff(Seq(column)).map(col)
+    val types =
+      Seq(new NumericTypeWithEncoder[Short](ShortType),
+        new NumericTypeWithEncoder[Long](LongType),
+        new NumericTypeWithEncoder[Int](IntegerType),
+        new NumericTypeWithEncoder[Float](FloatType),
+        new NumericTypeWithEncoder[Byte](ByteType),
+        new NumericTypeWithEncoder[Double](DoubleType),
+        new NumericTypeWithEncoder[Decimal](DecimalType(10, 0))(ExpressionEncoder())
+      )
+    types.map { t =>
+      val cols = Seq(col(column).cast(t.numericType)) ++ others
+      t -> df.select(cols: _*)
+    }
+  }
+
   test("input type validation") {
     val spark = this.spark
     import spark.implicits._
@@ -594,13 +657,16 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     val als = new ALS().setMaxIter(1).setRank(1)
     Seq(("user", IntegerType), ("item", IntegerType), ("rating", FloatType)).foreach {
       case (colName, sqlType) =>
-        MLTestingUtils.checkNumericTypesALS(als, spark, colName, sqlType) {
+        checkNumericTypesALS(als, spark, colName, sqlType) {
           (ex, act) =>
             ex.userFactors.first().getSeq[Float](1) === act.userFactors.first().getSeq[Float](1)
-        } { (ex, act, df) =>
-          ex.transform(df).selectExpr("cast(prediction as double)").first().getDouble(0) ~==
-            act.transform(df).selectExpr("cast(prediction as double)").first().getDouble(0) absTol
-              1e-6
+        } { (ex, act, df, enc) =>
+          val expected = ex.transform(df).selectExpr("prediction")
+            .first().getFloat(0)
+          testTransformerByGlobalCheckFunc(df, act, "prediction") {
+            case rows: Seq[Row] =>
+              expected ~== rows.head.getFloat(0) absTol 1e-6
+          }(enc)
         }
     }
     // check user/item ids falling outside of Int range
@@ -681,7 +747,8 @@ class ALSSuite extends MLTest with DefaultReadWriteTest with Logging {
     }
 
     // check 'drop' strategy should filter out rows with unknown users/items
-    val defaultPrediction = defaultModel.transform(test).select("prediction").as[Float].filter(!_.isNaN).first()
+    val defaultPrediction = defaultModel.transform(test).select("prediction")
+      .as[Float].filter(!_.isNaN).first()
     testTransformerByGlobalCheckFunc[(Int, Int, Boolean)](test,
       defaultModel.setColdStartStrategy("drop"), "prediction") {
       case rows: Seq[Row] =>
