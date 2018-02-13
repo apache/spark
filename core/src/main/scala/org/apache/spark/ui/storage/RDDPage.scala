@@ -200,7 +200,10 @@ private[ui] class BlockDataSource(
       rddPartition.storageLevel,
       rddPartition.memoryUsed,
       rddPartition.diskUsed,
-      rddPartition.executors.map(id => executorIdToAddress.get(id).getOrElse(id)).mkString(" "))
+      rddPartition.executors
+        .sorted
+        .map { id => executorIdToAddress.get(id).getOrElse(id) }
+        .mkString(" "))
   }
 
   /**
@@ -247,7 +250,7 @@ private[ui] class BlockPagedTable(
     pageSize,
     sortColumn,
     desc,
-    executorSummaries.map(ex => (ex.id, ex.hostPort)).toMap)
+    executorSummaries.map { ex => (ex.id, ex.hostPort) }.toMap)
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
