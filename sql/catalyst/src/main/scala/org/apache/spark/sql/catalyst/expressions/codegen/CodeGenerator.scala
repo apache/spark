@@ -136,6 +136,9 @@ class CodegenContext {
    */
   var currentVars: Seq[ExprCode] = null
 
+  // Reads the config here, to make it effective for the entire lifetime of this context.
+  private val tryInlineAllState = SQLConf.get.getConf(SQLConf.CODEGEN_TRY_INLINE_ALL_STATES)
+
   /**
    * Holding expressions' inlined mutable states like `MonotonicallyIncreasingID.count` as a
    * 2-tuple: java type, variable name.
@@ -253,10 +256,11 @@ class CodegenContext {
       forceInline: Boolean = false,
       useFreshName: Boolean = true): String = {
 
-    // want to put a primitive type variable at outerClass for performance
-    val canInlinePrimitive = isPrimitiveType(javaType) &&
+    // Puts a primitive type variable at outerClass for performance, or puts all variables at outer
+    // class if CODEGEN_TRY_INLINE_ALL_STATES is true, if we have't hit the threshold yet.
+    val canInline = (isPrimitiveType(javaType) || tryInlineAllState) &&
       (inlinedMutableStates.length < CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)
-    if (forceInline || canInlinePrimitive || javaType.contains("[][]")) {
+    if (forceInline || javaType.contains("[][]") || canInline) {
       val varName = if (useFreshName) freshName(variableName) else variableName
       val initCode = initFunc(varName)
       inlinedMutableStates += ((javaType, varName))
@@ -1461,20 +1465,19 @@ object CodeGenerator extends Logging {
       CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
       try {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
-        val stats = cf.methodInfos.asScala.flatMap { method =>
+        cf.methodInfos.asScala.flatMap { method =>
           method.getAttributes().filter(_.getClass.getName == codeAttr.getName).map { a =>
             val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
             byteCodeSize
           }
         }
-        Some(stats)
       } catch {
         case NonFatal(e) =>
           logWarning("Error calculating stats of compiled class.", e)
-          None
+          Nil
       }
-    }.flatten
+    }
 
     codeSizes.max
   }

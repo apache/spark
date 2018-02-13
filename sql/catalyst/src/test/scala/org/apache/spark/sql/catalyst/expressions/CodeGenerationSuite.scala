@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -435,5 +436,19 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     ctx.addImmutableStateIfNotExists("int", mutableState1)
     ctx.addImmutableStateIfNotExists("String", mutableState2)
     assert(ctx.inlinedMutableStates.length == 2)
+  }
+
+  test("SPARK-23407: inline all mutable states if CODEGEN_TRY_INLINE_ALL_STATES is true") {
+    val conf = SQLConf.get
+    try {
+      conf.setConf(SQLConf.CODEGEN_TRY_INLINE_ALL_STATES, true)
+      val ctx = new CodegenContext
+      ctx.addMutableState(ctx.JAVA_INT, "i", v => s"$v = 1;")
+      ctx.addMutableState("String", "s", v => s"$v = null;")
+      assert(ctx.inlinedMutableStates.size == 2)
+      assert(ctx.arrayCompactedMutableStates.isEmpty)
+    } finally {
+      conf.unsetConf(SQLConf.CODEGEN_TRY_INLINE_ALL_STATES)
+    }
   }
 }
