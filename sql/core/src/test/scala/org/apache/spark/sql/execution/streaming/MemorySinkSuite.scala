@@ -22,7 +22,7 @@ import scala.language.implicitConversions
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
+import org.apache.spark.sql.execution.streaming.sources.{MemoryPlanV2, MemorySinkV2}
 import org.apache.spark.sql.streaming.{OutputMode, StreamTest}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -35,9 +35,18 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     sqlContext.streams.active.foreach(_.stop())
   }
 
+  private def addBatchFunc(
+      sink: MemorySinkV2,
+      outputMode: OutputMode)(
+      batchId: Long,
+      vals: Seq[Int]): Unit = {
+    sink.write(batchId, outputMode, vals.map(Row(_)).toArray)
+  }
+
   test("directly add data in Append output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
     val sink = new MemorySinkV2
+    val addBatch = addBatchFunc(sink, OutputMode.Append()) _
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -45,33 +54,34 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(sink.allData, Seq.empty)
 
     // Add batch 0 and check outputs
-    sink.write(0, OutputMode.Append(), Range(1, 4).map(Row(_)).toArray)
+    addBatch(0, 1 to 3)
     assert(sink.latestBatchId === Some(0))
     checkAnswer(sink.latestBatchData, 1 to 3)
     checkAnswer(sink.allData, 1 to 3)
 
     // Add batch 1 and check outputs
-    sink.write(1, OutputMode.Append(), Range(4, 7).map(Row(_)).toArray)
+    addBatch(1, 4 to 6)
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
     checkAnswer(sink.allData, 1 to 6)     // new data should get appended to old data
 
     // Re-add batch 1 with different data, should not be added and outputs should not be changed
-    sink.write(1, OutputMode.Append(), Range(7, 10).map(Row(_)).toArray)
+    addBatch(1, 7 to 9)
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
     checkAnswer(sink.allData, 1 to 6)
 
     // Add batch 2 and check outputs
-    sink.write(2, OutputMode.Append(), Range(7, 10).map(Row(_)).toArray)
+    addBatch(2, 7 to 9)
     assert(sink.latestBatchId === Some(2))
     checkAnswer(sink.latestBatchData, 7 to 9)
     checkAnswer(sink.allData, 1 to 9)
   }
-/*
+
   test("directly add data in Update output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Update)
+    val sink = new MemorySinkV2
+    val addBatch = addBatchFunc(sink, OutputMode.Update()) _
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -79,25 +89,25 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(sink.allData, Seq.empty)
 
     // Add batch 0 and check outputs
-    sink.addBatch(0, 1 to 3)
+    addBatch(0, 1 to 3)
     assert(sink.latestBatchId === Some(0))
     checkAnswer(sink.latestBatchData, 1 to 3)
     checkAnswer(sink.allData, 1 to 3)
 
     // Add batch 1 and check outputs
-    sink.addBatch(1, 4 to 6)
+    addBatch(1, 4 to 6)
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
     checkAnswer(sink.allData, 1 to 6) // new data should get appended to old data
 
     // Re-add batch 1 with different data, should not be added and outputs should not be changed
-    sink.addBatch(1, 7 to 9)
+    addBatch(1, 7 to 9)
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
     checkAnswer(sink.allData, 1 to 6)
 
     // Add batch 2 and check outputs
-    sink.addBatch(2, 7 to 9)
+    addBatch(2, 7 to 9)
     assert(sink.latestBatchId === Some(2))
     checkAnswer(sink.latestBatchData, 7 to 9)
     checkAnswer(sink.allData, 1 to 9)
@@ -105,7 +115,8 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   test("directly add data in Complete output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Complete)
+    val sink = new MemorySinkV2
+    val addBatch = addBatchFunc(sink, OutputMode.Complete()) _
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -113,30 +124,29 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     checkAnswer(sink.allData, Seq.empty)
 
     // Add batch 0 and check outputs
-    sink.addBatch(0, 1 to 3)
+    addBatch(0, 1 to 3)
     assert(sink.latestBatchId === Some(0))
     checkAnswer(sink.latestBatchData, 1 to 3)
     checkAnswer(sink.allData, 1 to 3)
 
     // Add batch 1 and check outputs
-    sink.addBatch(1, 4 to 6)
+    addBatch(1, 4 to 6)
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
     checkAnswer(sink.allData, 4 to 6)     // new data should replace old data
 
     // Re-add batch 1 with different data, should not be added and outputs should not be changed
-    sink.addBatch(1, 7 to 9)
+    addBatch(1, 7 to 9)
     assert(sink.latestBatchId === Some(1))
     checkAnswer(sink.latestBatchData, 4 to 6)
     checkAnswer(sink.allData, 4 to 6)
 
     // Add batch 2 and check outputs
-    sink.addBatch(2, 7 to 9)
+    addBatch(2, 7 to 9)
     assert(sink.latestBatchId === Some(2))
     checkAnswer(sink.latestBatchData, 7 to 9)
     checkAnswer(sink.allData, 7 to 9)
   }
-*/
 
   test("registering as a table in Append output mode") {
     val input = MemoryStream[Int]
@@ -210,23 +220,24 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     query.stop()
   }
 
-  /* test("MemoryPlan statistics") {
+  test("MemoryPlan statistics") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Append)
-    val plan = new MemoryPlan(sink)
+    val sink = new MemorySinkV2
+    val plan = new MemoryPlanV2(sink, schema.toAttributes)
+    val addBatch = addBatchFunc(sink, OutputMode.Append()) _
 
     // Before adding data, check output
     checkAnswer(sink.allData, Seq.empty)
     assert(plan.stats.sizeInBytes === 0)
 
-    sink.addBatch(0, 1 to 3)
+    addBatch(0, 1 to 3)
     plan.invalidateStatsCache()
     assert(plan.stats.sizeInBytes === 12)
 
-    sink.addBatch(1, 4 to 6)
+    addBatch(1, 4 to 6)
     plan.invalidateStatsCache()
     assert(plan.stats.sizeInBytes === 24)
-  } */
+  }
 
   ignore("stress test") {
     // Ignore the stress test as it takes several minutes to run
