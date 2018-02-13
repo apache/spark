@@ -112,6 +112,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
         "Cannot add data when there is no query for finding the active kafka source")
 
       val sources = query.get.logicalPlan.collect {
+        case StreamingExecutionRelation(source: KafkaSource, _) => source
         case StreamingExecutionRelation(source: KafkaMicroBatchReader, _) => source
       } ++ (query.get.lastExecution match {
         case null => Seq()
@@ -154,7 +155,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
   protected def newTopic(): String = s"topic-${topicId.getAndIncrement()}"
 }
 
-class KafkaMicroBatchSourceSuite extends KafkaSourceSuiteBase {
+abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
 
   import testImplicits._
 
@@ -520,6 +521,63 @@ class KafkaMicroBatchSourceSuite extends KafkaSourceSuiteBase {
       waitUntilBatchProcessed,
       // smallest now empty, 5 from bigger one
       CheckLastBatch(120 to 124: _*)
+    )
+  }
+}
+
+
+class KafkaMicroBatchV1SourceSuite extends KafkaMicroBatchSourceSuiteBase {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(
+      "spark.sql.streaming.disabledV2MicroBatchReaders",
+      classOf[KafkaSourceProvider].getCanonicalName)
+  }
+
+  test("V1 Source is used when disabled through SQLConf") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 5)
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribePattern", s"$topic.*")
+      .load()
+
+    testStream(kafka)(
+      makeSureGetOffsetCalled,
+      AssertOnQuery { query =>
+        query.logicalPlan.collect {
+          case StreamingExecutionRelation(_: KafkaSource, _) => true
+        }.nonEmpty
+      }
+    )
+  }
+}
+
+class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
+
+  test("V2 Source is used by default") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 5)
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .option("subscribePattern", s"$topic.*")
+      .load()
+
+    testStream(kafka)(
+      makeSureGetOffsetCalled,
+      AssertOnQuery { query =>
+        query.logicalPlan.collect {
+          case StreamingExecutionRelation(_: KafkaMicroBatchReader, _) => true
+        }.nonEmpty
+      }
     )
   }
 }

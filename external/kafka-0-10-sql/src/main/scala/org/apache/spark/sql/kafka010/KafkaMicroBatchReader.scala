@@ -406,5 +406,3 @@ private[kafka010] class KafkaMicroBatchDataReader(
 
 private[kafka010] case class KafkaOffsetRange(
   topicPartition: TopicPartition, fromOffset: Long, untilOffset: Long)
-
-
