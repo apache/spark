@@ -48,7 +48,7 @@ private[sql] object CreateJacksonParser extends Serializable {
         jsonFactory.createParser(record.getBytes, 0, record.getLength)
     }
   }
-  
+
   def inputStream(jsonFactory: JsonFactory, record: InputStream): JsonParser = {
     jsonFactory.createParser(record)
   }
