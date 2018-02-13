@@ -119,6 +119,13 @@ case class StreamingDataSourceV2Relation(
   override def canEqual(other: Any): Boolean = other.isInstanceOf[StreamingDataSourceV2Relation]
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+
+  override def computeStats(): Statistics = reader match {
+    case r: SupportsReportStatistics =>
+      Statistics(sizeInBytes = r.getStatistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
+    case _ =>
+      Statistics(sizeInBytes = conf.defaultSizeInBytes)
+  }
 }
 
 object DataSourceV2Relation {
