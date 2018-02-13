@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.kafka010
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.streaming.Trigger
+import org.apache.spark.sql.test.TestSparkSession
 
 // Run tests in KafkaSourceSuiteBase in continuous execution mode.
 class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuousTest
