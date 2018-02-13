@@ -249,10 +249,34 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): QuantileDiscretizer = defaultCopy(extra)
+
+  @Since("2.3.0")
+  override def write: MLWriter = new QuantileDiscretizer.QuantileDiscretizerWriter(this)
 }
 
 @Since("1.6.0")
 object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] with Logging {
+
+  private[QuantileDiscretizer]
+  class QuantileDiscretizerWriter(instance: QuantileDiscretizer) extends MLWriter {
+
+    override protected def saveImpl(path: String): Unit = {
+      // SPARK-23377: The default params will be saved and loaded as user-supplied params.
+      // Once `inputCols` is set, the default value of `outputCol` param causes the error
+      // when checking exclusive params. As a temporary to fix it, we remove the default
+      // value of `outputCol` if `inputCols` is set before saving.
+      // TODO: If we modify the persistence mechanism later to better handle default params,
+      // we can get rid of this.
+      var removedOutputCol: Option[String] = None
+      if (instance.isSet(instance.inputCols)) {
+        removedOutputCol = instance.getDefault(instance.outputCol)
+        instance.clearDefault(instance.outputCol)
+      }
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      // Add the default param back.
+      removedOutputCol.map(instance.setDefault(instance.outputCol, _))
+    }
+  }
 
   @Since("1.6.0")
   override def load(path: String): QuantileDiscretizer = super.load(path)

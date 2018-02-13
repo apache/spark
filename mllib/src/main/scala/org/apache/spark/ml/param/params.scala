@@ -831,6 +831,15 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
+   * Clears the default value for the input param.
+   */
+  final def clearDefault[T](param: Param[T]): this.type = {
+    shouldOwn(param)
+    defaultParamMap.remove(param)
+    this
+  }
+
+  /**
    * Creates a copy of this instance with the same UID and some extra params.
    * Subclasses should implement this method and set the return type properly.
    * See `defaultCopy()`.

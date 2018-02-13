@@ -135,7 +135,10 @@ object MimaExcludes {
     ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.feature.Bucketizer.getHandleInvalid"),
     ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.feature.StringIndexer.getHandleInvalid"),
     ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.feature.QuantileDiscretizer.getHandleInvalid"),
-    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.feature.StringIndexerModel.getHandleInvalid")
+    ProblemFilters.exclude[FinalMethodProblem]("org.apache.spark.ml.feature.StringIndexerModel.getHandleInvalid"),
+
+    // [SPARK-23377][ML] Fixes Bucketizer with multiple columns persistence bug
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.param.Params.clearDefault")
   )
 
   // Exclude rules for 2.2.x
