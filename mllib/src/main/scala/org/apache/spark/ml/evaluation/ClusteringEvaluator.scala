@@ -24,6 +24,7 @@ import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector, Vectors, VectorUDT
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{avg, col, udf}
 import org.apache.spark.sql.types.DoubleType
@@ -66,14 +67,14 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
 
   /**
    * param for metric name in evaluation
-   * (supports `"silhouette"` (default))
+   * (supports `"silhouette"` (default), "calinski-harabasz")
    * @group param
    */
   @Since("2.3.0")
   val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("silhouette"))
-    new Param(
-      this, "metricName", "metric name in evaluation (silhouette)", allowedParams)
+    val allowedParams = ParamValidators.inArray(Array("silhouette", "calinski-harabasz"))
+    new Param(this, "metricName", "metric name in evaluation (silhouette, calinski-harabasz)",
+      allowedParams)
   }
 
   /** @group getParam */
@@ -94,8 +95,9 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
     $(metricName) match {
       case "silhouette" =>
         SquaredEuclideanSilhouette.computeSilhouetteScore(
-          dataset, $(predictionCol), $(featuresCol)
-      )
+          dataset, $(predictionCol), $(featuresCol))
+      case "calinski-harabasz" =>
+        CalinskiHarabasz.computeScore(dataset, ${predictionCol}, ${featuresCol})
     }
   }
 }
@@ -432,5 +434,196 @@ private[evaluation] object SquaredEuclideanSilhouette {
     bClustersStatsMap.destroy()
 
     silhouetteScore
+  }
+}
+
+
+/**
+ * [[CalinskiHarabasz]] computes Calinski-Harabasz index.
+ *
+ * This implementation differs slightly from the proposed one, to better fit in a big data
+ * environment.
+ * Indeed, Calinski-Harabasz is defined as:
+ *
+ * <blockquote>
+ *   $$
+ *   \frac{SSB}{SSW} * \frac{N - k}{k -1}
+ *   $$
+ * </blockquote>
+ *
+ * where `SSB` is the overall between-cluster variance, SSW is the overall within cluster
+ * variance, `N` is the number of points in the dataset and `k` is the number of clusters.
+ *
+ * In the original implementation, `SSW` is the sum of the squared distance between each point and
+ * the centroid of its cluster and `SSB` is computed as the sum of the squared distance between
+ * each point and the centroid of the whole datates (defined as the total sum of squares, `tss`)
+ * minus `SSW`.
+ * Here `SSW` and `SSB` are computed in the same way, but `tss` in a slightly different one.
+ * Indeed, we can write it as:
+ *
+ * <blockquote>
+ *   $$
+ *   tss = \sum\limits_{i=1}^N (X_{i} - C)^2 =
+ *   \sum\limits_{i=1}^N \Big( \sum\limits_{j=1}^D (x_{ij}-c_{j})^2 \Big)
+ *   = \sum\limits_{i=1}^N \Big( \sum\limits_{j=1}^D x_{ij}^2 +
+ *   \sum\limits_{j=1}^D c_{j}^2 -2\sum\limits_{j=1}^D x_{ij}c_{j} \Big)
+ *   = \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{ij}^2 +
+ *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D c_{j}^2
+ *   -2 \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{ij}c_{j}
+ *   $$
+ * </blockquote>
+ *
+ * In the last formula we can notice that:
+ *
+ * <blockquote>
+ *   $$
+ *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{ij}^2 = \sum\limits_{i=1}^N \|X_{i}\|^2
+ *   $$
+ * </blockquote>
+ *
+ * ie. the first element is the sum of the squared norm of all the points in the dataset, and
+ *
+ * <blockquote>
+ *   $$
+ *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D c_{j}^2 = N \|C\|^2
+ *   $$
+ * </blockquote>
+ *
+ * ie. the second element is `N` multiplied by the squared norm of detaset's centroid, and, if we
+ * define `Y` as the vector which is the element-wise sum of all the points in the cluster, then
+ * the third and last element becomes
+ *
+ * <blockquote>
+ *   $$
+ *   2 \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{ij}c_{j} = 2 Y \cdot C
+ *   $$
+ * </blockquote>
+ *
+ * Thus, `tss` becomes:
+ *
+ * <blockquote>
+ *   $$
+ *   tss = \sum\limits_{i=1}^N \|X_{i}\|^2 + N \|C\|^2 - 2 Y \cdot C
+ *   $$
+ * </blockquote>
+ *
+ * where `$\sum\limits_{i=1}^N \|X_{i}\|^2$` and `Y` are precomputed with a single pass on the
+ * dataset.
+ *
+ * @see <a href="http://www.tandfonline.com/doi/abs/10.1080/03610927408827101">
+ *        T. Calinski and J. Harabasz, 1974. "A dendrite method for cluster analysis".
+ *        Communications in Statistics</a>
+ */
+private[evaluation] object CalinskiHarabasz {
+
+  def computeScore(
+      dataset: Dataset[_],
+      predictionCol: String,
+      featuresCol: String): Double = {
+    val predictionAndFeaturesDf = dataset.select(
+      col(predictionCol).cast(DoubleType), col(featuresCol))
+    val predictionAndFeaturesRDD = predictionAndFeaturesDf.rdd
+      .map { row => (row.getDouble(0), row.getAs[Vector](1)) }
+
+    val numFeatures = dataset.select(col(featuresCol)).first().getAs[Vector](0).size
+
+    val featureSumsSquaredNormSumsAndNumOfPoints = computeFeatureSumsSquaredNormSumsAndNumOfPoints(
+      predictionAndFeaturesRDD,
+      predictionCol, featuresCol, numFeatures)
+
+    val (datasetCenter, datasetFeatureSums, datasetNumOfPoints) =
+      computeDatasetCenterDatasetFeatureSumsAndNumOfPoints(
+      featureSumsSquaredNormSumsAndNumOfPoints, numFeatures)
+
+    val clustersCenters = featureSumsSquaredNormSumsAndNumOfPoints.mapValues {
+      case (featureSum, _, numOfPoints) =>
+        BLAS.scal(1 / numOfPoints.toDouble, featureSum)
+        featureSum
+    }.map(identity) // required by https://issues.scala-lang.org/browse/SI-7005
+
+    val datasetSquaredNormSum = featureSumsSquaredNormSumsAndNumOfPoints.map {
+      case (_, (_, clusterSquaredNormSum, _)) => clusterSquaredNormSum
+    }.sum
+
+    val tss = totalSumOfSquares(datasetCenter, datasetNumOfPoints, datasetFeatureSums,
+      datasetSquaredNormSum)
+    val SSW = withinClusterVariance(predictionAndFeaturesRDD, clustersCenters)
+    // SSB is the overall between-cluster variance
+    val SSB = tss - SSW
+    val numOfClusters = clustersCenters.size
+
+    SSB / SSW * (datasetNumOfPoints - numOfClusters) / (numOfClusters -1)
+  }
+
+  def computeFeatureSumsSquaredNormSumsAndNumOfPoints(
+      predictionAndFeaturesRDD: RDD[(Double, Vector)],
+      predictionCol: String,
+      featuresCol: String,
+      numFeatures: Int): Map[Double, (Vector, Double, Long)] = {
+    val featureSumsSquaredNormSumsAndNumOfPoints = predictionAndFeaturesRDD
+      .aggregateByKey[(DenseVector, Double, Long)]((Vectors.zeros(numFeatures).toDense, 0.0, 0L))(
+        seqOp = {
+          case ((featureSum: DenseVector, sumOfSquaredNorm: Double, numOfPoints: Long),
+          (features)) =>
+            BLAS.axpy(1.0, features, featureSum)
+            val squaredNorm = math.pow(Vectors.norm(features, 2.0), 2.0)
+            (featureSum, squaredNorm + sumOfSquaredNorm, numOfPoints + 1)
+        },
+        combOp = {
+          case ((featureSum1, sumOfSquaredNorm1, numOfPoints1),
+          (featureSum2, sumOfSquaredNorm2, numOfPoints2)) =>
+            BLAS.axpy(1.0, featureSum2, featureSum1)
+            (featureSum1, sumOfSquaredNorm1 + sumOfSquaredNorm2, numOfPoints1 + numOfPoints2)
+        }
+      )
+
+    featureSumsSquaredNormSumsAndNumOfPoints
+      .collectAsMap()
+      .toMap
+  }
+
+  def computeDatasetCenterDatasetFeatureSumsAndNumOfPoints(
+      featureSumsSquaredNormSumsAndNumOfPoints: Map[Double, (Vector, Double, Long)],
+      numFeatures: Int): (Vector, Vector, Long) = {
+    val (featureSums, datasetNumOfPoints) = featureSumsSquaredNormSumsAndNumOfPoints
+      .aggregate((Vectors.zeros(numFeatures).toDense, 0L))(
+        seqop = {
+          case ((featureSum: DenseVector, numOfPoints: Long),
+          (_: Double, (clusterFeatureSum: DenseVector, _: Double, clusterNumOfPoints: Long))) =>
+            BLAS.axpy(1.0, clusterFeatureSum, featureSum)
+            (featureSum, clusterNumOfPoints + numOfPoints)
+        },
+        combop = {
+          case ((featureSum1, numOfPoints1), (featureSum2, numOfPoints2)) =>
+            BLAS.axpy(1.0, featureSum2, featureSum1)
+            (featureSum1, numOfPoints1 + numOfPoints2)
+        }
+      )
+    val datasetCenter = featureSums.copy
+    BLAS.scal(1 / datasetNumOfPoints.toDouble, datasetCenter)
+    (datasetCenter, featureSums, datasetNumOfPoints)
+  }
+
+  def totalSumOfSquares(
+      datasetCenter: Vector,
+      datasetNumOfPoints: Long,
+      datasetFeatureSums: Vector,
+      datasetSquaredNormSum: Double): Double = {
+    val datasetCenterSquaredNorm = math.pow(Vectors.norm(datasetCenter, 2.0), 2.0)
+
+    datasetSquaredNormSum + datasetNumOfPoints * datasetCenterSquaredNorm -
+      2 * BLAS.dot(datasetFeatureSums, datasetCenter)
+  }
+
+  def withinClusterVariance(
+      predictionAndFeaturesRDD: RDD[(Double, Vector)],
+      clusterCenters: Map[Double, Vector]): Double = {
+    val bClusterCenters = predictionAndFeaturesRDD.sparkContext.broadcast(clusterCenters)
+    val withinClusterVariance = predictionAndFeaturesRDD.map {
+      case (clusterId, features) =>
+        Vectors.sqdist(features, bClusterCenters.value(clusterId))
+    }.sum()
+    bClusterCenters.destroy()
+    withinClusterVariance
   }
 }
