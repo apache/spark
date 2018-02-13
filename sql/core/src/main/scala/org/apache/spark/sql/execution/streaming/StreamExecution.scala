@@ -29,6 +29,7 @@ import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
+import org.apache.spark.SparkException
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -369,7 +370,11 @@ abstract class StreamExecution(
         //                      exception
         // UncheckedExecutionException - thrown by codes that cannot throw a checked
         //                               ExecutionException, such as BiFunction.apply
-        case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
+        // SparkException - thrown if the interrupt happens in the middle of an RPC wait
+        case e2 @ (_: UncheckedIOException |
+                   _: ExecutionException |
+                   _: UncheckedExecutionException |
+                   _: SparkException)
           if e2.getCause != null =>
           isInterruptedByStop(e2.getCause)
         case _ =>
