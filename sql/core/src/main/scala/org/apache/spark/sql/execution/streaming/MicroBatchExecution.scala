@@ -27,9 +27,9 @@ import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, WriteToDataSourceV2}
 import org.apache.spark.sql.execution.streaming.sources.{InternalRowMicroBatchWriter, MicroBatchWriter}
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupport, StreamWriteSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset => OffsetV2}
 import org.apache.spark.sql.sources.v2.writer.SupportsWriteInternalRow
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
@@ -51,6 +51,8 @@ class MicroBatchExecution(
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
   @volatile protected var sources: Seq[BaseStreamingSource] = Seq.empty
+
+  private val readerToDataSourceMap = MutableMap.empty[MicroBatchReader, DataSourceV2]
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
@@ -90,6 +92,7 @@ class MicroBatchExecution(
             metadataPath,
             new DataSourceOptions(options.asJava))
           nextSourceId += 1
+          readerToDataSourceMap(reader) = source
           StreamingExecutionRelation(reader, output)(sparkSession)
         })
       case s @ StreamingRelationV2(_, sourceName, _, output, v1Relation) =>
@@ -405,12 +408,15 @@ class MicroBatchExecution(
             case v1: SerializedOffset => reader.deserializeOffset(v1.json)
             case v2: OffsetV2 => v2
           }
-          reader.setOffsetRange(
-            toJava(current),
-            Optional.of(availableV2))
+          reader.setOffsetRange(toJava(current), Optional.of(availableV2))
           logDebug(s"Retrieving data from $reader: $current -> $availableV2")
-          Some(reader ->
-            new StreamingDataSourceV2Relation(reader.readSchema().toAttributes, reader))
+          Some(reader -> new DataSourceV2Relation(
+            reader.readSchema().toAttributes,
+            // Provide a fake value here just in case something went wrong, e.g. the reader gives
+            // a wrong `equals` implementation.
+            readerToDataSourceMap.getOrElse(reader, FakeDataSourceV2),
+            reader,
+            isStreaming = true))
         case _ => None
       }
     }
@@ -500,3 +506,5 @@ class MicroBatchExecution(
     Optional.ofNullable(scalaOption.orNull)
   }
 }
+
+object FakeDataSourceV2 extends DataSourceV2
