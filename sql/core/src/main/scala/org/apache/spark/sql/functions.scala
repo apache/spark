@@ -1313,17 +1313,16 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Computes the cosine inverse of the given value; the returned angle is in the range
-   * 0.0 through pi.
+   * @return angle in radians whose cosine is `e`, as if computed by [[java.lang.Math#acos]]
    *
    * @group math_funcs
    * @since 1.4.0
    */
   def acos(e: Column): Column = withExpr { Acos(e.expr) }
 
+  // scalastyle:off line.size.limit
   /**
-   * Computes the cosine inverse of the given column; the returned angle is in the range
-   * 0.0 through pi.
+   * @return angle in radians whose cosine is `columnName` as if computed by [[java.lang.Math#acos]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1331,8 +1330,7 @@ object functions {
   def acos(columnName: String): Column = acos(Column(columnName))
 
   /**
-   * Computes the sine inverse of the given value; the returned angle is in the range
-   * -pi/2 through pi/2.
+   * @return angle in radians whose sine is `e`, as if computed by [[java.lang.Math#asin]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1340,8 +1338,7 @@ object functions {
   def asin(e: Column): Column = withExpr { Asin(e.expr) }
 
   /**
-   * Computes the sine inverse of the given column; the returned angle is in the range
-   * -pi/2 through pi/2.
+   * @return angle in radians whose sine is `columnName`, as if computed by [[java.lang.Math#asin]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1349,17 +1346,16 @@ object functions {
   def asin(columnName: String): Column = asin(Column(columnName))
 
   /**
-   * Computes the tangent inverse of the given column; the returned angle is in the range
-   * -pi/2 through pi/2
+   * @return angle in radians whose tangent is `e`, as if computed by [[java.lang.Math#atan]]
    *
    * @group math_funcs
    * @since 1.4.0
    */
   def atan(e: Column): Column = withExpr { Atan(e.expr) }
 
+  // scalastyle:off line.size.limit
   /**
-   * Computes the tangent inverse of the given column; the returned angle is in the range
-   * -pi/2 through pi/2
+   * @return angle in radians whose tangent is `columnName`, as if computed by [[java.lang.Math#atan]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1367,77 +1363,118 @@ object functions {
   def atan(columnName: String): Column = atan(Column(columnName))
 
   /**
-   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
-   * polar coordinates (r, theta). Units in radians.
+   *
+   * @param y coordinate on y-axis
+   * @param x coordinate on x-axis
+   * @return  the <i>theta</i> component of the point
+   *          (<i>r</i>,&nbsp;<i>theta</i>)
+   *          in polar coordinates that corresponds to the point
+   *          (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *          as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(l: Column, r: Column): Column = withExpr { Atan2(l.expr, r.expr) }
+  def atan2(y: Column, x: Column): Column = withExpr { Atan2(y.expr, x.expr) }
 
   /**
-   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
-   * polar coordinates (r, theta).
+   * @param y     coordinate on y-axis
+   * @param xName coordinate on x-axis
+   * @return      the <i>theta</i> component of the point
+   *              (<i>r</i>,&nbsp;<i>theta</i>)
+   *              in polar coordinates that corresponds to the point
+   *              (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *              as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(l: Column, rightName: String): Column = atan2(l, Column(rightName))
+  def atan2(y: Column, xName: String): Column = atan2(y, Column(xName))
 
   /**
-   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
-   * polar coordinates (r, theta).
+   * @param yName coordinate on y-axis
+   * @param x     coordinate on x-axis
+   * @return      the <i>theta</i> component of the point
+   *              (<i>r</i>,&nbsp;<i>theta</i>)
+   *              in polar coordinates that corresponds to the point
+   *              (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *              as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(leftName: String, r: Column): Column = atan2(Column(leftName), r)
+  def atan2(yName: String, x: Column): Column = atan2(Column(yName), x)
 
   /**
-   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
-   * polar coordinates (r, theta).
+   * @param yName coordinate on y-axis
+   * @param xName coordinate on x-axis
+   * @return      the <i>theta</i> component of the point
+   *              (<i>r</i>,&nbsp;<i>theta</i>)
+   *              in polar coordinates that corresponds to the point
+   *              (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *              as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(leftName: String, rightName: String): Column =
-    atan2(Column(leftName), Column(rightName))
+  def atan2(yName: String, xName: String): Column =
+    atan2(Column(yName), Column(xName))
 
   /**
-   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
-   * polar coordinates (r, theta).
+   * @param y      coordinate on y-axis
+   * @param xValue coordinate on x-axis
+   * @return       the <i>theta</i> component of the point
+   *               (<i>r</i>,&nbsp;<i>theta</i>)
+   *               in polar coordinates that corresponds to the point
+   *               (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *               as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(l: Column, r: Double): Column = atan2(l, lit(r))
+  def atan2(y: Column, xValue: Double): Column = atan2(y, lit(xValue))
 
   /**
-   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
-   * polar coordinates (r, theta).
+   * @param yName  coordinate on y-axis
+   * @param xValue coordinate on x-axis
+   * @return       the <i>theta</i> component of the point
+   *               (<i>r</i>,&nbsp;<i>theta</i>)
+   *               in polar coordinates that corresponds to the point
+   *               (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *               as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(leftName: String, r: Double): Column = atan2(Column(leftName), r)
+  def atan2(yName: String, xValue: Double): Column = atan2(Column(yName), xValue)
 
   /**
-   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
-   * polar coordinates (r, theta).
+   * @param yValue coordinate on y-axis
+   * @param x      coordinate on x-axis
+   * @return       the <i>theta</i> component of the point
+   *               (<i>r</i>,&nbsp;<i>theta</i>)
+   *               in polar coordinates that corresponds to the point
+   *               (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *               as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(l: Double, r: Column): Column = atan2(lit(l), r)
+  def atan2(yValue: Double, x: Column): Column = atan2(lit(yValue), x)
 
   /**
-   * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
-   * polar coordinates (r, theta).
+   * @param yValue coordinate on y-axis
+   * @param xName  coordinate on x-axis
+   * @return       the <i>theta</i> component of the point
+   *               (<i>r</i>,&nbsp;<i>theta</i>)
+   *               in polar coordinates that corresponds to the point
+   *               (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *               as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
    */
-  def atan2(l: Double, rightName: String): Column = atan2(l, Column(rightName))
+  def atan2(yValue: Double, xName: String): Column = atan2(yValue, Column(xName))
 
   /**
    * An expression that returns the string representation of the binary value of the given long
@@ -1500,7 +1537,8 @@ object functions {
   }
 
   /**
-   * Computes the cosine of the given value. Units in radians.
+   * @param e angle in radians
+   * @return  cosine of the angle, as if computed by [[java.lang.Math#cos]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1508,7 +1546,8 @@ object functions {
   def cos(e: Column): Column = withExpr { Cos(e.expr) }
 
   /**
-   * Computes the cosine of the given column.
+   * @param columnName angle in radians
+   * @return           cosine of the angle, as if computed by [[java.lang.Math#cos]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1516,7 +1555,8 @@ object functions {
   def cos(columnName: String): Column = cos(Column(columnName))
 
   /**
-   * Computes the hyperbolic cosine of the given value.
+   * @param e angle in radians
+   * @return  hyperbolic cosine of the angle, as if computed by [[java.lang.Math#cosh]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1524,7 +1564,8 @@ object functions {
   def cosh(e: Column): Column = withExpr { Cosh(e.expr) }
 
   /**
-   * Computes the hyperbolic cosine of the given column.
+   * @param columnName angle in radians
+   * @return        hyperbolic cosine of the angle, as if computed by [[java.lang.Math#cosh]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1967,7 +2008,8 @@ object functions {
   def signum(columnName: String): Column = signum(Column(columnName))
 
   /**
-   * Computes the sine of the given value. Units in radians.
+   * @param e angle in radians
+   * @return  sine of the angle, as if computed by [[java.lang.Math#sin]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1975,7 +2017,8 @@ object functions {
   def sin(e: Column): Column = withExpr { Sin(e.expr) }
 
   /**
-   * Computes the sine of the given column.
+   * @param columnName angle in radians
+   * @return        sine of the angle, as if computed by [[java.lang.Math#sin]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1983,7 +2026,8 @@ object functions {
   def sin(columnName: String): Column = sin(Column(columnName))
 
   /**
-   * Computes the hyperbolic sine of the given value.
+   * @param e hyperbolic angle
+   * @return  hyperbolic sine of the given value, as if computed by [[java.lang.Math#sinh]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1991,7 +2035,8 @@ object functions {
   def sinh(e: Column): Column = withExpr { Sinh(e.expr) }
 
   /**
-   * Computes the hyperbolic sine of the given column.
+   * @param columnName hyperbolic angle
+   * @return        hyperbolic sine of the given value, as if computed by [[java.lang.Math#sinh]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1999,7 +2044,8 @@ object functions {
   def sinh(columnName: String): Column = sinh(Column(columnName))
 
   /**
-   * Computes the tangent of the given value. Units in radians.
+   * @param e angle in radians
+   * @return  tangent of the given value, as if computed by [[java.lang.Math#tan]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2007,7 +2053,8 @@ object functions {
   def tan(e: Column): Column = withExpr { Tan(e.expr) }
 
   /**
-   * Computes the tangent of the given column.
+   * @param  columnName angle in radians
+   * @return tangent of the given value, as if computed by [[java.lang.Math#tan]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2015,7 +2062,8 @@ object functions {
   def tan(columnName: String): Column = tan(Column(columnName))
 
   /**
-   * Computes the hyperbolic tangent of the given value.
+   * @param e hyperbolic angle
+   * @return  hyperbolic tangent of the given value, as if computed by [[java.lang.Math#tanh]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2023,7 +2071,9 @@ object functions {
   def tanh(e: Column): Column = withExpr { Tanh(e.expr) }
 
   /**
-   * Computes the hyperbolic tangent of the given column.
+   * @param  columnName hyperbolic angle
+   * @return         hyperbolic tangent of the given value,
+   *                 as if computed by [[java.lang.Math#tanh]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2047,6 +2097,9 @@ object functions {
   /**
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
    *
+   * @param  e angle in radians
+   * @return   angle in degrees, as if computed by [[java.lang.Math#toDegrees]]
+   *
    * @group math_funcs
    * @since 2.1.0
    */
@@ -2054,6 +2107,9 @@ object functions {
 
   /**
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
+   *
+   * @param  columnName angle in radians
+   * @return         angle in degrees, as if computed by [[java.lang.Math#toDegrees]]
    *
    * @group math_funcs
    * @since 2.1.0
@@ -2077,6 +2133,9 @@ object functions {
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
    *
+   * @param  e angle in degrees
+   * @return   angle in radians, as if computed by [[java.lang.Math#toRadians]]
+   *
    * @group math_funcs
    * @since 2.1.0
    */
@@ -2084,6 +2143,9 @@ object functions {
 
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
+   *
+   * @param  columnName angle in degrees
+   * @return         angle in radians, as if computed by [[java.lang.Math#toRadians]]
    *
    * @group math_funcs
    * @since 2.1.0
@@ -2873,7 +2935,7 @@ object functions {
    *                      or equal to the `windowDuration`. Check
    *                      `org.apache.spark.unsafe.types.CalendarInterval` for valid duration
    *                      identifiers. This duration is likewise absolute, and does not vary
-    *                     according to a calendar.
+   *                      according to a calendar.
    * @param startTime The offset with respect to 1970-01-01 00:00:00 UTC with which to start
    *                  window intervals. For example, in order to have hourly tumbling windows that
    *                  start 15 minutes past the hour, e.g. 12:15-13:15, 13:15-14:15... provide
@@ -2929,7 +2991,7 @@ object functions {
    *                      or equal to the `windowDuration`. Check
    *                      `org.apache.spark.unsafe.types.CalendarInterval` for valid duration
    *                      identifiers. This duration is likewise absolute, and does not vary
-   *                     according to a calendar.
+   *                      according to a calendar.
    *
    * @group datetime_funcs
    * @since 2.0.0
