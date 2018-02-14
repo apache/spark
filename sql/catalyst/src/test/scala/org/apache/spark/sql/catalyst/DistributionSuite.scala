@@ -170,4 +170,41 @@ class DistributionSuite extends SparkFunSuite {
       AllTuples,
       false)
   }
+
+  test("Output partitioning after projection") {
+    checkSatisfied(
+      HashPartitioning(Seq(('a + 1).asc, ('b + 1).asc), 10)
+        .project(Seq('a.as("a1"), ('b + 1).as("b1"))),
+      ClusteredDistribution(Seq(('a1 + 1).asc, 'b1.asc)),
+      true
+    )
+
+    checkSatisfied(
+      HashPartitioning(Seq(('a + 1).asc, ('b + 1).asc), 10)
+        .project(Seq('a.as("a1"), ('b + 1).as("b1"))),
+      ClusteredDistribution(Seq('b1.asc, ('a1 + 1).asc)),
+      true
+    )
+
+    checkSatisfied(
+      HashPartitioning(Seq(('a + 1).asc, ('b + 1).asc), 10)
+        .project(Seq('a.as("a1"), ('b + 1).as("b1"))),
+      ClusteredDistribution(Seq('a1.asc, 'b1.asc)),
+      false
+    )
+
+    checkSatisfied(
+      RangePartitioning(Seq(('a + 'c).asc, ('b + 'd).asc), 10)
+        .project(Seq('a.as("a1"), ('b + 'd).as("bd"), 'c.as("c1"))),
+      OrderedDistribution(Seq(('a1 + 'c1).asc, 'bd.asc)),
+      true
+    )
+
+    checkSatisfied(
+      RangePartitioning(Seq(('a + 'c).asc, ('b + 'd).asc), 10)
+        .project(Seq('a.as("a1"), ('b + 'd).as("bd"), 'c.as("c1"))),
+      OrderedDistribution(Seq('bd.asc, ('a1 + 'c1).asc)),
+      false
+    )
+  }
 }
