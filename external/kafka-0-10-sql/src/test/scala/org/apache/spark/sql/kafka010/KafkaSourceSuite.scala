@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable
+import scala.io.Source
 import scala.util.Random
 
 import org.apache.kafka.clients.producer.RecordMetadata
@@ -301,6 +302,38 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       AddKafkaData(Set(topic2), 4, 5, 6),
       CheckAnswer(2, 3, 4, 5, 6, 7)
     )
+  }
+
+  test("ensure that intial offset are written with an extra byte in the front") {
+    withTempDir { metadataPath =>
+      val topic = "kafka-initial-offset-2-1-0"
+      testUtils.createTopic(topic, partitions = 1)
+
+      // Copy the initial offset file into the right location inside the checkpoint root directory
+      // such that the Kafka source can read it for initial offsets.
+      val initialOffsetFile = Paths.get(s"${metadataPath.getAbsolutePath}/sources/0/0").toFile
+
+      val df = spark
+        .readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+        .option("subscribe", topic)
+        .option("startingOffsets", s"earliest")
+        .load()
+
+      // Test that the query starts from the expected initial offset (i.e. read older offsets,
+      // even though startingOffsets is latest).
+      testStream(df)(
+        StartStream(checkpointLocation = metadataPath.getAbsolutePath),
+        makeSureGetOffsetCalled)
+
+      val binarySource = Source.fromFile(initialOffsetFile)
+      try {
+        assert(binarySource.next().toInt == 0)  // first byte is binary 0
+      } finally {
+        binarySource.close()
+      }
+    }
   }
 
   test("deserialization of initial offset written by Spark 2.1.0") {
