@@ -1784,7 +1784,7 @@ working with timestamps in `pandas_udf`s to get the best performance, see
       <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th></tr>
       <tr>
         <td><code>spark.sql.orc.impl</code></td>
-        <td><code>native</code></td>
+        <td><code>hive</code></td>
         <td>The name of ORC implementation. It can be one of <code>native</code> and <code>hive</code>. <code>native</code> means the native ORC support that is built on Apache ORC 1.4.1. `hive` means the ORC library in Hive 1.2.1 which is used prior to Spark 2.3.</td>
       </tr>
       <tr>
