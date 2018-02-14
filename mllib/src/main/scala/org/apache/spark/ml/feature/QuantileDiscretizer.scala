@@ -17,6 +17,10 @@
 
 package org.apache.spark.ml.feature
 
+import org.json4s.JsonDSL._
+import org.json4s.JValue
+import org.json4s.jackson.JsonMethods._
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
@@ -263,18 +267,19 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
     override protected def saveImpl(path: String): Unit = {
       // SPARK-23377: The default params will be saved and loaded as user-supplied params.
       // Once `inputCols` is set, the default value of `outputCol` param causes the error
-      // when checking exclusive params. As a temporary to fix it, we remove the default
-      // value of `outputCol` if `inputCols` is set before saving.
+      // when checking exclusive params. As a temporary to fix it, we skip the default value
+      // of `outputCol` if `inputCols` is set when saving the metadata.
       // TODO: If we modify the persistence mechanism later to better handle default params,
       // we can get rid of this.
-      var removedOutputCol: Option[String] = None
+      var paramWithoutOutputCol: Option[JValue] = None
       if (instance.isSet(instance.inputCols)) {
-        removedOutputCol = instance.getDefault(instance.outputCol)
-        instance.clearDefault(instance.outputCol)
+        val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
+        val jsonParams = params.filter(_.param != instance.outputCol).map { case ParamPair(p, v) =>
+          p.name -> parse(p.jsonEncode(v))
+        }.toList
+        paramWithoutOutputCol = Some(render(jsonParams))
       }
-      DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Add the default param back.
-      removedOutputCol.map(instance.setDefault(instance.outputCol, _))
+      DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap = paramWithoutOutputCol)
     }
   }
 
