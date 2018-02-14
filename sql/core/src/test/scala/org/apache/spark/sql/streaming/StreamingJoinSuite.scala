@@ -28,7 +28,9 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter}
-import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.execution.{FileSourceScanExec, LogicalRDD}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
@@ -321,6 +323,27 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       q.awaitTermination(10000)
     }
     assert(e.toString.contains("Stream stream joins without equality predicate is not supported"))
+  }
+
+  test("stream stream self join") {
+    val input = MemoryStream[Int]
+    val df = input.toDF
+    val join =
+      df.select('value % 5 as "key", 'value).join(
+        df.select('value % 5 as "key", 'value), "key")
+
+    testStream(join)(
+      AddData(input, 1, 2),
+      CheckAnswer((1, 1, 1), (2, 2, 2)),
+      StopStream,
+      StartStream(),
+      AddData(input, 3, 6),
+      /*
+      (1, 1)     (1, 1)
+      (2, 2)  x  (2, 2)  =  (1, 1, 1), (1, 1, 6), (2, 2, 2), (1, 6, 1), (1, 6, 6)
+      (1, 6)     (1, 6)
+      */
+      CheckAnswer((3, 3, 3), (1, 1, 1), (1, 1, 6), (2, 2, 2), (1, 6, 1), (1, 6, 6)))
   }
 
   test("locality preferences of StateStoreAwareZippedRDD") {
