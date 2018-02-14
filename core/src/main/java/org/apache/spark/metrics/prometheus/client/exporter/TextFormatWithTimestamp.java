@@ -25,7 +25,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Writing {@link Collector.MetricFamilySamples}
- * into the format expected by Prometheus {@see http://prometheus.io/docs/instrumenting/exposition_formats/}
+ * into the format expected by Prometheus
+ * {@see http://prometheus.io/docs/instrumenting/exposition_formats/}
  */
 public class TextFormatWithTimestamp {
     private static final Logger logger = LoggerFactory.getLogger(TextFormatWithTimestamp.class);
@@ -60,7 +61,8 @@ public class TextFormatWithTimestamp {
      * Converts the given {@link Collector.MetricFamilySamples} collection into text version 0.0.4
      * according to {@see http://prometheus.io/docs/instrumenting/exposition_formats/}
      */
-    protected static String buildTextFormat(Enumeration<Collector.MetricFamilySamples> mfs, String timestamp) {
+    protected static String buildTextFormat(Enumeration<Collector.MetricFamilySamples> mfs,
+                                            String timestamp) {
         StringBuilder textFormatBuilder = new StringBuilder();
 
         for (Collector.MetricFamilySamples metricFamilySamples : Collections.list(mfs)) {
@@ -84,7 +86,8 @@ public class TextFormatWithTimestamp {
         appendEscapedHelp(sb, help);
     }
 
-    private static void appendType(StringBuilder sb, String metricsFamilyName, Collector.Type type) {
+    private static void appendType(StringBuilder sb, String metricsFamilyName, Collector.Type
+            type) {
         sb.append('\n');
         sb.append("# TYPE ").append(metricsFamilyName).append(' ');
         sb.append(typeString(type));
@@ -104,7 +107,8 @@ public class TextFormatWithTimestamp {
         sb.append('}');
     }
 
-    private static void appendMetricSample(StringBuilder sb, Collector.MetricFamilySamples.Sample sample) {
+    private static void appendMetricSample(StringBuilder sb, Collector.MetricFamilySamples.Sample
+            sample) {
         sb.append(sample.name);
         if (sample.labelNames.size() > 0) {
             appendLabels(sb, sample.labelNames, sample.labelValues);

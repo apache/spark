@@ -109,7 +109,8 @@ public class TextFormatWithTimestampSuite {
         );
 
         // When
-        String actual = TextFormatWithTimestamp.buildTextFormat(Collections.enumeration(mfs), timeStamp);
+        String actual = TextFormatWithTimestamp.buildTextFormat(Collections.enumeration(mfs),
+                timeStamp);
 
         // Then
         Assert.assertEquals(expected, actual);
