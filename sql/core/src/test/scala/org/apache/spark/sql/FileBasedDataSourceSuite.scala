@@ -20,13 +20,25 @@ package org.apache.spark.sql
 import java.io.FileNotFoundException
 
 import org.apache.hadoop.fs.Path
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
-class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
+
+class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
   import testImplicits._
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.sessionState.conf.setConf(SQLConf.ORC_IMPLEMENTATION, "native")
+  }
+
+  override def afterAll(): Unit = {
+    spark.sessionState.conf.unsetConf(SQLConf.ORC_IMPLEMENTATION)
+    super.afterAll()
+  }
 
   private val allFileBasedDataSources = Seq("orc", "parquet", "csv", "json", "text")
   private val nameWithSpecialChars = "sp&cial%c hars"
