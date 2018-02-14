@@ -23,8 +23,8 @@ import org.apache.spark.sql.execution.SparkPlan
 
 object DataSourceV2Strategy extends Strategy {
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case r: DataSourceV2Relation =>
-      DataSourceV2ScanExec(r.output, r.source, r.reader) :: Nil
+    case DataSourceV2Relation(output, reader) =>
+      DataSourceV2ScanExec(output, reader) :: Nil
 
     case WriteToDataSourceV2(writer, query) =>
       WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil

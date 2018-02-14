@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.streaming.continuous._
-import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReader
 import org.apache.spark.sql.types.StructType
@@ -37,13 +36,10 @@ import org.apache.spark.sql.types.StructType
  */
 case class DataSourceV2ScanExec(
     output: Seq[AttributeReference],
-    @transient source: DataSourceV2,
     @transient reader: DataSourceReader)
-  extends LeafExecNode with DataSourceV2QueryPlan with ColumnarBatchScan {
+  extends LeafExecNode with DataSourceReaderHolder with ColumnarBatchScan {
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2ScanExec]
-
-  override def simpleString: String = s"Scan $metadataString"
 
   override def outputPartitioning: physical.Partitioning = reader match {
     case s: SupportsReportPartitioning =>
