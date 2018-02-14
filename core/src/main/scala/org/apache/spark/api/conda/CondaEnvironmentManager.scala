@@ -71,7 +71,8 @@ final class CondaEnvironmentManager(condaBinaryPath: String,
   def create(
               baseDir: String,
               condaPackages: Seq[String],
-              condaChannelUrls: Seq[String]): CondaEnvironment = {
+              condaChannelUrls: Seq[String],
+              condaExtraArgs: Seq[String] = Nil): CondaEnvironment = {
     require(condaPackages.nonEmpty, "Expected at least one conda package.")
     require(condaChannelUrls.nonEmpty, "Can't have an empty list of conda channel URLs")
     val name = "conda-env"
@@ -89,13 +90,14 @@ final class CondaEnvironmentManager(condaBinaryPath: String,
     runCondaProcess(
       linkedBaseDir,
       List("create", "-n", name, "-y", "--no-default-packages")
+        ::: condaExtraArgs.toList
         ::: verbosityFlags
         ::: "--" :: condaPackages.toList,
       description = "create conda env",
       channels = condaChannelUrls.toList
     )
 
-    new CondaEnvironment(this, linkedBaseDir, name, condaPackages, condaChannelUrls)
+    new CondaEnvironment(this, linkedBaseDir, name, condaPackages, condaChannelUrls, condaExtraArgs)
   }
 
   /**
@@ -236,7 +238,7 @@ object CondaEnvironmentManager extends Logging {
       val dirId = hash % localDirs.length
       Utils.createTempDir(localDirs(dirId).getAbsolutePath, "conda").getAbsolutePath
     }
-    condaEnvManager.create(envDir, condaPackages, instructions.channels)
+    condaEnvManager.create(envDir, condaPackages, instructions.channels, instructions.extraArgs)
   }
 
 }

@@ -278,6 +278,12 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
+  private[spark] val CONDA_EXTRA_ARGUMENTS = ConfigBuilder("spark.conda.extraArgs")
+    .doc("Custom conda arguments to add when running conda")
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
+
   // To limit how many applications are shown in the History Server summary ui
   private[spark] val HISTORY_UI_MAX_APPS =
     ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)
