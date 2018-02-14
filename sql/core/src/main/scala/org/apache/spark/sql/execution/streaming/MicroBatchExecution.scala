@@ -421,8 +421,6 @@ class MicroBatchExecution(
       }
     }
 
-    // A list of attributes that will need to be updated.
-    val replacements = new ArrayBuffer[(Attribute, Attribute)]
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val newBatchesPlan = logicalPlan transform {
       case StreamingExecutionRelation(source, output) =>
@@ -430,7 +428,6 @@ class MicroBatchExecution(
           assert(output.size == dataPlan.output.size,
             s"Invalid batch: ${Utils.truncatedString(output, ",")} != " +
               s"${Utils.truncatedString(dataPlan.output, ",")}")
-          replacements ++= output.zip(dataPlan.output)
 
           val aliases = output.zip(dataPlan.output).map { case (to, from) =>
             Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))
@@ -442,7 +439,6 @@ class MicroBatchExecution(
     }
 
     // Rewire the plan to use the new attributes that were returned by the source.
-    val replacementMap = AttributeMap(replacements)
     val newAttributePlan = newBatchesPlan transformAllExpressions {
       case ct: CurrentTimestamp =>
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
