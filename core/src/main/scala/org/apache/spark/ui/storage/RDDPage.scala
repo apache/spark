@@ -201,8 +201,8 @@ private[ui] class BlockDataSource(
       rddPartition.memoryUsed,
       rddPartition.diskUsed,
       rddPartition.executors
-        .sorted
         .map { id => executorIdToAddress.get(id).getOrElse(id) }
+        .sorted
         .mkString(" "))
   }
 
