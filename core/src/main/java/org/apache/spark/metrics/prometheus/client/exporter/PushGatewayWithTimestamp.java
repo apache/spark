@@ -228,9 +228,10 @@ public class PushGatewayWithTimestamp {
 
         connection.setConnectTimeout(10 * SECONDS_PER_MILLISECOND);
         connection.setReadTimeout(10 * SECONDS_PER_MILLISECOND);
-        connection.connect();
 
         try {
+            connection.connect();
+
             if (!method.equals("DELETE")) {
                 BufferedWriter writer =
                         new BufferedWriter(
