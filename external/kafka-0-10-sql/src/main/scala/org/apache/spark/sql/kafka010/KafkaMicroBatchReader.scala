@@ -184,7 +184,9 @@ private[kafka010] class KafkaMicroBatchReader(
 
   override def commit(end: Offset): Unit = {}
 
-  override def stop(): Unit = {}
+  override def stop(): Unit = {
+    kafkaOffsetReader.close()
+  }
 
   override def toString(): String = s"Kafka[$kafkaOffsetReader]"
 

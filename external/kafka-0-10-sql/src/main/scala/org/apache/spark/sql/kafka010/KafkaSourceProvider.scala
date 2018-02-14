@@ -110,7 +110,7 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
    * Creates a [[org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader]] to read batches
    * of Kafka data in a micro-batch streaming query.
    */
-  def createMicroBatchReader(
+  override def createMicroBatchReader(
       schema: Optional[StructType],
       metadataPath: String,
       options: DataSourceOptions): KafkaMicroBatchReader = {
