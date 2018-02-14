@@ -304,13 +304,11 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
-  test("ensure that intial offset are written with an extra byte in the front") {
+  test("ensure that intial offset are written with an extra byte in the beginning (SPARK-19517)") {
     withTempDir { metadataPath =>
-      val topic = "kafka-initial-offset-2-1-0"
+      val topic = "kafka-initial-offset-current"
       testUtils.createTopic(topic, partitions = 1)
 
-      // Copy the initial offset file into the right location inside the checkpoint root directory
-      // such that the Kafka source can read it for initial offsets.
       val initialOffsetFile = Paths.get(s"${metadataPath.getAbsolutePath}/sources/0/0").toFile
 
       val df = spark
@@ -321,8 +319,8 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
         .option("startingOffsets", s"earliest")
         .load()
 
-      // Test that the query starts from the expected initial offset (i.e. read older offsets,
-      // even though startingOffsets is latest).
+      // Test the written initial offset file has 0 byte in the beginning, so that
+      // Spark 2.1.0 can read the offsets (see SPARK-19517)
       testStream(df)(
         StartStream(checkpointLocation = metadataPath.getAbsolutePath),
         makeSureGetOffsetCalled)
@@ -336,7 +334,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     }
   }
 
-  test("deserialization of initial offset written by Spark 2.1.0") {
+  test("deserialization of initial offset written by Spark 2.1.0 (SPARK-19517)") {
     withTempDir { metadataPath =>
       val topic = "kafka-initial-offset-2-1-0"
       testUtils.createTopic(topic, partitions = 3)
