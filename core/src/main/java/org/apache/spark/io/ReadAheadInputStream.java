@@ -229,6 +229,8 @@ public class ReadAheadInputStream extends InputStream {
     stateChangeLock.lock();
     isWaiting.set(true);
     try {
+      // There is only one reader, and one writer, so the writer should signal only once,
+      // but a while loop checking the wake up condition is still needed to avoid spurious wakeups.
       while (readInProgress) {
         asyncReadComplete.await();
       }
