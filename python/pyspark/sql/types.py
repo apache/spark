@@ -1696,6 +1696,12 @@ def from_arrow_schema(arrow_schema):
 
 
 def _check_series_convert_date(series, data_type):
+    """
+    Cast the series to datetime.date if it's a date type, otherwise returns the original series.
+
+    :param series: pandas.Series
+    :param data_type: a Spark data type for the series
+    """
     if type(data_type) == DateType:
         return series.dt.date
     else:
