@@ -395,16 +395,19 @@ class ParquetFileFormat
         ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
       }
       val taskContext = Option(TaskContext.get())
-      val parquetReader = if (enableVectorizedReader) {
+      val iter = if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
           convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
+        val recordReaderIterator = new RecordReaderIterator(vectorizedReader)
+        // Register a task completion lister before `initalization`.
+        taskContext.foreach(_.addTaskCompletionListener(_ => recordReaderIterator.close()))
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)
         if (returningBatch) {
           vectorizedReader.enableReturningBatches()
         }
-        vectorizedReader
+        recordReaderIterator
       } else {
         logDebug(s"Falling back to parquet-mr")
         // ParquetRecordReader returns UnsafeRow
@@ -414,16 +417,16 @@ class ParquetFileFormat
         } else {
           new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz))
         }
+        val recordReaderIterator = new RecordReaderIterator(reader)
+        // Register a task completion lister before `initalization`.
+        taskContext.foreach(_.addTaskCompletionListener(_ => recordReaderIterator.close()))
         reader.initialize(split, hadoopAttemptContext)
-        reader
+        recordReaderIterator
       }
 
-      val iter = new RecordReaderIterator(parquetReader)
-      taskContext.foreach(_.addTaskCompletionListener(_ => iter.close()))
 
       // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
-      if (parquetReader.isInstanceOf[VectorizedParquetRecordReader] &&
-          enableVectorizedReader) {
+      if (enableVectorizedReader) {
         iter.asInstanceOf[Iterator[InternalRow]]
       } else {
         val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
