@@ -56,7 +56,7 @@ private[spark] trait ExecutorAllocationClient {
    * Request that the cluster manager kill the specified executors.
    *
    * @param executorIds identifiers of executors to kill
-   * @param adjustTargetNumExecutors whether the target number of executors be adjusted down
+   * @param adjustTargetNumExecutors whether the target number of executors will be adjusted down
    *                                 after these executors have been killed
    * @param countFailures if there are tasks running on the executors when they are killed, whether
    *                      those failures be counted to task failure limits?
