@@ -104,6 +104,13 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   /** Returns all field names in an array. */
   def fieldNames: Array[String] = fields.map(_.name)
 
+  /**
+   * Returns all field names in an array. This is an alias of `fieldNames`.
+   *
+   * @since 2.4.0
+   */
+  def names: Array[String] = fieldNames
+
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
   private lazy val nameToIndex: Map[String, Int] = fieldNames.zipWithIndex.toMap
