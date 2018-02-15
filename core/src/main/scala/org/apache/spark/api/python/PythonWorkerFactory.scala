@@ -204,15 +204,15 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         // is arbitrary data but is also coincidentally within range
         if (daemonPort < 1 || daemonPort > 0xffff) {
           val exceptionMessage = f"""
-               |Bad data in $daemonModule's standard output. Invalid port number:
-               |  $daemonPort (0x$daemonPort%08x)
-               |Python command to execute the daemon was:
-               |  ${command.asScala.mkString(" ")}
-               |Check that you don't have any unexpected modules or libraries in
-               |your PYTHONPATH:
-               |  $pythonPath
-               |Also, check if you have a sitecustomize.py module in your python path,
-               |or in your python installation, that is printing to standard output"""
+            |Bad data in $daemonModule's standard output. Invalid port number:
+            |  $daemonPort (0x$daemonPort%08x)
+            |Python command to execute the daemon was:
+            |  ${command.asScala.mkString(" ")}
+            |Check that you don't have any unexpected modules or libraries in
+            |your PYTHONPATH:
+            |  $pythonPath
+            |Also, check if you have a sitecustomize.py module in your python path,
+            |or in your python installation, that is printing to standard output"""
           throw new SparkException(exceptionMessage.stripMargin)
         }
 
