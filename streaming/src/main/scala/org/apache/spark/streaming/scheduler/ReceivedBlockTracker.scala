@@ -200,7 +200,7 @@ private[streaming] class ReceivedBlockTracker(
         s"${allocatedBlocks.streamIdToAllocatedBlocks}")
       allocatedBlocks.streamIdToAllocatedBlocks.foreach {
         case (streamId, allocatedBlocks) =>
-          streamIdToUnallocatedBlockQueues(streamId).dequeueAll(allocatedBlocks.toSet)
+          getReceivedBlockQueue(streamId).dequeueAll(allocatedBlocks.toSet)
       }
       timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
       lastAllocatedBatchTime = batchTime
