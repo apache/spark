@@ -283,7 +283,7 @@ private[kafka010] class KafkaMicroBatchReader(
     }
   }
 
-  /** A version of [[HDFSMetadataLog]] specialized for saving  */
+  /** A version of [[HDFSMetadataLog]] specialized for saving the initial offsets. */
   class KafkaSourceInitialOffsetWriter(sparkSession: SparkSession, metadataPath: String)
     extends HDFSMetadataLog[KafkaSourceOffset](sparkSession, metadataPath) {
 
