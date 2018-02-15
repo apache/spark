@@ -29,11 +29,12 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory}
+import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory, SupportsScanUnsafeRow}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.UninterruptibleThread
@@ -61,7 +62,7 @@ private[kafka010] class KafkaMicroBatchReader(
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends MicroBatchReader with Logging {
+  extends MicroBatchReader with SupportsScanUnsafeRow with Logging {
 
   type PartitionOffsetMap = Map[TopicPartition, Long]
 
@@ -102,7 +103,7 @@ private[kafka010] class KafkaMicroBatchReader(
         }
   }
 
-  override def createDataReaderFactories(): ju.List[DataReaderFactory[Row]] = {
+  override def createUnsafeRowReaderFactories(): ju.List[DataReaderFactory[UnsafeRow]] = {
     // Find the new partitions, and get their earliest offsets
     val newPartitions = endPartitionOffsets.keySet.diff(startPartitionOffsets.keySet)
     val newPartitionOffsets = kafkaOffsetReader.fetchEarliestOffsets(newPartitions.toSeq)
@@ -165,7 +166,7 @@ private[kafka010] class KafkaMicroBatchReader(
         None
       }
     }
-    factories.map(_.asInstanceOf[DataReaderFactory[Row]]).asJava
+    factories.map(_.asInstanceOf[DataReaderFactory[UnsafeRow]]).asJava
   }
 
   override def getStartOffset: Offset = {
@@ -324,11 +325,11 @@ private[kafka010] class KafkaMicroBatchDataReaderFactory(
     preferredLoc: Option[String],
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends DataReaderFactory[Row] {
+    failOnDataLoss: Boolean) extends DataReaderFactory[UnsafeRow] {
 
   override def preferredLocations(): Array[String] = preferredLoc.toArray
 
-  override def createDataReader(): DataReader[Row] = new KafkaMicroBatchDataReader(
+  override def createDataReader(): DataReader[UnsafeRow] = new KafkaMicroBatchDataReader(
     range, executorKafkaParams, pollTimeoutMs, failOnDataLoss)
 }
 
@@ -337,29 +338,21 @@ private[kafka010] class KafkaMicroBatchDataReader(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends DataReader[Row] with Logging {
+    failOnDataLoss: Boolean) extends DataReader[UnsafeRow] with Logging {
 
   private val consumer = CachedKafkaConsumer.getOrCreate(
     offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
   private val rangeToRead = resolveRange(offsetRange)
-  private val timestamp = new java.sql.Timestamp(0)
+  private val converter = new KafkaRecordToUnsafeRowConverter
 
   private var nextOffset = rangeToRead.fromOffset
-  private var nextRow: Row = _
+  private var nextRow: UnsafeRow = _
 
   override def next(): Boolean = {
     if (nextOffset < rangeToRead.untilOffset) {
-      val cr = consumer.get(nextOffset, rangeToRead.untilOffset, pollTimeoutMs, failOnDataLoss)
-      if (cr != null) {
-        timestamp.setTime(cr.timestamp)
-        nextRow = Row(
-          cr.key,
-          cr.value,
-          cr.topic,
-          cr.partition,
-          cr.offset,
-          timestamp,
-          cr.timestampType.id)
+      val record = consumer.get(nextOffset, rangeToRead.untilOffset, pollTimeoutMs, failOnDataLoss)
+      if (record != null) {
+        nextRow = converter.toUnsafeRow(record)
         true
       } else {
         false
@@ -369,7 +362,7 @@ private[kafka010] class KafkaMicroBatchDataReader(
     }
   }
 
-  override def get(): Row = {
+  override def get(): UnsafeRow = {
     assert(nextRow != null)
     nextOffset += 1
     nextRow
