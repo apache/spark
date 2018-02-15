@@ -196,7 +196,7 @@ private[kafka010] class KafkaMicroBatchReader(
    */
   private def getOrCreateInitialPartitionOffsets(): PartitionOffsetMap = {
     // Make sure that `KafkaConsumer.poll` is only called in StreamExecutionThread.
-    // Otherwise, interrupting a thread while running `KafkaConsumer.poll` may hang forever
+    // Otherwise, interrupting a thread while running `KafDataskaConsumer.poll` may hang forever
     // (KAFKA-1894).
     assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
 

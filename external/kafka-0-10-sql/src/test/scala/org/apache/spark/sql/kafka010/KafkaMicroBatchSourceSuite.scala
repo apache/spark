@@ -112,15 +112,18 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
         query.nonEmpty,
         "Cannot add data when there is no query for finding the active kafka source")
 
-      val sources = query.get.logicalPlan.collect {
-        case StreamingExecutionRelation(source: KafkaSource, _) => source
-        case StreamingExecutionRelation(source: KafkaMicroBatchReader, _) => source
-      } ++ (query.get.lastExecution match {
-        case null => Seq()
-        case e => e.logical.collect {
-          case DataSourceV2Relation(_, reader: KafkaContinuousReader) => reader
-        }
-      })
+      val sources = {
+        query.get.logicalPlan.collect {
+          case StreamingExecutionRelation(source: KafkaSource, _) => source
+          case StreamingExecutionRelation(source: KafkaMicroBatchReader, _) => source
+        } ++ (query.get.lastExecution match {
+          case null => Seq()
+          case e => e.logical.collect {
+            case DataSourceV2Relation(_, reader: KafkaContinuousReader) => reader
+          }
+        })
+      }.distinct
+
       if (sources.isEmpty) {
         throw new Exception(
           "Could not find Kafka source in the StreamExecution logical plan to add data to")
@@ -304,7 +307,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
     )
   }
 
-  test("ensure that intial offset are written with an extra byte in the beginning (SPARK-19517)") {
+  test("ensure that initial offset are written with an extra byte in the beginning (SPARK-19517)") {
     withTempDir { metadataPath =>
       val topic = "kafka-initial-offset-current"
       testUtils.createTopic(topic, partitions = 1)
@@ -552,6 +555,34 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       waitUntilBatchProcessed,
       // smallest now empty, 5 from bigger one
       CheckLastBatch(120 to 124: _*)
+    )
+  }
+
+  test("ensure stream-stream self-join generates only one offset in offset log") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 2)
+    require(testUtils.getLatestOffsets(Set(topic)).size === 2)
+
+    val kafka = spark
+      .readStream
+      .format("kafka")
+      .option("subscribe", topic)
+      .option("kafka.bootstrap.servers", testUtils.brokerAddress)
+      .option("kafka.metadata.max.age.ms", "1")
+      .load()
+
+    val values = kafka
+      .selectExpr("CAST(CAST(value AS STRING) AS INT) AS value",
+        "CAST(CAST(value AS STRING) AS INT) % 5 AS key")
+
+    val join = values.join(values, "key")
+
+    testStream(join)(
+      makeSureGetOffsetCalled,
+      AddKafkaData(Set(topic), 1, 2),
+      CheckAnswer((1, 1, 1), (2, 2, 2)),
+      AddKafkaData(Set(topic), 6, 3),
+      CheckAnswer((1, 1, 1), (2, 2, 2), (3, 3, 3), (1, 6, 1), (1, 1, 6), (1, 6, 6))
     )
   }
 }
