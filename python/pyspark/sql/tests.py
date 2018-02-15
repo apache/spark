@@ -4417,26 +4417,29 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         df = self.data.withColumn("arr", array(col("id")))
 
         # Different forms of group map pandas UDF, results of these are the same
+
+        output_schema = StructType(
+            [StructField('id', LongType()),
+             StructField('v', IntegerType()),
+             StructField('arr', ArrayType(LongType())),
+             StructField('v1', DoubleType()),
+             StructField('v2', LongType())])
+
         udf1 = pandas_udf(
             lambda pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
-            StructType(
-                [StructField('id', LongType()),
-                 StructField('v', IntegerType()),
-                 StructField('arr', ArrayType(LongType())),
-                 StructField('v1', DoubleType()),
-                 StructField('v2', LongType())]),
+            output_schema,
             PandasUDFType.GROUPED_MAP
         )
 
         udf2 = pandas_udf(
             lambda _, pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
-            'id long, v int, v1 double, v2 long',
+            output_schema,
             PandasUDFType.GROUPED_MAP
         )
 
         udf3 = pandas_udf(
             lambda key, pdf: pdf.assign(id=key[0], v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
-            'id long, v int, v1 double, v2 long',
+            output_schema,
             PandasUDFType.GROUPED_MAP
         )
 
