@@ -963,7 +963,7 @@ private[ui] class TaskPagedTable(
   }
 }
 
-private object ApiHelper {
+private[ui] object ApiHelper {
 
   val HEADER_ID = "ID"
   val HEADER_TASK_INDEX = "Index"
@@ -992,7 +992,7 @@ private object ApiHelper {
   val HEADER_DISK_SPILL = "Shuffle Spill (Disk)"
   val HEADER_ERROR = "Errors"
 
-  private val COLUMN_TO_INDEX = Map(
+  private[ui] val COLUMN_TO_INDEX = Map(
     HEADER_ID -> null.asInstanceOf[String],
     HEADER_TASK_INDEX -> TaskIndexNames.TASK_INDEX,
     HEADER_ATTEMPT -> TaskIndexNames.ATTEMPT,
