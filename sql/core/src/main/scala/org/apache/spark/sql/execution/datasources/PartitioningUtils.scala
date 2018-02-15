@@ -23,9 +23,7 @@ import java.util.{Locale, TimeZone}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
-
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCoercion}
@@ -34,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.unsafe.types.UTF8String
 
 // TODO: We should tighten up visibility of the classes here once we clean up Hive coupling.
 
@@ -407,6 +406,29 @@ object PartitioningUtils {
       Literal(bigDecimal)
     }
 
+    val dateTry = Try {
+      // try and parse the date, if no exception occurs this is a candidate to be resolved as
+      // DateType
+      DateTimeUtils.getThreadLocalDateFormat.parse(raw)
+      // SPARK-23436: Casting the string to date may still return null if a bad Date is provided.
+      // We need to check that we can cast the raw string since we later can use Cast to get
+      // the partition values with the right DataType (see
+      // org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex.inferPartitioning)
+      val dateOption = Option(Cast(Literal(raw), DateType).eval())
+      Literal.create(dateOption.get, DateType)
+    }
+
+    val timestampTry = Try {
+      val unescapedRaw = unescapePathName(raw)
+      // try and parse the date, if no exception occurs this is a candidate to be resolved as
+      // TimestampType
+      DateTimeUtils.getThreadLocalTimestampFormat(timeZone).parse(unescapedRaw)
+      // SPARK-23436: see comment for date
+      val timestampOption = Option(Cast(Literal(unescapedRaw), TimestampType,
+        Some(timeZone.getID)).eval())
+      Literal.create(timestampOption.get, TimestampType)
+    }
+
     if (typeInference) {
       // First tries integral types
       Try(Literal.create(Integer.parseInt(raw), IntegerType))
@@ -415,16 +437,8 @@ object PartitioningUtils {
         // Then falls back to fractional types
         .orElse(Try(Literal.create(JDouble.parseDouble(raw), DoubleType)))
         // Then falls back to date/timestamp types
-        .orElse(Try(
-          Literal.create(
-            DateTimeUtils.getThreadLocalTimestampFormat(timeZone)
-              .parse(unescapePathName(raw)).getTime * 1000L,
-            TimestampType)))
-        .orElse(Try(
-          Literal.create(
-            DateTimeUtils.millisToDays(
-              DateTimeUtils.getThreadLocalDateFormat.parse(raw).getTime),
-            DateType)))
+        .orElse(timestampTry)
+        .orElse(dateTry)
         // Then falls back to string
         .getOrElse {
           if (raw == DEFAULT_PARTITION_NAME) {
