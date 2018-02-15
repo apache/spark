@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.SparkFunSuite
 /* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.{HiveHash, Murmur3Hash}
 import org.apache.spark.sql.catalyst.plans.physical._
 
 class DistributionSuite extends SparkFunSuite {
@@ -81,6 +82,26 @@ class DistributionSuite extends SparkFunSuite {
 
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
+      HashClusteredDistribution(Seq('a, 'b, 'c), Some(10), classOf[Murmur3Hash]),
+      true)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b, 'c), 10),
+      HashClusteredDistribution(Seq('a, 'b, 'c), Some(12), classOf[Murmur3Hash]),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b, 'c), 10),
+      HashClusteredDistribution(Seq('d, 'e), Some(10), classOf[Murmur3Hash]),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b, 'c), 10),
+      HashClusteredDistribution(Seq('a, 'b, 'c), Some(10), classOf[HiveHash]),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b, 'c), 10),
       AllTuples,
       false)
 
@@ -123,21 +144,6 @@ class DistributionSuite extends SparkFunSuite {
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc, 'd.desc)),
-      true)
-
-    checkSatisfied(
-      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('a, 'b, 'c)),
-      true)
-
-    checkSatisfied(
-      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('c, 'b, 'a)),
-      true)
-
-    checkSatisfied(
-      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('b, 'c, 'a, 'd)),
       true)
 
     // Cases which need an exchange between two data properties.

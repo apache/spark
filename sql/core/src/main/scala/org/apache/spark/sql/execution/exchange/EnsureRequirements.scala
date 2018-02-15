@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.exchange
 
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -243,13 +244,13 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       rightPartitioning: Partitioning): (Seq[Expression], Seq[Expression]) = {
     if (leftKeys.forall(_.deterministic) && rightKeys.forall(_.deterministic)) {
       leftPartitioning match {
-        case HashPartitioning(leftExpressions, _)
+        case HashPartitioning(leftExpressions, _, _)
           if leftExpressions.length == leftKeys.length &&
             leftKeys.forall(x => leftExpressions.exists(_.semanticEquals(x))) =>
           reorder(leftKeys, rightKeys, leftExpressions, leftKeys)
 
         case _ => rightPartitioning match {
-          case HashPartitioning(rightExpressions, _)
+          case HashPartitioning(rightExpressions, _, _)
             if rightExpressions.length == rightKeys.length &&
               rightKeys.forall(x => rightExpressions.exists(_.semanticEquals(x))) =>
             reorder(leftKeys, rightKeys, rightExpressions, rightKeys)
@@ -262,14 +263,54 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     }
   }
 
+  private def adjustHashingFunctionAndNumPartitions(
+      plan: SparkPlan,
+      requiredNumPartitions: Option[Int],
+      hashingFunctionClass: Class[_ <: HashExpression[Int]]):
+  (Option[Int], Class[_ <: HashExpression[Int]]) = {
+
+    val childHashPartitionings = plan.children.map(_.outputPartitioning)
+      .filter(_.isInstanceOf[HashPartitioning])
+      .map(_.asInstanceOf[HashPartitioning])
+
+    val distinctRequiredNumPartitions = childHashPartitionings.map(_.numPartitions).distinct
+    val newRequiredNumPartitions =
+      if (distinctRequiredNumPartitions.nonEmpty && distinctRequiredNumPartitions.size == 1) {
+        Some(distinctRequiredNumPartitions.head)
+      } else {
+        requiredNumPartitions
+      }
+
+    val distinctHashingFunctions = childHashPartitionings.map(_.hashingFunctionClass).distinct
+    val newHashingFunctionClass =
+      if (distinctHashingFunctions.nonEmpty && distinctHashingFunctions.size == 1) {
+        distinctHashingFunctions.head
+      } else {
+        hashingFunctionClass
+      }
+
+    (newRequiredNumPartitions, newHashingFunctionClass)
+  }
+
   /**
+   * Based on the type of join and the properties of the child nodes, adjust following:
+   *
+   * [A] Join keys
+   * -----------------------------
    * When the physical operators are created for JOIN, the ordering of join keys is based on order
    * in which the join keys appear in the user query. That might not match with the output
    * partitioning of the join node's children (thus leading to extra sort / shuffle being
-   * introduced). This rule will change the ordering of the join keys to match with the
+   * introduced). This method will change the ordering of the join keys to match with the
    * partitioning of the join nodes' children.
+   *
+   * [B] Hashing function class and required partitions for children
+   * --------------------------------------------------------------------
+   * In case when children of the join node are already shuffled using the same hash function and
+   * have the same number of partitions, then let the join node use the same values (and not the
+   * default number of shuffle partitions and hashing function). This saves shuffling of the join
+   * nodes' children.
    */
-  private def reorderJoinPredicates(plan: SparkPlan): SparkPlan = {
+  private def adjustJoinRequirements(plan: SparkPlan): SparkPlan = {
     plan.transformUp {
       case BroadcastHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left,
         right) =>
@@ -278,16 +319,25 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         BroadcastHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, buildSide, condition,
           left, right)
 
-      case ShuffledHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left, right) =>
-        val (reorderedLeftKeys, reorderedRightKeys) =
-          reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
-        ShuffledHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, buildSide, condition,
-          left, right)
+      case ShuffledHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left, right,
+      requiredNumPartitions, hashingFunctionClass) =>
 
-      case SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right) =>
         val (reorderedLeftKeys, reorderedRightKeys) =
           reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
-        SortMergeJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, condition, left, right)
+        val (newRequiredNumPartitions, newHashingFunctionClass) =
+          adjustHashingFunctionAndNumPartitions(plan, requiredNumPartitions, hashingFunctionClass)
+        ShuffledHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, buildSide, condition,
+          left, right, newRequiredNumPartitions, newHashingFunctionClass)
+
+      case SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right,
+      requiredNumPartitions, hashingFunctionClass) =>
+
+        val (reorderedLeftKeys, reorderedRightKeys) =
+          reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
+        val (newRequiredNumPartitions, newHashingFunctionClass) =
+          adjustHashingFunctionAndNumPartitions(plan, requiredNumPartitions, hashingFunctionClass)
+        SortMergeJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, condition,
+          left, right, newRequiredNumPartitions, newHashingFunctionClass)
     }
   }
 
@@ -299,6 +349,6 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         case _ => operator
       }
     case operator: SparkPlan =>
-      ensureDistributionAndOrdering(reorderJoinPredicates(operator))
+      ensureDistributionAndOrdering(adjustJoinRequirements(operator))
   }
 }

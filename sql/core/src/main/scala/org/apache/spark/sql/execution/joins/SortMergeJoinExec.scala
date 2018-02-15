@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -39,7 +40,10 @@ case class SortMergeJoinExec(
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryExecNode with CodegenSupport {
+    right: SparkPlan,
+    requiredNumPartitions: Option[Int] = None,
+    hashingFunctionClass: Class[_ <: HashExpression[Int]] = classOf[Murmur3Hash])
+  extends BinaryExecNode with CodegenSupport {
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -77,8 +81,11 @@ case class SortMergeJoinExec(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
-  override def requiredChildDistribution: Seq[Distribution] =
-    HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+  override def requiredChildDistribution: Seq[Distribution] = {
+    HashClusteredDistribution(leftKeys, requiredNumPartitions, hashingFunctionClass) ::
+      HashClusteredDistribution(rightKeys, requiredNumPartitions, hashingFunctionClass) ::
+      Nil
+  }
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
     // For inner join, orders of both sides keys should be kept.

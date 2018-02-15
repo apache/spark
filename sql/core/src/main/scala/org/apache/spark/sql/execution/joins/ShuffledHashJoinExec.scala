@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution.joins
 
+import scala.language.existentials
+
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, HashExpression, Murmur3Hash}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
@@ -36,7 +38,9 @@ case class ShuffledHashJoinExec(
     buildSide: BuildSide,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan)
+    right: SparkPlan,
+    requiredNumPartitions: Option[Int] = None,
+    hashingFunctionClass: Class[_ <: HashExpression[Int]] = classOf[Murmur3Hash])
   extends BinaryExecNode with HashJoin {
 
   override lazy val metrics = Map(
@@ -45,8 +49,11 @@ case class ShuffledHashJoinExec(
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"),
     "avgHashProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hash probe"))
 
-  override def requiredChildDistribution: Seq[Distribution] =
-    HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+  override def requiredChildDistribution: Seq[Distribution] = {
+    HashClusteredDistribution(leftKeys, requiredNumPartitions, hashingFunctionClass) ::
+      HashClusteredDistribution(rightKeys, requiredNumPartitions, hashingFunctionClass) ::
+      Nil
+  }
 
   private def buildHashedRelation(iter: Iterator[InternalRow]): HashedRelation = {
     val buildDataSize = longMetric("buildDataSize")

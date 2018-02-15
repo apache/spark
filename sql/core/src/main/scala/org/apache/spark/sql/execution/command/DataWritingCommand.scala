@@ -21,8 +21,9 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
@@ -59,6 +60,10 @@ trait DataWritingCommand extends Command {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
     new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
   }
+
+  def requiredDistribution: Seq[Distribution] = Seq.fill(children.size)(UnspecifiedDistribution)
+
+  def requiredOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row]
 }
