@@ -362,12 +362,12 @@ class JacksonParser(
         // `columnNameOfCorruptRecord` are set to `null`.
         throw BadRecordException(() => recordLiteral(record), () => None, e)
       case e: CharConversionException if options.charset.isEmpty =>
-        val msg = e.getMessage +
-          """
-            |Charset was detected automatically. You might want to set it explicitly
-            |via the charset option like: .option("charset", "UTF-8")
-            |Example of supported charsets:""".stripMargin +
-          " UTF-8, UTF-16, UTF-16BE, UTF-16LE, UTF-32, UTF-32BE, UTF-32LE"
+        val msg =
+          """Failed to parse a character. Charset was detected automatically.
+            |You might want to set it explicitly via the charset option like:
+            |  .option("charset", "UTF-8")
+            |Example of supported charsets: """.stripMargin +
+          "UTF-8, UTF-16, UTF-16BE, UTF-16LE, UTF-32, UTF-32BE, UTF-32LE"
         throw new CharConversionException(msg)
     }
   }
