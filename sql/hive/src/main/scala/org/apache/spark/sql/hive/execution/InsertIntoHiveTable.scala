@@ -23,10 +23,11 @@ import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalog}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.HiveClientImpl
@@ -67,14 +68,15 @@ case class InsertIntoHiveTable(
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean) extends SaveAsHiveFile {
+    ifPartitionNotExists: Boolean,
+    outputColumns: Seq[Attribute]) extends SaveAsHiveFile {
 
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
    * `org.apache.hadoop.hive.serde2.SerDe` and the
    * `org.apache.hadoop.mapred.OutputFormat` provided by the table definition.
    */
-  override def run(sparkSession: SparkSession): Seq[Row] = {
+  override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     val externalCatalog = sparkSession.sharedState.externalCatalog
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
@@ -94,7 +96,7 @@ case class InsertIntoHiveTable(
     val tmpLocation = getExternalTmpPath(sparkSession, hadoopConf, tableLocation)
 
     try {
-      processInsert(sparkSession, externalCatalog, hadoopConf, tableDesc, tmpLocation)
+      processInsert(sparkSession, externalCatalog, hadoopConf, tableDesc, tmpLocation, child)
     } finally {
       // Attempt to delete the staging directory and the inclusive files. If failed, the files are
       // expected to be dropped at the normal termination of VM since deleteOnExit is used.
@@ -119,7 +121,8 @@ case class InsertIntoHiveTable(
       externalCatalog: ExternalCatalog,
       hadoopConf: Configuration,
       tableDesc: TableDesc,
-      tmpLocation: Path): Unit = {
+      tmpLocation: Path,
+      child: SparkPlan): Unit = {
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
 
     val numDynamicPartitions = partition.values.count(_.isEmpty)
@@ -191,10 +194,11 @@ case class InsertIntoHiveTable(
 
     saveAsHiveFile(
       sparkSession = sparkSession,
-      queryExecution = Dataset.ofRows(sparkSession, query).queryExecution,
+      plan = child,
       hadoopConf = hadoopConf,
       fileSinkConf = fileSinkConf,
       outputLocation = tmpLocation.toString,
+      allColumns = outputColumns,
       partitionAttributes = partitionAttributes)
 
     if (partition.nonEmpty) {

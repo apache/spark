@@ -1168,4 +1168,26 @@ class JDBCSuite extends SparkFunSuite
       val df3 = sql("SELECT * FROM test_sessionInitStatement")
       assert(df3.collect() === Array(Row(21519, 1234)))
     }
+
+  test("jdbc data source shouldn't have unnecessary metadata in its schema") {
+    val schema = StructType(Seq(
+      StructField("NAME", StringType, true), StructField("THEID", IntegerType, true)))
+
+    val df = spark.read.format("jdbc")
+      .option("Url", urlWithUserAndPass)
+      .option("DbTaBle", "TEST.PEOPLE")
+      .load()
+    assert(df.schema === schema)
+
+    withTempView("people_view") {
+      sql(
+        s"""
+          |CREATE TEMPORARY VIEW people_view
+          |USING org.apache.spark.sql.jdbc
+          |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass')
+        """.stripMargin.replaceAll("\n", " "))
+
+      assert(sql("select * from people_view").schema === schema)
+    }
+  }
 }

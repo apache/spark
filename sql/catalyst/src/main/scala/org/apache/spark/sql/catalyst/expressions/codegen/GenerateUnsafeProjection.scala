@@ -73,9 +73,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       bufferHolder: String,
       isTopLevel: Boolean = false): String = {
     val rowWriterClass = classOf[UnsafeRowWriter].getName
-    val rowWriter = ctx.freshName("rowWriter")
-    ctx.addMutableState(rowWriterClass, rowWriter,
-      s"$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});")
+    val rowWriter = ctx.addMutableState(rowWriterClass, "rowWriter",
+      v => s"$v = new $rowWriterClass($bufferHolder, ${inputs.length});")
 
     val resetWriter = if (isTopLevel) {
       // For top level row writer, it always writes to the beginning of the global buffer holder,
@@ -186,9 +185,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
     val tmpInput = ctx.freshName("tmpInput")
     val arrayWriterClass = classOf[UnsafeArrayWriter].getName
-    val arrayWriter = ctx.freshName("arrayWriter")
-    ctx.addMutableState(arrayWriterClass, arrayWriter,
-      s"$arrayWriter = new $arrayWriterClass();")
+    val arrayWriter = ctx.addMutableState(arrayWriterClass, "arrayWriter",
+      v => s"$v = new $arrayWriterClass();")
     val numElements = ctx.freshName("numElements")
     val index = ctx.freshName("index")
 
@@ -318,13 +316,12 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ => true
     }
 
-    val result = ctx.freshName("result")
-    ctx.addMutableState("UnsafeRow", result, s"$result = new UnsafeRow(${expressions.length});")
+    val result = ctx.addMutableState("UnsafeRow", "result",
+      v => s"$v = new UnsafeRow(${expressions.length});")
 
-    val holder = ctx.freshName("holder")
     val holderClass = classOf[BufferHolder].getName
-    ctx.addMutableState(holderClass, holder,
-      s"$holder = new $holderClass($result, ${numVarLenFields * 32});")
+    val holder = ctx.addMutableState(holderClass, "holder",
+      v => s"$v = new $holderClass($result, ${numVarLenFields * 32});")
 
     val resetBufferHolder = if (numVarLenFields == 0) {
       ""

@@ -68,7 +68,8 @@ class ExecutorStageSummary private[spark](
     val shuffleWrite : Long,
     val shuffleWriteRecords : Long,
     val memoryBytesSpilled : Long,
-    val diskBytesSpilled : Long)
+    val diskBytesSpilled : Long,
+    val isBlacklistedForStage: Boolean)
 
 class ExecutorSummary private[spark](
     val id: String,
@@ -94,7 +95,8 @@ class ExecutorSummary private[spark](
     val removeTime: Option[Date],
     val removeReason: Option[String],
     val executorLogs: Map[String, String],
-    val memoryMetrics: Option[MemoryMetrics])
+    val memoryMetrics: Option[MemoryMetrics],
+    val blacklistedInStages: Set[Int])
 
 class MemoryMetrics private[spark](
     val usedOnHeapStorageMemory: Long,
@@ -261,6 +263,9 @@ class TaskMetricDistributions private[spark](
     val resultSize: IndexedSeq[Double],
     val jvmGcTime: IndexedSeq[Double],
     val resultSerializationTime: IndexedSeq[Double],
+    val gettingResultTime: IndexedSeq[Double],
+    val schedulerDelay: IndexedSeq[Double],
+    val peakExecutionMemory: IndexedSeq[Double],
     val memoryBytesSpilled: IndexedSeq[Double],
     val diskBytesSpilled: IndexedSeq[Double],
 
@@ -311,3 +316,12 @@ class RuntimeInfo private[spark](
     val javaVersion: String,
     val javaHome: String,
     val scalaVersion: String)
+
+case class ThreadStackTrace(
+    val threadId: Long,
+    val threadName: String,
+    val threadState: Thread.State,
+    val stackTrace: String,
+    val blockedByThreadId: Option[Long],
+    val blockedByLock: String,
+    val holdingLocks: Seq[String])

@@ -21,7 +21,9 @@ import java.net.URI
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
@@ -136,12 +138,11 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 case class CreateDataSourceTableAsSelectCommand(
     table: CatalogTable,
     mode: SaveMode,
-    query: LogicalPlan)
-  extends RunnableCommand {
+    query: LogicalPlan,
+    outputColumns: Seq[Attribute])
+  extends DataWritingCommand {
 
-  override protected def innerChildren: Seq[LogicalPlan] = Seq(query)
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
+  override def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row] = {
     assert(table.tableType != CatalogTableType.VIEW)
     assert(table.provider.isDefined)
 
@@ -163,7 +164,7 @@ case class CreateDataSourceTableAsSelectCommand(
       }
 
       saveDataIntoTable(
-        sparkSession, table, table.storage.locationUri, query, SaveMode.Append, tableExists = true)
+        sparkSession, table, table.storage.locationUri, child, SaveMode.Append, tableExists = true)
     } else {
       assert(table.schema.isEmpty)
 
@@ -173,7 +174,7 @@ case class CreateDataSourceTableAsSelectCommand(
         table.storage.locationUri
       }
       val result = saveDataIntoTable(
-        sparkSession, table, tableLocation, query, SaveMode.Overwrite, tableExists = false)
+        sparkSession, table, tableLocation, child, SaveMode.Overwrite, tableExists = false)
       val newTable = table.copy(
         storage = table.storage.copy(locationUri = tableLocation),
         // We will use the schema of resolved.relation as the schema of the table (instead of
@@ -198,10 +199,10 @@ case class CreateDataSourceTableAsSelectCommand(
       session: SparkSession,
       table: CatalogTable,
       tableLocation: Option[URI],
-      data: LogicalPlan,
+      physicalPlan: SparkPlan,
       mode: SaveMode,
       tableExists: Boolean): BaseRelation = {
-    // Create the relation based on the input logical plan: `data`.
+    // Create the relation based on the input logical plan: `query`.
     val pathOption = tableLocation.map("path" -> CatalogUtils.URIToString(_))
     val dataSource = DataSource(
       session,
@@ -212,7 +213,7 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.writeAndRead(mode, query)
+      dataSource.writeAndRead(mode, query, outputColumns, physicalPlan)
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)

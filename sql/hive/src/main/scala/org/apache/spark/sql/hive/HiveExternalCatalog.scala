@@ -109,8 +109,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
-   * Get the raw table metadata from hive metastore directly. The raw table metadata may contains
-   * special data source properties and should not be exposed outside of `HiveExternalCatalog`. We
+   * Get the raw table metadata from hive metastore directly. The raw table metadata may contain
+   * special data source properties that should not be exposed outside of `HiveExternalCatalog`. We
    * should interpret these special data source properties and restore the original table metadata
    * before returning it.
    */
@@ -668,7 +668,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val schema = restoreTableMetadata(rawTable).schema
 
     // convert table statistics to properties so that we can persist them through hive client
-    var statsProperties =
+    val statsProperties =
       if (stats.isDefined) {
         statsToProperties(stats.get, schema)
       } else {
@@ -1098,20 +1098,15 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val schema = restoreTableMetadata(rawTable).schema
 
     // convert partition statistics to properties so that we can persist them through hive api
-    val withStatsProps = lowerCasedParts.map(p => {
+    val withStatsProps = lowerCasedParts.map { p =>
       if (p.stats.isDefined) {
         val statsProperties = statsToProperties(p.stats.get, schema)
         p.copy(parameters = p.parameters ++ statsProperties)
       } else {
         p
       }
-    })
+    }
 
-    // Note: Before altering table partitions in Hive, you *must* set the current database
-    // to the one that contains the table of interest. Otherwise you will end up with the
-    // most helpful error message ever: "Unable to alter partition. alter is not possible."
-    // See HIVE-2742 for more detail.
-    client.setCurrentDatabase(db)
     client.alterPartitions(db, table, withStatsProps)
   }
 

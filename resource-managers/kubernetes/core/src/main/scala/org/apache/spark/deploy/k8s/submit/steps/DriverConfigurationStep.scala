@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s.submit.steps
 import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 
 /**
- * Represents a step in preparing the Kubernetes driver.
+ * Represents a step in configuring the Spark driver pod.
  */
 private[spark] trait DriverConfigurationStep {
 

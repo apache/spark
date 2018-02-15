@@ -50,6 +50,8 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
 @ExtendedHiveTest
 class VersionsSuite extends SparkFunSuite with Logging {
 
+  override protected val enableAutoThreadAudit = false
+
   import HiveClientBuilder.buildClient
 
   /**
@@ -161,6 +163,15 @@ class VersionsSuite extends SparkFunSuite with Logging {
       val tempDB = CatalogDatabase(
         "temporary", description = "test create", tempDatabasePath, Map())
       client.createDatabase(tempDB, ignoreIfExists = true)
+    }
+
+    test(s"$version: createDatabase with null description") {
+      withTempDir { tmpDir =>
+        val dbWithNullDesc =
+          CatalogDatabase("dbWithNullDesc", description = null, tmpDir.toURI, Map())
+        client.createDatabase(dbWithNullDesc, ignoreIfExists = true)
+        assert(client.getDatabase("dbWithNullDesc").description == "")
+      }
     }
 
     test(s"$version: setCurrentDatabase") {
@@ -773,7 +784,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
            """.stripMargin
           )
 
-          val errorMsg = "data type mismatch: cannot cast DecimalType(2,1) to BinaryType"
+          val errorMsg = "data type mismatch: cannot cast decimal(2,1) to binary"
 
           if (isPartitioned) {
             val insertStmt = s"INSERT OVERWRITE TABLE $tableName partition (ds='a') SELECT 1.3"
@@ -802,7 +813,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: read avro file containing decimal") {
       val url = Thread.currentThread().getContextClassLoader.getResource("avroDecimal")
-      val location = new File(url.getFile)
+      val location = new File(url.getFile).toURI.toString
 
       val tableName = "tab1"
       val avroSchema =
@@ -842,6 +853,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
     }
 
     test(s"$version: SPARK-17920: Insert into/overwrite avro table") {
+      // skipped because it's failed in the condition on Windows
+      assume(!(Utils.isWindows && version == "0.12"))
       withTempDir { dir =>
         val avroSchema =
           """
@@ -866,10 +879,10 @@ class VersionsSuite extends SparkFunSuite with Logging {
         val writer = new PrintWriter(schemaFile)
         writer.write(avroSchema)
         writer.close()
-        val schemaPath = schemaFile.getCanonicalPath
+        val schemaPath = schemaFile.toURI.toString
 
         val url = Thread.currentThread().getContextClassLoader.getResource("avroDecimal")
-        val srcLocation = new File(url.getFile).getCanonicalPath
+        val srcLocation = new File(url.getFile).toURI.toString
         val destTableName = "tab1"
         val srcTableName = "tab2"
 

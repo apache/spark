@@ -92,6 +92,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private[this] var stopCalled: Boolean = false
 
   private val launcherBackend = new LauncherBackend() {
+    override protected def conf: SparkConf = sc.conf
+
     override protected def onStopRequest(): Unit = {
       stopSchedulerBackend()
       setState(SparkAppHandle.State.KILLED)

@@ -44,6 +44,7 @@ import array as pyarray
 import numpy as np
 from numpy import abs, all, arange, array, array_equal, inf, ones, tile, zeros
 import inspect
+import py4j
 
 from pyspark import keyword_only, SparkContext
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer, UnaryTransformer
@@ -417,6 +418,9 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(algo.getK(), 10)
         algo.setInitSteps(10)
         self.assertEqual(algo.getInitSteps(), 10)
+        self.assertEqual(algo.getDistanceMeasure(), "euclidean")
+        algo.setDistanceMeasure("cosine")
+        self.assertEqual(algo.getDistanceMeasure(), "cosine")
 
     def test_hasseed(self):
         noSeedSpecd = TestParams()
@@ -1619,6 +1623,21 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(s.k, 2)
 
 
+class KMeansTests(SparkSessionTestCase):
+
+    def test_kmeans_cosine_distance(self):
+        data = [(Vectors.dense([1.0, 1.0]),), (Vectors.dense([10.0, 10.0]),),
+                (Vectors.dense([1.0, 0.5]),), (Vectors.dense([10.0, 4.4]),),
+                (Vectors.dense([-1.0, 1.0]),), (Vectors.dense([-100.0, 90.0]),)]
+        df = self.spark.createDataFrame(data, ["features"])
+        kmeans = KMeans(k=3, seed=1, distanceMeasure="cosine")
+        model = kmeans.fit(df)
+        result = model.transform(df).collect()
+        self.assertTrue(result[0].prediction == result[1].prediction)
+        self.assertTrue(result[2].prediction == result[3].prediction)
+        self.assertTrue(result[4].prediction == result[5].prediction)
+
+
 class OneVsRestTests(SparkSessionTestCase):
 
     def test_copy(self):
@@ -1723,6 +1742,27 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
         self.assertTrue(np.allclose(model.coefficients.toArray(), [0.664647, -0.3192581],
                                     atol=1E-4))
         self.assertTrue(np.isclose(model.intercept, -1.561613, atol=1E-4))
+
+
+class LinearRegressionTest(SparkSessionTestCase):
+
+    def test_linear_regression_with_huber_loss(self):
+
+        data_path = "data/mllib/sample_linear_regression_data.txt"
+        df = self.spark.read.format("libsvm").load(data_path)
+
+        lir = LinearRegression(loss="huber", epsilon=2.0)
+        model = lir.fit(df)
+
+        expectedCoefficients = [0.136, 0.7648, -0.7761, 2.4236, 0.537,
+                                1.2612, -0.333, -0.5694, -0.6311, 0.6053]
+        expectedIntercept = 0.1607
+        expectedScale = 9.758
+
+        self.assertTrue(
+            np.allclose(model.coefficients.toArray(), expectedCoefficients, atol=1E-3))
+        self.assertTrue(np.isclose(model.intercept, expectedIntercept, atol=1E-3))
+        self.assertTrue(np.isclose(model.scale, expectedScale, atol=1E-3))
 
 
 class LogisticRegressionTest(SparkSessionTestCase):
@@ -1830,6 +1870,7 @@ class ImageReaderTest(SparkSessionTestCase):
         self.assertEqual(len(array), first_row[1])
         self.assertEqual(ImageSchema.toImage(array, origin=first_row[0]), first_row)
         self.assertEqual(df.schema, ImageSchema.imageSchema)
+        self.assertEqual(df.schema["image"].dataType, ImageSchema.columnSchema)
         expected = {'CV_8UC3': 16, 'Undefined': -1, 'CV_8U': 0, 'CV_8UC1': 0, 'CV_8UC4': 24}
         self.assertEqual(ImageSchema.ocvTypes, expected)
         expected = ['origin', 'height', 'width', 'nChannels', 'mode', 'data']
@@ -1859,8 +1900,9 @@ class ImageReaderTest2(PySparkTestCase):
 
     @classmethod
     def setUpClass(cls):
-        PySparkTestCase.setUpClass()
+        super(ImageReaderTest2, cls).setUpClass()
         # Note that here we enable Hive's support.
+        cls.spark = None
         try:
             cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
         except py4j.protocol.Py4JError:
@@ -1873,8 +1915,10 @@ class ImageReaderTest2(PySparkTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        PySparkTestCase.tearDownClass()
-        cls.spark.sparkSession.stop()
+        super(ImageReaderTest2, cls).tearDownClass()
+        if cls.spark is not None:
+            cls.spark.sparkSession.stop()
+            cls.spark = None
 
     def test_read_images_multiple_times(self):
         # This test case is to check if `ImageSchema.readImages` tries to
@@ -2353,6 +2397,21 @@ class UnaryTransformerTests(SparkSessionTestCase):
 
         for res in results:
             self.assertEqual(res.input + shiftVal, res.output)
+
+
+class EstimatorTest(unittest.TestCase):
+
+    def testDefaultFitMultiple(self):
+        N = 4
+        data = MockDataset()
+        estimator = MockEstimator()
+        params = [{estimator.fake: i} for i in range(N)]
+        modelIter = estimator.fitMultiple(data, params)
+        indexList = []
+        for index, model in modelIter:
+            self.assertEqual(model.getFake(), index)
+            indexList.append(index)
+        self.assertEqual(sorted(indexList), list(range(N)))
 
 
 if __name__ == "__main__":

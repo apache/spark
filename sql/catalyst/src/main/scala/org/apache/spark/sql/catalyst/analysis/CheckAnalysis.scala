@@ -153,11 +153,19 @@ trait CheckAnalysis extends PredicateHelper {
                 s"of type ${condition.dataType.simpleString} is not a boolean.")
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
+            def isAggregateExpression(expr: Expression) = {
+              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupAggPandasUDF(expr)
+            }
+
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {
-              case aggExpr: AggregateExpression =>
-                aggExpr.aggregateFunction.children.foreach { child =>
+              case expr: Expression if isAggregateExpression(expr) =>
+                val aggFunction = expr match {
+                  case agg: AggregateExpression => agg.aggregateFunction
+                  case udf: PythonUDF => udf
+                }
+                aggFunction.children.foreach { child =>
                   child.foreach {
-                    case agg: AggregateExpression =>
+                    case expr: Expression if isAggregateExpression(expr) =>
                       failAnalysis(
                         s"It is not allowed to use an aggregate function in the argument of " +
                           s"another aggregate function. Please use the inner aggregate function " +
@@ -348,6 +356,7 @@ trait CheckAnalysis extends PredicateHelper {
     }
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
+      case AnalysisBarrier(child) if !child.resolved => checkAnalysis(child)
       case o if !o.resolved => failAnalysis(s"unresolved operator ${o.simpleString}")
       case _ =>
     }
@@ -608,8 +617,8 @@ trait CheckAnalysis extends PredicateHelper {
       // allows to have correlation under it
       // but must not host any outer references.
       // Note:
-      // Generator with join=false is treated as Category 4.
-      case g: Generate if g.join =>
+      // Generator with requiredChildOutput.isEmpty is treated as Category 4.
+      case g: Generate if g.requiredChildOutput.nonEmpty =>
         failOnInvalidOuterReference(g)
 
       // Category 4: Any other operators not in the above 3 categories

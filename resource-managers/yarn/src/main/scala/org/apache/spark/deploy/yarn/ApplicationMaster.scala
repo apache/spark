@@ -30,6 +30,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -424,11 +425,8 @@ private[spark] class ApplicationMaster(
     val appAttempt = client.getAttemptId(_sparkConf)
     val appId = appAttempt.getApplicationId().toString()
     val attemptId = appAttempt.getAttemptId().toString()
-    val historyAddress =
-      _sparkConf.get(HISTORY_SERVER_ADDRESS)
-        .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
-        .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
-        .getOrElse("")
+    val historyAddress = ApplicationMaster
+      .getHistoryServerAddress(_sparkConf, yarnConf, appId, attemptId)
 
     val driverUrl = RpcEndpointAddress(
       _sparkConf.get("spark.driver.host"),
@@ -739,7 +737,7 @@ private[spark] class ApplicationMaster(
                 logError("User class threw exception: " + cause, cause)
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
-                  "User class threw exception: " + cause)
+                  "User class threw exception: " + StringUtils.stringifyException(cause))
             }
             sparkContextPromise.tryFailure(e.getCause())
         } finally {
@@ -868,6 +866,16 @@ object ApplicationMaster extends Logging {
     master.getAttemptId(sparkConf)
   }
 
+  private[spark] def getHistoryServerAddress(
+      sparkConf: SparkConf,
+      yarnConf: YarnConfiguration,
+      appId: String,
+      attemptId: String): String = {
+    sparkConf.get(HISTORY_SERVER_ADDRESS)
+      .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
+      .map { address => s"${address}${HistoryServer.UI_PATH_PREFIX}/${appId}/${attemptId}" }
+      .getOrElse("")
+  }
 }
 
 /**

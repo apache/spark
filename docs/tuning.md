@@ -219,7 +219,7 @@ temporary objects created during task execution. Some steps which may be useful 
   
 * Try the G1GC garbage collector with `-XX:+UseG1GC`. It can improve performance in some situations where
   garbage collection is a bottleneck. Note that with large executor heap sizes, it may be important to
-  increase the [G1 region size](https://blogs.oracle.com/g1gc/entry/g1_gc_tuning_a_case) 
+  increase the [G1 region size](http://www.oracle.com/technetwork/articles/java/g1gc-1984535.html) 
   with `-XX:G1HeapRegionSize`
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using

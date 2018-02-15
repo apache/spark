@@ -33,8 +33,15 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
    * Compression codec to use.
    */
   val compressionCodec = parameters.get(COMPRESSION).map(CompressionCodecs.getCodecClassName)
+
+  /**
+   * wholetext - If true, read a file as a single row and not split by "\n".
+   */
+  val wholeText = parameters.getOrElse(WHOLETEXT, "false").toBoolean
+
 }
 
 private[text] object TextOptions {
   val COMPRESSION = "compression"
+  val WHOLETEXT = "wholetext"
 }

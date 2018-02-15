@@ -66,16 +66,38 @@ class ClusteringEvaluatorSuite
     assert(evaluator.evaluate(irisDataset) ~== 0.6564679231 relTol 1e-5)
   }
 
-  test("number of clusters must be greater than one") {
-    val singleClusterDataset = irisDataset.where($"label" === 0.0)
+  /*
+    Use the following python code to load the data and evaluate it using scikit-learn package.
+
+    from sklearn import datasets
+    from sklearn.metrics import silhouette_score
+    iris = datasets.load_iris()
+    round(silhouette_score(iris.data, iris.target, metric='cosine'), 10)
+
+    0.7222369298
+  */
+  test("cosine Silhouette") {
     val evaluator = new ClusteringEvaluator()
       .setFeaturesCol("features")
       .setPredictionCol("label")
+      .setDistanceMeasure("cosine")
 
-    val e = intercept[AssertionError]{
-      evaluator.evaluate(singleClusterDataset)
+    assert(evaluator.evaluate(irisDataset) ~== 0.7222369298 relTol 1e-5)
+  }
+
+  test("number of clusters must be greater than one") {
+    val singleClusterDataset = irisDataset.where($"label" === 0.0)
+    Seq("squaredEuclidean", "cosine").foreach { distanceMeasure =>
+      val evaluator = new ClusteringEvaluator()
+        .setFeaturesCol("features")
+        .setPredictionCol("label")
+        .setDistanceMeasure(distanceMeasure)
+
+      val e = intercept[AssertionError] {
+        evaluator.evaluate(singleClusterDataset)
+      }
+      assert(e.getMessage.contains("Number of clusters must be greater than one"))
     }
-    assert(e.getMessage.contains("Number of clusters must be greater than one"))
   }
 
 }

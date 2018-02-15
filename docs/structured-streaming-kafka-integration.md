@@ -61,7 +61,7 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight java %}
 
 // Subscribe to 1 topic
-DataFrame<Row> df = spark
+Dataset<Row> df = spark
   .readStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -70,7 +70,7 @@ DataFrame<Row> df = spark
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 // Subscribe to multiple topics
-DataFrame<Row> df = spark
+Dataset<Row> df = spark
   .readStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -79,7 +79,7 @@ DataFrame<Row> df = spark
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 // Subscribe to a pattern
-DataFrame<Row> df = spark
+Dataset<Row> df = spark
   .readStream()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -125,7 +125,7 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 
 ### Creating a Kafka Source for Batch Queries 
 If you have a use case that is better suited to batch processing,
-you can create an Dataset/DataFrame for a defined range of offsets.
+you can create a Dataset/DataFrame for a defined range of offsets.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -171,7 +171,7 @@ df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
 {% highlight java %}
 
 // Subscribe to 1 topic defaults to the earliest and latest offsets
-DataFrame<Row> df = spark
+Dataset<Row> df = spark
   .read()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -180,7 +180,7 @@ DataFrame<Row> df = spark
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
 // Subscribe to multiple topics, specifying explicit Kafka offsets
-DataFrame<Row> df = spark
+Dataset<Row> df = spark
   .read()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -191,7 +191,7 @@ DataFrame<Row> df = spark
 df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)");
 
 // Subscribe to a pattern, at the earliest and latest offsets
-DataFrame<Row> df = spark
+Dataset<Row> df = spark
   .read()
   .format("kafka")
   .option("kafka.bootstrap.servers", "host1:port1,host2:port2")
@@ -597,7 +597,7 @@ Note that the following Kafka params cannot be set and the Kafka source or sink 
 - **key.serializer**: Keys are always serialized with ByteArraySerializer or StringSerializer. Use
 DataFrame operations to explicitly serialize the keys into either strings or byte arrays.
 - **value.serializer**: values are always serialized with ByteArraySerializer or StringSerializer. Use
-DataFrame oeprations to explicitly serialize the values into either strings or byte arrays.
+DataFrame operations to explicitly serialize the values into either strings or byte arrays.
 - **enable.auto.commit**: Kafka source doesn't commit any offset.
 - **interceptor.classes**: Kafka source always read keys and values as byte arrays. It's not safe to
  use ConsumerInterceptor as it may break the query.

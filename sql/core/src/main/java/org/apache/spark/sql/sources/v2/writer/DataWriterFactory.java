@@ -22,7 +22,7 @@ import java.io.Serializable;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A factory of {@link DataWriter} returned by {@link DataSourceV2Writer#createWriterFactory()},
+ * A factory of {@link DataWriter} returned by {@link DataSourceWriter#createWriterFactory()},
  * which is responsible for creating and initializing the actual data writer at executor side.
  *
  * Note that, the writer factory will be serialized and sent to executors, then the data writer

@@ -201,7 +201,7 @@ class KafkaTestUtils(withBrokerProps: Map[String, Object] = Map.empty) extends L
     verifyTopicDeletionWithRetries(zkUtils, topic, partitions, List(this.server))
   }
 
-  /** Add new paritions to a Kafka topic */
+  /** Add new partitions to a Kafka topic */
   def addPartitions(topic: String, partitions: Int): Unit = {
     AdminUtils.addPartitions(zkUtils, topic, partitions)
     // wait until metadata is propagated

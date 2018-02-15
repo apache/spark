@@ -85,7 +85,7 @@ class DriverServiceBootstrapStepSuite extends SparkFunSuite with BeforeAndAfter 
     val resolvedDriverSpec = configurationStep.configureDriver(baseDriverSpec)
     val expectedServiceName = SHORT_RESOURCE_NAME_PREFIX +
       DriverServiceBootstrapStep.DRIVER_SVC_POSTFIX
-    val expectedHostName = s"$expectedServiceName.my-namespace.svc.cluster.local"
+    val expectedHostName = s"$expectedServiceName.my-namespace.svc"
     verifySparkConfHostNames(resolvedDriverSpec.driverSparkConf, expectedHostName)
   }
 
@@ -120,7 +120,7 @@ class DriverServiceBootstrapStepSuite extends SparkFunSuite with BeforeAndAfter 
     val driverService = resolvedDriverSpec.otherKubernetesResources.head.asInstanceOf[Service]
     val expectedServiceName = s"spark-10000${DriverServiceBootstrapStep.DRIVER_SVC_POSTFIX}"
     assert(driverService.getMetadata.getName === expectedServiceName)
-    val expectedHostName = s"$expectedServiceName.my-namespace.svc.cluster.local"
+    val expectedHostName = s"$expectedServiceName.my-namespace.svc"
     verifySparkConfHostNames(resolvedDriverSpec.driverSparkConf, expectedHostName)
   }
 
