@@ -182,7 +182,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
     val getNewApplicationResponse = Records.newRecord(classOf[GetNewApplicationResponse])
     val containerLaunchContext = Records.newRecord(classOf[ContainerLaunchContext])
 
-    val client = new Client(args, sparkConf)
+    val client = new Client(args, sparkConf, null)
     client.createApplicationSubmissionContext(
       new YarnClientApplication(getNewApplicationResponse, appContext),
       containerLaunchContext)
@@ -391,7 +391,7 @@ class ClientSuite extends SparkFunSuite with Matchers {
       sparkConf: SparkConf,
       args: Array[String] = Array()): Client = {
     val clientArgs = new ClientArguments(args)
-    spy(new Client(clientArgs, sparkConf))
+    spy(new Client(clientArgs, sparkConf, null))
   }
 
   private def classpath(client: Client): Array[String] = {

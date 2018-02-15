@@ -52,8 +52,20 @@ import org.apache.spark.util._
 /**
  * Common application master functionality for Spark on Yarn.
  */
-private[spark] class ApplicationMaster(args: ApplicationMasterArguments, sparkConf: SparkConf,
-                                       yarnConf: YarnConfiguration) extends Logging {
+private[spark] class ApplicationMaster(
+    val args: ApplicationMasterArguments,
+    val sparkConf: SparkConf,
+    val yarnConf: YarnConfiguration)
+  extends Logging {
+
+  def this(sparkConf: SparkConf,
+           yarnConf: YarnConfiguration,
+           clientRpcEnv: RpcEnv) {
+    this(new ApplicationMasterArguments(Array.empty), sparkConf, yarnConf)
+    this.clientRpcEnv = clientRpcEnv
+  }
+
+  private var clientRpcEnv: RpcEnv = null
 
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
@@ -234,8 +246,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments, sparkCo
     resources.toMap
   }
 
-  def getAttemptId(): ApplicationAttemptId = {
-    client.getAttemptId()
+  def getAttemptId(sparkConf: SparkConf): ApplicationAttemptId = {
+    client.getAttemptId(sparkConf)
   }
 
   final def run(): Int = {
@@ -247,7 +259,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments, sparkCo
 
   private def runImpl(): Unit = {
     try {
-      val appAttemptId = client.getAttemptId()
+      val appAttemptId = client.getAttemptId(sparkConf)
 
       var attemptID: Option[String] = None
 
@@ -277,7 +289,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments, sparkCo
       val priority = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1
       ShutdownHookManager.addShutdownHook(priority) { () =>
         val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
-        val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
+        val isLastAttempt = client.getAttemptId(sparkConf).getAttemptId() >= maxAppAttempts
 
         if (!finished) {
           // The default state of ApplicationMaster is failed if it is invoked by shut down hook.
@@ -409,8 +421,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments, sparkCo
       _rpcEnv: RpcEnv,
       driverRef: RpcEndpointRef,
       uiAddress: Option[String]) = {
-    val appId = client.getAttemptId().getApplicationId().toString()
-    val attemptId = client.getAttemptId().getAttemptId().toString()
+    val appAttempt = client.getAttemptId(_sparkConf)
+    val appId = appAttempt.getApplicationId().toString()
+    val attemptId = appAttempt.getAttemptId().toString()
     val historyAddress =
       _sparkConf.get(HISTORY_SERVER_ADDRESS)
         .map { text => SparkHadoopUtil.get.substituteHadoopVariables(text, yarnConf) }
@@ -496,11 +509,19 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments, sparkCo
   }
 
   private def runExecutorLauncher(): Unit = {
-    val hostname = Utils.localHostName
-    val amCores = sparkConf.get(AM_CORES)
-    rpcEnv = RpcEnv.create("sparkYarnAM", hostname, hostname, -1, sparkConf, securityMgr,
-      amCores, true)
-    val driverRef = waitForSparkDriver()
+    var driverRef : RpcEndpointRef = null
+    if (sparkConf.get(YARN_UNMANAGED_AM)) {
+      rpcEnv = clientRpcEnv
+      driverRef = waitForSparkDriver(sparkConf.get("spark.driver.host"),
+        sparkConf.get("spark.driver.port").toInt)
+    } else {
+      val hostname = Utils.localHostName
+      val amCores = sparkConf.get(AM_CORES)
+      rpcEnv = RpcEnv.create("sparkYarnAM", hostname, hostname, -1, sparkConf, securityMgr,
+        amCores, true)
+      val (driverHost, driverPort) = Utils.parseHostPort(args.userArgs(0))
+      driverRef = waitForSparkDriver(driverHost, driverPort)
+    }
     addAmIpFilter(Some(driverRef))
     registerAM(sparkConf, rpcEnv, driverRef, sparkConf.getOption("spark.driver.appUIAddress"))
     registered = true
@@ -603,8 +624,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments, sparkCo
     try {
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
       if (!preserveFiles) {
-        stagingDirPath = new Path(System.getProperty("SPARK_YARN_STAGING_DIR",
-          System.getenv("SPARK_YARN_STAGING_DIR")))
+        var stagingDir = System.getenv("SPARK_YARN_STAGING_DIR")
+        if (stagingDir == null) {
+          val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
+            .getOrElse(FileSystem.get(yarnConf).getHomeDirectory())
+          stagingDir = appStagingBaseDir.toString + Path.SEPARATOR +
+            getAttemptId(sparkConf).getApplicationId.toString
+        }
+        stagingDirPath = new Path(stagingDir)
         logInfo("Deleting staging directory " + stagingDirPath)
         val fs = stagingDirPath.getFileSystem(yarnConf)
         fs.delete(stagingDirPath, true)
@@ -615,11 +642,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments, sparkCo
     }
   }
 
-  private def waitForSparkDriver(): RpcEndpointRef = {
+  private def waitForSparkDriver(driverHost: String, driverPort: Int): RpcEndpointRef = {
     logInfo("Waiting for Spark driver to be reachable.")
     var driverUp = false
-    val hostport = args.userArgs(0)
-    val (driverHost, driverPort) = Utils.parseHostPort(hostport)
 
     // Spark driver should already be up since it launched us, but we don't want to
     // wait forever, so wait 100 seconds max to match the cluster mode setting.
@@ -667,7 +692,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments, sparkCo
   private def getProxyBase: String = {
     var proxyBase = System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
     if (proxyBase == null) {
-      proxyBase = ProxyUriUtils.getPath(getAttemptId().getApplicationId)
+      proxyBase = ProxyUriUtils.getPath(getAttemptId(sparkConf).getApplicationId)
     }
     proxyBase
   }
@@ -839,8 +864,8 @@ object ApplicationMaster extends Logging {
     master.sparkContextInitialized(sc)
   }
 
-  private[spark] def getAttemptId(): ApplicationAttemptId = {
-    master.getAttemptId
+  private[spark] def getAttemptId(sparkConf: SparkConf): ApplicationAttemptId = {
+    master.getAttemptId(sparkConf)
   }
 
 }

@@ -186,13 +186,12 @@ object YarnSparkHadoopUtil {
     )
   }
 
-  def getContainerId: ContainerId = {
+  def getContainerId(sparkConf: SparkConf): ContainerId = {
       val containerIdString =
       if (System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name()) != null) {
         System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
       } else {
-        System.getProperty(
-          ApplicationConstants.Environment.CONTAINER_ID.name())
+        sparkConf.get("spark.yarn.containerId")
       }
     ConverterUtils.toContainerId(containerIdString)
   }

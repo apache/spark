@@ -229,6 +229,14 @@ package object config {
       .stringConf
       .createOptional
 
+  /* Unmanaged AM configuration. */
+
+  private[spark] val YARN_UNMANAGED_AM = ConfigBuilder("spark.yarn.unmanagedAM")
+    .doc("In client mode, whether to launch the Application Master service as part of the client " +
+      "using unmanaged am.")
+    .booleanConf
+    .createWithDefault(false)
+
   /* Security configuration. */
 
   private[spark] val CREDENTIAL_FILE_MAX_COUNT =

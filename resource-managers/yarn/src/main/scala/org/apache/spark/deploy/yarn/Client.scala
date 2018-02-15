@@ -55,11 +55,13 @@ import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{CallerContext, Utils}
 
 private[spark] class Client(
     val args: ClientArguments,
-    val sparkConf: SparkConf)
+    val sparkConf: SparkConf,
+    val rpcEnv: RpcEnv)
   extends Logging {
 
   import Client._
@@ -70,8 +72,7 @@ private[spark] class Client(
 
   private val isClusterMode = sparkConf.get("spark.submit.deployMode", "client") == "cluster"
 
-  private val isClientUnmanagedAMEnabled =
-    sparkConf.getBoolean("spark.yarn.un-managed-am", false) && !isClusterMode
+  private val isClientUnmanagedAMEnabled = sparkConf.get(YARN_UNMANAGED_AM) && !isClusterMode
   private var amServiceStarted = false
 
   // AM related configurations
@@ -794,9 +795,6 @@ private[spark] class Client(
     val env = new HashMap[String, String]()
     populateClasspath(args, hadoopConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
-    if (isClientUnmanagedAMEnabled) {
-      System.setProperty("SPARK_YARN_STAGING_DIR", stagingDirPath.toString)
-    }
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
     if (loginFromKeytab) {
       val credentialsFile = "credentials-" + UUID.randomUUID().toString
@@ -1139,15 +1137,14 @@ private[spark] class Client(
     val currentUGI = UserGroupInformation.getCurrentUser
     currentUGI.addToken(amRMToken)
 
-    System.setProperty(
-      ApplicationConstants.Environment.CONTAINER_ID.name(),
+    sparkConf.set("spark.yarn.containerId",
       ContainerId.newContainerId(report.getCurrentApplicationAttemptId, 1).toString)
-    val amArgs = new ApplicationMasterArguments(Array("--arg",
-      sparkConf.get("spark.driver.host") + ":" + sparkConf.get("spark.driver.port")))
     // Start Application Service in a separate thread and continue with application monitoring
-    new Thread() {
-      override def run(): Unit = new ApplicationMaster(amArgs, sparkConf, hadoopConf).run()
-    }.start()
+    val amService = new Thread() {
+      override def run(): Unit = new ApplicationMaster(sparkConf, hadoopConf, rpcEnv).run()
+    }
+    amService.setDaemon(true)
+    amService.start()
   }
 
   private def formatReportDetails(report: ApplicationReport): String = {
@@ -1535,7 +1532,7 @@ private[spark] class YarnClusterApplication extends SparkApplication {
     conf.remove("spark.jars")
     conf.remove("spark.files")
 
-    new Client(new ClientArguments(args), conf).run()
+    new Client(new ClientArguments(args), conf, null).run()
   }
 
 }
