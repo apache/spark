@@ -999,7 +999,7 @@ private object ApiHelper {
     HEADER_STATUS -> TaskIndexNames.STATUS,
     HEADER_LOCALITY -> TaskIndexNames.LOCALITY,
     HEADER_EXECUTOR -> TaskIndexNames.EXECUTOR,
-    HEADER_HOST -> TaskIndexNames.EXECUTOR,
+    HEADER_HOST -> TaskIndexNames.HOST,
     HEADER_LAUNCH_TIME -> TaskIndexNames.LAUNCH_TIME,
     HEADER_DURATION -> TaskIndexNames.DURATION,
     HEADER_SCHEDULER_DELAY -> TaskIndexNames.SCHEDULER_DELAY,
