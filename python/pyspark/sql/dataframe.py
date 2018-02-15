@@ -1986,12 +1986,24 @@ class DataFrame(object):
             timezone = None
 
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
+            should_fallback = False
             try:
+                from pyspark.sql.types import to_arrow_schema
+                from pyspark.sql.utils import require_minimum_pyarrow_version
+                require_minimum_pyarrow_version()
+                # Check if its schema is convertible in Arrow format.
+                to_arrow_schema(self.schema)
+            except Exception as e:
+                # Fallback to convert to Pandas DataFrame without arrow if raise some exception
+                should_fallback = True
+                warnings.warn(
+                    "Arrow will not be used in toPandas: %s" % _exception_message(e))
+
+            if not should_fallback:
+                import pyarrow
                 from pyspark.sql.types import _check_dataframe_convert_date, \
                     _check_dataframe_localize_timestamps
-                from pyspark.sql.utils import require_minimum_pyarrow_version
-                import pyarrow
-                require_minimum_pyarrow_version()
+
                 tables = self._collectAsArrow()
                 if tables:
                     table = pyarrow.concat_tables(tables)
@@ -2000,38 +2012,34 @@ class DataFrame(object):
                     return _check_dataframe_localize_timestamps(pdf, timezone)
                 else:
                     return pd.DataFrame.from_records([], columns=self.columns)
-            except ImportError as e:
-                msg = "note: pyarrow must be installed and available on calling Python process " \
-                      "if using spark.sql.execution.arrow.enabled=true"
-                raise ImportError("%s\n%s" % (_exception_message(e), msg))
+
+        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
+        dtype = {}
+        for field in self.schema:
+            pandas_type = _to_corrected_pandas_type(field.dataType)
+            # SPARK-21766: if an integer field is nullable and has null values, it can be
+            # inferred by pandas as float column. Once we convert the column with NaN back
+            # to integer type e.g., np.int16, we will hit exception. So we use the inferred
+            # float type, not the corrected type from the schema in this case.
+            if pandas_type is not None and \
+                not(isinstance(field.dataType, IntegralType) and field.nullable and
+                    pdf[field.name].isnull().any()):
+                dtype[field.name] = pandas_type
+
+        for f, t in dtype.items():
+            pdf[f] = pdf[f].astype(t, copy=False)
+
+        if timezone is None:
+            return pdf
         else:
-            pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
-
-            dtype = {}
+            from pyspark.sql.types import _check_series_convert_timestamps_local_tz
             for field in self.schema:
-                pandas_type = _to_corrected_pandas_type(field.dataType)
-                # SPARK-21766: if an integer field is nullable and has null values, it can be
-                # inferred by pandas as float column. Once we convert the column with NaN back
-                # to integer type e.g., np.int16, we will hit exception. So we use the inferred
-                # float type, not the corrected type from the schema in this case.
-                if pandas_type is not None and \
-                    not(isinstance(field.dataType, IntegralType) and field.nullable and
-                        pdf[field.name].isnull().any()):
-                    dtype[field.name] = pandas_type
-
-            for f, t in dtype.items():
-                pdf[f] = pdf[f].astype(t, copy=False)
-
-            if timezone is None:
-                return pdf
-            else:
-                from pyspark.sql.types import _check_series_convert_timestamps_local_tz
-                for field in self.schema:
-                    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-                    if isinstance(field.dataType, TimestampType):
-                        pdf[field.name] = \
-                            _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
-                return pdf
+                # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+                if isinstance(field.dataType, TimestampType):
+                    pdf[field.name] = \
+                        _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
+            return pdf
 
     def _collectAsArrow(self):
         """
