@@ -72,21 +72,15 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;
     }
 
-    final double readAheadFraction =
-        SparkEnv.get() == null ? 0.5 :
-             SparkEnv.get().conf().getDouble("spark.unsafe.sorter.spill.read.ahead.fraction", 0.5);
-
-    // SPARK-23310: Disable read-ahead input stream, because it is causing lock contention and perf
-    // regression for TPC-DS queries.
     final boolean readAheadEnabled = SparkEnv.get() != null &&
-        SparkEnv.get().conf().getBoolean("spark.unsafe.sorter.spill.read.ahead.enabled", false);
+        SparkEnv.get().conf().getBoolean("spark.unsafe.sorter.spill.read.ahead.enabled", true);
 
     final InputStream bs =
         new NioBufferedFileInputStream(file, (int) bufferSizeBytes);
     try {
       if (readAheadEnabled) {
         this.in = new ReadAheadInputStream(serializerManager.wrapStream(blockId, bs),
-                (int) bufferSizeBytes, (int) (bufferSizeBytes * readAheadFraction));
+                (int) bufferSizeBytes);
       } else {
         this.in = serializerManager.wrapStream(blockId, bs);
       }
