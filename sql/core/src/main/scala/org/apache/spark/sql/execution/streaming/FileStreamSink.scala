@@ -42,9 +42,13 @@ object FileStreamSink extends Logging {
         try {
           val hdfsPath = new Path(singlePath)
           val fs = hdfsPath.getFileSystem(hadoopConf)
-          val metadataPath = new Path(hdfsPath, metadataDir)
-          val res = fs.exists(metadataPath)
-          res
+          if (fs.isDirectory(hdfsPath)) {
+            val metadataPath = new Path(hdfsPath, metadataDir)
+            val res = fs.exists(metadataPath)
+            res
+          } else {
+            false
+          }
         } catch {
           case NonFatal(e) =>
             logWarning(s"Error while looking for metadata directory.")
