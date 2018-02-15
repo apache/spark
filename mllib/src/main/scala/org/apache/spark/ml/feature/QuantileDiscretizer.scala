@@ -254,7 +254,6 @@ final class QuantileDiscretizer @Since("1.6.0") (@Since("1.6.0") override val ui
   @Since("1.6.0")
   override def copy(extra: ParamMap): QuantileDiscretizer = defaultCopy(extra)
 
-  @Since("2.3.0")
   override def write: MLWriter = new QuantileDiscretizer.QuantileDiscretizerWriter(this)
 }
 
@@ -273,7 +272,7 @@ object QuantileDiscretizer extends DefaultParamsReadable[QuantileDiscretizer] wi
       // we can get rid of this.
       var paramWithoutOutputCol: Option[JValue] = None
       if (instance.isSet(instance.inputCols)) {
-        val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
+        val params = instance.extractParamMap().toSeq
         val jsonParams = params.filter(_.param != instance.outputCol).map { case ParamPair(p, v) =>
           p.name -> parse(p.jsonEncode(v))
         }.toList

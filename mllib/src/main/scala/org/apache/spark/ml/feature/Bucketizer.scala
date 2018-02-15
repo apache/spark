@@ -218,7 +218,6 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     defaultCopy[Bucketizer](extra).setParent(parent)
   }
 
-  @Since("2.3.0")
   override def write: MLWriter = new Bucketizer.BucketizerWriter(this)
 }
 
@@ -309,7 +308,7 @@ object Bucketizer extends DefaultParamsReadable[Bucketizer] {
       // we can get rid of this.
       var paramWithoutOutputCol: Option[JValue] = None
       if (instance.isSet(instance.inputCols)) {
-        val params = instance.extractParamMap().toSeq.asInstanceOf[Seq[ParamPair[Any]]]
+        val params = instance.extractParamMap().toSeq
         val jsonParams = params.filter(_.param != instance.outputCol).map { case ParamPair(p, v) =>
           p.name -> parse(p.jsonEncode(v))
         }.toList
