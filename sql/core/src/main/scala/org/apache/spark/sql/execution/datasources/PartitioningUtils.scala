@@ -23,7 +23,9 @@ import java.util.{Locale, TimeZone}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
+
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCoercion}
