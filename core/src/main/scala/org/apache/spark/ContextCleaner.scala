@@ -89,15 +89,9 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   /**
    * Whether the cleaning thread will block on cleanup tasks (other than shuffle, which
    * is controlled by the `spark.cleaner.referenceTracking.blocking.shuffle` parameter).
-   *
-   * Due to SPARK-3015, this is set to true by default. This is intended to be only a temporary
-   * workaround for the issue, which is ultimately caused by the way the BlockManager endpoints
-   * issue inter-dependent blocking RPC messages to each other at high frequencies. This happens,
-   * for instance, when the driver performs a GC and cleans up all broadcast blocks that are no
-   * longer in scope.
    */
   private val blockOnCleanupTasks = sc.conf.getBoolean(
-    "spark.cleaner.referenceTracking.blocking", true)
+    "spark.cleaner.referenceTracking.blocking", false)
 
   /**
    * Whether the cleaning thread will block on shuffle cleanup tasks.
