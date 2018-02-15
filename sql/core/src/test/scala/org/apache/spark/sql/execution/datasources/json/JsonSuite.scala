@@ -2063,17 +2063,4 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       )
     }
   }
-
-  test("json in UTF-16 with BOM") {
-    val fileName = "json-tests/utf16WithBOM.json"
-    val testFile = Thread.currentThread().getContextClassLoader.getResource(fileName).toString
-    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
-    val jsonDF = spark.read.schema(schema)
-      .option("mode", "DROPMALFORMED")
-      .json(testFile)
-
-    checkAnswer(jsonDF, Seq(
-      Row("Chris", "Baird"), Row("Doug", "Rood")
-    ))
-  }
 }
