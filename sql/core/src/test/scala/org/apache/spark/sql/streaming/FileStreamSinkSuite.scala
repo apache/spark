@@ -39,8 +39,11 @@ class FileStreamSinkSuite extends StreamTest {
   }
 
   override def afterAll(): Unit = {
-    spark.sessionState.conf.unsetConf(SQLConf.ORC_IMPLEMENTATION)
-    super.afterAll()
+    try {
+      spark.sessionState.conf.unsetConf(SQLConf.ORC_IMPLEMENTATION)
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("unpartitioned writing and batch reading") {

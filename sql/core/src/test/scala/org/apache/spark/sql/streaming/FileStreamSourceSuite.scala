@@ -213,8 +213,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   override def afterAll(): Unit = {
-    spark.sessionState.conf.unsetConf(SQLConf.ORC_IMPLEMENTATION)
-    super.afterAll()
+    try {
+      spark.sessionState.conf.unsetConf(SQLConf.ORC_IMPLEMENTATION)
+    } finally {
+      super.afterAll()
+    }
   }
 
   // ============= Basic parameter exists tests ================

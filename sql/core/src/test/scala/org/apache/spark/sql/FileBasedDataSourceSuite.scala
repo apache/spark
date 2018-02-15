@@ -36,8 +36,11 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   }
 
   override def afterAll(): Unit = {
-    spark.sessionState.conf.unsetConf(SQLConf.ORC_IMPLEMENTATION)
-    super.afterAll()
+    try {
+      spark.sessionState.conf.unsetConf(SQLConf.ORC_IMPLEMENTATION)
+    } finally {
+      super.afterAll()
+    }
   }
 
   private val allFileBasedDataSources = Seq("orc", "parquet", "csv", "json", "text")
