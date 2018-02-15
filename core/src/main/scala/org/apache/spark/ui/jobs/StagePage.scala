@@ -961,16 +961,17 @@ private[ui] class TaskPagedTable(
   }
 }
 
-private object ApiHelper {
+private[ui] object ApiHelper {
 
 
-  private val COLUMN_TO_INDEX = Map(
+  private[ui] val COLUMN_TO_INDEX = Map(
     "ID" -> null.asInstanceOf[String],
     "Index" -> TaskIndexNames.TASK_INDEX,
     "Attempt" -> TaskIndexNames.ATTEMPT,
     "Status" -> TaskIndexNames.STATUS,
     "Locality Level" -> TaskIndexNames.LOCALITY,
-    "Executor ID / Host" -> TaskIndexNames.EXECUTOR,
+    "Executor ID" -> TaskIndexNames.EXECUTOR,
+    "Host" -> TaskIndexNames.HOST,
     "Launch Time" -> TaskIndexNames.LAUNCH_TIME,
     "Duration" -> TaskIndexNames.DURATION,
     "Scheduler Delay" -> TaskIndexNames.SCHEDULER_DELAY,
