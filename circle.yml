@@ -12,7 +12,7 @@ machine:
     - |
       if [[ ! -d ${CONDA_ROOT} ]]; then
           echo "Installing Miniconda...";
-          wget --quiet https://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh &&
+          wget --quiet https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh &&
             bash Miniconda-latest-Linux-x86_64.sh -b -p ${CONDA_ROOT};
       else
           echo "Using cached Miniconda install";
