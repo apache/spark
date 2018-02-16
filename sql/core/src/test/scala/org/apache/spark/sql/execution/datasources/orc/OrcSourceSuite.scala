@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io.File
 import java.util.Locale
 
-import org.apache.orc.OrcConf.COMPRESS
+import org.apache.orc.{OrcFile, Reader}
+import org.apache.orc.OrcConf.{BUFFER_SIZE, COMPRESS, ROW_INDEX_STRIDE, STRIPE_SIZE}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.Row
@@ -157,6 +158,77 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
         val expected = if (c == "UNCOMPRESSED") "NONE" else c
         assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
+      }
+    }
+  }
+
+  private def getReader(path: String): Reader = {
+    val conf = spark.sessionState.newHadoopConf()
+    val files = OrcUtils.listOrcFiles(path, conf)
+    assert(files.length == 1)
+    val file = files.head
+    val readerOptions = OrcFile.readerOptions(conf).filesystem(file.getFileSystem(conf))
+    OrcFile.createReader(file, readerOptions)
+  }
+
+  test("SPARK-23342 Support orc.stripe.size and hive.exec.orc.default.stripe.size") {
+    val df = spark.range(1000000).map(_ => scala.util.Random.nextLong).repartition(1)
+
+    Seq(STRIPE_SIZE).foreach { conf =>
+      Seq(conf.getAttribute, conf.getHiveConfName).foreach { name =>
+        // Since the default value of orc.stripe.size is 64MB, there exists only 1 stripe.
+        withTempPath { path =>
+          val dir = path.getCanonicalPath
+          df.write.format("orc").save(dir)
+          assert(getReader(dir).getStripes().size === 1)
+        }
+
+        withTempPath { path =>
+          val dir = path.getCanonicalPath
+          df.write.format("orc").option(name, "10000").save(dir)
+          assert(getReader(dir).getStripes().size > 100)
+        }
+      }
+    }
+  }
+
+  test("SPARK-23342 Support orc.row.index.stride and hive.exec.orc.default.row.index.stride") {
+    val df = spark.range(1000000).map(_ => scala.util.Random.nextLong).repartition(1)
+
+    Seq(ROW_INDEX_STRIDE).foreach { conf =>
+      Seq(conf.getAttribute, conf.getHiveConfName).foreach { name =>
+        withTempPath { path =>
+          val dir = path.getCanonicalPath
+          df.write.format("orc").save(dir)
+          assert(getReader(dir).getRowIndexStride === ROW_INDEX_STRIDE.getDefaultValue)
+        }
+
+        withTempPath { path =>
+          val dir = path.getCanonicalPath
+          df.write.format("orc").option(name, "1024").save(dir)
+          assert(getReader(dir).getRowIndexStride === 1024)
+        }
+      }
+    }
+  }
+
+  test("SPARK-23342 Support orc.compress.size and hive.exec.orc.default.buffer.size") {
+    val df = spark.range(1000000).map(_ => scala.util.Random.nextLong).repartition(1)
+
+    Seq(BUFFER_SIZE).foreach { conf =>
+      Seq(conf.getAttribute, conf.getHiveConfName).foreach { name =>
+        withTempPath { path =>
+          val dir = path.getCanonicalPath
+          df.write.format("orc").save(dir)
+          assert(getReader(dir).getCompressionSize === BUFFER_SIZE.getDefaultValue)
+        }
+
+        withTempPath { path =>
+          val dir = path.getCanonicalPath
+
+          df.write.format("orc").option(name, "1024").save(dir)
+          assert(getReader(dir).getCompressionSize === 1024)
+        }
       }
     }
   }
