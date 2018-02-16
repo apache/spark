@@ -232,7 +232,7 @@ object FeatureHasher extends DefaultParamsReadable[FeatureHasher] {
    * See SPARK-23381.
    */
   @Since("2.3.0")
-  def murmur3Hash(term: Any): Int = {
+  private[feature] def murmur3Hash(term: Any): Int = {
     term match {
       case null => seed
       case b: Boolean => hashInt(if (b) 1 else 0, seed)
