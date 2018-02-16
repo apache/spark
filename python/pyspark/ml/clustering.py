@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import warnings
+
 from pyspark import since, keyword_only
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
@@ -320,7 +322,11 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         Return the K-means cost (sum of squared distances of points to their nearest center)
         for this model on the given data.
+
+        ..note:: Deprecated in 2.4.0. It will be removed in 3.0.0. Use ClusteringEvaluator instead.
         """
+        warnings.warn("Deprecated in 2.4.0. It will be removed in 3.0.0. Use ClusteringEvaluator"
+                      " instead.", DeprecationWarning)
         return self._call_java("computeCost", dataset)
 
     @property

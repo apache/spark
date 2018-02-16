@@ -149,8 +149,12 @@ class KMeansModel private[ml] (
   /**
    * Return the K-means cost (sum of squared distances of points to their nearest center) for this
    * model on the given data.
+   *
+   * @deprecated This method is deprecated and will be removed in 3.0.0. Use ClusteringEvaluator
+   *             instead.
    */
-  // TODO: Replace the temp fix when we have proper evaluators defined for clustering.
+  @deprecated("This method is deprecated and will be removed in 3.0.0." +
+    " Use ClusteringEvaluator instead.", "2.4.0")
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
