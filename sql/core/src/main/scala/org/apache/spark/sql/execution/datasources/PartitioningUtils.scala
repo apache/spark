@@ -412,11 +412,15 @@ object PartitioningUtils {
       // DateType
       DateTimeUtils.getThreadLocalDateFormat.parse(raw)
       // SPARK-23436: Casting the string to date may still return null if a bad Date is provided.
+      // This can happen since DateFormat.parse  may not use the entire text of the given string:
+      // so if there are extra-characters after the date, it returns correctly.
       // We need to check that we can cast the raw string since we later can use Cast to get
       // the partition values with the right DataType (see
       // org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex.inferPartitioning)
-      val dateOption = Option(Cast(Literal(raw), DateType).eval())
-      Literal.create(dateOption.get, DateType)
+      val dateValue = Cast(Literal(raw), DateType).eval()
+      // Disallow DateType if the cast returned null
+      require(dateValue != null)
+      Literal.create(dateValue, DateType)
     }
 
     val timestampTry = Try {
@@ -425,9 +429,10 @@ object PartitioningUtils {
       // TimestampType
       DateTimeUtils.getThreadLocalTimestampFormat(timeZone).parse(unescapedRaw)
       // SPARK-23436: see comment for date
-      val timestampOption = Option(Cast(Literal(unescapedRaw), TimestampType,
-        Some(timeZone.getID)).eval())
-      Literal.create(timestampOption.get, TimestampType)
+      val timestampValue = Cast(Literal(unescapedRaw), TimestampType, Some(timeZone.getID)).eval()
+      // Disallow TimestampType if the cast returned null
+      require(timestampValue != null)
+      Literal.create(timestampValue, TimestampType)
     }
 
     if (typeInference) {
