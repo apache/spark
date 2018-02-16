@@ -58,6 +58,12 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
  */
 case class ExprCode(var code: String, var isNull: String, var value: String)
 
+object ExprCode {
+  def forNonNullValue(value: String): ExprCode = {
+    ExprCode(code = "", isNull = "false", value = value)
+  }
+}
+
 /**
  * State used for subexpression elimination.
  *
