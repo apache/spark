@@ -1988,10 +1988,11 @@ class DataFrame(object):
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
                 from pyspark.sql.types import _check_dataframe_convert_date, \
-                    _check_dataframe_localize_timestamps
+                    _check_dataframe_localize_timestamps, to_arrow_schema
                 from pyspark.sql.utils import require_minimum_pyarrow_version
-                import pyarrow
                 require_minimum_pyarrow_version()
+                import pyarrow
+                to_arrow_schema(self.schema)
                 tables = self._collectAsArrow()
                 if tables:
                     table = pyarrow.concat_tables(tables)
@@ -2000,10 +2001,12 @@ class DataFrame(object):
                     return _check_dataframe_localize_timestamps(pdf, timezone)
                 else:
                     return pd.DataFrame.from_records([], columns=self.columns)
-            except ImportError as e:
-                msg = "note: pyarrow must be installed and available on calling Python process " \
-                      "if using spark.sql.execution.arrow.enabled=true"
-                raise ImportError("%s\n%s" % (_exception_message(e), msg))
+            except Exception as e:
+                msg = (
+                    "Note: toPandas attempted Arrow optimization because "
+                    "'spark.sql.execution.arrow.enabled' is set to true. Please set it to false "
+                    "to disable this.")
+                raise RuntimeError("%s\n%s" % (_exception_message(e), msg))
         else:
             pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
 
