@@ -52,7 +52,7 @@ from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
 from pyspark.ml.common import _java2py, _py2java
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
-    MulticlassClassificationEvaluator, RegressionEvaluator
+    MulticlassClassificationEvaluator, RegressionEvaluator, ClusteringEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.fpm import FPGrowth, FPGrowthModel
 from pyspark.ml.image import ImageSchema
@@ -540,6 +540,16 @@ class EvaluatorTests(SparkSessionTestCase):
         evaluatorCopy.evaluate(df)
         self.assertEqual(evaluator._java_obj.getMetricName(), "r2")
         self.assertEqual(evaluatorCopy._java_obj.getMetricName(), "mae")
+
+    def test_clustering_evaluator_with_cosine_distance(self):
+        featureAndPredictions = map(lambda x: (Vectors.dense(x[0]), x[1]),
+                                    [([1.0, 1.0], 1.0), ([10.0, 10.0], 1.0), ([1.0, 0.5], 2.0),
+                                     ([10.0, 4.4], 2.0), ([-1.0, 1.0], 3.0), ([-100.0, 90.0], 3.0)])
+        dataset = self.spark.createDataFrame(featureAndPredictions, ["features", "prediction"])
+        evaluator = ClusteringEvaluator(predictionCol="prediction", distanceMeasure="cosine")
+        self.assertEqual(evaluator.getDistanceMeasure(), "cosine")
+        self.assertEqual(round(evaluator.evaluate(dataset), 5),  0.99267)
+        self.assertEqual(evaluator._java_obj.getDistanceMeasure(), "cosine")
 
 
 class FeatureTests(SparkSessionTestCase):
