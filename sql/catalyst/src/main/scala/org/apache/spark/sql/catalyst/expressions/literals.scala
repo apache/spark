@@ -279,10 +279,11 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     if (value == null) {
-      // Note: the "DUMMY" placeholder is meant to cause compilation failures
-      // in case the "value" of null is ever used in computation, which is usually
-      // an indication that a codegen template isn't handling null checking correctly.
-      ExprCode(code = "", isNull = "true", value = "DUMMY")
+      val defaultValueLiteral = ctx.defaultValue(javaType) match {
+        case "null" => s"(($javaType)null)"
+        case lit => lit
+      }
+      ExprCode(code = "", isNull = "true", value = defaultValueLiteral)
     } else {
       dataType match {
         case BooleanType | IntegerType | DateType =>
