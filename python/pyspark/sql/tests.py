@@ -3443,7 +3443,14 @@ class ArrowTests(ReusedSQLTestCase):
         schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
+            with self.assertRaisesRegexp(Exception, 'Unsupported type'):
+                df.toPandas()
+
+        df = self.spark.createDataFrame([(None,)], schema="a binary")
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    Exception,
+                    'Unsupported type.*\nNote: toPandas attempted Arrow optimization because'):
                 df.toPandas()
 
     def test_null_conversion(self):
