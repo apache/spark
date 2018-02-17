@@ -315,7 +315,7 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
         .head()
       val labels = data.getAs[Seq[String]](0).toArray
       val model = new StringIndexerModel(metadata.uid, labels)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

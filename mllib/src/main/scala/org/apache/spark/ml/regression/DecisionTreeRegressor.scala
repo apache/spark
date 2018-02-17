@@ -281,7 +281,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val root = loadTreeNodes(path, metadata, sparkSession)
       val model = new DecisionTreeRegressionModel(metadata.uid, root, numFeatures)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

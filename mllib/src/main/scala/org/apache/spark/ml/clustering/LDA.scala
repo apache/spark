@@ -366,7 +366,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
 private object LDAParams {
 
   /**
-   * Equivalent to [[DefaultParamsReader.getAndSetParams()]], but handles [[LDA]] and [[LDAModel]]
+   * Equivalent to [[Metadata.getAndSetParams()]], but handles [[LDA]] and [[LDAModel]]
    * formats saved with Spark 1.6, which differ from the formats in Spark 2.0+.
    *
    * @param model    [[LDA]] or [[LDAModel]] instance.  This instance will be modified with
@@ -391,7 +391,7 @@ private object LDAParams {
               s"Cannot recognize JSON metadata: ${metadata.metadataJson}.")
         }
       case _ => // 2.0+
-        DefaultParamsReader.getAndSetParams(model, metadata)
+        metadata.getAndSetParams(model)
     }
   }
 }

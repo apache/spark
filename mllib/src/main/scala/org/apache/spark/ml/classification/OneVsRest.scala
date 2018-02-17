@@ -257,7 +257,7 @@ object OneVsRestModel extends MLReadable[OneVsRestModel] {
         DefaultParamsReader.loadParamsInstance[ClassificationModel[_, _]](modelPath, sc)
       }
       val ovrModel = new OneVsRestModel(metadata.uid, labelMetadata, models)
-      DefaultParamsReader.getAndSetParams(ovrModel, metadata)
+      metadata.getAndSetParams(ovrModel)
       ovrModel.set("classifier", classifier)
       ovrModel
     }
@@ -448,7 +448,7 @@ object OneVsRest extends MLReadable[OneVsRest] {
     override def load(path: String): OneVsRest = {
       val (metadata, classifier) = OneVsRestParams.loadImpl(path, sc, className)
       val ovr = new OneVsRest(metadata.uid)
-      DefaultParamsReader.getAndSetParams(ovr, metadata)
+      metadata.getAndSetParams(ovr)
       ovr.setClassifier(classifier)
     }
   }

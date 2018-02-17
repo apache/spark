@@ -377,7 +377,7 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
       val Row(coefficients: Vector, intercept: Double) =
         data.select("coefficients", "intercept").head()
       val model = new LinearSVCModel(metadata.uid, coefficients, intercept)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }

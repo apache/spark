@@ -335,7 +335,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
       val dataPath = new Path(path, "data").toString
       val frequentItems = sparkSession.read.parquet(dataPath)
       val model = new FPGrowthModel(metadata.uid, frequentItems)
-      DefaultParamsReader.getAndSetParams(model, metadata)
+      metadata.getAndSetParams(model)
       model
     }
   }
