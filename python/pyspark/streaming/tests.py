@@ -1478,7 +1478,7 @@ def search_kafka_assembly_jar():
             ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
             "You need to build Spark with "
             "'build/sbt -Pkafka-0-8 assembly/package streaming-kafka-0-8-assembly/assembly' or "
-            "'build/mvn -Pkafka-0-8 package' before running this test.")
+            "'build/mvn -DskipTests -Pkafka-0-8 package' before running this test.")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Kafka assembly JARs: %s; please "
                          "remove all but one") % (", ".join(jars)))
@@ -1495,7 +1495,7 @@ def search_flume_assembly_jar():
             ("Failed to find Spark Streaming Flume assembly jar in %s. " % flume_assembly_dir) +
             "You need to build Spark with "
             "'build/sbt -Pflume assembly/package streaming-flume-assembly/assembly' or "
-            "'build/mvn -Pflume package' before running this test.")
+            "'build/mvn -DskipTests -Pflume package' before running this test.")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Flume assembly JARs: %s; please "
                         "remove all but one") % (", ".join(jars)))
