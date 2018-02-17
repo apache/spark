@@ -399,7 +399,7 @@ class ParquetFileFormat
         val vectorizedReader = new VectorizedParquetRecordReader(
           convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
         val iter = new RecordReaderIterator(vectorizedReader)
-        // Register a task completion lister before `initialization`.
+        // SPARK-23457 Register a task completion lister before `initialization`.
         taskContext.foreach(_.addTaskCompletionListener(_ => iter.close()))
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
@@ -420,7 +420,7 @@ class ParquetFileFormat
           new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz))
         }
         val iter = new RecordReaderIterator(reader)
-        // Register a task completion lister before `initialization`.
+        // SPARK-23457 Register a task completion lister before `initialization`.
         taskContext.foreach(_.addTaskCompletionListener(_ => iter.close()))
         reader.initialize(split, hadoopAttemptContext)
 
