@@ -395,19 +395,21 @@ class ParquetFileFormat
         ParquetInputFormat.setFilterPredicate(hadoopAttemptContext.getConfiguration, pushed.get)
       }
       val taskContext = Option(TaskContext.get())
-      val iter = if (enableVectorizedReader) {
+      if (enableVectorizedReader) {
         val vectorizedReader = new VectorizedParquetRecordReader(
           convertTz.orNull, enableOffHeapColumnVector && taskContext.isDefined, capacity)
-        val recordReaderIterator = new RecordReaderIterator(vectorizedReader)
-        // Register a task completion lister before `initalization`.
-        taskContext.foreach(_.addTaskCompletionListener(_ => recordReaderIterator.close()))
+        val iter = new RecordReaderIterator(vectorizedReader)
+        // Register a task completion lister before `initialization`.
+        taskContext.foreach(_.addTaskCompletionListener(_ => iter.close()))
         vectorizedReader.initialize(split, hadoopAttemptContext)
         logDebug(s"Appending $partitionSchema ${file.partitionValues}")
         vectorizedReader.initBatch(partitionSchema, file.partitionValues)
         if (returningBatch) {
           vectorizedReader.enableReturningBatches()
         }
-        recordReaderIterator
+
+        // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
+        iter.asInstanceOf[Iterator[InternalRow]]
       } else {
         logDebug(s"Falling back to parquet-mr")
         // ParquetRecordReader returns UnsafeRow
@@ -417,18 +419,11 @@ class ParquetFileFormat
         } else {
           new ParquetRecordReader[UnsafeRow](new ParquetReadSupport(convertTz))
         }
-        val recordReaderIterator = new RecordReaderIterator(reader)
-        // Register a task completion lister before `initalization`.
-        taskContext.foreach(_.addTaskCompletionListener(_ => recordReaderIterator.close()))
+        val iter = new RecordReaderIterator(reader)
+        // Register a task completion lister before `initialization`.
+        taskContext.foreach(_.addTaskCompletionListener(_ => iter.close()))
         reader.initialize(split, hadoopAttemptContext)
-        recordReaderIterator
-      }
 
-
-      // UnsafeRowParquetRecordReader appends the columns internally to avoid another copy.
-      if (enableVectorizedReader) {
-        iter.asInstanceOf[Iterator[InternalRow]]
-      } else {
         val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
         val joinedRow = new JoinedRow()
         val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
