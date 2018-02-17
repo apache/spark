@@ -69,7 +69,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       .load()
       .select('value)
 
-    testStream(df, useV2Sink = true)(
+    testStream(df)(
       StartStream(longContinuousTrigger),
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 2)),
@@ -93,7 +93,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       .select('value)
       .map(r => r.getLong(0) * 2)
 
-    testStream(df, useV2Sink = true)(
+    testStream(df)(
       StartStream(longContinuousTrigger),
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 2)),
@@ -112,7 +112,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       .select('value)
       .flatMap(r => Seq(0, r.getLong(0), r.getLong(0) * 2))
 
-    testStream(df, useV2Sink = true)(
+    testStream(df)(
       StartStream(longContinuousTrigger),
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 2)),
@@ -131,7 +131,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       .select('value)
       .where('value > 5)
 
-    testStream(df, useV2Sink = true)(
+    testStream(df)(
       StartStream(longContinuousTrigger),
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 2)),
@@ -151,7 +151,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       .dropDuplicates()
 
     val except = intercept[AnalysisException] {
-      testStream(df, useV2Sink = true)(StartStream(longContinuousTrigger))
+      testStream(df)(StartStream(longContinuousTrigger))
     }
 
     assert(except.message.contains(
@@ -167,7 +167,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       .select(current_timestamp())
 
     val except = intercept[AnalysisException] {
-      testStream(df, useV2Sink = true)(StartStream(longContinuousTrigger))
+      testStream(df)(StartStream(longContinuousTrigger))
     }
 
     assert(except.message.contains(
@@ -182,7 +182,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       .load()
       .select('value)
 
-    testStream(df, useV2Sink = true)(
+    testStream(df)(
       StartStream(longContinuousTrigger),
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 2)),
@@ -218,7 +218,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
     }
     spark.sparkContext.addSparkListener(listener)
     try {
-      testStream(df, useV2Sink = true)(
+      testStream(df)(
         StartStream(Trigger.Continuous(100)),
         Execute(waitForRateSourceTriggers(_, 2)),
         Execute { _ =>
@@ -270,7 +270,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       .load()
       .select('value)
 
-    testStream(df, useV2Sink = true)(
+    testStream(df)(
       StartStream(longContinuousTrigger),
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 201)),
@@ -288,7 +288,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       .load()
       .select('value)
 
-    testStream(df, useV2Sink = true)(
+    testStream(df)(
       StartStream(Trigger.Continuous(2012)),
       AwaitEpoch(0),
       Execute(waitForRateSourceTriggers(_, 201)),
@@ -305,7 +305,7 @@ class ContinuousStressSuite extends ContinuousSuiteBase {
       .load()
       .select('value)
 
-    testStream(df, useV2Sink = true)(
+    testStream(df)(
       StartStream(Trigger.Continuous(2012)),
       AwaitEpoch(10),
       StopStream,

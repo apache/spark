@@ -187,9 +187,8 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 }
 
-
 class MemoryStreamDataReaderFactory(records: Array[UnsafeRow])
-  extends DataReaderFactory[UnsafeRow] {
+    extends DataReaderFactory[UnsafeRow] {
   override def createDataReader(): DataReader[UnsafeRow] = {
     new DataReader[UnsafeRow] {
       private var currentIndex = -1
@@ -205,81 +204,4 @@ class MemoryStreamDataReaderFactory(records: Array[UnsafeRow])
       override def close(): Unit = {}
     }
   }
-}
-
-/**
- * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
- * tests and does not provide durability.
- */
-class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink with Logging {
-
-  private case class AddedData(batchId: Long, data: Array[Row])
-
-  /** An order list of batches that have been written to this [[Sink]]. */
-  @GuardedBy("this")
-  private val batches = new ArrayBuffer[AddedData]()
-
-  /** Returns all rows that are stored in this [[Sink]]. */
-  def allData: Seq[Row] = synchronized {
-    batches.map(_.data).flatten
-  }
-
-  def latestBatchId: Option[Long] = synchronized {
-    batches.lastOption.map(_.batchId)
-  }
-
-  def latestBatchData: Seq[Row] = synchronized { batches.lastOption.toSeq.flatten(_.data) }
-
-  def toDebugString: String = synchronized {
-    batches.map { case AddedData(batchId, data) =>
-      val dataStr = try data.mkString(" ") catch {
-        case NonFatal(e) => "[Error converting to string]"
-      }
-      s"$batchId: $dataStr"
-    }.mkString("\n")
-  }
-
-  override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    val notCommitted = synchronized {
-      latestBatchId.isEmpty || batchId > latestBatchId.get
-    }
-    if (notCommitted) {
-      logDebug(s"Committing batch $batchId to $this")
-      outputMode match {
-        case Append | Update =>
-          val rows = AddedData(batchId, data.collect())
-          synchronized { batches += rows }
-
-        case Complete =>
-          val rows = AddedData(batchId, data.collect())
-          synchronized {
-            batches.clear()
-            batches += rows
-          }
-
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Output mode $outputMode is not supported by MemorySink")
-      }
-    } else {
-      logDebug(s"Skipping already committed batch: $batchId")
-    }
-  }
-
-  def clear(): Unit = synchronized {
-    batches.clear()
-  }
-
-  override def toString(): String = "MemorySink"
-}
-
-/**
- * Used to query the data that has been written into a [[MemorySink]].
- */
-case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode {
-  def this(sink: MemorySink) = this(sink, sink.schema.toAttributes)
-
-  private val sizePerRow = sink.schema.toAttributes.map(_.dataType.defaultSize).sum
-
-  override def computeStats(): Statistics = Statistics(sizePerRow * sink.allData.size)
 }

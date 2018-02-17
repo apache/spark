@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.StructType
  * A sink that stores the results in memory. This [[Sink]] is primarily intended for use in unit
  * tests and does not provide durability.
  */
-class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with Logging {
+class MemorySink extends DataSourceV2 with StreamWriteSupport with Logging {
   override def createStreamWriter(
       queryId: String,
       schema: StructType,
@@ -112,7 +112,7 @@ class MemorySinkV2 extends DataSourceV2 with StreamWriteSupport with Logging {
 
 case class MemoryWriterCommitMessage(partition: Int, data: Seq[Row]) extends WriterCommitMessage {}
 
-class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
+class MemoryWriter(sink: MemorySink, batchId: Long, outputMode: OutputMode)
   extends DataSourceWriter with Logging {
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
@@ -129,7 +129,7 @@ class MemoryWriter(sink: MemorySinkV2, batchId: Long, outputMode: OutputMode)
   }
 }
 
-class MemoryStreamWriter(val sink: MemorySinkV2, outputMode: OutputMode)
+class MemoryStreamWriter(val sink: MemorySink, outputMode: OutputMode)
   extends StreamWriter {
 
   override def createWriterFactory: MemoryWriterFactory = MemoryWriterFactory(outputMode)
@@ -174,7 +174,7 @@ class MemoryDataWriter(partition: Int, outputMode: OutputMode)
 /**
  * Used to query the data that has been written into a [[MemorySink]].
  */
-case class MemoryPlanV2(sink: MemorySinkV2, override val output: Seq[Attribute]) extends LeafNode {
+case class MemoryPlan(sink: MemorySink, override val output: Seq[Attribute]) extends LeafNode {
   private val sizePerRow = output.map(_.dataType.defaultSize).sum
 
   override def computeStats(): Statistics = Statistics(sizePerRow * sink.allData.size)
