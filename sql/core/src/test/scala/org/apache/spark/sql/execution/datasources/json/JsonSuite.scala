@@ -2089,4 +2089,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
   }
+
+  test("Use user's charset in reading of multi-line json in UTF-16LE") {
+    val fileName = "json-tests/utf16LE.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val jsonDF = spark.read.schema(schema)
+      .option("multiline", "true")
+      .option("charset", "UTF-16LE")
+      .json(testFile(fileName))
+
+    checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
+  }
 }
