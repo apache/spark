@@ -27,6 +27,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class FeatureHasherSuite extends SparkFunSuite
   with MLlibTestSparkContext
@@ -34,7 +35,7 @@ class FeatureHasherSuite extends SparkFunSuite
 
   import testImplicits._
 
-  import HashingTFSuite.murmur3FeatureIdx
+  import FeatureHasherSuite.murmur3FeatureIdx
 
   implicit private val vectorEncoder = ExpressionEncoder[Vector]()
 
@@ -215,4 +216,12 @@ class FeatureHasherSuite extends SparkFunSuite
       .setNumFeatures(10)
     testDefaultReadWrite(t)
   }
+}
+
+object FeatureHasherSuite {
+
+  private[feature] def murmur3FeatureIdx(numFeatures: Int)(term: Any): Int = {
+    Utils.nonNegativeMod(FeatureHasher.murmur3Hash(term), numFeatures)
+  }
+
 }
