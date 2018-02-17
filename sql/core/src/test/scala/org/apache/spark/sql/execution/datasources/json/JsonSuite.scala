@@ -2087,8 +2087,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       .option("multiline", "true")
       .json(testFile(fileName))
 
-    checkAnswer(jsonDF, Seq(
-      Row("Chris", "Baird"), Row("Doug", "Rood")
-    ))
+    checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
   }
 }

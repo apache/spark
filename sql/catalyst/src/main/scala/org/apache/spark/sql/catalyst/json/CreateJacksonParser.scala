@@ -49,7 +49,15 @@ private[sql] object CreateJacksonParser extends Serializable {
     }
   }
 
-  def inputStream(jsonFactory: JsonFactory, record: InputStream): JsonParser = {
-    jsonFactory.createParser(record)
+  def inputStream(jsonFactory: JsonFactory,
+    is: InputStream,
+    charset: Option[String]
+  ): JsonParser = {
+    charset match {
+      case Some(cs) =>
+        jsonFactory.createParser(new InputStreamReader(is, cs))
+      case _ =>
+        jsonFactory.createParser(is)
+    }
   }
 }

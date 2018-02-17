@@ -148,6 +148,15 @@ object MultiLineJsonDataSource extends JsonDataSource {
       parsedOptions: JSONOptions): StructType = {
     val json: RDD[PortableDataStream] = createBaseRdd(sparkSession, inputPaths)
     val sampled: RDD[PortableDataStream] = JsonUtils.sample(json, parsedOptions)
+    def createParser(jsonFactory: JsonFactory, record: PortableDataStream): JsonParser = {
+      val path = new Path(record.getPath())
+      CreateJacksonParser.inputStream(
+        jsonFactory,
+        CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, path),
+        parsedOptions.charset
+      )
+    }
+
     JsonInferSchema.infer(sampled, parsedOptions, createParser)
   }
 
@@ -170,33 +179,30 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .values
   }
 
-  private def createParser(jsonFactory: JsonFactory, record: PortableDataStream): JsonParser = {
-    val path = new Path(record.getPath())
-    CreateJacksonParser.inputStream(
-      jsonFactory,
-      CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, path))
-  }
-
   override def readFile(
       conf: Configuration,
       file: PartitionedFile,
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
+    def inputStream = {
+      CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath)))
+    }
     def partitionedFileString(ignored: Any): UTF8String = {
-      Utils.tryWithResource {
-        CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath)))
-      } { inputStream =>
-        UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
+      Utils.tryWithResource(inputStream) { is =>
+        UTF8String.fromBytes(ByteStreams.toByteArray(is))
       }
     }
+    val charset = parser.options.charset
 
     val safeParser = new FailureSafeParser[InputStream](
-      input => parser.parse(input, CreateJacksonParser.inputStream, partitionedFileString),
+      input => parser.parse[InputStream](input,
+        CreateJacksonParser.inputStream(_, _, charset),
+        partitionedFileString
+      ),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
 
-    safeParser.parse(
-      CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))))
+    safeParser.parse(inputStream)
   }
 }
