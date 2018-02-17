@@ -29,7 +29,7 @@ from socket import AF_INET, SOCK_STREAM, SOMAXCONN
 from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.worker import main as worker_main
-from pyspark.serializers import read_int, write_int
+from pyspark.serializers import read_int, write_int, write_long
 
 
 def compute_real_exit_code(exit_code):
@@ -69,7 +69,7 @@ def worker(sock):
     return exit_code
 
 
-def manager():
+def manager(parent_port, token):
     # Create a new process group to corral our children
     os.setpgid(0, 0)
 
@@ -79,11 +79,17 @@ def manager():
     listen_sock.listen(max(1024, SOMAXCONN))
     listen_host, listen_port = listen_sock.getsockname()
 
-    # re-open stdin/stdout in 'wb' mode
+    socket_to_parent = socket.socket(AF_INET, SOCK_STREAM)
+    socket_to_parent.connect(('127.0.0.1', parent_port))
+    outfile = socket_to_parent.makefile(mode="wb")
+    write_long(token, outfile)
+    write_int(listen_port, outfile)
+    outfile.flush()
+    outfile.close()
+    socket_to_parent.close()
+
+    # re-open stdin in 'rb' mode
     stdin_bin = os.fdopen(sys.stdin.fileno(), 'rb', 4)
-    stdout_bin = os.fdopen(sys.stdout.fileno(), 'wb', 4)
-    write_int(listen_port, stdout_bin)
-    stdout_bin.flush()
 
     def shutdown(code):
         signal.signal(SIGTERM, SIG_DFL)
@@ -177,4 +183,25 @@ def manager():
 
 
 if __name__ == '__main__':
-    manager()
+    if len(sys.argv) < 2:
+        sys.stderr.write("No parent port number specified\n")
+        sys.exit(1)
+    try:
+        parent_port = int(sys.argv[1])
+    except ValueError:
+        sys.stderr.write("Non-numeric port number specified: %s\n" % sys.argv[1])
+        sys.exit(1)
+
+    token_string = os.environ.get("PYSPARK_DAEMON_TOKEN")
+    if token_string is None:
+        sys.stderr.write("PYSPARK_DAEMON_TOKEN environment variable is not set\n")
+        sys.exit(1)
+    try:
+        # works for long values too
+        token = int(token_string)
+    except ValueError:
+        sys.stderr.write("Non-numeric value set in environment variable PYSPARK_DAEMON_TOKEN: %s\n"
+                         % token_string)
+        sys.exit(1)
+
+    manager(parent_port, token)

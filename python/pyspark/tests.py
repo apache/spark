@@ -66,7 +66,7 @@ from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
     CloudPickleSerializer, CompressedSerializer, UTF8Deserializer, NoOpSerializer, \
     PairDeserializer, CartesianDeserializer, AutoBatchedSerializer, AutoSerializer, \
-    FlattenedValuesSerializer
+    FlattenedValuesSerializer, read_long
 from pyspark.shuffle import Aggregator, ExternalMerger, ExternalSorter
 from pyspark import shuffle
 from pyspark.profiler import BasicProfiler
@@ -1794,16 +1794,42 @@ class DaemonTests(unittest.TestCase):
         return True
 
     def do_termination_test(self, terminator):
+        from socket import socket, AF_INET, SOCK_STREAM, SOMAXCONN
         from subprocess import Popen, PIPE
         from errno import ECONNREFUSED
+
+        # Create a listening socket on the AF_INET loopback interface
+        listen_sock = socket(AF_INET, SOCK_STREAM)
+        listen_sock.bind(('127.0.0.1', 0))
+        listen_sock.listen(max(1024, SOMAXCONN))
+        listen_host, listen_port = listen_sock.getsockname()
+
+        # set the token that the daemon will use to prove it is the daemon we launched
+        expected_token = -99
+        myEnv = os.environ.copy()
+        myEnv["PYSPARK_DAEMON_TOKEN"] = str(expected_token)
 
         # start daemon
         daemon_path = os.path.join(os.path.dirname(__file__), "daemon.py")
         python_exec = sys.executable or os.environ.get("PYSPARK_PYTHON")
-        daemon = Popen([python_exec, daemon_path], stdin=PIPE, stdout=PIPE)
+        daemon = Popen([python_exec, daemon_path, str(listen_port)], stdin=PIPE, stdout=PIPE,
+                       env=myEnv)
 
-        # read the port number
-        port = read_int(daemon.stdout)
+        # get a connection to the daemon we just launched
+        listen_sock.settimeout(10)
+        (sock, _) = listen_sock.accept()
+        infile = sock.makefile(mode='rb')
+
+        # read the token and port number
+        actual_token = read_long(infile)
+        if actual_token != expected_token:
+            self.fail("Daemon did not return expected auth token")
+        port = read_int(infile)
+
+        # done with this connection to the daemon
+        infile.close()
+        sock.close()
+        listen_sock.close()
 
         # daemon should accept connections
         self.assertTrue(self.connect(port))
