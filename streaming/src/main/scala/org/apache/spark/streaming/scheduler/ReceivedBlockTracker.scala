@@ -199,8 +199,8 @@ private[streaming] class ReceivedBlockTracker(
       logTrace(s"Recovery: Inserting allocated batch for time $batchTime to " +
         s"${allocatedBlocks.streamIdToAllocatedBlocks}")
       allocatedBlocks.streamIdToAllocatedBlocks.foreach {
-        case (streamId, allocatedBlocks) =>
-          getReceivedBlockQueue(streamId).dequeueAll(allocatedBlocks.toSet)
+        case (streamId, allocatedBlocksInStream) =>
+          getReceivedBlockQueue(streamId).dequeueAll(allocatedBlocksInStream.toSet)
       }
       timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
       lastAllocatedBatchTime = batchTime
