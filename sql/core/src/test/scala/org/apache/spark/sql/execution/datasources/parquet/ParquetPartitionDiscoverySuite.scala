@@ -1127,9 +1127,11 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         .toDF("id", "date_month", "date_hour", "data")
 
       data.write.partitionBy("date_month", "date_hour").parquet(path.getAbsolutePath)
-      val input = spark.read.parquet(path.getAbsolutePath)
-      checkAnswer(input.select("id", "date_month", "date_hour", "data"),
-        data.select("id", "date_month", "date_hour", "data"))
+      val input = spark.read.parquet(path.getAbsolutePath).select("id",
+        "date_month", "date_hour", "data")
+
+      assert(input.schema.sameType(input.schema))
+      checkAnswer(input, data)
     }
   }
 }
