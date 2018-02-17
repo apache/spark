@@ -178,6 +178,7 @@
 #Prometheus host
 #*.sink.prometheus.pushgateway-address-protocol=<prometheus pushgateway protocol> - defaults to http
 #*.sink.prometheus.pushgateway-address=<prometheus pushgateway address> - defaults to 127.0.0.1:9091
+#*.sink.prometheus.pushgateway-enable-timestamp=<enable/disable timestamp> - defaults to false
 #*.sink.prometheus.unit=< unit> - defaults to seconds (TimeUnit.SECONDS)
 #*.sink.prometheus.period=<period> - defaults to 10
 

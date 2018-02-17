@@ -117,4 +117,46 @@ public class TextFormatWithTimestampSuite {
 
     }
 
+    @Test
+    public void buildTextFormatWithNoMetricsTimestamp() {
+        // Given
+        List<Collector.MetricFamilySamples> mfs = Lists.newArrayList(
+                new Collector.MetricFamilySamples(
+                        "Metric_Family_1",
+                        Collector.Type.GAUGE,
+                        "help1",
+                        Lists.newArrayList(
+                                new Collector.MetricFamilySamples.Sample(
+                                        "Sample1",
+                                        Lists.newArrayList("label1", "label2"),
+                                        Lists.newArrayList("1", "value1"),
+                                        1.0
+                                ),
+                                new Collector.MetricFamilySamples.Sample(
+                                        "Sample2",
+                                        Lists.newArrayList("label1", "label2"),
+                                        Lists.newArrayList("2", "value2"),
+                                        2.0
+                                )
+                        )
+                )
+        );
+
+        String expected = String.join("\n",
+                "# HELP Metric_Family_1 help1",
+                "# TYPE Metric_Family_1 gauge",
+                "Sample1{label1=\"1\",label2=\"value1\"} 1.0",
+                "Sample2{label1=\"2\",label2=\"value2\"} 2.0",
+                ""
+        );
+
+        // When
+        String actual = TextFormatWithTimestamp.buildTextFormat(Collections.enumeration(mfs),
+                null);
+
+        // Then
+        Assert.assertEquals(expected, actual);
+
+    }
+
 }

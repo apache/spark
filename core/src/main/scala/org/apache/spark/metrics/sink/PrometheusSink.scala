@@ -89,9 +89,9 @@ private[spark] class PrometheusSink(
         case _ => Map("role" -> role)
       }
 
-      pushGateway.pushAdd(pushRegistry, job, groupingKey.asJava,
-        s"${System.currentTimeMillis}")
+      val metricTimestamp = if (enableTimestamp) Some(s"${System.currentTimeMillis}") else None
 
+      pushGateway.pushAdd(pushRegistry, job, groupingKey.asJava, metricTimestamp.orNull)
     }
   }
 
@@ -99,11 +99,13 @@ private[spark] class PrometheusSink(
   val DEFAULT_PUSH_PERIOD_UNIT: TimeUnit = TimeUnit.SECONDS
   val DEFAULT_PUSHGATEWAY_ADDRESS: String = "127.0.0.1:9091"
   val DEFAULT_PUSHGATEWAY_ADDRESS_PROTOCOL: String = "http"
+  val PUSHGATEWAY_ENABLE_TIMESTAMP: Boolean = false
 
   val KEY_PUSH_PERIOD = "period"
   val KEY_PUSH_PERIOD_UNIT = "unit"
   val KEY_PUSHGATEWAY_ADDRESS = "pushgateway-address"
   val KEY_PUSHGATEWAY_ADDRESS_PROTOCOL = "pushgateway-address-protocol"
+  val KEY_PUSHGATEWAY_ENABLE_TIMESTAMP = "pushgateway-enable-timestamp"
 
 
   val pollPeriod: Int =
@@ -124,6 +126,11 @@ private[spark] class PrometheusSink(
     Option(property.getProperty(KEY_PUSHGATEWAY_ADDRESS_PROTOCOL))
       .getOrElse(DEFAULT_PUSHGATEWAY_ADDRESS_PROTOCOL)
 
+  val enableTimestamp: Boolean =
+    Option(property.getProperty(KEY_PUSHGATEWAY_ENABLE_TIMESTAMP))
+      .map(_.toBoolean)
+      .getOrElse(PUSHGATEWAY_ENABLE_TIMESTAMP)
+
   // validate pushgateway host:port
   Try(new URI(s"$pushGatewayAddressProtocol://$pushGatewayAddress")).get
 
@@ -131,6 +138,7 @@ private[spark] class PrometheusSink(
 
   logInfo("Initializing Prometheus Sink...")
   logInfo(s"Metrics polling period -> $pollPeriod $pollUnit")
+  logInfo(s"Metrics timestamp enabled -> $enableTimestamp")
   logInfo(s"$KEY_PUSHGATEWAY_ADDRESS -> $pushGatewayAddress")
   logInfo(s"$KEY_PUSHGATEWAY_ADDRESS_PROTOCOL -> $pushGatewayAddressProtocol")
 
