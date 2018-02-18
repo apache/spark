@@ -148,16 +148,12 @@ object MultiLineJsonDataSource extends JsonDataSource {
       parsedOptions: JSONOptions): StructType = {
     val json: RDD[PortableDataStream] = createBaseRdd(sparkSession, inputPaths)
     val sampled: RDD[PortableDataStream] = JsonUtils.sample(json, parsedOptions)
-    def createParser(jsonFactory: JsonFactory, record: PortableDataStream): JsonParser = {
-      val path = new Path(record.getPath())
-      CreateJacksonParser.inputStream(
-        jsonFactory,
-        CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, path),
-        parsedOptions.charset
-      )
-    }
 
-    JsonInferSchema.infer(sampled, parsedOptions, createParser)
+    JsonInferSchema.infer[PortableDataStream](
+      sampled,
+      parsedOptions,
+      createParser(_, _, parsedOptions.charset)
+    )
   }
 
   private def createBaseRdd(
@@ -177,6 +173,18 @@ object MultiLineJsonDataSource extends JsonDataSource {
       sparkSession.sparkContext.defaultMinPartitions)
       .setName(s"JsonFile: $name")
       .values
+  }
+
+  private def createParser(
+      jsonFactory: JsonFactory,
+      record: PortableDataStream,
+      charset: Option[String] = None): JsonParser = {
+    val path = new Path(record.getPath())
+    CreateJacksonParser.inputStream(
+      jsonFactory,
+      CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, path),
+      charset
+    )
   }
 
   override def readFile(
