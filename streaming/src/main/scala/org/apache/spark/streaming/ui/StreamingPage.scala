@@ -490,15 +490,40 @@ private[ui] class StreamingPage(parent: StreamingTab)
       sortBy(_.batchTime.milliseconds).reverse
 
     val activeBatchesContent = {
-      <h4 id="active">Active Batches ({runningBatches.size + waitingBatches.size})</h4> ++
-        new ActiveBatchTable(runningBatches, waitingBatches, listener.batchDuration).toNodeSeq
+      <div class="row-fluid">
+        <div class="span12">
+          <span id="activeBatches" class="collapse-aggregated-activeBatches collapse-table"
+                onClick="collapseTable('collapse-aggregated-activeBatches',
+                'aggregated-activeBatches')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Active Batches ({runningBatches.size + waitingBatches.size})</a>
+            </h4>
+          </span>
+          <div class="aggregated-activeBatches collapsible-table">
+            {new ActiveBatchTable(runningBatches, waitingBatches, listener.batchDuration).toNodeSeq}
+          </div>
+        </div>
+      </div>
     }
 
     val completedBatchesContent = {
-      <h4 id="completed">
-        Completed Batches (last {completedBatches.size} out of {listener.numTotalCompletedBatches})
-      </h4> ++
-        new CompletedBatchTable(completedBatches, listener.batchDuration).toNodeSeq
+      <div class="row-fluid">
+        <div class="span12">
+          <span id="completedBatches" class="collapse-aggregated-completedBatches collapse-table"
+                onClick="collapseTable('collapse-aggregated-completedBatches',
+                'aggregated-completedBatches')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Completed Batches (last {completedBatches.size}
+                out of {listener.numTotalCompletedBatches})</a>
+            </h4>
+          </span>
+          <div class="aggregated-completedBatches collapsible-table">
+            {new CompletedBatchTable(completedBatches, listener.batchDuration).toNodeSeq}
+          </div>
+        </div>
+      </div>
     }
 
     activeBatchesContent ++ completedBatchesContent
