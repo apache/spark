@@ -203,7 +203,8 @@ object MultiLineJsonDataSource extends JsonDataSource {
     val charset = parser.options.charset
 
     val safeParser = new FailureSafeParser[InputStream](
-      input => parser.parse[InputStream](input,
+      input => parser.parse[InputStream](
+        input,
         CreateJacksonParser.inputStream(_, _, charset),
         partitionedFileString
       ),
