@@ -655,10 +655,11 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(people1.collect(), people_array.collect())
 
     def test_charset_json(self):
-        people1 = self.spark.read.option("charset", "UTF-8").json("python/test_support/sql/people.json")
-        people_array = self.spark.read.json("python/test_support/sql/people_array.json",
-                                            multiLine=True, charset="UTF-8")
-        self.assertEqual(people1.collect(), people_array.collect())
+        people_array = self.spark.read\
+            .json("python/test_support/sql/people_array_utf16le.json",
+                  multiLine=True, charset="UTF-16LE")
+        expected = [Row(age=30, name=u'Andy'), Row(age=19, name=u'Justin')]
+        self.assertEqual(people_array.collect(), expected)
 
     def test_multiline_csv(self):
         ages_newlines = self.spark.read.csv(
