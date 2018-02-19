@@ -654,6 +654,12 @@ class SQLTests(ReusedSQLTestCase):
                                             multiLine=True)
         self.assertEqual(people1.collect(), people_array.collect())
 
+    def test_charset_json(self):
+        people1 = self.spark.read.option("charset", "UTF-8").json("python/test_support/sql/people.json")
+        people_array = self.spark.read.json("python/test_support/sql/people_array.json",
+                                            multiLine=True, charset="UTF-8")
+        self.assertEqual(people1.collect(), people_array.collect())
+
     def test_multiline_csv(self):
         ages_newlines = self.spark.read.csv(
             "python/test_support/sql/ages_newlines.csv", multiLine=True)
