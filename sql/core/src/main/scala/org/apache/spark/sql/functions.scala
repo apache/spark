@@ -1313,16 +1313,15 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * @return angle in radians whose cosine is `e`, as if computed by [[java.lang.Math#acos]]
+   * @return inverse cosine of `e` in radians, as if computed by [[java.lang.Math#acos]]
    *
    * @group math_funcs
    * @since 1.4.0
    */
   def acos(e: Column): Column = withExpr { Acos(e.expr) }
 
-  // scalastyle:off line.size.limit
   /**
-   * @return angle in radians whose cosine is `columnName` as if computed by [[java.lang.Math#acos]]
+   * @return inverse cosine of `columnName`, as if computed by [[java.lang.Math#acos]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1330,7 +1329,7 @@ object functions {
   def acos(columnName: String): Column = acos(Column(columnName))
 
   /**
-   * @return angle in radians whose sine is `e`, as if computed by [[java.lang.Math#asin]]
+   * @return inverse sine of `e` in radians, as if computed by [[java.lang.Math#asin]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1338,7 +1337,7 @@ object functions {
   def asin(e: Column): Column = withExpr { Asin(e.expr) }
 
   /**
-   * @return angle in radians whose sine is `columnName`, as if computed by [[java.lang.Math#asin]]
+   * @return inverse sine of `columnName`, as if computed by [[java.lang.Math#asin]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1346,16 +1345,15 @@ object functions {
   def asin(columnName: String): Column = asin(Column(columnName))
 
   /**
-   * @return angle in radians whose tangent is `e`, as if computed by [[java.lang.Math#atan]]
+   * @return inverse tangent of `e`, as if computed by [[java.lang.Math#atan]]
    *
    * @group math_funcs
    * @since 1.4.0
    */
   def atan(e: Column): Column = withExpr { Atan(e.expr) }
 
-  // scalastyle:off line.size.limit
   /**
-   * @return angle in radians whose tangent is `columnName`, as if computed by [[java.lang.Math#atan]]
+   * @return inverse tangent of `columnName`, as if computed by [[java.lang.Math#atan]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1363,14 +1361,13 @@ object functions {
   def atan(columnName: String): Column = atan(Column(columnName))
 
   /**
-   *
    * @param y coordinate on y-axis
    * @param x coordinate on x-axis
-   * @return  the <i>theta</i> component of the point
-   *          (<i>r</i>,&nbsp;<i>theta</i>)
-   *          in polar coordinates that corresponds to the point
-   *          (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
-   *          as if computed by [[java.lang.Math#atan2]]
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>,&nbsp;<i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *         as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1378,13 +1375,13 @@ object functions {
   def atan2(y: Column, x: Column): Column = withExpr { Atan2(y.expr, x.expr) }
 
   /**
-   * @param y     coordinate on y-axis
+   * @param y coordinate on y-axis
    * @param xName coordinate on x-axis
-   * @return      the <i>theta</i> component of the point
-   *              (<i>r</i>,&nbsp;<i>theta</i>)
-   *              in polar coordinates that corresponds to the point
-   *              (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
-   *              as if computed by [[java.lang.Math#atan2]]
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>,&nbsp;<i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *         as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1393,12 +1390,12 @@ object functions {
 
   /**
    * @param yName coordinate on y-axis
-   * @param x     coordinate on x-axis
-   * @return      the <i>theta</i> component of the point
-   *              (<i>r</i>,&nbsp;<i>theta</i>)
-   *              in polar coordinates that corresponds to the point
-   *              (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
-   *              as if computed by [[java.lang.Math#atan2]]
+   * @param x coordinate on x-axis
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>,&nbsp;<i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *         as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1408,11 +1405,11 @@ object functions {
   /**
    * @param yName coordinate on y-axis
    * @param xName coordinate on x-axis
-   * @return      the <i>theta</i> component of the point
-   *              (<i>r</i>,&nbsp;<i>theta</i>)
-   *              in polar coordinates that corresponds to the point
-   *              (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
-   *              as if computed by [[java.lang.Math#atan2]]
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>,&nbsp;<i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *         as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1421,13 +1418,13 @@ object functions {
     atan2(Column(yName), Column(xName))
 
   /**
-   * @param y      coordinate on y-axis
+   * @param y coordinate on y-axis
    * @param xValue coordinate on x-axis
-   * @return       the <i>theta</i> component of the point
-   *               (<i>r</i>,&nbsp;<i>theta</i>)
-   *               in polar coordinates that corresponds to the point
-   *               (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
-   *               as if computed by [[java.lang.Math#atan2]]
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>,&nbsp;<i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *         as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1435,13 +1432,13 @@ object functions {
   def atan2(y: Column, xValue: Double): Column = atan2(y, lit(xValue))
 
   /**
-   * @param yName  coordinate on y-axis
+   * @param yName coordinate on y-axis
    * @param xValue coordinate on x-axis
-   * @return       the <i>theta</i> component of the point
-   *               (<i>r</i>,&nbsp;<i>theta</i>)
-   *               in polar coordinates that corresponds to the point
-   *               (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
-   *               as if computed by [[java.lang.Math#atan2]]
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>,&nbsp;<i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *         as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1450,12 +1447,12 @@ object functions {
 
   /**
    * @param yValue coordinate on y-axis
-   * @param x      coordinate on x-axis
-   * @return       the <i>theta</i> component of the point
-   *               (<i>r</i>,&nbsp;<i>theta</i>)
-   *               in polar coordinates that corresponds to the point
-   *               (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
-   *               as if computed by [[java.lang.Math#atan2]]
+   * @param x coordinate on x-axis
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>,&nbsp;<i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *         as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1464,12 +1461,12 @@ object functions {
 
   /**
    * @param yValue coordinate on y-axis
-   * @param xName  coordinate on x-axis
-   * @return       the <i>theta</i> component of the point
-   *               (<i>r</i>,&nbsp;<i>theta</i>)
-   *               in polar coordinates that corresponds to the point
-   *               (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
-   *               as if computed by [[java.lang.Math#atan2]]
+   * @param xName coordinate on x-axis
+   * @return the <i>theta</i> component of the point
+   *         (<i>r</i>,&nbsp;<i>theta</i>)
+   *         in polar coordinates that corresponds to the point
+   *         (<i>x</i>,&nbsp;<i>y</i>) in Cartesian coordinates,
+   *         as if computed by [[java.lang.Math#atan2]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1538,7 +1535,7 @@ object functions {
 
   /**
    * @param e angle in radians
-   * @return  cosine of the angle, as if computed by [[java.lang.Math#cos]]
+   * @return cosine of the angle, as if computed by [[java.lang.Math#cos]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1547,7 +1544,7 @@ object functions {
 
   /**
    * @param columnName angle in radians
-   * @return           cosine of the angle, as if computed by [[java.lang.Math#cos]]
+   * @return cosine of the angle, as if computed by [[java.lang.Math#cos]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1556,7 +1553,7 @@ object functions {
 
   /**
    * @param e angle in radians
-   * @return  hyperbolic cosine of the angle, as if computed by [[java.lang.Math#cosh]]
+   * @return hyperbolic cosine of the angle, as if computed by [[java.lang.Math#cosh]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1565,7 +1562,7 @@ object functions {
 
   /**
    * @param columnName angle in radians
-   * @return        hyperbolic cosine of the angle, as if computed by [[java.lang.Math#cosh]]
+   * @return hyperbolic cosine of the angle, as if computed by [[java.lang.Math#cosh]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2009,7 +2006,7 @@ object functions {
 
   /**
    * @param e angle in radians
-   * @return  sine of the angle, as if computed by [[java.lang.Math#sin]]
+   * @return sine of the angle, as if computed by [[java.lang.Math#sin]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2018,7 +2015,7 @@ object functions {
 
   /**
    * @param columnName angle in radians
-   * @return        sine of the angle, as if computed by [[java.lang.Math#sin]]
+   * @return sine of the angle, as if computed by [[java.lang.Math#sin]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2027,7 +2024,7 @@ object functions {
 
   /**
    * @param e hyperbolic angle
-   * @return  hyperbolic sine of the given value, as if computed by [[java.lang.Math#sinh]]
+   * @return hyperbolic sine of the given value, as if computed by [[java.lang.Math#sinh]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2036,7 +2033,7 @@ object functions {
 
   /**
    * @param columnName hyperbolic angle
-   * @return        hyperbolic sine of the given value, as if computed by [[java.lang.Math#sinh]]
+   * @return hyperbolic sine of the given value, as if computed by [[java.lang.Math#sinh]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2045,7 +2042,7 @@ object functions {
 
   /**
    * @param e angle in radians
-   * @return  tangent of the given value, as if computed by [[java.lang.Math#tan]]
+   * @return tangent of the given value, as if computed by [[java.lang.Math#tan]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2053,7 +2050,7 @@ object functions {
   def tan(e: Column): Column = withExpr { Tan(e.expr) }
 
   /**
-   * @param  columnName angle in radians
+   * @param columnName angle in radians
    * @return tangent of the given value, as if computed by [[java.lang.Math#tan]]
    *
    * @group math_funcs
@@ -2063,7 +2060,7 @@ object functions {
 
   /**
    * @param e hyperbolic angle
-   * @return  hyperbolic tangent of the given value, as if computed by [[java.lang.Math#tanh]]
+   * @return hyperbolic tangent of the given value, as if computed by [[java.lang.Math#tanh]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2071,9 +2068,8 @@ object functions {
   def tanh(e: Column): Column = withExpr { Tanh(e.expr) }
 
   /**
-   * @param  columnName hyperbolic angle
-   * @return         hyperbolic tangent of the given value,
-   *                 as if computed by [[java.lang.Math#tanh]]
+   * @param columnName hyperbolic angle
+   * @return hyperbolic tangent of the given value, as if computed by [[java.lang.Math#tanh]]
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2097,8 +2093,8 @@ object functions {
   /**
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
    *
-   * @param  e angle in radians
-   * @return   angle in degrees, as if computed by [[java.lang.Math#toDegrees]]
+   * @param e angle in radians
+   * @return angle in degrees, as if computed by [[java.lang.Math#toDegrees]]
    *
    * @group math_funcs
    * @since 2.1.0
@@ -2108,8 +2104,8 @@ object functions {
   /**
    * Converts an angle measured in radians to an approximately equivalent angle measured in degrees.
    *
-   * @param  columnName angle in radians
-   * @return         angle in degrees, as if computed by [[java.lang.Math#toDegrees]]
+   * @param columnName angle in radians
+   * @return angle in degrees, as if computed by [[java.lang.Math#toDegrees]]
    *
    * @group math_funcs
    * @since 2.1.0
@@ -2133,8 +2129,8 @@ object functions {
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
    *
-   * @param  e angle in degrees
-   * @return   angle in radians, as if computed by [[java.lang.Math#toRadians]]
+   * @param e angle in degrees
+   * @return angle in radians, as if computed by [[java.lang.Math#toRadians]]
    *
    * @group math_funcs
    * @since 2.1.0
@@ -2144,8 +2140,8 @@ object functions {
   /**
    * Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
    *
-   * @param  columnName angle in degrees
-   * @return         angle in radians, as if computed by [[java.lang.Math#toRadians]]
+   * @param columnName angle in degrees
+   * @return angle in radians, as if computed by [[java.lang.Math#toRadians]]
    *
    * @group math_funcs
    * @since 2.1.0
