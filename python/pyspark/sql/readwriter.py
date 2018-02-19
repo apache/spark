@@ -176,7 +176,7 @@ class DataFrameReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None, allowUnquotedControlChars=None):
+             multiLine=None, allowUnquotedControlChars=None, charset=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -237,6 +237,8 @@ class DataFrameReader(OptionUtils):
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
                                           characters (ASCII characters with value less than 32,
                                           including tab and line feed characters) or not.
+        :param charset: standard charset name, for example UTF-8, UTF-16 and UTF-32 If None is
+                          set, the charset of input json will be detected automatically.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
