@@ -38,7 +38,7 @@ MAKE_R=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
 
-function usage {
+function exit_with_usage {
   echo "make-distribution.sh - tool for making binary distributions of Spark"
   echo ""
   echo "usage:"
@@ -46,10 +46,6 @@ function usage {
   echo "make-distribution.sh $cl_options <maven build options>"
   echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
-}
-
-function exit_with_usage {
-  usage
   exit 1
 }
 
@@ -77,10 +73,8 @@ while (( "$#" )); do
       exit_with_usage
       ;;
     --*)
-      echo "Error: $1 is not supported, it will be ignored and not take effect"
-      usage
-      shift
-      continue
+      echo "Error: $1 is not supported"
+      exit_with_usage
       ;;
     -*)
       break
