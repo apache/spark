@@ -2152,6 +2152,21 @@ df.writeStream
 
 {% endhighlight %}
 </div>
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+# Default trigger (runs micro-batch as soon as it can)
+write.stream(df, "console")
+
+# ProcessingTime trigger with two-second micro-batch interval
+write.stream(df, "console", trigger.processingTime = "2 seconds")
+
+# One-time trigger
+write.stream(df, "console", trigger.once = TRUE)
+
+# Continuous trigger is not yet supported
+{% endhighlight %}
+</div>
 </div>
 
 
