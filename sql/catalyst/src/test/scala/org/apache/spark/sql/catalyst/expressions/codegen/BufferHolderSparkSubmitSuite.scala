@@ -39,8 +39,8 @@ class BufferHolderSparkSubmitSuite
     val argsForSparkSubmit = Seq(
       "--class", BufferHolderSparkSubmitSuite.getClass.getName.stripSuffix("$"),
       "--name", "SPARK-22222",
-      "--master", "local-cluster[2,1,1024]",
-      "--driver-memory", "4g",
+      "--master", "local-cluster[1,1,7168]",
+      "--driver-memory", "7g",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
       "--conf", "spark.driver.extraJavaOptions=-ea",
@@ -58,15 +58,20 @@ object BufferHolderSparkSubmitSuite {
     val holder = new BufferHolder(new UnsafeRow(1000))
 
     holder.reset()
+    // execute here since reset() updates holder.cursor
+    val smallBuffer = new Array[Byte](holder.cursor)
     holder.grow(roundToWord(ARRAY_MAX / 2))
 
     holder.reset()
+    holder.buffer = smallBuffer  // avoid to reuse an allocated large byte array
     holder.grow(roundToWord(ARRAY_MAX / 2 + 8))
 
     holder.reset()
+    holder.buffer = smallBuffer  // avoid to reuse an allocated large byte array
     holder.grow(roundToWord(Integer.MAX_VALUE / 2))
 
     holder.reset()
+    holder.buffer = smallBuffer  // avoid to reuse an allocated large byte array
     holder.grow(roundToWord(Integer.MAX_VALUE))
   }
 
