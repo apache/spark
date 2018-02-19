@@ -168,9 +168,11 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the inverse cosine (a.k.a. arc cosine) of `expr`, as if computed by `java.lang.Math._FUNC_`.",
+  usage = """
+    _FUNC_(expr) - Returns the inverse cosine (a.k.a. arc cosine) of `expr`, as if computed by
+      `java.lang.Math._FUNC_`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -178,12 +180,13 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
       > SELECT _FUNC_(2);
        NaN
   """)
-// scalastyle:on line.size.limit
 case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS")
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the inverse sine (a.k.a. arc sine) the arc sin of `expr`, as if computed by `java.lang.Math._FUNC_`.",
+  usage = """
+    _FUNC_(expr) - Returns the inverse sine (a.k.a. arc sine) the arc sin of `expr`,
+      as if computed by `java.lang.Math._FUNC_`.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -191,18 +194,18 @@ case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS"
       > SELECT _FUNC_(2);
        NaN
   """)
-// scalastyle:on line.size.limit
 case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN")
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the inverse tangent (a.k.a. arc tangent) of `expr`, as if computed by `java.lang.Math._FUNC_`.",
+  usage = """
+    _FUNC_(expr) - Returns the inverse tangent (a.k.a. arc tangent) of `expr`, as if computed by
+      `java.lang.Math._FUNC_`
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
        0.0
   """)
-// scalastyle:on line.size.limit
 case class Atan(child: Expression) extends UnaryMathExpression(math.atan, "ATAN")
 
 @ExpressionDescription(
@@ -252,7 +255,10 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the cosine of `expr`, as if computed by `java.lang.Math._FUNC_`.",
+  usage = """
+    _FUNC_(expr) - Returns the cosine of `expr`, as if computed by
+      `java.lang.Math._FUNC_`.
+  """,
   arguments =
     """
     Arguments:
@@ -535,9 +541,11 @@ case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "S
   """)
 case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns hyperbolic sine of `expr`, as if computed by `java.lang.Math._FUNC_`.",
+  usage = """
+  _FUNC_(expr) - Returns hyperbolic sine of `expr`, as if computed by
+    `java.lang.Math._FUNC_`.
+  """,
   arguments =
     """
     Arguments:
@@ -559,9 +567,11 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
   """)
 case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the tangent of `expr`, as if computed by `java.lang.Math._FUNC_`.",
+  usage = """
+    _FUNC_(expr) - Returns the tangent of `expr`, as if computed by
+      `java.lang.Math._FUNC_`.
+  """,
   arguments =
   """
     Arguments:
@@ -575,8 +585,10 @@ case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT"
 case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the cotangent of `expr` ," +
-    "as if computed by `1/java.lang.Math._FUNC_`.",
+  usage = """
+    _FUNC_(expr) - Returns the cotangent of `expr`, as if computed by
+      `1/java.lang.Math._FUNC_`.
+  """,
   arguments =
     """
     Arguments:
@@ -595,7 +607,10 @@ case class Cot(child: Expression)
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the hyperbolic tangent of `expr`, as if computed by `java.lang.Math._FUNC_`.",
+  usage = """
+    _FUNC_(expr) - Returns the hyperbolic tangent of `expr`, as if computed by
+      `java.lang.Math._FUNC_`.
+  """,
   arguments =
     """
     Arguments:
@@ -816,9 +831,12 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(exprY, exprX) - Returns the angle in radians between the positive x-axis of a plane and the point given by the coordinates (`exprX`, `exprY`), as if computed by `java.lang.Math._FUNC_`.",
+  usage = """
+    _FUNC_(exprY, exprX) - Returns the angle in radians between the positive x-axis of a plane
+      and the point given by the coordinates (`exprX`, `exprY`), as if computed by
+      `java.lang.Math._FUNC_`.
+  """,
   arguments =
     """
     Arguments:
@@ -830,7 +848,6 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
       > SELECT _FUNC_(0, 0);
        0.0
   """)
-// scalastyle:on line.size.limit
 case class Atan2(left: Expression, right: Expression)
   extends BinaryMathExpression(math.atan2, "ATAN2") {
 
@@ -857,6 +874,7 @@ case class Pow(left: Expression, right: Expression)
     defineCodeGen(ctx, ev, (c1, c2) => s"java.lang.Math.pow($c1, $c2)")
   }
 }
+
 
 /**
  * Bitwise left shift.
@@ -968,6 +986,7 @@ case class ShiftRightUnsigned(left: Expression, right: Expression)
   """)
 case class Hypot(left: Expression, right: Expression)
   extends BinaryMathExpression(math.hypot, "HYPOT")
+
 
 /**
  * Computes the logarithm of a number.
