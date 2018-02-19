@@ -93,7 +93,7 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_EXECUTOR_CORES =
     ConfigBuilder("spark.kubernetes.executor.cores")
-      .doc("Specify the CPU core request for each executor pod")
+      .doc("Specify the cpu request for each executor pod")
       .stringConf
       .createOptional
 
