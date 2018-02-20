@@ -43,8 +43,7 @@ object FileStreamSink extends Logging {
           val hdfsPath = new Path(singlePath)
           val fs = hdfsPath.getFileSystem(hadoopConf)
           if (fs.isDirectory(hdfsPath)) {
-            val metadataPath = new Path(hdfsPath, metadataDir)
-            fs.exists(metadataPath)
+            fs.exists(new Path(hdfsPath, metadataDir))
           } else {
             false
           }
