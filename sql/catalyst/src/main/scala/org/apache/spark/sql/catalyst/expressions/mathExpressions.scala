@@ -262,7 +262,7 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   arguments = """
     Arguments:
       * expr - angle in radians
-    """,
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -271,11 +271,14 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
 case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
 
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the hyperbolic cosine of `expr`.",
+  usage = """
+      _FUNC_(expr) - Returns the hyperbolic cosine of `expr`, as if computed by
+        `java.lang.Math._FUNC_`.
+  """,
   arguments = """
     Arguments:
-      * expr - hyperbolic angle.
-    """,
+      * expr - hyperbolic angle
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -530,7 +533,7 @@ case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "S
   arguments = """
     Arguments:
       * expr - angle in radians
-    """,
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -545,7 +548,7 @@ case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
   arguments = """
     Arguments:
       * expr - hyperbolic angle
-    """,
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -564,13 +567,12 @@ case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT"
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the tangent of `expr`, as if computed by
-      `java.lang.Math._FUNC_`.
+    _FUNC_(expr) - Returns the tangent of `expr`, as if computed by `java.lang.Math._FUNC_`.
   """,
   arguments = """
     Arguments:
       * expr - angle in radians
-    """,
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -580,13 +582,12 @@ case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
 
 @ExpressionDescription(
   usage = """
-    _FUNC_(expr) - Returns the cotangent of `expr`, as if computed by
-      `1/java.lang.Math._FUNC_`.
+    _FUNC_(expr) - Returns the cotangent of `expr`, as if computed by `1/java.lang.Math._FUNC_`.
   """,
   arguments = """
     Arguments:
       * expr - angle in radians
-    """,
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(1);
@@ -607,7 +608,7 @@ case class Cot(child: Expression)
   arguments = """
     Arguments:
       * expr - hyperbolic angle
-    """,
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0);
@@ -620,7 +621,7 @@ case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH"
   arguments = """
     Arguments:
       * expr - angle in radians
-    """,
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(3.141592653589793);
@@ -635,7 +636,7 @@ case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegre
   arguments = """
     Arguments:
       * expr - angle in degrees
-    """,
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(180);
@@ -831,7 +832,7 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
     Arguments:
       * exprY - coordinate on y-axis
       * exprX - coordinate on x-axis
-    """,
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0, 0);
