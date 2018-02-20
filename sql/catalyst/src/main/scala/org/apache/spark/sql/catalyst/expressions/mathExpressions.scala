@@ -259,8 +259,7 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
     _FUNC_(expr) - Returns the cosine of `expr`, as if computed by
       `java.lang.Math._FUNC_`.
   """,
-  arguments =
-    """
+  arguments = """
     Arguments:
       * expr - angle in radians
     """,
@@ -273,8 +272,7 @@ case class Cos(child: Expression) extends UnaryMathExpression(math.cos, "COS")
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the hyperbolic cosine of `expr`.",
-  arguments =
-    """
+  arguments = """
     Arguments:
       * expr - hyperbolic angle.
     """,
@@ -529,8 +527,7 @@ case class Signum(child: Expression) extends UnaryMathExpression(math.signum, "S
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the sine of `expr`, as if computed by `java.lang.Math._FUNC_`.",
-  arguments =
-    """
+  arguments = """
     Arguments:
       * expr - angle in radians
     """,
@@ -543,11 +540,9 @@ case class Sin(child: Expression) extends UnaryMathExpression(math.sin, "SIN")
 
 @ExpressionDescription(
   usage = """
-  _FUNC_(expr) - Returns hyperbolic sine of `expr`, as if computed by
-    `java.lang.Math._FUNC_`.
+    _FUNC_(expr) - Returns hyperbolic sine of `expr`, as if computed by `java.lang.Math._FUNC_`.
   """,
-  arguments =
-    """
+  arguments = """
     Arguments:
       * expr - hyperbolic angle
     """,
@@ -572,8 +567,7 @@ case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT"
     _FUNC_(expr) - Returns the tangent of `expr`, as if computed by
       `java.lang.Math._FUNC_`.
   """,
-  arguments =
-  """
+  arguments = """
     Arguments:
       * expr - angle in radians
     """,
@@ -589,8 +583,7 @@ case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
     _FUNC_(expr) - Returns the cotangent of `expr`, as if computed by
       `1/java.lang.Math._FUNC_`.
   """,
-  arguments =
-    """
+  arguments = """
     Arguments:
       * expr - angle in radians
     """,
@@ -611,8 +604,7 @@ case class Cot(child: Expression)
     _FUNC_(expr) - Returns the hyperbolic tangent of `expr`, as if computed by
       `java.lang.Math._FUNC_`.
   """,
-  arguments =
-    """
+  arguments = """
     Arguments:
       * expr - hyperbolic angle
     """,
@@ -625,8 +617,7 @@ case class Tanh(child: Expression) extends UnaryMathExpression(math.tanh, "TANH"
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Converts radians to degrees.",
-  arguments =
-    """
+  arguments = """
     Arguments:
       * expr - angle in radians
     """,
@@ -641,8 +632,7 @@ case class ToDegrees(child: Expression) extends UnaryMathExpression(math.toDegre
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Converts degrees to radians.",
-  arguments =
-    """
+  arguments = """
     Arguments:
       * expr - angle in degrees
     """,
@@ -837,8 +827,7 @@ case class Unhex(child: Expression) extends UnaryExpression with ImplicitCastInp
       and the point given by the coordinates (`exprX`, `exprY`), as if computed by
       `java.lang.Math._FUNC_`.
   """,
-  arguments =
-    """
+  arguments = """
     Arguments:
       * exprY - coordinate on y-axis
       * exprX - coordinate on x-axis
