@@ -72,27 +72,36 @@ class MicroBatchExecution(
     // Note that we have to use the previous `output` as attributes in StreamingExecutionRelation,
     // since the existing logical plan has already used those attributes. The per-microbatch
     // transformation is responsible for replacing attributes with their final values.
+
+    val disabledSources =
+      sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders.split(",")
+
     val _logicalPlan = analyzedPlan.transform {
-      case streamingRelation@StreamingRelation(dataSource, _, output) =>
+      case streamingRelation@StreamingRelation(dataSourceV1, sourceName, output) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-          val source = dataSource.createSource(metadataPath)
+          val source = dataSourceV1.createSource(metadataPath)
           nextSourceId += 1
+          logInfo(s"Using Source [$source] from DataSourceV1 named '$sourceName' [$dataSourceV1]")
           StreamingExecutionRelation(source, output)(sparkSession)
         })
-      case s @ StreamingRelationV2(source: MicroBatchReadSupport, _, options, output, _) =>
+      case s @ StreamingRelationV2(
+        dataSourceV2: MicroBatchReadSupport, sourceName, options, output, _) if
+          !disabledSources.contains(dataSourceV2.getClass.getCanonicalName) =>
         v2ToExecutionRelationMap.getOrElseUpdate(s, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-          val reader = source.createMicroBatchReader(
+          val reader = dataSourceV2.createMicroBatchReader(
             Optional.empty(), // user specified schema
             metadataPath,
             new DataSourceOptions(options.asJava))
           nextSourceId += 1
+          logInfo(s"Using MicroBatchReader [$reader] from " +
+            s"DataSourceV2 named '$sourceName' [$dataSourceV2]")
           StreamingExecutionRelation(reader, output)(sparkSession)
         })
-      case s @ StreamingRelationV2(_, sourceName, _, output, v1Relation) =>
+      case s @ StreamingRelationV2(dataSourceV2, sourceName, _, output, v1Relation) =>
         v2ToExecutionRelationMap.getOrElseUpdate(s, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
@@ -102,6 +111,7 @@ class MicroBatchExecution(
           }
           val source = v1Relation.get.dataSource.createSource(metadataPath)
           nextSourceId += 1
+          logInfo(s"Using Source [$source] from DataSourceV2 named '$sourceName' [$dataSourceV2]")
           StreamingExecutionRelation(source, output)(sparkSession)
         })
     }

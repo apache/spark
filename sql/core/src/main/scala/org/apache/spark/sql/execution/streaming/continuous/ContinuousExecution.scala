@@ -201,7 +201,7 @@ class ContinuousExecution(
     val withSink = WriteToDataSourceV2(writer, triggerLogicalPlan)
 
     val reader = withSink.collect {
-      case DataSourceV2Relation(_, r: ContinuousReader) => r
+      case StreamingDataSourceV2Relation(_, r: ContinuousReader) => r
     }.head
 
     reportTimeTaken("queryPlanning") {

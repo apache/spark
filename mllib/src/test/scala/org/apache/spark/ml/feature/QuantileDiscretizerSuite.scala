@@ -27,6 +27,8 @@ import org.apache.spark.sql.functions.udf
 class QuantileDiscretizerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import testImplicits._
+
   test("Test observed number of buckets and their sizes match expected values") {
     val spark = this.spark
     import spark.implicits._
@@ -132,7 +134,10 @@ class QuantileDiscretizerSuite
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
       .setNumBuckets(6)
-    testDefaultReadWrite(t)
+
+    val readDiscretizer = testDefaultReadWrite(t)
+    val data = sc.parallelize(1 to 100).map(Tuple1.apply).toDF("myInputCol")
+    readDiscretizer.fit(data)
   }
 
   test("Verify resulting model has parent") {
@@ -379,7 +384,12 @@ class QuantileDiscretizerSuite
       .setInputCols(Array("input1", "input2"))
       .setOutputCols(Array("result1", "result2"))
       .setNumBucketsArray(Array(5, 10))
-    testDefaultReadWrite(discretizer)
+
+    val readDiscretizer = testDefaultReadWrite(discretizer)
+    val data = Seq((1.0, 2.0), (2.0, 3.0), (3.0, 4.0)).toDF("input1", "input2")
+    readDiscretizer.fit(data)
+    assert(discretizer.hasDefault(discretizer.outputCol))
+    assert(readDiscretizer.hasDefault(readDiscretizer.outputCol))
   }
 
   test("Multiple Columns: Both inputCol and inputCols are set") {

@@ -195,7 +195,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   // Tests the latest version of every release line.
-  val testingVersions = Seq("2.0.2", "2.1.2", "2.2.0")
+  val testingVersions = Seq("2.0.2", "2.1.2", "2.2.0", "2.2.1")
 
   protected var spark: SparkSession = _
 
@@ -249,7 +249,7 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
 
       // SPARK-22356: overlapped columns between data and partition schema in data source tables
       val tbl_with_col_overlap = s"tbl_with_col_overlap_$index"
-      // For Spark 2.2.0 and 2.1.x, the behavior is different from Spark 2.0.
+      // For Spark 2.2.0 and 2.1.x, the behavior is different from Spark 2.0, 2.2.1, 2.3+
       if (testingVersions(index).startsWith("2.1") || testingVersions(index) == "2.2.0") {
         spark.sql("msck repair table " + tbl_with_col_overlap)
         assert(spark.table(tbl_with_col_overlap).columns === Array("i", "j", "p"))
