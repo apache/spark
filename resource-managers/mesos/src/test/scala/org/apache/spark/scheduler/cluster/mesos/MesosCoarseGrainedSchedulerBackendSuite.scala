@@ -108,6 +108,28 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verifyTaskLaunched(driver, "o2")
   }
 
+  test("mesos declines offers from blacklisted slave") {
+    setBackend()
+
+    // launches a task on a valid offer on slave s1
+    val minMem = backend.executorMemory(sc) + 1024
+    val minCpu = 4
+    val offer1 = Resources(minMem, minCpu)
+    offerResources(List(offer1))
+    verifyTaskLaunched(driver, "o1")
+
+    // for any reason executor(aka mesos task) failed on s1
+    val status = createTaskStatus("0", "s1", TaskState.TASK_FAILED)
+    backend.statusUpdate(driver, status)
+    when(taskScheduler.nodeBlacklist()).thenReturn(Set("hosts1"))
+
+    val offer2 = Resources(minMem, minCpu)
+    // Offer resources from the same slave
+    offerResources(List(offer2))
+    // but since it's blacklisted the offer is declined
+    verifyDeclinedOffer(driver, createOfferId("o1"))
+  }
+
   test("mesos supports spark.executor.cores") {
     val executorCores = 4
     setBackend(Map("spark.executor.cores" -> executorCores.toString))
@@ -790,6 +812,7 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     taskScheduler = mock[TaskSchedulerImpl]
     when(taskScheduler.sc).thenReturn(sc)
+    when(taskScheduler.nodeBlacklist()).thenReturn(Set[String]())
 
     externalShuffleClient = mock[MesosExternalShuffleClient]
 

@@ -568,6 +568,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpus + totalCoresAcquired <= maxCores &&
       mem <= offerMem &&
       numExecutors < executorLimit &&
+      !scheduler.nodeBlacklist().contains(offerHostname) &&
       meetsPortRequirements &&
       satisfiesLocality(offerHostname)
   }
