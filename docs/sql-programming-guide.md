@@ -1018,7 +1018,7 @@ the vectorized reader is used when `spark.sql.hive.convertMetastoreOrc` is also 
   <tr>
     <td><code>spark.sql.orc.impl</code></td>
     <td><code>hive</code></td>
-    <td>The name of ORC implementation. It can be one of <code>native</code> and <code>hive</code>. <code>native</code> means the native ORC support that is built on Apache ORC 1.4.1. `hive` means the ORC library in Hive 1.2.1.</td>
+    <td>The name of ORC implementation. It can be one of <code>native</code> and <code>hive</code>. <code>native</code> means the native ORC support that is built on Apache ORC 1.4. `hive` means the ORC library in Hive 1.2.1.</td>
   </tr>
   <tr>
     <td><code>spark.sql.orc.enableVectorizedReader</code></td>
@@ -1796,6 +1796,10 @@ working with timestamps in `pandas_udf`s to get the best performance, see
 [here](https://pandas.pydata.org/pandas-docs/stable/timeseries.html) for details.
 
 # Migration Guide
+
+## Upgrading From Spark SQL 2.3 to 2.4
+
+  - Since Spark 2.4, Spark maximizes the usage of a vectorized ORC reader for ORC files by default. To do that, `spark.sql.orc.impl` and `spark.sql.orc.filterPushdown` change their default values to `native` and `true` respectively.
 
 ## Upgrading From Spark SQL 2.2 to 2.3
 
