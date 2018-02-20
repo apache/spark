@@ -925,7 +925,9 @@ specifying the event time column and the threshold on how late the data is expec
 event time. For a specific window starting at time `T`, the engine will maintain state and allow late
 data to update the state until `(max event time seen by the engine - late threshold > T)`. 
 In other words, late data within the threshold will be aggregated, 
-but data later than the threshold will be dropped. Let's understand this with an example. We can 
+but data later than the threshold will start getting dropped
+(see [later]((#semantic-guarantees-of-aggregation-with-watermarking))
+in the section for the exact guarantees). Let's understand this with an example. We can
 easily define watermarking on the previous example using `withWatermark()` as shown below.
 
 <div class="codetabs">
