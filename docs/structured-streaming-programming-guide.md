@@ -2046,7 +2046,7 @@ Here are the different kinds of triggers that are supported.
     <td>
         The query will execute *only one* micro-batch to process all the available data and then
         stop on its own. This is useful in scenarios you want to periodically spin up a cluster,
-        process everything that is available since the last period, and then the shutdown the
+        process everything that is available since the last period, and then shutdown the
         cluster. In some case, this may lead to significant cost savings.
     </td>
   </tr>
@@ -2072,7 +2072,7 @@ df.writeStream
   .format("console")
   .start()
 
-// ProcessingTime trigger with two-second micro-batch interval
+// ProcessingTime trigger with two-seconds micro-batch interval
 df.writeStream
   .format("console")
   .trigger(Trigger.ProcessingTime("2 seconds"))
@@ -2087,7 +2087,7 @@ df.writeStream
 // Continuous trigger with one-second checkpointing interval
 df.writeStream
   .format("console")
-  .trigger(Trigger.Continuous())
+  .trigger(Trigger.Continuous("1 second"))
   .start()
 
 {% endhighlight %}
@@ -2104,7 +2104,7 @@ df.writeStream
   .format("console")
   .start();
 
-// ProcessingTime trigger with two-second micro-batch interval
+// ProcessingTime trigger with two-seconds micro-batch interval
 df.writeStream
   .format("console")
   .trigger(Trigger.ProcessingTime("2 seconds"))
@@ -2119,7 +2119,7 @@ df.writeStream
 // Continuous trigger with one-second checkpointing interval
 df.writeStream
   .format("console")
-  .trigger(Trigger.Continuous())
+  .trigger(Trigger.Continuous("1 second"))
   .start();
 
 {% endhighlight %}
@@ -2134,7 +2134,7 @@ df.writeStream \
   .format("console") \
   .start()
 
-# ProcessingTime trigger with two-second micro-batch interval
+# ProcessingTime trigger with two-seconds micro-batch interval
 df.writeStream \
   .format("console") \
   .trigger(processingTime='2 seconds') \
@@ -2160,7 +2160,7 @@ df.writeStream
 # Default trigger (runs micro-batch as soon as it can)
 write.stream(df, "console")
 
-# ProcessingTime trigger with two-second micro-batch interval
+# ProcessingTime trigger with two-seconds micro-batch interval
 write.stream(df, "console", trigger.processingTime = "2 seconds")
 
 # One-time trigger
