@@ -110,10 +110,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
      * offset of added data.
      */
     def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset)
-
-    def addAllData(query: Option[StreamExecution]): Seq[(BaseStreamingSource, Offset)] = {
-      Seq(addData(query))
-    }
   }
 
   /** A trait that can be extended when testing a source. */
@@ -634,25 +630,24 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                   .map(_._2)
               }
 
-                // Try to find the index of the source to which data was added. Either get the index
-                // from the current active query or the original input logical plan.
-                val sourceIndex =
-                queryToUse.flatMap { query =>
-                  findSourceIndex(query.logicalPlan)
-                }.orElse {
-                  findSourceIndex(stream.logicalPlan)
-                }.orElse {
-                  queryToUse.flatMap { q =>
-                    findSourceIndex(q.lastExecution.logical)
-                  }
-                }.getOrElse {
-                  throw new IllegalArgumentException(
-                    "Could not find index of the source to which data was added")
+              // Try to find the index of the source to which data was added. Either get the index
+              // from the current active query or the original input logical plan.
+              val sourceIndex =
+              queryToUse.flatMap { query =>
+                findSourceIndex(query.logicalPlan)
+              }.orElse {
+                findSourceIndex(stream.logicalPlan)
+              }.orElse {
+                queryToUse.flatMap { q =>
+                  findSourceIndex(q.lastExecution.logical)
                 }
-
-                // Store the expected offset of added data to wait for it later
-                awaiting.put(sourceIndex, offset)
+              }.getOrElse {
+                throw new IllegalArgumentException(
+                  "Could not find index of the source to which data was added")
               }
+
+              // Store the expected offset of added data to wait for it later
+              awaiting.put(sourceIndex, offset)
             } catch {
               case NonFatal(e) =>
                 failTest("Error adding data", e)
