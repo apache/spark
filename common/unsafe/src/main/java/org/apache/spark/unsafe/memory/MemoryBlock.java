@@ -49,7 +49,7 @@ public abstract class MemoryBlock {
 
   protected long offset;
 
-  protected final long length;
+  protected long length;
 
   /**
    * Optional page number; used when this MemoryBlock represents a page allocated by a
