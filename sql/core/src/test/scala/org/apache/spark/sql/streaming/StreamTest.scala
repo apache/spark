@@ -110,6 +110,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
      * offset of added data.
      */
     def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset)
+
+    def addAllData(query: Option[StreamExecution]): Seq[(BaseStreamingSource, Offset)] = {
+      Seq(addData(query))
+    }
   }
 
   /** A trait that can be extended when testing a source. */
@@ -429,7 +433,25 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     val defaultCheckpointLocation =
       Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     try {
-      startedTest.foreach { action =>
+      val actionIterator = startedTest.iterator.buffered
+      while (actionIterator.hasNext) {
+        // Synchronize sequential addDataMemory actions.
+        val addDataMemoryActions = ArrayBuffer[AddDataMemory[_]]()
+        while (actionIterator.hasNext && actionIterator.head.isInstanceOf[AddDataMemory[_]]) {
+          addDataMemoryActions.append(actionIterator.next().asInstanceOf[AddDataMemory[_]])
+        }
+        if (addDataMemoryActions.nonEmpty) {
+          val synchronizeAll = addDataMemoryActions
+            .map(t => t.source.synchronized[Unit] _)
+            .reduce(_.compose(_))
+          synchronizeAll {
+            addDataMemoryActions.foreach(handleAction)
+          }
+        } else {
+          handleAction(actionIterator.next())
+        }
+      }
+      def handleAction: StreamAction => Unit = { action =>
         logInfo(s"Processing test stream action: $action")
         action match {
           case StartStream(trigger, triggerClock, additionalConfs, checkpointLocation) =>
@@ -599,22 +621,23 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
               }
               // Add data
               val queryToUse = Option(currentStream).orElse(Option(lastStream))
-              val (source, offset) = a.addData(queryToUse)
+              a.addAllData(queryToUse).foreach { tuple =>
+                val (source, offset) = tuple
 
-              def findSourceIndex(plan: LogicalPlan): Option[Int] = {
-                plan
-                  .collect {
-                    case StreamingExecutionRelation(s, _) => s
-                    case DataSourceV2Relation(_, r) => r
-                  }
-                  .zipWithIndex
-                  .find(_._1 == source)
-                  .map(_._2)
-              }
+                def findSourceIndex(plan: LogicalPlan): Option[Int] = {
+                  plan
+                    .collect {
+                      case StreamingExecutionRelation(s, _) => s
+                      case DataSourceV2Relation(_, r) => r
+                    }
+                    .zipWithIndex
+                    .find(_._1 == source)
+                    .map(_._2)
+                }
 
-              // Try to find the index of the source to which data was added. Either get the index
-              // from the current active query or the original input logical plan.
-              val sourceIndex =
+                // Try to find the index of the source to which data was added. Either get the index
+                // from the current active query or the original input logical plan.
+                val sourceIndex =
                 queryToUse.flatMap { query =>
                   findSourceIndex(query.logicalPlan)
                 }.orElse {
@@ -628,8 +651,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                     "Could not find index of the source to which data was added")
                 }
 
-              // Store the expected offset of added data to wait for it later
-              awaiting.put(sourceIndex, offset)
+                // Store the expected offset of added data to wait for it later
+                awaiting.put(sourceIndex, offset)
+              }
             } catch {
               case NonFatal(e) =>
                 failTest("Error adding data", e)
