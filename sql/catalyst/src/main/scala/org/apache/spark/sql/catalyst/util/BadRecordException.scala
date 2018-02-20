@@ -23,11 +23,14 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Exception thrown when the underlying parser meet a bad record and can't parse it.
  * @param record a function to return the record that cause the parser to fail
- * @param partialResult a function that returns an optional row, which is the partial result of
+ * @param partialResults a function that returns an optional rows, which is the partial results of
  *                      parsing this bad record.
+ * @param hasErrors a function that returns an optional booleans, which is used to know if a row
+ *                  encounters error when parsing it.
  * @param cause the actual exception about why the record is bad and can't be parsed.
  */
 case class BadRecordException(
     record: () => UTF8String,
-    partialResult: () => Option[InternalRow],
+    partialResults: () => Option[Seq[InternalRow]],
+    hasErrors: () => Option[Seq[Boolean]],
     cause: Throwable) extends Exception(cause)

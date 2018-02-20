@@ -196,9 +196,9 @@ class UnivocityParser(
       } else {
         tokens.take(schema.length)
       }
-      def getPartialResult(): Option[InternalRow] = {
+      def getPartialResult(): Option[Seq[InternalRow]] = {
         try {
-          Some(convert(checkedTokens))
+          Some(convert(checkedTokens) :: Nil)
         } catch {
           case _: BadRecordException => None
         }
@@ -206,6 +206,7 @@ class UnivocityParser(
       throw BadRecordException(
         () => getCurrentInput,
         () => getPartialResult(),
+        () => None,
         new RuntimeException("Malformed CSV record"))
     } else {
       try {
@@ -218,7 +219,7 @@ class UnivocityParser(
         row
       } catch {
         case NonFatal(e) =>
-          throw BadRecordException(() => getCurrentInput, () => None, e)
+          throw BadRecordException(() => getCurrentInput, () => None, () => None, e)
       }
     }
   }
