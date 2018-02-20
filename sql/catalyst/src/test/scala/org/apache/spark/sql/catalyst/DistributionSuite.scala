@@ -206,5 +206,27 @@ class DistributionSuite extends SparkFunSuite {
       OrderedDistribution(Seq('bd.asc, ('a1 + 'c1).asc)),
       false
     )
+
+    checkSatisfied(
+      PartitioningCollection(
+        Seq(
+          RangePartitioning(Seq(('a + 1).asc, ('b + 1).asc), 10),
+          RangePartitioning(Seq(('c - 1).asc, ('d - 1).asc), 10)
+        )
+      ).project(Seq('a.as("a1"), ('b + 1).as("b1"), ('c - 1).as("c1"), 'd.as("d1"))),
+      OrderedDistribution(Seq(('a1 + 1).asc, 'b1.asc)),
+      true
+    )
+
+    checkSatisfied(
+      PartitioningCollection(
+        Seq(
+          RangePartitioning(Seq(('a + 1).asc, ('b + 1).asc), 10),
+          RangePartitioning(Seq(('c - 1).asc, ('d - 1).asc), 10)
+        )
+      ).project(Seq('a.as("a1"), ('b + 1).as("b1"), ('c - 1).as("c1"), 'd.as("d1"))),
+      OrderedDistribution(Seq('c1.asc, ('d1 - 1).asc)),
+      true
+    )
   }
 }
