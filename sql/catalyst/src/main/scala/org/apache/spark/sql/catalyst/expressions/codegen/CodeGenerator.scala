@@ -1243,7 +1243,12 @@ class CodegenContext {
     // flat, see SPARK-15680.
     if (force ||
       SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
-      val name = if (placeholderId != "") placeholderId else freshName("c")
+      val name = if (placeholderId != "") {
+        assert(!placeHolderToComments.contains(placeholderId))
+        placeholderId
+      } else {
+        freshName("c")
+      }
       val comment = if (text.contains("\n") || text.contains("\r")) {
         text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
       } else {
