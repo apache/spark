@@ -32,18 +32,21 @@ private case object TeradataDialect extends JdbcDialect {
     case _ => None
   }
 
+  // Teradata does not support cascading a truncation
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   /**
-   * The SQL query used to truncate a table.
+   * The SQL query used to truncate a table. Teradata does not support the 'TRUNCATE' syntax that
+   * other dialects use. Instead, we need to use a 'DELETE FROM' statement.
    * @param table The table to truncate.
    * @param cascade Whether or not to cascade the truncation. Default value is the
-   *                value of isCascadingTruncateTable(). Ignored for Teradata as it is unsupported
+   *                value of isCascadingTruncateTable(). Teradata does not support cascading a
+   *                'DELETE FROM' statement (and as mentioned, does not support 'TRUNCATE' syntax)
    * @return The SQL query to use for truncating a table
    */
   override def getTruncateQuery(
       table: String,
       cascade: Option[Boolean] = isCascadingTruncateTable): String = {
-    s"TRUNCATE TABLE $table"
+    s"DELETE FROM $table ALL"
   }
 }

@@ -684,17 +684,17 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("quote column names by jdbc dialect") {
-    val mysql = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
-    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
-    val derby = JdbcDialects.get("jdbc:derby:db")
+    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val Derby = JdbcDialects.get("jdbc:derby:db")
 
     val columns = Seq("abc", "key")
-    val mySQLColumns = columns.map(mysql.quoteIdentifier(_))
-    val postgresColumns = columns.map(postgres.quoteIdentifier(_))
-    val derbyColumns = columns.map(derby.quoteIdentifier(_))
-    assert(mySQLColumns === Seq("`abc`", "`key`"))
-    assert(postgresColumns === Seq(""""abc"""", """"key""""))
-    assert(derbyColumns === Seq(""""abc"""", """"key""""))
+    val MySQLColumns = columns.map(MySQL.quoteIdentifier(_))
+    val PostgresColumns = columns.map(Postgres.quoteIdentifier(_))
+    val DerbyColumns = columns.map(Derby.quoteIdentifier(_))
+    assert(MySQLColumns === Seq("`abc`", "`key`"))
+    assert(PostgresColumns === Seq(""""abc"""", """"key""""))
+    assert(DerbyColumns === Seq(""""abc"""", """"key""""))
   }
 
   test("compile filters") {
@@ -805,13 +805,13 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("PostgresDialect type mapping") {
-    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
-    assert(postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
-    assert(postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
-    assert(postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
-    assert(postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "json", 1, null) === Some(StringType))
+    assert(Postgres.getCatalystType(java.sql.Types.OTHER, "jsonb", 1, null) === Some(StringType))
+    assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
+    assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     val errMsg = intercept[IllegalArgumentException] {
-      postgres.getJDBCType(ByteType)
+      Postgres.getJDBCType(ByteType)
     }
     assert(errMsg.getMessage contains "Unsupported type in postgresql: ByteType")
   }
@@ -839,16 +839,16 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("table exists query by jdbc dialect") {
-    val mysql = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
-    val postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+    val MySQL = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
     val db2 = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
     val h2 = JdbcDialects.get(url)
     val derby = JdbcDialects.get("jdbc:derby:db")
     val table = "weblogs"
     val defaultQuery = s"SELECT * FROM $table WHERE 1=0"
     val limitQuery = s"SELECT 1 FROM $table LIMIT 1"
-    assert(mysql.getTableExistsQuery(table) == limitQuery)
-    assert(postgres.getTableExistsQuery(table) == limitQuery)
+    assert(MySQL.getTableExistsQuery(table) == limitQuery)
+    assert(Postgres.getTableExistsQuery(table) == limitQuery)
     assert(db2.getTableExistsQuery(table) == defaultQuery)
     assert(h2.getTableExistsQuery(table) == defaultQuery)
     assert(derby.getTableExistsQuery(table) == defaultQuery)
@@ -861,18 +861,20 @@ class JDBCSuite extends SparkFunSuite
     val h2 = JdbcDialects.get(url)
     val derby = JdbcDialects.get("jdbc:derby:db")
     val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
-
+    val teradata = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
 
     val table = "weblogs"
     val defaultQuery = s"TRUNCATE TABLE $table"
     val postgresQuery = s"TRUNCATE TABLE ONLY $table"
+    val teradataQuery = s"DELETE FROM $table ALL"
 
-    assert(mysql.getTruncateQuery(table) == defaultQuery)
+    Seq(mysql, db2, h2, derby).foreach{ dialect =>
+      assert(dialect.getTruncateQuery(table, Some(true)) == defaultQuery)
+    }
+
     assert(postgres.getTruncateQuery(table) == postgresQuery)
-    assert(db2.getTruncateQuery(table) == defaultQuery)
-    assert(h2.getTruncateQuery(table) == defaultQuery)
-    assert(derby.getTruncateQuery(table) == defaultQuery)
     assert(oracle.getTruncateQuery(table) == defaultQuery)
+    assert(teradata.getTruncateQuery(table) == teradataQuery)
   }
 
   test("SPARK-22880: Truncate table with CASCADE by jdbc dialect") {
@@ -890,14 +892,14 @@ class JDBCSuite extends SparkFunSuite
     val defaultQuery = s"TRUNCATE TABLE $table"
     val postgresQuery = s"TRUNCATE TABLE ONLY $table CASCADE"
     val oracleQuery = s"TRUNCATE TABLE $table CASCADE"
+    val teradataQuery = s"DELETE FROM $table ALL"
 
-    assert(mysql.getTruncateQuery(table, Some(true)) == defaultQuery)
+    Seq(mysql, db2, h2, derby).foreach{ dialect =>
+      assert(dialect.getTruncateQuery(table, Some(true)) == defaultQuery)
+    }
     assert(postgres.getTruncateQuery(table, Some(true)) == postgresQuery)
-    assert(db2.getTruncateQuery(table, Some(true)) == defaultQuery)
-    assert(h2.getTruncateQuery(table, Some(true)) == defaultQuery)
-    assert(derby.getTruncateQuery(table, Some(true)) == defaultQuery)
     assert(oracle.getTruncateQuery(table, Some(true)) == oracleQuery)
-    assert(teradata.getTruncateQuery(table, Some(true)) == defaultQuery)
+    assert(teradata.getTruncateQuery(table, Some(true)) == teradataQuery)
   }
 
   test("Test DataFrame.where for Date and Timestamp") {

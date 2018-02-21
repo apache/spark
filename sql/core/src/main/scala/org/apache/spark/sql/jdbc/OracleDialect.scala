@@ -111,5 +111,4 @@ private case object OracleDialect extends JdbcDialect {
       case _ => s"TRUNCATE TABLE $table"
     }
   }
-
 }

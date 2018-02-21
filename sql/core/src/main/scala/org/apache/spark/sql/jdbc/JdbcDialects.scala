@@ -144,7 +144,6 @@ abstract class JdbcDialect extends Serializable {
     s"TRUNCATE TABLE $table"
   }
 
-
   /**
    * Override connection specific properties to run before a select is made.  This is in place to
    * allow dialects that need special treatment to optimize behavior.
