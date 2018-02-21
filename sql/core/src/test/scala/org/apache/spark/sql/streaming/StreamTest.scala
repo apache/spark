@@ -102,6 +102,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       AddDataMemory(source, data)
   }
 
+  /**
+   * Adds data to multiple memory streams such that all the data will be made visible in the
+   * same batch. This is applicable only to MicroBatchExecution, as this coordination cannot be
+   * performed at the driver in ContinuousExecutions.
+   */
   object MultiAddData {
     def apply[A]
       (source1: MemoryStream[A], data1: A*)(source2: MemoryStream[A], data2: A*): StreamAction = {
@@ -225,6 +230,11 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       s"ExpectFailure[${causeClass.getName}, isFatalError: $isFatalError]"
   }
 
+  /**
+   * Performs multiple actions while locking the stream from progressing.
+   * This is applicable only to MicroBatchExecution, as progress of ContinuousExecution
+   * cannot be controlled from the driver.
+   */
   case class StreamProgressLockedActions(actions: Seq[StreamAction], desc: String = null)
     extends StreamAction {
 
@@ -444,7 +454,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       }
     }
 
-    def performAction(action: StreamAction): Unit = {
+    def executeAction(action: StreamAction): Unit = {
       logInfo(s"Processing test stream action: $action")
       action match {
         case StartStream(trigger, triggerClock, additionalConfs, checkpointLocation) =>
@@ -681,11 +691,17 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
 
     try {
       startedTest.foreach {
-        case StreamProgressLockedActions(actions, _) =>
+        case StreamProgressLockedActions(actns, _) =>
+          // Perform actions while holding the stream from progressing
           assert(currentStream != null,
-            s"Cannot perform stream-progress-locked actions $actions when query is inactive")
-          currentStream.withProgressLocked { actions.foreach(performAction) }
-        case action: StreamAction => performAction(action)
+            s"Cannot perform stream-progress-locked actions $actns when query is not active")
+          assert(currentStream.isInstanceOf[MicroBatchExecution],
+            s"Cannot perform stream-progress-locked actions on non-microbatch queries")
+          currentStream.asInstanceOf[MicroBatchExecution].withProgressLocked {
+            actns.foreach(executeAction)
+          }
+
+        case action: StreamAction => executeAction(action)
       }
       if (streamThreadDeathCause != null) {
         failTest("Stream Thread Died", streamThreadDeathCause)

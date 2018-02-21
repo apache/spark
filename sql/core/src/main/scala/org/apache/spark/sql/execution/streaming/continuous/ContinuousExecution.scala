@@ -285,7 +285,7 @@ class ContinuousExecution(
     awaitProgressLock.lock()
     try {
       val globalOffset = reader.mergeOffsets(partitionOffsets.toArray)
-      val oldOffset = synchronized {
+      val oldOffset = {
         offsetLog.add(epoch, OffsetSeq.fill(globalOffset))
         offsetLog.get(epoch - 1)
       }
