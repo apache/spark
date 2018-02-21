@@ -441,7 +441,14 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
   }
 
   test("secret key generation") {
-    Seq("yarn", "local[*]").foreach { master =>
+    Seq(
+      ("yarn", true),
+      ("local", true),
+      ("local[*]", true),
+      ("local[1,2]", true),
+      ("local-cluster[2, 1, 1024]", false),
+      ("invalid", false)
+    ).foreach { case (master, shouldGenerateSecret) =>
       val conf = new SparkConf()
         .set(NETWORK_AUTH_ENABLED, true)
         .set(SparkLauncher.SPARK_MASTER, master)
@@ -450,11 +457,20 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
       UserGroupInformation.createUserForTesting("authTest", Array()).doAs(
         new PrivilegedExceptionAction[Unit]() {
           override def run(): Unit = {
-            mgr.initializeAuth()
-            val creds = UserGroupInformation.getCurrentUser().getCredentials()
-            val secret = creds.getSecretKey(SecurityManager.SECRET_LOOKUP_KEY)
-            assert(secret != null)
-            assert(new String(secret, UTF_8) === mgr.getSecretKey())
+            if (shouldGenerateSecret) {
+              mgr.initializeAuth()
+              val creds = UserGroupInformation.getCurrentUser().getCredentials()
+              val secret = creds.getSecretKey(SecurityManager.SECRET_LOOKUP_KEY)
+              assert(secret != null)
+              assert(new String(secret, UTF_8) === mgr.getSecretKey())
+            } else {
+              intercept[IllegalArgumentException] {
+                mgr.initializeAuth()
+              }
+              intercept[IllegalArgumentException] {
+                mgr.getSecretKey()
+              }
+            }
           }
         }
       )

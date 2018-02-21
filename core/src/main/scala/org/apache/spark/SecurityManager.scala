@@ -525,15 +525,20 @@ private[spark] class SecurityManager(
    * In other modes, assert that the auth secret is set in the configuration.
    */
   def initializeAuth(): Unit = {
+    import SparkMasterRegex._
+
     if (!sparkConf.get(NETWORK_AUTH_ENABLED)) {
       return
     }
 
     val master = sparkConf.get(SparkLauncher.SPARK_MASTER, "")
-    if (master != "yarn" && !master.startsWith("local")) {
-      require(sparkConf.contains(SPARK_AUTH_SECRET_CONF),
-        s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config.")
-      return
+    master match {
+      case "yarn" | "local" | LOCAL_N_REGEX(_) | LOCAL_N_FAILURES_REGEX(_, _) =>
+        // Secret generation allowed here
+      case _ =>
+        require(sparkConf.contains(SPARK_AUTH_SECRET_CONF),
+          s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config.")
+        return
     }
 
     val rnd = new SecureRandom()
