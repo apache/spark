@@ -440,23 +440,25 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
     assert(keyFromEnv === new SecurityManager(conf2).getSecretKey())
   }
 
-  test("secret key generation in yarn mode") {
-    val conf = new SparkConf()
-      .set(NETWORK_AUTH_ENABLED, true)
-      .set(SparkLauncher.SPARK_MASTER, "yarn")
-    val mgr = new SecurityManager(conf)
+  test("secret key generation") {
+    Seq("yarn", "local[*]").foreach { master =>
+      val conf = new SparkConf()
+        .set(NETWORK_AUTH_ENABLED, true)
+        .set(SparkLauncher.SPARK_MASTER, master)
+      val mgr = new SecurityManager(conf)
 
-    UserGroupInformation.createUserForTesting("authTest", Array()).doAs(
-      new PrivilegedExceptionAction[Unit]() {
-        override def run(): Unit = {
-          mgr.initializeAuth()
-          val creds = UserGroupInformation.getCurrentUser().getCredentials()
-          val secret = creds.getSecretKey(SecurityManager.SECRET_LOOKUP_KEY)
-          assert(secret != null)
-          assert(new String(secret, UTF_8) === mgr.getSecretKey())
+      UserGroupInformation.createUserForTesting("authTest", Array()).doAs(
+        new PrivilegedExceptionAction[Unit]() {
+          override def run(): Unit = {
+            mgr.initializeAuth()
+            val creds = UserGroupInformation.getCurrentUser().getCredentials()
+            val secret = creds.getSecretKey(SecurityManager.SECRET_LOOKUP_KEY)
+            assert(secret != null)
+            assert(new String(secret, UTF_8) === mgr.getSecretKey())
+          }
         }
-      }
-    )
+      )
+    }
   }
 
 }
