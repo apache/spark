@@ -2125,4 +2125,21 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
   }
+
+
+  test("specified charset is not matched to actual charset") {
+    val fileName = "json-tests/utf16LE.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val exception = intercept[SparkException] {
+      spark.read.schema(schema)
+        .option("mode", "FAILFAST")
+        .option("multiline", "true")
+        .option("charset", "UTF-16BE")
+        .json(testFile(fileName))
+        .count()
+    }
+    val errMsg = exception.getMessage
+
+    assert(errMsg.contains("Malformed records are detected in record parsing"))
+  }
 }
