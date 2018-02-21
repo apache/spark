@@ -49,5 +49,5 @@ public interface DataWriterFactory<T> extends Serializable {
    *                      tasks with the same task id running at the same time. Implementations can
    *                      use this attempt number to distinguish writers of different task attempts.
    */
-  DataWriter<T> createDataWriter(int partitionId, int attemptNumber);
+  DataWriter<T> createDataWriter(int partitionId, int attemptNumber, long epochId);
 }

@@ -469,6 +469,9 @@ class MicroBatchExecution(
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
 
+    sparkSessionToRunBatch.sparkContext.setLocalProperty(
+      MicroBatchExecution.BATCH_ID_KEY, currentBatchId.toString)
+
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
         sparkSessionToRunBatch,
@@ -517,4 +520,8 @@ class MicroBatchExecution(
   private def toJava(scalaOption: Option[OffsetV2]): Optional[OffsetV2] = {
     Optional.ofNullable(scalaOption.orNull)
   }
+}
+
+object MicroBatchExecution {
+  val BATCH_ID_KEY = "streaming.sql.batchId"
 }
