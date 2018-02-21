@@ -306,7 +306,9 @@ private class CompactedKafkaRDDIterator[K, V](
   override def hasNext(): Boolean = okNext
 
   override def next(): ConsumerRecord[K, V] = {
-    assert(hasNext, "Can't call getNext() once untilOffset has been reached")
+    if (!hasNext) {
+      throw new ju.NoSuchElementException("Can't call getNext() once untilOffset has been reached")
+    }
     val r = nextRecord
     if (r.offset + 1 >= part.untilOffset) {
       okNext = false
