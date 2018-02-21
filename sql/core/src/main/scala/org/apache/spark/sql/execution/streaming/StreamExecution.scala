@@ -543,6 +543,15 @@ abstract class StreamExecution(
     Option(name).map(_ + "<br/>").getOrElse("") +
       s"id = $id<br/>runId = $runId<br/>batch = $batchDescription"
   }
+
+  private[sql] def withProgressLocked(f: => Unit): Unit = {
+    awaitProgressLock.lock()
+    try {
+      f
+    } finally {
+      awaitProgressLock.unlock()
+    }
+  }
 }
 
 object StreamExecution {
