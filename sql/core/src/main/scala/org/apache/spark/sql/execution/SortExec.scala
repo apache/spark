@@ -84,7 +84,7 @@ case class SortExec(
     }
 
     val pageSize = SparkEnv.get.memoryManager.pageSizeBytes
-    val sorter = new UnsafeExternalRowSorter(
+    val sorter = UnsafeExternalRowSorter.create(
       schema, ordering, prefixComparator, prefixComputer, pageSize, canUseRadixSort)
 
     if (testSpillFrequency > 0) {
@@ -138,7 +138,7 @@ case class SortExec(
     // Initialize the class member variables. This includes the instance of the Sorter and
     // the iterator to return sorted rows.
     val thisPlan = ctx.addReferenceObj("plan", this)
-    // inline mutable state since not many Sort operations in a task
+    // Inline mutable state since not many Sort operations in a task
     sorterVariable = ctx.addMutableState(classOf[UnsafeExternalRowSorter].getName, "sorter",
       v => s"$v = $thisPlan.createSorter();", forceInline = true)
     val metrics = ctx.addMutableState(classOf[TaskMetrics].getName, "metrics",

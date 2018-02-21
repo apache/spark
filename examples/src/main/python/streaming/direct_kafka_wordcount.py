@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""
+r"""
  Counts words in UTF8 encoded, '\n' delimited text directly received from Kafka in every 2 seconds.
  Usage: direct_kafka_wordcount.py <broker_list> <topic>
 

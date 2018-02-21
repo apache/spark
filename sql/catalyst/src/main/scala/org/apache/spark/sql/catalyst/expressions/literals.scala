@@ -58,7 +58,7 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(UTF8String.fromString(s), StringType)
     case b: Boolean => Literal(b, BooleanType)
-    case d: BigDecimal => Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale))
+    case d: BigDecimal => Literal(Decimal(d), DecimalType.fromBigDecimal(d))
     case d: JavaBigDecimal =>
       Literal(Decimal(d), DecimalType(Math.max(d.precision, d.scale), d.scale()))
     case d: Decimal => Literal(d, DecimalType(Math.max(d.precision, d.scale), d.scale))
@@ -278,40 +278,45 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
-    // change the isNull and primitive to consts, to inline them
     if (value == null) {
-      ev.isNull = LiteralValue("true")
-      ev.copy(s"final $javaType ${ev.value} = ${ctx.defaultValue(dataType)};")
+      val defaultValueLiteral = ctx.defaultValue(javaType) match {
+        case "null" => s"(($javaType)null)"
+        case lit => lit
+      }
+      ExprCode(code = "", isNull = LiteralValue("true"), value = LiteralValue(defaultValueLiteral))
     } else {
-      ev.isNull = LiteralValue("false")
       dataType match {
         case BooleanType | IntegerType | DateType =>
-          ev.copy(code = "", value = LiteralValue(value.toString))
+          ExprCode.forNonNullValue(LiteralValue(value.toString))
         case FloatType =>
-          val v = value.asInstanceOf[Float]
-          if (v.isNaN || v.isInfinite) {
-            val boxedValue = ctx.addReferenceObj("boxedValue", v)
-            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
-            ev.copy(code = code)
-          } else {
-            ev.copy(code = "", value = LiteralValue(s"${value}f"))
+          value.asInstanceOf[Float] match {
+            case v if v.isNaN =>
+              ExprCode.forNonNullValue(LiteralValue("Float.NaN"))
+            case Float.PositiveInfinity =>
+              ExprCode.forNonNullValue(LiteralValue("Float.POSITIVE_INFINITY"))
+            case Float.NegativeInfinity =>
+              ExprCode.forNonNullValue(LiteralValue("Float.NEGATIVE_INFINITY"))
+            case _ =>
+              ExprCode.forNonNullValue(LiteralValue(s"${value}F"))
           }
         case DoubleType =>
-          val v = value.asInstanceOf[Double]
-          if (v.isNaN || v.isInfinite) {
-            val boxedValue = ctx.addReferenceObj("boxedValue", v)
-            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
-            ev.copy(code = code)
-          } else {
-            ev.copy(code = "", value = LiteralValue(s"${value}D"))
+          value.asInstanceOf[Double] match {
+            case v if v.isNaN =>
+              ExprCode.forNonNullValue(LiteralValue("Double.NaN"))
+            case Double.PositiveInfinity =>
+              ExprCode.forNonNullValue(LiteralValue("Double.POSITIVE_INFINITY"))
+            case Double.NegativeInfinity =>
+              ExprCode.forNonNullValue(LiteralValue("Double.NEGATIVE_INFINITY"))
+            case _ =>
+              ExprCode.forNonNullValue(LiteralValue(s"${value}D"))
           }
         case ByteType | ShortType =>
-          ev.copy(code = "", value = LiteralValue(s"($javaType)$value"))
+          ExprCode.forNonNullValue(LiteralValue(s"($javaType)$value"))
         case TimestampType | LongType =>
-          ev.copy(code = "", value = LiteralValue(s"${value}L"))
+          ExprCode.forNonNullValue(LiteralValue(s"${value}L"))
         case _ =>
-          ev.copy(code = "", value = GlobalValue(ctx.addReferenceObj("literal", value,
-            ctx.javaType(dataType))))
+          val constRef = ctx.addReferenceObj("literal", value, javaType)
+          ExprCode.forNonNullValue(GlobalValue(constRef))
       }
     }
   }

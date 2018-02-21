@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""
+r"""
  Use DataFrames and SQL to count words in UTF8 encoded, '\n' delimited text received from the
  network every second.
 

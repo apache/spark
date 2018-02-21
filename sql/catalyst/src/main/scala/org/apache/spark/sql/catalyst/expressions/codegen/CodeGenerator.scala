@@ -67,8 +67,13 @@ object ExprValue {
 }
 
 // A literal evaluation of [[ExprCode]].
-case class LiteralValue(val value: String) extends ExprValue {
+class LiteralValue(val value: String) extends ExprValue {
   override def toString: String = value
+}
+
+object LiteralValue {
+  def apply(value: String): LiteralValue = new LiteralValue(value)
+  def unapply(literal: LiteralValue): Option[String] = Some(literal.value)
 }
 
 // A variable evaluation of [[ExprCode]].
@@ -86,6 +91,14 @@ case class GlobalValue(val value: String) extends ExprValue {
   override def toString: String = value
 }
 
+case object TrueLiteral extends LiteralValue("true")
+case object FalseLiteral extends LiteralValue("false")
+
+object ExprCode {
+  def forNonNullValue(value: ExprValue): ExprCode = {
+    ExprCode(code = "", isNull = FalseLiteral, value = value)
+  }
+}
 
 /**
  * State used for subexpression elimination.
@@ -219,7 +232,7 @@ class CodegenContext {
 
     /**
      * Returns the reference of next available slot in current compacted array. The size of each
-     * compacted array is controlled by the config `CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT`.
+     * compacted array is controlled by the constant `CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT`.
      * Once reaching the threshold, new compacted array is created.
      */
     def getNextSlot(): String = {
@@ -235,6 +248,14 @@ class CodegenContext {
     }
 
   }
+
+  /**
+   * A map containing the mutable states which have been defined so far using
+   * `addImmutableStateIfNotExists`. Each entry contains the name of the mutable state as key and
+   * its Java type and init code as value.
+   */
+  private val immutableStates: mutable.Map[String, (String, String)] =
+    mutable.Map.empty[String, (String, String)]
 
   /**
    * Add a mutable state as a field to the generated class. c.f. the comments above.
@@ -295,6 +316,38 @@ class CodegenContext {
   }
 
   /**
+   * Add an immutable state as a field to the generated class only if it does not exist yet a field
+   * with that name. This helps reducing the number of the generated class' fields, since the same
+   * variable can be reused by many functions.
+   *
+   * Even though the added variables are not declared as final, they should never be reassigned in
+   * the generated code to prevent errors and unexpected behaviors.
+   *
+   * Internally, this method calls `addMutableState`.
+   *
+   * @param javaType Java type of the field.
+   * @param variableName Name of the field.
+   * @param initFunc Function includes statement(s) to put into the init() method to initialize
+   *                 this field. The argument is the name of the mutable state variable.
+   */
+  def addImmutableStateIfNotExists(
+      javaType: String,
+      variableName: String,
+      initFunc: String => String = _ => ""): Unit = {
+    val existingImmutableState = immutableStates.get(variableName)
+    if (existingImmutableState.isEmpty) {
+      addMutableState(javaType, variableName, initFunc, useFreshName = false, forceInline = true)
+      immutableStates(variableName) = (javaType, initFunc(variableName))
+    } else {
+      val (prevJavaType, prevInitCode) = existingImmutableState.get
+      assert(prevJavaType == javaType, s"$variableName has already been defined with type " +
+        s"$prevJavaType and now it is tried to define again with type $javaType.")
+      assert(prevInitCode == initFunc(variableName), s"$variableName has already been defined " +
+        s"with different initialization statements.")
+    }
+  }
+
+  /**
    * Add buffer variable which stores data coming from an [[InternalRow]]. This methods guarantees
    * that the variable is safely stored, which is important for (potentially) byte array backed
    * data types like: UTF8String, ArrayData, MapData & InternalRow.
@@ -341,7 +394,7 @@ class CodegenContext {
   def initMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    val initCodes = mutableStateInitCode.distinct
+    val initCodes = mutableStateInitCode.distinct.map(_ + "\n")
 
     // The generated initialization code may exceed 64kb function size limit in JVM if there are too
     // many mutable states, so split it into multiple functions.
@@ -677,17 +730,13 @@ class CodegenContext {
   /**
    * Returns the specialized code to access a value from a column vector for a given `DataType`.
    */
-  def getValue(vector: String, rowId: String, dataType: DataType): String = {
-    val jt = javaType(dataType)
-    dataType match {
-      case _ if isPrimitiveType(jt) =>
-        s"$vector.get${primitiveTypeName(jt)}($rowId)"
-      case t: DecimalType =>
-        s"$vector.getDecimal($rowId, ${t.precision}, ${t.scale})"
-      case StringType =>
-        s"$vector.getUTF8String($rowId)"
-      case _ =>
-        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+  def getValueFromVector(vector: String, dataType: DataType, rowId: String): String = {
+    if (dataType.isInstanceOf[StructType]) {
+      // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
+      // `ordinal` parameter.
+      s"$vector.getStruct($rowId)"
+    } else {
+      getValue(vector, dataType, rowId)
     }
   }
 
@@ -1219,14 +1268,29 @@ class CodegenContext {
 
   /**
    * Register a comment and return the corresponding place holder
+   *
+   * @param placeholderId an optionally specified identifier for the comment's placeholder.
+   *                      The caller should make sure this identifier is unique within the
+   *                      compilation unit. If this argument is not specified, a fresh identifier
+   *                      will be automatically created and used as the placeholder.
+   * @param force whether to force registering the comments
    */
-  def registerComment(text: => String): String = {
+   def registerComment(
+       text: => String,
+       placeholderId: String = "",
+       force: Boolean = false): String = {
     // By default, disable comments in generated code because computing the comments themselves can
     // be extremely expensive in certain cases, such as deeply-nested expressions which operate over
     // inputs with wide schemas. For more details on the performance issues that motivated this
     // flat, see SPARK-15680.
-    if (SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
-      val name = freshName("c")
+    if (force ||
+      SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
+      val name = if (placeholderId != "") {
+        assert(!placeHolderToComments.contains(placeholderId))
+        placeholderId
+      } else {
+        freshName("c")
+      }
       val comment = if (text.contains("\n") || text.contains("\r")) {
         text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
       } else {
@@ -1237,6 +1301,31 @@ class CodegenContext {
     } else {
       ""
     }
+  }
+
+  /**
+   * Returns the length of parameters for a Java method descriptor. `this` contributes one unit
+   * and a parameter of type long or double contributes two units. Besides, for nullable parameter,
+   * we also need to pass a boolean parameter for the null status.
+   */
+  def calculateParamLength(params: Seq[Expression]): Int = {
+    def paramLengthForExpr(input: Expression): Int = {
+      // For a nullable expression, we need to pass in an extra boolean parameter.
+      (if (input.nullable) 1 else 0) + javaType(input.dataType) match {
+        case JAVA_LONG | JAVA_DOUBLE => 2
+        case _ => 1
+      }
+    }
+    // Initial value is 1 for `this`.
+    1 + params.map(paramLengthForExpr(_)).sum
+  }
+
+  /**
+   * In Java, a method descriptor is valid only if it represents method parameters with a total
+   * length less than a pre-defined constant.
+   */
+  def isValidParamLength(paramLength: Int): Boolean = {
+    paramLength <= CodeGenerator.MAX_JVM_METHOD_PARAMS_LENGTH
   }
 }
 
@@ -1304,26 +1393,29 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 object CodeGenerator extends Logging {
 
   // This is the value of HugeMethodLimit in the OpenJDK JVM settings
-  val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
+  final val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
+
+  // The max valid length of method parameters in JVM.
+  final val MAX_JVM_METHOD_PARAMS_LENGTH = 255
 
   // This is the threshold over which the methods in an inner class are grouped in a single
   // method which is going to be called by the outer class instead of the many small ones
-  val MERGE_SPLIT_METHODS_THRESHOLD = 3
+  final val MERGE_SPLIT_METHODS_THRESHOLD = 3
 
   // The number of named constants that can exist in the class is limited by the Constant Pool
   // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a
   // threshold of 1000k bytes to determine when a function should be inlined to a private, inner
   // class.
-  val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
+  final val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
 
   // This is the threshold for the number of global variables, whose types are primitive type or
   // complex type (e.g. more than one-dimensional array), that will be placed at the outer class
-  val OUTER_CLASS_VARIABLES_THRESHOLD = 10000
+  final val OUTER_CLASS_VARIABLES_THRESHOLD = 10000
 
   // This is the maximum number of array elements to keep global variables in one Java array
   // 32767 is the maximum integer value that does not require a constant pool entry in a Java
   // bytecode instruction
-  val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
+  final val MUTABLESTATEARRAY_SIZE_LIMIT = 32768
 
   /**
    * Compile the Java source code into a Java class, using Janino.

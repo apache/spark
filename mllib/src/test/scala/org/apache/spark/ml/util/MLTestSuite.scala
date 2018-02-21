@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.util
 
-import org.apache.spark.ml.{PipelineModel, Transformer}
 import org.apache.spark.ml.feature.StringIndexer
 import org.apache.spark.sql.Row
 
@@ -32,15 +31,24 @@ class MLTestSuite extends MLTest {
     val indexer = new StringIndexer().setStringOrderType("alphabetAsc")
       .setInputCol("label").setOutputCol("indexed")
     val indexerModel = indexer.fit(data)
-    testTransformerOnStreamData[(Int, String)](data, indexerModel, "id", "indexed") {
+    testTransformer[(Int, String)](data, indexerModel, "id", "indexed") {
       case Row(id: Int, indexed: Double) =>
         assert(id === indexed.toInt)
+    }
+    testTransformerByGlobalCheckFunc[(Int, String)] (data, indexerModel, "id", "indexed") { rows =>
+      assert(rows.map(_.getDouble(1)).max === 5.0)
     }
 
     intercept[Exception] {
       testTransformerOnStreamData[(Int, String)](data, indexerModel, "id", "indexed") {
         case Row(id: Int, indexed: Double) =>
           assert(id != indexed.toInt)
+      }
+    }
+    intercept[Exception] {
+      testTransformerOnStreamData[(Int, String)](data, indexerModel, "id", "indexed") {
+        rows: Seq[Row] =>
+          assert(rows.map(_.getDouble(1)).max === 1.0)
       }
     }
   }

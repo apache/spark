@@ -31,7 +31,6 @@ import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
-import org.apache.spark.sql.execution.vectorized.ColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
@@ -96,7 +95,7 @@ public class VectorizedColumnReader {
   private final OriginalType originalType;
   // The timezone conversion to apply to int96 timestamps. Null if no conversion.
   private final TimeZone convertTz;
-  private final static TimeZone UTC = DateTimeUtils.TimeZoneUTC();
+  private static final TimeZone UTC = DateTimeUtils.TimeZoneUTC();
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
@@ -445,7 +444,8 @@ public class VectorizedColumnReader {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
-    if (column.dataType() == DataTypes.StringType || column.dataType() == DataTypes.BinaryType) {
+    if (column.dataType() == DataTypes.StringType || column.dataType() == DataTypes.BinaryType
+            || DecimalType.isByteArrayDecimalType(column.dataType())) {
       defColumn.readBinarys(num, column, rowId, maxDefLevel, data);
     } else if (column.dataType() == DataTypes.TimestampType) {
       if (!shouldConvertTimestamps()) {

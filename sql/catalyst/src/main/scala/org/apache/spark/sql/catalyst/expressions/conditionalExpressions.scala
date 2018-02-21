@@ -40,7 +40,8 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   override def checkInputDataTypes(): TypeCheckResult = {
     if (predicate.dataType != BooleanType) {
       TypeCheckResult.TypeCheckFailure(
-        s"type of predicate expression in If should be boolean, not ${predicate.dataType}")
+        "type of predicate expression in If should be boolean, " +
+          s"not ${predicate.dataType.simpleString}")
     } else if (!trueValue.dataType.sameType(falseValue.dataType)) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
         s"(${trueValue.dataType.simpleString} and ${falseValue.dataType.simpleString}).")

@@ -33,6 +33,19 @@ import org.apache.spark.util.Utils
 class FileStreamSinkSuite extends StreamTest {
   import testImplicits._
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.sessionState.conf.setConf(SQLConf.ORC_IMPLEMENTATION, "native")
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      spark.sessionState.conf.unsetConf(SQLConf.ORC_IMPLEMENTATION)
+    } finally {
+      super.afterAll()
+    }
+  }
+
   test("unpartitioned writing and batch reading") {
     val inputData = MemoryStream[Int]
     val df = inputData.toDF()
@@ -81,7 +94,7 @@ class FileStreamSinkSuite extends StreamTest {
       .start(outputDir)
 
     try {
-      // The output is partitoned by "value", so the value will appear in the file path.
+      // The output is partitioned by "value", so the value will appear in the file path.
       // This is to test if we handle spaces in the path correctly.
       inputData.addData("hello world")
       failAfter(streamingTimeout) {

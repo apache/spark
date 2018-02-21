@@ -53,12 +53,12 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     }
   }
 
-  def testTransformerOnStreamData[A : Encoder](
+  private[util] def testTransformerOnStreamData[A : Encoder](
       dataframe: DataFrame,
       transformer: Transformer,
       firstResultCol: String,
       otherResultCols: String*)
-      (checkFunction: Row => Unit): Unit = {
+      (globalCheckFunction: Seq[Row] => Unit): Unit = {
 
     val columnNames = dataframe.schema.fieldNames
     val stream = MemoryStream[A]
@@ -70,8 +70,19 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       .select(firstResultCol, otherResultCols: _*)
     testStream(streamOutput) (
       AddData(stream, data: _*),
-      CheckAnswer(checkFunction)
+      CheckAnswer(globalCheckFunction)
     )
+  }
+
+  private[util] def testTransformerOnDF(
+      dataframe: DataFrame,
+      transformer: Transformer,
+      firstResultCol: String,
+      otherResultCols: String*)
+      (globalCheckFunction: Seq[Row] => Unit): Unit = {
+    val dfOutput = transformer.transform(dataframe)
+    val outputs = dfOutput.select(firstResultCol, otherResultCols: _*).collect()
+    globalCheckFunction(outputs)
   }
 
   def testTransformer[A : Encoder](
@@ -80,12 +91,22 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       firstResultCol: String,
       otherResultCols: String*)
       (checkFunction: Row => Unit): Unit = {
-    testTransformerOnStreamData(dataframe, transformer, firstResultCol,
-      otherResultCols: _*)(checkFunction)
+    testTransformerByGlobalCheckFunc(
+      dataframe,
+      transformer,
+      firstResultCol,
+      otherResultCols: _*) { rows: Seq[Row] => rows.foreach(checkFunction(_)) }
+  }
 
-    val dfOutput = transformer.transform(dataframe)
-    dfOutput.select(firstResultCol, otherResultCols: _*).collect().foreach { row =>
-      checkFunction(row)
-    }
+  def testTransformerByGlobalCheckFunc[A : Encoder](
+      dataframe: DataFrame,
+      transformer: Transformer,
+      firstResultCol: String,
+      otherResultCols: String*)
+      (globalCheckFunction: Seq[Row] => Unit): Unit = {
+    testTransformerOnStreamData(dataframe, transformer, firstResultCol,
+      otherResultCols: _*)(globalCheckFunction)
+    testTransformerOnDF(dataframe, transformer, firstResultCol,
+      otherResultCols: _*)(globalCheckFunction)
   }
 }

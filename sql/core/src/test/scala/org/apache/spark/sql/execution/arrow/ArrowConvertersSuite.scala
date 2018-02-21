@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{BinaryType, Decimal, IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 
@@ -302,6 +302,70 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val df = a_d.zip(b_d).toDF("a_d", "b_d")
 
     collectAndValidate(df, json, "floating_point-double_precision.json")
+  }
+
+  test("decimal conversion") {
+    val json =
+      s"""
+         |{
+         |  "schema" : {
+         |    "fields" : [ {
+         |      "name" : "a_d",
+         |      "type" : {
+         |        "name" : "decimal",
+         |        "precision" : 38,
+         |        "scale" : 18
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ ]
+         |    }, {
+         |      "name" : "b_d",
+         |      "type" : {
+         |        "name" : "decimal",
+         |        "precision" : 38,
+         |        "scale" : 18
+         |      },
+         |      "nullable" : true,
+         |      "children" : [ ]
+         |    } ]
+         |  },
+         |  "batches" : [ {
+         |    "count" : 7,
+         |    "columns" : [ {
+         |      "name" : "a_d",
+         |      "count" : 7,
+         |      "VALIDITY" : [ 1, 1, 1, 1, 1, 1, 1 ],
+         |      "DATA" : [
+         |        "1000000000000000000",
+         |        "2000000000000000000",
+         |        "10000000000000000",
+         |        "200000000000000000000",
+         |        "100000000000000",
+         |        "20000000000000000000000",
+         |        "30000000000000000000" ]
+         |    }, {
+         |      "name" : "b_d",
+         |      "count" : 7,
+         |      "VALIDITY" : [ 1, 0, 0, 1, 0, 1, 0 ],
+         |      "DATA" : [
+         |        "1100000000000000000",
+         |        "0",
+         |        "0",
+         |        "2200000000000000000",
+         |        "0",
+         |        "3300000000000000000",
+         |        "0" ]
+         |    } ]
+         |  } ]
+         |}
+       """.stripMargin
+
+    val a_d = List(1.0, 2.0, 0.01, 200.0, 0.0001, 20000.0, 30.0).map(Decimal(_))
+    val b_d = List(Some(Decimal(1.1)), None, None, Some(Decimal(2.2)), None, Some(Decimal(3.3)),
+      Some(Decimal("123456789012345678901234567890")))
+    val df = a_d.zip(b_d).toDF("a_d", "b_d")
+
+    collectAndValidate(df, json, "decimalData.json")
   }
 
   test("index conversion") {
@@ -1153,7 +1217,6 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
       assert(msg.getCause.getClass === classOf[UnsupportedOperationException])
     }
 
-    runUnsupported { decimalData.toArrowPayload.collect() }
     runUnsupported { mapData.toDF().toArrowPayload.collect() }
     runUnsupported { complexData.toArrowPayload.collect() }
   }

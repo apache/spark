@@ -42,9 +42,11 @@ object FileStreamSink extends Logging {
         try {
           val hdfsPath = new Path(singlePath)
           val fs = hdfsPath.getFileSystem(hadoopConf)
-          val metadataPath = new Path(hdfsPath, metadataDir)
-          val res = fs.exists(metadataPath)
-          res
+          if (fs.isDirectory(hdfsPath)) {
+            fs.exists(new Path(hdfsPath, metadataDir))
+          } else {
+            false
+          }
         } catch {
           case NonFatal(e) =>
             logWarning(s"Error while looking for metadata directory.")
@@ -118,13 +120,14 @@ class FileStreamSink(
           throw new RuntimeException(s"Partition column $col not found in schema ${data.schema}")
         }
       }
+      val qe = data.queryExecution
 
       FileFormatWriter.write(
         sparkSession = sparkSession,
-        queryExecution = data.queryExecution,
+        plan = qe.executedPlan,
         fileFormat = fileFormat,
         committer = committer,
-        outputSpec = FileFormatWriter.OutputSpec(path, Map.empty),
+        outputSpec = FileFormatWriter.OutputSpec(path, Map.empty, qe.analyzed.output),
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = None,

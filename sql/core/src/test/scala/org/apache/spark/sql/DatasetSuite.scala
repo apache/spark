@@ -660,7 +660,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException] {
       df.as[KryoData]
     }.message
-    assert(e.contains("cannot cast IntegerType to BinaryType"))
+    assert(e.contains("cannot cast int to binary"))
   }
 
   test("Java encoder") {
@@ -958,12 +958,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     ).toDS()
 
     val expected =
-      """+-------+
-        ||      f|
-        |+-------+
-        ||[foo,1]|
-        ||[bar,2]|
-        |+-------+
+      """+--------+
+        ||       f|
+        |+--------+
+        ||[foo, 1]|
+        ||[bar, 2]|
+        |+--------+
         |""".stripMargin
 
     checkShowString(ds, expected)
@@ -1440,6 +1440,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       val e = intercept[SparkException](ds.map(_ * 2).collect())
       assert(e.getCause.isInstanceOf[NullPointerException])
     }
+  }
+
+  test("SPARK-23025: Add support for null type in scala reflection") {
+    val data = Seq(("a", null))
+    checkDataset(data.toDS(), data: _*)
   }
 }
 

@@ -20,8 +20,9 @@ package org.apache.spark.sql.execution.aggregate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
-import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, MutableColumnarRow, OnHeapColumnVector}
+import org.apache.spark.sql.execution.vectorized.{MutableColumnarRow, OnHeapColumnVector}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
  * This is a helper class to generate an append-only vectorized hash map that can act as a 'cache'
@@ -93,7 +94,7 @@ class VectorizedHashMapGenerator(
        |
        |  public $generatedClassName() {
        |    vectors = ${classOf[OnHeapColumnVector].getName}.allocateColumns(capacity, schema);
-       |    batch = new ${classOf[ColumnarBatch].getName}(schema, vectors, capacity);
+       |    batch = new ${classOf[ColumnarBatch].getName}(vectors);
        |
        |    // Generates a projection to return the aggregate buffer only.
        |    ${classOf[OnHeapColumnVector].getName}[] aggBufferVectors =
@@ -126,8 +127,8 @@ class VectorizedHashMapGenerator(
 
     def genEqualsForKeys(groupingKeys: Seq[Buffer]): String = {
       groupingKeys.zipWithIndex.map { case (key: Buffer, ordinal: Int) =>
-        s"""(${ctx.genEqual(key.dataType, ctx.getValue(s"vectors[$ordinal]", "buckets[idx]",
-          key.dataType), key.name)})"""
+        val value = ctx.getValueFromVector(s"vectors[$ordinal]", key.dataType, "buckets[idx]")
+        s"(${ctx.genEqual(key.dataType, value, key.name)})"
       }.mkString(" && ")
     }
 

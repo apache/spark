@@ -80,7 +80,7 @@ SELECT cast(1 as tinyint) in (cast('1' as binary)) FROM t
 struct<>
 -- !query 9 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS TINYINT) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: ByteType != BinaryType; line 1 pos 26
+cannot resolve '(CAST(1 AS TINYINT) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: tinyint != binary; line 1 pos 26
 
 
 -- !query 10
@@ -89,7 +89,7 @@ SELECT cast(1 as tinyint) in (cast(1 as boolean)) FROM t
 struct<>
 -- !query 10 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS TINYINT) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: ByteType != BooleanType; line 1 pos 26
+cannot resolve '(CAST(1 AS TINYINT) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: tinyint != boolean; line 1 pos 26
 
 
 -- !query 11
@@ -98,7 +98,7 @@ SELECT cast(1 as tinyint) in (cast('2017-12-11 09:30:00.0' as timestamp)) FROM t
 struct<>
 -- !query 11 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS TINYINT) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: ByteType != TimestampType; line 1 pos 26
+cannot resolve '(CAST(1 AS TINYINT) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: tinyint != timestamp; line 1 pos 26
 
 
 -- !query 12
@@ -107,7 +107,7 @@ SELECT cast(1 as tinyint) in (cast('2017-12-11 09:30:00' as date)) FROM t
 struct<>
 -- !query 12 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS TINYINT) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: ByteType != DateType; line 1 pos 26
+cannot resolve '(CAST(1 AS TINYINT) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: tinyint != date; line 1 pos 26
 
 
 -- !query 13
@@ -180,7 +180,7 @@ SELECT cast(1 as smallint) in (cast('1' as binary)) FROM t
 struct<>
 -- !query 21 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS SMALLINT) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: ShortType != BinaryType; line 1 pos 27
+cannot resolve '(CAST(1 AS SMALLINT) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: smallint != binary; line 1 pos 27
 
 
 -- !query 22
@@ -189,7 +189,7 @@ SELECT cast(1 as smallint) in (cast(1 as boolean)) FROM t
 struct<>
 -- !query 22 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS SMALLINT) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: ShortType != BooleanType; line 1 pos 27
+cannot resolve '(CAST(1 AS SMALLINT) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: smallint != boolean; line 1 pos 27
 
 
 -- !query 23
@@ -198,7 +198,7 @@ SELECT cast(1 as smallint) in (cast('2017-12-11 09:30:00.0' as timestamp)) FROM 
 struct<>
 -- !query 23 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS SMALLINT) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: ShortType != TimestampType; line 1 pos 27
+cannot resolve '(CAST(1 AS SMALLINT) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: smallint != timestamp; line 1 pos 27
 
 
 -- !query 24
@@ -207,7 +207,7 @@ SELECT cast(1 as smallint) in (cast('2017-12-11 09:30:00' as date)) FROM t
 struct<>
 -- !query 24 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS SMALLINT) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: ShortType != DateType; line 1 pos 27
+cannot resolve '(CAST(1 AS SMALLINT) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: smallint != date; line 1 pos 27
 
 
 -- !query 25
@@ -280,7 +280,7 @@ SELECT cast(1 as int) in (cast('1' as binary)) FROM t
 struct<>
 -- !query 33 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS INT) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: IntegerType != BinaryType; line 1 pos 22
+cannot resolve '(CAST(1 AS INT) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: int != binary; line 1 pos 22
 
 
 -- !query 34
@@ -289,7 +289,7 @@ SELECT cast(1 as int) in (cast(1 as boolean)) FROM t
 struct<>
 -- !query 34 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS INT) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: IntegerType != BooleanType; line 1 pos 22
+cannot resolve '(CAST(1 AS INT) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: int != boolean; line 1 pos 22
 
 
 -- !query 35
@@ -298,7 +298,7 @@ SELECT cast(1 as int) in (cast('2017-12-11 09:30:00.0' as timestamp)) FROM t
 struct<>
 -- !query 35 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS INT) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: IntegerType != TimestampType; line 1 pos 22
+cannot resolve '(CAST(1 AS INT) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: int != timestamp; line 1 pos 22
 
 
 -- !query 36
@@ -307,7 +307,7 @@ SELECT cast(1 as int) in (cast('2017-12-11 09:30:00' as date)) FROM t
 struct<>
 -- !query 36 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS INT) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: IntegerType != DateType; line 1 pos 22
+cannot resolve '(CAST(1 AS INT) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: int != date; line 1 pos 22
 
 
 -- !query 37
@@ -380,7 +380,7 @@ SELECT cast(1 as bigint) in (cast('1' as binary)) FROM t
 struct<>
 -- !query 45 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BIGINT) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: LongType != BinaryType; line 1 pos 25
+cannot resolve '(CAST(1 AS BIGINT) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: bigint != binary; line 1 pos 25
 
 
 -- !query 46
@@ -389,7 +389,7 @@ SELECT cast(1 as bigint) in (cast(1 as boolean)) FROM t
 struct<>
 -- !query 46 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BIGINT) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: LongType != BooleanType; line 1 pos 25
+cannot resolve '(CAST(1 AS BIGINT) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: bigint != boolean; line 1 pos 25
 
 
 -- !query 47
@@ -398,7 +398,7 @@ SELECT cast(1 as bigint) in (cast('2017-12-11 09:30:00.0' as timestamp)) FROM t
 struct<>
 -- !query 47 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BIGINT) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: LongType != TimestampType; line 1 pos 25
+cannot resolve '(CAST(1 AS BIGINT) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: bigint != timestamp; line 1 pos 25
 
 
 -- !query 48
@@ -407,7 +407,7 @@ SELECT cast(1 as bigint) in (cast('2017-12-11 09:30:00' as date)) FROM t
 struct<>
 -- !query 48 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BIGINT) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: LongType != DateType; line 1 pos 25
+cannot resolve '(CAST(1 AS BIGINT) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: bigint != date; line 1 pos 25
 
 
 -- !query 49
@@ -480,7 +480,7 @@ SELECT cast(1 as float) in (cast('1' as binary)) FROM t
 struct<>
 -- !query 57 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS FLOAT) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: FloatType != BinaryType; line 1 pos 24
+cannot resolve '(CAST(1 AS FLOAT) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: float != binary; line 1 pos 24
 
 
 -- !query 58
@@ -489,7 +489,7 @@ SELECT cast(1 as float) in (cast(1 as boolean)) FROM t
 struct<>
 -- !query 58 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS FLOAT) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: FloatType != BooleanType; line 1 pos 24
+cannot resolve '(CAST(1 AS FLOAT) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: float != boolean; line 1 pos 24
 
 
 -- !query 59
@@ -498,7 +498,7 @@ SELECT cast(1 as float) in (cast('2017-12-11 09:30:00.0' as timestamp)) FROM t
 struct<>
 -- !query 59 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS FLOAT) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: FloatType != TimestampType; line 1 pos 24
+cannot resolve '(CAST(1 AS FLOAT) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: float != timestamp; line 1 pos 24
 
 
 -- !query 60
@@ -507,7 +507,7 @@ SELECT cast(1 as float) in (cast('2017-12-11 09:30:00' as date)) FROM t
 struct<>
 -- !query 60 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS FLOAT) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: FloatType != DateType; line 1 pos 24
+cannot resolve '(CAST(1 AS FLOAT) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: float != date; line 1 pos 24
 
 
 -- !query 61
@@ -580,7 +580,7 @@ SELECT cast(1 as double) in (cast('1' as binary)) FROM t
 struct<>
 -- !query 69 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DOUBLE) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: DoubleType != BinaryType; line 1 pos 25
+cannot resolve '(CAST(1 AS DOUBLE) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: double != binary; line 1 pos 25
 
 
 -- !query 70
@@ -589,7 +589,7 @@ SELECT cast(1 as double) in (cast(1 as boolean)) FROM t
 struct<>
 -- !query 70 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DOUBLE) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: DoubleType != BooleanType; line 1 pos 25
+cannot resolve '(CAST(1 AS DOUBLE) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: double != boolean; line 1 pos 25
 
 
 -- !query 71
@@ -598,7 +598,7 @@ SELECT cast(1 as double) in (cast('2017-12-11 09:30:00.0' as timestamp)) FROM t
 struct<>
 -- !query 71 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DOUBLE) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: DoubleType != TimestampType; line 1 pos 25
+cannot resolve '(CAST(1 AS DOUBLE) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: double != timestamp; line 1 pos 25
 
 
 -- !query 72
@@ -607,7 +607,7 @@ SELECT cast(1 as double) in (cast('2017-12-11 09:30:00' as date)) FROM t
 struct<>
 -- !query 72 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DOUBLE) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: DoubleType != DateType; line 1 pos 25
+cannot resolve '(CAST(1 AS DOUBLE) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: double != date; line 1 pos 25
 
 
 -- !query 73
@@ -680,7 +680,7 @@ SELECT cast(1 as decimal(10, 0)) in (cast('1' as binary)) FROM t
 struct<>
 -- !query 81 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: DecimalType(10,0) != BinaryType; line 1 pos 33
+cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: decimal(10,0) != binary; line 1 pos 33
 
 
 -- !query 82
@@ -689,7 +689,7 @@ SELECT cast(1 as decimal(10, 0)) in (cast(1 as boolean)) FROM t
 struct<>
 -- !query 82 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: DecimalType(10,0) != BooleanType; line 1 pos 33
+cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: decimal(10,0) != boolean; line 1 pos 33
 
 
 -- !query 83
@@ -698,7 +698,7 @@ SELECT cast(1 as decimal(10, 0)) in (cast('2017-12-11 09:30:00.0' as timestamp))
 struct<>
 -- !query 83 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: DecimalType(10,0) != TimestampType; line 1 pos 33
+cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: decimal(10,0) != timestamp; line 1 pos 33
 
 
 -- !query 84
@@ -707,7 +707,7 @@ SELECT cast(1 as decimal(10, 0)) in (cast('2017-12-11 09:30:00' as date)) FROM t
 struct<>
 -- !query 84 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: DecimalType(10,0) != DateType; line 1 pos 33
+cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: decimal(10,0) != date; line 1 pos 33
 
 
 -- !query 85
@@ -780,7 +780,7 @@ SELECT cast(1 as string) in (cast('1' as binary)) FROM t
 struct<>
 -- !query 93 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS STRING) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: StringType != BinaryType; line 1 pos 25
+cannot resolve '(CAST(1 AS STRING) IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: string != binary; line 1 pos 25
 
 
 -- !query 94
@@ -789,7 +789,7 @@ SELECT cast(1 as string) in (cast(1 as boolean)) FROM t
 struct<>
 -- !query 94 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS STRING) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: StringType != BooleanType; line 1 pos 25
+cannot resolve '(CAST(1 AS STRING) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: string != boolean; line 1 pos 25
 
 
 -- !query 95
@@ -814,7 +814,7 @@ SELECT cast('1' as binary) in (cast(1 as tinyint)) FROM t
 struct<>
 -- !query 97 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: BinaryType != ByteType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: binary != tinyint; line 1 pos 27
 
 
 -- !query 98
@@ -823,7 +823,7 @@ SELECT cast('1' as binary) in (cast(1 as smallint)) FROM t
 struct<>
 -- !query 98 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: BinaryType != ShortType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: binary != smallint; line 1 pos 27
 
 
 -- !query 99
@@ -832,7 +832,7 @@ SELECT cast('1' as binary) in (cast(1 as int)) FROM t
 struct<>
 -- !query 99 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS INT)))' due to data type mismatch: Arguments must be same type but were: BinaryType != IntegerType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS INT)))' due to data type mismatch: Arguments must be same type but were: binary != int; line 1 pos 27
 
 
 -- !query 100
@@ -841,7 +841,7 @@ SELECT cast('1' as binary) in (cast(1 as bigint)) FROM t
 struct<>
 -- !query 100 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: BinaryType != LongType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: binary != bigint; line 1 pos 27
 
 
 -- !query 101
@@ -850,7 +850,7 @@ SELECT cast('1' as binary) in (cast(1 as float)) FROM t
 struct<>
 -- !query 101 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: BinaryType != FloatType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: binary != float; line 1 pos 27
 
 
 -- !query 102
@@ -859,7 +859,7 @@ SELECT cast('1' as binary) in (cast(1 as double)) FROM t
 struct<>
 -- !query 102 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: BinaryType != DoubleType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: binary != double; line 1 pos 27
 
 
 -- !query 103
@@ -868,7 +868,7 @@ SELECT cast('1' as binary) in (cast(1 as decimal(10, 0))) FROM t
 struct<>
 -- !query 103 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: BinaryType != DecimalType(10,0); line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: binary != decimal(10,0); line 1 pos 27
 
 
 -- !query 104
@@ -877,7 +877,7 @@ SELECT cast('1' as binary) in (cast(1 as string)) FROM t
 struct<>
 -- !query 104 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS STRING)))' due to data type mismatch: Arguments must be same type but were: BinaryType != StringType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS STRING)))' due to data type mismatch: Arguments must be same type but were: binary != string; line 1 pos 27
 
 
 -- !query 105
@@ -894,7 +894,7 @@ SELECT cast('1' as binary) in (cast(1 as boolean)) FROM t
 struct<>
 -- !query 106 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: BinaryType != BooleanType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: binary != boolean; line 1 pos 27
 
 
 -- !query 107
@@ -903,7 +903,7 @@ SELECT cast('1' as binary) in (cast('2017-12-11 09:30:00.0' as timestamp)) FROM 
 struct<>
 -- !query 107 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: BinaryType != TimestampType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: binary != timestamp; line 1 pos 27
 
 
 -- !query 108
@@ -912,7 +912,7 @@ SELECT cast('1' as binary) in (cast('2017-12-11 09:30:00' as date)) FROM t
 struct<>
 -- !query 108 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: BinaryType != DateType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: binary != date; line 1 pos 27
 
 
 -- !query 109
@@ -921,7 +921,7 @@ SELECT true in (cast(1 as tinyint)) FROM t
 struct<>
 -- !query 109 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true IN (CAST(1 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: BooleanType != ByteType; line 1 pos 12
+cannot resolve '(true IN (CAST(1 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: boolean != tinyint; line 1 pos 12
 
 
 -- !query 110
@@ -930,7 +930,7 @@ SELECT true in (cast(1 as smallint)) FROM t
 struct<>
 -- !query 110 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true IN (CAST(1 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: BooleanType != ShortType; line 1 pos 12
+cannot resolve '(true IN (CAST(1 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: boolean != smallint; line 1 pos 12
 
 
 -- !query 111
@@ -939,7 +939,7 @@ SELECT true in (cast(1 as int)) FROM t
 struct<>
 -- !query 111 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true IN (CAST(1 AS INT)))' due to data type mismatch: Arguments must be same type but were: BooleanType != IntegerType; line 1 pos 12
+cannot resolve '(true IN (CAST(1 AS INT)))' due to data type mismatch: Arguments must be same type but were: boolean != int; line 1 pos 12
 
 
 -- !query 112
@@ -948,7 +948,7 @@ SELECT true in (cast(1 as bigint)) FROM t
 struct<>
 -- !query 112 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true IN (CAST(1 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: BooleanType != LongType; line 1 pos 12
+cannot resolve '(true IN (CAST(1 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: boolean != bigint; line 1 pos 12
 
 
 -- !query 113
@@ -957,7 +957,7 @@ SELECT true in (cast(1 as float)) FROM t
 struct<>
 -- !query 113 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true IN (CAST(1 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: BooleanType != FloatType; line 1 pos 12
+cannot resolve '(true IN (CAST(1 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: boolean != float; line 1 pos 12
 
 
 -- !query 114
@@ -966,7 +966,7 @@ SELECT true in (cast(1 as double)) FROM t
 struct<>
 -- !query 114 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true IN (CAST(1 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: BooleanType != DoubleType; line 1 pos 12
+cannot resolve '(true IN (CAST(1 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: boolean != double; line 1 pos 12
 
 
 -- !query 115
@@ -975,7 +975,7 @@ SELECT true in (cast(1 as decimal(10, 0))) FROM t
 struct<>
 -- !query 115 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true IN (CAST(1 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: BooleanType != DecimalType(10,0); line 1 pos 12
+cannot resolve '(true IN (CAST(1 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: boolean != decimal(10,0); line 1 pos 12
 
 
 -- !query 116
@@ -984,7 +984,7 @@ SELECT true in (cast(1 as string)) FROM t
 struct<>
 -- !query 116 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true IN (CAST(1 AS STRING)))' due to data type mismatch: Arguments must be same type but were: BooleanType != StringType; line 1 pos 12
+cannot resolve '(true IN (CAST(1 AS STRING)))' due to data type mismatch: Arguments must be same type but were: boolean != string; line 1 pos 12
 
 
 -- !query 117
@@ -993,7 +993,7 @@ SELECT true in (cast('1' as binary)) FROM t
 struct<>
 -- !query 117 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: BooleanType != BinaryType; line 1 pos 12
+cannot resolve '(true IN (CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: boolean != binary; line 1 pos 12
 
 
 -- !query 118
@@ -1010,7 +1010,7 @@ SELECT true in (cast('2017-12-11 09:30:00.0' as timestamp)) FROM t
 struct<>
 -- !query 119 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: BooleanType != TimestampType; line 1 pos 12
+cannot resolve '(true IN (CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: boolean != timestamp; line 1 pos 12
 
 
 -- !query 120
@@ -1019,7 +1019,7 @@ SELECT true in (cast('2017-12-11 09:30:00' as date)) FROM t
 struct<>
 -- !query 120 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(true IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: BooleanType != DateType; line 1 pos 12
+cannot resolve '(true IN (CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: boolean != date; line 1 pos 12
 
 
 -- !query 121
@@ -1028,7 +1028,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast(2 as tinyint)) FROM t
 struct<>
 -- !query 121 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: TimestampType != ByteType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: timestamp != tinyint; line 1 pos 50
 
 
 -- !query 122
@@ -1037,7 +1037,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast(2 as smallint)) FROM 
 struct<>
 -- !query 122 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: TimestampType != ShortType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: timestamp != smallint; line 1 pos 50
 
 
 -- !query 123
@@ -1046,7 +1046,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast(2 as int)) FROM t
 struct<>
 -- !query 123 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS INT)))' due to data type mismatch: Arguments must be same type but were: TimestampType != IntegerType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS INT)))' due to data type mismatch: Arguments must be same type but were: timestamp != int; line 1 pos 50
 
 
 -- !query 124
@@ -1055,7 +1055,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast(2 as bigint)) FROM t
 struct<>
 -- !query 124 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: TimestampType != LongType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: timestamp != bigint; line 1 pos 50
 
 
 -- !query 125
@@ -1064,7 +1064,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast(2 as float)) FROM t
 struct<>
 -- !query 125 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: TimestampType != FloatType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: timestamp != float; line 1 pos 50
 
 
 -- !query 126
@@ -1073,7 +1073,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast(2 as double)) FROM t
 struct<>
 -- !query 126 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: TimestampType != DoubleType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: timestamp != double; line 1 pos 50
 
 
 -- !query 127
@@ -1082,7 +1082,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast(2 as decimal(10, 0)))
 struct<>
 -- !query 127 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: TimestampType != DecimalType(10,0); line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: timestamp != decimal(10,0); line 1 pos 50
 
 
 -- !query 128
@@ -1099,7 +1099,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast('2' as binary)) FROM 
 struct<>
 -- !query 129 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: TimestampType != BinaryType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: timestamp != binary; line 1 pos 50
 
 
 -- !query 130
@@ -1108,7 +1108,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast(2 as boolean)) FROM t
 struct<>
 -- !query 130 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: TimestampType != BooleanType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST(2 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: timestamp != boolean; line 1 pos 50
 
 
 -- !query 131
@@ -1133,7 +1133,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast(2 as tinyint)) FROM t
 struct<>
 -- !query 133 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: DateType != ByteType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: date != tinyint; line 1 pos 43
 
 
 -- !query 134
@@ -1142,7 +1142,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast(2 as smallint)) FROM t
 struct<>
 -- !query 134 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: DateType != ShortType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: date != smallint; line 1 pos 43
 
 
 -- !query 135
@@ -1151,7 +1151,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast(2 as int)) FROM t
 struct<>
 -- !query 135 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS INT)))' due to data type mismatch: Arguments must be same type but were: DateType != IntegerType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS INT)))' due to data type mismatch: Arguments must be same type but were: date != int; line 1 pos 43
 
 
 -- !query 136
@@ -1160,7 +1160,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast(2 as bigint)) FROM t
 struct<>
 -- !query 136 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: DateType != LongType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: date != bigint; line 1 pos 43
 
 
 -- !query 137
@@ -1169,7 +1169,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast(2 as float)) FROM t
 struct<>
 -- !query 137 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: DateType != FloatType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: date != float; line 1 pos 43
 
 
 -- !query 138
@@ -1178,7 +1178,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast(2 as double)) FROM t
 struct<>
 -- !query 138 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: DateType != DoubleType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: date != double; line 1 pos 43
 
 
 -- !query 139
@@ -1187,7 +1187,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast(2 as decimal(10, 0))) FROM t
 struct<>
 -- !query 139 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: DateType != DecimalType(10,0); line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: date != decimal(10,0); line 1 pos 43
 
 
 -- !query 140
@@ -1204,7 +1204,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast('2' as binary)) FROM t
 struct<>
 -- !query 141 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: DateType != BinaryType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: date != binary; line 1 pos 43
 
 
 -- !query 142
@@ -1213,7 +1213,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast(2 as boolean)) FROM t
 struct<>
 -- !query 142 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: DateType != BooleanType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST(2 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: date != boolean; line 1 pos 43
 
 
 -- !query 143
@@ -1302,7 +1302,7 @@ SELECT cast(1 as tinyint) in (cast(1 as tinyint), cast('1' as binary)) FROM t
 struct<>
 -- !query 153 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS TINYINT) IN (CAST(1 AS TINYINT), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: ByteType != BinaryType; line 1 pos 26
+cannot resolve '(CAST(1 AS TINYINT) IN (CAST(1 AS TINYINT), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: tinyint != binary; line 1 pos 26
 
 
 -- !query 154
@@ -1311,7 +1311,7 @@ SELECT cast(1 as tinyint) in (cast(1 as tinyint), cast(1 as boolean)) FROM t
 struct<>
 -- !query 154 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS TINYINT) IN (CAST(1 AS TINYINT), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: ByteType != BooleanType; line 1 pos 26
+cannot resolve '(CAST(1 AS TINYINT) IN (CAST(1 AS TINYINT), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: tinyint != boolean; line 1 pos 26
 
 
 -- !query 155
@@ -1320,7 +1320,7 @@ SELECT cast(1 as tinyint) in (cast(1 as tinyint), cast('2017-12-11 09:30:00.0' a
 struct<>
 -- !query 155 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS TINYINT) IN (CAST(1 AS TINYINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: ByteType != TimestampType; line 1 pos 26
+cannot resolve '(CAST(1 AS TINYINT) IN (CAST(1 AS TINYINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: tinyint != timestamp; line 1 pos 26
 
 
 -- !query 156
@@ -1329,7 +1329,7 @@ SELECT cast(1 as tinyint) in (cast(1 as tinyint), cast('2017-12-11 09:30:00' as 
 struct<>
 -- !query 156 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS TINYINT) IN (CAST(1 AS TINYINT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: ByteType != DateType; line 1 pos 26
+cannot resolve '(CAST(1 AS TINYINT) IN (CAST(1 AS TINYINT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: tinyint != date; line 1 pos 26
 
 
 -- !query 157
@@ -1402,7 +1402,7 @@ SELECT cast(1 as smallint) in (cast(1 as smallint), cast('1' as binary)) FROM t
 struct<>
 -- !query 165 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS SMALLINT) IN (CAST(1 AS SMALLINT), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: ShortType != BinaryType; line 1 pos 27
+cannot resolve '(CAST(1 AS SMALLINT) IN (CAST(1 AS SMALLINT), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: smallint != binary; line 1 pos 27
 
 
 -- !query 166
@@ -1411,7 +1411,7 @@ SELECT cast(1 as smallint) in (cast(1 as smallint), cast(1 as boolean)) FROM t
 struct<>
 -- !query 166 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS SMALLINT) IN (CAST(1 AS SMALLINT), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: ShortType != BooleanType; line 1 pos 27
+cannot resolve '(CAST(1 AS SMALLINT) IN (CAST(1 AS SMALLINT), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: smallint != boolean; line 1 pos 27
 
 
 -- !query 167
@@ -1420,7 +1420,7 @@ SELECT cast(1 as smallint) in (cast(1 as smallint), cast('2017-12-11 09:30:00.0'
 struct<>
 -- !query 167 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS SMALLINT) IN (CAST(1 AS SMALLINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: ShortType != TimestampType; line 1 pos 27
+cannot resolve '(CAST(1 AS SMALLINT) IN (CAST(1 AS SMALLINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: smallint != timestamp; line 1 pos 27
 
 
 -- !query 168
@@ -1429,7 +1429,7 @@ SELECT cast(1 as smallint) in (cast(1 as smallint), cast('2017-12-11 09:30:00' a
 struct<>
 -- !query 168 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS SMALLINT) IN (CAST(1 AS SMALLINT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: ShortType != DateType; line 1 pos 27
+cannot resolve '(CAST(1 AS SMALLINT) IN (CAST(1 AS SMALLINT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: smallint != date; line 1 pos 27
 
 
 -- !query 169
@@ -1502,7 +1502,7 @@ SELECT cast(1 as int) in (cast(1 as int), cast('1' as binary)) FROM t
 struct<>
 -- !query 177 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS INT) IN (CAST(1 AS INT), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: IntegerType != BinaryType; line 1 pos 22
+cannot resolve '(CAST(1 AS INT) IN (CAST(1 AS INT), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: int != binary; line 1 pos 22
 
 
 -- !query 178
@@ -1511,7 +1511,7 @@ SELECT cast(1 as int) in (cast(1 as int), cast(1 as boolean)) FROM t
 struct<>
 -- !query 178 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS INT) IN (CAST(1 AS INT), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: IntegerType != BooleanType; line 1 pos 22
+cannot resolve '(CAST(1 AS INT) IN (CAST(1 AS INT), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: int != boolean; line 1 pos 22
 
 
 -- !query 179
@@ -1520,7 +1520,7 @@ SELECT cast(1 as int) in (cast(1 as int), cast('2017-12-11 09:30:00.0' as timest
 struct<>
 -- !query 179 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS INT) IN (CAST(1 AS INT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: IntegerType != TimestampType; line 1 pos 22
+cannot resolve '(CAST(1 AS INT) IN (CAST(1 AS INT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: int != timestamp; line 1 pos 22
 
 
 -- !query 180
@@ -1529,7 +1529,7 @@ SELECT cast(1 as int) in (cast(1 as int), cast('2017-12-11 09:30:00' as date)) F
 struct<>
 -- !query 180 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS INT) IN (CAST(1 AS INT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: IntegerType != DateType; line 1 pos 22
+cannot resolve '(CAST(1 AS INT) IN (CAST(1 AS INT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: int != date; line 1 pos 22
 
 
 -- !query 181
@@ -1602,7 +1602,7 @@ SELECT cast(1 as bigint) in (cast(1 as bigint), cast('1' as binary)) FROM t
 struct<>
 -- !query 189 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BIGINT) IN (CAST(1 AS BIGINT), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: LongType != BinaryType; line 1 pos 25
+cannot resolve '(CAST(1 AS BIGINT) IN (CAST(1 AS BIGINT), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: bigint != binary; line 1 pos 25
 
 
 -- !query 190
@@ -1611,7 +1611,7 @@ SELECT cast(1 as bigint) in (cast(1 as bigint), cast(1 as boolean)) FROM t
 struct<>
 -- !query 190 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BIGINT) IN (CAST(1 AS BIGINT), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: LongType != BooleanType; line 1 pos 25
+cannot resolve '(CAST(1 AS BIGINT) IN (CAST(1 AS BIGINT), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: bigint != boolean; line 1 pos 25
 
 
 -- !query 191
@@ -1620,7 +1620,7 @@ SELECT cast(1 as bigint) in (cast(1 as bigint), cast('2017-12-11 09:30:00.0' as 
 struct<>
 -- !query 191 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BIGINT) IN (CAST(1 AS BIGINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: LongType != TimestampType; line 1 pos 25
+cannot resolve '(CAST(1 AS BIGINT) IN (CAST(1 AS BIGINT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: bigint != timestamp; line 1 pos 25
 
 
 -- !query 192
@@ -1629,7 +1629,7 @@ SELECT cast(1 as bigint) in (cast(1 as bigint), cast('2017-12-11 09:30:00' as da
 struct<>
 -- !query 192 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS BIGINT) IN (CAST(1 AS BIGINT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: LongType != DateType; line 1 pos 25
+cannot resolve '(CAST(1 AS BIGINT) IN (CAST(1 AS BIGINT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: bigint != date; line 1 pos 25
 
 
 -- !query 193
@@ -1702,7 +1702,7 @@ SELECT cast(1 as float) in (cast(1 as float), cast('1' as binary)) FROM t
 struct<>
 -- !query 201 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS FLOAT) IN (CAST(1 AS FLOAT), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: FloatType != BinaryType; line 1 pos 24
+cannot resolve '(CAST(1 AS FLOAT) IN (CAST(1 AS FLOAT), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: float != binary; line 1 pos 24
 
 
 -- !query 202
@@ -1711,7 +1711,7 @@ SELECT cast(1 as float) in (cast(1 as float), cast(1 as boolean)) FROM t
 struct<>
 -- !query 202 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS FLOAT) IN (CAST(1 AS FLOAT), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: FloatType != BooleanType; line 1 pos 24
+cannot resolve '(CAST(1 AS FLOAT) IN (CAST(1 AS FLOAT), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: float != boolean; line 1 pos 24
 
 
 -- !query 203
@@ -1720,7 +1720,7 @@ SELECT cast(1 as float) in (cast(1 as float), cast('2017-12-11 09:30:00.0' as ti
 struct<>
 -- !query 203 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS FLOAT) IN (CAST(1 AS FLOAT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: FloatType != TimestampType; line 1 pos 24
+cannot resolve '(CAST(1 AS FLOAT) IN (CAST(1 AS FLOAT), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: float != timestamp; line 1 pos 24
 
 
 -- !query 204
@@ -1729,7 +1729,7 @@ SELECT cast(1 as float) in (cast(1 as float), cast('2017-12-11 09:30:00' as date
 struct<>
 -- !query 204 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS FLOAT) IN (CAST(1 AS FLOAT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: FloatType != DateType; line 1 pos 24
+cannot resolve '(CAST(1 AS FLOAT) IN (CAST(1 AS FLOAT), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: float != date; line 1 pos 24
 
 
 -- !query 205
@@ -1802,7 +1802,7 @@ SELECT cast(1 as double) in (cast(1 as double), cast('1' as binary)) FROM t
 struct<>
 -- !query 213 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DOUBLE) IN (CAST(1 AS DOUBLE), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: DoubleType != BinaryType; line 1 pos 25
+cannot resolve '(CAST(1 AS DOUBLE) IN (CAST(1 AS DOUBLE), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: double != binary; line 1 pos 25
 
 
 -- !query 214
@@ -1811,7 +1811,7 @@ SELECT cast(1 as double) in (cast(1 as double), cast(1 as boolean)) FROM t
 struct<>
 -- !query 214 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DOUBLE) IN (CAST(1 AS DOUBLE), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: DoubleType != BooleanType; line 1 pos 25
+cannot resolve '(CAST(1 AS DOUBLE) IN (CAST(1 AS DOUBLE), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: double != boolean; line 1 pos 25
 
 
 -- !query 215
@@ -1820,7 +1820,7 @@ SELECT cast(1 as double) in (cast(1 as double), cast('2017-12-11 09:30:00.0' as 
 struct<>
 -- !query 215 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DOUBLE) IN (CAST(1 AS DOUBLE), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: DoubleType != TimestampType; line 1 pos 25
+cannot resolve '(CAST(1 AS DOUBLE) IN (CAST(1 AS DOUBLE), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: double != timestamp; line 1 pos 25
 
 
 -- !query 216
@@ -1829,7 +1829,7 @@ SELECT cast(1 as double) in (cast(1 as double), cast('2017-12-11 09:30:00' as da
 struct<>
 -- !query 216 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DOUBLE) IN (CAST(1 AS DOUBLE), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: DoubleType != DateType; line 1 pos 25
+cannot resolve '(CAST(1 AS DOUBLE) IN (CAST(1 AS DOUBLE), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: double != date; line 1 pos 25
 
 
 -- !query 217
@@ -1902,7 +1902,7 @@ SELECT cast(1 as decimal(10, 0)) in (cast(1 as decimal(10, 0)), cast('1' as bina
 struct<>
 -- !query 225 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST(1 AS DECIMAL(10,0)), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: DecimalType(10,0) != BinaryType; line 1 pos 33
+cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST(1 AS DECIMAL(10,0)), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: decimal(10,0) != binary; line 1 pos 33
 
 
 -- !query 226
@@ -1911,7 +1911,7 @@ SELECT cast(1 as decimal(10, 0)) in (cast(1 as decimal(10, 0)), cast(1 as boolea
 struct<>
 -- !query 226 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST(1 AS DECIMAL(10,0)), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: DecimalType(10,0) != BooleanType; line 1 pos 33
+cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST(1 AS DECIMAL(10,0)), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: decimal(10,0) != boolean; line 1 pos 33
 
 
 -- !query 227
@@ -1920,7 +1920,7 @@ SELECT cast(1 as decimal(10, 0)) in (cast(1 as decimal(10, 0)), cast('2017-12-11
 struct<>
 -- !query 227 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST(1 AS DECIMAL(10,0)), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: DecimalType(10,0) != TimestampType; line 1 pos 33
+cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST(1 AS DECIMAL(10,0)), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: decimal(10,0) != timestamp; line 1 pos 33
 
 
 -- !query 228
@@ -1929,7 +1929,7 @@ SELECT cast(1 as decimal(10, 0)) in (cast(1 as decimal(10, 0)), cast('2017-12-11
 struct<>
 -- !query 228 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST(1 AS DECIMAL(10,0)), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: DecimalType(10,0) != DateType; line 1 pos 33
+cannot resolve '(CAST(1 AS DECIMAL(10,0)) IN (CAST(1 AS DECIMAL(10,0)), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: decimal(10,0) != date; line 1 pos 33
 
 
 -- !query 229
@@ -2002,7 +2002,7 @@ SELECT cast(1 as string) in (cast(1 as string), cast('1' as binary)) FROM t
 struct<>
 -- !query 237 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS STRING) IN (CAST(1 AS STRING), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: StringType != BinaryType; line 1 pos 25
+cannot resolve '(CAST(1 AS STRING) IN (CAST(1 AS STRING), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: string != binary; line 1 pos 25
 
 
 -- !query 238
@@ -2011,7 +2011,7 @@ SELECT cast(1 as string) in (cast(1 as string), cast(1 as boolean)) FROM t
 struct<>
 -- !query 238 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST(1 AS STRING) IN (CAST(1 AS STRING), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: StringType != BooleanType; line 1 pos 25
+cannot resolve '(CAST(1 AS STRING) IN (CAST(1 AS STRING), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: string != boolean; line 1 pos 25
 
 
 -- !query 239
@@ -2036,7 +2036,7 @@ SELECT cast('1' as binary) in (cast('1' as binary), cast(1 as tinyint)) FROM t
 struct<>
 -- !query 241 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: BinaryType != ByteType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: binary != tinyint; line 1 pos 27
 
 
 -- !query 242
@@ -2045,7 +2045,7 @@ SELECT cast('1' as binary) in (cast('1' as binary), cast(1 as smallint)) FROM t
 struct<>
 -- !query 242 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: BinaryType != ShortType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: binary != smallint; line 1 pos 27
 
 
 -- !query 243
@@ -2054,7 +2054,7 @@ SELECT cast('1' as binary) in (cast('1' as binary), cast(1 as int)) FROM t
 struct<>
 -- !query 243 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS INT)))' due to data type mismatch: Arguments must be same type but were: BinaryType != IntegerType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS INT)))' due to data type mismatch: Arguments must be same type but were: binary != int; line 1 pos 27
 
 
 -- !query 244
@@ -2063,7 +2063,7 @@ SELECT cast('1' as binary) in (cast('1' as binary), cast(1 as bigint)) FROM t
 struct<>
 -- !query 244 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: BinaryType != LongType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: binary != bigint; line 1 pos 27
 
 
 -- !query 245
@@ -2072,7 +2072,7 @@ SELECT cast('1' as binary) in (cast('1' as binary), cast(1 as float)) FROM t
 struct<>
 -- !query 245 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: BinaryType != FloatType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: binary != float; line 1 pos 27
 
 
 -- !query 246
@@ -2081,7 +2081,7 @@ SELECT cast('1' as binary) in (cast('1' as binary), cast(1 as double)) FROM t
 struct<>
 -- !query 246 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: BinaryType != DoubleType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: binary != double; line 1 pos 27
 
 
 -- !query 247
@@ -2090,7 +2090,7 @@ SELECT cast('1' as binary) in (cast('1' as binary), cast(1 as decimal(10, 0))) F
 struct<>
 -- !query 247 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: BinaryType != DecimalType(10,0); line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: binary != decimal(10,0); line 1 pos 27
 
 
 -- !query 248
@@ -2099,7 +2099,7 @@ SELECT cast('1' as binary) in (cast('1' as binary), cast(1 as string)) FROM t
 struct<>
 -- !query 248 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS STRING)))' due to data type mismatch: Arguments must be same type but were: BinaryType != StringType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS STRING)))' due to data type mismatch: Arguments must be same type but were: binary != string; line 1 pos 27
 
 
 -- !query 249
@@ -2116,7 +2116,7 @@ SELECT cast('1' as binary) in (cast('1' as binary), cast(1 as boolean)) FROM t
 struct<>
 -- !query 250 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: BinaryType != BooleanType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: binary != boolean; line 1 pos 27
 
 
 -- !query 251
@@ -2125,7 +2125,7 @@ SELECT cast('1' as binary) in (cast('1' as binary), cast('2017-12-11 09:30:00.0'
 struct<>
 -- !query 251 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: BinaryType != TimestampType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: binary != timestamp; line 1 pos 27
 
 
 -- !query 252
@@ -2134,7 +2134,7 @@ SELECT cast('1' as binary) in (cast('1' as binary), cast('2017-12-11 09:30:00' a
 struct<>
 -- !query 252 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: BinaryType != DateType; line 1 pos 27
+cannot resolve '(CAST('1' AS BINARY) IN (CAST('1' AS BINARY), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: binary != date; line 1 pos 27
 
 
 -- !query 253
@@ -2143,7 +2143,7 @@ SELECT cast('1' as boolean) in (cast('1' as boolean), cast(1 as tinyint)) FROM t
 struct<>
 -- !query 253 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: BooleanType != ByteType; line 1 pos 28
+cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: boolean != tinyint; line 1 pos 28
 
 
 -- !query 254
@@ -2152,7 +2152,7 @@ SELECT cast('1' as boolean) in (cast('1' as boolean), cast(1 as smallint)) FROM 
 struct<>
 -- !query 254 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: BooleanType != ShortType; line 1 pos 28
+cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: boolean != smallint; line 1 pos 28
 
 
 -- !query 255
@@ -2161,7 +2161,7 @@ SELECT cast('1' as boolean) in (cast('1' as boolean), cast(1 as int)) FROM t
 struct<>
 -- !query 255 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS INT)))' due to data type mismatch: Arguments must be same type but were: BooleanType != IntegerType; line 1 pos 28
+cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS INT)))' due to data type mismatch: Arguments must be same type but were: boolean != int; line 1 pos 28
 
 
 -- !query 256
@@ -2170,7 +2170,7 @@ SELECT cast('1' as boolean) in (cast('1' as boolean), cast(1 as bigint)) FROM t
 struct<>
 -- !query 256 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: BooleanType != LongType; line 1 pos 28
+cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: boolean != bigint; line 1 pos 28
 
 
 -- !query 257
@@ -2179,7 +2179,7 @@ SELECT cast('1' as boolean) in (cast('1' as boolean), cast(1 as float)) FROM t
 struct<>
 -- !query 257 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: BooleanType != FloatType; line 1 pos 28
+cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: boolean != float; line 1 pos 28
 
 
 -- !query 258
@@ -2188,7 +2188,7 @@ SELECT cast('1' as boolean) in (cast('1' as boolean), cast(1 as double)) FROM t
 struct<>
 -- !query 258 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: BooleanType != DoubleType; line 1 pos 28
+cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: boolean != double; line 1 pos 28
 
 
 -- !query 259
@@ -2197,7 +2197,7 @@ SELECT cast('1' as boolean) in (cast('1' as boolean), cast(1 as decimal(10, 0)))
 struct<>
 -- !query 259 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: BooleanType != DecimalType(10,0); line 1 pos 28
+cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: boolean != decimal(10,0); line 1 pos 28
 
 
 -- !query 260
@@ -2206,7 +2206,7 @@ SELECT cast('1' as boolean) in (cast('1' as boolean), cast(1 as string)) FROM t
 struct<>
 -- !query 260 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS STRING)))' due to data type mismatch: Arguments must be same type but were: BooleanType != StringType; line 1 pos 28
+cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST(1 AS STRING)))' due to data type mismatch: Arguments must be same type but were: boolean != string; line 1 pos 28
 
 
 -- !query 261
@@ -2215,7 +2215,7 @@ SELECT cast('1' as boolean) in (cast('1' as boolean), cast('1' as binary)) FROM 
 struct<>
 -- !query 261 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: BooleanType != BinaryType; line 1 pos 28
+cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: boolean != binary; line 1 pos 28
 
 
 -- !query 262
@@ -2232,7 +2232,7 @@ SELECT cast('1' as boolean) in (cast('1' as boolean), cast('2017-12-11 09:30:00.
 struct<>
 -- !query 263 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: BooleanType != TimestampType; line 1 pos 28
+cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST('2017-12-11 09:30:00.0' AS TIMESTAMP)))' due to data type mismatch: Arguments must be same type but were: boolean != timestamp; line 1 pos 28
 
 
 -- !query 264
@@ -2241,7 +2241,7 @@ SELECT cast('1' as boolean) in (cast('1' as boolean), cast('2017-12-11 09:30:00'
 struct<>
 -- !query 264 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: BooleanType != DateType; line 1 pos 28
+cannot resolve '(CAST('1' AS BOOLEAN) IN (CAST('1' AS BOOLEAN), CAST('2017-12-11 09:30:00' AS DATE)))' due to data type mismatch: Arguments must be same type but were: boolean != date; line 1 pos 28
 
 
 -- !query 265
@@ -2250,7 +2250,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast('2017-12-12 09:30:00.
 struct<>
 -- !query 265 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: TimestampType != ByteType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: timestamp != tinyint; line 1 pos 50
 
 
 -- !query 266
@@ -2259,7 +2259,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast('2017-12-12 09:30:00.
 struct<>
 -- !query 266 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: TimestampType != ShortType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: timestamp != smallint; line 1 pos 50
 
 
 -- !query 267
@@ -2268,7 +2268,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast('2017-12-12 09:30:00.
 struct<>
 -- !query 267 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS INT)))' due to data type mismatch: Arguments must be same type but were: TimestampType != IntegerType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS INT)))' due to data type mismatch: Arguments must be same type but were: timestamp != int; line 1 pos 50
 
 
 -- !query 268
@@ -2277,7 +2277,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast('2017-12-12 09:30:00.
 struct<>
 -- !query 268 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: TimestampType != LongType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: timestamp != bigint; line 1 pos 50
 
 
 -- !query 269
@@ -2286,7 +2286,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast('2017-12-12 09:30:00.
 struct<>
 -- !query 269 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: TimestampType != FloatType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: timestamp != float; line 1 pos 50
 
 
 -- !query 270
@@ -2295,7 +2295,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast('2017-12-12 09:30:00.
 struct<>
 -- !query 270 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: TimestampType != DoubleType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: timestamp != double; line 1 pos 50
 
 
 -- !query 271
@@ -2304,7 +2304,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast('2017-12-12 09:30:00.
 struct<>
 -- !query 271 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: TimestampType != DecimalType(10,0); line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: timestamp != decimal(10,0); line 1 pos 50
 
 
 -- !query 272
@@ -2321,7 +2321,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast('2017-12-12 09:30:00.
 struct<>
 -- !query 273 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: TimestampType != BinaryType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: timestamp != binary; line 1 pos 50
 
 
 -- !query 274
@@ -2330,7 +2330,7 @@ SELECT cast('2017-12-12 09:30:00.0' as timestamp) in (cast('2017-12-12 09:30:00.
 struct<>
 -- !query 274 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: TimestampType != BooleanType; line 1 pos 50
+cannot resolve '(CAST('2017-12-12 09:30:00.0' AS TIMESTAMP) IN (CAST('2017-12-12 09:30:00.0' AS TIMESTAMP), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: timestamp != boolean; line 1 pos 50
 
 
 -- !query 275
@@ -2355,7 +2355,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast('2017-12-12 09:30:00' as dat
 struct<>
 -- !query 277 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: DateType != ByteType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS TINYINT)))' due to data type mismatch: Arguments must be same type but were: date != tinyint; line 1 pos 43
 
 
 -- !query 278
@@ -2364,7 +2364,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast('2017-12-12 09:30:00' as dat
 struct<>
 -- !query 278 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: DateType != ShortType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS SMALLINT)))' due to data type mismatch: Arguments must be same type but were: date != smallint; line 1 pos 43
 
 
 -- !query 279
@@ -2373,7 +2373,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast('2017-12-12 09:30:00' as dat
 struct<>
 -- !query 279 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS INT)))' due to data type mismatch: Arguments must be same type but were: DateType != IntegerType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS INT)))' due to data type mismatch: Arguments must be same type but were: date != int; line 1 pos 43
 
 
 -- !query 280
@@ -2382,7 +2382,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast('2017-12-12 09:30:00' as dat
 struct<>
 -- !query 280 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: DateType != LongType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS BIGINT)))' due to data type mismatch: Arguments must be same type but were: date != bigint; line 1 pos 43
 
 
 -- !query 281
@@ -2391,7 +2391,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast('2017-12-12 09:30:00' as dat
 struct<>
 -- !query 281 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: DateType != FloatType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS FLOAT)))' due to data type mismatch: Arguments must be same type but were: date != float; line 1 pos 43
 
 
 -- !query 282
@@ -2400,7 +2400,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast('2017-12-12 09:30:00' as dat
 struct<>
 -- !query 282 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: DateType != DoubleType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS DOUBLE)))' due to data type mismatch: Arguments must be same type but were: date != double; line 1 pos 43
 
 
 -- !query 283
@@ -2409,7 +2409,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast('2017-12-12 09:30:00' as dat
 struct<>
 -- !query 283 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: DateType != DecimalType(10,0); line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS DECIMAL(10,0))))' due to data type mismatch: Arguments must be same type but were: date != decimal(10,0); line 1 pos 43
 
 
 -- !query 284
@@ -2426,7 +2426,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast('2017-12-12 09:30:00' as dat
 struct<>
 -- !query 285 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: DateType != BinaryType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST('1' AS BINARY)))' due to data type mismatch: Arguments must be same type but were: date != binary; line 1 pos 43
 
 
 -- !query 286
@@ -2435,7 +2435,7 @@ SELECT cast('2017-12-12 09:30:00' as date) in (cast('2017-12-12 09:30:00' as dat
 struct<>
 -- !query 286 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: DateType != BooleanType; line 1 pos 43
+cannot resolve '(CAST('2017-12-12 09:30:00' AS DATE) IN (CAST('2017-12-12 09:30:00' AS DATE), CAST(1 AS BOOLEAN)))' due to data type mismatch: Arguments must be same type but were: date != boolean; line 1 pos 43
 
 
 -- !query 287

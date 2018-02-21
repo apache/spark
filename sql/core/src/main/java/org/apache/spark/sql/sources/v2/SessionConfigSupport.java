@@ -19,16 +19,13 @@ package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.annotation.InterfaceStability;
 
-import java.util.List;
-import java.util.Map;
-
 /**
  * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
  * propagate session configs with the specified key-prefix to all data source operations in this
  * session.
  */
 @InterfaceStability.Evolving
-public interface SessionConfigSupport {
+public interface SessionConfigSupport extends DataSourceV2 {
 
     /**
      * Key prefix of the session configs to propagate. Spark will extract all session configs that

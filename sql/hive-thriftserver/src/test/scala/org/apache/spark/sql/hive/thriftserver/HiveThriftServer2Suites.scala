@@ -135,6 +135,22 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
   }
 
+  test("Support beeline --hiveconf and --hivevar") {
+    withJdbcStatement() { statement =>
+      executeTest(hiveConfList)
+      executeTest(hiveVarList)
+      def executeTest(hiveList: String): Unit = {
+        hiveList.split(";").foreach{ m =>
+          val kv = m.split("=")
+          // select "${a}"; ---> avalue
+          val resultSet = statement.executeQuery("select \"${" + kv(0) + "}\"")
+          resultSet.next()
+          assert(resultSet.getString(1) === kv(1))
+        }
+      }
+    }
+  }
+
   test("JDBC query execution") {
     withJdbcStatement("test") { statement =>
       val queries = Seq(
@@ -740,10 +756,11 @@ abstract class HiveThriftJdbcTest extends HiveThriftServer2Test {
     s"""jdbc:hive2://localhost:$serverPort/
        |default?
        |hive.server2.transport.mode=http;
-       |hive.server2.thrift.http.path=cliservice
+       |hive.server2.thrift.http.path=cliservice;
+       |${hiveConfList}#${hiveVarList}
      """.stripMargin.split("\n").mkString.trim
   } else {
-    s"jdbc:hive2://localhost:$serverPort/"
+    s"jdbc:hive2://localhost:$serverPort/?${hiveConfList}#${hiveVarList}"
   }
 
   def withMultipleConnectionJdbcStatement(tableNames: String*)(fs: (Statement => Unit)*) {
@@ -779,6 +796,8 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   private var listeningPort: Int = _
   protected def serverPort: Int = listeningPort
 
+  protected val hiveConfList = "a=avalue;b=bvalue"
+  protected val hiveVarList = "c=cvalue;d=dvalue"
   protected def user = System.getProperty("user.name")
 
   protected var warehousePath: File = _

@@ -27,17 +27,38 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.streaming.RateStreamOffset
-import org.apache.spark.sql.sources.v2.DataSourceV2Options
+import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
+import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2.reader._
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
-import org.apache.spark.util.SystemClock
+import org.apache.spark.util.{ManualClock, SystemClock}
 
-class RateStreamV2Reader(options: DataSourceV2Options)
+/**
+ * This is a temporary register as we build out v2 migration. Microbatch read support should
+ * be implemented in the same register as v1.
+ */
+class RateSourceProviderV2 extends DataSourceV2 with MicroBatchReadSupport with DataSourceRegister {
+  override def createMicroBatchReader(
+      schema: Optional[StructType],
+      checkpointLocation: String,
+      options: DataSourceOptions): MicroBatchReader = {
+    new RateStreamMicroBatchReader(options)
+  }
+
+  override def shortName(): String = "ratev2"
+}
+
+class RateStreamMicroBatchReader(options: DataSourceOptions)
   extends MicroBatchReader {
   implicit val defaultFormats: DefaultFormats = DefaultFormats
 
-  val clock = new SystemClock
+  val clock = {
+    // The option to use a manual clock is provided only for unit testing purposes.
+    if (options.get("useManualClock").orElse("false").toBoolean) new ManualClock
+    else new SystemClock
+  }
 
   private val numPartitions =
     options.get(RateStreamSourceV2.NUM_PARTITIONS).orElse("5").toInt
@@ -71,7 +92,7 @@ class RateStreamV2Reader(options: DataSourceV2Options)
       val currentTime = clock.getTimeMillis()
       RateStreamOffset(
         this.start.partitionToValueAndRunTimeMs.map {
-          case startOffset @ (part, (currentVal, currentReadTime)) =>
+          case startOffset @ (part, ValueRunTimeMsPair(currentVal, currentReadTime)) =>
             // Calculate the number of rows we should advance in this partition (based on the
             // current time), and output a corresponding offset.
             val readInterval = currentTime - currentReadTime
@@ -79,9 +100,9 @@ class RateStreamV2Reader(options: DataSourceV2Options)
             if (numNewRows <= 0) {
               startOffset
             } else {
-              (part,
-                (currentVal + (numNewRows * numPartitions),
-                currentReadTime + (numNewRows * msPerPartitionBetweenRows)))
+              (part, ValueRunTimeMsPair(
+                  currentVal + (numNewRows * numPartitions),
+                  currentReadTime + (numNewRows * msPerPartitionBetweenRows)))
             }
         }
       )
@@ -98,26 +119,26 @@ class RateStreamV2Reader(options: DataSourceV2Options)
   }
 
   override def deserializeOffset(json: String): Offset = {
-    RateStreamOffset(Serialization.read[Map[Int, (Long, Long)]](json))
+    RateStreamOffset(Serialization.read[Map[Int, ValueRunTimeMsPair]](json))
   }
 
-  override def createReadTasks(): java.util.List[ReadTask[Row]] = {
+  override def createDataReaderFactories(): java.util.List[DataReaderFactory[Row]] = {
     val startMap = start.partitionToValueAndRunTimeMs
     val endMap = end.partitionToValueAndRunTimeMs
     endMap.keys.toSeq.map { part =>
-      val (endVal, _) = endMap(part)
-      val (startVal, startTimeMs) = startMap(part)
+      val ValueRunTimeMsPair(endVal, _) = endMap(part)
+      val ValueRunTimeMsPair(startVal, startTimeMs) = startMap(part)
 
       val packedRows = mutable.ListBuffer[(Long, Long)]()
       var outVal = startVal + numPartitions
-      var outTimeMs = startTimeMs + msPerPartitionBetweenRows
+      var outTimeMs = startTimeMs
       while (outVal <= endVal) {
         packedRows.append((outTimeMs, outVal))
         outVal += numPartitions
         outTimeMs += msPerPartitionBetweenRows
       }
 
-      RateStreamBatchTask(packedRows).asInstanceOf[ReadTask[Row]]
+      RateStreamBatchTask(packedRows).asInstanceOf[DataReaderFactory[Row]]
     }.toList.asJava
   }
 
@@ -125,12 +146,12 @@ class RateStreamV2Reader(options: DataSourceV2Options)
   override def stop(): Unit = {}
 }
 
-case class RateStreamBatchTask(vals: Seq[(Long, Long)]) extends ReadTask[Row] {
+case class RateStreamBatchTask(vals: Seq[(Long, Long)]) extends DataReaderFactory[Row] {
   override def createDataReader(): DataReader[Row] = new RateStreamBatchReader(vals)
 }
 
 class RateStreamBatchReader(vals: Seq[(Long, Long)]) extends DataReader[Row] {
-  var currentIndex = -1
+  private var currentIndex = -1
 
   override def next(): Boolean = {
     // Return true as long as the new index is in the seq.
@@ -158,7 +179,8 @@ object RateStreamSourceV2 {
         // by the increment that will later be applied. The first row output in each
         // partition will have a value equal to the partition index.
         (i,
-          ((i - numPartitions).toLong,
+          ValueRunTimeMsPair(
+            (i - numPartitions).toLong,
             creationTimeMs))
       }.toMap)
   }

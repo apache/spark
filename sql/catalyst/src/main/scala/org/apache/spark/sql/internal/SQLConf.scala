@@ -27,11 +27,13 @@ import scala.util.matching.Regex
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
+import org.apache.spark.util.Utils
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -70,7 +72,7 @@ object SQLConf {
    * Default config. Only used when there is no active SparkSession for the thread.
    * See [[get]] for more information.
    */
-  private val fallbackConf = new ThreadLocal[SQLConf] {
+  private lazy val fallbackConf = new ThreadLocal[SQLConf] {
     override def initialValue: SQLConf = new SQLConf
   }
 
@@ -121,14 +123,12 @@ object SQLConf {
       .createWithDefault(10)
 
   val COMPRESS_CACHED = buildConf("spark.sql.inMemoryColumnarStorage.compressed")
-    .internal()
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
       "column based on statistics of the data.")
     .booleanConf
     .createWithDefault(true)
 
   val COLUMN_BATCH_SIZE = buildConf("spark.sql.inMemoryColumnarStorage.batchSize")
-    .internal()
     .doc("Controls the size of batches for columnar caching.  Larger batch sizes can improve " +
       "memory utilization and compression, but risk OOMs when caching data.")
     .intConf
@@ -138,6 +138,12 @@ object SQLConf {
     buildConf("spark.sql.inMemoryColumnarStorage.partitionPruning")
       .internal()
       .doc("When true, enable partition pruning for in-memory columnar tables.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val CACHE_VECTORIZED_READER_ENABLED =
+    buildConf("spark.sql.inMemoryColumnarStorage.enableVectorizedReader")
+      .doc("Enables vectorized reader for columnar caching.")
       .booleanConf
       .createWithDefault(true)
 
@@ -247,7 +253,7 @@ object SQLConf {
   val CONSTRAINT_PROPAGATION_ENABLED = buildConf("spark.sql.constraintPropagation.enabled")
     .internal()
     .doc("When true, the query optimizer will infer and propagate data constraints in the query " +
-      "plan to optimize them. Constraint propagation can sometimes be computationally expensive" +
+      "plan to optimize them. Constraint propagation can sometimes be computationally expensive " +
       "for certain kinds of query plans (such as those with a large number of predicates and " +
       "aliases) which might negatively impact overall runtime.")
     .booleanConf
@@ -260,6 +266,15 @@ object SQLConf {
       "prior to Spark 2.0.")
     .booleanConf
     .createWithDefault(false)
+
+  val FILE_COMRESSION_FACTOR = buildConf("spark.sql.sources.fileCompressionFactor")
+    .internal()
+    .doc("When estimating the output data size of a table scan, multiply the file size with this " +
+      "factor as the estimated data size, in case the data is compressed in the file and lead to" +
+      " a heavily underestimated result.")
+    .doubleConf
+    .checkValue(_ > 0, "the value of fileDataSizeFactor must be larger than 0")
+    .createWithDefault(1.0)
 
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
@@ -323,11 +338,14 @@ object SQLConf {
     .createWithDefault(false)
 
   val PARQUET_COMPRESSION = buildConf("spark.sql.parquet.compression.codec")
-    .doc("Sets the compression codec use when writing Parquet files. Acceptable values include: " +
-      "uncompressed, snappy, gzip, lzo.")
+    .doc("Sets the compression codec used when writing Parquet files. If either `compression` or " +
+      "`parquet.compression` is specified in the table-specific options/properties, the " +
+      "precedence would be `compression`, `parquet.compression`, " +
+      "`spark.sql.parquet.compression.codec`. Acceptable values include: none, uncompressed, " +
+      "snappy, gzip, lzo.")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
-    .checkValues(Set("uncompressed", "snappy", "gzip", "lzo"))
+    .checkValues(Set("none", "uncompressed", "snappy", "gzip", "lzo"))
     .createWithDefault("snappy")
 
   val PARQUET_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.filterPushdown")
@@ -336,8 +354,8 @@ object SQLConf {
     .createWithDefault(true)
 
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
-    .doc("Whether to follow Parquet's format specification when converting Parquet schema to " +
-      "Spark SQL schema and vice versa.")
+    .doc("Whether to be compatible with the legacy Parquet format adopted by Spark 1.4 and prior " +
+      "versions, when converting Parquet schema to Spark SQL schema and vice versa.")
     .booleanConf
     .createWithDefault(false)
 
@@ -363,9 +381,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARQUET_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.parquet.columnarReaderBatchSize")
+    .doc("The number of rows to include in a parquet vectorized reader batch. The number should " +
+      "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
+    .intConf
+    .createWithDefault(4096)
+
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
-    .doc("Sets the compression codec use when writing ORC files. Acceptable values include: " +
-      "none, uncompressed, snappy, zlib, lzo.")
+    .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
+      "`orc.compress` is specified in the table-specific options/properties, the precedence " +
+      "would be `compression`, `orc.compress`, `spark.sql.orc.compression.codec`." +
+      "Acceptable values include: none, uncompressed, snappy, zlib, lzo.")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo"))
@@ -373,16 +399,34 @@ object SQLConf {
 
   val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
     .doc("When native, use the native version of ORC support instead of the ORC library in Hive " +
-      "1.2.1. It is 'hive' by default prior to Spark 2.3.")
+      "1.2.1. It is 'hive' by default prior to Spark 2.4.")
     .internal()
     .stringConf
     .checkValues(Set("hive", "native"))
     .createWithDefault("native")
 
+  val ORC_VECTORIZED_READER_ENABLED = buildConf("spark.sql.orc.enableVectorizedReader")
+    .doc("Enables vectorized orc decoding.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val ORC_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.orc.columnarReaderBatchSize")
+    .doc("The number of rows to include in a orc vectorized reader batch. The number should " +
+      "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
+    .intConf
+    .createWithDefault(4096)
+
+  val ORC_COPY_BATCH_TO_SPARK = buildConf("spark.sql.orc.copyBatchToSpark")
+    .doc("Whether or not to copy the ORC columnar batch to Spark columnar batch in the " +
+      "vectorized ORC reader.")
+    .internal()
+    .booleanConf
+    .createWithDefault(false)
+
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
     .booleanConf
-    .createWithDefault(false)
+    .createWithDefault(true)
 
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
@@ -601,6 +645,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME =
+    buildConf("spark.sql.codegen.useIdInClassName")
+    .internal()
+    .doc("When true, embed the (whole-stage) codegen stage ID into " +
+      "the class name of the generated class as a suffix")
+    .booleanConf
+    .createWithDefault(true)
+
   val WHOLESTAGE_MAX_NUM_FIELDS = buildConf("spark.sql.codegen.maxFields")
     .internal()
     .doc("The maximum number of fields (including nested fields) that will be supported before" +
@@ -626,12 +678,22 @@ object SQLConf {
   val WHOLESTAGE_HUGE_METHOD_LIMIT = buildConf("spark.sql.codegen.hugeMethodLimit")
     .internal()
     .doc("The maximum bytecode size of a single compiled Java function generated by whole-stage " +
-      "codegen. When the compiled function exceeds this threshold, " +
-      "the whole-stage codegen is deactivated for this subtree of the current query plan. " +
-      s"The default value is ${CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT} and " +
-      "this is a limit in the OpenJDK JVM implementation.")
+      "codegen. When the compiled function exceeds this threshold, the whole-stage codegen is " +
+      "deactivated for this subtree of the current query plan. The default value is 65535, which " +
+      "is the largest bytecode size possible for a valid Java method. When running on HotSpot, " +
+      s"it may be preferable to set the value to ${CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT} " +
+      "to match HotSpot's implementation.")
     .intConf
-    .createWithDefault(CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT)
+    .createWithDefault(65535)
+
+  val WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR =
+    buildConf("spark.sql.codegen.splitConsumeFuncByOperator")
+      .internal()
+      .doc("When true, whole stage codegen would put the logic of consuming rows of each " +
+        "physical operator into individual methods, instead of a single big method. This can be " +
+        "used to avoid oversized function that can miss the opportunity of JIT optimization.")
+      .booleanConf
+      .createWithDefault(true)
 
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
@@ -866,7 +928,7 @@ object SQLConf {
       .internal()
       .doc("The number of bins when generating histograms.")
       .intConf
-      .checkValue(num => num > 1, "The number of bins must be large than 1.")
+      .checkValue(num => num > 1, "The number of bins must be larger than 1.")
       .createWithDefault(254)
 
   val PERCENTILE_ACCURACY =
@@ -998,17 +1060,16 @@ object SQLConf {
 
   val ARROW_EXECUTION_ENABLE =
     buildConf("spark.sql.execution.arrow.enabled")
-      .internal()
-      .doc("Make use of Apache Arrow for columnar data transfers. Currently available " +
-        "for use with pyspark.sql.DataFrame.toPandas with the following data types: " +
-        "StringType, BinaryType, BooleanType, DoubleType, FloatType, ByteType, IntegerType, " +
-        "LongType, ShortType")
+      .doc("When true, make use of Apache Arrow for columnar data transfers. Currently available " +
+        "for use with pyspark.sql.DataFrame.toPandas, and " +
+        "pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame. " +
+        "The following data types are unsupported: " +
+        "BinaryType, MapType, ArrayType of TimestampType, and nested StructType.")
       .booleanConf
       .createWithDefault(false)
 
   val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
-      .internal()
       .doc("When using Apache Arrow, limit the maximum number of records that can be written " +
         "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit.")
       .intConf
@@ -1036,6 +1097,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val DECIMAL_OPERATIONS_ALLOW_PREC_LOSS =
+    buildConf("spark.sql.decimalOperations.allowPrecisionLoss")
+      .internal()
+      .doc("When true (default), establishing the result type of an arithmetic operation " +
+        "happens according to Hive behavior and SQL ANSI 2011 specification, ie. rounding the " +
+        "decimal part of the result if an exact representation is not possible. Otherwise, NULL " +
+        "is returned in those cases, as previously.")
+      .booleanConf
+      .createWithDefault(true)
+
   val SQL_STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.sql.redaction.string.regex")
       .doc("Regex to decide which parts of strings produced by Spark contain sensitive " +
@@ -1043,6 +1114,81 @@ object SQLConf {
         "dummy value. This is currently used to redact the output of SQL explain commands. " +
         "When this conf is not set, the value from `spark.redaction.string.regex` is used.")
       .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
+
+  val CONCAT_BINARY_AS_STRING = buildConf("spark.sql.function.concatBinaryAsString")
+    .doc("When this option is set to false and all inputs are binary, `functions.concat` returns " +
+      "an output as binary. Otherwise, it returns as a string. ")
+    .booleanConf
+    .createWithDefault(false)
+
+  val ELT_OUTPUT_AS_STRING = buildConf("spark.sql.function.eltOutputAsString")
+    .doc("When this option is set to false and all inputs are binary, `elt` returns " +
+      "an output as binary. Otherwise, it returns as a string. ")
+    .booleanConf
+    .createWithDefault(false)
+
+  val CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE =
+    buildConf("spark.sql.streaming.continuous.executorQueueSize")
+    .internal()
+    .doc("The size (measured in number of rows) of the queue used in continuous execution to" +
+      " buffer the results of a ContinuousDataReader.")
+    .intConf
+    .createWithDefault(1024)
+
+  val CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS =
+    buildConf("spark.sql.streaming.continuous.executorPollIntervalMs")
+      .internal()
+      .doc("The interval at which continuous execution readers will poll to check whether" +
+        " the epoch has advanced on the driver.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefault(100)
+
+  val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
+    .internal()
+    .doc("A comma-separated list of fully qualified data source register class names for which" +
+      " StreamWriteSupport is disabled. Writes to these sources will fall back to the V1 Sinks.")
+    .stringConf
+    .createWithDefault("")
+
+  val DISABLED_V2_STREAMING_MICROBATCH_READERS =
+    buildConf("spark.sql.streaming.disabledV2MicroBatchReaders")
+      .internal()
+      .doc(
+        "A comma-separated list of fully qualified data source register class names for which " +
+          "MicroBatchReadSupport is disabled. Reads from these sources will fall back to the " +
+          "V1 Sources.")
+      .stringConf
+      .createWithDefault("")
+
+  object PartitionOverwriteMode extends Enumeration {
+    val STATIC, DYNAMIC = Value
+  }
+
+  val PARTITION_OVERWRITE_MODE =
+    buildConf("spark.sql.sources.partitionOverwriteMode")
+      .doc("When INSERT OVERWRITE a partitioned data source table, we currently support 2 modes: " +
+        "static and dynamic. In static mode, Spark deletes all the partitions that match the " +
+        "partition specification(e.g. PARTITION(a=1,b)) in the INSERT statement, before " +
+        "overwriting. In dynamic mode, Spark doesn't delete partitions ahead, and only overwrite " +
+        "those partitions that have data written into it at runtime. By default we use static " +
+        "mode to keep the same behavior of Spark prior to 2.3. Note that this config doesn't " +
+        "affect Hive serde tables, as they are always overwritten with dynamic mode.")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(PartitionOverwriteMode.values.map(_.toString))
+      .createWithDefault(PartitionOverwriteMode.STATIC.toString)
+
+  val SORT_BEFORE_REPARTITION =
+    buildConf("spark.sql.execution.sortBeforeRepartition")
+      .internal()
+      .doc("When perform a repartition following a shuffle, the output row ordering would be " +
+        "nondeterministic. If some downstream stages fail and some tasks of the repartition " +
+        "stage retry, these tasks may generate different data, and that can lead to correctness " +
+        "issues. Turn on this config to insert a local sort before actually doing repartition " +
+        "to generate consistent repartition results. The performance of repartition() may go " +
+        "down since we insert extra local sort before it.")
+      .booleanConf
+      .createWithDefault(true)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -1064,6 +1210,12 @@ object SQLConf {
  */
 class SQLConf extends Serializable with Logging {
   import SQLConf._
+
+  if (Utils.isTesting && SparkEnv.get != null) {
+    // assert that we're only accessing it on the driver.
+    assert(SparkEnv.get.executorId == SparkContext.DRIVER_IDENTIFIER,
+      "SQLConf should only be created and accessed on the driver.")
+  }
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
   @transient protected[spark] val settings = java.util.Collections.synchronizedMap(
@@ -1124,11 +1276,19 @@ class SQLConf extends Serializable with Logging {
 
   def orcCompressionCodec: String = getConf(ORC_COMPRESSION)
 
+  def orcVectorizedReaderEnabled: Boolean = getConf(ORC_VECTORIZED_READER_ENABLED)
+
+  def orcVectorizedReaderBatchSize: Int = getConf(ORC_VECTORIZED_READER_BATCH_SIZE)
+
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
 
+  def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
+
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
+
+  def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
 
   def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
@@ -1163,6 +1323,8 @@ class SQLConf extends Serializable with Logging {
 
   def wholeStageEnabled: Boolean = getConf(WHOLESTAGE_CODEGEN_ENABLED)
 
+  def wholeStageUseIdInClassName: Boolean = getConf(WHOLESTAGE_CODEGEN_USE_ID_IN_CLASS_NAME)
+
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
   def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
@@ -1170,6 +1332,9 @@ class SQLConf extends Serializable with Logging {
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
+
+  def wholeStageSplitConsumeFuncByOperator: Boolean =
+    getConf(WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR)
 
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
@@ -1182,7 +1347,11 @@ class SQLConf extends Serializable with Logging {
 
   def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
+  def fileCompressionFactor: Double = getConf(FILE_COMRESSION_FACTOR)
+
   def stringRedationPattern: Option[Regex] = SQL_STRING_REDACTION_PATTERN.readFrom(reader)
+
+  def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -1356,6 +1525,25 @@ class SQLConf extends Serializable with Logging {
   def pandasRespectSessionTimeZone: Boolean = getConf(PANDAS_RESPECT_SESSION_LOCAL_TIMEZONE)
 
   def replaceExceptWithFilter: Boolean = getConf(REPLACE_EXCEPT_WITH_FILTER)
+
+  def decimalOperationsAllowPrecisionLoss: Boolean = getConf(DECIMAL_OPERATIONS_ALLOW_PREC_LOSS)
+
+  def continuousStreamingExecutorQueueSize: Int = getConf(CONTINUOUS_STREAMING_EXECUTOR_QUEUE_SIZE)
+
+  def continuousStreamingExecutorPollIntervalMs: Long =
+    getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
+
+  def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
+
+  def disabledV2StreamingMicroBatchReaders: String =
+    getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
+
+  def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
+
+  def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
+
+  def partitionOverwriteMode: PartitionOverwriteMode.Value =
+    PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
 
   /** ********************** SQLConf functionality methods ************ */
 

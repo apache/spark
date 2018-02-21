@@ -15,6 +15,13 @@
 # limitations under the License.
 #
 
+"""
+An example demonstrating k-means clustering.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/kmeans_example.py
+
+This example requires NumPy (http://www.numpy.org/).
+"""
 from __future__ import print_function
 
 # $example on$
@@ -23,14 +30,6 @@ from pyspark.ml.evaluation import ClusteringEvaluator
 # $example off$
 
 from pyspark.sql import SparkSession
-
-"""
-An example demonstrating k-means clustering.
-Run with:
-  bin/spark-submit examples/src/main/python/ml/kmeans_example.py
-
-This example requires NumPy (http://www.numpy.org/).
-"""
 
 if __name__ == "__main__":
     spark = SparkSession\

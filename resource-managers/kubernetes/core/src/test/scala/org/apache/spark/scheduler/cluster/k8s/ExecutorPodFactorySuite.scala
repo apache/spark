@@ -18,15 +18,19 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{Pod, _}
-import org.mockito.MockitoAnnotations
+import io.fabric8.kubernetes.api.model._
+import org.mockito.{AdditionalAnswers, MockitoAnnotations}
+import org.mockito.Matchers.any
+import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.k8s.{InitContainerBootstrap, MountSecretsBootstrap, PodWithDetachedInitContainer, SecretVolumeUtils}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 
 class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterEach {
+
   private val driverPodName: String = "driver-pod"
   private val driverPodUid: String = "driver-uid"
   private val executorPrefix: String = "base"
@@ -50,11 +54,11 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     baseConf = new SparkConf()
       .set(KUBERNETES_DRIVER_POD_NAME, driverPodName)
       .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, executorPrefix)
-      .set(EXECUTOR_CONTAINER_IMAGE, executorImage)
+      .set(CONTAINER_IMAGE, executorImage)
   }
 
   test("basic executor pod has reasonable defaults") {
-    val factory = new ExecutorPodFactoryImpl(baseConf)
+    val factory = new ExecutorPodFactory(baseConf, None, None, None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -85,7 +89,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX,
       "loremipsumdolorsitametvimatelitrefficiendisuscipianturvixlegeresple")
 
-    val factory = new ExecutorPodFactoryImpl(conf)
+    val factory = new ExecutorPodFactory(conf, None, None, None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -97,14 +101,84 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     conf.set(org.apache.spark.internal.config.EXECUTOR_JAVA_OPTIONS, "foo=bar")
     conf.set(org.apache.spark.internal.config.EXECUTOR_CLASS_PATH, "bar=baz")
 
-    val factory = new ExecutorPodFactoryImpl(conf)
+    val factory = new ExecutorPodFactory(conf, None, None, None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)]("qux" -> "quux"), driverPod, Map[String, Int]())
 
     checkEnv(executor,
       Map("SPARK_JAVA_OPT_0" -> "foo=bar",
-        "SPARK_EXECUTOR_EXTRA_CLASSPATH" -> "bar=baz",
+        ENV_CLASSPATH -> "bar=baz",
         "qux" -> "quux"))
+    checkOwnerReferences(executor, driverPodUid)
+  }
+
+  test("executor secrets get mounted") {
+    val conf = baseConf.clone()
+
+    val secretsBootstrap = new MountSecretsBootstrap(Map("secret1" -> "/var/secret1"))
+    val factory = new ExecutorPodFactory(
+      conf,
+      Some(secretsBootstrap),
+      None,
+      None)
+    val executor = factory.createExecutorPod(
+      "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
+
+    assert(executor.getSpec.getContainers.size() === 1)
+    assert(executor.getSpec.getContainers.get(0).getVolumeMounts.size() === 1)
+    assert(executor.getSpec.getContainers.get(0).getVolumeMounts.get(0).getName
+      === "secret1-volume")
+    assert(executor.getSpec.getContainers.get(0).getVolumeMounts.get(0)
+      .getMountPath === "/var/secret1")
+
+    // check volume mounted.
+    assert(executor.getSpec.getVolumes.size() === 1)
+    assert(executor.getSpec.getVolumes.get(0).getSecret.getSecretName === "secret1")
+
+    checkOwnerReferences(executor, driverPodUid)
+  }
+
+  test("init-container bootstrap step adds an init container") {
+    val conf = baseConf.clone()
+    val initContainerBootstrap = mock(classOf[InitContainerBootstrap])
+    when(initContainerBootstrap.bootstrapInitContainer(
+      any(classOf[PodWithDetachedInitContainer]))).thenAnswer(AdditionalAnswers.returnsFirstArg())
+
+    val factory = new ExecutorPodFactory(
+      conf,
+      None,
+      Some(initContainerBootstrap),
+      None)
+    val executor = factory.createExecutorPod(
+      "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
+
+    assert(executor.getSpec.getInitContainers.size() === 1)
+    checkOwnerReferences(executor, driverPodUid)
+  }
+
+  test("init-container with secrets mount bootstrap") {
+    val conf = baseConf.clone()
+    val initContainerBootstrap = mock(classOf[InitContainerBootstrap])
+    when(initContainerBootstrap.bootstrapInitContainer(
+      any(classOf[PodWithDetachedInitContainer]))).thenAnswer(AdditionalAnswers.returnsFirstArg())
+    val secretsBootstrap = new MountSecretsBootstrap(Map("secret1" -> "/var/secret1"))
+
+    val factory = new ExecutorPodFactory(
+      conf,
+      Some(secretsBootstrap),
+      Some(initContainerBootstrap),
+      Some(secretsBootstrap))
+    val executor = factory.createExecutorPod(
+      "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
+
+    assert(executor.getSpec.getVolumes.size() === 1)
+    assert(SecretVolumeUtils.podHasVolume(executor, "secret1-volume"))
+    assert(SecretVolumeUtils.containerHasVolume(
+      executor.getSpec.getContainers.get(0), "secret1-volume", "/var/secret1"))
+    assert(executor.getSpec.getInitContainers.size() === 1)
+    assert(SecretVolumeUtils.containerHasVolume(
+      executor.getSpec.getInitContainers.get(0), "secret1-volume", "/var/secret1"))
+
     checkOwnerReferences(executor, driverPodUid)
   }
 
@@ -123,7 +197,8 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       ENV_EXECUTOR_CORES -> "1",
       ENV_EXECUTOR_MEMORY -> "1g",
       ENV_APPLICATION_ID -> "dummy",
-      ENV_EXECUTOR_POD_IP -> null) ++ additionalEnvVars
+      ENV_EXECUTOR_POD_IP -> null,
+      ENV_MOUNTED_CLASSPATH -> "/var/spark-data/spark-jars/*") ++ additionalEnvVars
 
     assert(executor.getSpec.getContainers.size() === 1)
     assert(executor.getSpec.getContainers.get(0).getEnv.size() === defaultEnvs.size)

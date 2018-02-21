@@ -111,7 +111,7 @@ private [sql] object GenArrayData {
       val assignmentString = ctx.splitExpressionsWithCurrentInputs(
         expressions = assignments,
         funcName = "apply",
-        extraArguments = ("Object[]", arrayDataName) :: Nil)
+        extraArguments = ("Object[]", arrayName) :: Nil)
 
       (s"Object[] $arrayName = new Object[$numElements];",
        assignmentString,

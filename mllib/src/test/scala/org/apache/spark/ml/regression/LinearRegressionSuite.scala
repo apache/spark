@@ -19,14 +19,13 @@ package org.apache.spark.ml.regression
 
 import scala.util.Random
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
+import org.apache.spark.mllib.util.LinearDataGenerator
 import org.apache.spark.sql.{DataFrame, Row}
 
 class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
@@ -363,8 +362,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
       assert(model2.intercept ~== interceptR2 relTol 1E-3)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-3)
 
-      model1.transform(datasetWithDenseFeature).select("features", "prediction")
-        .collect().foreach {
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
+        "features", "prediction") {
           case Row(features: DenseVector, prediction1: Double) =>
             val prediction2 =
               features(0) * model1.coefficients(0) + features(1) * model1.coefficients(1) +
@@ -416,8 +415,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
       assert(model2.intercept ~== interceptR2 absTol 1E-2)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
-      model1.transform(datasetWithDenseFeature).select("features", "prediction")
-        .collect().foreach {
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
+        "features", "prediction") {
           case Row(features: DenseVector, prediction1: Double) =>
             val prediction2 =
               features(0) * model1.coefficients(0) + features(1) * model1.coefficients(1) +
@@ -467,7 +466,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
       assert(model2.intercept ~== interceptR2 relTol 1E-2)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
-      model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
+        "features", "prediction") {
         case Row(features: DenseVector, prediction1: Double) =>
           val prediction2 =
             features(0) * model1.coefficients(0) + features(1) * model1.coefficients(1) +
@@ -518,7 +518,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
       assert(model2.intercept ~== interceptR2 absTol 1E-2)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
-      model1.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
+        "features", "prediction") {
         case Row(features: DenseVector, prediction1: Double) =>
           val prediction2 =
             features(0) * model1.coefficients(0) + features(1) * model1.coefficients(1) +
@@ -570,8 +571,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
       assert(model2.intercept ~== interceptR2 relTol 1E-2)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
-      model1.transform(datasetWithDenseFeature).select("features", "prediction")
-        .collect().foreach {
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
+        "features", "prediction") {
         case Row(features: DenseVector, prediction1: Double) =>
           val prediction2 =
             features(0) * model1.coefficients(0) + features(1) * model1.coefficients(1) +
@@ -624,8 +625,8 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
       assert(model2.intercept ~== interceptR2 absTol 1E-2)
       assert(model2.coefficients ~= coefficientsR2 relTol 1E-2)
 
-      model1.transform(datasetWithDenseFeature).select("features", "prediction")
-        .collect().foreach {
+      testTransformer[(Double, Vector)](datasetWithDenseFeature, model1,
+        "features", "prediction") {
         case Row(features: DenseVector, prediction1: Double) =>
           val prediction2 =
             features(0) * model1.coefficients(0) + features(1) * model1.coefficients(1) +

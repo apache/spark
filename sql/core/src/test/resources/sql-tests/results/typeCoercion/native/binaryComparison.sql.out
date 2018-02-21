@@ -16,7 +16,7 @@ SELECT cast(1 as binary) = '1' FROM t
 struct<>
 -- !query 1 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 7
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 7
 
 
 -- !query 2
@@ -25,7 +25,7 @@ SELECT cast(1 as binary) > '2' FROM t
 struct<>
 -- !query 2 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 7
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 7
 
 
 -- !query 3
@@ -34,7 +34,7 @@ SELECT cast(1 as binary) >= '2' FROM t
 struct<>
 -- !query 3 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 7
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 7
 
 
 -- !query 4
@@ -43,7 +43,7 @@ SELECT cast(1 as binary) < '2' FROM t
 struct<>
 -- !query 4 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 7
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 7
 
 
 -- !query 5
@@ -52,7 +52,7 @@ SELECT cast(1 as binary) <= '2' FROM t
 struct<>
 -- !query 5 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 7
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 7
 
 
 -- !query 6
@@ -61,7 +61,7 @@ SELECT cast(1 as binary) <> '2' FROM t
 struct<>
 -- !query 6 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 7
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 7
 
 
 -- !query 7
@@ -70,7 +70,7 @@ SELECT cast(1 as binary) = cast(null as string) FROM t
 struct<>
 -- !query 7 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 7
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 7
 
 
 -- !query 8
@@ -79,7 +79,7 @@ SELECT cast(1 as binary) > cast(null as string) FROM t
 struct<>
 -- !query 8 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 7
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 7
 
 
 -- !query 9
@@ -88,7 +88,7 @@ SELECT cast(1 as binary) >= cast(null as string) FROM t
 struct<>
 -- !query 9 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 7
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 7
 
 
 -- !query 10
@@ -97,7 +97,7 @@ SELECT cast(1 as binary) < cast(null as string) FROM t
 struct<>
 -- !query 10 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 7
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 7
 
 
 -- !query 11
@@ -106,7 +106,7 @@ SELECT cast(1 as binary) <= cast(null as string) FROM t
 struct<>
 -- !query 11 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 7
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 7
 
 
 -- !query 12
@@ -115,7 +115,7 @@ SELECT cast(1 as binary) <> cast(null as string) FROM t
 struct<>
 -- !query 12 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 7
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 7
 
 
 -- !query 13
@@ -124,7 +124,7 @@ SELECT '1' = cast(1 as binary) FROM t
 struct<>
 -- !query 13 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 13
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 13
 
 
 -- !query 14
@@ -133,7 +133,7 @@ SELECT '2' > cast(1 as binary) FROM t
 struct<>
 -- !query 14 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 13
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 13
 
 
 -- !query 15
@@ -142,7 +142,7 @@ SELECT '2' >= cast(1 as binary) FROM t
 struct<>
 -- !query 15 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 14
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 14
 
 
 -- !query 16
@@ -151,7 +151,7 @@ SELECT '2' < cast(1 as binary) FROM t
 struct<>
 -- !query 16 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 13
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 13
 
 
 -- !query 17
@@ -160,7 +160,7 @@ SELECT '2' <= cast(1 as binary) FROM t
 struct<>
 -- !query 17 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 14
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 14
 
 
 -- !query 18
@@ -169,7 +169,7 @@ SELECT '2' <> cast(1 as binary) FROM t
 struct<>
 -- !query 18 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 14
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 14
 
 
 -- !query 19
@@ -178,7 +178,7 @@ SELECT cast(null as string) = cast(1 as binary) FROM t
 struct<>
 -- !query 19 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 30
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 30
 
 
 -- !query 20
@@ -187,7 +187,7 @@ SELECT cast(null as string) > cast(1 as binary) FROM t
 struct<>
 -- !query 20 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 30
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 30
 
 
 -- !query 21
@@ -196,7 +196,7 @@ SELECT cast(null as string) >= cast(1 as binary) FROM t
 struct<>
 -- !query 21 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 31
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 31
 
 
 -- !query 22
@@ -205,7 +205,7 @@ SELECT cast(null as string) < cast(1 as binary) FROM t
 struct<>
 -- !query 22 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 30
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 30
 
 
 -- !query 23
@@ -214,7 +214,7 @@ SELECT cast(null as string) <= cast(1 as binary) FROM t
 struct<>
 -- !query 23 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 31
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 31
 
 
 -- !query 24
@@ -223,7 +223,7 @@ SELECT cast(null as string) <> cast(1 as binary) FROM t
 struct<>
 -- !query 24 output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast IntegerType to BinaryType; line 1 pos 31
+cannot resolve 'CAST(1 AS BINARY)' due to data type mismatch: cannot cast int to binary; line 1 pos 31
 
 
 -- !query 25
