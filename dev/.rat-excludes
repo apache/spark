@@ -109,3 +109,4 @@ publish.sh
 publish-local.sh
 structured-streaming/*
 kafka-source-initial-offset-version-2.1.0.bin
+kafka-source-initial-offset-future-version.bin

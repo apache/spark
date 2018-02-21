@@ -23,7 +23,7 @@ from pyspark import SparkContext, since
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.types import StringType, DataType, ArrayType, StructType, MapType, \
-    _parse_datatype_string
+    _parse_datatype_string, to_arrow_type, to_arrow_schema
 
 __all__ = ["UDFRegistration"]
 
@@ -113,15 +113,31 @@ class UserDefinedFunction(object):
             else:
                 self._returnType_placeholder = _parse_datatype_string(self._returnType)
 
-        if self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF \
-                and not isinstance(self._returnType_placeholder, StructType):
-            raise ValueError("Invalid returnType: returnType must be a StructType for "
-                             "pandas_udf with function type GROUPED_MAP")
-        elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF \
-                and isinstance(self._returnType_placeholder, (StructType, ArrayType, MapType)):
-            raise NotImplementedError(
-                "ArrayType, StructType and MapType are not supported with "
-                "PandasUDFType.GROUPED_AGG")
+        if self.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF:
+            try:
+                to_arrow_type(self._returnType_placeholder)
+            except TypeError:
+                raise NotImplementedError(
+                    "Invalid returnType with scalar Pandas UDFs: %s is "
+                    "not supported" % str(self._returnType_placeholder))
+        elif self.evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
+            if isinstance(self._returnType_placeholder, StructType):
+                try:
+                    to_arrow_schema(self._returnType_placeholder)
+                except TypeError:
+                    raise NotImplementedError(
+                        "Invalid returnType with grouped map Pandas UDFs: "
+                        "%s is not supported" % str(self._returnType_placeholder))
+            else:
+                raise TypeError("Invalid returnType for grouped map Pandas "
+                                "UDFs: returnType must be a StructType.")
+        elif self.evalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
+            try:
+                to_arrow_type(self._returnType_placeholder)
+            except TypeError:
+                raise NotImplementedError(
+                    "Invalid returnType with grouped aggregate Pandas UDFs: "
+                    "%s is not supported" % str(self._returnType_placeholder))
 
         return self._returnType_placeholder
 
@@ -357,7 +373,7 @@ class UDFRegistration(object):
 
         >>> spark.udf.registerJavaUDAF("javaUDAF", "test.org.apache.spark.sql.MyDoubleAvg")
         >>> df = spark.createDataFrame([(1, "a"),(2, "b"), (3, "a")],["id", "name"])
-        >>> df.registerTempTable("df")
+        >>> df.createOrReplaceTempView("df")
         >>> spark.sql("SELECT name, javaUDAF(id) as avg from df group by name").collect()
         [Row(name=u'b', avg=102.0), Row(name=u'a', avg=102.0)]
         """

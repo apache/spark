@@ -138,7 +138,7 @@
     <retrofit.version>2.3.0</retrofit.version>
     <bouncycastle.version>1.58</bouncycastle.version>
     <jetty.version>9.4.8.v20171121</jetty.version>
-    <orc.version>1.4.1</orc.version>
+    <orc.version>1.4.3</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <javaxservlet.version>3.1.0</javaxservlet.version>
     <chill.version>0.8.4</chill.version>
@@ -170,7 +170,7 @@
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
     <fasterxml.jackson.version>2.6.7</fasterxml.jackson.version>
     <fasterxml.jackson.databind.version>2.6.7.1</fasterxml.jackson.databind.version>
-    <snappy.version>1.1.2.6</snappy.version>
+    <snappy.version>1.1.7.1</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
     <commons-codec.version>1.10</commons-codec.version>
@@ -200,6 +200,10 @@
     <paranamer.version>2.8</paranamer.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.0.0</commons-crypto.version>
+    <!--
+    If you are changing Arrow version specification, please check ./python/pyspark/sql/utils.py,
+    ./python/run-tests.py and ./python/setup.py too.
+    -->
     <arrow.version>0.8.0</arrow.version>
 
     <test.java.home>${java.home}</test.java.home>
@@ -2005,10 +2009,6 @@
           <exclusion>
             <groupId>org.apache.hive</groupId>
             <artifactId>hive-storage-api</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>io.airlift</groupId>
-            <artifactId>slice</artifactId>
           </exclusion>
         </exclusions>
       </dependency>

@@ -646,6 +646,9 @@ class SparkSession(object):
         except Exception:
             has_pandas = False
         if has_pandas and isinstance(data, pandas.DataFrame):
+            from pyspark.sql.utils import require_minimum_pandas_version
+            require_minimum_pandas_version()
+
             if self.conf.get("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
                == "true":
                 timezone = self.conf.get("spark.sql.session.timeZone")
