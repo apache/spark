@@ -20,14 +20,14 @@ package org.apache.spark.unsafe.array;
 import org.junit.Assert;
 import org.junit.Test;
 
-import org.apache.spark.unsafe.memory.LongArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.OnHeapMemoryBlock;
 
 public class LongArraySuite {
 
   @Test
   public void basicTest() {
     long[] bytes = new long[2];
-    LongArray arr = new LongArray(LongArrayMemoryBlock.fromArray(bytes));
+    LongArray arr = new LongArray(OnHeapMemoryBlock.fromArray(bytes));
     arr.set(0, 1L);
     arr.set(1, 2L);
     arr.set(1, 3L);

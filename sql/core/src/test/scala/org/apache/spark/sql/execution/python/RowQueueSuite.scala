@@ -22,13 +22,13 @@ import java.io.File
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.memory.{MemoryManager, TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.unsafe.memory.LongArrayMemoryBlock
+import org.apache.spark.unsafe.memory.OnHeapMemoryBlock
 import org.apache.spark.util.Utils
 
 class RowQueueSuite extends SparkFunSuite {
 
   test("in-memory queue") {
-    val page = LongArrayMemoryBlock.fromArray(new Array[Long](1<<10))
+    val page = OnHeapMemoryBlock.fromArray(new Array[Long](1<<10))
     val queue = new InMemoryRowQueue(page, 1) {
       override def close() {}
     }

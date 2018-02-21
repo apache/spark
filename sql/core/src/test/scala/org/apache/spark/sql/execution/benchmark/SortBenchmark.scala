@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import java.util.{Arrays, Comparator}
 
 import org.apache.spark.unsafe.array.LongArray
-import org.apache.spark.unsafe.memory.LongArrayMemoryBlock
+import org.apache.spark.unsafe.memory.OnHeapMemoryBlock
 import org.apache.spark.util.Benchmark
 import org.apache.spark.util.collection.Sorter
 import org.apache.spark.util.collection.unsafe.sort._
@@ -37,7 +37,7 @@ class SortBenchmark extends BenchmarkBase {
 
   private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int, refCmp: PrefixComparator) {
     val sortBuffer =
-      new LongArray(LongArrayMemoryBlock.fromArray(new Array[Long](buf.size().toInt)))
+      new LongArray(OnHeapMemoryBlock.fromArray(new Array[Long](buf.size().toInt)))
     new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(
       buf, lo, hi, new Comparator[RecordPointerAndKeyPrefix] {
         override def compare(
@@ -51,8 +51,8 @@ class SortBenchmark extends BenchmarkBase {
   private def generateKeyPrefixTestData(size: Int, rand: => Long): (LongArray, LongArray) = {
     val ref = Array.tabulate[Long](size * 2) { i => rand }
     val extended = ref ++ Array.fill[Long](size * 2)(0)
-    (new LongArray(LongArrayMemoryBlock.fromArray(ref)),
-      new LongArray(LongArrayMemoryBlock.fromArray(extended)))
+    (new LongArray(OnHeapMemoryBlock.fromArray(ref)),
+      new LongArray(OnHeapMemoryBlock.fromArray(extended)))
   }
 
   ignore("sort") {
@@ -61,7 +61,7 @@ class SortBenchmark extends BenchmarkBase {
     val benchmark = new Benchmark("radix sort " + size, size)
     benchmark.addTimerCase("reference TimSort key prefix array") { timer =>
       val array = Array.tabulate[Long](size * 2) { i => rand.nextLong }
-      val buf = new LongArray(LongArrayMemoryBlock.fromArray(array))
+      val buf = new LongArray(OnHeapMemoryBlock.fromArray(array))
       timer.startTiming()
       referenceKeyPrefixSort(buf, 0, size, PrefixComparators.BINARY)
       timer.stopTiming()
@@ -79,7 +79,7 @@ class SortBenchmark extends BenchmarkBase {
         array(i) = rand.nextLong & 0xff
         i += 1
       }
-      val buf = new LongArray(LongArrayMemoryBlock.fromArray(array))
+      val buf = new LongArray(OnHeapMemoryBlock.fromArray(array))
       timer.startTiming()
       RadixSort.sort(buf, size, 0, 7, false, false)
       timer.stopTiming()
@@ -91,7 +91,7 @@ class SortBenchmark extends BenchmarkBase {
         array(i) = rand.nextLong & 0xffff
         i += 1
       }
-      val buf = new LongArray(LongArrayMemoryBlock.fromArray(array))
+      val buf = new LongArray(OnHeapMemoryBlock.fromArray(array))
       timer.startTiming()
       RadixSort.sort(buf, size, 0, 7, false, false)
       timer.stopTiming()
@@ -103,7 +103,7 @@ class SortBenchmark extends BenchmarkBase {
         array(i) = rand.nextLong
         i += 1
       }
-      val buf = new LongArray(LongArrayMemoryBlock.fromArray(array))
+      val buf = new LongArray(OnHeapMemoryBlock.fromArray(array))
       timer.startTiming()
       RadixSort.sort(buf, size, 0, 7, false, false)
       timer.stopTiming()

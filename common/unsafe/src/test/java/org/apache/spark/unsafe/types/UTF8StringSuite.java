@@ -27,7 +27,7 @@ import java.util.*;
 import com.google.common.collect.ImmutableMap;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
-import org.apache.spark.unsafe.memory.IntArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.OnHeapMemoryBlock;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -593,26 +593,26 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void writeToOutputStreamIntArray() throws IOException {
+  public void writeToOutputStreamLongArray() throws IOException {
     // verify that writes work on objects that are not byte arrays
-    final ByteBuffer buffer = StandardCharsets.UTF_8.encode("大千世界");
+    final ByteBuffer buffer = StandardCharsets.UTF_8.encode("3千大千世界");
     buffer.position(0);
     buffer.order(ByteOrder.nativeOrder());
 
     final int length = buffer.limit();
-    assertEquals(12, length);
+    assertEquals(16, length);
 
-    final int ints = length / 4;
-    final int[] array = new int[ints];
+    final int longs = length / 8;
+    final long[] array = new long[longs];
 
-    for (int i = 0; i < ints; ++i) {
-      array[i] = buffer.getInt();
+    for (int i = 0; i < longs; ++i) {
+      array[i] = buffer.getLong();
     }
 
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    fromAddress(IntArrayMemoryBlock.fromArray(array), Platform.INT_ARRAY_OFFSET, length)
+    fromAddress(OnHeapMemoryBlock.fromArray(array), Platform.LONG_ARRAY_OFFSET, length)
         .writeTo(outputStream);
-    assertEquals("大千世界", outputStream.toString("UTF-8"));
+    assertEquals("3千大千世界", outputStream.toString("UTF-8"));
   }
 
   @Test

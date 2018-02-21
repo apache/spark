@@ -59,7 +59,7 @@ public class HeapMemoryAllocator implements MemoryAllocator {
             if (array != null) {
               assert (array.length * 8L >= size);
               MemoryBlock memory =
-                new LongArrayMemoryBlock(array, Platform.LONG_ARRAY_OFFSET, size);
+                new OnHeapMemoryBlock(array, Platform.LONG_ARRAY_OFFSET, size);
               if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
                 memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
               }
@@ -71,7 +71,7 @@ public class HeapMemoryAllocator implements MemoryAllocator {
       }
     }
     long[] array = new long[numWords];
-    MemoryBlock memory = new LongArrayMemoryBlock(array, Platform.LONG_ARRAY_OFFSET, size);
+    MemoryBlock memory = new OnHeapMemoryBlock(array, Platform.LONG_ARRAY_OFFSET, size);
     if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
       memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
     }
@@ -80,7 +80,7 @@ public class HeapMemoryAllocator implements MemoryAllocator {
 
   @Override
   public void free(MemoryBlock memory) {
-    assert(memory instanceof LongArrayMemoryBlock);
+    assert(memory instanceof OnHeapMemoryBlock);
     assert (memory.getBaseObject() != null) :
       "baseObject was null; are you trying to use the on-heap allocator to free off-heap memory?";
     assert (memory.getPageNumber() != MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER) :
@@ -100,7 +100,7 @@ public class HeapMemoryAllocator implements MemoryAllocator {
 
     // As an additional layer of defense against use-after-free bugs, we mutate the
     // MemoryBlock to null out its reference to the long[] array.
-    long[] array = ((LongArrayMemoryBlock)memory).getLongArray();
+    long[] array = ((OnHeapMemoryBlock)memory).getLongArray();
     memory.resetObjAndOffset();
 
     long alignedSize = ((size + 7) / 8) * 8;

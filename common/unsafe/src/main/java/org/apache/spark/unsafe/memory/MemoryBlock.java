@@ -111,12 +111,9 @@ public abstract class MemoryBlock {
     if (obj instanceof byte[]) {
       byte[] array = (byte[])obj;
       mb = new ByteArrayMemoryBlock(array, offset, length);
-    } else if (obj instanceof int[]) {
-      int[] array = (int[])obj;
-      mb = new IntArrayMemoryBlock(array, offset, length);
     } else if (obj instanceof long[]) {
       long[] array = (long[])obj;
-      mb = new LongArrayMemoryBlock(array, offset, length);
+      mb = new OnHeapMemoryBlock(array, offset, length);
     } else if (obj == null) {
       // we assume that to pass null pointer means off-heap
       mb = new OffHeapMemoryBlock(offset, length);
@@ -164,68 +161,32 @@ public abstract class MemoryBlock {
 
   public abstract void putObjectVolatile(long offset, Object value);
 
-  public static final void copyMemory(
+  public static void copyMemory(
       MemoryBlock src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
     Platform.copyMemory(src.getBaseObject(), srcOffset, dst.getBaseObject(), dstOffset, length);
   }
 
-  public static final void copyMemory(
-      byte[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
-    Platform.copyMemory(src, srcOffset, dst.getBaseObject(), dstOffset, length);
-  }
+  public abstract void copyFrom(byte[] src, long srcOffset, long dstOffset, long length);
 
-  public static final void copyMemory(
-      short[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
-    Platform.copyMemory(src, srcOffset, dst.getBaseObject(), dstOffset, length);
-  }
+  public abstract void copyFrom(short[] src, long srcOffset, long dstOffset, long length);
 
-  public static final void copyMemory(
-      int[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
-    Platform.copyMemory(src, srcOffset, dst.getBaseObject(), dstOffset, length);
-  }
+  public abstract void copyFrom(int[] src, long srcOffset, long dstOffset, long length);
 
-  public static final void copyMemory(
-      long[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
-    Platform.copyMemory(src, srcOffset, dst.getBaseObject(), dstOffset, length);
-  }
+  public abstract void copyFrom(long[] src, long srcOffset, long dstOffset, long length);
 
-  public static final void copyMemory(
-      float[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
-    Platform.copyMemory(src, srcOffset, dst.getBaseObject(), dstOffset, length);
-  }
+  public abstract void copyFrom(float[] src, long srcOffset, long dstOffset, long length);
 
-  public static final void copyMemory(
-      double[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
-    Platform.copyMemory(src, srcOffset, dst.getBaseObject(), dstOffset, length);
-  }
+  public abstract void copyFrom(double[] src, long srcOffset, long dstOffset, long length);
 
-  public static final void copyMemory(
-      MemoryBlock src, long srcOffset, byte[] dst, long dstOffset, long length) {
-    Platform.copyMemory(src.getBaseObject(), srcOffset, dst, dstOffset, length);
-  }
+  public abstract void writeTo(long srcOffset, byte[] dst, long dstOffset, long length);
 
-  public static final void copyMemory(
-      MemoryBlock src, long srcOffset, short[] dst, long dstOffset, long length) {
-    Platform.copyMemory(src.getBaseObject(), srcOffset, dst, dstOffset, length);
-  }
+  public abstract void writeTo(long srcOffset, short[] dst, long dstOffset, long length);
 
-  public static final void copyMemory(
-      MemoryBlock src, long srcOffset, int[] dst, long dstOffset, long length) {
-    Platform.copyMemory(src.getBaseObject(), srcOffset, dst, dstOffset, length);
-  }
+  public abstract void writeTo(long srcOffset, int[] dst, long dstOffset, long length);
 
-  public static final void copyMemory(
-      MemoryBlock src, long srcOffset, long[] dst, long dstOffset, long length) {
-    Platform.copyMemory(src.getBaseObject(), srcOffset, dst, dstOffset, length);
-  }
+  public abstract void writeTo(long srcOffset, long[] dst, long dstOffset, long length);
 
-  public static final void copyMemory(
-      MemoryBlock src, long srcOffset, float[] dst, long dstOffset, long length) {
-    Platform.copyMemory(src.getBaseObject(), srcOffset, dst, dstOffset, length);
-  }
+  public abstract void writeTo(long srcOffset, float[] dst, long dstOffset, long length);
 
-  public static final void copyMemory(
-      MemoryBlock src, long srcOffset, double[] dst, long dstOffset, long length) {
-    Platform.copyMemory(src.getBaseObject(), srcOffset, dst, dstOffset, length);
-  }
+  public abstract void writeTo(long srcOffset, double[] dst, long dstOffset, long length);
 }

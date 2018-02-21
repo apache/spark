@@ -21,9 +21,11 @@ import org.apache.spark.unsafe.Platform;
 import org.junit.Assert;
 import org.junit.Test;
 
-import org.apache.spark.unsafe.memory.LongArrayMemoryBlock;
+import java.nio.ByteOrder;
 
 public class MemoryBlockSuite {
+  private static final boolean bigEndianPlatform =
+    ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
 
   private void check(MemoryBlock memory, Object obj, long offset, int length) {
     memory.setPageNumber(1);
@@ -36,6 +38,12 @@ public class MemoryBlockSuite {
     memory.putFloat(offset + 16, 1.0F);
     memory.putDouble(offset + 20, 2.0);
     MemoryBlock.copyMemory(memory, offset, memory, offset + 28, 4);
+    int[] a = new int[2];
+    a[0] = 0x12345678;
+    a[1] = 0x13579BDF;
+    memory.copyFrom(a, Platform.INT_ARRAY_OFFSET, offset + 32, 8);
+    byte[] b = new byte[8];
+    memory.writeTo(offset + 32, b, Platform.BYTE_ARRAY_OFFSET, 8);
 
     Assert.assertEquals(obj, memory.getBaseObject());
     Assert.assertEquals(offset, memory.getBaseOffset());
@@ -51,14 +59,31 @@ public class MemoryBlockSuite {
     Assert.assertEquals(true, memory.getBoolean(offset + 28));
     Assert.assertEquals((byte)127, memory.getByte(offset + 29 ));
     Assert.assertEquals((short)257, memory.getShort(offset + 30));
-    for (int i = 32; i < memory.size(); i++) {
+    Assert.assertEquals(a[0], memory.getInt(offset + 32));
+    Assert.assertEquals(a[1], memory.getInt(offset + 36));
+    if (bigEndianPlatform) {
+      Assert.assertEquals(a[0],
+        ((int)b[0] & 0xff) << 24 | ((int)b[1] & 0xff) << 16 |
+        ((int)b[2] & 0xff) << 8 | ((int)b[3] & 0xff));
+      Assert.assertEquals(a[1],
+        ((int)b[4] & 0xff) << 24 | ((int)b[5] & 0xff) << 16 |
+        ((int)b[6] & 0xff) << 8 | ((int)b[7] & 0xff));
+    } else {
+      Assert.assertEquals(a[0],
+        ((int)b[3] & 0xff) << 24 | ((int)b[2] & 0xff) << 16 |
+        ((int)b[1] & 0xff) << 8 | ((int)b[0] & 0xff));
+      Assert.assertEquals(a[1],
+        ((int)b[7] & 0xff) << 24 | ((int)b[6] & 0xff) << 16 |
+        ((int)b[5] & 0xff) << 8 | ((int)b[4] & 0xff));
+    }
+    for (int i = 40; i < memory.size(); i++) {
       Assert.assertEquals((byte) -1, memory.getByte(offset + i));
     }
   }
 
   @Test
   public void ByteArrayMemoryBlockTest() {
-    byte[] obj = new byte[36];
+    byte[] obj = new byte[48];
     long offset = Platform.BYTE_ARRAY_OFFSET;
     int length = obj.length;
     MemoryBlock memory = new ByteArrayMemoryBlock(obj, offset, length);
@@ -67,21 +92,11 @@ public class MemoryBlockSuite {
   }
 
   @Test
-  public void IntArrayMemoryBlockTest() {
-    int[] obj = new int[9];
-    long offset = Platform.INT_ARRAY_OFFSET;
-    int length = obj.length;
-    MemoryBlock memory = new IntArrayMemoryBlock(obj, offset, length);
-
-    check(memory, obj, offset, length);
-  }
-
-  @Test
-  public void LongArrayMemoryBlockTest() {
-    long[] obj = new long[5];
+  public void OnHeapMemoryBlockTest() {
+    long[] obj = new long[6];
     long offset = Platform.LONG_ARRAY_OFFSET;
     int length = obj.length;
-    MemoryBlock memory = new LongArrayMemoryBlock(obj, offset, length);
+    MemoryBlock memory = new OnHeapMemoryBlock(obj, offset, length);
 
     check(memory, obj, offset, length);
   }
@@ -89,10 +104,10 @@ public class MemoryBlockSuite {
   @Test
   public void OffHeapArrayMemoryBlockTest() {
     MemoryAllocator memoryAllocator = new UnsafeMemoryAllocator();
-    MemoryBlock memory = memoryAllocator.allocate(36);
+    MemoryBlock memory = memoryAllocator.allocate(48);
     Object obj = memory.getBaseObject();
     long offset = memory.getBaseOffset();
-    int length = 36;
+    int length = 48;
 
     check(memory, obj, offset, length);
   }
