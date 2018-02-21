@@ -71,6 +71,7 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   private def compactLogs(topic: String, partition: Int, messages: Array[(String, String)]) {
     val mockTime = new MockTime()
+    // LogCleaner in 0.10 version of Kafka is still expecting the old TopicAndPartition api
     val logs = new Pool[TopicAndPartition, Log]()
     val logDir = kafkaTestUtils.brokerLogDir
     val dir = new java.io.File(logDir, topic + "-" + partition)

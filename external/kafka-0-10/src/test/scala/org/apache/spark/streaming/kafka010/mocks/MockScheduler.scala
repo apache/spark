@@ -45,13 +45,11 @@ private[kafka010] class MockScheduler(val time: Time) extends Scheduler {
 
   def isStarted: Boolean = true
 
-  def startup() {}
+  def startup(): Unit = {}
 
-  def shutdown() {
-    this synchronized {
-      tasks.foreach(_.fun())
-      tasks.clear()
-    }
+  def shutdown(): Unit = synchronized {
+    tasks.foreach(_.fun())
+    tasks.clear()
   }
 
   /**
@@ -97,12 +95,6 @@ case class MockTask(
     val period: Long) extends Ordered[MockTask] {
   def periodic: Boolean = period >= 0
   def compare(t: MockTask): Int = {
-    if (t.nextExecution == nextExecution) {
-      0
-    } else if (t.nextExecution < nextExecution) {
-      -1
-    } else {
-      1
-    }
+    java.lang.Long.compare(t.nextExecution, nextExecution)
   }
 }

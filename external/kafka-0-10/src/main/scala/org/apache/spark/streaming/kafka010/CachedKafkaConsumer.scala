@@ -119,7 +119,7 @@ class CachedKafkaConsumer[K, V] private(
 
   /**
    * Rewind to previous record in the batch from a compacted topic.
-   * Will throw NoSuchElementException if no previous element
+   * @throws NoSuchElementException if no previous element
    */
   def compactedPrevious(): ConsumerRecord[K, V] = {
     buffer.previous()

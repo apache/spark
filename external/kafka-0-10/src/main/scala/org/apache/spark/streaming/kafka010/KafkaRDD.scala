@@ -137,14 +137,11 @@ private[spark] class KafkaRDD[K, V](
         }
       }
 
-      val buf = new ArrayBuffer[ConsumerRecord[K, V]]
-      val res = context.runJob(
+      context.runJob(
         this,
         (tc: TaskContext, it: Iterator[ConsumerRecord[K, V]]) =>
         it.take(parts(tc.partitionId)).toArray, parts.keys.toArray
-      )
-      res.foreach(buf ++= _)
-      buf.toArray
+      ).flatten
     }
 
   private def executors(): Array[ExecutorCacheTaskLocation] = {
@@ -259,14 +256,16 @@ private class KafkaRDDIterator[K, V](
 
   def closeIfNeeded(): Unit = {
     if (!useConsumerCache && consumer != null) {
-      consumer.close
+      consumer.close()
     }
   }
 
   override def hasNext(): Boolean = requestOffset < part.untilOffset
 
   override def next(): ConsumerRecord[K, V] = {
-    assert(hasNext(), "Can't call getNext() once untilOffset has been reached")
+    if (!hasNext) {
+      throw new ju.NoSuchElementException("Can't call getNext() once untilOffset has been reached")
+    }
     val r = consumer.get(requestOffset, pollTimeout)
     requestOffset += 1
     r
@@ -300,9 +299,9 @@ private class CompactedKafkaRDDIterator[K, V](
 
   consumer.compactedStart(part.fromOffset, pollTimeout)
 
-  var nextRecord = consumer.compactedNext(pollTimeout)
+  private var nextRecord = consumer.compactedNext(pollTimeout)
 
-  var okNext: Boolean = true
+  private var okNext: Boolean = true
 
   override def hasNext(): Boolean = okNext
 

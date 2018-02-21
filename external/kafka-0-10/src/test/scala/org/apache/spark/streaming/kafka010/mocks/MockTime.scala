@@ -46,6 +46,6 @@ private[kafka010] class MockTime(@volatile private var currentMs: Long) extends 
     scheduler.tick()
   }
 
-  override def toString(): String = "MockTime(%d)".format(milliseconds)
+  override def toString(): String = s"MockTime($milliseconds)"
 
 }
