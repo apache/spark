@@ -2114,4 +2114,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(causedBy.isInstanceOf[java.io.UnsupportedEncodingException])
     assert(causedBy.getMessage.contains(invalidCharset))
   }
+
+  test("checking that the charset option is case agnostic") {
+    val fileName = "json-tests/utf16LE.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val jsonDF = spark.read.schema(schema)
+      .option("multiline", "true")
+      .option("charset", "uTf-16lE")
+      .json(testFile(fileName))
+
+    checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
+  }
 }
