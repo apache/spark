@@ -33,6 +33,19 @@ import org.apache.spark.util.Utils
 class FileStreamSinkSuite extends StreamTest {
   import testImplicits._
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.sessionState.conf.setConf(SQLConf.ORC_IMPLEMENTATION, "native")
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      spark.sessionState.conf.unsetConf(SQLConf.ORC_IMPLEMENTATION)
+    } finally {
+      super.afterAll()
+    }
+  }
+
   test("unpartitioned writing and batch reading") {
     val inputData = MemoryStream[Int]
     val df = inputData.toDF()

@@ -572,7 +572,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("String APIs", 6, StringType) {
+  testVector("String APIs", 7, StringType) {
     column =>
       val reference = mutable.ArrayBuffer.empty[String]
 
@@ -619,6 +619,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
       idx += 1
       assert(column.arrayData().elementsAppended == 17 + (s + s).length)
 
+      column.putNull(idx)
+      assert(column.getUTF8String(idx) == null)
+      idx += 1
+
       reference.zipWithIndex.foreach { v =>
         val errMsg = "VectorType=" + column.getClass.getSimpleName
         assert(v._1.length == column.getArrayLength(v._2), errMsg)
@@ -647,6 +651,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       reference += new CalendarInterval(0, 2000)
 
       column.putNull(2)
+      assert(column.getInterval(2) == null)
       reference += null
 
       months.putInt(3, 20)
@@ -683,6 +688,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.getArray(0).numElements == 1)
       assert(column.getArray(1).numElements == 2)
       assert(column.isNullAt(2))
+      assert(column.getArray(2) == null)
       assert(column.getArray(3).numElements == 0)
       assert(column.getArray(4).numElements == 3)
 
@@ -785,6 +791,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       column.putArray(0, 0, 1)
       column.putArray(1, 1, 2)
       column.putNull(2)
+      assert(column.getMap(2) == null)
       column.putArray(3, 3, 0)
       column.putArray(4, 3, 3)
 
@@ -821,6 +828,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       c2.putDouble(0, 3.45)
 
       column.putNull(1)
+      assert(column.getStruct(1) == null)
 
       c1.putInt(2, 456)
       c2.putDouble(2, 5.67)
@@ -1260,5 +1268,69 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
     batch.close()
     allocator.close()
+  }
+
+  testVector("Decimal API", 4, DecimalType.IntDecimal) {
+    column =>
+
+      val reference = mutable.ArrayBuffer.empty[Decimal]
+
+      var idx = 0
+      column.putDecimal(idx, new Decimal().set(10), 10)
+      reference += new Decimal().set(10)
+      idx += 1
+
+      column.putDecimal(idx, new Decimal().set(20), 10)
+      reference += new Decimal().set(20)
+      idx += 1
+
+      column.putNull(idx)
+      assert(column.getDecimal(idx, 10, 0) == null)
+      reference += null
+      idx += 1
+
+      column.putDecimal(idx, new Decimal().set(30), 10)
+      reference += new Decimal().set(30)
+
+      reference.zipWithIndex.foreach { case (v, i) =>
+        val errMsg = "VectorType=" + column.getClass.getSimpleName
+        assert(v == column.getDecimal(i, 10, 0), errMsg)
+        if (v == null) assert(column.isNullAt(i), errMsg)
+      }
+
+      column.close()
+  }
+
+  testVector("Binary APIs", 4, BinaryType) {
+    column =>
+
+      val reference = mutable.ArrayBuffer.empty[String]
+      var idx = 0
+      column.putByteArray(idx, "Hello".getBytes(StandardCharsets.UTF_8))
+      reference += "Hello"
+      idx += 1
+
+      column.putByteArray(idx, "World".getBytes(StandardCharsets.UTF_8))
+      reference += "World"
+      idx += 1
+
+      column.putNull(idx)
+      reference += null
+      idx += 1
+
+      column.putByteArray(idx, "abc".getBytes(StandardCharsets.UTF_8))
+      reference += "abc"
+
+      reference.zipWithIndex.foreach { case (v, i) =>
+        val errMsg = "VectorType=" + column.getClass.getSimpleName
+        if (v != null) {
+          assert(v == new String(column.getBinary(i)), errMsg)
+        } else {
+          assert(column.isNullAt(i), errMsg)
+          assert(column.getBinary(i) == null, errMsg)
+        }
+      }
+
+      column.close()
   }
 }

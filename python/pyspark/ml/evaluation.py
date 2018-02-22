@@ -362,18 +362,21 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation (silhouette)",
                        typeConverter=TypeConverters.toString)
+    distanceMeasure = Param(Params._dummy(), "distanceMeasure", "The distance measure. " +
+                            "Supported options: 'squaredEuclidean' and 'cosine'.",
+                            typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", featuresCol="features",
-                 metricName="silhouette"):
+                 metricName="silhouette", distanceMeasure="squaredEuclidean"):
         """
         __init__(self, predictionCol="prediction", featuresCol="features", \
-                 metricName="silhouette")
+                 metricName="silhouette", distanceMeasure="squaredEuclidean")
         """
         super(ClusteringEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.ClusteringEvaluator", self.uid)
-        self._setDefault(metricName="silhouette")
+        self._setDefault(metricName="silhouette", distanceMeasure="squaredEuclidean")
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -394,14 +397,29 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     @keyword_only
     @since("2.3.0")
     def setParams(self, predictionCol="prediction", featuresCol="features",
-                  metricName="silhouette"):
+                  metricName="silhouette", distanceMeasure="squaredEuclidean"):
         """
         setParams(self, predictionCol="prediction", featuresCol="features", \
-                  metricName="silhouette")
+                  metricName="silhouette", distanceMeasure="squaredEuclidean")
         Sets params for clustering evaluator.
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
+
+    @since("2.4.0")
+    def setDistanceMeasure(self, value):
+        """
+        Sets the value of :py:attr:`distanceMeasure`.
+        """
+        return self._set(distanceMeasure=value)
+
+    @since("2.4.0")
+    def getDistanceMeasure(self):
+        """
+        Gets the value of `distanceMeasure`
+        """
+        return self.getOrDefault(self.distanceMeasure)
+
 
 if __name__ == "__main__":
     import doctest

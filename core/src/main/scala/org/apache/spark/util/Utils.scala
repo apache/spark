@@ -63,6 +63,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+import org.apache.spark.status.api.v1.ThreadStackTrace
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
 private[spark] case class CallSite(shortForm: String, longForm: String)
@@ -2168,7 +2169,22 @@ private[spark] object Utils extends Logging {
     // We need to filter out null values here because dumpAllThreads() may return null array
     // elements for threads that are dead / don't exist.
     val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
-    threadInfos.sortBy(_.getThreadId).map(threadInfoToThreadStackTrace)
+    threadInfos.sortWith { case (threadTrace1, threadTrace2) =>
+        val v1 = if (threadTrace1.getThreadName.contains("Executor task launch")) 1 else 0
+        val v2 = if (threadTrace2.getThreadName.contains("Executor task launch")) 1 else 0
+        if (v1 == v2) {
+          val name1 = threadTrace1.getThreadName().toLowerCase(Locale.ROOT)
+          val name2 = threadTrace2.getThreadName().toLowerCase(Locale.ROOT)
+          val nameCmpRes = name1.compareTo(name2)
+          if (nameCmpRes == 0) {
+            threadTrace1.getThreadId < threadTrace2.getThreadId
+          } else {
+            nameCmpRes < 0
+          }
+        } else {
+          v1 > v2
+        }
+    }.map(threadInfoToThreadStackTrace)
   }
 
   def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {

@@ -444,29 +444,16 @@ case class FileSourceScanExec(
       currentSize = 0
     }
 
-    def addFile(file: PartitionedFile): Unit = {
-        currentFiles += file
-        currentSize += file.length + openCostInBytes
-    }
-
-    var frontIndex = 0
-    var backIndex = splitFiles.length - 1
-
-    while (frontIndex <= backIndex) {
-      addFile(splitFiles(frontIndex))
-      frontIndex += 1
-      while (frontIndex <= backIndex &&
-             currentSize + splitFiles(frontIndex).length <= maxSplitBytes) {
-        addFile(splitFiles(frontIndex))
-        frontIndex += 1
+    // Assign files to partitions using "Next Fit Decreasing"
+    splitFiles.foreach { file =>
+      if (currentSize + file.length > maxSplitBytes) {
+        closePartition()
       }
-      while (backIndex > frontIndex &&
-             currentSize + splitFiles(backIndex).length <= maxSplitBytes) {
-        addFile(splitFiles(backIndex))
-        backIndex -= 1
-      }
-      closePartition()
+      // Add the given file to the current partition.
+      currentSize += file.length + openCostInBytes
+      currentFiles += file
     }
+    closePartition()
 
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
   }

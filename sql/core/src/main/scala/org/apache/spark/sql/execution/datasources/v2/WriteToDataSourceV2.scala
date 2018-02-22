@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
@@ -26,6 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.execution.streaming.continuous.{CommitPartitionEpoch, ContinuousExecution, EpochCoordinatorRef, SetWriterPartitions}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
@@ -53,6 +57,7 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
       case _ => new InternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
     }
 
+    val useCommitCoordinator = writer.useCommitCoordinator
     val rdd = query.execute()
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)
 
@@ -73,7 +78,7 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
             DataWritingSparkTask.runContinuous(writeTask, context, iter)
         case _ =>
           (context: TaskContext, iter: Iterator[InternalRow]) =>
-            DataWritingSparkTask.run(writeTask, context, iter)
+            DataWritingSparkTask.run(writeTask, context, iter, useCommitCoordinator)
       }
 
       sparkContext.runJob(
@@ -105,7 +110,13 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
             throw new SparkException("Writing job failed.", cause)
         }
         logError(s"Data source writer $writer aborted.")
-        throw new SparkException("Writing job aborted.", cause)
+        cause match {
+          // Do not wrap interruption exceptions that will be handled by streaming specially.
+          case _ if StreamExecution.isInterruptionException(cause) => throw cause
+          // Only wrap non fatal exceptions.
+          case NonFatal(e) => throw new SparkException("Writing job aborted.", e)
+          case _ => throw cause
+        }
     }
 
     sparkContext.emptyRDD
@@ -116,21 +127,44 @@ object DataWritingSparkTask extends Logging {
   def run(
       writeTask: DataWriterFactory[InternalRow],
       context: TaskContext,
-      iter: Iterator[InternalRow]): WriterCommitMessage = {
-    val dataWriter = writeTask.createDataWriter(context.partitionId(), context.attemptNumber())
+      iter: Iterator[InternalRow],
+      useCommitCoordinator: Boolean): WriterCommitMessage = {
+    val stageId = context.stageId()
+    val partId = context.partitionId()
+    val attemptId = context.attemptNumber()
+    val dataWriter = writeTask.createDataWriter(partId, attemptId)
 
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
       iter.foreach(dataWriter.write)
-      logInfo(s"Writer for partition ${context.partitionId()} is committing.")
-      val msg = dataWriter.commit()
-      logInfo(s"Writer for partition ${context.partitionId()} committed.")
+
+      val msg = if (useCommitCoordinator) {
+        val coordinator = SparkEnv.get.outputCommitCoordinator
+        val commitAuthorized = coordinator.canCommit(context.stageId(), partId, attemptId)
+        if (commitAuthorized) {
+          logInfo(s"Writer for stage $stageId, task $partId.$attemptId is authorized to commit.")
+          dataWriter.commit()
+        } else {
+          val message = s"Stage $stageId, task $partId.$attemptId: driver did not authorize commit"
+          logInfo(message)
+          // throwing CommitDeniedException will trigger the catch block for abort
+          throw new CommitDeniedException(message, stageId, partId, attemptId)
+        }
+
+      } else {
+        logInfo(s"Writer for partition ${context.partitionId()} is committing.")
+        dataWriter.commit()
+      }
+
+      logInfo(s"Writer for stage $stageId, task $partId.$attemptId committed.")
+
       msg
+
     })(catchBlock = {
       // If there is an error, abort this writer
-      logError(s"Writer for partition ${context.partitionId()} is aborting.")
+      logError(s"Writer for stage $stageId, task $partId.$attemptId is aborting.")
       dataWriter.abort()
-      logError(s"Writer for partition ${context.partitionId()} aborted.")
+      logError(s"Writer for stage $stageId, task $partId.$attemptId aborted.")
     })
   }
 

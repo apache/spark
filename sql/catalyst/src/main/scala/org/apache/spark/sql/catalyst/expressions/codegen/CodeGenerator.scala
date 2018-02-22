@@ -58,6 +58,12 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
  */
 case class ExprCode(var code: String, var isNull: String, var value: String)
 
+object ExprCode {
+  def forNonNullValue(value: String): ExprCode = {
+    ExprCode(code = "", isNull = "false", value = value)
+  }
+}
+
 /**
  * State used for subexpression elimination.
  *
@@ -1226,14 +1232,29 @@ class CodegenContext {
 
   /**
    * Register a comment and return the corresponding place holder
+   *
+   * @param placeholderId an optionally specified identifier for the comment's placeholder.
+   *                      The caller should make sure this identifier is unique within the
+   *                      compilation unit. If this argument is not specified, a fresh identifier
+   *                      will be automatically created and used as the placeholder.
+   * @param force whether to force registering the comments
    */
-  def registerComment(text: => String): String = {
+   def registerComment(
+       text: => String,
+       placeholderId: String = "",
+       force: Boolean = false): String = {
     // By default, disable comments in generated code because computing the comments themselves can
     // be extremely expensive in certain cases, such as deeply-nested expressions which operate over
     // inputs with wide schemas. For more details on the performance issues that motivated this
     // flat, see SPARK-15680.
-    if (SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
-      val name = freshName("c")
+    if (force ||
+      SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
+      val name = if (placeholderId != "") {
+        assert(!placeHolderToComments.contains(placeholderId))
+        placeholderId
+      } else {
+        freshName("c")
+      }
       val comment = if (text.contains("\n") || text.contains("\r")) {
         text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
       } else {

@@ -741,9 +741,9 @@ class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures,
     >>> df = spark.createDataFrame(data, cols)
     >>> hasher = FeatureHasher(inputCols=cols, outputCol="features")
     >>> hasher.transform(df).head().features
-    SparseVector(262144, {51871: 1.0, 63643: 1.0, 174475: 2.0, 253195: 1.0})
+    SparseVector(262144, {174475: 2.0, 247670: 1.0, 257907: 1.0, 262126: 1.0})
     >>> hasher.setCategoricalCols(["real"]).transform(df).head().features
-    SparseVector(262144, {51871: 1.0, 63643: 1.0, 171257: 1.0, 253195: 1.0})
+    SparseVector(262144, {171257: 1.0, 247670: 1.0, 257907: 1.0, 262126: 1.0})
     >>> hasherPath = temp_path + "/hasher"
     >>> hasher.save(hasherPath)
     >>> loadedHasher = FeatureHasher.load(hasherPath)

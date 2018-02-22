@@ -809,6 +809,36 @@ def ntile(n):
     return Column(sc._jvm.functions.ntile(int(n)))
 
 
+@since(2.4)
+def unboundedPreceding():
+    """
+    Window function: returns the special frame boundary that represents the first row
+    in the window partition.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.unboundedPreceding())
+
+
+@since(2.4)
+def unboundedFollowing():
+    """
+    Window function: returns the special frame boundary that represents the last row
+    in the window partition.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.unboundedFollowing())
+
+
+@since(2.4)
+def currentRow():
+    """
+    Window function: returns the special frame boundary that represents the current row
+    in the window partition.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.currentRow())
+
+
 # ---------------------- Date/Timestamp functions ------------------------------
 
 @since(1.5)
@@ -1705,10 +1735,12 @@ def unhex(col):
 @ignore_unicode_prefix
 @since(1.5)
 def length(col):
-    """Calculates the length of a string or binary expression.
+    """Computes the character length of string data or number of bytes of binary data.
+    The length of character data includes the trailing spaces. The length of binary data
+    includes binary zeros.
 
-    >>> spark.createDataFrame([('ABC',)], ['a']).select(length('a').alias('length')).collect()
-    [Row(length=3)]
+    >>> spark.createDataFrame([('ABC ',)], ['a']).select(length('a').alias('length')).collect()
+    [Row(length=4)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.length(_to_java_column(col)))

@@ -51,7 +51,7 @@ from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer, U
 from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
 from pyspark.ml.common import _java2py, _py2java
-from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, ClusteringEvaluator, \
     MulticlassClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.fpm import FPGrowth, FPGrowthModel
@@ -418,6 +418,9 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(algo.getK(), 10)
         algo.setInitSteps(10)
         self.assertEqual(algo.getInitSteps(), 10)
+        self.assertEqual(algo.getDistanceMeasure(), "euclidean")
+        algo.setDistanceMeasure("cosine")
+        self.assertEqual(algo.getDistanceMeasure(), "cosine")
 
     def test_hasseed(self):
         noSeedSpecd = TestParams()
@@ -537,6 +540,15 @@ class EvaluatorTests(SparkSessionTestCase):
         evaluatorCopy.evaluate(df)
         self.assertEqual(evaluator._java_obj.getMetricName(), "r2")
         self.assertEqual(evaluatorCopy._java_obj.getMetricName(), "mae")
+
+    def test_clustering_evaluator_with_cosine_distance(self):
+        featureAndPredictions = map(lambda x: (Vectors.dense(x[0]), x[1]),
+                                    [([1.0, 1.0], 1.0), ([10.0, 10.0], 1.0), ([1.0, 0.5], 2.0),
+                                     ([10.0, 4.4], 2.0), ([-1.0, 1.0], 3.0), ([-100.0, 90.0], 3.0)])
+        dataset = self.spark.createDataFrame(featureAndPredictions, ["features", "prediction"])
+        evaluator = ClusteringEvaluator(predictionCol="prediction", distanceMeasure="cosine")
+        self.assertEqual(evaluator.getDistanceMeasure(), "cosine")
+        self.assertTrue(np.isclose(evaluator.evaluate(dataset),  0.992671213, atol=1e-5))
 
 
 class FeatureTests(SparkSessionTestCase):
@@ -1620,6 +1632,21 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(s.k, 2)
 
 
+class KMeansTests(SparkSessionTestCase):
+
+    def test_kmeans_cosine_distance(self):
+        data = [(Vectors.dense([1.0, 1.0]),), (Vectors.dense([10.0, 10.0]),),
+                (Vectors.dense([1.0, 0.5]),), (Vectors.dense([10.0, 4.4]),),
+                (Vectors.dense([-1.0, 1.0]),), (Vectors.dense([-100.0, 90.0]),)]
+        df = self.spark.createDataFrame(data, ["features"])
+        kmeans = KMeans(k=3, seed=1, distanceMeasure="cosine")
+        model = kmeans.fit(df)
+        result = model.transform(df).collect()
+        self.assertTrue(result[0].prediction == result[1].prediction)
+        self.assertTrue(result[2].prediction == result[3].prediction)
+        self.assertTrue(result[4].prediction == result[5].prediction)
+
+
 class OneVsRestTests(SparkSessionTestCase):
 
     def test_copy(self):
@@ -1852,6 +1879,7 @@ class ImageReaderTest(SparkSessionTestCase):
         self.assertEqual(len(array), first_row[1])
         self.assertEqual(ImageSchema.toImage(array, origin=first_row[0]), first_row)
         self.assertEqual(df.schema, ImageSchema.imageSchema)
+        self.assertEqual(df.schema["image"].dataType, ImageSchema.columnSchema)
         expected = {'CV_8UC3': 16, 'Undefined': -1, 'CV_8U': 0, 'CV_8UC1': 0, 'CV_8UC4': 24}
         self.assertEqual(ImageSchema.ocvTypes, expected)
         expected = ['origin', 'height', 'width', 'nChannels', 'mode', 'data']
@@ -1942,11 +1970,14 @@ class DefaultValuesTests(PySparkTestCase):
         import pyspark.ml.feature
         import pyspark.ml.classification
         import pyspark.ml.clustering
+        import pyspark.ml.evaluation
         import pyspark.ml.pipeline
         import pyspark.ml.recommendation
         import pyspark.ml.regression
+
         modules = [pyspark.ml.feature, pyspark.ml.classification, pyspark.ml.clustering,
-                   pyspark.ml.pipeline, pyspark.ml.recommendation, pyspark.ml.regression]
+                   pyspark.ml.evaluation, pyspark.ml.pipeline, pyspark.ml.recommendation,
+                   pyspark.ml.regression]
         for module in modules:
             for name, cls in inspect.getmembers(module, inspect.isclass):
                 if not name.endswith('Model') and issubclass(cls, JavaParams)\
