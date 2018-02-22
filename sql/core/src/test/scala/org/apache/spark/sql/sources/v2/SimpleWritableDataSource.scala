@@ -212,7 +212,7 @@ class SimpleCSVDataWriterFactory(path: String, jobId: String, conf: Serializable
       attemptNumber: Int,
       epochId: Long): DataWriter[Row] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
-    val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber-$epochId")
+    val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
     val fs = filePath.getFileSystem(conf.value)
     new SimpleCSVDataWriter(fs, filePath)
   }
@@ -248,7 +248,7 @@ class InternalRowCSVDataWriterFactory(path: String, jobId: String, conf: Seriali
       attemptNumber: Int,
       epochId: Long): DataWriter[InternalRow] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
-    val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber-$epochId")
+    val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
     val fs = filePath.getFileSystem(conf.value)
     new InternalRowCSVDataWriter(fs, filePath)
   }
