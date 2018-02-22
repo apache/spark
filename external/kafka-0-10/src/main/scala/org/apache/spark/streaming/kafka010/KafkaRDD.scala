@@ -55,12 +55,12 @@ private[spark] class KafkaRDD[K, V](
     useConsumerCache: Boolean
 ) extends RDD[ConsumerRecord[K, V]](sc, Nil) with Logging with HasOffsetRanges {
 
-  assert("none" ==
+  require("none" ==
     kafkaParams.get(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG).asInstanceOf[String],
     ConsumerConfig.AUTO_OFFSET_RESET_CONFIG +
       " must be set to none for executor kafka params, else messages may not match offsetRange")
 
-  assert(false ==
+  require(false ==
     kafkaParams.get(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG).asInstanceOf[Boolean],
     ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG +
       " must be set to false for executor kafka params, else offsets may commit before processing")
@@ -187,7 +187,7 @@ private[spark] class KafkaRDD[K, V](
 
   override def compute(thePart: Partition, context: TaskContext): Iterator[ConsumerRecord[K, V]] = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
-    assert(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
+    require(part.fromOffset <= part.untilOffset, errBeginAfterEnd(part))
     if (part.fromOffset == part.untilOffset) {
       logInfo(s"Beginning offset ${part.fromOffset} is the same as ending offset " +
         s"skipping ${part.topic} ${part.partition}")

@@ -36,7 +36,7 @@ class CachedKafkaConsumer[K, V] private(
   val partition: Int,
   val kafkaParams: ju.Map[String, Object]) extends Logging {
 
-  assert(groupId == kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG),
+  require(groupId == kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG),
     "groupId used for cache key must match the groupId in kafkaParams")
 
   val topicPartition = new TopicPartition(topic, partition)
@@ -69,7 +69,7 @@ class CachedKafkaConsumer[K, V] private(
     }
 
     if (!buffer.hasNext()) { poll(timeout) }
-    assert(buffer.hasNext(),
+    require(buffer.hasNext(),
       s"Failed to get records for $groupId $topic $partition $offset after polling for $timeout")
     var record = buffer.next()
 
@@ -77,10 +77,10 @@ class CachedKafkaConsumer[K, V] private(
       logInfo(s"Buffer miss for $groupId $topic $partition $offset")
       seek(offset)
       poll(timeout)
-      assert(buffer.hasNext(),
+      require(buffer.hasNext(),
         s"Failed to get records for $groupId $topic $partition $offset after polling for $timeout")
       record = buffer.next()
-      assert(record.offset == offset,
+      require(record.offset == offset,
         s"Got wrong record for $groupId $topic $partition even after seeking to offset $offset " +
           s"got offset ${record.offset} instead. If this is a compacted topic, consider enabling " +
           "spark.streaming.kafka.allowNonConsecutiveOffsets"
@@ -110,7 +110,7 @@ class CachedKafkaConsumer[K, V] private(
    */
   def compactedNext(timeout: Long): ConsumerRecord[K, V] = {
     if (!buffer.hasNext()) { poll(timeout) }
-    assert(buffer.hasNext(),
+    require(buffer.hasNext(),
       s"Failed to get records for compacted $groupId $topic $partition after polling for $timeout")
     val record = buffer.next()
     nextOffset = record.offset + 1
