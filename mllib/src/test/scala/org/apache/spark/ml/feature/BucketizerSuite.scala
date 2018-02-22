@@ -187,6 +187,15 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       }
     }
   }
+
+  test("Bucketizer should only drop NaN in input columns, with handleInvalid=skip") {
+    val df = spark.createDataFrame(Seq((2.3, 3.0), (Double.NaN, 3.0), (6.7, Double.NaN)))
+      .toDF("a", "b")
+    val splits = Array(Double.NegativeInfinity, 3.0, Double.PositiveInfinity)
+    val bucketizer = new Bucketizer().setInputCol("a").setOutputCol("x").setSplits(splits)
+    bucketizer.setHandleInvalid("skip")
+    assert(bucketizer.transform(df).count() == 2)
+  }
 }
 
 private object BucketizerSuite extends SparkFunSuite {

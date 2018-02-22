@@ -106,7 +106,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     val (filteredDataset, keepInvalid) = {
       if (getHandleInvalid == Bucketizer.SKIP_INVALID) {
         // "skip" NaN option is set, will filter out NaN values in the dataset
-        (dataset.na.drop().toDF(), false)
+        (dataset.na.drop(Seq($(inputCol))).toDF(), false)
       } else {
         (dataset.toDF(), getHandleInvalid == Bucketizer.KEEP_INVALID)
       }
