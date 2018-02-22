@@ -51,7 +51,7 @@ case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
 
 // Format of the shuffle block ids (including data and index) should be kept in sync with
 // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getBlockData().
-trait ShuffleBlockIdBase {
+trait ShuffleBlockIdBase extends BlockId {
   def shuffleId: Int
   def mapId: Int
   def reduceId: Int
@@ -59,13 +59,13 @@ trait ShuffleBlockIdBase {
 
 @DeveloperApi
 case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int)
-  extends BlockId with ShuffleBlockIdBase {
+  extends ShuffleBlockIdBase {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
 @DeveloperApi
 case class ContinuousShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int, numBlocks: Int)
-  extends BlockId with ShuffleBlockIdBase {
+  extends ShuffleBlockIdBase {
   override def name: String =
     "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + "_" + numBlocks
 }
