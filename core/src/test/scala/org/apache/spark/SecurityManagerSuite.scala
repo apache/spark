@@ -445,7 +445,7 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
       ("yarn", true),
       ("local", true),
       ("local[*]", true),
-      ("local[1,2]", true),
+      ("local[1, 2]", true),
       ("local-cluster[2, 1, 1024]", false),
       ("invalid", false)
     ).foreach { case (master, shouldGenerateSecret) =>
