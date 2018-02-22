@@ -236,7 +236,6 @@ class ContinuousExecution(
             startTrigger()
 
             if (reader.needsReconfiguration() && state.compareAndSet(ACTIVE, RECONFIGURING)) {
-              stopSources()
               if (queryExecutionThread.isAlive) {
                 queryExecutionThread.interrupt()
               }
@@ -268,6 +267,8 @@ class ContinuousExecution(
     } catch {
       case t: Throwable
           if StreamExecution.isInterruptionException(t) && state.get() == RECONFIGURING =>
+        stopSources()
+        sparkSession.sparkContext.cancelJobGroup(runId.toString)
         // interrupted by reconfiguration - swallow exception so we can restart the query
     } finally {
       epochEndpoint.askSync[Unit](StopContinuousExecutionWrites)
