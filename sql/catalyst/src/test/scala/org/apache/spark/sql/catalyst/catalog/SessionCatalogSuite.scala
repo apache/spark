@@ -955,8 +955,10 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       val oldPart1 = catalog.getPartition(TableIdentifier("tbl2", Some("db2")), part1.spec)
       val oldPart2 = catalog.getPartition(TableIdentifier("tbl2", Some("db2")), part2.spec)
       catalog.alterPartitions(TableIdentifier("tbl2", Some("db2")), Seq(
-        oldPart1.copy(storage = storageFormat.copy(locationUri = Some(newLocation))),
-        oldPart2.copy(storage = storageFormat.copy(locationUri = Some(newLocation)))))
+        oldPart1.copy(parameters = oldPart1.parameters,
+          storage = storageFormat.copy(locationUri = Some(newLocation))),
+        oldPart2.copy(parameters = oldPart2.parameters,
+          storage = storageFormat.copy(locationUri = Some(newLocation)))))
       val newPart1 = catalog.getPartition(TableIdentifier("tbl2", Some("db2")), part1.spec)
       val newPart2 = catalog.getPartition(TableIdentifier("tbl2", Some("db2")), part2.spec)
       assert(newPart1.storage.locationUri == Some(newLocation))
@@ -965,7 +967,9 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       assert(oldPart2.storage.locationUri != Some(newLocation))
       // Alter partitions without explicitly specifying database
       catalog.setCurrentDatabase("db2")
-      catalog.alterPartitions(TableIdentifier("tbl2"), Seq(oldPart1, oldPart2))
+      catalog.alterPartitions(TableIdentifier("tbl2"),
+        Seq(oldPart1.copy(parameters = newPart1.parameters),
+          oldPart2.copy(parameters = newPart2.parameters)))
       val newerPart1 = catalog.getPartition(TableIdentifier("tbl2"), part1.spec)
       val newerPart2 = catalog.getPartition(TableIdentifier("tbl2"), part2.spec)
       assert(oldPart1.storage.locationUri == newerPart1.storage.locationUri)

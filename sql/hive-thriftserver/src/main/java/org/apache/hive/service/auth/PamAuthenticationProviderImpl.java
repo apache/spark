@@ -17,17 +17,16 @@
  */
 package org.apache.hive.service.auth;
 
-import javax.security.sasl.AuthenticationException;
-
 import net.sf.jpam.Pam;
 import org.apache.hadoop.hive.conf.HiveConf;
+
+import javax.security.sasl.AuthenticationException;
 
 public class PamAuthenticationProviderImpl implements PasswdAuthenticationProvider {
 
   private final String pamServiceNames;
 
-  PamAuthenticationProviderImpl() {
-    HiveConf conf = new HiveConf();
+  PamAuthenticationProviderImpl(HiveConf conf) {
     pamServiceNames = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PAM_SERVICES);
   }
 
@@ -38,13 +37,20 @@ public class PamAuthenticationProviderImpl implements PasswdAuthenticationProvid
       throw new AuthenticationException("No PAM services are set.");
     }
 
+    String errorMsg = "Error authenticating with the PAM service: ";
     String[] pamServices = pamServiceNames.split(",");
     for (String pamService : pamServices) {
-      Pam pam = new Pam(pamService);
-      boolean isAuthenticated = pam.authenticateSuccessful(user, password);
-      if (!isAuthenticated) {
-        throw new AuthenticationException(
-          "Error authenticating with the PAM service: " + pamService);
+      try {
+        Pam pam = new Pam(pamService);
+        boolean isAuthenticated = pam.authenticateSuccessful(user, password);
+        if (!isAuthenticated) {
+          throw new AuthenticationException(errorMsg + pamService);
+        }
+      } catch(Throwable e) {
+        // Catch the exception caused by missing jpam.so which otherwise would
+        // crashes the thread and causes the client hanging rather than notifying
+        // the client nicely
+        throw new AuthenticationException(errorMsg + pamService, e);
       }
     }
   }

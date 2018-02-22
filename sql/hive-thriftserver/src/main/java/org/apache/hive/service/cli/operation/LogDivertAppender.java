@@ -17,10 +17,12 @@
  */
 
 package org.apache.hive.service.cli.operation;
+
 import java.io.CharArrayWriter;
 import java.util.Enumeration;
 import java.util.regex.Pattern;
 
+import com.google.common.base.Joiner;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.log.PerfLogger;
 import org.apache.hadoop.hive.ql.session.OperationLog;
@@ -33,8 +35,6 @@ import org.apache.log4j.Logger;
 import org.apache.log4j.WriterAppender;
 import org.apache.log4j.spi.Filter;
 import org.apache.log4j.spi.LoggingEvent;
-
-import com.google.common.base.Joiner;
 
 /**
  * An Appender to divert logs from individual threads to the LogObject they belong to.

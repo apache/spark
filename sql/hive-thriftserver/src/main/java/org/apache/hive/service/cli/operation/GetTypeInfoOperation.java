@@ -18,7 +18,11 @@
 
 package org.apache.hive.service.cli.operation;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
+import org.apache.hadoop.hive.serde2.thrift.Type;
 import org.apache.hive.service.cli.FetchOrientation;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.OperationState;
@@ -26,7 +30,6 @@ import org.apache.hive.service.cli.OperationType;
 import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
 import org.apache.hive.service.cli.TableSchema;
-import org.apache.hive.service.cli.Type;
 import org.apache.hive.service.cli.session.HiveSession;
 
 /**
@@ -35,7 +38,7 @@ import org.apache.hive.service.cli.session.HiveSession;
  */
 public class GetTypeInfoOperation extends MetadataOperation {
 
-  private static final TableSchema RESULT_SET_SCHEMA = new TableSchema()
+  private final static TableSchema RESULT_SET_SCHEMA = new TableSchema()
   .addPrimitiveColumn("TYPE_NAME", Type.STRING_TYPE,
       "Type name")
   .addPrimitiveColumn("DATA_TYPE", Type.INT_TYPE,
@@ -77,7 +80,7 @@ public class GetTypeInfoOperation extends MetadataOperation {
 
   protected GetTypeInfoOperation(HiveSession parentSession) {
     super(parentSession, OperationType.GET_TYPE_INFO);
-    rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion());
+    rowSet = RowSetFactory.create(RESULT_SET_SCHEMA, getProtocolVersion(), false);
   }
 
   @Override
@@ -123,7 +126,7 @@ public class GetTypeInfoOperation extends MetadataOperation {
    */
   @Override
   public TableSchema getResultSetSchema() throws HiveSQLException {
-    assertState(OperationState.FINISHED);
+    assertState(new ArrayList<OperationState>(Arrays.asList(OperationState.FINISHED)));
     return RESULT_SET_SCHEMA;
   }
 
@@ -132,7 +135,7 @@ public class GetTypeInfoOperation extends MetadataOperation {
    */
   @Override
   public RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
-    assertState(OperationState.FINISHED);
+    assertState(new ArrayList<OperationState>(Arrays.asList(OperationState.FINISHED)));
     validateDefaultFetchOrientation(orientation);
     if (orientation.equals(FetchOrientation.FETCH_FIRST)) {
       rowSet.setStartOffset(0);

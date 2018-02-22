@@ -17,22 +17,18 @@
  */
 package org.apache.hive.service.auth;
 
+import org.apache.hive.service.auth.AuthenticationProviderFactory.AuthMethods;
+
+import javax.security.auth.callback.*;
+import javax.security.sasl.AuthorizeCallback;
+import javax.security.sasl.SaslException;
+import javax.security.sasl.SaslServer;
+import javax.security.sasl.SaslServerFactory;
 import java.io.IOException;
 import java.security.Provider;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Map;
-import javax.security.auth.callback.Callback;
-import javax.security.auth.callback.CallbackHandler;
-import javax.security.auth.callback.NameCallback;
-import javax.security.auth.callback.PasswordCallback;
-import javax.security.auth.callback.UnsupportedCallbackException;
-import javax.security.sasl.AuthorizeCallback;
-import javax.security.sasl.SaslException;
-import javax.security.sasl.SaslServer;
-import javax.security.sasl.SaslServerFactory;
-
-import org.apache.hive.service.auth.AuthenticationProviderFactory.AuthMethods;
 
 /**
  * Sun JDK only provides a PLAIN client and no server. This class implements the Plain SASL server

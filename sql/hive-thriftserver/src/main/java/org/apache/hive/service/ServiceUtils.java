@@ -17,6 +17,11 @@
  */
 package org.apache.hive.service;
 
+import java.io.IOException;
+
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.slf4j.Logger;
+
 public class ServiceUtils {
 
   /*
@@ -41,4 +46,31 @@ public class ServiceUtils {
     }
     return endIdx;
   }
+
+  /**
+   * Close the Closeable objects and <b>ignore</b> any {@link IOException} or
+   * null pointers. Must only be used for cleanup in exception handlers.
+   *
+   * @param log the log to record problems to at debug level. Can be null.
+   * @param closeables the objects to close
+   */
+  public static void cleanup(Logger log, java.io.Closeable... closeables) {
+    for (java.io.Closeable c : closeables) {
+      if (c != null) {
+        try {
+          c.close();
+        } catch(IOException e) {
+          if (log != null && log.isDebugEnabled()) {
+            log.debug("Exception in closing " + c, e);
+          }
+        }
+      }
+    }
+  }
+
+  public static boolean canProvideProgressLog(HiveConf hiveConf) {
+    return "tez".equals(hiveConf.getVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE))
+        && hiveConf.getBoolVar(HiveConf.ConfVars.HIVE_SERVER2_INPLACE_PROGRESS);
+  }
+
 }

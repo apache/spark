@@ -18,8 +18,8 @@
 
 package org.apache.hive.service.auth;
 
-import org.apache.hive.service.cli.thrift.TCLIService;
-import org.apache.hive.service.cli.thrift.TCLIService.Iface;
+import org.apache.hive.service.rpc.thrift.TCLIService;
+import org.apache.hive.service.rpc.thrift.TCLIService.Iface;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TSaslClientTransport;
@@ -31,9 +31,12 @@ import org.slf4j.LoggerFactory;
 
 /**
  * This class is responsible for setting the ipAddress for operations executed via HiveServer2.
- *
- * - IP address is only set for operations that calls listeners with hookContext
- * - IP address is only set if the underlying transport mechanism is socket
+ * <p>
+ * <ul>
+ * <li>IP address is only set for operations that calls listeners with hookContext</li>
+ * <li>IP address is only set if the underlying transport mechanism is socket</li>
+ * </ul>
+ * </p>
  *
  * @see org.apache.hadoop.hive.ql.hooks.ExecuteWithHookContext
  */
@@ -92,14 +95,14 @@ public class TSetIpAddressProcessor<I extends Iface> extends TCLIService.Process
 
   private static final ThreadLocal<String> THREAD_LOCAL_IP_ADDRESS = new ThreadLocal<String>() {
     @Override
-    protected synchronized String initialValue() {
+    protected String initialValue() {
       return null;
     }
   };
 
   private static final ThreadLocal<String> THREAD_LOCAL_USER_NAME = new ThreadLocal<String>() {
     @Override
-    protected synchronized String initialValue() {
+    protected String initialValue() {
       return null;
     }
   };

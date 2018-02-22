@@ -22,10 +22,14 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import com.esotericsoftware.kryo.Kryo
+import com.esotericsoftware.kryo.io.Output
+import org.apache.commons.codec.binary.Base64
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc._
+import org.apache.hadoop.hive.ql.io.sarg.{ConvertAstToSearchArg, SearchArgument}
 import org.apache.hadoop.hive.serde2.objectinspector.{SettableStructObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
@@ -113,6 +117,13 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     true
   }
 
+  def toKryo(sarg: SearchArgument): String = {
+    val out = new Output(4 * 1024, 10 * 1024 * 1024)
+    new Kryo().writeObject(out, sarg)
+    out.close()
+    Base64.encodeBase64String(out.toBytes)
+  }
+
   override def buildReader(
       sparkSession: SparkSession,
       dataSchema: StructType,
@@ -123,8 +134,9 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates
+      // https://github.com/apache/hive/commit/9ae70cb4d11dae6cea45c29b0e87dc5da1e5555c
       OrcFilters.createFilter(requiredSchema, filters.toArray).foreach { f =>
-        hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, f.toKryo)
+        hadoopConf.set(ConvertAstToSearchArg.SARG_PUSHDOWN, toKryo(f))
         hadoopConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
       }
     }

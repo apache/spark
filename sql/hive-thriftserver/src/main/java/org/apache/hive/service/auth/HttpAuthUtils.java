@@ -18,22 +18,7 @@
 
 package org.apache.hive.service.auth;
 
-import java.security.AccessControlContext;
-import java.security.AccessController;
-import java.security.PrivilegedExceptionAction;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
-import java.util.StringTokenizer;
-
-import javax.security.auth.Subject;
-
 import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.http.protocol.BasicHttpContext;
@@ -42,6 +27,14 @@ import org.ietf.jgss.GSSContext;
 import org.ietf.jgss.GSSManager;
 import org.ietf.jgss.GSSName;
 import org.ietf.jgss.Oid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.security.auth.Subject;
+import java.security.AccessControlContext;
+import java.security.AccessController;
+import java.security.PrivilegedExceptionAction;
+import java.util.*;
 
 /**
  * Utility functions for HTTP mode authentication.
@@ -51,12 +44,12 @@ public final class HttpAuthUtils {
   public static final String AUTHORIZATION = "Authorization";
   public static final String BASIC = "Basic";
   public static final String NEGOTIATE = "Negotiate";
-  private static final Log LOG = LogFactory.getLog(HttpAuthUtils.class);
+  private static final Logger LOG = LoggerFactory.getLogger(HttpAuthUtils.class);
   private static final String COOKIE_ATTR_SEPARATOR = "&";
   private static final String COOKIE_CLIENT_USER_NAME = "cu";
   private static final String COOKIE_CLIENT_RAND_NUMBER = "rn";
   private static final String COOKIE_KEY_VALUE_SEPARATOR = "=";
-  private static final Set<String> COOKIE_ATTRIBUTES =
+  private final static Set<String> COOKIE_ATTRIBUTES =
     new HashSet<String>(Arrays.asList(COOKIE_CLIENT_USER_NAME, COOKIE_CLIENT_RAND_NUMBER));
 
   /**
@@ -89,14 +82,14 @@ public final class HttpAuthUtils {
    * @param clientUserName Client User name.
    * @return An unsigned cookie token generated from input parameters.
    * The final cookie generated is of the following format :
-   * {@code cu=<username>&rn=<randomNumber>&s=<cookieSignature>}
+   * cu=<username>&rn=<randomNumber>&s=<cookieSignature>
    */
   public static String createCookieToken(String clientUserName) {
-    StringBuffer sb = new StringBuffer();
-    sb.append(COOKIE_CLIENT_USER_NAME).append(COOKIE_KEY_VALUE_SEPARATOR).append(clientUserName)
-      .append(COOKIE_ATTR_SEPARATOR);
-    sb.append(COOKIE_CLIENT_RAND_NUMBER).append(COOKIE_KEY_VALUE_SEPARATOR)
-      .append((new Random(System.currentTimeMillis())).nextLong());
+    StringBuilder sb = new StringBuilder();
+    sb.append(COOKIE_CLIENT_USER_NAME).append(COOKIE_KEY_VALUE_SEPARATOR).append(clientUserName).
+    append(COOKIE_ATTR_SEPARATOR);
+    sb.append(COOKIE_CLIENT_RAND_NUMBER).append(COOKIE_KEY_VALUE_SEPARATOR).
+    append((new Random(System.currentTimeMillis())).nextLong());
     return sb.toString();
   }
 

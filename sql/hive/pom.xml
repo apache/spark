@@ -88,22 +88,38 @@
       <version>${protobuf.version}</version>
     </dependency>
 -->
-<!--
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-common</artifactId>
     </dependency>
--->
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
-<!--
-      <classifier>core</classifier>
--->
+      <classifier>${hive.classifier}</classifier>
     </dependency>
     <dependency>
       <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-serde</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-llap-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${hive.group}</groupId>
+      <artifactId>hive-llap-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive.shims</groupId>
+      <artifactId>hive-shims-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hive.shims</groupId>
+      <artifactId>hive-shims-0.23</artifactId>
     </dependency>
     <!--
         <dependency>
@@ -133,11 +149,15 @@
     </dependency>
     <dependency>
       <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-avatica</artifactId>
+      <artifactId>calcite-core</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.calcite</groupId>
-      <artifactId>calcite-core</artifactId>
+      <artifactId>calcite-druid</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.calcite.avatica</groupId>
+      <artifactId>avatica</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>

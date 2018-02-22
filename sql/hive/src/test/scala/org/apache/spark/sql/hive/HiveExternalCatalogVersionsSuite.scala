@@ -86,6 +86,8 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
     Seq("tar", "-xzf", downloaded, "-C", targetDir, "--strip-components=1").!
 
+    Seq("bash", "-c", s"rm -f $targetDir/jars/datanucleus-*.jar").!
+
     Seq("rm", downloaded).!
   }
 

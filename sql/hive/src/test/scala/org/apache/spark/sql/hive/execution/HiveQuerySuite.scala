@@ -820,7 +820,8 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
   test("ADD JAR command 2") {
     // this is a test case from mapjoin_addjar.q
-    val testJar = TestHive.getHiveFile("hive-hcatalog-core-0.13.1.jar").toURI
+    // use AbstractSerDe, see: HIVE-15167
+    val testJar = TestHive.getHiveFile("hive-hcatalog-core-2.3.2.jar").toURI
     val testData = TestHive.getHiveFile("data/files/sample.json").toURI
     sql(s"ADD JAR $testJar")
     sql(
@@ -830,9 +831,9 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     sql("select * from src join t1 on src.key = t1.a")
     sql("DROP TABLE t1")
     assert(sql("list jars").
-      filter(_.getString(0).contains("hive-hcatalog-core-0.13.1.jar")).count() > 0)
+      filter(_.getString(0).contains("hive-hcatalog-core-2.3.2.jar")).count() > 0)
     assert(sql("list jar").
-      filter(_.getString(0).contains("hive-hcatalog-core-0.13.1.jar")).count() > 0)
+      filter(_.getString(0).contains("hive-hcatalog-core-2.3.2.jar")).count() > 0)
     val testJar2 = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
     sql(s"ADD JAR $testJar2")
     assert(sql(s"list jar $testJar").count() == 1)

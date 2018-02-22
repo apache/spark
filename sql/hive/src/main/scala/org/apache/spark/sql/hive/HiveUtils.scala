@@ -58,11 +58,11 @@ private[spark] object HiveUtils extends Logging {
   }
 
   /** The version of hive used internally by Spark SQL. */
-  val builtinHiveVersion: String = "1.2.1"
+  val builtinHiveVersion: String = "2.3.2"
 
   val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        s"<code>0.12.0</code> through <code>2.1.1</code>.")
+        s"<code>0.12.0</code> through <code>2.3.2</code>.")
     .stringConf
     .createWithDefault(builtinHiveVersion)
 
@@ -202,8 +202,7 @@ private[spark] object HiveUtils extends Logging {
       ConfVars.METASTORE_AGGREGATE_STATS_CACHE_MAX_READER_WAIT -> TimeUnit.MILLISECONDS,
       ConfVars.HIVES_AUTO_PROGRESS_TIMEOUT -> TimeUnit.SECONDS,
       ConfVars.HIVE_LOG_INCREMENTAL_PLAN_PROGRESS_INTERVAL -> TimeUnit.MILLISECONDS,
-      ConfVars.HIVE_STATS_JDBC_TIMEOUT -> TimeUnit.SECONDS,
-      ConfVars.HIVE_STATS_RETRIES_WAIT -> TimeUnit.MILLISECONDS,
+      // https://issues.apache.org/jira/browse/HIVE-12164
       ConfVars.HIVE_LOCK_SLEEP_BETWEEN_RETRIES -> TimeUnit.SECONDS,
       ConfVars.HIVE_ZOOKEEPER_SESSION_TIMEOUT -> TimeUnit.MILLISECONDS,
       ConfVars.HIVE_ZOOKEEPER_CONNECTION_BASESLEEPTIME -> TimeUnit.MILLISECONDS,
@@ -499,5 +498,13 @@ private[spark] object HiveUtils extends Logging {
       val dataCols = hiveTable.getCols.asScala.map(HiveClientImpl.fromHiveColumn)
       table.copy(schema = StructType(dataCols ++ partCols))
     }
+  }
+
+  def closeHiveSchemaVerification(hiveConf: Configuration): Unit = {
+    // Hive changed the default of datanucleus.schema.autoCreateAll from true to false and
+    // hive.metastore.schema.verification from false to true since 2.0
+    // For details, see the JIRA HIVE-6113, HIVE-12463 and HIVE-1841
+    hiveConf.setBoolean("hive.metastore.schema.verification", false)
+    hiveConf.setBoolean("datanucleus.schema.autoCreateAll", true)
   }
 }

@@ -18,34 +18,32 @@
 
 package org.apache.hive.service.server;
 
-import java.util.Properties;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.cli.GnuParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.OptionBuilder;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.apache.commons.cli.*;
+import org.apache.hadoop.hive.common.JvmPauseMonitor;
 import org.apache.hadoop.hive.common.LogUtils;
 import org.apache.hadoop.hive.common.LogUtils.LogInitializationException;
+import org.apache.hadoop.hive.common.cli.CommonCliOptions;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.shims.ShimLoader;
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hive.common.util.HiveStringUtils;
+import org.apache.hive.common.util.ShutdownHookManager;
 import org.apache.hive.service.CompositeService;
 import org.apache.hive.service.cli.CLIService;
 import org.apache.hive.service.cli.thrift.ThriftBinaryCLIService;
 import org.apache.hive.service.cli.thrift.ThriftCLIService;
 import org.apache.hive.service.cli.thrift.ThriftHttpCLIService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * HiveServer2.
  *
  */
 public class HiveServer2 extends CompositeService {
-  private static final Log LOG = LogFactory.getLog(HiveServer2.class);
-
+  private static final Logger LOG = LoggerFactory.getLogger(HiveServer2.class);
   private CLIService cliService;
   private ThriftCLIService thriftCLIService;
 
@@ -58,22 +56,23 @@ public class HiveServer2 extends CompositeService {
   public synchronized void init(HiveConf hiveConf) {
     cliService = new CLIService(this);
     addService(cliService);
+    final HiveServer2 hiveServer2 = this;
+    Runnable oomHook = new Runnable() {
+      @Override
+      public void run() {
+        hiveServer2.stop();
+      }
+    };
     if (isHTTPTransportMode(hiveConf)) {
-      thriftCLIService = new ThriftHttpCLIService(cliService);
+      thriftCLIService = new ThriftHttpCLIService(cliService, oomHook);
     } else {
-      thriftCLIService = new ThriftBinaryCLIService(cliService);
+      thriftCLIService = new ThriftBinaryCLIService(cliService, oomHook);
     }
     addService(thriftCLIService);
     super.init(hiveConf);
 
     // Add a shutdown hook for catching SIGTERM & SIGINT
-    final HiveServer2 hiveServer2 = this;
-    Runtime.getRuntime().addShutdownHook(new Thread() {
-      @Override
-      public void run() {
-        hiveServer2.stop();
-      }
-    });
+    ShutdownHookManager.addShutdownHook(oomHook);
   }
 
   public static boolean isHTTPTransportMode(HiveConf hiveConf) {
@@ -105,12 +104,21 @@ public class HiveServer2 extends CompositeService {
       LOG.info("Starting HiveServer2");
       HiveConf hiveConf = new HiveConf();
       maxAttempts = hiveConf.getLongVar(HiveConf.ConfVars.HIVE_SERVER2_MAX_START_ATTEMPTS);
+      long retrySleepIntervalMs = hiveConf
+          .getTimeVar(ConfVars.HIVE_SERVER2_SLEEP_INTERVAL_BETWEEN_START_ATTEMPTS,
+              TimeUnit.MILLISECONDS);
       HiveServer2 server = null;
       try {
         server = new HiveServer2();
         server.init(hiveConf);
         server.start();
-        ShimLoader.getHadoopShims().startPauseMonitor(hiveConf);
+        try {
+          JvmPauseMonitor pauseMonitor = new JvmPauseMonitor(hiveConf);
+          pauseMonitor.start();
+        } catch (Throwable t) {
+          LOG.warn("Could not initiate the JvmPauseMonitor thread." + " GCs and Pauses may not be " +
+            "warned upon.", t);
+        }
         break;
       } catch (Throwable throwable) {
         if (server != null) {
@@ -126,9 +134,9 @@ public class HiveServer2 extends CompositeService {
           throw new Error("Max start attempts " + maxAttempts + " exhausted", throwable);
         } else {
           LOG.warn("Error starting HiveServer2 on attempt " + attempts
-              + ", will retry in 60 seconds", throwable);
+              + ", will retry in " + retrySleepIntervalMs + "ms", throwable);
           try {
-            Thread.sleep(60L * 1000L);
+            Thread.sleep(retrySleepIntervalMs);
           } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
           }
@@ -149,7 +157,7 @@ public class HiveServer2 extends CompositeService {
       LOG.debug(initLog4jMessage);
       HiveStringUtils.startupShutdownMessage(HiveServer2.class, args, LOG);
 
-      // Log debug message from "oproc" after log4j initialize properly
+      // Logger debug message from "oproc" after log4j initialize properly
       LOG.debug(oproc.getDebugMessage().toString());
 
       // Call the executor which will execute the appropriate command based on the parsed options
@@ -196,7 +204,11 @@ public class HiveServer2 extends CompositeService {
         for (String propKey : confProps.stringPropertyNames()) {
           // save logging message for log4j output latter after log4j initialize properly
           debugMessage.append("Setting " + propKey + "=" + confProps.getProperty(propKey) + ";\n");
-          System.setProperty(propKey, confProps.getProperty(propKey));
+          if (propKey.equalsIgnoreCase("hive.root.logger")) {
+            CommonCliOptions.splitAndSetLogger(propKey, confProps);
+          } else {
+            System.setProperty(propKey, confProps.getProperty(propKey));
+          }
         }
 
         // Process --help
@@ -269,7 +281,7 @@ public class HiveServer2 extends CompositeService {
       try {
         startHiveServer2();
       } catch (Throwable t) {
-        LOG.fatal("Error starting HiveServer2", t);
+        LOG.error("Error starting HiveServer2", t);
         System.exit(-1);
       }
     }

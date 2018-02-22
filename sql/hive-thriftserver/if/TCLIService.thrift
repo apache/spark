@@ -32,14 +32,14 @@
 // * Service names begin with the letter "T", use a capital letter for each
 //   new word (with no underscores), and end with the word "Service".
 
-namespace java org.apache.hive.service.cli.thrift
-namespace cpp apache.hive.service.cli.thrift
+namespace java org.apache.hive.service.rpc.thrift
+namespace cpp apache.hive.service.rpc.thrift
 
 // List of protocol versions. A new token should be
 // added to the end of this list every time a change is made.
 enum TProtocolVersion {
   HIVE_CLI_SERVICE_PROTOCOL_V1,
-  
+
   // V2 adds support for asynchronous execution
   HIVE_CLI_SERVICE_PROTOCOL_V2
 
@@ -60,6 +60,12 @@ enum TProtocolVersion {
 
   // V8 adds support for interval types
   HIVE_CLI_SERVICE_PROTOCOL_V8
+
+  // V9 adds support for serializing ResultSets in SerDe
+  HIVE_CLI_SERVICE_PROTOCOL_V9
+
+  // V10 adds support for in place updates via GetOperationStatus
+  HIVE_CLI_SERVICE_PROTOCOL_V10
 }
 
 enum TTypeId {
@@ -86,7 +92,7 @@ enum TTypeId {
   INTERVAL_YEAR_MONTH_TYPE,
   INTERVAL_DAY_TIME_TYPE
 }
-  
+
 const set<TTypeId> PRIMITIVE_TYPES = [
   TTypeId.BOOLEAN_TYPE,
   TTypeId.TINYINT_TYPE,
@@ -265,7 +271,7 @@ struct TColumnDesc {
 
   // The type descriptor for this column
   2: required TTypeDesc typeDesc
-  
+
   // The ordinal position of this column in the schema
   3: required i32 position
 
@@ -402,6 +408,8 @@ struct TRowSet {
   1: required i64 startRowOffset
   2: required list<TRow> rows
   3: optional list<TColumn> columns
+  4: optional binary binaryColumns
+  5: optional i32 columnCount
 }
 
 // The return status code contained in each response.
@@ -456,6 +464,9 @@ enum TOperationState {
 
   // The operation is in an pending state
   PENDING_STATE,
+
+  // The operation is in an timedout state
+  TIMEDOUT_STATE,
 }
 
 // A string identifier. This is interpreted literally.
@@ -551,7 +562,7 @@ struct TOperationHandle {
 // which operations may be executed.
 struct TOpenSessionReq {
   // The version of the HiveServer2 protocol that the client is using.
-  1: required TProtocolVersion client_protocol = TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V8
+  1: required TProtocolVersion client_protocol = TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V10
 
   // Username and password for authentication.
   // Depending on the authentication scheme being used,
@@ -570,7 +581,7 @@ struct TOpenSessionResp {
   1: required TStatus status
 
   // The protocol version that the server is using.
-  2: required TProtocolVersion serverProtocolVersion = TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V8
+  2: required TProtocolVersion serverProtocolVersion = TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V10
 
   // Session Handle
   3: optional TSessionHandle sessionHandle
@@ -661,7 +672,7 @@ union TGetInfoValue {
 // The function returns general information about the data source
 // using the same keys as ODBC.
 struct TGetInfoReq {
-  // The session to run this request against
+  // The sesssion to run this request against
   1: required TSessionHandle sessionHandle
 
   2: required TGetInfoType infoType
@@ -692,9 +703,12 @@ struct TExecuteStatementReq {
   // is executed. These properties apply to this statement
   // only and will not affect the subsequent state of the Session.
   3: optional map<string, string> confOverlay
-  
+
   // Execute asynchronously when runAsync is true
   4: optional bool runAsync = false
+
+  // The number of seconds after which the query will timeout on the server
+  5: optional i64 queryTimeout = 0
 }
 
 struct TExecuteStatementResp {
@@ -718,13 +732,13 @@ struct TGetTypeInfoReq {
 struct TGetTypeInfoResp {
   1: required TStatus status
   2: optional TOperationHandle operationHandle
-}  
+}
 
 
 // GetCatalogs()
 //
-// Returns the list of catalogs (databases) 
-// Results are ordered by TABLE_CATALOG 
+// Returns the list of catalogs (databases)
+// Results are ordered by TABLE_CATALOG
 //
 // Resultset columns :
 // col1
@@ -834,9 +848,9 @@ struct TGetTablesResp {
 
 // GetTableTypes()
 //
-// Returns the table types available in this database. 
-// The results are ordered by table type. 
-// 
+// Returns the table types available in this database.
+// The results are ordered by table type.
+//
 // col1
 // name: TABLE_TYPE
 // type: STRING
@@ -857,8 +871,8 @@ struct TGetTableTypesResp {
 // Returns a list of columns in the specified tables.
 // The information is returned as a result set which can be fetched
 // using the OperationHandle provided in the response.
-// Results are ordered by TABLE_CAT, TABLE_SCHEM, TABLE_NAME, 
-// and ORDINAL_POSITION. 
+// Results are ordered by TABLE_CAT, TABLE_SCHEM, TABLE_NAME,
+// and ORDINAL_POSITION.
 //
 // Result Set Columns are the same as those for the ODBC CLIColumns
 // function.
@@ -954,7 +968,53 @@ struct TGetFunctionsResp {
   1: required TStatus status
   2: optional TOperationHandle operationHandle
 }
-  
+
+struct TGetPrimaryKeysReq {
+  // Session to run this request against
+  1: required TSessionHandle sessionHandle
+
+  // Name of the catalog.
+  2: optional TIdentifier catalogName
+
+  // Name of the schema.
+  3: optional TIdentifier schemaName
+
+  // Name of the table.
+  4: optional TIdentifier tableName
+}
+
+struct TGetPrimaryKeysResp {
+  1: required TStatus status
+  2: optional TOperationHandle operationHandle
+}
+
+struct TGetCrossReferenceReq {
+  // Session to run this request against
+  1: required TSessionHandle sessionHandle
+
+  // Name of the parent catalog.
+  2: optional TIdentifier parentCatalogName
+
+  // Name of the parent schema.
+  3: optional TIdentifier parentSchemaName
+
+  // Name of the parent table.
+  4: optional TIdentifier parentTableName
+
+  // Name of the foreign catalog.
+  5: optional TIdentifier foreignCatalogName
+
+  // Name of the foreign schema.
+  6: optional TIdentifier foreignSchemaName
+
+  // Name of the foreign table.
+  7: optional TIdentifier foreignTableName
+}
+
+struct TGetCrossReferenceResp {
+  1: required TStatus status
+  2: optional TOperationHandle operationHandle
+}
 
 // GetOperationStatus()
 //
@@ -962,6 +1022,8 @@ struct TGetFunctionsResp {
 struct TGetOperationStatusReq {
   // Session to run this request against
   1: required TOperationHandle operationHandle
+  // optional arguments to get progress information
+  2: optional bool getProgressUpdate
 }
 
 struct TGetOperationStatusResp {
@@ -977,6 +1039,21 @@ struct TGetOperationStatusResp {
 
   // Error message
   5: optional string errorMessage
+
+  // List of statuses of sub tasks
+  6: optional string taskStatus
+
+  // When was the operation started
+  7: optional i64 operationStarted
+
+  // When was the operation completed
+  8: optional i64 operationCompleted
+
+  // If the operation has the result
+  9: optional bool hasResultSet
+
+  10: optional TProgressUpdateResp progressUpdateResponse
+
 }
 
 
@@ -1032,7 +1109,7 @@ enum TFetchOrientation {
   FETCH_PRIOR,
 
   // Return the rowset at the given fetch offset relative
-  // to the current rowset.
+  // to the curren rowset.
   // NOT SUPPORTED
   FETCH_RELATIVE,
 
@@ -1059,7 +1136,7 @@ struct TFetchResultsReq {
   // The fetch orientation. For V1 this must be either
   // FETCH_NEXT or FETCH_FIRST. Defaults to FETCH_NEXT.
   2: required TFetchOrientation orientation = TFetchOrientation.FETCH_NEXT
-  
+
   // Max number of rows that should be returned in
   // the rowset.
   3: required i64 maxRows
@@ -1132,6 +1209,21 @@ struct TRenewDelegationTokenResp {
   1: required TStatus status
 }
 
+enum TJobExecutionStatus {
+    IN_PROGRESS,
+    COMPLETE,
+    NOT_AVAILABLE
+}
+
+struct TProgressUpdateResp {
+  1: required list<string> headerNames
+  2: required list<list<string>> rows
+  3: required double progressedPercentage
+  4: required TJobExecutionStatus status
+  5: required string footerSummary
+  6: required i64 startTime
+}
+
 service TCLIService {
 
   TOpenSessionResp OpenSession(1:TOpenSessionReq req);
@@ -1156,8 +1248,12 @@ service TCLIService {
 
   TGetFunctionsResp GetFunctions(1:TGetFunctionsReq req);
 
+  TGetPrimaryKeysResp GetPrimaryKeys(1:TGetPrimaryKeysReq req);
+
+  TGetCrossReferenceResp GetCrossReference(1:TGetCrossReferenceReq req);
+
   TGetOperationStatusResp GetOperationStatus(1:TGetOperationStatusReq req);
-  
+
   TCancelOperationResp CancelOperation(1:TCancelOperationReq req);
 
   TCloseOperationResp CloseOperation(1:TCloseOperationReq req);

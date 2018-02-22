@@ -17,68 +17,96 @@
  */
 package org.apache.hive.service.auth;
 
-import java.util.Hashtable;
-import javax.naming.Context;
-import javax.naming.NamingException;
-import javax.naming.directory.InitialDirContext;
-import javax.security.sasl.AuthenticationException;
-
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hive.service.ServiceUtils;
+import org.apache.hive.service.auth.ldap.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import javax.security.sasl.AuthenticationException;
+import java.util.Iterator;
+import java.util.List;
 
 public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvider {
 
-  private final String ldapURL;
-  private final String baseDN;
-  private final String ldapDomain;
+  private static final Logger LOG = LoggerFactory.getLogger(LdapAuthenticationProviderImpl.class);
 
-  LdapAuthenticationProviderImpl() {
-    HiveConf conf = new HiveConf();
-    ldapURL = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_URL);
-    baseDN = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_BASEDN);
-    ldapDomain = conf.getVar(HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_DOMAIN);
+  private static final List<FilterFactory> FILTER_FACTORIES = ImmutableList.<FilterFactory>of(
+      new CustomQueryFilterFactory(),
+      new ChainFilterFactory(new UserSearchFilterFactory(), new UserFilterFactory(),
+          new GroupFilterFactory())
+  );
+
+  private final HiveConf conf;
+  private final Filter filter;
+  private final DirSearchFactory searchFactory;
+
+  public LdapAuthenticationProviderImpl(HiveConf conf) {
+    this(conf, new LdapSearchFactory());
+  }
+
+  @VisibleForTesting
+  LdapAuthenticationProviderImpl(HiveConf conf, DirSearchFactory searchFactory) {
+    this.conf = conf;
+    this.searchFactory = searchFactory;
+    filter = resolveFilter(conf);
   }
 
   @Override
   public void Authenticate(String user, String password) throws AuthenticationException {
-
-    Hashtable<String, Object> env = new Hashtable<String, Object>();
-    env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
-    env.put(Context.PROVIDER_URL, ldapURL);
-
-    // If the domain is available in the config, then append it unless domain is
-    // already part of the username. LDAP providers like Active Directory use a
-    // fully qualified user name like foo@bar.com.
-    if (!hasDomain(user) && ldapDomain != null) {
-      user  = user + "@" + ldapDomain;
-    }
-
-    if (password == null || password.isEmpty() || password.getBytes()[0] == 0) {
-      throw new AuthenticationException("Error validating LDAP user:" +
-          " a null or blank password has been provided");
-    }
-
-    // setup the security principal
-    String bindDN;
-    if (baseDN == null) {
-      bindDN = user;
-    } else {
-      bindDN = "uid=" + user + "," + baseDN;
-    }
-    env.put(Context.SECURITY_AUTHENTICATION, "simple");
-    env.put(Context.SECURITY_PRINCIPAL, bindDN);
-    env.put(Context.SECURITY_CREDENTIALS, password);
-
+    DirSearch search = null;
     try {
-      // Create initial context
-      Context ctx = new InitialDirContext(env);
-      ctx.close();
-    } catch (NamingException e) {
-      throw new AuthenticationException("Error validating LDAP user", e);
+      search = createDirSearch(user, password);
+      applyFilter(search, user);
+    } finally {
+      ServiceUtils.cleanup(LOG, search);
     }
   }
 
-  private boolean hasDomain(String userName) {
-    return (ServiceUtils.indexOfDomainMatch(userName) > 0);
+  private DirSearch createDirSearch(String user, String password) throws AuthenticationException {
+    if (StringUtils.isBlank(user)) {
+      throw new AuthenticationException("Error validating LDAP user:"
+          + " a null or blank user name has been provided");
+    }
+    if (StringUtils.isBlank(password) || password.getBytes()[0] == 0) {
+      throw new AuthenticationException("Error validating LDAP user:"
+          + " a null or blank password has been provided");
+    }
+    List<String> principals = LdapUtils.createCandidatePrincipals(conf, user);
+    for (Iterator<String> iterator = principals.iterator(); iterator.hasNext();) {
+      String principal = iterator.next();
+      try {
+        return searchFactory.getInstance(conf, principal, password);
+      } catch (AuthenticationException ex) {
+        if (!iterator.hasNext()) {
+          throw ex;
+        }
+      }
+    }
+    throw new AuthenticationException(
+        String.format("No candidate principals for %s was found.", user));
+  }
+
+  private static Filter resolveFilter(HiveConf conf) {
+    for (FilterFactory filterProvider : FILTER_FACTORIES) {
+      Filter filter = filterProvider.getInstance(conf);
+      if (filter != null) {
+        return filter;
+      }
+    }
+    return null;
+  }
+
+  private void applyFilter(DirSearch client, String user) throws AuthenticationException {
+    if (filter != null) {
+      if (LdapUtils.hasDomain(user)) {
+        filter.apply(client, LdapUtils.extractUserName(user));
+      } else {
+        filter.apply(client, user);
+      }
+    }
   }
 }

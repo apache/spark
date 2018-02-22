@@ -1146,3 +1146,7 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
     alterPartitionsMethod.invoke(hive, tableName, newParts, environmentContextInAlterTable)
   }
 }
+
+private[client] class Shim_v2_3 extends Shim_v2_1 {
+
+}

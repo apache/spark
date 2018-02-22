@@ -20,11 +20,12 @@ package org.apache.hive.service.cli;
 
 import java.util.List;
 
+import org.apache.hadoop.hive.serde2.thrift.Type;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory;
-import org.apache.hive.service.cli.thrift.TPrimitiveTypeEntry;
-import org.apache.hive.service.cli.thrift.TTypeDesc;
-import org.apache.hive.service.cli.thrift.TTypeEntry;
+import org.apache.hive.service.rpc.thrift.TPrimitiveTypeEntry;
+import org.apache.hive.service.rpc.thrift.TTypeDesc;
+import org.apache.hive.service.rpc.thrift.TTypeEntry;
 
 /**
  * TypeDescriptor.
@@ -98,7 +99,7 @@ public class TypeDescriptor {
    * For datetime types this is the length in characters of the String representation
    * (assuming the maximum allowed precision of the fractional seconds component).
    * For binary data this is the length in bytes.
-   * Null is returned for data types where the column size is not applicable.
+   * Null is returned for for data types where the column size is not applicable.
    */
   public Integer getColumnSize() {
     if (type.isNumericType()) {
