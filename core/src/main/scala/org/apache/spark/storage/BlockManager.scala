@@ -940,7 +940,11 @@ private[spark] class BlockManager(
             if (memoryMode == MemoryMode.OFF_HEAP &&
                 bytes.chunks.exists(buffer => !buffer.isDirect)) {
               bytes.copy(Platform.allocateDirectBuffer)
-            } else {
+            } else if (memoryMode == MemoryMode.ON_HEAP &&
+              bytes.chunks.exists(buffer => buffer.isDirect)) {
+              bytes.copy(ByteBuffer.allocate)
+            }
+            else {
               bytes
             }
           })
