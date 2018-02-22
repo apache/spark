@@ -17,14 +17,18 @@
  */
 package org.apache.hive.service.auth;
 
-import javax.security.auth.callback.*;
+import java.io.IOException;
+import java.security.Security;
+import java.util.HashMap;
+import javax.security.auth.callback.Callback;
+import javax.security.auth.callback.CallbackHandler;
+import javax.security.auth.callback.NameCallback;
+import javax.security.auth.callback.PasswordCallback;
+import javax.security.auth.callback.UnsupportedCallbackException;
 import javax.security.auth.login.LoginException;
 import javax.security.sasl.AuthenticationException;
 import javax.security.sasl.AuthorizeCallback;
 import javax.security.sasl.SaslException;
-import java.io.IOException;
-import java.security.Security;
-import java.util.HashMap;
 
 import org.apache.hive.service.auth.AuthenticationProviderFactory.AuthMethods;
 import org.apache.hive.service.auth.PlainSaslServer.SaslPlainProvider;

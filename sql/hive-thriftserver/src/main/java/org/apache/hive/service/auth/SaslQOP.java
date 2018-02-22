@@ -19,16 +19,19 @@
 package org.apache.hive.service.auth;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
  * Possible values of SASL quality-of-protection value.
  */
 public enum SaslQOP {
-  AUTH("auth"), // Authentication only.
-  AUTH_INT("auth-int"), // Authentication and integrity checking by using signatures.
-  AUTH_CONF("auth-conf"); // Authentication, integrity and confidentiality checking
-                          // by using signatures and encryption.
+  // Authentication only.
+  AUTH("auth"),
+  // Authentication and integrity checking by using signatures.
+  AUTH_INT("auth-int"),
+  // Authentication, integrity and confidentiality checking by using signatures and encryption.
+  AUTH_CONF("auth-conf");
 
   public final String saslQop;
 
@@ -50,7 +53,7 @@ public enum SaslQOP {
 
   public static SaslQOP fromString(String str) {
     if (str != null) {
-      str = str.toLowerCase();
+      str = str.toLowerCase(Locale.ROOT);
     }
     SaslQOP saslQOP = STR_TO_ENUM.get(str);
     if (saslQOP == null) {

@@ -18,15 +18,15 @@
 
 package org.apache.hive.service.auth;
 
-import org.apache.hadoop.hive.thrift.TFilterTransport;
-import org.apache.thrift.transport.TTransport;
-import org.apache.thrift.transport.TTransportException;
-
-import javax.security.auth.Subject;
 import java.security.AccessControlContext;
 import java.security.AccessController;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
+import javax.security.auth.Subject;
+
+import org.apache.hadoop.hive.thrift.TFilterTransport;
+import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.TTransportException;
 
 /**
  * This is used on the client side, where the API explicitly opens a transport to

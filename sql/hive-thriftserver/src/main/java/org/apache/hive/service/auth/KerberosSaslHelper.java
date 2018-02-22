@@ -17,6 +17,10 @@
  */
 package org.apache.hive.service.auth;
 
+import java.io.IOException;
+import java.util.Map;
+import javax.security.sasl.SaslException;
+
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge;
 import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge.Server;
@@ -27,10 +31,6 @@ import org.apache.thrift.TProcessor;
 import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.transport.TSaslClientTransport;
 import org.apache.thrift.transport.TTransport;
-
-import javax.security.sasl.SaslException;
-import java.io.IOException;
-import java.util.Map;
 
 public final class KerberosSaslHelper {
 

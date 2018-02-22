@@ -31,7 +31,6 @@ import java.util.Set;
  * <br>
  * The produced filter object filters out all users that are not on the provided in
  * Hive configuration list.
- * @see HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_USERFILTER
  */
 public final class UserFilterFactory implements FilterFactory {
 

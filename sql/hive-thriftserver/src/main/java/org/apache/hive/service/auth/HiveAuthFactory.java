@@ -17,6 +17,13 @@
  */
 package org.apache.hive.service.auth;
 
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
+import javax.security.auth.login.LoginException;
+import javax.security.sasl.AuthenticationException;
+import javax.security.sasl.Sasl;
+
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
@@ -39,13 +46,6 @@ import org.apache.thrift.transport.TTransportException;
 import org.apache.thrift.transport.TTransportFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.security.auth.login.LoginException;
-import javax.security.sasl.AuthenticationException;
-import javax.security.sasl.Sasl;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * This class helps in some aspects of authentication. It creates the proper Thrift classes for the

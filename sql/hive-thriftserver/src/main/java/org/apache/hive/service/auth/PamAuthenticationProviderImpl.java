@@ -17,10 +17,10 @@
  */
 package org.apache.hive.service.auth;
 
+import javax.security.sasl.AuthenticationException;
+
 import net.sf.jpam.Pam;
 import org.apache.hadoop.hive.conf.HiveConf;
-
-import javax.security.sasl.AuthenticationException;
 
 public class PamAuthenticationProviderImpl implements PasswdAuthenticationProvider {
 

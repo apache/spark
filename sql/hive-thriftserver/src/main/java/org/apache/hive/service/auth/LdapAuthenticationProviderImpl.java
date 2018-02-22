@@ -17,6 +17,10 @@
  */
 package org.apache.hive.service.auth;
 
+import java.util.Iterator;
+import java.util.List;
+import javax.security.sasl.AuthenticationException;
+
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import org.apache.commons.lang.StringUtils;
@@ -25,10 +29,6 @@ import org.apache.hive.service.ServiceUtils;
 import org.apache.hive.service.auth.ldap.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.security.sasl.AuthenticationException;
-import java.util.Iterator;
-import java.util.List;
 
 public class LdapAuthenticationProviderImpl implements PasswdAuthenticationProvider {
 

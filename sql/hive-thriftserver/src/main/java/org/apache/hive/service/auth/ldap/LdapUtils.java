@@ -146,10 +146,6 @@ public final class LdapUtils {
    * @param conf Hive configuration
    * @param var variable to be read
    * @return a list of DN patterns
-   * @see HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_BASEDN
-   * @see HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_GUIDKEY
-   * @see HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_GROUPDNPATTERN
-   * @see HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_USERDNPATTERN
    */
   public static List<String> parseDnPatterns(HiveConf conf, HiveConf.ConfVars var) {
     String patternsString = conf.getVar(var);
@@ -184,8 +180,6 @@ public final class LdapUtils {
    * Converts a collection of Distinguished Name patterns to a collection of base DNs.
    * @param patterns Distinguished Name patterns
    * @return a list of base DNs
-   * @see HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_GROUPDNPATTERN
-   * @see HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_USERDNPATTERN
    */
   public static List<String> patternsToBaseDns(Collection<String> patterns) {
     List<String> result = new ArrayList<>();

@@ -17,9 +17,9 @@
  */
 package org.apache.hive.service.auth;
 
-import org.apache.hadoop.hive.conf.HiveConf;
-
 import javax.security.sasl.AuthenticationException;
+
+import org.apache.hadoop.hive.conf.HiveConf;
 
 /**
  * This class helps select a {@link PasswdAuthenticationProvider} for a given {@code AuthMethod}.

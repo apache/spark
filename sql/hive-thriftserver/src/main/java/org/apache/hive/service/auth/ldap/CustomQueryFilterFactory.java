@@ -31,7 +31,6 @@ import java.util.List;
  * <br>
  * The produced filter object filters out all users that are not found in the search result
  * of the query provided in Hive configuration.
- * @see HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_CUSTOMLDAPQUERY
  */
 public class CustomQueryFilterFactory implements FilterFactory {
 

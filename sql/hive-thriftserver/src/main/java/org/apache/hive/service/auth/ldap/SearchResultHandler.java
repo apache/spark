@@ -148,7 +148,6 @@ public final class SearchResultHandler {
    * Implementations of this interface perform the actual work of processing each record,
    * but don't need to worry about exception handling, closing underlying data structures,
    * and combining results from several search requests.
-   * {@see SearchResultHandler}
    */
   public interface RecordProcessor {
 

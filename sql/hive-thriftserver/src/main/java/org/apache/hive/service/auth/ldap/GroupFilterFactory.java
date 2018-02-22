@@ -32,7 +32,6 @@ import java.util.*;
  * <br>
  * The produced filter object filters out all users that are not members of at least one of
  * the groups provided in Hive configuration.
- * @see HiveConf.ConfVars.HIVE_SERVER2_PLAIN_LDAP_GROUPFILTER
  */
 public final class GroupFilterFactory implements FilterFactory {
 
