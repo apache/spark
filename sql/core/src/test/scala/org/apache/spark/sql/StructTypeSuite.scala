@@ -20,24 +20,24 @@ package org.apache.spark.sql
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types.StructType
 
-class StructTypeSuite extends SparkFunSuite{
+class StructTypeSuite extends SparkFunSuite {
 
   test("SPARK-23462 lookup a single missing field should output existing fields") {
-    val s = StructType.fromDDL("a INT")
-    val e = intercept[IllegalArgumentException](s("b")).getMessage
-    assert(e.contains("Available fields: a"))
+    val s = StructType.fromDDL("a INT, b STRING")
+    val e = intercept[IllegalArgumentException](s("c")).getMessage
+    assert(e.contains("Available fields: a,b"))
   }
 
   test("SPARK-23462 lookup a set of missing fields should output existing fields") {
-    val s = StructType.fromDDL("a INT")
-    val e = intercept[IllegalArgumentException](s(Set("a", "b"))).getMessage
-    assert(e.contains("Available fields: a"))
+    val s = StructType.fromDDL("a INT, b STRING")
+    val e = intercept[IllegalArgumentException](s(Set("a", "c"))).getMessage
+    assert(e.contains("Available fields: a,b"))
   }
 
   test("SPARK-23462 lookup fieldIndex for missing field should output existing fields") {
-    val s = StructType.fromDDL("a INT")
-    val e = intercept[IllegalArgumentException](s.fieldIndex("b")).getMessage
-    assert(e.contains("Available fields: a"))
+    val s = StructType.fromDDL("a INT, b STRING")
+    val e = intercept[IllegalArgumentException](s.fieldIndex("c")).getMessage
+    assert(e.contains("Available fields: a,b"))
   }
 
 }
