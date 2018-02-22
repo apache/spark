@@ -36,6 +36,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
 
     val activeStages = allStages.filter(_.status == StageStatus.ACTIVE)
     val pendingStages = allStages.filter(_.status == StageStatus.PENDING)
+    val skippedStages = allStages.filter(_.status == StageStatus.SKIPPED)
     val completedStages = allStages.filter(_.status == StageStatus.COMPLETE)
     val failedStages = allStages.filter(_.status == StageStatus.FAILED).reverse
 
@@ -50,6 +51,9 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         parent.basePath, subPath, parent.isFairScheduler, false, false)
     val completedStagesTable =
       new StageTableBase(parent.store, request, completedStages, "completed", "completedStage",
+        parent.basePath, subPath, parent.isFairScheduler, false, false)
+    val skippedStagesTable =
+      new StageTableBase(parent.store, request, skippedStages, "skipped", "skippedStage",
         parent.basePath, subPath, parent.isFairScheduler, false, false)
     val failedStagesTable =
       new StageTableBase(parent.store, request, failedStages, "failed", "failedStage",
@@ -66,6 +70,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
     val shouldShowActiveStages = activeStages.nonEmpty
     val shouldShowPendingStages = pendingStages.nonEmpty
     val shouldShowCompletedStages = completedStages.nonEmpty
+    val shouldShowSkippedStages = skippedStages.nonEmpty
     val shouldShowFailedStages = failedStages.nonEmpty
 
     val appSummary = parent.store.appSummary()
@@ -99,6 +104,14 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
               <li id="completed-summary">
                 <a href="#completed"><strong>Completed Stages:</strong></a>
                 {completedStageNumStr}
+              </li>
+            }
+          }
+          {
+            if (shouldShowSkippedStages) {
+              <li id="completed-summary">
+                <a href="#skipped"><strong>Skipped Stages:</strong></a>
+                {skippedStages.size}
               </li>
             }
           }
@@ -170,6 +183,20 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         </span> ++
         <div class="aggregated-allCompletedStages collapsible-table">
           {completedStagesTable.toNodeSeq}
+        </div>
+    }
+    if (shouldShowSkippedStages) {
+      content ++=
+        <span id="skipped" class="collapse-aggregated-allSkippedStages collapse-table"
+              onClick="collapseTable('collapse-aggregated-allSkippedStages',
+            'aggregated-allSkippedStages')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Skipped Stages ({skippedStages.size})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-allSkippedStages collapsible-table">
+          {skippedStagesTable.toNodeSeq}
         </div>
     }
     if (shouldShowFailedStages) {

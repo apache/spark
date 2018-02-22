@@ -541,7 +541,8 @@ private[spark] class SecurityManager(
     rnd.nextBytes(secretBytes)
 
     val creds = new Credentials()
-    creds.addSecretKey(SECRET_LOOKUP_KEY, secretBytes)
+    val secretStr = HashCodes.fromBytes(secretBytes).toString()
+    creds.addSecretKey(SECRET_LOOKUP_KEY, secretStr.getBytes(UTF_8))
     UserGroupInformation.getCurrentUser().addCredentials(creds)
   }
 

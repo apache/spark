@@ -174,13 +174,6 @@ object DataSourceV2Relation {
       v2Options: DataSourceOptions,
       userSchema: Option[StructType]): StructType = {
     val reader = userSchema match {
-      // TODO: remove this case because it is confusing for users
-      case Some(s) if !source.isInstanceOf[ReadSupportWithSchema] =>
-        val reader = source.asReadSupport.createReader(v2Options)
-        if (reader.readSchema() != s) {
-          throw new AnalysisException(s"${source.name} does not allow user-specified schemas.")
-        }
-        reader
       case Some(s) =>
         source.asReadSupportWithSchema.createReader(s, v2Options)
       case _ =>
@@ -195,11 +188,7 @@ object DataSourceV2Relation {
       filters: Option[Seq[Expression]] = None,
       userSpecifiedSchema: Option[StructType] = None): DataSourceV2Relation = {
     val projection = schema(source, makeV2Options(options), userSpecifiedSchema).toAttributes
-    DataSourceV2Relation(source, options, projection, filters,
-      // if the source does not implement ReadSupportWithSchema, then the userSpecifiedSchema must
-      // be equal to the reader's schema. the schema method enforces this. because the user schema
-      // and the reader's schema are identical, drop the user schema.
-      if (source.isInstanceOf[ReadSupportWithSchema]) userSpecifiedSchema else None)
+    DataSourceV2Relation(source, options, projection, filters, userSpecifiedSchema)
   }
 
   private def pushRequiredColumns(reader: DataSourceReader, struct: StructType): Unit = {
