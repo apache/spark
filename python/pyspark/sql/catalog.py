@@ -29,7 +29,7 @@ from pyspark.sql.types import IntegerType, StringType, StructType
 Database = namedtuple("Database", "name description locationUri")
 Table = namedtuple("Table", "name database description tableType isTemporary")
 Column = namedtuple("Column", "name description dataType nullable isPartition isBucket")
-Function = namedtuple("Function", "name description className isTemporary")
+Function = namedtuple("Function", "name database description className isTemporary")
 
 
 class Catalog(object):
@@ -108,6 +108,7 @@ class Catalog(object):
             jfunction = iter.next()
             functions.append(Function(
                 name=jfunction.name(),
+                database=jfunction.database(),
                 description=jfunction.description(),
                 className=jfunction.className(),
                 isTemporary=jfunction.isTemporary()))
@@ -137,6 +138,78 @@ class Catalog(object):
                 isPartition=jcolumn.isPartition(),
                 isBucket=jcolumn.isBucket()))
         return columns
+
+    @ignore_unicode_prefix
+    # TODO: @since() decorator?
+    def databaseExists(self, dbName):
+        """Check if the database with the specified name exists."""
+        return self._jcatalog.databaseExists(dbName)
+
+    @ignore_unicode_prefix
+    # TODO: @since() decorator?
+    def functionExists(self, functionName, dbName=None):
+        """Check if the function with the specified name exists.
+
+        If no database is specified, the current database is used.
+        """
+        if dbName is None:
+            dbName = self.currentDatabase()
+        return self._jcatalog.functionExists(dbName, functionName)
+
+    @ignore_unicode_prefix
+    # TODO: @since() decorator?
+    def tableExists(self, tableName, dbName=None):
+        """Check if the table or view with the specified name exists.
+
+        If no database is specified, the current database is used.
+        """
+        if dbName is None:
+            dbName = self.currentDatabase()
+        return self._jcatalog.tableExists(dbName, tableName)
+
+    @ignore_unicode_prefix
+    # TODO: @since() decorator?
+    def getDatabase(self, dbName):
+        """Get the database with the specified name."""
+        database = self._jcatalog.getDatabase(dbName)
+        return Database(
+                name=database.name(),
+                description=database.description(),
+                locationUri=database.locationUri())
+
+    @ignore_unicode_prefix
+    # TODO: @since() decorator?
+    def getTable(self, tableName, dbName=None):
+        """Get the table or view with the specified name.
+
+        If no database is specified, the current database is used.
+        """
+        if dbName is None:
+            dbName = self.currentDatabase()
+        table = self._jcatalog.getTable(dbName, tableName)
+        return Table(
+                name=table.name(),
+                database=table.database(),
+                description=table.description(),
+                tableType=table.tableType(),
+                isTemporary=table.isTemporary())
+
+    @ignore_unicode_prefix
+    # TODO: @since() decorator?
+    def getFunction(self, functionName, dbName=None):
+        """Get the function with the specified name.
+
+        If no database is specified, the current database is used.
+        """
+        if dbName is None:
+            dbName = self.currentDatabase()
+        function = self._jcatalog.getFunction(dbName, functionName)
+        return Function(
+                name=function.name(),
+                database=function.database(),
+                description=function.description(),
+                className=function.className(),
+                isTemporary=function.isTemporary())
 
     @since(2.0)
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
