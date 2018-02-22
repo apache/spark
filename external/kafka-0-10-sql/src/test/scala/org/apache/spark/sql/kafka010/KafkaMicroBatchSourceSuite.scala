@@ -35,7 +35,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{Dataset, ForeachWriter}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.functions.{count, window}
@@ -119,7 +119,7 @@ abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
         } ++ (query.get.lastExecution match {
           case null => Seq()
           case e => e.logical.collect {
-            case DataSourceV2Relation(_, reader: KafkaContinuousReader) => reader
+            case StreamingDataSourceV2Relation(_, reader: KafkaContinuousReader) => reader
           }
         })
       }.distinct
