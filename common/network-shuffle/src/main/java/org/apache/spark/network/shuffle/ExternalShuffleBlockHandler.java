@@ -190,6 +190,13 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
     }
   }
 
+  private boolean isShuffleBlock(String[] blockIdParts) {
+    // length == 4: ShuffleBlockId
+    // length == 5: ContinuousShuffleBlockId
+    return (blockIdParts.length == 4 || blockIdParts.length == 5) &&
+      blockIdParts[0].equals("shuffle");
+  }
+
   private class ManagedBufferIterator implements Iterator<ManagedBuffer> {
 
     private int index = 0;
@@ -203,18 +210,14 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
       this.appId = appId;
       this.execId = execId;
       String[] blockId0Parts = blockIds[0].split("_");
-      // length == 4: ShuffleBlockId
-      // length == 5: ContinuousShuffleBlockId
-      if (!(blockId0Parts.length == 4 || blockId0Parts.length == 5) ||
-        !blockId0Parts[0].equals("shuffle")) {
+      if (!isShuffleBlock(blockId0Parts)) {
         throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[0]);
       }
       this.shuffleId = Integer.parseInt(blockId0Parts[1]);
       shuffleBlockIds = new int[3 * blockIds.length];
       for (int i = 0; i < blockIds.length; i++) {
         String[] blockIdParts = blockIds[i].split("_");
-        if (!(blockIdParts.length == 4 || blockIdParts.length == 5) ||
-          !blockIdParts[0].equals("shuffle")) {
+        if (!isShuffleBlock(blockIdParts)) {
           throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockIds[i]);
         }
         if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
