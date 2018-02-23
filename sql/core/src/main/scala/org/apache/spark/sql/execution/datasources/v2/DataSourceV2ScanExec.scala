@@ -38,12 +38,13 @@ import org.apache.spark.sql.types.StructType
 case class DataSourceV2ScanExec(
     output: Seq[AttributeReference],
     @transient source: DataSourceV2,
+    @transient options: Map[String, String],
     @transient reader: DataSourceReader)
   extends LeafExecNode with DataSourceV2QueryPlan with ColumnarBatchScan {
 
   override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2ScanExec]
 
-  override def simpleString: String = "Scan " + metadataString
+  override def simpleString: String = "V2Scan " + metadataString
 
   override def outputPartitioning: physical.Partitioning = reader match {
     case s: SupportsReportPartitioning =>

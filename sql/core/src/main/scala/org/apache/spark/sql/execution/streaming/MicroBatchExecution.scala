@@ -52,7 +52,8 @@ class MicroBatchExecution(
 
   @volatile protected var sources: Seq[BaseStreamingSource] = Seq.empty
 
-  private val readerToDataSourceMap = MutableMap.empty[MicroBatchReader, DataSourceV2]
+  private val readerToDataSourceMap =
+    MutableMap.empty[MicroBatchReader, (DataSourceV2, Map[String, String])]
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
@@ -99,7 +100,7 @@ class MicroBatchExecution(
             metadataPath,
             new DataSourceOptions(options.asJava))
           nextSourceId += 1
-          readerToDataSourceMap(reader) = dsV2
+          readerToDataSourceMap(reader) = dsV2 -> options
           logInfo(s"Using MicroBatchReader [$reader] from DataSourceV2 named '$sourceName' [$dsV2]")
           StreamingExecutionRelation(reader, output)(sparkSession)
         })
@@ -420,12 +421,19 @@ class MicroBatchExecution(
           }
           reader.setOffsetRange(toJava(current), Optional.of(availableV2))
           logDebug(s"Retrieving data from $reader: $current -> $availableV2")
-          Some(reader -> StreamingDataSourceV2Relation(
-            output = reader.readSchema().toAttributes,
+
+          val (source, options) = reader match {
+            // `MemoryStream` is special. It's for test only and doesn't have a `DataSourceV2`
+            // implementation. We provide a fake one here for explain.
+            case _: MemoryStream[_] => MemoryStreamDataSource -> Map.empty[String, String]
             // Provide a fake value here just in case something went wrong, e.g. the reader gives
             // a wrong `equals` implementation.
-            source = readerToDataSourceMap.getOrElse(reader, FakeDataSourceV2),
-            reader = reader))
+            case _ => readerToDataSourceMap.getOrElse(reader, {
+              FakeDataSourceV2 -> Map.empty[String, String]
+            })
+          }
+          Some(reader -> StreamingDataSourceV2Relation(
+            reader.readSchema().toAttributes, source, options, reader))
         case _ => None
       }
     }
@@ -513,5 +521,7 @@ class MicroBatchExecution(
     Optional.ofNullable(scalaOption.orNull)
   }
 }
+
+object MemoryStreamDataSource extends DataSourceV2
 
 object FakeDataSourceV2 extends DataSourceV2

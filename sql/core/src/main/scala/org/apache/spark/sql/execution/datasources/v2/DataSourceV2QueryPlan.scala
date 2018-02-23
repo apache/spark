@@ -23,6 +23,7 @@ import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.util.Utils
@@ -35,15 +36,20 @@ import org.apache.spark.util.Utils
 trait DataSourceV2QueryPlan {
 
   /**
+   * The instance of this data source implementation. Note that we only consider its class in
+   * equals/hashCode, not the instance itself.
+   */
+  def source: DataSourceV2
+
+  /**
    * The output of the data source reader, w.r.t. column pruning.
    */
   def output: Seq[Attribute]
 
   /**
-   * The instance of this data source implementation. Note that we only consider its class in
-   * equals/hashCode, not the instance itself.
+   * The options for this data source reader.
    */
-  def source: DataSourceV2
+  def options: Map[String, String]
 
   /**
    * The created data source reader. Here we use it to get the filters that has been pushed down
@@ -60,7 +66,7 @@ trait DataSourceV2QueryPlan {
   /**
    * The metadata of this data source query plan that can be used for equality check.
    */
-  private def metadata: Seq[Any] = Seq(output, source.getClass, filters)
+  private def metadata: Seq[Any] = Seq(source.getClass, output, options, filters)
 
   def canEqual(other: Any): Boolean
 
@@ -73,9 +79,24 @@ trait DataSourceV2QueryPlan {
     metadata.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
   }
 
+  private def sourceName: String = source match {
+    case registered: DataSourceRegister => registered.shortName()
+    case _ => source.getClass.getSimpleName.stripSuffix("$")
+  }
+
   def metadataString: String = {
     val entries = scala.collection.mutable.ArrayBuffer.empty[(String, String)]
-    if (filters.nonEmpty) entries += "Pushed Filters" -> filters.mkString("[", ", ", "]")
+
+    if (filters.nonEmpty) {
+      entries += "Pushed Filters" -> filters.mkString("[", ", ", "]")
+    }
+
+    // TODO: we should only display some standard options like path, table, etc.
+    if (options.nonEmpty) {
+      entries += "Options" -> options.map {
+        case (k, v) => s"$k=$v"
+      }.mkString("[", ",", "]")
+    }
 
     val outputStr = Utils.truncatedString(output, "[", ", ", "]")
 
@@ -87,7 +108,7 @@ trait DataSourceV2QueryPlan {
       ""
     }
 
-    s"${source.getClass.getSimpleName.stripSuffix("$")}$outputStr$entriesStr"
+    s"$sourceName$outputStr$entriesStr"
   }
 
   private def redact(text: String): String = {

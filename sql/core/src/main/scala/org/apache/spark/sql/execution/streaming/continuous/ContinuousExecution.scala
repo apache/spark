@@ -167,7 +167,7 @@ class ContinuousExecution(
 
     var insertedSourceId = 0
     val withNewSources = logicalPlan transform {
-      case ContinuousExecutionRelation(source, _, output) =>
+      case ContinuousExecutionRelation(source, options, output) =>
         val reader = continuousSources(insertedSourceId)
         insertedSourceId += 1
         val newOutput = reader.readSchema().toAttributes
@@ -180,7 +180,7 @@ class ContinuousExecution(
         val loggedOffset = offsets.offsets(0)
         val realOffset = loggedOffset.map(off => reader.deserializeOffset(off.json))
         reader.setStartOffset(java.util.Optional.ofNullable(realOffset.orNull))
-        StreamingDataSourceV2Relation(newOutput, source, reader)
+        StreamingDataSourceV2Relation(newOutput, source, options, reader)
     }
 
     // Rewire the plan to use the new attributes that were returned by the source.
@@ -201,7 +201,7 @@ class ContinuousExecution(
     val withSink = WriteToDataSourceV2(writer, triggerLogicalPlan)
 
     val reader = withSink.collect {
-      case StreamingDataSourceV2Relation(_, _, r: ContinuousReader) => r
+      case StreamingDataSourceV2Relation(_, _, _, r: ContinuousReader) => r
     }.head
 
     reportTimeTaken("queryPlanning") {
