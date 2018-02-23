@@ -106,14 +106,6 @@ public class OffHeapMemoryBlock extends MemoryBlock {
     Platform.putDouble(null, offset, value);
   }
 
-  public final Object getObjectVolatile(long offset) {
-    return Platform.getObjectVolatile(null, offset);
-  }
-
-  public final void putObjectVolatile(long offset, Object value) {
-    Platform.putObjectVolatile(null, offset, value);
-  }
-
   public final void copyFrom(byte[] src, long srcOffset, long dstOffset, long length) {
     assert(srcOffset - Platform.BYTE_ARRAY_OFFSET + length <= src.length);
     assert(dstOffset + length <= this.offset + this.length);

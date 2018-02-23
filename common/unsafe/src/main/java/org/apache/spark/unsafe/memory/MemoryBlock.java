@@ -22,7 +22,8 @@ import javax.annotation.Nullable;
 import org.apache.spark.unsafe.Platform;
 
 /**
- * A declaration of interfaces of MemoryBlock classes .
+ * A representation of a consecutive memory block in Spark. It defines the common interfaces
+ * for memory accessing and mutating.
  */
 public abstract class MemoryBlock {
   /** Special `pageNumber` value for pages which were not allocated by TaskMemoryManagers */
@@ -157,13 +158,14 @@ public abstract class MemoryBlock {
 
   public abstract void putDouble(long offset, double value);
 
-  public abstract Object getObjectVolatile(long offset);
-
-  public abstract void putObjectVolatile(long offset, Object value);
-
-  public static void copyMemory(
+  public static final void copyMemory(
       MemoryBlock src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
     Platform.copyMemory(src.getBaseObject(), srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static final void copyMemory(MemoryBlock src, MemoryBlock dst, long length) {
+    Platform.copyMemory(src.getBaseObject(), src.getBaseOffset(),
+      dst.getBaseObject(), dst.getBaseOffset(), length);
   }
 
   public abstract void copyFrom(byte[] src, long srcOffset, long dstOffset, long length);

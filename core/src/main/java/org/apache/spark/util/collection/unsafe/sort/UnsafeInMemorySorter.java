@@ -215,12 +215,7 @@ public final class UnsafeInMemorySorter {
     if (newArray.size() < array.size()) {
       throw new SparkOutOfMemoryError("Not enough memory to grow pointer array");
     }
-    MemoryBlock.copyMemory(
-      array.memoryBlock(),
-      array.getBaseOffset(),
-      newArray.memoryBlock(),
-      newArray.getBaseOffset(),
-      pos * 8L);
+    MemoryBlock.copyMemory(array.memoryBlock(), newArray.memoryBlock(), pos * 8L);
     consumer.freeArray(array);
     array = newArray;
     usableCapacity = getUsableCapacity();

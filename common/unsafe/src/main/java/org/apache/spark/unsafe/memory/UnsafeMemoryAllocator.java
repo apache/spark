@@ -71,7 +71,7 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
   public OffHeapMemoryBlock reallocate(OffHeapMemoryBlock block, long oldSize, long newSize) {
     OffHeapMemoryBlock mb = this.allocate(newSize);
     if (block.getBaseOffset() != 0)
-      MemoryBlock.copyMemory(block, block.getBaseOffset(), mb, mb.getBaseOffset(), oldSize);
+      MemoryBlock.copyMemory(block, mb, oldSize);
     free(block);
     return mb;
   }

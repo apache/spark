@@ -104,13 +104,7 @@ final class ShuffleInMemorySorter {
 
   public void expandPointerArray(LongArray newArray) {
     assert(newArray.size() > array.size());
-    MemoryBlock.copyMemory(
-      array.memoryBlock(),
-      array.getBaseOffset(),
-      newArray.memoryBlock(),
-      newArray.getBaseOffset(),
-      pos * 8L
-    );
+    MemoryBlock.copyMemory(array.memoryBlock(), newArray.memoryBlock(),pos * 8L);
     consumer.freeArray(array);
     array = newArray;
     usableCapacity = getUsableCapacity();

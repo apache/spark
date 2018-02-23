@@ -68,12 +68,12 @@ public final class OnHeapMemoryBlock extends MemoryBlock {
   }
 
   public final byte getByte(long offset) {
-    assert(offset + 2 - Platform.LONG_ARRAY_OFFSET <= array.length * 8);
+    assert(offset + 1 - Platform.LONG_ARRAY_OFFSET <= array.length * 8);
     return Platform.getByte(array, offset);
   }
 
   public final void putByte(long offset, byte value) {
-    assert(offset + 2 - Platform.LONG_ARRAY_OFFSET <= array.length * 8);
+    assert(offset + 1 - Platform.LONG_ARRAY_OFFSET <= array.length * 8);
     Platform.putByte(array, offset, value);
   }
 
@@ -117,14 +117,6 @@ public final class OnHeapMemoryBlock extends MemoryBlock {
     Platform.putDouble(array, offset, value);
   }
 
-  public final Object getObjectVolatile(long offset) {
-    return Platform.getObjectVolatile(array, offset);
-  }
-
-  public final void putObjectVolatile(long offset, Object value) {
-    Platform.putObjectVolatile(array, offset, value);
-  }
-
   public final void copyFrom(byte[] src, long srcOffset, long dstOffset, long length) {
     assert(srcOffset - Platform.BYTE_ARRAY_OFFSET + length <= src.length);
     assert(dstOffset - Platform.LONG_ARRAY_OFFSET + length <= array.length * 8);
@@ -157,42 +149,42 @@ public final class OnHeapMemoryBlock extends MemoryBlock {
 
   public final void copyFrom(double[] src, long srcOffset, long dstOffset, long length) {
     assert(srcOffset - Platform.DOUBLE_ARRAY_OFFSET + length <= src.length * 8);
-    assert(dstOffset - Platform.LONG_ARRAY_OFFSET + length <= this.length * 8);
+    assert(dstOffset - Platform.LONG_ARRAY_OFFSET + length <= array.length * 8);
     Platform.copyMemory(src, srcOffset, array, dstOffset, length);
   }
 
   public final void writeTo(long srcOffset, byte[] dst, long dstOffset, long length) {
-    assert(srcOffset - Platform.LONG_ARRAY_OFFSET + length <= this.length * 8);
+    assert(srcOffset - Platform.LONG_ARRAY_OFFSET + length <= array.length * 8);
     assert(dstOffset - Platform.BYTE_ARRAY_OFFSET + length <= dst.length);
     Platform.copyMemory(array, srcOffset, dst, dstOffset, length);
   }
 
   public final void writeTo(long srcOffset, short[] dst, long dstOffset, long length) {
-    assert(srcOffset - Platform.LONG_ARRAY_OFFSET + length <= this.length * 8);
+    assert(srcOffset - Platform.LONG_ARRAY_OFFSET + length <= array.length * 8);
     assert(dstOffset - Platform.SHORT_ARRAY_OFFSET + length <= dst.length * 2);
     Platform.copyMemory(array, srcOffset, dst, dstOffset, length);
   }
 
   public final void writeTo(long srcOffset, int[] dst, long dstOffset, long length) {
-    assert(srcOffset - Platform.LONG_ARRAY_OFFSET + length <= this.length * 8);
+    assert(srcOffset - Platform.LONG_ARRAY_OFFSET + length <= array.length * 8);
     assert(dstOffset - Platform.INT_ARRAY_OFFSET + length <= dst.length * 4);
     Platform.copyMemory(array, srcOffset, dst, dstOffset, length);
   }
 
   public final void writeTo(long srcOffset, long[] dst, long dstOffset, long length) {
-    assert(srcOffset - Platform.LONG_ARRAY_OFFSET + length <= this.length * 8);
+    assert(srcOffset - Platform.LONG_ARRAY_OFFSET + length <= array.length * 8);
     assert(dstOffset - Platform.LONG_ARRAY_OFFSET + length <= dst.length * 8);
     Platform.copyMemory(array, srcOffset, dst, dstOffset, length);
   }
 
   public final void writeTo(long srcOffset, float[] dst, long dstOffset, long length) {
-    assert(srcOffset - Platform.LONG_ARRAY_OFFSET + length <= this.length * 8);
+    assert(srcOffset - Platform.LONG_ARRAY_OFFSET + length <= array.length * 8);
     assert(dstOffset - Platform.FLOAT_ARRAY_OFFSET + length <= dst.length * 4);
     Platform.copyMemory(array, srcOffset, dst, dstOffset, length);
   }
 
   public final void writeTo(long srcOffset, double[] dst, long dstOffset, long length) {
-    assert(srcOffset - Platform.LONG_ARRAY_OFFSET + length <= this.length * 8);
+    assert(srcOffset - Platform.LONG_ARRAY_OFFSET + length <= array.length * 8);
     assert(dstOffset - Platform.DOUBLE_ARRAY_OFFSET + length <= dst.length * 8);
     Platform.copyMemory(array, srcOffset, dst, dstOffset, length);
   }

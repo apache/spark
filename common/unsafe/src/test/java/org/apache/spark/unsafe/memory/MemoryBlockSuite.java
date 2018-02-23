@@ -86,8 +86,11 @@ public class MemoryBlockSuite {
     byte[] obj = new byte[48];
     long offset = Platform.BYTE_ARRAY_OFFSET;
     int length = obj.length;
-    MemoryBlock memory = new ByteArrayMemoryBlock(obj, offset, length);
 
+    MemoryBlock memory = new ByteArrayMemoryBlock(obj, offset, length);
+    check(memory, obj, offset, length);
+
+    memory = ByteArrayMemoryBlock.fromArray(obj);
     check(memory, obj, offset, length);
   }
 
@@ -95,9 +98,12 @@ public class MemoryBlockSuite {
   public void OnHeapMemoryBlockTest() {
     long[] obj = new long[6];
     long offset = Platform.LONG_ARRAY_OFFSET;
-    int length = obj.length;
-    MemoryBlock memory = new OnHeapMemoryBlock(obj, offset, length);
+    int length = obj.length * 8;
 
+    MemoryBlock memory = new OnHeapMemoryBlock(obj, offset, length);
+    check(memory, obj, offset, length);
+
+    memory = OnHeapMemoryBlock.fromArray(obj);
     check(memory, obj, offset, length);
   }
 
