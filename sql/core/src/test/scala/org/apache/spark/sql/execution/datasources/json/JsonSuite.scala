@@ -2143,6 +2143,22 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(errMsg.contains("Malformed records are detected in record parsing"))
   }
 
+  def readJsonFiles(path: String, charset: String): String = {
+    val jsonFiles = new File(path)
+      .listFiles()
+      .filter(_.isFile)
+      .filter(_.getName.endsWith("json"))
+    val content = jsonFiles.map { file =>
+      scala.io.Source.fromFile(file, charset).mkString
+    }
+    val result = content
+      .mkString
+      .trim
+      .replaceAll(" ", "")
+
+    result
+  }
+
   test("save json in UTF-32BE") {
     val charset = "UTF-32BE"
     withTempPath { path =>
@@ -2151,13 +2167,38 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .option("charset", charset)
         .format("json").mode("overwrite")
         .save(path.getCanonicalPath)
-      val jsonFiles = new File(path.getCanonicalPath).listFiles()
-        .filter(_.isFile).filter(_.getName.endsWith("json"))
-      val written = jsonFiles.map { file =>
-        scala.io.Source.fromFile(file, charset).mkString
-      }.mkString.trim.replaceAll(" ", "")
+      val written = readJsonFiles(path.getCanonicalPath, charset)
 
       assert(written == """{"_1":"Dog","_2":42}""")
     }
+  }
+
+  test("save json in default charset - UTF-8") {
+    withTempPath { path =>
+      val df = spark.createDataset(Seq(("Dog", 42)))
+      df.write
+        .format("json").mode("overwrite")
+        .save(path.getCanonicalPath)
+      val written = readJsonFiles(path.getCanonicalPath, "UTF-8")
+
+      assert(written == """{"_1":"Dog","_2":42}""")
+    }
+  }
+
+  test("wrong output charset") {
+    val charset = "UTF-128"
+    val exception = intercept[SparkException] {
+      withTempPath { path =>
+        val df = spark.createDataset(Seq((0)))
+        df.write
+          .option("charset", charset)
+          .format("json").mode("overwrite")
+          .save(path.getCanonicalPath)
+      }
+    }
+    val causedBy = exception.getCause.getCause.getCause
+
+    assert(causedBy.isInstanceOf[java.nio.charset.UnsupportedCharsetException])
+    assert(causedBy.getMessage == charset)
   }
 }
