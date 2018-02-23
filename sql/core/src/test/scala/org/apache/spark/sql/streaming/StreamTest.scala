@@ -102,6 +102,19 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       AddDataMemory(source, data)
   }
 
+  /**
+   * Adds data to multiple memory streams such that all the data will be made visible in the
+   * same batch. This is applicable only to MicroBatchExecution, as this coordination cannot be
+   * performed at the driver in ContinuousExecutions.
+   */
+  object MultiAddData {
+    def apply[A]
+      (source1: MemoryStream[A], data1: A*)(source2: MemoryStream[A], data2: A*): StreamAction = {
+      val actions = Seq(AddDataMemory(source1, data1), AddDataMemory(source2, data2))
+      StreamProgressLockedActions(actions, desc = actions.mkString("[ ", " | ", " ]"))
+    }
+  }
+
   /** A trait that can be extended when testing a source. */
   trait AddData extends StreamAction {
     /**
@@ -217,6 +230,19 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       s"ExpectFailure[${causeClass.getName}, isFatalError: $isFatalError]"
   }
 
+  /**
+   * Performs multiple actions while locking the stream from progressing.
+   * This is applicable only to MicroBatchExecution, as progress of ContinuousExecution
+   * cannot be controlled from the driver.
+   */
+  case class StreamProgressLockedActions(actions: Seq[StreamAction], desc: String = null)
+    extends StreamAction {
+
+    override def toString(): String = {
+      if (desc != null) desc else super.toString
+    }
+  }
+
   /** Assert that a body is true */
   class Assert(condition: => Boolean, val message: String = "") extends StreamAction {
     def run(): Unit = { Assertions.assert(condition) }
@@ -295,6 +321,9 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     val awaiting = new mutable.HashMap[Int, Offset]() // source index -> offset to wait for
     val sink = if (useV2Sink) new MemorySinkV2 else new MemorySink(stream.schema, outputMode)
     val resetConfValues = mutable.Map[String, Option[String]]()
+    val defaultCheckpointLocation =
+      Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
+    var manualClockExpectedTime = -1L
 
     @volatile
     var streamThreadDeathCause: Throwable = null
@@ -425,243 +454,254 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       }
     }
 
-    var manualClockExpectedTime = -1L
-    val defaultCheckpointLocation =
-      Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-    try {
-      startedTest.foreach { action =>
-        logInfo(s"Processing test stream action: $action")
-        action match {
-          case StartStream(trigger, triggerClock, additionalConfs, checkpointLocation) =>
-            verify(currentStream == null, "stream already running")
-            verify(triggerClock.isInstanceOf[SystemClock]
-              || triggerClock.isInstanceOf[StreamManualClock],
-              "Use either SystemClock or StreamManualClock to start the stream")
-            if (triggerClock.isInstanceOf[StreamManualClock]) {
-              manualClockExpectedTime = triggerClock.asInstanceOf[StreamManualClock].getTimeMillis()
+    def executeAction(action: StreamAction): Unit = {
+      logInfo(s"Processing test stream action: $action")
+      action match {
+        case StartStream(trigger, triggerClock, additionalConfs, checkpointLocation) =>
+          verify(currentStream == null, "stream already running")
+          verify(triggerClock.isInstanceOf[SystemClock]
+            || triggerClock.isInstanceOf[StreamManualClock],
+            "Use either SystemClock or StreamManualClock to start the stream")
+          if (triggerClock.isInstanceOf[StreamManualClock]) {
+            manualClockExpectedTime = triggerClock.asInstanceOf[StreamManualClock].getTimeMillis()
+          }
+          val metadataRoot = Option(checkpointLocation).getOrElse(defaultCheckpointLocation)
+
+          additionalConfs.foreach(pair => {
+            val value =
+              if (sparkSession.conf.contains(pair._1)) {
+                Some(sparkSession.conf.get(pair._1))
+              } else None
+            resetConfValues(pair._1) = value
+            sparkSession.conf.set(pair._1, pair._2)
+          })
+
+          lastStream = currentStream
+          currentStream =
+            sparkSession
+              .streams
+              .startQuery(
+                None,
+                Some(metadataRoot),
+                stream,
+                Map(),
+                sink,
+                outputMode,
+                trigger = trigger,
+                triggerClock = triggerClock)
+              .asInstanceOf[StreamingQueryWrapper]
+              .streamingQuery
+          // Wait until the initialization finishes, because some tests need to use `logicalPlan`
+          // after starting the query.
+          try {
+            currentStream.awaitInitialization(streamingTimeout.toMillis)
+            currentStream match {
+              case s: ContinuousExecution => eventually("IncrementalExecution was not created") {
+                assert(s.lastExecution != null)
+              }
+              case _ =>
             }
-            val metadataRoot = Option(checkpointLocation).getOrElse(defaultCheckpointLocation)
+          } catch {
+            case _: StreamingQueryException =>
+              // Ignore the exception. `StopStream` or `ExpectFailure` will catch it as well.
+          }
 
-            additionalConfs.foreach(pair => {
-              val value =
-                if (sparkSession.conf.contains(pair._1)) {
-                  Some(sparkSession.conf.get(pair._1))
-                } else None
-              resetConfValues(pair._1) = value
-              sparkSession.conf.set(pair._1, pair._2)
-            })
+        case AdvanceManualClock(timeToAdd) =>
+          verify(currentStream != null,
+                 "can not advance manual clock when a stream is not running")
+          verify(currentStream.triggerClock.isInstanceOf[StreamManualClock],
+                 s"can not advance clock of type ${currentStream.triggerClock.getClass}")
+          val clock = currentStream.triggerClock.asInstanceOf[StreamManualClock]
+          assert(manualClockExpectedTime >= 0)
 
+          // Make sure we don't advance ManualClock too early. See SPARK-16002.
+          eventually("StreamManualClock has not yet entered the waiting state") {
+            assert(clock.isStreamWaitingAt(manualClockExpectedTime))
+          }
+
+          clock.advance(timeToAdd)
+          manualClockExpectedTime += timeToAdd
+          verify(clock.getTimeMillis() === manualClockExpectedTime,
+            s"Unexpected clock time after updating: " +
+              s"expecting $manualClockExpectedTime, current ${clock.getTimeMillis()}")
+
+        case StopStream =>
+          verify(currentStream != null, "can not stop a stream that is not running")
+          try failAfter(streamingTimeout) {
+            currentStream.stop()
+            verify(!currentStream.queryExecutionThread.isAlive,
+              s"microbatch thread not stopped")
+            verify(!currentStream.isActive,
+              "query.isActive() is false even after stopping")
+            verify(currentStream.exception.isEmpty,
+              s"query.exception() is not empty after clean stop: " +
+                currentStream.exception.map(_.toString()).getOrElse(""))
+          } catch {
+            case _: InterruptedException =>
+            case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
+              failTest(
+                "Timed out while stopping and waiting for microbatchthread to terminate.", e)
+            case t: Throwable =>
+              failTest("Error while stopping stream", t)
+          } finally {
             lastStream = currentStream
-            currentStream =
-              sparkSession
-                .streams
-                .startQuery(
-                  None,
-                  Some(metadataRoot),
-                  stream,
-                  Map(),
-                  sink,
-                  outputMode,
-                  trigger = trigger,
-                  triggerClock = triggerClock)
-                .asInstanceOf[StreamingQueryWrapper]
-                .streamingQuery
-            // Wait until the initialization finishes, because some tests need to use `logicalPlan`
-            // after starting the query.
-            try {
-              currentStream.awaitInitialization(streamingTimeout.toMillis)
-              currentStream match {
-                case s: ContinuousExecution => eventually("IncrementalExecution was not created") {
-                  assert(s.lastExecution != null)
-                }
-                case _ =>
-              }
-            } catch {
-              case _: StreamingQueryException =>
-                // Ignore the exception. `StopStream` or `ExpectFailure` will catch it as well.
+            currentStream = null
+          }
+
+        case ef: ExpectFailure[_] =>
+          verify(currentStream != null, "can not expect failure when stream is not running")
+          try failAfter(streamingTimeout) {
+            val thrownException = intercept[StreamingQueryException] {
+              currentStream.awaitTermination()
             }
-
-          case AdvanceManualClock(timeToAdd) =>
-            verify(currentStream != null,
-                   "can not advance manual clock when a stream is not running")
-            verify(currentStream.triggerClock.isInstanceOf[StreamManualClock],
-                   s"can not advance clock of type ${currentStream.triggerClock.getClass}")
-            val clock = currentStream.triggerClock.asInstanceOf[StreamManualClock]
-            assert(manualClockExpectedTime >= 0)
-
-            // Make sure we don't advance ManualClock too early. See SPARK-16002.
-            eventually("StreamManualClock has not yet entered the waiting state") {
-              assert(clock.isStreamWaitingAt(manualClockExpectedTime))
+            eventually("microbatch thread not stopped after termination with failure") {
+              assert(!currentStream.queryExecutionThread.isAlive)
             }
+            verify(currentStream.exception === Some(thrownException),
+              s"incorrect exception returned by query.exception()")
 
-            clock.advance(timeToAdd)
-            manualClockExpectedTime += timeToAdd
-            verify(clock.getTimeMillis() === manualClockExpectedTime,
-              s"Unexpected clock time after updating: " +
-                s"expecting $manualClockExpectedTime, current ${clock.getTimeMillis()}")
-
-          case StopStream =>
-            verify(currentStream != null, "can not stop a stream that is not running")
-            try failAfter(streamingTimeout) {
-              currentStream.stop()
-              verify(!currentStream.queryExecutionThread.isAlive,
-                s"microbatch thread not stopped")
-              verify(!currentStream.isActive,
-                "query.isActive() is false even after stopping")
-              verify(currentStream.exception.isEmpty,
-                s"query.exception() is not empty after clean stop: " +
-                  currentStream.exception.map(_.toString()).getOrElse(""))
-            } catch {
-              case _: InterruptedException =>
-              case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
-                failTest(
-                  "Timed out while stopping and waiting for microbatchthread to terminate.", e)
-              case t: Throwable =>
-                failTest("Error while stopping stream", t)
-            } finally {
-              lastStream = currentStream
-              currentStream = null
+            val exception = currentStream.exception.get
+            verify(exception.cause.getClass === ef.causeClass,
+              "incorrect cause in exception returned by query.exception()\n" +
+                s"\tExpected: ${ef.causeClass}\n\tReturned: ${exception.cause.getClass}")
+            if (ef.isFatalError) {
+              // This is a fatal error, `streamThreadDeathCause` should be set to this error in
+              // UncaughtExceptionHandler.
+              verify(streamThreadDeathCause != null &&
+                streamThreadDeathCause.getClass === ef.causeClass,
+                "UncaughtExceptionHandler didn't receive the correct error\n" +
+                  s"\tExpected: ${ef.causeClass}\n\tReturned: $streamThreadDeathCause")
+              streamThreadDeathCause = null
             }
+            ef.assertFailure(exception.getCause)
+          } catch {
+            case _: InterruptedException =>
+            case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
+              failTest("Timed out while waiting for failure", e)
+            case t: Throwable =>
+              failTest("Error while checking stream failure", t)
+          } finally {
+            lastStream = currentStream
+            currentStream = null
+          }
 
-          case ef: ExpectFailure[_] =>
-            verify(currentStream != null, "can not expect failure when stream is not running")
-            try failAfter(streamingTimeout) {
-              val thrownException = intercept[StreamingQueryException] {
-                currentStream.awaitTermination()
-              }
-              eventually("microbatch thread not stopped after termination with failure") {
-                assert(!currentStream.queryExecutionThread.isAlive)
-              }
-              verify(currentStream.exception === Some(thrownException),
-                s"incorrect exception returned by query.exception()")
+        case a: AssertOnQuery =>
+          verify(currentStream != null || lastStream != null,
+            "cannot assert when no stream has been started")
+          val streamToAssert = Option(currentStream).getOrElse(lastStream)
+          try {
+            verify(a.condition(streamToAssert), s"Assert on query failed: ${a.message}")
+          } catch {
+            case NonFatal(e) =>
+              failTest(s"Assert on query failed: ${a.message}", e)
+          }
 
-              val exception = currentStream.exception.get
-              verify(exception.cause.getClass === ef.causeClass,
-                "incorrect cause in exception returned by query.exception()\n" +
-                  s"\tExpected: ${ef.causeClass}\n\tReturned: ${exception.cause.getClass}")
-              if (ef.isFatalError) {
-                // This is a fatal error, `streamThreadDeathCause` should be set to this error in
-                // UncaughtExceptionHandler.
-                verify(streamThreadDeathCause != null &&
-                  streamThreadDeathCause.getClass === ef.causeClass,
-                  "UncaughtExceptionHandler didn't receive the correct error\n" +
-                    s"\tExpected: ${ef.causeClass}\n\tReturned: $streamThreadDeathCause")
-                streamThreadDeathCause = null
-              }
-              ef.assertFailure(exception.getCause)
-            } catch {
-              case _: InterruptedException =>
-              case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
-                failTest("Timed out while waiting for failure", e)
-              case t: Throwable =>
-                failTest("Error while checking stream failure", t)
-            } finally {
-              lastStream = currentStream
-              currentStream = null
-            }
+        case a: Assert =>
+          val streamToAssert = Option(currentStream).getOrElse(lastStream)
+          verify({ a.run(); true }, s"Assert failed: ${a.message}")
 
-          case a: AssertOnQuery =>
-            verify(currentStream != null || lastStream != null,
-              "cannot assert when no stream has been started")
-            val streamToAssert = Option(currentStream).getOrElse(lastStream)
-            try {
-              verify(a.condition(streamToAssert), s"Assert on query failed: ${a.message}")
-            } catch {
-              case NonFatal(e) =>
-                failTest(s"Assert on query failed: ${a.message}", e)
-            }
+        case a: AddData =>
+          try {
 
-          case a: Assert =>
-            val streamToAssert = Option(currentStream).getOrElse(lastStream)
-            verify({ a.run(); true }, s"Assert failed: ${a.message}")
-
-          case a: AddData =>
-            try {
-
-              // If the query is running with manual clock, then wait for the stream execution
-              // thread to start waiting for the clock to increment. This is needed so that we
-              // are adding data when there is no trigger that is active. This would ensure that
-              // the data gets deterministically added to the next batch triggered after the manual
-              // clock is incremented in following AdvanceManualClock. This avoid race conditions
-              // between the test thread and the stream execution thread in tests using manual
-              // clock.
-              if (currentStream != null &&
-                  currentStream.triggerClock.isInstanceOf[StreamManualClock]) {
-                val clock = currentStream.triggerClock.asInstanceOf[StreamManualClock]
-                eventually("Error while synchronizing with manual clock before adding data") {
-                  if (currentStream.isActive) {
-                    assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
-                  }
-                }
-                if (!currentStream.isActive) {
-                  failTest("Query terminated while synchronizing with manual clock")
+            // If the query is running with manual clock, then wait for the stream execution
+            // thread to start waiting for the clock to increment. This is needed so that we
+            // are adding data when there is no trigger that is active. This would ensure that
+            // the data gets deterministically added to the next batch triggered after the manual
+            // clock is incremented in following AdvanceManualClock. This avoid race conditions
+            // between the test thread and the stream execution thread in tests using manual
+            // clock.
+            if (currentStream != null &&
+                currentStream.triggerClock.isInstanceOf[StreamManualClock]) {
+              val clock = currentStream.triggerClock.asInstanceOf[StreamManualClock]
+              eventually("Error while synchronizing with manual clock before adding data") {
+                if (currentStream.isActive) {
+                  assert(clock.isStreamWaitingAt(clock.getTimeMillis()))
                 }
               }
-              // Add data
-              val queryToUse = Option(currentStream).orElse(Option(lastStream))
-              val (source, offset) = a.addData(queryToUse)
+              if (!currentStream.isActive) {
+                failTest("Query terminated while synchronizing with manual clock")
+              }
+            }
+            // Add data
+            val queryToUse = Option(currentStream).orElse(Option(lastStream))
+            val (source, offset) = a.addData(queryToUse)
 
-              def findSourceIndex(plan: LogicalPlan): Option[Int] = {
-                plan
-                  .collect {
-                    case StreamingExecutionRelation(s, _) => s
-                    case StreamingDataSourceV2Relation(_, r) => r
-                  }
-                  .zipWithIndex
-                  .find(_._1 == source)
-                  .map(_._2)
+            def findSourceIndex(plan: LogicalPlan): Option[Int] = {
+              plan
+                .collect {
+                  case StreamingExecutionRelation(s, _) => s
+                  case StreamingDataSourceV2Relation(_, r) => r
+                }
+                .zipWithIndex
+                .find(_._1 == source)
+                .map(_._2)
+            }
+
+            // Try to find the index of the source to which data was added. Either get the index
+            // from the current active query or the original input logical plan.
+            val sourceIndex =
+              queryToUse.flatMap { query =>
+                findSourceIndex(query.logicalPlan)
+              }.orElse {
+                findSourceIndex(stream.logicalPlan)
+              }.orElse {
+                queryToUse.flatMap { q =>
+                  findSourceIndex(q.lastExecution.logical)
+                }
+              }.getOrElse {
+                throw new IllegalArgumentException(
+                  "Could not find index of the source to which data was added")
               }
 
-              // Try to find the index of the source to which data was added. Either get the index
-              // from the current active query or the original input logical plan.
-              val sourceIndex =
-                queryToUse.flatMap { query =>
-                  findSourceIndex(query.logicalPlan)
-                }.orElse {
-                  findSourceIndex(stream.logicalPlan)
-                }.orElse {
-                  queryToUse.flatMap { q =>
-                    findSourceIndex(q.lastExecution.logical)
-                  }
-                }.getOrElse {
-                  throw new IllegalArgumentException(
-                    "Could not find index of the source to which data was added")
-                }
+            // Store the expected offset of added data to wait for it later
+            awaiting.put(sourceIndex, offset)
+          } catch {
+            case NonFatal(e) =>
+              failTest("Error adding data", e)
+          }
 
-              // Store the expected offset of added data to wait for it later
-              awaiting.put(sourceIndex, offset)
-            } catch {
-              case NonFatal(e) =>
-                failTest("Error adding data", e)
-            }
+        case e: ExternalAction =>
+          e.runAction()
 
-          case e: ExternalAction =>
-            e.runAction()
+        case CheckAnswerRows(expectedAnswer, lastOnly, isSorted) =>
+          val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
+          QueryTest.sameRows(expectedAnswer, sparkAnswer, isSorted).foreach {
+            error => failTest(error)
+          }
 
-          case CheckAnswerRows(expectedAnswer, lastOnly, isSorted) =>
-            val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
-            QueryTest.sameRows(expectedAnswer, sparkAnswer, isSorted).foreach {
-              error => failTest(error)
-            }
+        case CheckAnswerRowsContains(expectedAnswer, lastOnly) =>
+          val sparkAnswer = currentStream match {
+            case null => fetchStreamAnswer(lastStream, lastOnly)
+            case s => fetchStreamAnswer(s, lastOnly)
+          }
+          QueryTest.includesRows(expectedAnswer, sparkAnswer).foreach {
+            error => failTest(error)
+          }
 
-          case CheckAnswerRowsContains(expectedAnswer, lastOnly) =>
-            val sparkAnswer = currentStream match {
-              case null => fetchStreamAnswer(lastStream, lastOnly)
-              case s => fetchStreamAnswer(s, lastOnly)
-            }
-            QueryTest.includesRows(expectedAnswer, sparkAnswer).foreach {
-              error => failTest(error)
-            }
+        case CheckAnswerRowsByFunc(globalCheckFunction, lastOnly) =>
+          val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
+          try {
+            globalCheckFunction(sparkAnswer)
+          } catch {
+            case e: Throwable => failTest(e.toString)
+          }
+      }
+      pos += 1
+    }
 
-          case CheckAnswerRowsByFunc(globalCheckFunction, lastOnly) =>
-            val sparkAnswer = fetchStreamAnswer(currentStream, lastOnly)
-            try {
-              globalCheckFunction(sparkAnswer)
-            } catch {
-              case e: Throwable => failTest(e.toString)
-            }
-        }
-        pos += 1
+    try {
+      startedTest.foreach {
+        case StreamProgressLockedActions(actns, _) =>
+          // Perform actions while holding the stream from progressing
+          assert(currentStream != null,
+            s"Cannot perform stream-progress-locked actions $actns when query is not active")
+          assert(currentStream.isInstanceOf[MicroBatchExecution],
+            s"Cannot perform stream-progress-locked actions on non-microbatch queries")
+          currentStream.asInstanceOf[MicroBatchExecution].withProgressLocked {
+            actns.foreach(executeAction)
+          }
+
+        case action: StreamAction => executeAction(action)
       }
       if (streamThreadDeathCause != null) {
         failTest("Stream Thread Died", streamThreadDeathCause)
