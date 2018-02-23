@@ -267,8 +267,6 @@ class ContinuousExecution(
     } catch {
       case t: Throwable
           if StreamExecution.isInterruptionException(t) && state.get() == RECONFIGURING =>
-        stopSources()
-        sparkSession.sparkContext.cancelJobGroup(runId.toString)
         // interrupted by reconfiguration - swallow exception so we can restart the query
     } finally {
       epochEndpoint.askSync[Unit](StopContinuousExecutionWrites)
@@ -276,6 +274,9 @@ class ContinuousExecution(
 
       epochUpdateThread.interrupt()
       epochUpdateThread.join()
+
+      stopSources()
+      sparkSession.sparkContext.cancelJobGroup(runId.toString)
     }
   }
 
