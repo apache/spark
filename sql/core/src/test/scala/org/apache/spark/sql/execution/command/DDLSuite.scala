@@ -536,6 +536,35 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("create table - append to a non-partitioned table created with different paths") {
+    import testImplicits._
+    withTempDir { dir1 =>
+      withTempDir { dir2 =>
+        withTable("path_test") {
+          Seq(1L -> "a").toDF("v1", "v2")
+            .write
+            .mode(SaveMode.Append)
+            .format("json")
+            .option("path", dir1.getCanonicalPath)
+            .saveAsTable("path_test")
+
+          val ex = intercept[AnalysisException] {
+            Seq((3L, "c")).toDF("v1", "v2")
+              .write
+              .mode(SaveMode.Append)
+              .format("json")
+              .option("path", dir2.getCanonicalPath)
+              .saveAsTable("path_test")
+          }.getMessage
+          assert(ex.contains("The location of the existing table `default`.`path_test`"))
+
+          checkAnswer(
+            spark.table("path_test"), Row(1L, "a") :: Nil)
+        }
+      }
+    }
+  }
+
   test("Refresh table after changing the data source table partitioning") {
     import testImplicits._
 
