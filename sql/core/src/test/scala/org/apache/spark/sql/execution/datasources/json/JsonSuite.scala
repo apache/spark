@@ -71,7 +71,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       Utils.tryWithResource(factory.createParser(writer.toString)) { jsonParser =>
         jsonParser.nextToken()
         val converter = parser.makeConverter(dataType)
-        converter.apply(jsonParser)
+        converter.apply(jsonParser)._1
       }
     }
 
@@ -2062,5 +2062,36 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Row(null) :: Row(null) :: Row("{\"field\": \"3\"}") :: Nil
       )
     }
+  }
+
+  test("SPARK-23448: Json reader should return partial rows even some fields can't be parsed") {
+    def testFile(fileName: String): String = {
+      Thread.currentThread().getContextClassLoader.getResource(fileName).toString
+    }
+
+    val partialJsonFile1 = "test-data/partial1.json"
+    val partialJsonFile2 = "test-data/partial2.json"
+
+    val schema = StructType(
+      Seq(StructField("attr1", StringType, true),
+        StructField("attr2", ArrayType(StringType, true), true),
+        StructField("attr3", IntegerType, true),
+        StructField("_corrupt_record", StringType, true)))
+
+    val partial1Json = spark.read.schema(schema).json(testFile(partialJsonFile1))
+    val partial2Json = spark.read.schema(schema).json(testFile(partialJsonFile2))
+
+    checkAnswer(partial1Json,
+      Row("val1", null, 1, """{"attr1":"val1","attr2":"[val2]","attr3":1}""") ::
+      Row("val3", Seq("val4"), 2, null) :: Nil)
+
+    val corrupted_record = """[{"attr1":"val1","attr2":"[val2]","attr3":1}, """ +
+      """{"attr1":"val3","attr2":["val4"],"attr3":2}]"""
+
+    checkAnswer(partial2Json,
+      Row("val1", null, 1, corrupted_record) ::
+      Row("val3", Seq("val4"), 2, null) ::
+      Row("val5", Seq("val6"), 3, null) ::
+      Row("val7", Seq("val8"), 4, null) :: Nil)
   }
 }

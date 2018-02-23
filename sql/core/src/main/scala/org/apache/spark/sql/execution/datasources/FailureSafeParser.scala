@@ -39,7 +39,7 @@ class FailureSafeParser[IN](
   // schema doesn't contain a field for corrupted record, we just return the partial result or a
   // row with all fields null. If the given schema contains a field for corrupted record, we will
   // set the bad record to this field, and set other fields according to the partial result or null.
-  private val toResultRow: (Option[InternalRow], () => UTF8String) => InternalRow = {
+  private val toResultRow: (Option[InternalRow], UTF8String) => InternalRow = {
     if (corruptFieldIndex.isDefined) {
       (row, badRecord) => {
         var i = 0
@@ -48,7 +48,7 @@ class FailureSafeParser[IN](
           resultRow(schema.fieldIndex(from.name)) = row.map(_.get(i, from.dataType)).orNull
           i += 1
         }
-        resultRow(corruptFieldIndex.get) = badRecord()
+        resultRow(corruptFieldIndex.get) = badRecord
         resultRow
       }
     } else {
@@ -58,11 +58,22 @@ class FailureSafeParser[IN](
 
   def parse(input: IN): Iterator[InternalRow] = {
     try {
-      rawParser.apply(input).toIterator.map(row => toResultRow(Some(row), () => null))
+      rawParser.apply(input).toIterator.map(row => toResultRow(Some(row), null))
     } catch {
       case e: BadRecordException => mode match {
         case PermissiveMode =>
-          Iterator(toResultRow(e.partialResult(), e.record))
+          val partialRows = e.partialResults().getOrElse(Seq(null))
+          val hasErrors = e.hasErrors().getOrElse(Seq.fill(partialRows.length)(true))
+          // We could lazily obtain later record, instead of current record which fails to parse.
+          // So we must get the record here.
+          val record = e.record()
+          partialRows.zip(hasErrors).toIterator.map { case (partialRow, hasError) =>
+            if (hasError || partialRow == null) {
+              toResultRow(Option(partialRow), record)
+            } else {
+              toResultRow(Option(partialRow), null)
+            }
+          }
         case DropMalformedMode =>
           Iterator.empty
         case FailFastMode =>
