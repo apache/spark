@@ -2142,4 +2142,22 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(errMsg.contains("Malformed records are detected in record parsing"))
   }
+
+  test("save json in UTF-32BE") {
+    val charset = "UTF-32BE"
+    withTempPath { path =>
+      val df = spark.createDataset(Seq(("Dog", 42)))
+      df.write
+        .option("charset", charset)
+        .format("json").mode("overwrite")
+        .save(path.getCanonicalPath)
+      val jsonFiles = new File(path.getCanonicalPath).listFiles()
+        .filter(_.isFile).filter(_.getName.endsWith("json"))
+      val written = jsonFiles.map { file =>
+        scala.io.Source.fromFile(file, charset).mkString
+      }.mkString.trim.replaceAll(" ", "")
+
+      assert(written == """{"_1":"Dog","_2":42}""")
+    }
+  }
 }
