@@ -492,6 +492,16 @@ class MicroBatchExecution(
     }
   }
 
+  /** Execute a function while locking the stream from making an progress */
+  private[sql] def withProgressLocked(f: => Unit): Unit = {
+    awaitProgressLock.lock()
+    try {
+      f
+    } finally {
+      awaitProgressLock.unlock()
+    }
+  }
+
   private def toJava(scalaOption: Option[OffsetV2]): Optional[OffsetV2] = {
     Optional.ofNullable(scalaOption.orNull)
   }
