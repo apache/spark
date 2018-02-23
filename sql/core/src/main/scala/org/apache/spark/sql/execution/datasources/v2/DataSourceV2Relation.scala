@@ -40,8 +40,6 @@ case class DataSourceV2Relation(
 
   import DataSourceV2Relation._
 
-  override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2Relation]
-
   override def simpleString: String = "V2Relation " + metadataString
 
   override lazy val schema: StructType = reader.readSchema()
@@ -120,8 +118,6 @@ case class StreamingDataSourceV2Relation(
   extends LeafNode with MultiInstanceRelation with DataSourceV2QueryPlan {
 
   override def isStreaming: Boolean = true
-
-  override def canEqual(other: Any): Boolean = other.isInstanceOf[StreamingDataSourceV2Relation]
 
   override def simpleString: String = "Streaming V2Relation " + metadataString
 

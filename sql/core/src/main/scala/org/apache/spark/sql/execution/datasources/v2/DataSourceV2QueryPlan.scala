@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.Objects
-
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -61,22 +59,6 @@ trait DataSourceV2QueryPlan {
     case s: SupportsPushDownCatalystFilters => s.pushedCatalystFilters().toSet
     case s: SupportsPushDownFilters => s.pushedFilters().toSet
     case _ => Set.empty
-  }
-
-  /**
-   * The metadata of this data source query plan that can be used for equality check.
-   */
-  private def metadata: Seq[Any] = Seq(source.getClass, output, options, filters)
-
-  def canEqual(other: Any): Boolean
-
-  override def equals(other: Any): Boolean = other match {
-    case other: DataSourceV2QueryPlan => canEqual(other) && metadata == other.metadata
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    metadata.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
   }
 
   private def sourceName: String = source match {

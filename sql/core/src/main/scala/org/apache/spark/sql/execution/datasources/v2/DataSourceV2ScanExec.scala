@@ -42,8 +42,6 @@ case class DataSourceV2ScanExec(
     @transient reader: DataSourceReader)
   extends LeafExecNode with DataSourceV2QueryPlan with ColumnarBatchScan {
 
-  override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2ScanExec]
-
   override def simpleString: String = "V2Scan " + metadataString
 
   override def outputPartitioning: physical.Partitioning = reader match {
