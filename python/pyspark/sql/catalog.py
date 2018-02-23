@@ -29,7 +29,7 @@ from pyspark.sql.types import IntegerType, StringType, StructType
 Database = namedtuple("Database", "name description locationUri")
 Table = namedtuple("Table", "name database description tableType isTemporary")
 Column = namedtuple("Column", "name description dataType nullable isPartition isBucket")
-Function = namedtuple("Function", "name database description className isTemporary")
+Function = namedtuple("Function", "name description className isTemporary")
 
 
 class Catalog(object):
@@ -108,7 +108,6 @@ class Catalog(object):
             jfunction = iter.next()
             functions.append(Function(
                 name=jfunction.name(),
-                database=jfunction.database(),
                 description=jfunction.description(),
                 className=jfunction.className(),
                 isTemporary=jfunction.isTemporary()))
@@ -140,13 +139,13 @@ class Catalog(object):
         return columns
 
     @ignore_unicode_prefix
-    # TODO: @since() decorator?
+    @since(2.4)
     def databaseExists(self, dbName):
         """Check if the database with the specified name exists."""
         return self._jcatalog.databaseExists(dbName)
 
     @ignore_unicode_prefix
-    # TODO: @since() decorator?
+    @since(2.4)
     def functionExists(self, functionName, dbName=None):
         """Check if the function with the specified name exists.
 
@@ -157,7 +156,7 @@ class Catalog(object):
         return self._jcatalog.functionExists(dbName, functionName)
 
     @ignore_unicode_prefix
-    # TODO: @since() decorator?
+    @since(2.4)
     def tableExists(self, tableName, dbName=None):
         """Check if the table or view with the specified name exists.
 
@@ -168,7 +167,7 @@ class Catalog(object):
         return self._jcatalog.tableExists(dbName, tableName)
 
     @ignore_unicode_prefix
-    # TODO: @since() decorator?
+    @since(2.4)
     def getDatabase(self, dbName):
         """Get the database with the specified name."""
         database = self._jcatalog.getDatabase(dbName)
@@ -178,7 +177,7 @@ class Catalog(object):
                 locationUri=database.locationUri())
 
     @ignore_unicode_prefix
-    # TODO: @since() decorator?
+    @since(2.4)
     def getTable(self, tableName, dbName=None):
         """Get the table or view with the specified name.
 
@@ -195,7 +194,7 @@ class Catalog(object):
                 isTemporary=table.isTemporary())
 
     @ignore_unicode_prefix
-    # TODO: @since() decorator?
+    @since(2.4)
     def getFunction(self, functionName, dbName=None):
         """Get the function with the specified name.
 
@@ -206,7 +205,6 @@ class Catalog(object):
         function = self._jcatalog.getFunction(dbName, functionName)
         return Function(
                 name=function.name(),
-                database=function.database(),
                 description=function.description(),
                 className=function.className(),
                 isTemporary=function.isTemporary())
