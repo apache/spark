@@ -59,7 +59,7 @@ private[spark] trait ExecutorAllocationClient {
    * @param adjustTargetNumExecutors whether the target number of executors will be adjusted down
    *                                 after these executors have been killed
    * @param countFailures if there are tasks running on the executors when they are killed, whether
-   *                      those failures be counted to task failure limits?
+    *                     to count those failures toward task failure limits
    * @param force whether to force kill busy executors, default false
    * @return the ids of the executors acknowledged by the cluster manager to be removed.
    */

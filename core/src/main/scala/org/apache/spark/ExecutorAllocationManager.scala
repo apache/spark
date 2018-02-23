@@ -337,10 +337,10 @@ private[spark] class ExecutorAllocationManager(
       // If the new target has not changed, avoid sending a message to the cluster manager
       if (numExecutorsTarget < oldNumExecutorsTarget) {
         // We lower the target number of executors but don't actively kill any yet.  Killing is
-        // controlled separately by an idle timeout.  Its still helpful to reduce the target number
+        // controlled separately by an idle timeout.  It's still helpful to reduce the target number
         // in case an executor just happens to get lost (eg., bad hardware, or the cluster manager
         // preempts it) -- in that case, there is no point in trying to immediately  get a new
-        // executor, since we couldn't even use it yet.
+        // executor, since we wouldn't even use it yet.
         client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
         logDebug(s"Lowering target number of executors to $numExecutorsTarget (previously " +
           s"$oldNumExecutorsTarget) because not all requested executors are actually needed")

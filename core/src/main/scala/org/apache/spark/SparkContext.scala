@@ -1687,7 +1687,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def killAndReplaceExecutor(executorId: String): Boolean = {
     schedulerBackend match {
       case b: ExecutorAllocationClient =>
-        b.killExecutors(Seq(executorId), adjustTargetNumExecutors = false, countFailures = false,
+        b.killExecutors(Seq(executorId), adjustTargetNumExecutors = false, countFailures = true,
           force = true).nonEmpty
       case _ =>
         logWarning("Killing executors is not supported by current scheduler.")
