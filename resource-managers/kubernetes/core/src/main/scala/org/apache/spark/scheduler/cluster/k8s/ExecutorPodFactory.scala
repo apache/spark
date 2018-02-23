@@ -138,7 +138,6 @@ private[spark] class ExecutorPodFactory(
       }.getOrElse(Seq.empty[EnvVar])
     val executorEnv = (Seq(
       (ENV_DRIVER_URL, driverUrl),
-      // Executor backend expects integral value for executor cores, so round it up to an int.
       (ENV_EXECUTOR_CORES, executorCores.toString),
       (ENV_EXECUTOR_MEMORY, executorMemoryString),
       (ENV_APPLICATION_ID, applicationId),
