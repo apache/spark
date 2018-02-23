@@ -17,44 +17,38 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
 
-class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class NormalizerSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
-  @transient var data: Array[Vector] = _
-  @transient var dataFrame: DataFrame = _
-  @transient var normalizer: Normalizer = _
-  @transient var l1Normalized: Array[Vector] = _
-  @transient var l2Normalized: Array[Vector] = _
+  @transient val data: Seq[Vector] = Seq(
+    Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
+    Vectors.dense(0.0, 0.0, 0.0),
+    Vectors.dense(0.6, -1.1, -3.0),
+    Vectors.sparse(3, Seq((1, 0.91), (2, 3.2))),
+    Vectors.sparse(3, Seq((0, 5.7), (1, 0.72), (2, 2.7))),
+    Vectors.sparse(3, Seq()))
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
+  def assertTypeOfVector(lhs: Vector, rhs: Vector): Unit = {
+    assert((lhs, rhs) match {
+      case (v1: DenseVector, v2: DenseVector) => true
+      case (v1: SparseVector, v2: SparseVector) => true
+      case _ => false
+    }, "The vector type should be preserved after normalization.")
+  }
 
-    data = Array(
-      Vectors.sparse(3, Seq((0, -2.0), (1, 2.3))),
-      Vectors.dense(0.0, 0.0, 0.0),
-      Vectors.dense(0.6, -1.1, -3.0),
-      Vectors.sparse(3, Seq((1, 0.91), (2, 3.2))),
-      Vectors.sparse(3, Seq((0, 5.7), (1, 0.72), (2, 2.7))),
-      Vectors.sparse(3, Seq())
-    )
-    l1Normalized = Array(
-      Vectors.sparse(3, Seq((0, -0.465116279), (1, 0.53488372))),
-      Vectors.dense(0.0, 0.0, 0.0),
-      Vectors.dense(0.12765957, -0.23404255, -0.63829787),
-      Vectors.sparse(3, Seq((1, 0.22141119), (2, 0.7785888))),
-      Vectors.dense(0.625, 0.07894737, 0.29605263),
-      Vectors.sparse(3, Seq())
-    )
-    l2Normalized = Array(
+  def assertValues(lhs: Vector, rhs: Vector): Unit = {
+    assert(lhs ~== rhs absTol 1E-5, "The vector value is not correct after normalization.")
+  }
+
+  test("Normalization with default parameter") {
+    val expected = Seq(
       Vectors.sparse(3, Seq((0, -0.65617871), (1, 0.75460552))),
       Vectors.dense(0.0, 0.0, 0.0),
       Vectors.dense(0.184549876, -0.3383414, -0.922749378),
@@ -62,49 +56,33 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       Vectors.dense(0.897906166, 0.113419726, 0.42532397),
       Vectors.sparse(3, Seq())
     )
+    val dataFrame: DataFrame = data.zip(expected).seq.toDF("features", "expected")
+    val normalizer = new Normalizer().setInputCol("features").setOutputCol("normalized")
 
-    dataFrame = data.map(NormalizerSuite.FeatureData).toSeq.toDF()
-    normalizer = new Normalizer()
-      .setInputCol("features")
-      .setOutputCol("normalized_features")
-  }
-
-  def collectResult(result: DataFrame): Array[Vector] = {
-    result.select("normalized_features").collect().map {
-      case Row(features: Vector) => features
+    testTransformer[(Vector, Vector)](dataFrame, normalizer, "features", "normalized", "expected") {
+      case Row(features: Vector, normalized: Vector, expected: Vector) =>
+        assertTypeOfVector(normalized, features)
+        assertValues(normalized, expected)
     }
   }
 
-  def assertTypeOfVector(lhs: Array[Vector], rhs: Array[Vector]): Unit = {
-    assert((lhs, rhs).zipped.forall {
-      case (v1: DenseVector, v2: DenseVector) => true
-      case (v1: SparseVector, v2: SparseVector) => true
-      case _ => false
-    }, "The vector type should be preserved after normalization.")
-  }
-
-  def assertValues(lhs: Array[Vector], rhs: Array[Vector]): Unit = {
-    assert((lhs, rhs).zipped.forall { (vector1, vector2) =>
-      vector1 ~== vector2 absTol 1E-5
-    }, "The vector value is not correct after normalization.")
-  }
-
-  test("Normalization with default parameter") {
-    val result = collectResult(normalizer.transform(dataFrame))
-
-    assertTypeOfVector(data, result)
-
-    assertValues(result, l2Normalized)
-  }
-
   test("Normalization with setter") {
-    normalizer.setP(1)
+    val expected = Seq(
+      Vectors.sparse(3, Seq((0, -0.465116279), (1, 0.53488372))),
+      Vectors.dense(0.0, 0.0, 0.0),
+      Vectors.dense(0.12765957, -0.23404255, -0.63829787),
+      Vectors.sparse(3, Seq((1, 0.22141119), (2, 0.7785888))),
+      Vectors.dense(0.625, 0.07894737, 0.29605263),
+      Vectors.sparse(3, Seq())
+    )
+    val dataFrame: DataFrame = data.zip(expected).seq.toDF("features", "expected")
+    val normalizer = new Normalizer().setInputCol("features").setOutputCol("normalized").setP(1)
 
-    val result = collectResult(normalizer.transform(dataFrame))
-
-    assertTypeOfVector(data, result)
-
-    assertValues(result, l1Normalized)
+    testTransformer[(Vector, Vector)](dataFrame, normalizer, "features", "normalized", "expected") {
+      case Row(features: Vector, normalized: Vector, expected: Vector) =>
+        assertTypeOfVector(normalized, features)
+        assertValues(normalized, expected)
+    }
   }
 
   test("read/write") {
@@ -114,8 +92,4 @@ class NormalizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setP(3.0)
     testDefaultReadWrite(t)
   }
-}
-
-private object NormalizerSuite {
-  case class FeatureData(features: Vector)
 }
