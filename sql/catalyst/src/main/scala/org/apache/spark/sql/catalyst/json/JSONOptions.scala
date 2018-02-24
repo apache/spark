@@ -92,9 +92,12 @@ private[sql] class JSONOptions(
    */
   val charset: Option[String] = parameters.get("charset")
 
-  val delimiter: Option[Array[Byte]] = {
-    parameters.get("delimiter").map(Base64.decodeBase64(_))
-  }
+  // A separator of json records
+  val sep: Option[Array[Byte]] = parameters.get("sep").map(
+    _.replaceAll("[^0-9A-Fa-f]", "")
+     .sliding(2, 2)
+     .toArray.map(Integer.parseInt(_, 16).toByte)
+  )
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
