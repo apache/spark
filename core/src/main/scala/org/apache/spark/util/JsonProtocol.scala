@@ -946,7 +946,7 @@ private[spark] object JsonProtocol {
     val executorId = (json \ "Executor ID").extract[String].intern()
     val host = (json \ "Host").extract[String].intern()
     val port = (json \ "Port").extract[Int]
-    BlockManagerId(executorId, host, port)
+    BlockManagerId(executorId, host, port, clearOldValues = true)
   }
 
   private object JOB_RESULT_FORMATTED_CLASS_NAMES {

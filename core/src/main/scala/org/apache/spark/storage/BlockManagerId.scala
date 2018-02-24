@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{TimeStampedHashMap, Utils}
 
 /**
  * :: DeveloperApi ::
@@ -123,7 +123,8 @@ private[spark] object BlockManagerId {
       execId: String,
       host: String,
       port: Int,
-      topologyInfo: Option[String] = None): BlockManagerId =
+      topologyInfo: Option[String] = None,
+      clearOldValues: Boolean = false): BlockManagerId =
     getCachedBlockManagerId(new BlockManagerId(execId, host, port, topologyInfo))
 
   def apply(in: ObjectInput): BlockManagerId = {
@@ -132,10 +133,15 @@ private[spark] object BlockManagerId {
     getCachedBlockManagerId(obj)
   }
 
-  val blockManagerIdCache = new ConcurrentHashMap[BlockManagerId, BlockManagerId]()
+  val blockManagerIdCache = new TimeStampedHashMap[BlockManagerId, BlockManagerId](true)
 
-  def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {
+  def getCachedBlockManagerId(id: BlockManagerId, clearOldValues: Boolean = false): BlockManagerId =
+  {
     blockManagerIdCache.putIfAbsent(id, id)
-    blockManagerIdCache.get(id)
+    val blockManagerId = blockManagerIdCache.get(id)
+    if (clearOldValues) {
+      blockManagerIdCache.clearOldValues(System.currentTimeMillis - Utils.timeStringAsMs("10d"))
+    }
+    blockManagerId.get
   }
 }
