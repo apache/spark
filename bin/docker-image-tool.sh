@@ -44,6 +44,7 @@ function image_ref {
 function build {
   local BUILD_ARGS
   local IMG_PATH
+  local DOCKERFILE=${DOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
 
   if [ ! -f "$SPARK_HOME/RELEASE" ]; then
     # Set image build arguments accordingly if this is a source repo and not a distribution archive.
@@ -65,7 +66,7 @@ function build {
 
   docker build "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
-    -f "$IMG_PATH/spark/Dockerfile" .
+    -f "$DOCKERFILE" .
 }
 
 function push {
@@ -83,6 +84,7 @@ Commands:
   push        Push a pre-built image to a registry. Requires a repository address to be provided.
 
 Options:
+  -f file     Dockerfile to build. By default builds the Dockerfile shipped with Spark.
   -r repo     Repository address.
   -t tag      Tag to apply to the built image, or to identify the image to be pushed.
   -m          Use minikube's Docker daemon.
@@ -112,10 +114,12 @@ fi
 
 REPO=
 TAG=
+DOCKERFILE=
 while getopts mr:t: option
 do
  case "${option}"
  in
+ f) DOCKERFILE=${OPTARG};;
  r) REPO=${OPTARG};;
  t) TAG=${OPTARG};;
  m)

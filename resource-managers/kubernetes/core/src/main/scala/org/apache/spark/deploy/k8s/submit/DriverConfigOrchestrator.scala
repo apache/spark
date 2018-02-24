@@ -25,7 +25,6 @@ import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.steps._
-import org.apache.spark.deploy.k8s.submit.steps.initcontainer.InitContainerConfigOrchestrator
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.SystemClock
 import org.apache.spark.util.Utils
@@ -123,38 +122,8 @@ private[spark] class DriverConfigOrchestrator(
         "dependencies in the local file system.")
     }
 
-    val dependencyResolutionStep = if (sparkJars.nonEmpty || sparkFiles.nonEmpty) {
-      Seq(new DependencyResolutionStep(
-        sparkJars,
-        sparkFiles,
-        jarsDownloadPath,
-        filesDownloadPath))
-    } else {
-      Nil
-    }
-
     val mountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
       Seq(new DriverMountSecretsStep(new MountSecretsBootstrap(secretNamesToMountPaths)))
-    } else {
-      Nil
-    }
-
-    val initContainerBootstrapStep = if (existNonContainerLocalFiles(sparkJars ++ sparkFiles)) {
-      val orchestrator = new InitContainerConfigOrchestrator(
-        sparkJars,
-        sparkFiles,
-        jarsDownloadPath,
-        filesDownloadPath,
-        imagePullPolicy,
-        initContainerConfigMapName,
-        INIT_CONTAINER_PROPERTIES_FILE_NAME,
-        sparkConf)
-      val bootstrapStep = new DriverInitContainerBootstrapStep(
-        orchestrator.getAllConfigurationSteps,
-        initContainerConfigMapName,
-        INIT_CONTAINER_PROPERTIES_FILE_NAME)
-
-      Seq(bootstrapStep)
     } else {
       Nil
     }
@@ -163,9 +132,8 @@ private[spark] class DriverConfigOrchestrator(
       initialSubmissionStep,
       serviceBootstrapStep,
       kubernetesCredentialsStep) ++
-      dependencyResolutionStep ++
       mountSecretsStep ++
-      initContainerBootstrapStep
+      Seq(new DriverConfigPropertiesStep(kubernetesResourceNamePrefix))
   }
 
   private def existSubmissionLocalFiles(files: Seq[String]): Boolean = {

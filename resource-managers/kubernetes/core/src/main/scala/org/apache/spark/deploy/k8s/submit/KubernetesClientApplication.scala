@@ -111,29 +111,9 @@ private[spark] class Client(
       currentDriverSpec = nextStep.configureDriver(currentDriverSpec)
     }
 
-    val resolvedDriverJavaOpts = currentDriverSpec
-      .driverSparkConf
-      // Remove this as the options are instead extracted and set individually below using
-      // environment variables with prefix SPARK_JAVA_OPT_.
-      .remove(org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS)
-      .getAll
-      .map {
-        case (confKey, confValue) => s"-D$confKey=$confValue"
-      } ++ driverJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
-    val driverJavaOptsEnvs: Seq[EnvVar] = resolvedDriverJavaOpts.zipWithIndex.map {
-      case (option, index) =>
-        new EnvVarBuilder()
-          .withName(s"$ENV_JAVA_OPT_PREFIX$index")
-          .withValue(option)
-          .build()
-    }
-
-    val resolvedDriverContainer = new ContainerBuilder(currentDriverSpec.driverContainer)
-      .addAllToEnv(driverJavaOptsEnvs.asJava)
-      .build()
     val resolvedDriverPod = new PodBuilder(currentDriverSpec.driverPod)
       .editSpec()
-        .addToContainers(resolvedDriverContainer)
+        .addToContainers(currentDriverSpec.driverContainer)
         .endSpec()
       .build()
 

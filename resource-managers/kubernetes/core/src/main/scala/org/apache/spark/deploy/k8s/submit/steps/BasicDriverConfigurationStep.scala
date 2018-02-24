@@ -26,6 +26,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils
 import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 import org.apache.spark.internal.config.{DRIVER_CLASS_PATH, DRIVER_MEMORY, DRIVER_MEMORY_OVERHEAD}
+import org.apache.spark.launcher.SparkLauncher
 
 /**
  * Performs basic configuration for the driver pod.
@@ -110,18 +111,6 @@ private[spark] class BasicDriverConfigurationStep(
       .addAllToEnv(driverCustomEnvs.asJava)
       .addToEnv(driverExtraClasspathEnv.toSeq: _*)
       .addNewEnv()
-        .withName(ENV_DRIVER_MEMORY)
-        .withValue(driverMemoryString)
-        .endEnv()
-      .addNewEnv()
-        .withName(ENV_DRIVER_MAIN_CLASS)
-        .withValue(mainClass)
-        .endEnv()
-      .addNewEnv()
-        .withName(ENV_DRIVER_ARGS)
-        .withValue(appArgs.mkString(" "))
-        .endEnv()
-      .addNewEnv()
         .withName(ENV_DRIVER_BIND_ADDRESS)
         .withValueFrom(new EnvVarSourceBuilder()
           .withNewFieldRef("v1", "status.podIP")
@@ -134,6 +123,12 @@ private[spark] class BasicDriverConfigurationStep(
         .addToLimits(maybeCpuLimitQuantity.toMap.asJava)
         .endResources()
       .addToArgs("driver")
+      .addToArgs("--properties-file", SPARK_CONF_PATH)
+      .addToArgs("--class", mainClass)
+      // The user application jar is merged into the spark.jars list and managed through that
+      // property, so there is no need to reference it explicitly here.
+      .addToArgs(SparkLauncher.NO_RESOURCE)
+      .addToArgs(appArgs: _*)
       .build()
 
     val baseDriverPod = new PodBuilder(driverSpec.driverPod)
@@ -158,4 +153,5 @@ private[spark] class BasicDriverConfigurationStep(
       driverSparkConf = resolvedSparkConf,
       driverContainer = driverContainer)
   }
+
 }

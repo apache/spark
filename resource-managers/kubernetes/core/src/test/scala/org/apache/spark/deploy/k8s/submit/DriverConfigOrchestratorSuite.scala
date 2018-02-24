@@ -49,8 +49,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       classOf[BasicDriverConfigurationStep],
       classOf[DriverServiceBootstrapStep],
       classOf[DriverKubernetesCredentialsStep],
-      classOf[DependencyResolutionStep]
-    )
+      classOf[DriverConfigPropertiesStep])
   }
 
   test("Base submission steps without a main app resource.") {
@@ -67,31 +66,8 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       orchestrator,
       classOf[BasicDriverConfigurationStep],
       classOf[DriverServiceBootstrapStep],
-      classOf[DriverKubernetesCredentialsStep]
-    )
-  }
-
-  test("Submission steps with an init-container.") {
-    val sparkConf = new SparkConf(false)
-      .set(CONTAINER_IMAGE, DRIVER_IMAGE)
-      .set(INIT_CONTAINER_IMAGE.key, IC_IMAGE)
-      .set("spark.jars", "hdfs://localhost:9000/var/apps/jars/jar1.jar")
-    val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
-    val orchestrator = new DriverConfigOrchestrator(
-      APP_ID,
-      LAUNCH_TIME,
-      Some(mainAppResource),
-      APP_NAME,
-      MAIN_CLASS,
-      APP_ARGS,
-      sparkConf)
-    validateStepTypes(
-      orchestrator,
-      classOf[BasicDriverConfigurationStep],
-      classOf[DriverServiceBootstrapStep],
       classOf[DriverKubernetesCredentialsStep],
-      classOf[DependencyResolutionStep],
-      classOf[DriverInitContainerBootstrapStep])
+      classOf[DriverConfigPropertiesStep])
   }
 
   test("Submission steps with driver secrets to mount") {
@@ -113,8 +89,8 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       classOf[BasicDriverConfigurationStep],
       classOf[DriverServiceBootstrapStep],
       classOf[DriverKubernetesCredentialsStep],
-      classOf[DependencyResolutionStep],
-      classOf[DriverMountSecretsStep])
+      classOf[DriverMountSecretsStep],
+      classOf[DriverConfigPropertiesStep])
   }
 
   test("Submission using client local dependencies") {

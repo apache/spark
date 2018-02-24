@@ -148,22 +148,6 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val createdPod = createdPodArgumentCaptor.getValue
     val driverContainer = Iterables.getOnlyElement(createdPod.getSpec.getContainers)
     assert(driverContainer.getName === SecondTestConfigurationStep.containerName)
-    val driverJvmOptsEnvs = driverContainer.getEnv.asScala.filter { env =>
-      env.getName.startsWith(ENV_JAVA_OPT_PREFIX)
-    }.sortBy(_.getName)
-    assert(driverJvmOptsEnvs.size === 4)
-
-    val expectedJvmOptsValues = Seq(
-      "-Dspark.logConf=true",
-      s"-D${SecondTestConfigurationStep.sparkConfKey}=" +
-        s"${SecondTestConfigurationStep.sparkConfValue}",
-      "-XX:+HeapDumpOnOutOfMemoryError",
-      "-XX:+PrintGCDetails")
-    driverJvmOptsEnvs.zip(expectedJvmOptsValues).zipWithIndex.foreach {
-      case ((resolvedEnv, expectedJvmOpt), index) =>
-        assert(resolvedEnv.getName === s"$ENV_JAVA_OPT_PREFIX$index")
-        assert(resolvedEnv.getValue === expectedJvmOpt)
-    }
   }
 
   test("Waiting for app completion should stall on the watcher") {
