@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.json
 import java.util.{Locale, TimeZone}
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
-import org.apache.commons.codec.binary.Base64
 import org.apache.commons.lang3.time.FastDateFormat
 
 import org.apache.spark.internal.Logging
