@@ -896,6 +896,28 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
   }
 
+  test("withAllColumnsRenamed using identity column mapping") {
+    val df = testData.toDF().withColumn("newCol", col("key") + 1)
+      .withAllColumnsRenamed("" + _)
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("key", "value", "newCol"))
+  }
+
+  test("withAllColumnsRenamed adding prefix to each column") {
+    val df = testData.toDF().withColumn("newCol", col("key") + 1)
+      .withAllColumnsRenamed("pre." + _)
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("pre.key", "pre.value", "pre.newCol"))
+  }
+
   private lazy val person2: DataFrame = Seq(
     ("Bob", 16, 176),
     ("Alice", 32, 164),
