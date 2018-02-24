@@ -40,7 +40,7 @@ case class DataSourceV2Relation(
 
   import DataSourceV2Relation._
 
-  override def simpleString: String = "V2Relation " + metadataString
+  override def simpleString: String = "RelationV2 " + metadataString
 
   override lazy val schema: StructType = reader.readSchema()
 
@@ -119,7 +119,7 @@ case class StreamingDataSourceV2Relation(
 
   override def isStreaming: Boolean = true
 
-  override def simpleString: String = "Streaming V2Relation " + metadataString
+  override def simpleString: String = "Streaming RelationV2 " + metadataString
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
