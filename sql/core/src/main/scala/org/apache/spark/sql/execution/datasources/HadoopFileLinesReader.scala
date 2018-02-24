@@ -32,7 +32,10 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
  * in that file.
  */
 class HadoopFileLinesReader(
-    file: PartitionedFile, conf: Configuration) extends Iterator[Text] with Closeable {
+    file: PartitionedFile,
+    conf: Configuration,
+    recordDelimiter: Option[Array[Byte]] = None
+  ) extends Iterator[Text] with Closeable {
   private val iterator = {
     val fileSplit = new FileSplit(
       new Path(new URI(file.filePath)),
@@ -42,7 +45,10 @@ class HadoopFileLinesReader(
       Array.empty)
     val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
-    val reader = new LineRecordReader()
+    val reader = recordDelimiter match {
+      case Some(delimiter) => new LineRecordReader(delimiter)
+      case _ => new LineRecordReader()
+    }
     reader.initialize(fileSplit, hadoopAttemptContext)
     new RecordReaderIterator(reader)
   }
