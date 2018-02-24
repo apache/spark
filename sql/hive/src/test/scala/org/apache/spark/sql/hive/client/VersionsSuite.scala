@@ -110,7 +110,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
   }
 
-  private val versions = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1")
+  private val versions =
+    Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3")
 
   private var client: HiveClient = null
 
@@ -125,7 +126,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       // Hive changed the default of datanucleus.schema.autoCreateAll from true to false and
       // hive.metastore.schema.verification from false to true since 2.0
       // For details, see the JIRA HIVE-6113 and HIVE-12463
-      if (version == "2.0" || version == "2.1") {
+      if (version.split("\\.").head.toInt > 1) {
         hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
         hadoopConf.set("hive.metastore.schema.verification", "false")
       }
