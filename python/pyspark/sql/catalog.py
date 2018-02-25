@@ -172,9 +172,9 @@ class Catalog(object):
         """Get the database with the specified name."""
         database = self._jcatalog.getDatabase(dbName)
         return Database(
-                name=database.name(),
-                description=database.description(),
-                locationUri=database.locationUri())
+            name=database.name(),
+            description=database.description(),
+            locationUri=database.locationUri())
 
     @ignore_unicode_prefix
     @since(2.4)
@@ -187,11 +187,11 @@ class Catalog(object):
             dbName = self.currentDatabase()
         table = self._jcatalog.getTable(dbName, tableName)
         return Table(
-                name=table.name(),
-                database=table.database(),
-                description=table.description(),
-                tableType=table.tableType(),
-                isTemporary=table.isTemporary())
+            name=table.name(),
+            database=table.database(),
+            description=table.description(),
+            tableType=table.tableType(),
+            isTemporary=table.isTemporary())
 
     @ignore_unicode_prefix
     @since(2.4)
@@ -204,10 +204,10 @@ class Catalog(object):
             dbName = self.currentDatabase()
         function = self._jcatalog.getFunction(dbName, functionName)
         return Function(
-                name=function.name(),
-                description=function.description(),
-                className=function.className(),
-                isTemporary=function.isTemporary())
+            name=function.name(),
+            description=function.description(),
+            className=function.className(),
+            isTemporary=function.isTemporary())
 
     @since(2.0)
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
