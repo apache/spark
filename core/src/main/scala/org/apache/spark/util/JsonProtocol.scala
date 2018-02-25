@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import java.io.{ByteArrayOutputStream, PipedInputStream, PipedOutputStream}
 import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
@@ -24,6 +25,7 @@ import scala.collection.Map
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.apache.commons.io.IOUtils
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST._
 import org.json4s.JsonDSL._
@@ -100,7 +102,16 @@ private[spark] object JsonProtocol {
         executorMetricsUpdateToJson(metricsUpdate)
       case blockUpdate: SparkListenerBlockUpdated =>
         blockUpdateToJson(blockUpdate)
-      case _ => parse(mapper.writeValueAsString(event))
+      case _ =>
+        val outputStream = new PipedOutputStream()
+        val inputStream = new PipedInputStream(outputStream)
+        try {
+          mapper.writeValue(outputStream, event)
+          parse(inputStream)
+        } finally {
+          IOUtils.closeQuietly(outputStream)
+          IOUtils.closeQuietly(inputStream)
+        }
     }
   }
 
