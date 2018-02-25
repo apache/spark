@@ -32,11 +32,8 @@ object AggregateEstimation {
     val childStats = agg.child.stats
     // Check if we have column stats for all group-by columns.
     val colStatsExist = agg.groupingExpressions.forall { e =>
-      e.isInstanceOf[Attribute] && (
-        childStats.attributeStats.get(e.asInstanceOf[Attribute]) match {
-          case Some(colStats) => colStats.hasCountStats
-          case None => false
-        })
+      e.isInstanceOf[Attribute] &&
+        childStats.attributeStats.get(e.asInstanceOf[Attribute]).exists(_.hasCountStats)
     }
     if (rowCountsExist(agg.child) && colStatsExist) {
       // Multiply distinct counts of group-by columns. This is an upper bound, which assumes

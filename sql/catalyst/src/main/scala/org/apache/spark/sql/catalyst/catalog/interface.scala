@@ -394,13 +394,13 @@ case class CatalogStatistics(
  * This class of statistics for a column is used in [[CatalogTable]] to interact with metastore.
  */
 case class CatalogColumnStat(
-  distinctCount: Option[BigInt] = None,
-  min: Option[String] = None,
-  max: Option[String] = None,
-  nullCount: Option[BigInt] = None,
-  avgLen: Option[Long] = None,
-  maxLen: Option[Long] = None,
-  histogram: Option[Histogram] = None) {
+    distinctCount: Option[BigInt] = None,
+    min: Option[String] = None,
+    max: Option[String] = None,
+    nullCount: Option[BigInt] = None,
+    avgLen: Option[Long] = None,
+    maxLen: Option[Long] = None,
+    histogram: Option[Histogram] = None) {
 
   /**
    * Returns a map from string to string that can be used to serialize the column stats.
@@ -410,7 +410,7 @@ case class CatalogColumnStat(
    * [[ColumnStat.fromExternalString]].
    *
    * As part of the protocol, the returned map always contains a key called "version".
-   * In the case min/max values are null (None), they won't appear in the map.
+   * Any of the fields that are null (None) won't appear in the map.
    */
   def toMap(colName: String): Map[String, String] = {
     val map = new scala.collection.mutable.HashMap[String, String]
