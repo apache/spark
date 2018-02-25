@@ -46,6 +46,9 @@ public final class OnHeapMemoryBlock extends MemoryBlock {
     return new OnHeapMemoryBlock(array, Platform.LONG_ARRAY_OFFSET, array.length * 8);
   }
 
+  public static OnHeapMemoryBlock fromArray(final long[] array, long size) {
+    return new OnHeapMemoryBlock(array, Platform.LONG_ARRAY_OFFSET, size);
+  }
 
   public final int getInt(long offset) {
     assert(offset + 4 - Platform.LONG_ARRAY_OFFSET <= array.length * 8);
