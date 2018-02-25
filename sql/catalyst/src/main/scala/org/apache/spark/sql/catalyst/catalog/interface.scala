@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types._
 
 
 /**
@@ -407,7 +407,7 @@ case class CatalogColumnStat(
    * The key is the name of the column and name of the field (e.g. "colName.distinctCount"),
    * and the value is the string representation for the value.
    * min/max values are stored as Strings. They can be deserialized using
-   * [[ColumnStat.fromExternalString]].
+   * [[CatalogColumnStat.fromExternalString]].
    *
    * As part of the protocol, the returned map always contains a key called "version".
    * Any of the fields that are null (None) won't appear in the map.
@@ -437,8 +437,8 @@ case class CatalogColumnStat(
       dataType: DataType): ColumnStat =
     ColumnStat(
       distinctCount = distinctCount,
-      min = min.map(ColumnStat.fromExternalString(_, colName, dataType)),
-      max = max.map(ColumnStat.fromExternalString(_, colName, dataType)),
+      min = min.map(CatalogColumnStat.fromExternalString(_, colName, dataType)),
+      max = max.map(CatalogColumnStat.fromExternalString(_, colName, dataType)),
       nullCount = nullCount,
       avgLen = avgLen,
       maxLen = maxLen,
@@ -456,6 +456,48 @@ object CatalogColumnStat extends Logging {
   private val KEY_AVG_LEN = "avgLen"
   private val KEY_MAX_LEN = "maxLen"
   private val KEY_HISTOGRAM = "histogram"
+
+  /**
+   * Converts from string representation of data type to the corresponding Catalyst data type.
+   */
+  def fromExternalString(s: String, name: String, dataType: DataType): Any = {
+    dataType match {
+      case BooleanType => s.toBoolean
+      case DateType => DateTimeUtils.fromJavaDate(java.sql.Date.valueOf(s))
+      case TimestampType => DateTimeUtils.fromJavaTimestamp(java.sql.Timestamp.valueOf(s))
+      case ByteType => s.toByte
+      case ShortType => s.toShort
+      case IntegerType => s.toInt
+      case LongType => s.toLong
+      case FloatType => s.toFloat
+      case DoubleType => s.toDouble
+      case _: DecimalType => Decimal(s)
+      // This version of Spark does not use min/max for binary/string types so we ignore it.
+      case BinaryType | StringType => null
+      case _ =>
+        throw new AnalysisException("Column statistics deserialization is not supported for " +
+          s"column $name of data type: $dataType.")
+    }
+  }
+
+  /**
+   * Converts the given value from Catalyst data type to string representation of external
+   * data type.
+   */
+  def toExternalString(v: Any, colName: String, dataType: DataType): String = {
+    val externalValue = dataType match {
+      case DateType => DateTimeUtils.toJavaDate(v.asInstanceOf[Int])
+      case TimestampType => DateTimeUtils.toJavaTimestamp(v.asInstanceOf[Long])
+      case BooleanType | _: IntegralType | FloatType | DoubleType => v
+      case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
+      // This version of Spark does not use min/max for binary/string types so we ignore it.
+      case _ =>
+        throw new AnalysisException("Column statistics deserialization is not supported for " +
+          s"column $colName of data type: $dataType.")
+    }
+    externalValue.toString
+  }
+
 
   /**
    * Creates a [[CatalogColumnStat]] object from the given map.
