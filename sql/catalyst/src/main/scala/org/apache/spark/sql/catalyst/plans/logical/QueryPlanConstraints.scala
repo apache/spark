@@ -29,12 +29,26 @@ trait QueryPlanConstraints { self: LogicalPlan =>
    */
   lazy val constraints: ExpressionSet = {
     if (conf.constraintPropagationEnabled) {
+      var relevantOutPutSet: AttributeSet = outputSet
+      constraints.foreach {
+        case eq @ EqualTo(l: Attribute, r: Attribute) =>
+          if (l.references.subsetOf(relevantOutPutSet)
+            && !r.references.subsetOf(relevantOutPutSet)) {
+            relevantOutPutSet = relevantOutPutSet.++(r.references)
+          }
+          if (r.references.subsetOf(relevantOutPutSet)
+            && !l.references.subsetOf(relevantOutPutSet)) {
+            relevantOutPutSet = relevantOutPutSet.++(l.references)
+          }
+        case _ => // No inference
+      }
+
       ExpressionSet(
         validConstraints
           .union(inferAdditionalConstraints(validConstraints))
           .union(constructIsNotNullConstraints(validConstraints))
           .filter { c =>
-            c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
+            c.references.nonEmpty && c.references.subsetOf(relevantOutPutSet) && c.deterministic
           }
       )
     } else {
