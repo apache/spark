@@ -1000,114 +1000,10 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("verify serialized column stats after analyzing columns") {
     import testImplicits._
 
-    val tableName = "column_stats_test2"
+    val tableName = "column_stats_test_ser"
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
     val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
-
-    val expectedSerializedColStats = Map(
-      "spark.sql.statistics.colStats.cbinary.avgLen" -> "3",
-      "spark.sql.statistics.colStats.cbinary.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cbinary.maxLen" -> "3",
-      "spark.sql.statistics.colStats.cbinary.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cbinary.version" -> "1",
-      "spark.sql.statistics.colStats.cbool.avgLen" -> "1",
-      "spark.sql.statistics.colStats.cbool.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cbool.max" -> "true",
-      "spark.sql.statistics.colStats.cbool.maxLen" -> "1",
-      "spark.sql.statistics.colStats.cbool.min" -> "false",
-      "spark.sql.statistics.colStats.cbool.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cbool.version" -> "1",
-      "spark.sql.statistics.colStats.cbyte.avgLen" -> "1",
-      "spark.sql.statistics.colStats.cbyte.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cbyte.max" -> "2",
-      "spark.sql.statistics.colStats.cbyte.maxLen" -> "1",
-      "spark.sql.statistics.colStats.cbyte.min" -> "1",
-      "spark.sql.statistics.colStats.cbyte.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cbyte.version" -> "1",
-      "spark.sql.statistics.colStats.cdate.avgLen" -> "4",
-      "spark.sql.statistics.colStats.cdate.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cdate.max" -> "2016-05-09",
-      "spark.sql.statistics.colStats.cdate.maxLen" -> "4",
-      "spark.sql.statistics.colStats.cdate.min" -> "2016-05-08",
-      "spark.sql.statistics.colStats.cdate.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cdate.version" -> "1",
-      "spark.sql.statistics.colStats.cdecimal.avgLen" -> "16",
-      "spark.sql.statistics.colStats.cdecimal.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cdecimal.max" -> "8.000000000000000000",
-      "spark.sql.statistics.colStats.cdecimal.maxLen" -> "16",
-      "spark.sql.statistics.colStats.cdecimal.min" -> "1.000000000000000000",
-      "spark.sql.statistics.colStats.cdecimal.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cdecimal.version" -> "1",
-      "spark.sql.statistics.colStats.cdouble.avgLen" -> "8",
-      "spark.sql.statistics.colStats.cdouble.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cdouble.max" -> "6.0",
-      "spark.sql.statistics.colStats.cdouble.maxLen" -> "8",
-      "spark.sql.statistics.colStats.cdouble.min" -> "1.0",
-      "spark.sql.statistics.colStats.cdouble.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cdouble.version" -> "1",
-      "spark.sql.statistics.colStats.cfloat.avgLen" -> "4",
-      "spark.sql.statistics.colStats.cfloat.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cfloat.max" -> "7.0",
-      "spark.sql.statistics.colStats.cfloat.maxLen" -> "4",
-      "spark.sql.statistics.colStats.cfloat.min" -> "1.0",
-      "spark.sql.statistics.colStats.cfloat.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cfloat.version" -> "1",
-      "spark.sql.statistics.colStats.cint.avgLen" -> "4",
-      "spark.sql.statistics.colStats.cint.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cint.max" -> "4",
-      "spark.sql.statistics.colStats.cint.maxLen" -> "4",
-      "spark.sql.statistics.colStats.cint.min" -> "1",
-      "spark.sql.statistics.colStats.cint.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cint.version" -> "1",
-      "spark.sql.statistics.colStats.clong.avgLen" -> "8",
-      "spark.sql.statistics.colStats.clong.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.clong.max" -> "5",
-      "spark.sql.statistics.colStats.clong.maxLen" -> "8",
-      "spark.sql.statistics.colStats.clong.min" -> "1",
-      "spark.sql.statistics.colStats.clong.nullCount" -> "1",
-      "spark.sql.statistics.colStats.clong.version" -> "1",
-      "spark.sql.statistics.colStats.cshort.avgLen" -> "2",
-      "spark.sql.statistics.colStats.cshort.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cshort.max" -> "3",
-      "spark.sql.statistics.colStats.cshort.maxLen" -> "2",
-      "spark.sql.statistics.colStats.cshort.min" -> "1",
-      "spark.sql.statistics.colStats.cshort.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cshort.version" -> "1",
-      "spark.sql.statistics.colStats.cstring.avgLen" -> "3",
-      "spark.sql.statistics.colStats.cstring.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.cstring.maxLen" -> "3",
-      "spark.sql.statistics.colStats.cstring.nullCount" -> "1",
-      "spark.sql.statistics.colStats.cstring.version" -> "1",
-      "spark.sql.statistics.colStats.ctimestamp.avgLen" -> "8",
-      "spark.sql.statistics.colStats.ctimestamp.distinctCount" -> "2",
-      "spark.sql.statistics.colStats.ctimestamp.max" -> "2016-05-09 00:00:02.0",
-      "spark.sql.statistics.colStats.ctimestamp.maxLen" -> "8",
-      "spark.sql.statistics.colStats.ctimestamp.min" -> "2016-05-08 00:00:01.0",
-      "spark.sql.statistics.colStats.ctimestamp.nullCount" -> "1",
-      "spark.sql.statistics.colStats.ctimestamp.version" -> "1"
-    )
-
-    val expectedSerializedHistograms = Map(
-      "spark.sql.statistics.colStats.cbyte.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cbyte").histogram.get),
-      "spark.sql.statistics.colStats.cshort.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cshort").histogram.get),
-      "spark.sql.statistics.colStats.cint.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cint").histogram.get),
-      "spark.sql.statistics.colStats.clong.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("clong").histogram.get),
-      "spark.sql.statistics.colStats.cdouble.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cdouble").histogram.get),
-      "spark.sql.statistics.colStats.cfloat.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cfloat").histogram.get),
-      "spark.sql.statistics.colStats.cdecimal.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cdecimal").histogram.get),
-      "spark.sql.statistics.colStats.cdate.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("cdate").histogram.get),
-      "spark.sql.statistics.colStats.ctimestamp.histogram" ->
-        HistogramSerializer.serialize(statsWithHgms("ctimestamp").histogram.get)
-    )
 
     def checkColStatsProps(expected: Map[String, String]): Unit = {
       sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS " + stats.keys.mkString(", "))
@@ -1127,6 +1023,29 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
         checkColStatsProps(expectedSerializedColStats ++ expectedSerializedHistograms)
       }
+    }
+  }
+
+  test("verify column stats can be deserialized from tblproperties") {
+    import testImplicits._
+
+    val tableName = "column_stats_test_de"
+    // (data.head.productArity - 1) because the last column does not support stats collection.
+    assert(stats.size == data.head.productArity - 1)
+    val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
+
+    withTable(tableName) {
+      df.write.saveAsTable(tableName)
+
+      // Put in stats properties manually.
+      val table = getCatalogTable(tableName)
+      val newTable = table.copy(
+        properties = table.properties ++
+          expectedSerializedColStats ++ expectedSerializedHistograms +
+          ("spark.sql.statistics.totalSize" -> "1") /* totalSize always required */)
+      hiveClient.alterTable(newTable)
+
+      validateColStats(tableName, statsWithHgms)
     }
   }
 

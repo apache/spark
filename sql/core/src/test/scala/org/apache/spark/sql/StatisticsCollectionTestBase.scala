@@ -25,7 +25,7 @@ import scala.util.Random
 
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable, HiveTableRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, HistogramBin, HistogramSerializer, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -113,6 +113,110 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
     colStats
   }
 
+  val expectedSerializedColStats = Map(
+    "spark.sql.statistics.colStats.cbinary.avgLen" -> "3",
+    "spark.sql.statistics.colStats.cbinary.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.cbinary.maxLen" -> "3",
+    "spark.sql.statistics.colStats.cbinary.nullCount" -> "1",
+    "spark.sql.statistics.colStats.cbinary.version" -> "1",
+    "spark.sql.statistics.colStats.cbool.avgLen" -> "1",
+    "spark.sql.statistics.colStats.cbool.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.cbool.max" -> "true",
+    "spark.sql.statistics.colStats.cbool.maxLen" -> "1",
+    "spark.sql.statistics.colStats.cbool.min" -> "false",
+    "spark.sql.statistics.colStats.cbool.nullCount" -> "1",
+    "spark.sql.statistics.colStats.cbool.version" -> "1",
+    "spark.sql.statistics.colStats.cbyte.avgLen" -> "1",
+    "spark.sql.statistics.colStats.cbyte.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.cbyte.max" -> "2",
+    "spark.sql.statistics.colStats.cbyte.maxLen" -> "1",
+    "spark.sql.statistics.colStats.cbyte.min" -> "1",
+    "spark.sql.statistics.colStats.cbyte.nullCount" -> "1",
+    "spark.sql.statistics.colStats.cbyte.version" -> "1",
+    "spark.sql.statistics.colStats.cdate.avgLen" -> "4",
+    "spark.sql.statistics.colStats.cdate.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.cdate.max" -> "2016-05-09",
+    "spark.sql.statistics.colStats.cdate.maxLen" -> "4",
+    "spark.sql.statistics.colStats.cdate.min" -> "2016-05-08",
+    "spark.sql.statistics.colStats.cdate.nullCount" -> "1",
+    "spark.sql.statistics.colStats.cdate.version" -> "1",
+    "spark.sql.statistics.colStats.cdecimal.avgLen" -> "16",
+    "spark.sql.statistics.colStats.cdecimal.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.cdecimal.max" -> "8.000000000000000000",
+    "spark.sql.statistics.colStats.cdecimal.maxLen" -> "16",
+    "spark.sql.statistics.colStats.cdecimal.min" -> "1.000000000000000000",
+    "spark.sql.statistics.colStats.cdecimal.nullCount" -> "1",
+    "spark.sql.statistics.colStats.cdecimal.version" -> "1",
+    "spark.sql.statistics.colStats.cdouble.avgLen" -> "8",
+    "spark.sql.statistics.colStats.cdouble.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.cdouble.max" -> "6.0",
+    "spark.sql.statistics.colStats.cdouble.maxLen" -> "8",
+    "spark.sql.statistics.colStats.cdouble.min" -> "1.0",
+    "spark.sql.statistics.colStats.cdouble.nullCount" -> "1",
+    "spark.sql.statistics.colStats.cdouble.version" -> "1",
+    "spark.sql.statistics.colStats.cfloat.avgLen" -> "4",
+    "spark.sql.statistics.colStats.cfloat.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.cfloat.max" -> "7.0",
+    "spark.sql.statistics.colStats.cfloat.maxLen" -> "4",
+    "spark.sql.statistics.colStats.cfloat.min" -> "1.0",
+    "spark.sql.statistics.colStats.cfloat.nullCount" -> "1",
+    "spark.sql.statistics.colStats.cfloat.version" -> "1",
+    "spark.sql.statistics.colStats.cint.avgLen" -> "4",
+    "spark.sql.statistics.colStats.cint.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.cint.max" -> "4",
+    "spark.sql.statistics.colStats.cint.maxLen" -> "4",
+    "spark.sql.statistics.colStats.cint.min" -> "1",
+    "spark.sql.statistics.colStats.cint.nullCount" -> "1",
+    "spark.sql.statistics.colStats.cint.version" -> "1",
+    "spark.sql.statistics.colStats.clong.avgLen" -> "8",
+    "spark.sql.statistics.colStats.clong.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.clong.max" -> "5",
+    "spark.sql.statistics.colStats.clong.maxLen" -> "8",
+    "spark.sql.statistics.colStats.clong.min" -> "1",
+    "spark.sql.statistics.colStats.clong.nullCount" -> "1",
+    "spark.sql.statistics.colStats.clong.version" -> "1",
+    "spark.sql.statistics.colStats.cshort.avgLen" -> "2",
+    "spark.sql.statistics.colStats.cshort.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.cshort.max" -> "3",
+    "spark.sql.statistics.colStats.cshort.maxLen" -> "2",
+    "spark.sql.statistics.colStats.cshort.min" -> "1",
+    "spark.sql.statistics.colStats.cshort.nullCount" -> "1",
+    "spark.sql.statistics.colStats.cshort.version" -> "1",
+    "spark.sql.statistics.colStats.cstring.avgLen" -> "3",
+    "spark.sql.statistics.colStats.cstring.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.cstring.maxLen" -> "3",
+    "spark.sql.statistics.colStats.cstring.nullCount" -> "1",
+    "spark.sql.statistics.colStats.cstring.version" -> "1",
+    "spark.sql.statistics.colStats.ctimestamp.avgLen" -> "8",
+    "spark.sql.statistics.colStats.ctimestamp.distinctCount" -> "2",
+    "spark.sql.statistics.colStats.ctimestamp.max" -> "2016-05-09 00:00:02.0",
+    "spark.sql.statistics.colStats.ctimestamp.maxLen" -> "8",
+    "spark.sql.statistics.colStats.ctimestamp.min" -> "2016-05-08 00:00:01.0",
+    "spark.sql.statistics.colStats.ctimestamp.nullCount" -> "1",
+    "spark.sql.statistics.colStats.ctimestamp.version" -> "1"
+  )
+
+  val expectedSerializedHistograms = Map(
+    "spark.sql.statistics.colStats.cbyte.histogram" ->
+      HistogramSerializer.serialize(statsWithHgms("cbyte").histogram.get),
+    "spark.sql.statistics.colStats.cshort.histogram" ->
+      HistogramSerializer.serialize(statsWithHgms("cshort").histogram.get),
+    "spark.sql.statistics.colStats.cint.histogram" ->
+      HistogramSerializer.serialize(statsWithHgms("cint").histogram.get),
+    "spark.sql.statistics.colStats.clong.histogram" ->
+      HistogramSerializer.serialize(statsWithHgms("clong").histogram.get),
+    "spark.sql.statistics.colStats.cdouble.histogram" ->
+      HistogramSerializer.serialize(statsWithHgms("cdouble").histogram.get),
+    "spark.sql.statistics.colStats.cfloat.histogram" ->
+      HistogramSerializer.serialize(statsWithHgms("cfloat").histogram.get),
+    "spark.sql.statistics.colStats.cdecimal.histogram" ->
+      HistogramSerializer.serialize(statsWithHgms("cdecimal").histogram.get),
+    "spark.sql.statistics.colStats.cdate.histogram" ->
+      HistogramSerializer.serialize(statsWithHgms("cdate").histogram.get),
+    "spark.sql.statistics.colStats.ctimestamp.histogram" ->
+      HistogramSerializer.serialize(statsWithHgms("ctimestamp").histogram.get)
+  )
+
   private val randomName = new Random(31)
 
   def getCatalogTable(tableName: String): CatalogTable = {
@@ -164,14 +268,24 @@ abstract class StatisticsCollectionTestBase extends QueryTest with SQLTestUtils 
         colStats.keys.mkString(", "))
 
       // Validate statistics
-      val table = getCatalogTable(tableName)
-      assert(table.stats.isDefined)
-      assert(table.stats.get.colStats.size == colStats.size)
+      validateColStats(tableName, colStats)
+    }
+  }
 
-      colStats.foreach { case (k, v) =>
-        withClue(s"column $k") {
-          assert(table.stats.get.colStats(k) == v)
-        }
+  /**
+   * Validate if the given catalog table has the provided statistics.
+   */
+  def validateColStats(
+      tableName: String,
+      colStats: mutable.LinkedHashMap[String, CatalogColumnStat]): Unit = {
+
+    val table = getCatalogTable(tableName)
+    assert(table.stats.isDefined)
+    assert(table.stats.get.colStats.size == colStats.size)
+
+    colStats.foreach { case (k, v) =>
+      withClue(s"column $k") {
+        assert(table.stats.get.colStats(k) == v)
       }
     }
   }
