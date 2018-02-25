@@ -638,6 +638,46 @@ class VersionsSuite extends SparkFunSuite with Logging {
       }
     }
 
+    test(s"$version: CREATE Partitioned TABLE AS SELECT") {
+      withTable("tbl") {
+        versionSpark.sql(
+          """
+            |CREATE TABLE tbl(c1 string)
+            |PARTITIONED BY (ds STRING)
+          """.stripMargin)
+        versionSpark.sql("INSERT OVERWRITE TABLE tbl partition (ds='2') SELECT '1'")
+
+        assert(versionSpark.table("tbl").collect().toSeq == Seq(Row("1", "2")))
+        val partMeta = versionSpark.sessionState.catalog.getPartition(
+          TableIdentifier("tbl"), spec = Map("ds" -> "2")).parameters
+        val totalSize = partMeta.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+        val numFiles = partMeta.get(StatsSetupConst.NUM_FILES).map(_.toLong)
+        // Except 0.12, all the following versions will fill the Hive-generated statistics
+        if (version == "0.12") {
+          assert(totalSize.isEmpty && numFiles.isEmpty)
+        } else {
+          assert(totalSize.nonEmpty && numFiles.nonEmpty)
+        }
+
+        versionSpark.sql(
+          """
+            |ALTER TABLE tbl PARTITION (ds='2')
+            |SET SERDEPROPERTIES ('newKey' = 'vvv')
+          """.stripMargin)
+        val newPartMeta = versionSpark.sessionState.catalog.getPartition(
+          TableIdentifier("tbl"), spec = Map("ds" -> "2")).parameters
+
+        val newTotalSize = newPartMeta.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+        val newNumFiles = newPartMeta.get(StatsSetupConst.NUM_FILES).map(_.toLong)
+        // Except 0.12, all the following versions will fill the Hive-generated statistics
+        if (version == "0.12") {
+          assert(newTotalSize.isEmpty && newNumFiles.isEmpty)
+        } else {
+          assert(newTotalSize.nonEmpty && newNumFiles.nonEmpty)
+        }
+      }
+    }
+
     test(s"$version: Delete the temporary staging directory and files after each insert") {
       withTempDir { tmpDir =>
         withTable("tab") {
