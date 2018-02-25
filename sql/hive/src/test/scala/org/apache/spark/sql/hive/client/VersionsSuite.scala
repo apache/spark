@@ -21,6 +21,7 @@ import java.io.{ByteArrayOutputStream, File, PrintStream, PrintWriter}
 import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
@@ -423,15 +424,18 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: alterPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "2")
+      val parameters = Map(StatsSetupConst.TOTAL_SIZE -> "0", StatsSetupConst.NUM_FILES -> "1")
       val newLocation = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
       val storage = storageFormat.copy(
         locationUri = Some(newLocation),
         // needed for 0.12 alter partitions
         serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-      val partition = CatalogTablePartition(spec, storage)
+      val partition = CatalogTablePartition(spec, storage, parameters)
       client.alterPartitions("default", "src_part", Seq(partition))
       assert(client.getPartition("default", "src_part", spec)
         .storage.locationUri == Some(newLocation))
+      assert(client.getPartition("default", "src_part", spec)
+        .parameters.get(StatsSetupConst.TOTAL_SIZE) == Some("0"))
     }
 
     test(s"$version: dropPartitions") {
