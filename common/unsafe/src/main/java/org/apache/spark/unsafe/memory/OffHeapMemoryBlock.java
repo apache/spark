@@ -33,7 +33,7 @@ public class OffHeapMemoryBlock extends MemoryBlock {
 
   @Override
   public MemoryBlock allocate(long offset, long size) {
-    return new OffHeapMemoryBlock(offset, size);
+    return new OffHeapMemoryBlock(this.offset + offset, size);
   }
 
   public final int getInt(long offset) {

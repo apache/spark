@@ -33,7 +33,7 @@ public final class ByteArrayMemoryBlock extends MemoryBlock {
 
   @Override
   public MemoryBlock allocate(long offset, long size) {
-    return new ByteArrayMemoryBlock(array, offset, size);
+    return new ByteArrayMemoryBlock(array, this.offset + offset, size);
   }
 
   public byte[] getByteArray() { return array; }

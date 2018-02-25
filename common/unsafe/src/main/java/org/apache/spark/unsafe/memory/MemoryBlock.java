@@ -160,7 +160,8 @@ public abstract class MemoryBlock {
 
   public static final void copyMemory(
       MemoryBlock src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
-    Platform.copyMemory(src.getBaseObject(), srcOffset, dst.getBaseObject(), dstOffset, length);
+    Platform.copyMemory(src.getBaseObject(), src.getBaseOffset() + srcOffset,
+            dst.getBaseObject(), dst.getBaseOffset() + dstOffset, length);
   }
 
   public static final void copyMemory(MemoryBlock src, MemoryBlock dst, long length) {

@@ -34,7 +34,7 @@ public final class OnHeapMemoryBlock extends MemoryBlock {
 
   @Override
   public MemoryBlock allocate(long offset, long size) {
-    return new OnHeapMemoryBlock(array, offset, size);
+    return new OnHeapMemoryBlock(array, this.offset + offset, size);
   }
 
   public long[] getLongArray() { return array; }

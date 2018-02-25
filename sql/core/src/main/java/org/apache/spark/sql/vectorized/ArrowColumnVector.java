@@ -381,7 +381,7 @@ public final class ArrowColumnVector extends ColumnVector {
       } else {
         mb.setAddressAndSize(stringResult.buffer.memoryAddress(), stringResult.buffer.capacity());
         return UTF8String.fromAddress(mb,
-          stringResult.buffer.memoryAddress() + stringResult.start,
+          stringResult.start,
           stringResult.end - stringResult.start);
       }
     }

@@ -138,7 +138,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   // for serialization
   public UTF8String() {
-    this((MemoryBlock)null,0);
+    this(null,0);
   }
 
   /**
@@ -148,10 +148,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public void writeToMemory(byte[] target, long targetOffset) {
     base.writeTo(base.getBaseOffset(), target, targetOffset, numBytes);
-  }
-
-  public void writeToMemory(MemoryBlock target, long targetOffset) {
-    MemoryBlock.copyMemory(base, base.getBaseOffset(), target, targetOffset, numBytes);
   }
 
   public void writeTo(ByteBuffer buffer) {

@@ -37,7 +37,7 @@ public class MemoryBlockSuite {
     memory.putLong(offset + 8, -1L);
     memory.putFloat(offset + 16, 1.0F);
     memory.putDouble(offset + 20, 2.0);
-    MemoryBlock.copyMemory(memory, offset, memory, offset + 28, 4);
+    MemoryBlock.copyMemory(memory, 0L, memory, 28, 4);
     int[] a = new int[2];
     a[0] = 0x12345678;
     a[1] = 0x13579BDF;
