@@ -169,27 +169,11 @@ public abstract class MemoryBlock {
       dst.getBaseObject(), dst.getBaseOffset(), length);
   }
 
-  public abstract void copyFrom(byte[] src, long srcOffset, long dstOffset, long length);
+  public final void copyFrom(Object src, long srcOffset, long dstOffset, long length) {
+    Platform.copyMemory(src, srcOffset, obj, offset + dstOffset, length);
+  }
 
-  public abstract void copyFrom(short[] src, long srcOffset, long dstOffset, long length);
-
-  public abstract void copyFrom(int[] src, long srcOffset, long dstOffset, long length);
-
-  public abstract void copyFrom(long[] src, long srcOffset, long dstOffset, long length);
-
-  public abstract void copyFrom(float[] src, long srcOffset, long dstOffset, long length);
-
-  public abstract void copyFrom(double[] src, long srcOffset, long dstOffset, long length);
-
-  public abstract void writeTo(long srcOffset, byte[] dst, long dstOffset, long length);
-
-  public abstract void writeTo(long srcOffset, short[] dst, long dstOffset, long length);
-
-  public abstract void writeTo(long srcOffset, int[] dst, long dstOffset, long length);
-
-  public abstract void writeTo(long srcOffset, long[] dst, long dstOffset, long length);
-
-  public abstract void writeTo(long srcOffset, float[] dst, long dstOffset, long length);
-
-  public abstract void writeTo(long srcOffset, double[] dst, long dstOffset, long length);
+  public final void writeTo(long srcOffset, Object dst, long dstOffset, long length) {
+    Platform.copyMemory(obj, offset + srcOffset, dst, dstOffset, length);
+  }
 }

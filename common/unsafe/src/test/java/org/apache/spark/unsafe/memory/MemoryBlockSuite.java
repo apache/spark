@@ -41,9 +41,9 @@ public class MemoryBlockSuite {
     int[] a = new int[2];
     a[0] = 0x12345678;
     a[1] = 0x13579BDF;
-    memory.copyFrom(a, Platform.INT_ARRAY_OFFSET, offset + 32, 8);
+    memory.copyFrom(a, Platform.INT_ARRAY_OFFSET, 32, 8);
     byte[] b = new byte[8];
-    memory.writeTo(offset + 32, b, Platform.BYTE_ARRAY_OFFSET, 8);
+    memory.writeTo(32, b, Platform.BYTE_ARRAY_OFFSET, 8);
 
     Assert.assertEquals(obj, memory.getBaseObject());
     Assert.assertEquals(offset, memory.getBaseOffset());
