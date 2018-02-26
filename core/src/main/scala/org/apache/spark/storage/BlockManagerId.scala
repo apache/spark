@@ -18,7 +18,7 @@
 package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
-import java.lang.ref.{Reference, SoftReference, WeakReference}
+import java.lang.ref.SoftReference
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.SparkContext
