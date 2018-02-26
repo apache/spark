@@ -17,22 +17,24 @@
 
 package org.apache.spark.sql.execution.streaming.sources
 
-import java.io.{IOException, OutputStreamWriter}
-import java.net.ServerSocket
+import java.io.IOException
+import java.net.InetSocketAddress
+import java.nio.ByteBuffer
+import java.nio.channels.ServerSocketChannel
 import java.sql.Timestamp
 import java.util.Optional
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ListBuffer
 
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.execution.streaming.LongOffset
-import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
@@ -55,62 +57,72 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
   private var serverThread: ServerThread = null
   private var batchReader: MicroBatchReader = null
 
-  test("V2 basic usage") {
+  case class AddSocketData(data: String*) extends AddData {
+    override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {
+      require(
+        query.nonEmpty,
+        "Cannot add data when there is no query for finding the active socket source")
+
+      val sources = query.get.logicalPlan.collect {
+        case StreamingExecutionRelation(source: TextSocketMicroBatchReader, _) => source
+      }
+      if (sources.isEmpty) {
+        throw new Exception(
+          "Could not find socket source in the StreamExecution logical plan to add data to")
+      } else if (sources.size > 1) {
+        throw new Exception(
+          "Could not select the socket source in the StreamExecution logical plan as there" +
+            "are multiple socket sources:\n\t" + sources.mkString("\n\t"))
+      }
+      val socketSource = sources.head
+
+      assert(serverThread != null && serverThread.port != 0)
+      val currOffset = socketSource.currentOffset
+      data.foreach(serverThread.enqueue)
+
+      val newOffset = LongOffset(currOffset.offset + data.size)
+      (socketSource, newOffset)
+    }
+
+    override def toString: String = s"AddSocketData(data = $data)"
+  }
+
+  test("backward compatibility with old path") {
+    DataSource.lookupDataSource("org.apache.spark.sql.execution.streaming.TextSocketSourceProvider",
+      spark.sqlContext.conf).newInstance() match {
+      case ds: MicroBatchReadSupport =>
+        assert(ds.isInstanceOf[TextSocketSourceProvider])
+      case _ =>
+        throw new IllegalStateException("Could not find socket source")
+    }
+  }
+
+  test("basic usage") {
     serverThread = new ServerThread()
     serverThread.start()
 
-    val provider = new TextSocketSourceProvider
-    val options = new DataSourceOptions(
-      Map("host" -> "localhost", "port" -> serverThread.port.toString).asJava)
-    batchReader = provider.createMicroBatchReader(Optional.empty(), "", options)
+    withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+      val ref = spark
+      import ref.implicits._
 
-    val schema = batchReader.readSchema()
-    assert(schema === StructType(StructField("value", StringType) :: Nil))
+      val socket = spark
+        .readStream
+        .format("socket")
+        .options(Map("host" -> "localhost", "port" -> serverThread.port.toString))
+        .load()
+        .as[String]
 
-    failAfter(streamingTimeout) {
-      serverThread.enqueue("hello")
-      batchReader.setOffsetRange(Optional.empty(), Optional.empty())
-      while (batchReader.getEndOffset.asInstanceOf[LongOffset].offset == -1L) {
-        batchReader.setOffsetRange(Optional.empty(), Optional.empty())
-        Thread.sleep(10)
-      }
-      withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
-        val offset1 = batchReader.getEndOffset
-        val batch1 = new ListBuffer[Row]
-        batchReader.createDataReaderFactories().asScala.map(_.createDataReader()).foreach { r =>
-          while (r.next()) {
-            batch1.append(r.get())
-          }
-        }
-        assert(batch1.map(_.getAs[String](0)) === Seq("hello"))
+      assert(socket.schema === StructType(StructField("value", StringType) :: Nil))
 
-        serverThread.enqueue("world")
-        while (batchReader.getEndOffset === offset1) {
-          batchReader.setOffsetRange(Optional.of(offset1), Optional.empty())
-          Thread.sleep(10)
-        }
-        val offset2 = batchReader.getEndOffset
-        val batch2 = new ListBuffer[Row]
-        batchReader.createDataReaderFactories().asScala.map(_.createDataReader()).foreach { r =>
-          while (r.next()) {
-            batch2.append(r.get())
-          }
-        }
-        assert(batch2.map(_.getAs[String](0)) === Seq("world"))
-
-        batchReader.setOffsetRange(Optional.empty(), Optional.of(offset2))
-        val both = new ListBuffer[Row]
-        batchReader.createDataReaderFactories().asScala.map(_.createDataReader()).foreach { r =>
-          while (r.next()) {
-            both.append(r.get())
-          }
-        }
-        assert(both.map(_.getAs[String](0)) === Seq("hello", "world"))
-      }
-
-      // Try stopping the source to make sure this does not block forever.
-      batchReader.stop()
-      batchReader = null
+      testStream(socket)(
+        StartStream(),
+        AddSocketData("hello"),
+        CheckAnswer("hello"),
+        AddSocketData("world"),
+        CheckLastBatch("world"),
+        CheckAnswer("hello", "world"),
+        StopStream
+      )
     }
   }
 
@@ -118,53 +130,44 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     serverThread = new ServerThread()
     serverThread.start()
 
-    val provider = new TextSocketSourceProvider
-    val options = new DataSourceOptions(Map("host" -> "localhost",
-      "port" -> serverThread.port.toString, "includeTimestamp" -> "true").asJava)
-    batchReader = provider.createMicroBatchReader(Optional.empty(), "", options)
+    withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+      val socket = spark
+        .readStream
+        .format("socket")
+        .options(Map(
+          "host" -> "localhost",
+          "port" -> serverThread.port.toString,
+          "includeTimestamp" -> "true"))
+        .load()
 
-    val schema = batchReader.readSchema()
-    assert(schema === StructType(StructField("value", StringType) ::
-      StructField("timestamp", TimestampType) :: Nil))
+      assert(socket.schema === StructType(StructField("value", StringType) ::
+        StructField("timestamp", TimestampType) :: Nil))
 
-    failAfter(streamingTimeout) {
-      serverThread.enqueue("hello")
-      batchReader.setOffsetRange(Optional.empty(), Optional.empty())
-      while (batchReader.getEndOffset.asInstanceOf[LongOffset].offset == -1L) {
-        batchReader.setOffsetRange(Optional.empty(), Optional.empty())
-        Thread.sleep(10)
-      }
-      withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
-        val offset1 = batchReader.getEndOffset
-        val batch1 = new ListBuffer[Row]
-        batchReader.createDataReaderFactories().asScala.map(_.createDataReader()).foreach { r =>
-          while (r.next()) {
-            batch1.append(r.get())
-          }
-        }
-        assert(batch1.map(_.getAs[String](0)) === Seq("hello"))
-        val batch1Stamp = batch1.map(_.getAs[Timestamp](1)).head
+      var batch1Stamp: Timestamp = null
+      var batch2Stamp: Timestamp = null
 
-        serverThread.enqueue("world")
-        while (batchReader.getEndOffset === offset1) {
-          batchReader.setOffsetRange(Optional.of(offset1), Optional.empty())
-          Thread.sleep(10)
-        }
-        val offset2 = batchReader.getEndOffset
-        val batch2 = new ListBuffer[Row]
-        batchReader.createDataReaderFactories().asScala.map(_.createDataReader()).foreach { r =>
-          while (r.next()) {
-            batch2.append(r.get())
-          }
-        }
-        assert(batch2.map(_.getAs[String](0)) === Seq("world"))
-        val batch2Stamp = batch2.map(_.getAs[Timestamp](1)).head
-        assert(!batch2Stamp.before(batch1Stamp))
-      }
+      testStream(socket)(
+        StartStream(),
+        AddSocketData("hello"),
+        CheckAnswerRowsByFunc(
+          rows => {
+            assert(rows.size === 1)
+            assert(rows.head.getAs[String](0) === "hello")
+            batch1Stamp = rows.head.getAs[Timestamp](1)
+          },
+          true),
+        AddSocketData("world"),
+        CheckAnswerRowsByFunc(
+          rows => {
+            assert(rows.size === 1)
+            assert(rows.head.getAs[String](0) === "world")
+            batch2Stamp = rows.head.getAs[Timestamp](1)
+          },
+          true),
+        StopStream
+      )
 
-      // Try stopping the source to make sure this does not block forever.
-      batchReader.stop()
-      batchReader = null
+      assert(!batch2Stamp.before(batch1Stamp))
     }
   }
 
@@ -217,25 +220,45 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
   }
 
   private class ServerThread extends Thread with Logging {
-    private val serverSocket = new ServerSocket(0)
+    private val serverSocketChannel = ServerSocketChannel.open()
+    serverSocketChannel.bind(new InetSocketAddress(0))
     private val messageQueue = new LinkedBlockingQueue[String]()
 
-    val port = serverSocket.getLocalPort
+    val port = serverSocketChannel.socket().getLocalPort
 
     override def run(): Unit = {
       try {
-        val clientSocket = serverSocket.accept()
-        clientSocket.setTcpNoDelay(true)
-        val out = new OutputStreamWriter(clientSocket.getOutputStream)
         while (true) {
-          val line = messageQueue.take()
-          out.write(line + "\n")
-          out.flush()
+          val clientSocketChannel = serverSocketChannel.accept()
+          clientSocketChannel.configureBlocking(false)
+          clientSocketChannel.socket().setTcpNoDelay(true)
+
+          // Check whether remote client is closed but still send data to this closed socket.
+          // This happens in DataStreamReader where a source will be created to get the schema.
+          var remoteIsClosed = false
+          var cnt = 0
+          while (cnt < 3 && !remoteIsClosed) {
+            if (clientSocketChannel.read(ByteBuffer.allocate(1)) != -1) {
+              cnt += 1
+              Thread.sleep(100)
+            } else {
+              remoteIsClosed = true
+            }
+          }
+
+          if (remoteIsClosed) {
+            logInfo(s"remote client ${clientSocketChannel.socket()} is closed")
+          } else {
+            while (true) {
+              val line = messageQueue.take() + "\n"
+              clientSocketChannel.write(ByteBuffer.wrap(line.getBytes("UTF-8")))
+            }
+          }
         }
       } catch {
         case e: InterruptedException =>
       } finally {
-        serverSocket.close()
+        serverSocketChannel.close()
       }
     }
 

@@ -71,7 +71,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
   private val batches = new ListBuffer[(String, Timestamp)]
 
   @GuardedBy("this")
-  private var currentOffset: LongOffset = LongOffset(-1L)
+  private[sources] var currentOffset: LongOffset = LongOffset(-1L)
 
   @GuardedBy("this")
   private var lastOffsetCommitted: LongOffset = LongOffset(-1L)
