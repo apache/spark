@@ -18,10 +18,12 @@
 package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
-import java.util.concurrent.ConcurrentHashMap
 
-import org.apache.spark.SparkContext
+import com.google.common.cache.{CacheBuilder, CacheLoader}
+
+import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -132,10 +134,15 @@ private[spark] object BlockManagerId {
     getCachedBlockManagerId(obj)
   }
 
-  val blockManagerIdCache = new ConcurrentHashMap[BlockManagerId, BlockManagerId]()
+  val blockManagerIdCache = CacheBuilder.newBuilder()
+    .maximumSize(SparkEnv.get.conf.get(BLOCK_MANAGER_ID_CACHE_SIZE))
+    .build(new CacheLoader[BlockManagerId, BlockManagerId]() {
+      override def load(id: BlockManagerId) = {
+        id
+      }
+    })
 
   def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {
-    blockManagerIdCache.putIfAbsent(id, id)
     blockManagerIdCache.get(id)
   }
 }
