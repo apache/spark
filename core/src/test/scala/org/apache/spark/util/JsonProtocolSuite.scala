@@ -17,16 +17,21 @@
 
 package org.apache.spark.util
 
+import java.io.IOException
 import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.concurrent.{Await, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
 
 import org.json4s.JsonAST.{JArray, JInt, JString, JValue}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions
+import org.scalatest.concurrent.TimeLimits
 import org.scalatest.exceptions.TestFailedException
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.executor._
@@ -36,7 +41,7 @@ import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.shuffle.MetadataFetchFailedException
 import org.apache.spark.storage._
 
-class JsonProtocolSuite extends SparkFunSuite {
+class JsonProtocolSuite extends SparkFunSuite with TimeLimits {
   import JsonProtocolSuite._
 
   test("SparkListenerEvent") {
@@ -124,6 +129,29 @@ class JsonProtocolSuite extends SparkFunSuite {
     testEvent(nodeUnblacklisted, nodeUnblacklistedJsonString)
     testEvent(executorMetricsUpdate, executorMetricsUpdateJsonString)
     testEvent(blockUpdated, blockUpdatedJsonString)
+  }
+
+  test("sparkEventToJson: Unknown SparkListenerEvent") {
+    val test = LongJsonEvent("b" * 8000000)
+    val json =
+      s"""
+         |{
+         |  "Event" : "org.apache.spark.util.JsonProtocolSuite$$LongJsonEvent",
+         |  "a": "${"b" * 8000000}"
+         |}
+       """.stripMargin
+    // we're testing a deadlock here. Giving a bit of leeway to avoid slow Jenkins flakiness.
+    val f = Future(testEvent(test, json))
+    ThreadUtils.awaitResult(f, 1 minute)
+  }
+
+  test("sparkEventToJson: Unknown SparkListenerEvent failure during json serialization") {
+    val test = ThrowsErrorDuringJson()
+    val json = ""
+    // Make sure that an error doesn't block forever
+    intercept[IOException] {
+      testEvent(test, json)
+    }
   }
 
   test("Dependent Classes") {
@@ -2068,4 +2096,10 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "hostId" : "node1"
       |}
     """.stripMargin
+
+  case class LongJsonEvent(a: String) extends SparkListenerEvent
+
+  case class ThrowsErrorDuringJson() extends SparkListenerEvent {
+    lazy val a: String = throw new UnsupportedOperationException("Can't touch this.")
+  }
 }

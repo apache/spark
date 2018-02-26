@@ -106,7 +106,13 @@ private[spark] object JsonProtocol {
         val outputStream = new PipedOutputStream()
         val inputStream = new PipedInputStream(outputStream)
         try {
-          mapper.writeValue(outputStream, event)
+          val thread = new Thread("SparkListenerEvent json writer") {
+            override def run(): Unit = {
+              mapper.writeValue(outputStream, event)
+            }
+          }
+          thread.setDaemon(true)
+          thread.start()
           parse(inputStream)
         } finally {
           IOUtils.closeQuietly(outputStream)
