@@ -22,15 +22,13 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.{Attribute, Elem, Node, NodeSeq, Null, Text}
 
 import org.apache.spark.scheduler.Schedulable
-import org.apache.spark.status.PoolData
-import org.apache.spark.status.api.v1.StageStatus
+import org.apache.spark.status.{AppSummary, PoolData}
+import org.apache.spark.status.api.v1.{StageData, StageStatus}
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 /** Page showing list of all ongoing and recently finished stages and pools */
 private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   private val sc = parent.sc
-  private lazy val allStages = parent.store.stageList(null)
-  private lazy val appSummary = parent.store.appSummary()
   private val subPath = "stages"
   private def isFairScheduler = parent.isFairScheduler
 
@@ -46,7 +44,11 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
     val allStatuses = Seq(StageStatus.ACTIVE, StageStatus.PENDING, StageStatus.COMPLETE,
       StageStatus.SKIPPED, StageStatus.FAILED)
 
-    val (summaries, tables) = allStatuses.map(summaryAndTableForStatus(_, request)).unzip
+    val allStages = parent.store.stageList(null)
+    val appSummary = parent.store.appSummary()
+
+    val (summaries, tables) = allStatuses.map(
+      summaryAndTableForStatus(allStages, appSummary, _, request)).unzip
 
     val summary: NodeSeq =
       <div>
@@ -55,30 +57,29 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         </ul>
       </div>
 
-    var content: NodeSeq = summary ++
-      {
-        if (sc.isDefined && isFairScheduler) {
-          <span class="collapse-aggregated-poolTable collapse-table"
-              onClick="collapseTable('collapse-aggregated-poolTable','aggregated-poolTable')">
-            <h4>
-              <span class="collapse-table-arrow arrow-open"></span>
-              <a>Fair Scheduler Pools ({pools.size})</a>
-            </h4>
-          </span> ++
-          <div class="aggregated-poolTable collapsible-table">
-            {poolTable.toNodeSeq}
-          </div>
-        } else {
-          Seq.empty[Node]
-        }
+    val poolsDescription = if (sc.isDefined && isFairScheduler) {
+        <span class="collapse-aggregated-poolTable collapse-table"
+            onClick="collapseTable('collapse-aggregated-poolTable','aggregated-poolTable')">
+          <h4>
+            <span class="collapse-table-arrow arrow-open"></span>
+            <a>Fair Scheduler Pools ({pools.size})</a>
+          </h4>
+        </span> ++
+        <div class="aggregated-poolTable collapsible-table">
+          {poolTable.toNodeSeq}
+        </div>
+      } else {
+        Seq.empty[Node]
       }
 
-    tables.flatten.foreach(content ++= _)
+    val content = summary ++ poolsDescription ++ tables.flatten.flatten
 
     UIUtils.headerSparkPage("Stages for All Jobs", content, parent)
   }
 
   def summaryAndTableForStatus(
+      allStages: Seq[StageData],
+      appSummary: AppSummary,
       status: StageStatus,
       request: HttpServletRequest): (Option[Elem], Option[NodeSeq]) = {
     val stages = if (status == StageStatus.FAILED) {
@@ -94,14 +95,15 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       val isFailedStage = status == StageStatus.FAILED
 
       val stagesTable =
-        new StageTableBase(parent.store, request, stages, tableHeaderID(status), stageTag(status),
+        new StageTableBase(parent.store, request, stages, statusName(status), stageTag(status),
           parent.basePath, subPath, parent.isFairScheduler, killEnabled, isFailedStage)
       val stagesSize = stages.size
-      (Some(summary(status, stagesSize)), Some(table(status, stagesTable, stagesSize)))
+      (Some(summary(appSummary, status, stagesSize)),
+        Some(table(appSummary, status, stagesTable, stagesSize)))
     }
   }
 
-  private def tableHeaderID(status: StageStatus): String = status match {
+  private def statusName(status: StageStatus): String = status match {
     case StageStatus.ACTIVE => "active"
     case StageStatus.COMPLETE => "completed"
     case StageStatus.FAILED => "failed"
@@ -109,46 +111,25 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
     case StageStatus.SKIPPED => "skipped"
   }
 
-  private def stageTag(status: StageStatus): String = status match {
-    case StageStatus.ACTIVE => "activeStage"
-    case StageStatus.COMPLETE => "completedStage"
-    case StageStatus.FAILED => "failedStage"
-    case StageStatus.PENDING => "pendingStage"
-    case StageStatus.SKIPPED => "skippedStage"
-  }
+  private def stageTag(status: StageStatus): String = s"${statusName(status)}Stage"
 
-  private def headerDescription(status: StageStatus): String = status match {
-    case StageStatus.ACTIVE => "Active"
-    case StageStatus.COMPLETE => "Completed"
-    case StageStatus.FAILED => "Failed"
-    case StageStatus.PENDING => "Pending"
-    case StageStatus.SKIPPED => "Skipped"
-  }
+  private def headerDescription(status: StageStatus): String = statusName(status).capitalize
 
-  private def classSuffix(status: StageStatus): String = status match {
-    case StageStatus.ACTIVE => "ActiveStages"
-    case StageStatus.COMPLETE => "CompletedStages"
-    case StageStatus.FAILED => "FailedStages"
-    case StageStatus.PENDING => "PendingStages"
-    case StageStatus.SKIPPED => "SkippedStages"
-  }
-
-  private def summaryContent(status: StageStatus, size: Int): String = {
-    if (status == StageStatus.COMPLETE
-        && appSummary.numCompletedStages != size) {
+  private def summaryContent(appSummary: AppSummary, status: StageStatus, size: Int): String = {
+    if (status == StageStatus.COMPLETE && appSummary.numCompletedStages != size) {
       s"${appSummary.numCompletedStages}, only showing $size"
     } else {
       s"$size"
     }
   }
 
-  private def summary(status: StageStatus, size: Int): Elem = {
+  private def summary(appSummary: AppSummary, status: StageStatus, size: Int): Elem = {
     val summary =
       <li>
-        <a href={s"#${tableHeaderID(status)}"}>
+        <a href={s"#${statusName(status)}"}>
           <strong>{headerDescription(status)} Stages:</strong>
         </a>
-        {summaryContent(status, size)}
+        {summaryContent(appSummary, status, size)}
       </li>
 
     if (status == StageStatus.COMPLETE) {
@@ -158,18 +139,21 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
     }
   }
 
-  private def table(status: StageStatus, stagesTable: StageTableBase, size: Int): NodeSeq = {
-    val classSuffixStatus = classSuffix(status)
-    <span id={tableHeaderID(status)}
-          class={s"collapse-aggregated-all$classSuffixStatus collapse-table"}
-          onClick={s"collapseTable('collapse-aggregated-all$classSuffixStatus'," +
-            s" 'aggregated-all$classSuffixStatus')"}>
+  private def table(
+      appSummary: AppSummary,
+      status: StageStatus,
+      stagesTable: StageTableBase, size: Int): NodeSeq = {
+    val classSuffix = s"${statusName(status).capitalize}Stages"
+    <span id={statusName(status)}
+          class={s"collapse-aggregated-all$classSuffix collapse-table"}
+          onClick={s"collapseTable('collapse-aggregated-all$classSuffix'," +
+            s" 'aggregated-all$classSuffix')"}>
       <h4>
         <span class="collapse-table-arrow arrow-open"></span>
-        <a>{headerDescription(status)} Stages ({summaryContent(status, size)})</a>
+        <a>{headerDescription(status)} Stages ({summaryContent(appSummary, status, size)})</a>
       </h4>
     </span> ++
-      <div class={s"aggregated-all$classSuffixStatus collapsible-table"}>
+      <div class={s"aggregated-all$classSuffix collapsible-table"}>
         {stagesTable.toNodeSeq}
       </div>
   }
