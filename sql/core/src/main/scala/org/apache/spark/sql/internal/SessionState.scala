@@ -115,7 +115,9 @@ private[sql] class SessionState(
 private[sql] object SessionState {
   def newHadoopConf(hadoopConf: Configuration, sqlConf: SQLConf): Configuration = {
     val newHadoopConf = new Configuration(hadoopConf)
-    sqlConf.getAllConfs.foreach { case (k, v) => if (v ne null) newHadoopConf.set(k, v) }
+    sqlConf.getAllConfs.foreach { case (k, v) =>
+      if (v ne null) newHadoopConf.set(k, v.stripPrefix("spark.hadoop"))
+    }
     newHadoopConf
   }
 }
