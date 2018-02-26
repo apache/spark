@@ -80,14 +80,6 @@ case "$SPARK_K8S_CMD" in
     )
     ;;
 
-  init)
-    CMD=(
-      "$SPARK_HOME/bin/spark-class"
-      "org.apache.spark.deploy.k8s.SparkPodInitContainer"
-      "$@"
-    )
-    ;;
-
   *)
     echo "Unknown command: $SPARK_K8S_CMD" 1>&2
     exit 1

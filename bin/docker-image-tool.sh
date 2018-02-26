@@ -44,7 +44,6 @@ function image_ref {
 function build {
   local BUILD_ARGS
   local IMG_PATH
-  local DOCKERFILE=${DOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
 
   if [ ! -f "$SPARK_HOME/RELEASE" ]; then
     # Set image build arguments accordingly if this is a source repo and not a distribution archive.
@@ -63,6 +62,8 @@ function build {
   if [ ! -d "$IMG_PATH" ]; then
     error "Cannot find docker image. This script must be run from a runnable distribution of Apache Spark."
   fi
+
+  local DOCKERFILE=${DOCKERFILE:-"$IMG_PATH/spark/Dockerfile"}
 
   docker build "${BUILD_ARGS[@]}" \
     -t $(image_ref spark) \
@@ -115,7 +116,7 @@ fi
 REPO=
 TAG=
 DOCKERFILE=
-while getopts mr:t: option
+while getopts f:mr:t: option
 do
  case "${option}"
  in

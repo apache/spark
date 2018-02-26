@@ -36,16 +36,24 @@ class DriverConfigPropertiesStepSuite extends SparkFunSuite {
   private val NAMESPACE = "test-namepsace"
   private val CUSTOM_JAVA_PROPERTY_KEY = "customJavaPropKey"
   private val CUSTOM_JAVA_PROPERTY_VALUE = "customJavaPropValue"
+  private val POD_NAME = "example-pod-name"
+  private val CONTAINER_NAME = "example-container-name"
 
   test("Testing driver configuration config map mounting") {
     val sparkConf = new SparkConf(false)
       .set(CUSTOM_JAVA_PROPERTY_KEY, CUSTOM_JAVA_PROPERTY_VALUE)
       .set(KUBERNETES_NAMESPACE, NAMESPACE)
     val submissionStep = new DriverConfigPropertiesStep(RESOURCE_NAME_PREFIX)
-    val basePod = new PodBuilder().withNewMetadata().endMetadata().withNewSpec().endSpec().build()
+    val basePod = new PodBuilder()
+      .withNewMetadata()
+        .withName(POD_NAME)
+      .endMetadata()
+      .withNewSpec()
+      .endSpec()
+      .build()
     val baseDriverSpec = KubernetesDriverSpec(
       driverPod = basePod,
-      driverContainer = new ContainerBuilder().build(),
+      driverContainer = new ContainerBuilder().withName(CONTAINER_NAME).build(),
       driverSparkConf = sparkConf,
       otherKubernetesResources = Seq.empty[HasMetadata])
     val preparedDriverSpec = submissionStep.configureDriver(baseDriverSpec)
@@ -86,5 +94,8 @@ class DriverConfigPropertiesStepSuite extends SparkFunSuite {
         hasMatchingVolumeMountName && hasVolumeMountPath
       case _ => false
     })
+    assert(preparedDriverSpec.driverSparkConf.getAll.sameElements(sparkConf.getAll))
+    assert(preparedDriverSpec.driverPod.getMetadata.getName == POD_NAME)
+    assert(preparedDriverSpec.driverContainer.getName == CONTAINER_NAME)
   }
 }
