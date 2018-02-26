@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayOutputStream, PipedInputStream, PipedOutputStream}
+import java.io.{PipedInputStream, PipedOutputStream}
 import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
@@ -103,6 +103,7 @@ private[spark] object JsonProtocol {
       case blockUpdate: SparkListenerBlockUpdated =>
         blockUpdateToJson(blockUpdate)
       case _ =>
+        // Use piped streams to avoid extra memory consumption
         val outputStream = new PipedOutputStream()
         val inputStream = new PipedInputStream(outputStream)
         try {
@@ -115,6 +116,7 @@ private[spark] object JsonProtocol {
           thread.start()
           parse(inputStream)
         } finally {
+          // close quietly in case Jackson auto closes streams
           IOUtils.closeQuietly(outputStream)
           IOUtils.closeQuietly(inputStream)
         }
