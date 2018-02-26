@@ -219,6 +219,37 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     }
   }
 
+  test("input row metrics") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+      val ref = spark
+      import ref.implicits._
+
+      val socket = spark
+        .readStream
+        .format("socket")
+        .options(Map("host" -> "localhost", "port" -> serverThread.port.toString))
+        .load()
+        .as[String]
+
+      assert(socket.schema === StructType(StructField("value", StringType) :: Nil))
+
+      testStream(socket)(
+        StartStream(),
+        AddSocketData("hello"),
+        CheckAnswer("hello"),
+        AssertOnQuery { q =>
+          val numRowMetric =
+            q.lastExecution.executedPlan.collectLeaves().head.metrics.get("numOutputRows")
+          numRowMetric.nonEmpty && numRowMetric.get.value == 1
+        },
+        StopStream
+      )
+    }
+  }
+
   private class ServerThread extends Thread with Logging {
     private val serverSocketChannel = ServerSocketChannel.open()
     serverSocketChannel.bind(new InetSocketAddress(0))
