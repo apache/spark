@@ -18,6 +18,7 @@
 package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
+import java.lang.ref.{Reference, SoftReference, WeakReference}
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.SparkContext
@@ -132,10 +133,21 @@ private[spark] object BlockManagerId {
     getCachedBlockManagerId(obj)
   }
 
-  val blockManagerIdCache = new ConcurrentHashMap[BlockManagerId, BlockManagerId]()
+  /**
+   * We use SoftReference in case blockManagerIdCache will not remove old values
+   * and which may cause out of memory issue.(SPARK-23508)
+   */
+  val blockManagerIdCache = new ConcurrentHashMap[SoftReference[BlockManagerId],
+    SoftReference[BlockManagerId]]()
 
   def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {
-    blockManagerIdCache.putIfAbsent(id, id)
-    blockManagerIdCache.get(id)
+    blockManagerIdCache.putIfAbsent(new SoftReference[BlockManagerId](id),
+      new SoftReference[BlockManagerId](id))
+    val blockManagerIdRef = blockManagerIdCache.get(id)
+    if (blockManagerIdRef.get equals null) {
+      id
+    } else {
+      blockManagerIdRef.get
+    }
   }
 }
