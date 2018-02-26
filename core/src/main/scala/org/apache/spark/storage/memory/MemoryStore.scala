@@ -247,18 +247,19 @@ private[spark] class MemoryStore(
         val amountToRequest = size - unrollMemoryUsedByThisBlock
         keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
         if (keepUnrolling) {
-          unrollMemoryUsedByThisBlock += amountToRequest
+          unrollMemoryUsedByThisBlock = size
         }
+      } else if (size < unrollMemoryUsedByThisBlock) {
+        releaseUnrollMemoryForThisTask(memoryMode, unrollMemoryUsedByThisBlock - size)
+        unrollMemoryUsedByThisBlock = size
       }
 
       if (keepUnrolling) {
         val entry = entryBuilder.build()
-        // Synchronize so that transfer is atomic
-        memoryManager.synchronized {
-          releaseUnrollMemoryForThisTask(memoryMode, unrollMemoryUsedByThisBlock)
-          val success = memoryManager.acquireStorageMemory(blockId, entry.size, memoryMode)
-          assert(success, "transferring unroll memory to storage memory failed")
-        }
+        // In fact, unroll memory is also storage memory, it is unnecessary to
+        // release unroll memory and then to get storage memory again, it only
+        // needs to release memory from unroll memory map.
+        releaseMemoryFromUnrollMemoryMap(memoryMode, unrollMemoryUsedByThisBlock)
 
         entries.synchronized {
           entries.put(blockId, entry)
@@ -581,6 +582,30 @@ private[spark] class MemoryStore(
         }
         if (unrollMemoryMap(taskAttemptId) == 0) {
           unrollMemoryMap.remove(taskAttemptId)
+        }
+      }
+    }
+  }
+
+  /**
+   * Only release memory used by this task from unroll memory
+   * map(`onHeapUnrollMemoryMap` or `offHeapUnrollMemoryMap`).
+   */
+  def releaseMemoryFromUnrollMemoryMap(
+      memoryMode: MemoryMode,
+      memory: Long = Long.MaxValue): Unit = {
+    val taskAttemptId = currentTaskAttemptId()
+    memoryManager.synchronized {
+      val unrollMemoryMap = memoryMode match {
+        case MemoryMode.ON_HEAP => onHeapUnrollMemoryMap
+        case MemoryMode.OFF_HEAP => offHeapUnrollMemoryMap
+      }
+      val unrollMem = unrollMemoryMap.getOrElse(taskAttemptId, -1L)
+      if (unrollMem >= 0) {
+        if (memory >=  unrollMem) {
+          unrollMemoryMap.remove(taskAttemptId)
+        } else {
+          unrollMemoryMap(taskAttemptId) = unrollMem - memory
         }
       }
     }
