@@ -19,17 +19,19 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.test.SQLTestUtilsBase
 import org.apache.spark.util.Utils
 
-class HiveMetastoreLazyInitializationSuite extends SparkFunSuite {
+class HiveMetastoreLazyInitializationSuite extends SparkFunSuite with SQLTestUtilsBase {
 
-  test("lazily initialize Hive client") {
-    val spark = SparkSession.builder()
+  override def spark: SparkSession = SparkSession.builder()
       .appName("HiveMetastoreLazyInitializationSuite")
       .master("local[2]")
       .enableHiveSupport()
       .config("spark.hadoop.hive.metastore.uris", "thrift://127.0.0.1:11111")
       .getOrCreate()
+
+  test("lazily initialize Hive client") {
     val originalLevel = org.apache.log4j.Logger.getRootLogger().getLevel
     try {
       // Avoid outputting a lot of expected warning logs
@@ -37,6 +39,16 @@ class HiveMetastoreLazyInitializationSuite extends SparkFunSuite {
 
       // We should be able to run Spark jobs without Hive client.
       assert(spark.sparkContext.range(0, 1).count() === 1)
+
+      // We should be able to use Spark SQL if no table references.
+      assert(spark.sql("select 1 + 1").count() === 1)
+      assert(spark.range(0, 1).count() === 1)
+
+      // We should be able to use fs
+      withTempPath { dir =>
+        spark.range(0, 1).write.parquet(dir.getAbsolutePath)
+        assert(spark.read.parquet(dir.getAbsolutePath).count() === 1)
+      }
 
       // Make sure that we are not using the local derby metastore.
       val exceptionString = Utils.exceptionString(intercept[AnalysisException] {
