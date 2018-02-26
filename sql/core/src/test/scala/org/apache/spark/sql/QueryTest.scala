@@ -332,6 +332,19 @@ object QueryTest {
     None
   }
 
+  def includesRowsOnlyOnce(
+      expectedRows: Seq[Row],
+      sparkAnswer: Seq[Row]): Option[String] = {
+    val expectedAnswer = prepareAnswer(expectedRows, true)
+    val actualAnswer = prepareAnswer(sparkAnswer, true)
+    val diffRow = actualAnswer.diff(expectedAnswer)
+    if (!expectedAnswer.toSet.subsetOf(actualAnswer.toSet)
+      || diffRow.intersect(expectedAnswer).nonEmpty) {
+      return Some(genError(expectedRows, sparkAnswer, true))
+    }
+    None
+  }
+
   def sameRows(
       expectedAnswer: Seq[Row],
       sparkAnswer: Seq[Row],

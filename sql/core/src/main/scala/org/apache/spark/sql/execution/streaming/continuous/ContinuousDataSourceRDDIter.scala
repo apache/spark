@@ -48,15 +48,24 @@ class ContinuousDataSourceRDD(
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
-    // If attempt number isn't 0, this is a task retry, which we don't support.
-    if (context.attemptNumber() != 0) {
-      throw new ContinuousTaskRetryException()
-    }
+    val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
+    val epochEndpoint = EpochCoordinatorRef.get(coordinatorId, SparkEnv.get)
 
     val reader = split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]]
       .readerFactory.createDataReader()
+    var lastEpoch: Option[Long] = None
 
-    val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
+    // If attempt number isn't 0, this is a task retry, we should get last offset and epoch.
+    if (context.attemptNumber() != 0) {
+      val lastEpochAndOffset = epochEndpoint.askSync[Option[(Long, PartitionOffset)]](
+        GetLastEpochAndOffset(context.partitionId()))
+      // If GetLastEpochAndOffset return None, it means task failed while created, just
+      // restart from the initial offset and epoch.
+      if (lastEpochAndOffset.isDefined) {
+        ContinuousDataSourceRDD.getBaseReader(reader).setOffset(lastEpochAndOffset.get._2)
+        lastEpoch = Some(lastEpochAndOffset.get._1)
+      }
+    }
 
     // This queue contains two types of messages:
     // * (null, null) representing an epoch boundary.
@@ -83,14 +92,13 @@ class ContinuousDataSourceRDD(
       epochPollExecutor.shutdown()
     })
 
-    val epochEndpoint = EpochCoordinatorRef.get(coordinatorId, SparkEnv.get)
     new Iterator[UnsafeRow] {
       private val POLL_TIMEOUT_MS = 1000
 
       private var currentEntry: (UnsafeRow, PartitionOffset) = _
       private var currentOffset: PartitionOffset = startOffset
       private var currentEpoch =
-        context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
+        lastEpoch.getOrElse(context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong)
 
       override def hasNext(): Boolean = {
         while (currentEntry == null) {

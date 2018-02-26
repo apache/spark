@@ -152,4 +152,11 @@ class RateStreamContinuousDataReader(
 
   override def getOffset(): PartitionOffset =
     RateStreamPartitionOffset(partitionIndex, currentValue, nextReadTime)
+
+  override def setOffset(offset: PartitionOffset): Unit = {
+    val rateStreamOffset = offset.asInstanceOf[RateStreamPartitionOffset]
+    assert(rateStreamOffset.partition == partitionIndex)
+    currentValue = rateStreamOffset.currentValue
+    nextReadTime = rateStreamOffset.currentTimeMs
+  }
 }

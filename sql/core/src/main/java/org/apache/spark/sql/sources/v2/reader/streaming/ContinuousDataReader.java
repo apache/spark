@@ -33,4 +33,16 @@ public interface ContinuousDataReader<T> extends DataReader<T> {
      * as a restart checkpoint.
      */
     PartitionOffset getOffset();
+
+    /**
+     * Set the start offset for the current record, only used in task retry. If setOffset keep
+     * default implementation, it means current ContinuousDataReader can't support task level retry.
+     *
+     * @param offset last offset before task retry.
+     */
+    default void setOffset(PartitionOffset offset) {
+        throw new UnsupportedOperationException(
+          "Current ContinuousDataReader can't support setOffset, task will restart " +
+            "with checkpoints in ContinuousExecution.");
+    }
 }

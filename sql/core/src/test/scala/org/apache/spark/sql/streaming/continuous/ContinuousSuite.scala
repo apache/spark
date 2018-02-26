@@ -201,7 +201,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
       StopStream)
   }
 
-  test("task failure kills the query") {
+  test("task restart") {
     val df = spark.readStream
       .format("rate")
       .option("numPartitions", "5")
@@ -219,8 +219,10 @@ class ContinuousSuite extends ContinuousSuiteBase {
     spark.sparkContext.addSparkListener(listener)
     try {
       testStream(df, useV2Sink = true)(
-        StartStream(Trigger.Continuous(100)),
+        StartStream(longContinuousTrigger),
+        AwaitEpoch(0),
         Execute(waitForRateSourceTriggers(_, 2)),
+        IncrementEpoch(),
         Execute { _ =>
           // Wait until a task is started, then kill its first attempt.
           eventually(timeout(streamingTimeout)) {
@@ -228,9 +230,48 @@ class ContinuousSuite extends ContinuousSuiteBase {
           }
           spark.sparkContext.killTaskAttempt(taskId)
         },
-        ExpectFailure[SparkException] { e =>
-          e.getCause != null && e.getCause.getCause.isInstanceOf[ContinuousTaskRetryException]
-        })
+        Execute(waitForRateSourceTriggers(_, 4)),
+        IncrementEpoch(),
+        // Check the answer exactly, if there's duplicated result, CheckAnserRowsContains
+        // will also return true.
+        CheckAnswerRowsContainsOnlyOnce(scala.Range(0, 20).map(Row(_))),
+        StopStream)
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
+  test("task restart without last offset") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "5")
+      .load()
+      .select('value)
+
+    // Get an arbitrary task from this query to kill. It doesn't matter which one.
+    var taskId: Long = -1
+    val listener = new SparkListener() {
+      override def onTaskStart(start: SparkListenerTaskStart): Unit = {
+        taskId = start.taskInfo.taskId
+      }
+    }
+    spark.sparkContext.addSparkListener(listener)
+    try {
+      testStream(df, useV2Sink = true)(
+        StartStream(longContinuousTrigger),
+        Execute { _ =>
+          // Wait until a task is started, then kill its first attempt.
+          eventually(timeout(streamingTimeout)) {
+            assert(taskId != -1)
+          }
+          spark.sparkContext.killTaskAttempt(taskId)
+        },
+        AwaitEpoch(0),
+        Execute(waitForRateSourceTriggers(_, 2)),
+        IncrementEpoch(),
+        CheckAnswerRowsContainsOnlyOnce(scala.Range(0, 10).map(Row(_))),
+        StopStream)
     } finally {
       spark.sparkContext.removeSparkListener(listener)
     }

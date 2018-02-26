@@ -73,6 +73,11 @@ private[sql] case class ReportPartitionOffset(
     epoch: Long,
     offset: PartitionOffset) extends EpochCoordinatorMessage
 
+/**
+ * Get last epoch and offset of particular partition, only used in task retry.
+ */
+private[sql] case class GetLastEpochAndOffset(partitionId: Int) extends EpochCoordinatorMessage
+
 
 /** Helper object used to create reference to [[EpochCoordinator]]. */
 private[sql] object EpochCoordinatorRef extends Logging {
@@ -205,5 +210,12 @@ private[continuous] class EpochCoordinator(
     case StopContinuousExecutionWrites =>
       queryWritesStopped = true
       context.reply(())
+
+    case GetLastEpochAndOffset(partitionId) =>
+      val epochAndOffset = partitionOffsets.collect {
+        case ((e, p), o) if p == partitionId => (e, o)
+      }.toSeq.sortBy(_._1).lastOption
+      logDebug(s"Get last epoch and offset of partitionId($partitionId): $epochAndOffset")
+      context.reply(epochAndOffset)
   }
 }

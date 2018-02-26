@@ -235,6 +235,13 @@ class KafkaContinuousDataReader(
     KafkaSourcePartitionOffset(topicPartition, nextKafkaOffset)
   }
 
+  override def setOffset(offset: PartitionOffset): Unit = {
+    val kafkaOffset = offset.asInstanceOf[KafkaSourcePartitionOffset]
+    assert(
+      kafkaOffset.topicPartition == topicPartition)
+    nextKafkaOffset = kafkaOffset.partitionOffset
+  }
+
   override def close(): Unit = {
     consumer.close()
   }
