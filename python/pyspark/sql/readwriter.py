@@ -215,8 +215,8 @@ class DataFrameReader(OptionUtils):
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
                   schema does not have the field, it drops corrupt records during parsing. \
                   When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
-                  field in an output schema. It doesn't support partial results. Even just one \
-                  field can't be correctly parsed, all fields except for the field of \
+                  field in an output schema. It does not support partial results. Even just one \
+                  field can not be correctly parsed, all fields except for the field of \
                   ``columnNameOfCorruptRecord`` will be set to ``null``.
                 *  ``DROPMALFORMED`` : ignores the whole corrupted records.
                 *  ``FAILFAST`` : throws an exception when it meets corrupted records.
@@ -401,8 +401,8 @@ class DataFrameReader(OptionUtils):
                   field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
                   schema does not have the field, it drops corrupt records during parsing. \
                   It supports partial result for the records just with less or more tokens \
-                  than the schema. When it meets a malformed record whose parsed tokens is \
-                  shorter than an expected length of a schema, it sets ``null`` for extra \
+                  than the schema. When it meets a malformed record having the length of \
+                  parsed tokens shorter than the length of a schema, it sets ``null`` for extra \
                   fields. When a length of tokens is longer than a schema, it drops extra \
                   tokens.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
