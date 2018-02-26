@@ -1053,16 +1053,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     if (statsProps.isEmpty) {
       None
     } else {
-
       val colStats = new mutable.HashMap[String, CatalogColumnStat]
-      val statPropsForField = new mutable.HashMap[String, mutable.HashMap[String, String]]
-
       val colStatsProps = properties.filterKeys(_.startsWith(STATISTICS_COL_STATS_PREFIX)).map {
         case (k, v) => k.drop(STATISTICS_COL_STATS_PREFIX.length) -> v
       }
 
       // Find all the column names by matching the KEY_VERSION properties for them.
-      val fieldNames = colStatsProps.keys.filter {
+      colStatsProps.keys.filter {
         k => k.endsWith(CatalogColumnStat.KEY_VERSION)
       }.map { k =>
         k.dropRight(CatalogColumnStat.KEY_VERSION.length + 1)

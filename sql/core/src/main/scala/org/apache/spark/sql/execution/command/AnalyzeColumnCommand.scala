@@ -256,7 +256,7 @@ case class AnalyzeColumnCommand(
       avgLen = Option(row.getLong(4)),
       maxLen = Option(row.getLong(5))
     )
-    if (row.isNullAt(6) || !cs.nullCount.isDefined) {
+    if (row.isNullAt(6) || cs.nullCount.isEmpty) {
       cs
     } else {
       val ndvs = row.getArray(6).toLongArray()

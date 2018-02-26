@@ -492,7 +492,7 @@ object CatalogColumnStat extends Logging {
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal
       // This version of Spark does not use min/max for binary/string types so we ignore it.
       case _ =>
-        throw new AnalysisException("Column statistics deserialization is not supported for " +
+        throw new AnalysisException("Column statistics serialization is not supported for " +
           s"column $colName of data type: $dataType.")
     }
     externalValue.toString
