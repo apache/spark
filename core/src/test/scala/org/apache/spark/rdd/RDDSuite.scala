@@ -1152,9 +1152,8 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
       .groupBy(identity)
       .mapValues(_.size)
 
-    // Without the fix these would be:
-    //  numPartsPerLocation(locations(0)) == numCoalescedPartitions - 1
-    //  numPartsPerLocation(locations(1)) == 1
+    // Make sure the coalesced partitions are distributed fairly evenly between the two locations.
+    // This should not become flaky since the DefaultPartitionsCoalescer uses a fixed seed.
     assert(numPartsPerLocation(locations(0)) > 0.4 * numCoalescedPartitions)
     assert(numPartsPerLocation(locations(1)) > 0.4 * numCoalescedPartitions)
   }
