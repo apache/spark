@@ -904,8 +904,8 @@ This watermark lets the engine maintain intermediate state for additional 10 min
 data to be counted. For example, the data `(12:09, cat)` is out of order and late, and it falls in
 windows `12:05 - 12:15` and `12:10 - 12:20`. Since, it is still ahead of the watermark `12:04` in 
 the trigger, the engine still maintains the intermediate counts as state and correctly updates the 
-counts of the related windows. However, when the watermark is updated to `12:11`, the intermediate 
-state for window `(12:00 - 12:10)` is cleared, and all subsequent data (e.g. `(12:04, donkey)`) 
+counts of the related windows. However, when the watermark is updated to `12:05`, because the last seen data is `(12:15, cat)`, the intermediate 
+state for window `(11:55 - 12:05)` is cleared, and all subsequent data (e.g. `(12:04, donkey)`) 
 is considered "too late" and therefore ignored. Note that after every trigger, 
 the updated counts (i.e. purple rows) are written to sink as the trigger output, as dictated by 
 the Update mode.
