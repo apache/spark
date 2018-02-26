@@ -23,8 +23,10 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
+
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
+
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted, SparkListenerTaskEnd, SparkListenerTaskStart}
 import org.apache.spark.util.ThreadUtils
 
@@ -320,6 +322,9 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   }
 
   test("Interruptible iterator of shuffle reader") {
+    // In this test case, we create a Spark job of two stages. The second stage is cancelled during
+    // execution and a counter is used to make sure that the corresponding tasks are indeed
+    // cancelled.
     import JobCancellationSuite._
     val numSlice = 2
     sc = new SparkContext(s"local[$numSlice]", "test")
@@ -330,7 +335,11 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
         taskStartedSemaphore.release()
         iter
       }.foreachAsync { x =>
-        if ( x._1 >= 10) { // this block of code is partially executed.
+        if (x._1 >= 10) {
+          // This block of code is partially executed. It will be blocked when x._1 >= 10 and the
+          // next iteration will be cancelled if the source iterator is interruptible. Then in this
+          // case, the maximum num of increment would be 11(|1...10| + |N|) where N is the first
+          // element in another partition(assuming no ordering guarantee).
           taskCancelledSemaphore.acquire()
         }
         executionOfInterruptibleCounter.getAndIncrement()
@@ -353,18 +362,19 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
       }
 
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
-        if (taskEnd.stageId == 1) { // make sure task ends
+        if (taskEnd.stageId == 1) { // make sure tasks are completed
           taskCompletedSem.release()
         }
       }
     })
 
+    // Make sure code in the Future block is finished, a.k.a tasks are being cancelled.
     sem.acquire()
     val e = intercept[SparkException] { f.get() }.getCause
     assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
 
+    // Make sure tasks are indeed completed.
     taskCompletedSem.acquire(numSlice)
-    // 11 as |1..10| + |501|(another partition)
     assert(executionOfInterruptibleCounter.get() <= 11)
  }
 
