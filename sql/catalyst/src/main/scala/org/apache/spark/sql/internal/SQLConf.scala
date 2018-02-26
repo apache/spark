@@ -1068,6 +1068,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ARROW_FALLBACK_ENABLE =
+    buildConf("spark.sql.execution.arrow.fallback.enabled")
+      .doc("When true, the optimization by 'spark.sql.execution.arrow.enabled' " +
+        "could be disabled when it is unable to be used, and fallback to " +
+        "non-optimization.")
+      .booleanConf
+      .createWithDefault(true)
+
   val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
       .doc("When using Apache Arrow, limit the maximum number of records that can be written " +
@@ -1519,6 +1527,8 @@ class SQLConf extends Serializable with Logging {
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 
   def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
+
+  def arrowFallbackEnable: Boolean = getConf(ARROW_FALLBACK_ENABLE)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
