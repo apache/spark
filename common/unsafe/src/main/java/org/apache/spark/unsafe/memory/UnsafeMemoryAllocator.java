@@ -32,9 +32,6 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
 
   @Override
   public OffHeapMemoryBlock allocate(long size) throws OutOfMemoryError {
-    // No usage of DirectByteBuffer.allocateDirect is current design
-    // Platform.allocateMemory is used here.
-    // http://downloads.typesafe.com/website/presentations/ScalaDaysSF2015/T4_Xin_Performance_Optimization.pdf#page=26
     long address = Platform.allocateMemory(size);
     OffHeapMemoryBlock memory = new OffHeapMemoryBlock(address, size);
     if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
