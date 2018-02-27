@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import itertools
+import sys
 import numpy as np
 from multiprocessing.pool import ThreadPool
 
@@ -727,4 +728,4 @@ if __name__ == "__main__":
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

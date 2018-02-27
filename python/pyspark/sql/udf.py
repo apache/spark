@@ -18,6 +18,7 @@
 User-defined function related classes and functions
 """
 import functools
+import sys
 
 from pyspark import SparkContext, since
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_prefix
@@ -395,7 +396,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

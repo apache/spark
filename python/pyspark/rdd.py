@@ -2498,7 +2498,7 @@ def _test():
         globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

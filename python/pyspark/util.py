@@ -19,6 +19,8 @@ from py4j.protocol import Py4JJavaError
 
 __all__ = []
 
+import sys
+
 
 def _exception_message(excp):
     """Return the message from an exception as either a str or unicode object.  Supports both
@@ -49,4 +51,4 @@ if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

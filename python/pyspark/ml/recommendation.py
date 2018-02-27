@@ -480,4 +480,4 @@ if __name__ == "__main__":
         except OSError:
             pass
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
