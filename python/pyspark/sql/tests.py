@@ -201,7 +201,7 @@ class ReusedSQLTestCase(ReusedPySparkTestCase):
     def sql_conf(self, key, value):
         """
         A convenient context manager to test some configuration specific logic. This sets
-        `value` to the configuration `key` then restores it back.
+        `value` to the configuration `key` and then restores it back when it exits.
         """
 
         orig_value = self.spark.conf.get(key, None)

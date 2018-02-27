@@ -2035,8 +2035,10 @@ class DataFrame(object):
                     msg = (
                         "toPandas attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.enabled' is set to true; however, "
-                        "failed unexpectedly:\n"
-                        "  %s" % _exception_message(e))
+                        "failed unexpectedly:\n  %s\n"
+                        "Note that 'spark.sql.execution.arrow.fallback.enabled' does "
+                        "not have an effect in such failure in the middle of "
+                        "computation." % _exception_message(e))
                     raise RuntimeError(msg)
 
         # Below is toPandas without Arrow optimization.
