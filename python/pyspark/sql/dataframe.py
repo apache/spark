@@ -1995,13 +1995,12 @@ class DataFrame(object):
                 to_arrow_schema(self.schema)
             except Exception as e:
 
-                if self.sql_ctx.getConf("spark.sql.execution.arrow.fallback.enabled", "false") \
+                if self.sql_ctx.getConf("spark.sql.execution.arrow.fallback.enabled", "true") \
                         .lower() == "true":
                     msg = (
                         "toPandas attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.enabled' is set to true; however, "
-                        "failed by the reason below:\n"
-                        "  %s\n"
+                        "failed by the reason below:\n  %s\n"
                         "Attempts non-optimization as "
                         "'spark.sql.execution.arrow.fallback.enabled' is set to "
                         "true." % _exception_message(e))
@@ -2011,8 +2010,7 @@ class DataFrame(object):
                     msg = (
                         "toPandas attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.enabled' is set to true; however, "
-                        "failed by the reason below:\n"
-                        "  %s\n"
+                        "failed by the reason below:\n  %s\n"
                         "For fallback to non-optimization automatically, please set true to "
                         "'spark.sql.execution.arrow.fallback.enabled'." % _exception_message(e))
                     raise RuntimeError(msg)

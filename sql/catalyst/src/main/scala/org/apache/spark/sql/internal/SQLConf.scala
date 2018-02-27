@@ -1070,9 +1070,8 @@ object SQLConf {
 
   val ARROW_FALLBACK_ENABLE =
     buildConf("spark.sql.execution.arrow.fallback.enabled")
-      .doc("When true, the optimization by 'spark.sql.execution.arrow.enabled' " +
-        "could be disabled when it is unable to be used, and fallback to " +
-        "non-optimization.")
+      .doc("When true, optimizations enabled by 'spark.sql.execution.arrow.enabled' will " +
+        "fallback automatically to non-optimized implementations if an error occurs.")
       .booleanConf
       .createWithDefault(true)
 

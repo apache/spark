@@ -668,13 +668,12 @@ class SparkSession(object):
                 except Exception as e:
                     from pyspark.util import _exception_message
 
-                    if self.conf.get("spark.sql.execution.arrow.fallback.enabled", "false") \
+                    if self.conf.get("spark.sql.execution.arrow.fallback.enabled", "true") \
                             .lower() == "true":
                         msg = (
                             "createDataFrame attempted Arrow optimization because "
                             "'spark.sql.execution.arrow.enabled' is set to true; however, "
-                            "failed by the reason below:\n"
-                            "  %s\n"
+                            "failed by the reason below:\n  %s\n"
                             "Attempts non-optimization as "
                             "'spark.sql.execution.arrow.fallback.enabled' is set to "
                             "true." % _exception_message(e))
@@ -683,8 +682,7 @@ class SparkSession(object):
                         msg = (
                             "createDataFrame attempted Arrow optimization because "
                             "'spark.sql.execution.arrow.enabled' is set to true; however, "
-                            "failed by the reason below:\n"
-                            "  %s\n"
+                            "failed by the reason below:\n  %s\n"
                             "For fallback to non-optimization automatically, please set true to "
                             "'spark.sql.execution.arrow.fallback.enabled'." % _exception_message(e))
                         raise RuntimeError(msg)
