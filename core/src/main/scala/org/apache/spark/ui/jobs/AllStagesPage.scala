@@ -142,7 +142,8 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   private def table(
       appSummary: AppSummary,
       status: StageStatus,
-      stagesTable: StageTableBase, size: Int): NodeSeq = {
+      stagesTable: StageTableBase,
+      size: Int): NodeSeq = {
     val classSuffix = s"${statusName(status).capitalize}Stages"
     <span id={statusName(status)}
           class={s"collapse-aggregated-all$classSuffix collapse-table"}
