@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.math.BigDecimal.RoundingMode
 
@@ -38,9 +39,18 @@ object EstimationUtils {
     }
   }
 
+  /** Check if each attribute has column stat containing distinct and null counts
+   *  in the corresponding statistic. */
+  def columnStatsWithCountsExist(statsAndAttr: (Statistics, Attribute)*): Boolean = {
+    statsAndAttr.forall { case (stats, attr) =>
+      stats.attributeStats.get(attr).map(_.hasCountStats).getOrElse(false)
+    }
+  }
+
+  /** Statistics for a Column containing only NULLs. */
   def nullColumnStat(dataType: DataType, rowCount: BigInt): ColumnStat = {
-    ColumnStat(distinctCount = 0, min = None, max = None, nullCount = rowCount,
-      avgLen = dataType.defaultSize, maxLen = dataType.defaultSize)
+    ColumnStat(distinctCount = Some(0), min = None, max = None, nullCount = Some(rowCount),
+      avgLen = Some(dataType.defaultSize), maxLen = Some(dataType.defaultSize))
   }
 
   /**
@@ -70,13 +80,13 @@ object EstimationUtils {
     // We assign a generic overhead for a Row object, the actual overhead is different for different
     // Row format.
     val sizePerRow = 8 + attributes.map { attr =>
-      if (attrStats.contains(attr)) {
+      if (attrStats.get(attr).map(_.avgLen.isDefined).getOrElse(false)) {
         attr.dataType match {
           case StringType =>
             // UTF8String: base + offset + numBytes
-            attrStats(attr).avgLen + 8 + 4
+            attrStats(attr).avgLen.get + 8 + 4
           case _ =>
-            attrStats(attr).avgLen
+            attrStats(attr).avgLen.get
         }
       } else {
         attr.dataType.defaultSize
