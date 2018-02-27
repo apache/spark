@@ -85,7 +85,8 @@ case class JoinEstimation(join: Join) extends Logging {
       // 3. Update statistics based on the output of join
       val inputAttrStats = AttributeMap(
         leftStats.attributeStats.toSeq ++ rightStats.attributeStats.toSeq)
-      val attributesWithStat = join.output.filter(a => inputAttrStats.contains(a))
+      val attributesWithStat = join.output.filter(a =>
+        inputAttrStats.get(a).map(_.hasCountStats).getOrElse(false))
       val (fromLeft, fromRight) = attributesWithStat.partition(join.left.outputSet.contains(_))
 
       val outputStats: Seq[(Attribute, ColumnStat)] = if (outputRows == 0) {
@@ -106,10 +107,10 @@ case class JoinEstimation(join: Join) extends Logging {
           case FullOuter =>
             fromLeft.map { a =>
               val oriColStat = inputAttrStats(a)
-              (a, oriColStat.copy(nullCount = oriColStat.nullCount + rightRows))
+              (a, oriColStat.copy(nullCount = Some(oriColStat.nullCount.get + rightRows)))
             } ++ fromRight.map { a =>
               val oriColStat = inputAttrStats(a)
-              (a, oriColStat.copy(nullCount = oriColStat.nullCount + leftRows))
+              (a, oriColStat.copy(nullCount = Some(oriColStat.nullCount.get + leftRows)))
             }
           case _ =>
             assert(joinType == Inner || joinType == Cross)
@@ -219,19 +220,27 @@ case class JoinEstimation(join: Join) extends Logging {
   private def computeByNdv(
       leftKey: AttributeReference,
       rightKey: AttributeReference,
-      newMin: Option[Any],
-      newMax: Option[Any]): (BigInt, ColumnStat) = {
+      min: Option[Any],
+      max: Option[Any]): (BigInt, ColumnStat) = {
     val leftKeyStat = leftStats.attributeStats(leftKey)
     val rightKeyStat = rightStats.attributeStats(rightKey)
-    val maxNdv = leftKeyStat.distinctCount.max(rightKeyStat.distinctCount)
+    val maxNdv = leftKeyStat.distinctCount.get.max(rightKeyStat.distinctCount.get)
     // Compute cardinality by the basic formula.
     val card = BigDecimal(leftStats.rowCount.get * rightStats.rowCount.get) / BigDecimal(maxNdv)
 
     // Get the intersected column stat.
-    val newNdv = leftKeyStat.distinctCount.min(rightKeyStat.distinctCount)
-    val newMaxLen = math.min(leftKeyStat.maxLen, rightKeyStat.maxLen)
-    val newAvgLen = (leftKeyStat.avgLen + rightKeyStat.avgLen) / 2
-    val newStats = ColumnStat(newNdv, newMin, newMax, 0, newAvgLen, newMaxLen)
+    val newNdv = Some(leftKeyStat.distinctCount.get.min(rightKeyStat.distinctCount.get))
+    val newMaxLen = if (leftKeyStat.maxLen.isDefined && rightKeyStat.maxLen.isDefined) {
+      Some(math.min(leftKeyStat.maxLen.get, rightKeyStat.maxLen.get))
+    } else {
+      None
+    }
+    val newAvgLen = if (leftKeyStat.avgLen.isDefined && rightKeyStat.avgLen.isDefined) {
+      Some((leftKeyStat.avgLen.get + rightKeyStat.avgLen.get) / 2)
+    } else {
+      None
+    }
+    val newStats = ColumnStat(newNdv, min, max, Some(0), newAvgLen, newMaxLen)
 
     (ceil(card), newStats)
   }
@@ -267,9 +276,17 @@ case class JoinEstimation(join: Join) extends Logging {
 
     val leftKeyStat = leftStats.attributeStats(leftKey)
     val rightKeyStat = rightStats.attributeStats(rightKey)
-    val newMaxLen = math.min(leftKeyStat.maxLen, rightKeyStat.maxLen)
-    val newAvgLen = (leftKeyStat.avgLen + rightKeyStat.avgLen) / 2
-    val newStats = ColumnStat(ceil(totalNdv), newMin, newMax, 0, newAvgLen, newMaxLen)
+    val newMaxLen = if (leftKeyStat.maxLen.isDefined && rightKeyStat.maxLen.isDefined) {
+      Some(math.min(leftKeyStat.maxLen.get, rightKeyStat.maxLen.get))
+    } else {
+      None
+    }
+    val newAvgLen = if (leftKeyStat.avgLen.isDefined && rightKeyStat.avgLen.isDefined) {
+      Some((leftKeyStat.avgLen.get + rightKeyStat.avgLen.get) / 2)
+    } else {
+      None
+    }
+    val newStats = ColumnStat(Some(ceil(totalNdv)), newMin, newMax, Some(0), newAvgLen, newMaxLen)
     (ceil(card), newStats)
   }
 
@@ -292,10 +309,14 @@ case class JoinEstimation(join: Join) extends Logging {
       } else {
         val oldColStat = oldAttrStats(a)
         val oldNdv = oldColStat.distinctCount
-        val newNdv = if (join.left.outputSet.contains(a)) {
-          updateNdv(oldNumRows = leftRows, newNumRows = outputRows, oldNdv = oldNdv)
+        val newNdv = if (oldNdv.isDefined) {
+          Some(if (join.left.outputSet.contains(a)) {
+            updateNdv(oldNumRows = leftRows, newNumRows = outputRows, oldNdv = oldNdv.get)
+          } else {
+            updateNdv(oldNumRows = rightRows, newNumRows = outputRows, oldNdv = oldNdv.get)
+          })
         } else {
-          updateNdv(oldNumRows = rightRows, newNumRows = outputRows, oldNdv = oldNdv)
+          None
         }
         val newColStat = oldColStat.copy(distinctCount = newNdv)
         // TODO: support nullCount updates for specific outer joins
@@ -313,7 +334,7 @@ case class JoinEstimation(join: Join) extends Logging {
       // Note: join keys from EqualNullSafe also fall into this case (Coalesce), consider to
       // support it in the future by using `nullCount` in column stats.
       case (lk: AttributeReference, rk: AttributeReference)
-        if columnStatsExist((leftStats, lk), (rightStats, rk)) => (lk, rk)
+        if columnStatsWithCountsExist((leftStats, lk), (rightStats, rk)) => (lk, rk)
     }
   }
 
