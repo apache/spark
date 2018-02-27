@@ -107,12 +107,11 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       firstResultCol: String,
       otherResultCols: String*)
       (globalCheckFunction: Seq[Row] => Unit): Unit = {
-
-    testTransformerOnDF(dataframe, transformer, firstResultCol,
-      otherResultCols: _*)(globalCheckFunction)
     testTransformerOnStreamData(dataframe, transformer, firstResultCol,
       otherResultCols: _*)(globalCheckFunction)
-  }
+    testTransformerOnDF(dataframe, transformer, firstResultCol,
+      otherResultCols: _*)(globalCheckFunction)
+    }
 
   def testTransformerByInterceptingException[A : Encoder](
     dataframe: DataFrame,
