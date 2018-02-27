@@ -362,6 +362,12 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     })
 
     taskStartedSemaphore.acquire()
+    // Job is cancelled when:
+    // 1. task in reduce stage has been started, guaranteed by previous line.
+    // 2. task in reduce stage is blocked after processing at most 10 records as
+    //    taskCancelledSemaphore is not released until cancelTasks event is posted
+    // After job being cancelled, task in reduce stage will be cancelled and no more iteration are
+    // executed.
     f.cancel()
 
     val e = intercept[SparkException](f.get()).getCause
