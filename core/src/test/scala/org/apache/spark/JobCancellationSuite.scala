@@ -326,11 +326,11 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // execution and a counter is used to make sure that the corresponding tasks are indeed
     // cancelled.
     import JobCancellationSuite._
-    val numSlice = 2
+    val numSlice = 1
     sc = new SparkContext(s"local[$numSlice]", "test")
 
     val f = sc.parallelize(1 to 1000, numSlice).map { i => (i, i) }
-      .repartitionAndSortWithinPartitions(new HashPartitioner(2))
+      .repartitionAndSortWithinPartitions(new HashPartitioner(numSlice))
       .mapPartitions { iter =>
         taskStartedSemaphore.release()
         iter
@@ -338,8 +338,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
         if (x._1 >= 10) {
           // This block of code is partially executed. It will be blocked when x._1 >= 10 and the
           // next iteration will be cancelled if the source iterator is interruptible. Then in this
-          // case, the maximum num of increment would be 11(|1...10| + |N|) where N is the first
-          // element in another partition(assuming no ordering guarantee).
+          // case, the maximum num of increment would be 10(|1...10|)
           taskCancelledSemaphore.acquire()
         }
         executionOfInterruptibleCounter.getAndIncrement()
@@ -365,12 +364,12 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     taskStartedSemaphore.acquire()
     f.cancel()
 
-    val e = intercept[SparkException] { f.get() }.getCause
+    val e = intercept[SparkException](f.get()).getCause
     assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
 
     // Make sure tasks are indeed completed.
     taskCompletedSem.acquire(numSlice)
-    assert(executionOfInterruptibleCounter.get() <= 11)
+    assert(executionOfInterruptibleCounter.get() <= 10)
  }
 
   def testCount() {
