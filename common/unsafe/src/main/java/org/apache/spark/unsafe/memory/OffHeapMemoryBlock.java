@@ -37,72 +37,58 @@ public class OffHeapMemoryBlock extends MemoryBlock {
   }
 
   public final int getInt(long offset) {
-    assert(offset + 4 <= this.offset + this.length); 
     return Platform.getInt(null, offset);
   }
 
   public final void putInt(long offset, int value) {
-    assert(offset + 4 <= this.offset + this.length);
     Platform.putInt(null, offset, value);
   }
 
   public final boolean getBoolean(long offset) {
-    assert(offset + 1 <= this.offset + this.length);
     return Platform.getBoolean(null, offset);
   }
 
   public final void putBoolean(long offset, boolean value) {
-    assert(offset + 1 <= this.offset + this.length);
     Platform.putBoolean(null, offset, value);
   }
 
   public final byte getByte(long offset) {
-    assert(offset + 1 <= this.offset + this.length);
     return Platform.getByte(null, offset);
   }
 
   public final void putByte(long offset, byte value) {
-    assert(offset + 1 <= this.offset + this.length);
     Platform.putByte(null, offset, value);
   }
 
   public final short getShort(long offset) {
-    assert(offset + 2 <= this.offset + this.length);
     return Platform.getShort(null, offset);
   }
 
   public final void putShort(long offset, short value) {
-    assert(offset + 2 <= this.offset + this.length);
     Platform.putShort(null, offset, value);
   }
 
   public final long getLong(long offset) {
-    assert(offset + 8 <= this.offset + this.length);
     return Platform.getLong(null, offset);
   }
 
   public final void putLong(long offset, long value) {
-    assert(offset + 8 <= this.offset + this.length);
     Platform.putLong(null, offset, value);
   }
 
   public final float getFloat(long offset) {
-    assert(offset + 4 <= this.offset + this.length);
     return Platform.getFloat(null, offset);
   }
 
   public final void putFloat(long offset, float value) {
-    assert(offset + 4 <= this.offset + this.length);
     Platform.putFloat(null, offset, value);
   }
 
   public final double getDouble(long offset) {
-    assert(offset + 8 <= this.offset + this.length);
     return Platform.getDouble(null, offset);
   }
 
   public final void putDouble(long offset, double value) {
-    assert(offset + 8 <= this.offset + this.length);
     Platform.putDouble(null, offset, value);
   }
 }

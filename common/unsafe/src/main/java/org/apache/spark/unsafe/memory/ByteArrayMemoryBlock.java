@@ -47,23 +47,18 @@ public final class ByteArrayMemoryBlock extends MemoryBlock {
 
 
   public final int getInt(long offset) {
-    // UTF8String.getPrefix() assumes data is 4-byte aligned
-    assert(offset + 4 - Platform.BYTE_ARRAY_OFFSET <= ((array.length + 3) / 4) * 4);
     return Platform.getInt(array, offset);
   }
 
   public final void putInt(long offset, int value) {
-    assert(offset + 4 - Platform.BYTE_ARRAY_OFFSET <= array.length);
     Platform.putInt(array, offset, value);
   }
 
   public final boolean getBoolean(long offset) {
-    assert(offset + 1 - Platform.BYTE_ARRAY_OFFSET <= array.length);
     return Platform.getBoolean(array, offset);
   }
 
   public final void putBoolean(long offset, boolean value) {
-    assert(offset + 1 - Platform.BYTE_ARRAY_OFFSET <= array.length);
     Platform.putBoolean(array, offset, value);
   }
 
@@ -76,43 +71,34 @@ public final class ByteArrayMemoryBlock extends MemoryBlock {
   }
 
   public final short getShort(long offset) {
-    assert(offset + 2 - Platform.BYTE_ARRAY_OFFSET <= array.length);
     return Platform.getShort(array, offset);
   }
 
   public final void putShort(long offset, short value) {
-    assert(offset + 2 - Platform.BYTE_ARRAY_OFFSET <= array.length);
     Platform.putShort(array, offset, value);
   }
 
   public final long getLong(long offset) {
-    // UTF8String.getPrefix() assumes data is 8-byte aligned
-    assert(offset + 8 - Platform.BYTE_ARRAY_OFFSET <= ((array.length + 7) / 8) * 8);
     return Platform.getLong(array, offset);
   }
 
   public final void putLong(long offset, long value) {
-    assert(offset + 8 - Platform.BYTE_ARRAY_OFFSET <= array.length);
     Platform.putLong(array, offset, value);
   }
 
   public final float getFloat(long offset) {
-    assert(offset + 4 - Platform.BYTE_ARRAY_OFFSET <= array.length);
     return Platform.getFloat(array, offset);
   }
 
   public final void putFloat(long offset, float value) {
-    assert(offset + 4 - Platform.BYTE_ARRAY_OFFSET <= array.length);
     Platform.putFloat(array, offset, value);
   }
 
   public final double getDouble(long offset) {
-    assert(offset + 8 - Platform.BYTE_ARRAY_OFFSET <= array.length);
     return Platform.getDouble(array, offset);
   }
 
   public final void putDouble(long offset, double value) {
-    assert(offset + 8 - Platform.BYTE_ARRAY_OFFSET <= array.length);
     Platform.putDouble(array, offset, value);
   }
 }
