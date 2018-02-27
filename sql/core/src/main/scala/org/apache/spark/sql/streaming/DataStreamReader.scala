@@ -320,10 +320,10 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To keep
    *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
    *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
-   *     during parsing. It supports partial result for the records just with less or more tokens
-   *     than the schema. When it meets a malformed record having the length of parsed tokens
-   *     shorter than the length of a schema, it sets `null` for extra fields. When a length of
-   *     tokens is longer than a schema, it drops extra tokens.</li>
+   *     during parsing. A record with less/more tokens than schema is not a corrupted record.
+   *     It supports partial result for such records. When it meets a record having the length
+   *     of parsed tokens shorter than the length of a schema, it sets ``null`` for extra fields.
+   *     When a length of tokens is longer than a schema, it drops extra tokens.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
