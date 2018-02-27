@@ -40,9 +40,19 @@ case class DataSourceV2ScanExec(
     @transient source: DataSourceV2,
     @transient options: Map[String, String],
     @transient reader: DataSourceReader)
-  extends LeafExecNode with DataSourceV2QueryPlan with ColumnarBatchScan {
+  extends LeafExecNode with DataSourceV2StringFormat with ColumnarBatchScan {
 
   override def simpleString: String = "ScanV2 " + metadataString
+
+  override def equals(other: Any): Boolean = other match {
+    case other: StreamingDataSourceV2Relation =>
+      output == other.output && source == other.source && options == other.options
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    Seq(output, source, options).hashCode()
+  }
 
   override def outputPartitioning: physical.Partitioning = reader match {
     case s: SupportsReportPartitioning =>

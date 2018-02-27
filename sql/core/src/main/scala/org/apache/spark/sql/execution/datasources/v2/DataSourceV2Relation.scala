@@ -36,7 +36,7 @@ case class DataSourceV2Relation(
     projection: Seq[AttributeReference],
     filters: Option[Seq[Expression]] = None,
     userSpecifiedSchema: Option[StructType] = None)
-  extends LeafNode with MultiInstanceRelation with DataSourceV2QueryPlan {
+  extends LeafNode with MultiInstanceRelation with DataSourceV2StringFormat {
 
   import DataSourceV2Relation._
 
@@ -115,13 +115,23 @@ case class StreamingDataSourceV2Relation(
     source: DataSourceV2,
     options: Map[String, String],
     reader: DataSourceReader)
-  extends LeafNode with MultiInstanceRelation with DataSourceV2QueryPlan {
+  extends LeafNode with MultiInstanceRelation with DataSourceV2StringFormat {
 
   override def isStreaming: Boolean = true
 
   override def simpleString: String = "Streaming RelationV2 " + metadataString
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
+
+  override def equals(other: Any): Boolean = other match {
+    case other: StreamingDataSourceV2Relation =>
+      output == other.output && source == other.source && options == other.options
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    Seq(output, source, options).hashCode()
+  }
 
   override def computeStats(): Statistics = reader match {
     case r: SupportsReportStatistics =>
