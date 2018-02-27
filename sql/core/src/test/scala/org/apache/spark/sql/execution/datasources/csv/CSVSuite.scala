@@ -1279,4 +1279,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       Row("0,2013-111-11 12:13:14") :: Row(null) :: Nil
     )
   }
+
+  test("skip the first byte of a char if it is disallowed in UTF-8") {
+    val result = spark.read
+      .format("csv")
+      .option("header", "true")
+      .load(testFile("test-data/utf8xFF.csv"))
+
+    assert(result.count() == 2)
+  }
 }
