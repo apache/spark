@@ -172,12 +172,12 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
   def createTopic(topic: String, partitions: Int): Unit = {
-    createTopic(topic, partitions, new Properties)
+    createTopic(topic, partitions, new Properties())
   }
 
   /** Create a Kafka topic and wait until it is propagated to the whole cluster */
   def createTopic(topic: String): Unit = {
-    createTopic(topic, 1, new Properties)
+    createTopic(topic, 1, new Properties())
   }
 
   /** Java-friendly function for sending messages to the Kafka broker */

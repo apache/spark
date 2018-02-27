@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
+import java.io.File
 
 import scala.collection.JavaConverters._
 import scala.util.Random
@@ -74,11 +75,11 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
     // LogCleaner in 0.10 version of Kafka is still expecting the old TopicAndPartition api
     val logs = new Pool[TopicAndPartition, Log]()
     val logDir = kafkaTestUtils.brokerLogDir
-    val dir = new java.io.File(logDir, topic + "-" + partition)
+    val dir = new File(logDir, topic + "-" + partition)
     dir.mkdirs()
     val logProps = new ju.Properties()
     logProps.put(LogConfig.CleanupPolicyProp, LogConfig.Compact)
-    logProps.put(LogConfig.MinCleanableDirtyRatioProp, 0.1f: java.lang.Float)
+    logProps.put(LogConfig.MinCleanableDirtyRatioProp, java.lang.Float.valueOf(0.1f))
     val log = new Log(
       dir,
       LogConfig(logProps),
@@ -87,10 +88,10 @@ class KafkaRDDSuite extends SparkFunSuite with BeforeAndAfterAll {
       mockTime
     )
     messages.foreach { case (k, v) =>
-        val msg = new ByteBufferMessageSet(
-          NoCompressionCodec,
-          new Message(v.getBytes, k.getBytes, Message.NoTimestamp, Message.CurrentMagicValue))
-        log.append(msg)
+      val msg = new ByteBufferMessageSet(
+        NoCompressionCodec,
+        new Message(v.getBytes, k.getBytes, Message.NoTimestamp, Message.CurrentMagicValue))
+      log.append(msg)
     }
     log.roll()
     logs.put(TopicAndPartition(topic, partition), log)

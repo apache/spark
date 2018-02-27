@@ -117,31 +117,33 @@ private[spark] class KafkaRDD[K, V](
   override def take(num: Int): Array[ConsumerRecord[K, V]] =
     if (compacted) {
       super.take(num)
+    } else if (num < 1) {
+      Array.empty[ConsumerRecord[K, V]]
     } else {
       val nonEmptyPartitions = this.partitions
         .map(_.asInstanceOf[KafkaRDDPartition])
         .filter(_.count > 0)
 
-      if (num < 1 || nonEmptyPartitions.isEmpty) {
-        return new Array[ConsumerRecord[K, V]](0)
-      }
-
-      // Determine in advance how many messages need to be taken from each partition
-      val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
-        val remain = num - result.values.sum
-        if (remain > 0) {
-          val taken = Math.min(remain, part.count)
-          result + (part.index -> taken.toInt)
-        } else {
-          result
+      if (nonEmptyPartitions.isEmpty) {
+        Array.empty[ConsumerRecord[K, V]]
+      } else {
+        // Determine in advance how many messages need to be taken from each partition
+        val parts = nonEmptyPartitions.foldLeft(Map[Int, Int]()) { (result, part) =>
+          val remain = num - result.values.sum
+          if (remain > 0) {
+            val taken = Math.min(remain, part.count)
+            result + (part.index -> taken.toInt)
+          } else {
+            result
+          }
         }
-      }
 
-      context.runJob(
-        this,
-        (tc: TaskContext, it: Iterator[ConsumerRecord[K, V]]) =>
-        it.take(parts(tc.partitionId)).toArray, parts.keys.toArray
-      ).flatten
+        context.runJob(
+          this,
+          (tc: TaskContext, it: Iterator[ConsumerRecord[K, V]]) =>
+          it.take(parts(tc.partitionId)).toArray, parts.keys.toArray
+        ).flatten
+      }
     }
 
   private def executors(): Array[ExecutorCacheTaskLocation] = {
@@ -239,7 +241,7 @@ private class KafkaRDDIterator[K, V](
 
   val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
-  context.addTaskCompletionListener{ context => closeIfNeeded() }
+  context.addTaskCompletionListener(_ => closeIfNeeded())
 
   val consumer = if (useConsumerCache) {
     CachedKafkaConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)

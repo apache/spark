@@ -109,7 +109,9 @@ class CachedKafkaConsumer[K, V] private(
    * Assumes compactedStart has been called first, and ignores gaps.
    */
   def compactedNext(timeout: Long): ConsumerRecord[K, V] = {
-    if (!buffer.hasNext()) { poll(timeout) }
+    if (!buffer.hasNext()) {
+      poll(timeout)
+    }
     require(buffer.hasNext(),
       s"Failed to get records for compacted $groupId $topic $partition after polling for $timeout")
     val record = buffer.next()
