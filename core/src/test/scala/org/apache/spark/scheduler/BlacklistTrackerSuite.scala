@@ -479,7 +479,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
   test("blacklisting kills executors, configured by BLACKLIST_KILL_ENABLED") {
     val allocationClientMock = mock[ExecutorAllocationClient]
-    when(allocationClientMock.killExecutors(any(), any(), any())).thenReturn(Seq("called"))
+    when(allocationClientMock.killExecutors(any(), any(), any(), any())).thenReturn(Seq("called"))
     when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer(new Answer[Boolean] {
       // To avoid a race between blacklisting and killing, it is important that the nodeBlacklist
       // is updated before we ask the executor allocation client to kill all the executors
@@ -517,7 +517,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     }
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist1.execToFailures)
 
-    verify(allocationClientMock, never).killExecutors(any(), any(), any())
+    verify(allocationClientMock, never).killExecutors(any(), any(), any(), any())
     verify(allocationClientMock, never).killExecutorsOnHost(any())
 
     // Enable auto-kill. Blacklist an executor and make sure killExecutors is called.
@@ -533,7 +533,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     }
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist2.execToFailures)
 
-    verify(allocationClientMock).killExecutors(Seq("1"), true, true)
+    verify(allocationClientMock).killExecutors(Seq("1"), false, false, true)
 
     val taskSetBlacklist3 = createTaskSetBlacklist(stageId = 1)
     // Fail 4 tasks in one task set on executor 2, so that executor gets blacklisted for the whole
@@ -545,13 +545,13 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     }
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist3.execToFailures)
 
-    verify(allocationClientMock).killExecutors(Seq("2"), true, true)
+    verify(allocationClientMock).killExecutors(Seq("2"), false, false, true)
     verify(allocationClientMock).killExecutorsOnHost("hostA")
   }
 
   test("fetch failure blacklisting kills executors, configured by BLACKLIST_KILL_ENABLED") {
     val allocationClientMock = mock[ExecutorAllocationClient]
-    when(allocationClientMock.killExecutors(any(), any(), any())).thenReturn(Seq("called"))
+    when(allocationClientMock.killExecutors(any(), any(), any(), any())).thenReturn(Seq("called"))
     when(allocationClientMock.killExecutorsOnHost("hostA")).thenAnswer(new Answer[Boolean] {
       // To avoid a race between blacklisting and killing, it is important that the nodeBlacklist
       // is updated before we ask the executor allocation client to kill all the executors
@@ -571,7 +571,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     conf.set(config.BLACKLIST_KILL_ENABLED, false)
     blacklist.updateBlacklistForFetchFailure("hostA", exec = "1")
 
-    verify(allocationClientMock, never).killExecutors(any(), any(), any())
+    verify(allocationClientMock, never).killExecutors(any(), any(), any(), any())
     verify(allocationClientMock, never).killExecutorsOnHost(any())
 
     // Enable auto-kill. Blacklist an executor and make sure killExecutors is called.
@@ -580,7 +580,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     clock.advance(1000)
     blacklist.updateBlacklistForFetchFailure("hostA", exec = "1")
 
-    verify(allocationClientMock).killExecutors(Seq("1"), true, true)
+    verify(allocationClientMock).killExecutors(Seq("1"), false, false, true)
     verify(allocationClientMock, never).killExecutorsOnHost(any())
 
     assert(blacklist.executorIdToBlacklistStatus.contains("1"))
