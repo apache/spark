@@ -58,10 +58,10 @@ setHiveContext <- function(sc) {
 unsetHiveContext <- function() {
   previousSession <- get(".prevSparkRsession", envir = .sparkREnv)
   previousConf <- get(".prevSessionConf", envir = .sparkREnv)
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "setSparkContextSessionConf", previousSessioni, previousConf)
+  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "setSparkContextSessionConf", previousSession, previousConf)
   assign(".sparkRsession", previousSession, envir = .sparkREnv)
   remove(".prevSparkRsession", envir = .sparkREnv)
-  remove(".prevSparkConf", envir = .sparkREnv)
+  remove(".prevSessionConf", envir = .sparkREnv)
 }
 
 # Tests for SparkSQL functions in SparkR
