@@ -205,7 +205,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the number of bytes
    */
   public int numBytes() {
-    return (int)base.size();
+    long size = base.size();
+    assert(size <= (long)Integer.MAX_VALUE);
+    return (int)size;
   }
 
   /**

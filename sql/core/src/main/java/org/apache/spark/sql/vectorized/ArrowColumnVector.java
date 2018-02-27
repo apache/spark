@@ -379,10 +379,10 @@ public final class ArrowColumnVector extends ColumnVector {
       if (stringResult.isSet == 0) {
         return null;
       } else {
-        mb.setAddressAndSize(stringResult.buffer.memoryAddress(), stringResult.buffer.capacity());
-        return UTF8String.fromAddress(mb,
-          stringResult.start,
-          stringResult.end - stringResult.start);
+        int size = stringResult.end - stringResult.start;
+        mb.setAddressAndSize(
+          stringResult.buffer.memoryAddress() + stringResult.start, size);
+        return UTF8String.fromAddress(mb, 0, size);
       }
     }
   }
