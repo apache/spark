@@ -28,12 +28,13 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_METADATA_ONLY
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
 import org.apache.spark.sql.test.SQLTestData.TestData2
 import org.apache.spark.sql.types._
@@ -2250,6 +2251,25 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .select(col("DecimalCol")).describe()
     val mean = result.select("DecimalCol").where($"summary" === "mean")
     assert(mean.collect().toSet === Set(Row("0.0345678900000000000000000000000000000")))
+  }
+
+  test("Incorrect result caused by the rule OptimizeMetadataOnlyQuery") {
+    withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true") {
+      withTempPath { path =>
+        val tablePath = new File(s"${path.getCanonicalPath}/cOl3=c/cOl1=a/cOl5=e")
+        Seq(("a", "b", "c", "d", "e")).toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")
+          .write.json(tablePath.getCanonicalPath)
+
+        val df = spark.read.json(path.getCanonicalPath).select("CoL1", "CoL5", "CoL3").distinct()
+        checkAnswer(df, Row("a", "e", "c"))
+
+        val localRelation = df.queryExecution.optimizedPlan.collectFirst {
+          case l: LocalRelation => l
+        }
+        assert(localRelation.nonEmpty, "expect to see a LocalRelation")
+        assert(localRelation.get.output.map(_.name) == Seq("cOl3", "cOl1", "cOl5"))
+      }
+    }
   }
 
   test("SPARK-22520: support code generation for large CaseWhen") {
