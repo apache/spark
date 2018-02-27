@@ -285,11 +285,6 @@ package object config {
     .doc("Address where to bind network listen sockets on the driver.")
     .fallbackConf(DRIVER_HOST_ADDRESS)
 
-  private[spark] val BLOCK_MANAGER_ID_CACHE_SIZE = ConfigBuilder("spark.blockManagerId.cache.size")
-    .doc("Max size for blockManagerCache of BlockManagerId.")
-    .intConf
-    .createWithDefault(100)
-
   private[spark] val BLOCK_MANAGER_PORT = ConfigBuilder("spark.blockManager.port")
     .doc("Port to use for the block manager when a more specific setting is not provided.")
     .intConf
