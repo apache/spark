@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Locale
+
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{HiveTableRelation, SessionCatalog}
@@ -81,9 +83,9 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
   private def getPartitionAttrs(
       partitionColumnNames: Seq[String],
       relation: LogicalPlan): Seq[Attribute] = {
-    val attrMap = relation.output.map(_.name).zip(relation.output).toMap
+    val attrMap = relation.output.map(_.name.toLowerCase(Locale.ROOT)).zip(relation.output).toMap
     partitionColumnNames.map { colName =>
-      attrMap.getOrElse(colName,
+      attrMap.getOrElse(colName.toLowerCase(Locale.ROOT),
         throw new AnalysisException(s"Unable to find the column `$colName` " +
           s"given [${relation.output.map(_.name).mkString(", ")}]")
       )
