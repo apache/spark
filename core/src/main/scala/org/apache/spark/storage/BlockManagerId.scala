@@ -136,9 +136,7 @@ private[spark] object BlockManagerId {
   val blockManagerIdCache = CacheBuilder.newBuilder()
     .maximumSize(500)
     .build(new CacheLoader[BlockManagerId, BlockManagerId]() {
-      override def load(id: BlockManagerId) = {
-        id
-      }
+      override def load(id: BlockManagerId) = id
     })
 
   def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {
