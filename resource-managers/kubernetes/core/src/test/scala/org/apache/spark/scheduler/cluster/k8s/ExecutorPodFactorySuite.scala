@@ -25,7 +25,7 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{MountSecretsBootstrap, PodWithDetachedInitContainer, SecretVolumeUtils}
+import org.apache.spark.deploy.k8s.{MountSecretsBootstrap, SecretVolumeUtils}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 

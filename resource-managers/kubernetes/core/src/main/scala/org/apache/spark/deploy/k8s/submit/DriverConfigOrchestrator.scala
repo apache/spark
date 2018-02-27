@@ -33,9 +33,7 @@ import org.apache.spark.util.Utils
  * Figures out and returns the complete ordered list of needed DriverConfigurationSteps to
  * configure the Spark driver pod. The returned steps will be applied one by one in the given
  * order to produce a final KubernetesDriverSpec that is used in KubernetesClientApplication
- * to construct and create the driver pod. It uses the InitContainerConfigOrchestrator to
- * configure the driver init-container if one is needed, i.e., when there are remote dependencies
- * to localize.
+ * to construct and create the driver pod.
  */
 private[spark] class DriverConfigOrchestrator(
     kubernetesAppId: String,
@@ -55,9 +53,6 @@ private[spark] class DriverConfigOrchestrator(
   }
 
   private val imagePullPolicy = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
-  private val initContainerConfigMapName = s"$kubernetesResourceNamePrefix-init-config"
-  private val jarsDownloadPath = sparkConf.get(JARS_DOWNLOAD_LOCATION)
-  private val filesDownloadPath = sparkConf.get(FILES_DOWNLOAD_LOCATION)
 
   def getAllConfigurationSteps: Seq[DriverConfigurationStep] = {
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
@@ -122,6 +117,14 @@ private[spark] class DriverConfigOrchestrator(
         "dependencies in the local file system.")
     }
 
+    val dependencyResolutionStep = if (sparkJars.nonEmpty || sparkFiles.nonEmpty) {
+      Seq(new DependencyResolutionStep(
+        sparkJars,
+        sparkFiles))
+    } else {
+      Nil
+    }
+
     val mountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
       Seq(new DriverMountSecretsStep(new MountSecretsBootstrap(secretNamesToMountPaths)))
     } else {
@@ -132,6 +135,7 @@ private[spark] class DriverConfigOrchestrator(
       initialSubmissionStep,
       serviceBootstrapStep,
       kubernetesCredentialsStep) ++
+      dependencyResolutionStep ++
       mountSecretsStep ++
       Seq(new DriverConfigPropertiesStep(kubernetesResourceNamePrefix))
   }

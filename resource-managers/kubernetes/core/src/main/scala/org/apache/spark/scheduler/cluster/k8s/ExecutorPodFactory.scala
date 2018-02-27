@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap, PodWithDetachedInitContainer}
+import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD}
@@ -37,7 +37,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] class ExecutorPodFactory(
     sparkConf: SparkConf,
-    mountSecretsBootstrap: Option[MountSecretsBootstrap]) {
+    mountSecretsBootstrap: Option[MountSecretsBootstrap]){
 
   private val executorExtraClasspath = sparkConf.get(EXECUTOR_CLASS_PATH)
 
@@ -85,8 +85,6 @@ private[spark] class ExecutorPodFactory(
 
   private val executorCores = sparkConf.getDouble("spark.executor.cores", 1)
   private val executorLimitCores = sparkConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
-
-  private val executorJarsDownloadDir = sparkConf.get(JARS_DOWNLOAD_LOCATION)
 
   /**
    * Configure and construct an executor pod with the given parameters.
@@ -211,6 +209,7 @@ private[spark] class ExecutorPodFactory(
       mountSecretsBootstrap.map { bootstrap =>
         (bootstrap.addSecretVolumes(executorPod), bootstrap.mountSecrets(containerWithLimitCores))
       }.getOrElse((executorPod, containerWithLimitCores))
+
 
     new PodBuilder(maybeSecretsMountedPod)
       .editSpec()

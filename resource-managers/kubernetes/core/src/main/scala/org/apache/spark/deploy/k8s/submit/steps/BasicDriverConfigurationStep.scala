@@ -111,6 +111,22 @@ private[spark] class BasicDriverConfigurationStep(
       .addAllToEnv(driverCustomEnvs.asJava)
       .addToEnv(driverExtraClasspathEnv.toSeq: _*)
       .addNewEnv()
+        .withName(ENV_DRIVER_MEMORY)
+        .withValue(driverMemoryString)
+        .endEnv()
+      .addNewEnv()
+        .withName(ENV_DRIVER_MEMORY)
+        .withValue(driverMemoryString)
+        .endEnv()
+      .addNewEnv()
+        .withName(ENV_DRIVER_MAIN_CLASS)
+        .withValue(mainClass)
+      .endEnv()
+      .addNewEnv()
+        .withName(ENV_DRIVER_ARGS)
+        .withValue(appArgs.mkString(" "))
+        .endEnv()
+      .addNewEnv()
         .withName(ENV_DRIVER_BIND_ADDRESS)
         .withValueFrom(new EnvVarSourceBuilder()
           .withNewFieldRef("v1", "status.podIP")
@@ -155,3 +171,4 @@ private[spark] class BasicDriverConfigurationStep(
   }
 
 }
+

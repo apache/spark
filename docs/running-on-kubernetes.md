@@ -578,37 +578,6 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.mountDependencies.jarsDownloadDir</code></td>
-  <td><code>/var/spark-data/spark-jars</code></td>
-  <td>
-    Location to download jars to in the driver and executors.
-    This directory must be empty and will be mounted as an empty directory volume on the driver and executor pods.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.mountDependencies.filesDownloadDir</code></td>
-  <td><code>/var/spark-data/spark-files</code></td>
-  <td>
-    Location to download jars to in the driver and executors.
-    This directory must be empty and will be mounted as an empty directory volume on the driver and executor pods.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.mountDependencies.timeout</code></td>
-  <td>300s</td>
-  <td>
-   Timeout in seconds before aborting the attempt to download and unpack dependencies from remote locations into
-   the driver and executor pods.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.mountDependencies.maxSimultaneousDownloads</code></td>
-  <td>5</td>
-  <td>
-   Maximum number of remote dependencies to download simultaneously in a driver or executor pod.
-  </td>
-</tr>
-<tr>
   <td><code>spark.kubernetes.driver.secrets.[SecretName]</code></td>
   <td>(none)</td>
   <td>

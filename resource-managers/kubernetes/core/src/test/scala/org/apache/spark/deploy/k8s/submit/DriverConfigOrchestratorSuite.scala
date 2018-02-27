@@ -49,6 +49,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       classOf[BasicDriverConfigurationStep],
       classOf[DriverServiceBootstrapStep],
       classOf[DriverKubernetesCredentialsStep],
+      classOf[DependencyResolutionStep],
       classOf[DriverConfigPropertiesStep])
   }
 
@@ -89,6 +90,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       classOf[BasicDriverConfigurationStep],
       classOf[DriverServiceBootstrapStep],
       classOf[DriverKubernetesCredentialsStep],
+      classOf[DependencyResolutionStep],
       classOf[DriverMountSecretsStep],
       classOf[DriverConfigPropertiesStep])
   }
