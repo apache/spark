@@ -352,6 +352,63 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     intercept[FetchFailedException] { iterator.next() }
   }
 
+  test("big corrupt blocks will not be retiried") {
+    val corruptStream = mock(classOf[InputStream])
+    when(corruptStream.read(any(), any(), any())).thenThrow(new IOException("corrupt"))
+    val corruptBuffer = mock(classOf[ManagedBuffer])
+    when(corruptBuffer.createInputStream()).thenReturn(corruptStream)
+    doReturn(10000L).when(corruptBuffer).size()
+
+    val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-client", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+    doReturn(corruptBuffer).when(blockManager).getBlockData(ShuffleBlockId(0, 0, 0))
+    val localBlockLengths = Seq[Tuple2[BlockId, Long]](
+      ShuffleBlockId(0, 0, 0) -> corruptBuffer.size()
+    )
+
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val remoteBlockLengths = Seq[Tuple2[BlockId, Long]](
+      ShuffleBlockId(0, 1, 0) -> corruptBuffer.size()
+    )
+
+    val transfer = mock(classOf[BlockTransferService])
+    when(transfer.fetchBlocks(any(), any(), any(), any(), any(), any()))
+        .thenAnswer(new Answer[Unit] {
+          override def answer(invocation: InvocationOnMock): Unit = {
+            val listener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
+            val blocks = invocation.getArguments()(3).asInstanceOf[Array[String]]
+            Future {
+              blocks.foreach (listener.onBlockFetchSuccess(_, corruptBuffer))
+            }
+          }
+        })
+
+    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
+      (localBmId, localBlockLengths),
+      (remoteBmId, remoteBlockLengths)
+    )
+
+    val taskContext = TaskContext.empty()
+    val iterator = new ShuffleBlockFetcherIterator(
+      taskContext,
+      transfer,
+      blockManager,
+      blocksByAddress,
+      (_, in) => new LimitedInputStream(in, 10000),
+      2048,
+      Int.MaxValue,
+      Int.MaxValue,
+      Int.MaxValue,
+      true)
+    // Blocks should be returned without exceptions.
+    val blockSet = collection.mutable.HashSet[BlockId]()
+    blockSet.add(iterator.next()._1)
+    blockSet.add(iterator.next()._1)
+    assert(blockSet == collection.immutable.HashSet(
+      ShuffleBlockId(0, 0, 0), ShuffleBlockId(0, 1, 0)))
+  }
+
   test("retry corrupt blocks (disabled)") {
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-client", 1)
