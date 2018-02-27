@@ -67,6 +67,9 @@ case class HadoopFsRelation(
     }
   }
 
+  // When data schema and partition schema have the overlapped columns, the output
+  // schema respects the order of data schema for the overlapped columns, but respect
+  // the data types of partition schema
   val schema: StructType = {
     StructType(dataSchema.map(f => overlappedPartCols.getOrElse(getColName(f), f)) ++
       partitionSchema.filterNot(f => overlappedPartCols.contains(getColName(f))))
