@@ -33,9 +33,6 @@ markUtf8 <- function(s) {
 }
 
 setHiveContext <- function(sc) {
-  previousSession <- get(".sparkRsession", envir = .sparkREnv)
-  # In case the spark conf is changed during the test, let's also make a copy of the confs.
-  previousConf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getSessionConf", previousSession)
   if (exists(".testHiveSession", envir = .sparkREnv)) {
     hiveSession <- get(".testHiveSession", envir = .sparkREnv)
   } else {
@@ -49,19 +46,16 @@ setHiveContext <- function(sc) {
     })
     hiveSession <- callJMethod(hiveCtx, "sparkSession")
   }
+  previousSession <- get(".sparkRsession", envir = .sparkREnv)
   assign(".sparkRsession", hiveSession, envir = .sparkREnv)
   assign(".prevSparkRsession", previousSession, envir = .sparkREnv)
-  assign(".prevSessionConf", previousConf, envir = .sparkREnv)
   hiveSession
 }
 
 unsetHiveContext <- function() {
   previousSession <- get(".prevSparkRsession", envir = .sparkREnv)
-  previousConf <- get(".prevSessionConf", envir = .sparkREnv)
-  callJStatic("org.apache.spark.sql.api.r.SQLUtils", "setSparkContextSessionConf", previousSession, previousConf)
   assign(".sparkRsession", previousSession, envir = .sparkREnv)
   remove(".prevSparkRsession", envir = .sparkREnv)
-  remove(".prevSessionConf", envir = .sparkREnv)
 }
 
 # Tests for SparkSQL functions in SparkR
@@ -73,6 +67,8 @@ sparkSession <- if (windows_with_hadoop()) {
     sparkR.session(master = sparkRTestMaster, enableHiveSupport = FALSE)
   }
 sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
+# materialize the catalog implementation
+listTables()
 
 mockLines <- c("{\"name\":\"Michael\"}",
                "{\"name\":\"Andy\", \"age\":30}",
