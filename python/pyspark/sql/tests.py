@@ -200,8 +200,8 @@ class ReusedSQLTestCase(ReusedPySparkTestCase):
     @contextmanager
     def sql_conf(self, key, value):
         """
-        A convenient context manager to test some configuration specific logic. This sets the
-        configurations then restores it back.
+        A convenient context manager to test some configuration specific logic. This sets
+        `value` to the configuration `key` then restores it back.
         """
 
         orig_value = self.spark.conf.get(key, None)
