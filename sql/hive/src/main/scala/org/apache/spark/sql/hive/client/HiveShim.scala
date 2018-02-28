@@ -880,9 +880,7 @@ private[client] class Shim_v0_14 extends Shim_v0_13 {
 
 }
 
-private[client] class Shim_v1_0 extends Shim_v0_14 {
-
-}
+private[client] class Shim_v1_0 extends Shim_v0_14
 
 private[client] class Shim_v1_1 extends Shim_v1_0 {
 
@@ -1144,5 +1142,25 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
 
   override def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit = {
     alterPartitionsMethod.invoke(hive, tableName, newParts, environmentContextInAlterTable)
+  }
+}
+
+private[client] class Shim_v2_2 extends Shim_v2_1
+
+private[client] class Shim_v2_3 extends Shim_v2_2 {
+
+  val environmentContext = new EnvironmentContext()
+  environmentContext.putToProperties("DO_NOT_UPDATE_STATS", "true")
+
+  private lazy val alterPartitionsMethod =
+    findMethod(
+      classOf[Hive],
+      "alterPartitions",
+      classOf[String],
+      classOf[JList[Partition]],
+      classOf[EnvironmentContext])
+
+  override def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit = {
+    alterPartitionsMethod.invoke(hive, tableName, newParts, environmentContext)
   }
 }
