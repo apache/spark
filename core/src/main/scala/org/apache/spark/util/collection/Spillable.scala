@@ -76,11 +76,12 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
    *
    * @param collection collection to spill to disk
    * @param currentMemory estimated size of the collection in bytes
+   * @param frequency frequency for spill check
    * @return true if `collection` was spilled to disk; false otherwise
    */
-  protected def maybeSpill(collection: C, currentMemory: Long): Boolean = {
+  protected def maybeSpill(collection: C, currentMemory: Long, frequency: Int = 32): Boolean = {
     var shouldSpill = false
-    if (elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
+    if (elementsRead % frequency == 0 && currentMemory >= myMemoryThreshold) {
       // Claim up to double our current memory from the shuffle memory pool
       val amountToRequest = 2 * currentMemory - myMemoryThreshold
       val granted = acquireMemory(amountToRequest)
@@ -89,6 +90,10 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
       // or we already had more memory than myMemoryThreshold), spill the current collection
       shouldSpill = currentMemory >= myMemoryThreshold
     }
+    // Just hack for spill scenario test, @jerry-shao for review
+    // if (frequency == 1 && elementsRead % 2 == 0) {
+    //   shouldSpill = true
+    // }
     shouldSpill = shouldSpill || _elementsRead > numElementsForceSpillThreshold
     // Actually spill
     if (shouldSpill) {

@@ -138,6 +138,11 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
     }
   }
 
+  @Override
+  public boolean isDirect() {
+    return length >= conf.memoryMapBytes();
+  }
+
   public File getFile() { return file; }
 
   public long getOffset() { return offset; }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.shuffle
 
+import java.io.InputStream
+
 import org.apache.spark._
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer.SerializerManager
@@ -42,7 +44,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
 
   /** Read the combined key-values for this reduce task */
   override def read(): Iterator[Product2[K, C]] = {
-    val wrappedStreams = new ShuffleBlockFetcherIterator(
+    val wrappedStreams = new ShuffleBlockFetcherIterator[InputStream](
       context,
       blockManager.shuffleClient,
       blockManager,

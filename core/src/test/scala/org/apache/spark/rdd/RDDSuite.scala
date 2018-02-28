@@ -832,8 +832,8 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
 
     val repartitioned = data.repartitionAndSortWithinPartitions(partitioner)
     val partitions = repartitioned.glom().collect()
-    assert(partitions(0) === Seq((0, 5), (0, 8), (2, 6)))
-    assert(partitions(1) === Seq((1, 3), (3, 8), (3, 8)))
+    assert(partitions(0).toSet === Set((0, 5), (0, 8), (2, 6)))
+    assert(partitions(1).toSet === Set((1, 3), (3, 8), (3, 8)))
   }
 
   test("intersection") {

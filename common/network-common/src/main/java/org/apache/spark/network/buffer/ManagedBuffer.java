@@ -72,4 +72,9 @@ public abstract class ManagedBuffer {
    * the caller will be responsible for releasing this new reference.
    */
   public abstract Object convertToNetty() throws IOException;
+
+  /**
+   * Tell whether to not this byte buffer is direct.
+   */
+  public abstract boolean isDirect();
 }
