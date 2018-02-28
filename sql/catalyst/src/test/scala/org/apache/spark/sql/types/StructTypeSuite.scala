@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.types
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.StructType
 
 class StructTypeSuite extends SparkFunSuite {
 
