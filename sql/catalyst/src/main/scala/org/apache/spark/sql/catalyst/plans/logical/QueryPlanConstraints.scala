@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.expressions._
 trait QueryPlanConstraints { self: LogicalPlan =>
 
   /**
-   * An [[ExpressionSet]] that contains an additional set of constraints about equality
-   * constraints and `isNotNull` constraints.
+   * An [[ExpressionSet]] that contains an additional set of constraints, such as equality
+   * constraints and `isNotNull` constraints, etc.
    */
   lazy val allConstraints: ExpressionSet = {
     if (conf.constraintPropagationEnabled) {
