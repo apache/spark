@@ -83,7 +83,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
   private def getPartitionAttrs(
       partitionColumnNames: Seq[String],
       relation: LogicalPlan): Seq[Attribute] = {
-    val attrMap = relation.output.map(_.name.toLowerCase(Locale.ROOT)).zip(relation.output).toMap
+    val attrMap = relation.output.map(a => a.name.toLowerCase(Locale.ROOT) -> a).toMap
     partitionColumnNames.map { colName =>
       attrMap.getOrElse(colName.toLowerCase(Locale.ROOT),
         throw new AnalysisException(s"Unable to find the column `$colName` " +
