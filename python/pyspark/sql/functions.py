@@ -2277,10 +2277,11 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         E.g.:
 
     >>> @pandas_udf('string', PandasUDFType.SCALAR)  # doctest: +SKIP
-    ... def get_user(v):
+    ... def foo(v):
     ...     import getpass as gp
-    ...     return gp.getuser()
-    >>> get_user = get_user.asNonNullable()  # doctest: +SKIP
+    ...     import pandas as pd
+    ...     return pd.Series(gp.getuser()).repeat(v.size)
+    >>> foo = foo.asNonNullable()  # doctest: +SKIP
 
     .. note:: The user-defined functions do not support conditional expressions or short circuiting
         in boolean expressions and it ends up with being executed all internally. If the functions

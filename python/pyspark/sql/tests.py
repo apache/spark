@@ -634,6 +634,16 @@ class SQLTests(ReusedSQLTestCase):
         self.assertFalse(res.schema['plus_four'].nullable)
         self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
 
+    def test_udf_no_nulls_returns_null(self):
+        from pyspark.sql.functions import udf
+        plus_four = udf(lambda x: x + 4 if x > 0 else None, IntegerType()).asNonNullable()
+        df = self.spark.range(10)
+        res = df.select(plus_four(df['id']).alias('plus_four'))
+        self.assertFalse(plus_four.nullable)
+        self.assertFalse(res.schema['plus_four'].nullable)
+        with self.assertRaisesRegexp(Exception, "Cannot return null value from user defined function.*"):
+            res.agg({'plus_four': 'sum'}).collect()
+
     def test_non_existed_udaf(self):
         spark = self.spark
         self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udaf",

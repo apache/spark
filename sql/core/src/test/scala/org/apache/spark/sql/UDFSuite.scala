@@ -275,6 +275,37 @@ class UDFSuite extends QueryTest with SharedSQLContext {
           """.stripMargin).toDF(), complexData.select("m", "a", "b"))
   }
 
+  test("Non-nullable UDF") {
+    val foo = udf(() => Math.random())
+    spark.udf.register("random0", foo.asNonNullable())
+    val df = sql("SELECT random0()")
+    assert(df.logicalPlan.asInstanceOf[Project].projectList.forall(!_.nullable))
+    assert(df.head().getDouble(0) >= 0.0)
+
+    val foo1 = foo.asNonNullable()
+    val df1 = testData.select(foo1())
+    assert(df1.logicalPlan.asInstanceOf[Project].projectList.forall(!_.nullable))
+    assert(df1.head().getDouble(0) >= 0.0)
+
+    val bar = udf(() => Math.random(), DataTypes.DoubleType).asNonNullable()
+    val df2 = testData.select(bar())
+    assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.nullable))
+    assert(df2.head().getDouble(0) >= 0.0)
+
+    val javaUdf = udf(new UDF0[Double] {
+      override def call(): Double = Math.random()
+    }, DoubleType).asNonNullable()
+    val df3 = testData.select(javaUdf())
+    assert(df3.logicalPlan.asInstanceOf[Project].projectList.forall(!_.nullable))
+    assert(df3.head().getDouble(0) >= 0.0)
+  }
+
+  test("Non-nullable UDF returning null") {
+    val foo = udf(() => null).asNonNullable()
+    val df1 = testData.select(foo())
+    df1.head()
+  }
+
   test("SPARK-11716 UDFRegistration does not include the input data type in returned UDF") {
     val myUDF = spark.udf.register("testDataFunc", (n: Int, s: String) => { (n, s.toInt) })
 

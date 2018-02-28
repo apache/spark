@@ -34,6 +34,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
 case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], child: SparkPlan)
   extends EvalPythonExec(udfs, output, child) {
 
+
   protected override def evaluate(
       funcs: Seq[ChainedPythonFunctions],
       bufferSize: Int,
@@ -86,13 +87,30 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       val unpickledBatch = unpickle.loads(pickedResult)
       unpickledBatch.asInstanceOf[java.util.ArrayList[Any]].asScala
     }.map { result =>
+      var row: InternalRow = null
       if (udfs.length == 1) {
         // fast path for single UDF
         mutableRow(0) = fromJava(result)
-        mutableRow
+        row = mutableRow
       } else {
-        fromJava(result).asInstanceOf[InternalRow]
+        row = fromJava(result).asInstanceOf[InternalRow]
+      }
+
+      verifyResults(row)
+
+      row
+    }
+  }
+
+  private def verifyResults(row: InternalRow) {
+    for ((udf, i) <- udfs.view.zipWithIndex) {
+      if (row.isNullAt(i) && !udf.nullable) {
+        val inputTypes = udf.children.map(_.dataType.simpleString).mkString(", ")
+        val signature = s"${udf.name}: ($inputTypes) => ${udf.dataType.simpleString}"
+        throw new UnsupportedOperationException(
+          s"Cannot return null value from user defined function $signature.")
       }
     }
   }
+
 }
