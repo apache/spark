@@ -23,18 +23,24 @@ import org.apache.spark.sql.catalyst.expressions._
 trait QueryPlanConstraints { self: LogicalPlan =>
 
   /**
-    * An [[ExpressionSet]] that contains an additional set of constraints about equality
-    * constraints and `isNotNull` constraints.
-    */
-  lazy val allConstraints: ExpressionSet = ExpressionSet(validConstraints
-    .union(inferAdditionalConstraints(validConstraints))
-    .union(constructIsNotNullConstraints(validConstraints)))
+   * An [[ExpressionSet]] that contains an additional set of constraints about equality
+   * constraints and `isNotNull` constraints.
+   */
+  lazy val allConstraints: ExpressionSet = {
+    if (conf.constraintPropagationEnabled) {
+      ExpressionSet(validConstraints
+        .union(inferAdditionalConstraints(validConstraints))
+        .union(constructIsNotNullConstraints(validConstraints)))
+    } else {
+      ExpressionSet(Set.empty)
+    }
+  }
 
   /**
-    * An [[ExpressionSet]] that contains invariants about the rows output by this operator. For
-    * example, if this set contains the expression `a = 2` then that expression is guaranteed to
-    * evaluate to `true` for all rows produced.
-    */
+   * An [[ExpressionSet]] that contains invariants about the rows output by this operator. For
+   * example, if this set contains the expression `a = 2` then that expression is guaranteed to
+   * evaluate to `true` for all rows produced.
+   */
   lazy val constraints: ExpressionSet = {
     if (conf.constraintPropagationEnabled) {
       ExpressionSet(allConstraints.filter { c =>
