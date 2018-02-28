@@ -79,7 +79,7 @@ trait DataSourceV2StringFormat {
 
     val entriesStr = if (entries.nonEmpty) {
       Utils.truncatedString(entries.map {
-        case (key, value) => key + ": " + StringUtils.abbreviate(redact(value), 100)
+        case (key, value) => StringUtils.abbreviate(redact(key + ":" + value), 100)
       }, " (", ", ", ")")
     } else {
       ""

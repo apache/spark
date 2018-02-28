@@ -44,9 +44,10 @@ case class DataSourceV2ScanExec(
 
   override def simpleString: String = "ScanV2 " + metadataString
 
+  // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
-    case other: StreamingDataSourceV2Relation =>
-      output == other.output && source == other.source && options == other.options
+    case other: DataSourceV2ScanExec =>
+      output == other.output && reader.getClass == other.reader.getClass && options == other.options
     case _ => false
   }
 

@@ -123,9 +123,10 @@ case class StreamingDataSourceV2Relation(
 
   override def newInstance(): LogicalPlan = copy(output = output.map(_.newInstance()))
 
+  // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: StreamingDataSourceV2Relation =>
-      output == other.output && source == other.source && options == other.options
+      output == other.output && reader.getClass == other.reader.getClass && options == other.options
     case _ => false
   }
 
