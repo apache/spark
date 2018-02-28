@@ -133,8 +133,12 @@ private[spark] object BlockManagerId {
     getCachedBlockManagerId(obj)
   }
 
+  /**
+   * Here we set max cache size as 10000.Since the size of a BlockManagerId object
+   * is about 48B,so the max memory this cache cost will be about 1MB which is feasible.
+   */
   val blockManagerIdCache = CacheBuilder.newBuilder()
-    .maximumSize(500)
+    .maximumSize(10000)
     .build(new CacheLoader[BlockManagerId, BlockManagerId]() {
       override def load(id: BlockManagerId) = id
     })
