@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.command.ExplainCommand
@@ -303,7 +304,10 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   test("Non-nullable UDF returning null") {
     val foo = udf(() => null).asNonNullable()
     val df1 = testData.select(foo())
-    df1.head()
+    val e = intercept[SparkException] {
+      df1.head()
+    }
+    assert(e.getMessage.contains("Cannot return null value from user defined function"))
   }
 
   test("SPARK-11716 UDFRegistration does not include the input data type in returned UDF") {

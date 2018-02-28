@@ -1040,7 +1040,7 @@ case class ScalaUDF(
   lazy val functionSignature = {
     val funcCls = function.getClass.getSimpleName
     val inputTypes = children.map(_.dataType.simpleString).mkString(", ")
-    s"user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
+    s"user defined function ($funcCls: ($inputTypes) => ${dataType.simpleString})"
   }
 
   lazy val udfErrorMessage = {

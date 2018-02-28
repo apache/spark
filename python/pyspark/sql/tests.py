@@ -641,7 +641,7 @@ class SQLTests(ReusedSQLTestCase):
         res = df.select(plus_four(df['id']).alias('plus_four'))
         self.assertFalse(plus_four.nullable)
         self.assertFalse(res.schema['plus_four'].nullable)
-        with self.assertRaisesRegexp(Exception, "Cannot return null value from user defined function.*"):
+        with self.assertRaisesRegexp(Exception, "Cannot return null value.*"):
             res.agg({'plus_four': 'sum'}).collect()
 
     def test_non_existed_udaf(self):
