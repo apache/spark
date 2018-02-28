@@ -154,21 +154,18 @@ class Summarizer(object):
     +-----------------------------------+
     |[[1.0,1.0,1.0], 1]                 |
     +-----------------------------------+
-
     >>> df.select(summarizer.summary(df.features)).show(truncate=False)
     +--------------------------------+
     |aggregate_metrics(features, 1.0)|
     +--------------------------------+
     |[[1.0,1.5,2.0], 2]              |
     +--------------------------------+
-
     >>> df.select(Summarizer.mean(df.features, df.weight)).show(truncate=False)
     +--------------+
     |mean(features)|
     +--------------+
     |[1.0,1.0,1.0] |
     +--------------+
-
     >>> df.select(Summarizer.mean(df.features)).show(truncate=False)
     +--------------+
     |mean(features)|
@@ -177,6 +174,7 @@ class Summarizer(object):
     +--------------+
 
     .. versionadded:: 2.3.0
+
     """
     def __init__(self, js):
         self._js = js
