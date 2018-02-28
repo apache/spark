@@ -46,7 +46,7 @@ class StandaloneDynamicAllocationSuite
   with PrivateMethodTester {
 
   private val numWorkers = 2
-  private val conf = new SparkConf()
+  private val conf = new SparkConf().set("spark.locality.enable", "true")
   private val securityManager = new SecurityManager(conf)
 
   private var masterRpcEnv: RpcEnv = null
@@ -61,8 +61,9 @@ class StandaloneDynamicAllocationSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
     masterRpcEnv = RpcEnv.create(Master.SYSTEM_NAME, "localhost", 0, conf, securityManager)
+    val addr = Array("127.0.0.2", "127.0.0.3")
     workerRpcEnvs = (0 until numWorkers).map { i =>
-      RpcEnv.create(Worker.SYSTEM_NAME + i, "localhost", 0, conf, securityManager)
+      RpcEnv.create(Worker.SYSTEM_NAME + i, addr(i), 0, conf, securityManager)
     }
     master = makeMaster()
     workers = makeWorkers(10, 2048)
@@ -351,6 +352,49 @@ class StandaloneDynamicAllocationSuite
     apps = getApplications()
     assert(apps.head.executors.size === 4)
     assert(apps.head.getExecutorLimit === 1000)
+  }
+
+  test("Standalone supports data locality with dynamic allocation") {
+    sc = new SparkContext(appConf
+      .set("spark.executor.cores", "1")
+      .set("spark.cores.max", "9")
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.shuffle.service.enabled", "true")
+      .set("spark.dynamicAllocation.initialExecutors", "0"))
+    val appId = sc.applicationId
+    eventually(timeout(10.seconds), interval(10.millis)) {
+      val apps = getApplications()
+      assert(apps.size === 1)
+      assert(apps.head.id === appId)
+      assert(apps.head.executors.size === 0)
+      assert(apps.head.getExecutorLimit === 0)
+    }
+
+    var apps = getApplications()
+    def workerContainExecutorsCount(hostName: String): Int = {
+      getApplications().head.executors.values.count(_.worker.host == hostName)
+    }
+    // request 1
+    assert(sc.requestTotalExecutors(1, 0, Map("127.0.0.2" -> 4, "127.0.0.3" -> 3)))
+    apps = getApplications()
+    assert(apps.head.executors.size === 1)
+    assert(workerContainExecutorsCount("127.0.0.2") == 1)
+    assert(workerContainExecutorsCount("127.0.0.3") == 0)
+    assert(apps.head.getExecutorLimit === 1)
+    // request 2 more
+    assert(sc.requestTotalExecutors(3, 0, Map("127.0.0.2" -> 4, "127.0.0.3" -> 3)))
+    apps = getApplications()
+    assert(apps.head.executors.size === 3)
+    assert(apps.head.getExecutorLimit === 3)
+    assert(workerContainExecutorsCount("127.0.0.2") == 2)
+    assert(workerContainExecutorsCount("127.0.0.3") == 1)
+    // request 10 more; none will go through
+    assert(sc.requestTotalExecutors(13, 0, Map("127.0.0.2" -> 4, "127.0.0.3" -> 3)))
+    apps = getApplications()
+    assert(apps.head.executors.size === 9)
+    assert(apps.head.getExecutorLimit === 13)
+    assert(workerContainExecutorsCount("127.0.0.2") == 5)
+    assert(workerContainExecutorsCount("127.0.0.3") == 4)
   }
 
   test("kill the same executor twice (SPARK-9795)") {

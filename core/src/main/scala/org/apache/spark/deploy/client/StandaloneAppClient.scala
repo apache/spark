@@ -295,9 +295,10 @@ private[spark] class StandaloneAppClient(
    *
    * @return whether the request is acknowledged.
    */
-  def requestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
+  def requestTotalExecutors(requestedTotal: Int,
+                            hostToLocalTaskCount: Map[String, Int] = Map.empty): Future[Boolean] = {
     if (endpoint.get != null && appId.get != null) {
-      endpoint.get.ask[Boolean](RequestExecutors(appId.get, requestedTotal))
+      endpoint.get.ask[Boolean](RequestExecutors(appId.get, requestedTotal, hostToLocalTaskCount))
     } else {
       logWarning("Attempted to request executors before driver fully initialized.")
       Future.successful(false)

@@ -191,7 +191,7 @@ private[spark] class StandaloneSchedulerBackend(
    */
   protected override def doRequestTotalExecutors(requestedTotal: Int): Future[Boolean] = {
     Option(client) match {
-      case Some(c) => c.requestTotalExecutors(requestedTotal)
+      case Some(c) => c.requestTotalExecutors(requestedTotal, this.hostToLocalTaskCount)
       case None =>
         logWarning("Attempted to request executors before driver fully initialized.")
         Future.successful(false)

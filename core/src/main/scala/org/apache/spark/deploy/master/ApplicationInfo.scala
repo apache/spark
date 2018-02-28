@@ -47,6 +47,8 @@ private[spark] class ApplicationInfo(
   // application will this be set to a finite value. This is used for dynamic allocation.
   @transient private[master] var executorLimit: Int = _
 
+  @transient private[master] var hostToLocalTaskCount: Map[String, Int] = Map.empty
+
   @transient private var nextExecutorId: Int = _
 
   init()

@@ -140,7 +140,8 @@ private[deploy] object DeployMessages {
 
   case class MasterChangeAcknowledged(appId: String)
 
-  case class RequestExecutors(appId: String, requestedTotal: Int)
+  case class RequestExecutors(appId: String, requestedTotal: Int,
+                              hostToLocalTaskCount: Map[String, Int] = Map.empty)
 
   case class KillExecutors(appId: String, executorIds: Seq[String])
 

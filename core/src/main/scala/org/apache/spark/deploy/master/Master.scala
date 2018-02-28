@@ -113,6 +113,9 @@ private[deploy] class Master(
   // among all the nodes) instead of trying to consolidate each app onto a small # of nodes.
   private val spreadOutApps = conf.getBoolean("spark.deploy.spreadOut", true)
 
+  // This is only used for dynamic allocation.
+  private val localityEnable = conf.getBoolean("spark.locality.enable", false)
+
   // Default maxCores for applications that don't specify it (i.e. pass Int.MaxValue)
   private val defaultCores = conf.getInt("spark.deploy.defaultCores", Int.MaxValue)
   val reverseProxy = conf.getBoolean("spark.ui.reverseProxy", false)
@@ -488,8 +491,8 @@ private[deploy] class Master(
     case BoundPortsRequest =>
       context.reply(BoundPortsResponse(address.port, webUi.boundPort, restServerBoundPort))
 
-    case RequestExecutors(appId, requestedTotal) =>
-      context.reply(handleRequestExecutors(appId, requestedTotal))
+    case RequestExecutors(appId, requestedTotal, hostToLocalTaskCount) =>
+      context.reply(handleRequestExecutors(appId, requestedTotal, hostToLocalTaskCount))
 
     case KillExecutors(appId, executorIds) =>
       val formattedExecutorIds = formatExecutorIds(executorIds)
@@ -671,10 +674,23 @@ private[deploy] class Master(
       // If the cores left is less than the coresPerExecutor,the cores left will not be allocated
       if (app.coresLeft >= coresPerExecutor) {
         // Filter out workers that don't have enough resources to launch an executor
-        val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
+        var usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
             worker.coresFree >= coresPerExecutor)
-          .sortBy(_.coresFree).reverse
+          .sortBy(_.coresFree)
+
+        // `InitialExecutorLimit` is equal to 0, indicating that it is dynamic allocation
+        // for this app
+        if (app.desc.initialExecutorLimit.getOrElse(Integer.MAX_VALUE) == 0 && localityEnable) {
+          // 1.sort by executors which have assigned for this app per worker (ascend)
+          // 2.sort by local tasks per worker (descend)
+          // 3.sort by free cores per worker (descend)
+          usableWorkers = usableWorkers.sortBy(worker =>
+            app.hostToLocalTaskCount.getOrElse(worker.host, 0)).reverse
+            .sortBy(w => app.executors.values.count(_.worker == w))
+        } else {
+          usableWorkers = usableWorkers.reverse
+        }
         val assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, spreadOutApps)
 
         // Now that we've decided how many cores to allocate on each worker, let's allocate them
@@ -896,11 +912,13 @@ private[deploy] class Master(
    *
    * @return whether the application has previously registered with this Master.
    */
-  private def handleRequestExecutors(appId: String, requestedTotal: Int): Boolean = {
+  private def handleRequestExecutors(appId: String, requestedTotal: Int,
+                                     hostToLocalTaskCount: Map[String, Int]): Boolean = {
     idToApp.get(appId) match {
       case Some(appInfo) =>
         logInfo(s"Application $appId requested to set total executors to $requestedTotal.")
         appInfo.executorLimit = requestedTotal
+        appInfo.hostToLocalTaskCount = hostToLocalTaskCount
         schedule()
         true
       case None =>
