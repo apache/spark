@@ -1281,11 +1281,22 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("skip the first byte of a char if it is disallowed in UTF-8") {
-    val result = spark.read
+    val df = spark.read
       .format("csv")
       .option("header", "true")
       .load(testFile("test-data/utf8xFF.csv"))
+    val expectedSchema = new StructType()
+      .add("keycode", StringType)
+      .add("alternatechannel", StringType)
+      .add("alternatesubchannel", StringType)
+      .add("corenoncore", StringType)
 
-    assert(result.count() == 2)
+    assert(df.schema == expectedSchema)
+
+    val badStr = new String("AAGEN".getBytes :+ 0xff.toByte) ++ " "
+    checkAnswer(
+      df.select("alternatesubchannel"),
+      Row("United HealthCare") :: Row(badStr) :: Nil
+    )
   }
 }
