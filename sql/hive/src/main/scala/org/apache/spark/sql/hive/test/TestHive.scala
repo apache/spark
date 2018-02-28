@@ -518,8 +518,9 @@ private[hive] class TestHiveSparkSession(
       // an HDFS scratch dir: ${hive.exec.scratchdir}/<username> is created, with
       // ${hive.scratch.dir.permission}. To resolve the permission issue, the simplest way is to
       // delete it. Later, it will be re-created with the right permission.
-      val location = new Path(sc.hadoopConfiguration.get(ConfVars.SCRATCHDIR.varname))
-      val fs = location.getFileSystem(sc.hadoopConfiguration)
+      val hadoopConf = sessionState.newHadoopConf()
+      val location = new Path(hadoopConf.get(ConfVars.SCRATCHDIR.varname))
+      val fs = location.getFileSystem(hadoopConf)
       fs.delete(location, true)
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.
