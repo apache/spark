@@ -266,7 +266,7 @@ class BisectingKMeans @Since("2.0.0") (
     val parentModel = bkm.run(rdd)
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
     val summary = new BisectingKMeansSummary(
-      model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
+      model.transform(dataset), $(predictionCol), $(featuresCol), $(k), $(maxIter))
     model.setSummary(Some(summary))
     instr.logSuccess(model)
     model
@@ -302,4 +302,5 @@ class BisectingKMeansSummary private[clustering] (
     predictions: DataFrame,
     predictionCol: String,
     featuresCol: String,
-    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)
+    k: Int,
+    numIter: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter)

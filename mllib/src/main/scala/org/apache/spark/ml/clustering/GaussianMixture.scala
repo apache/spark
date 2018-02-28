@@ -421,7 +421,7 @@ class GaussianMixture @Since("2.0.0") (
 
     val model = copyValues(new GaussianMixtureModel(uid, weights, gaussianDists)).setParent(this)
     val summary = new GaussianMixtureSummary(model.transform(dataset),
-      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood)
+      $(predictionCol), $(probabilityCol), $(featuresCol), $(k), logLikelihood, iter)
     model.setSummary(Some(summary))
     instr.logSuccess(model)
     model
@@ -692,8 +692,9 @@ class GaussianMixtureSummary private[clustering] (
     @Since("2.0.0") val probabilityCol: String,
     featuresCol: String,
     k: Int,
-    @Since("2.2.0") val logLikelihood: Double)
-  extends ClusteringSummary(predictions, predictionCol, featuresCol, k) {
+    @Since("2.2.0") val logLikelihood: Double,
+    numIter: Int)
+  extends ClusteringSummary(predictions, predictionCol, featuresCol, k, numIter) {
 
   /**
    * Probability of each cluster.

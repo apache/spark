@@ -97,6 +97,7 @@ class BisectingKMeansSuite
   test("fit, transform and summary") {
     val predictionColName = "bisecting_kmeans_prediction"
     val bkm = new BisectingKMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
+      .setMaxIter(2)
     val model = bkm.fit(dataset)
     assert(model.clusterCenters.length === k)
 
@@ -127,6 +128,7 @@ class BisectingKMeansSuite
     assert(clusterSizes.length === k)
     assert(clusterSizes.sum === numRows)
     assert(clusterSizes.forall(_ >= 0))
+    assert(summary.numIter == 2)
 
     model.setSummary(None)
     assert(!model.hasSummary)

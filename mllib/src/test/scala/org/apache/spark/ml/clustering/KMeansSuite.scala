@@ -130,6 +130,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(clusterSizes.length === k)
     assert(clusterSizes.sum === numRows)
     assert(clusterSizes.forall(_ >= 0))
+    assert(summary.numIter == 1)
 
     model.setSummary(None)
     assert(!model.hasSummary)
