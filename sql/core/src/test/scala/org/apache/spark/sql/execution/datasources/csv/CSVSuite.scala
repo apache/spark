@@ -1286,17 +1286,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .option("header", "true")
       .load(testFile("test-data/utf8xFF.csv"))
     val expectedSchema = new StructType()
-      .add("keycode", StringType)
-      .add("alternatechannel", StringType)
-      .add("alternatesubchannel", StringType)
-      .add("corenoncore", StringType)
+      .add("channel", StringType)
+      .add("code", StringType)
 
     assert(df.schema == expectedSchema)
 
-    val badStr = new String("AAGEN".getBytes :+ 0xff.toByte) ++ " "
+    val badStr = new String("ABGUN".getBytes :+ 0xff.toByte)
     checkAnswer(
-      df.select("alternatesubchannel"),
-      Row("United HealthCare") :: Row(badStr) :: Nil
+      df.select("channel"),
+      Row("United") :: Row(badStr) :: Nil
     )
   }
 }
