@@ -111,7 +111,7 @@ trait CodegenSupport extends SparkPlan {
 
   private def prepareRowVar(ctx: CodegenContext, row: String, colVars: Seq[ExprCode]): ExprCode = {
     if (row != null) {
-      ExprCode("", LiteralValue("false"), VariableValue(row))
+      ExprCode("", FalseLiteral, VariableValue(row, ExprType("UnsafeRow", false)))
     } else {
       if (colVars.nonEmpty) {
         val colExprs = output.zipWithIndex.map { case (attr, i) =>
@@ -126,10 +126,10 @@ trait CodegenSupport extends SparkPlan {
           |$evaluateInputs
           |${ev.code.trim}
          """.stripMargin.trim
-        ExprCode(code, LiteralValue("false"), ev.value)
+        ExprCode(code, FalseLiteral, ev.value)
       } else {
         // There is no columns
-        ExprCode("", LiteralValue("false"), VariableValue("unsafeRow"))
+        ExprCode("", FalseLiteral, VariableValue("unsafeRow", ExprType("UnsafeRow", false)))
       }
     }
   }
@@ -240,15 +240,16 @@ trait CodegenSupport extends SparkPlan {
       parameters += s"$paramType $paramName"
       val paramIsNull = if (!attributes(i).nullable) {
         // Use constant `false` without passing `isNull` for non-nullable variable.
-        LiteralValue("false")
+        FalseLiteral
       } else {
         val isNull = ctx.freshName(s"exprIsNull_$i")
         arguments += ev.isNull
         parameters += s"boolean $isNull"
-        VariableValue(isNull)
+        VariableValue(isNull, ExprType(ctx.JAVA_BOOLEAN, true))
       }
 
-      paramVars += ExprCode("", paramIsNull, VariableValue(paramName))
+      paramVars += ExprCode("", paramIsNull,
+        VariableValue(paramName, ExprType(ctx, attributes(i).dataType)))
     }
     (arguments, parameters, paramVars)
   }

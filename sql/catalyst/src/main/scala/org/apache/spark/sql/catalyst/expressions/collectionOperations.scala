@@ -55,7 +55,7 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
       boolean ${ev.isNull} = false;
       ${childGen.code}
       ${ctx.javaType(dataType)} ${ev.value} = ${childGen.isNull} ? -1 :
-        (${childGen.value}).numElements();""", isNull = LiteralValue("false"))
+        (${childGen.value}).numElements();""", isNull = FalseLiteral)
   }
 }
 

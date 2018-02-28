@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, LiteralValue}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
@@ -83,7 +83,7 @@ case class Rand(child: Expression) extends RDG {
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
     ev.copy(code = s"""
       final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextDouble();""",
-      isNull = LiteralValue("false"))
+      isNull = FalseLiteral)
   }
 }
 
@@ -118,7 +118,7 @@ case class Randn(child: Expression) extends RDG {
       s"$rngTerm = new $className(${seed}L + partitionIndex);")
     ev.copy(code = s"""
       final ${ctx.javaType(dataType)} ${ev.value} = $rngTerm.nextGaussian();""",
-      isNull = LiteralValue("false"))
+      isNull = FalseLiteral)
   }
 }
 

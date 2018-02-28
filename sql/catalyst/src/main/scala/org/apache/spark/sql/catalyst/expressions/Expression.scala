@@ -104,7 +104,9 @@ abstract class Expression extends TreeNode[Expression] {
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
-      val eval = doGenCode(ctx, ExprCode("", VariableValue(isNull), VariableValue(value)))
+      val eval = doGenCode(ctx, ExprCode("",
+        VariableValue(isNull, ExprType(ctx.JAVA_BOOLEAN, true)),
+        VariableValue(value, ExprType(ctx, dataType))))
       reduceCodeSize(ctx, eval)
       if (eval.code.nonEmpty) {
         // Add `this` in the comment.
@@ -121,7 +123,7 @@ abstract class Expression extends TreeNode[Expression] {
       val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {
         val globalIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull
-        eval.isNull = GlobalValue(globalIsNull)
+        eval.isNull = GlobalValue(globalIsNull, ExprType(ctx.JAVA_BOOLEAN, true))
         s"$globalIsNull = $localIsNull;"
       } else {
         ""
@@ -140,7 +142,7 @@ abstract class Expression extends TreeNode[Expression] {
            |}
            """.stripMargin)
 
-      eval.value = VariableValue(newValue)
+      eval.value = VariableValue(newValue, ExprType(ctx, dataType))
       eval.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
     }
   }
@@ -419,7 +421,7 @@ abstract class UnaryExpression extends Expression {
         boolean ${ev.isNull} = false;
         ${childGen.code}
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        $resultCode""", isNull = LiteralValue("false"))
+        $resultCode""", isNull = FalseLiteral)
     }
   }
 }
@@ -519,7 +521,7 @@ abstract class BinaryExpression extends Expression {
         ${leftGen.code}
         ${rightGen.code}
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        $resultCode""", isNull = LiteralValue("false"))
+        $resultCode""", isNull = FalseLiteral)
     }
   }
 }
@@ -663,7 +665,7 @@ abstract class TernaryExpression extends Expression {
         ${midGen.code}
         ${rightGen.code}
         ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        $resultCode""", isNull = LiteralValue("false"))
+        $resultCode""", isNull = FalseLiteral)
     }
   }
 }

@@ -531,11 +531,13 @@ case class SortMergeJoinExec(
              |boolean $isNull = false;
              |$javaType $value = $defaultValue;
            """.stripMargin
-        (ExprCode(code, VariableValue(isNull), VariableValue(value)), leftVarsDecl)
+        (ExprCode(code, VariableValue(isNull, ExprType(ctx.JAVA_BOOLEAN, true)),
+          VariableValue(value, ExprType(ctx, a.dataType))), leftVarsDecl)
       } else {
         val code = s"$value = $valueCode;"
         val leftVarsDecl = s"""$javaType $value = $defaultValue;"""
-        (ExprCode(code, LiteralValue("false"), VariableValue(value)), leftVarsDecl)
+        (ExprCode(code, FalseLiteral,
+          VariableValue(value, ExprType(ctx, a.dataType))), leftVarsDecl)
       }
     }.unzip
   }

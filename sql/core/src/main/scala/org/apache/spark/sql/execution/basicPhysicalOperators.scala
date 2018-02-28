@@ -192,7 +192,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // generate better code (remove dead branches).
     val resultVars = input.zipWithIndex.map { case (ev, i) =>
       if (notNullAttributes.contains(child.output(i).exprId)) {
-        ev.isNull = LiteralValue("false")
+        ev.isNull = FalseLiteral
       }
       ev
     }
@@ -368,7 +368,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val number = ctx.addMutableState(ctx.JAVA_LONG, "number")
 
     val value = ctx.freshName("value")
-    val ev = ExprCode("", LiteralValue("false"), VariableValue(value))
+    val ev = ExprCode("", FalseLiteral, VariableValue(value, ExprType(ctx.JAVA_LONG, true)))
     val BigInt = classOf[java.math.BigInteger].getName
 
     // Inline mutable state since not many Range operations in a task

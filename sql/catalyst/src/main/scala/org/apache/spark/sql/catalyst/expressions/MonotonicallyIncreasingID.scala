@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, LiteralValue}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
 import org.apache.spark.sql.types.{DataType, LongType}
 
 /**
@@ -73,7 +73,7 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterminis
 
     ev.copy(code = s"""
       final ${ctx.javaType(dataType)} ${ev.value} = $partitionMaskTerm + $countTerm;
-      $countTerm++;""", isNull = LiteralValue("false"))
+      $countTerm++;""", isNull = FalseLiteral)
   }
 
   override def prettyName: String = "monotonically_increasing_id"

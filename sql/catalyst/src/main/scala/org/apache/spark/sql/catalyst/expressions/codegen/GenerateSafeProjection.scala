@@ -53,7 +53,8 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val rowClass = classOf[GenericInternalRow].getName
 
     val fieldWriters = schema.map(_.dataType).zipWithIndex.map { case (dt, i) =>
-      val converter = convertToSafe(ctx, StatementValue(ctx.getValue(tmpInput, dt, i.toString)), dt)
+      val converter = convertToSafe(ctx, StatementValue(ctx.getValue(tmpInput, dt, i.toString),
+        ExprType(ctx, dt)), dt)
       s"""
         if (!$tmpInput.isNullAt($i)) {
           ${converter.code}
@@ -74,7 +75,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
          |final InternalRow $output = new $rowClass($values);
        """.stripMargin
 
-    ExprCode(code, LiteralValue("false"), VariableValue(output))
+    ExprCode(code, FalseLiteral, VariableValue(output, ExprType("InternalRow", false)))
   }
 
   private def createCodeForArray(
@@ -90,7 +91,8 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val arrayClass = classOf[GenericArrayData].getName
 
     val elementConverter = convertToSafe(
-      ctx, StatementValue(ctx.getValue(tmpInput, elementType, index)), elementType)
+      ctx, StatementValue(ctx.getValue(tmpInput, elementType, index), ExprType(ctx, elementType)),
+      elementType)
     val code = s"""
       final ArrayData $tmpInput = $input;
       final int $numElements = $tmpInput.numElements();
@@ -104,7 +106,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final ArrayData $output = new $arrayClass($values);
     """
 
-    ExprCode(code, LiteralValue("false"), VariableValue(output))
+    ExprCode(code, FalseLiteral, VariableValue(output, ExprType("ArrayData", false)))
   }
 
   private def createCodeForMap(
@@ -125,7 +127,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final MapData $output = new $mapClass(${keyConverter.value}, ${valueConverter.value});
     """
 
-    ExprCode(code, LiteralValue("false"), VariableValue(output))
+    ExprCode(code, FalseLiteral, VariableValue(output, ExprType("MapData", false)))
   }
 
   @tailrec
@@ -137,7 +139,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     case ArrayType(elementType, _) => createCodeForArray(ctx, input, elementType)
     case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
     case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
-    case _ => ExprCode("", LiteralValue("false"), input)
+    case _ => ExprCode("", FalseLiteral, input)
   }
 
   protected def create(expressions: Seq[Expression]): Projection = {

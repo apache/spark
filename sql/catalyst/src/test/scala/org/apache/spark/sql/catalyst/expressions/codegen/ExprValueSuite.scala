@@ -29,12 +29,14 @@ class ExprValueSuite extends SparkFunSuite {
     assert(falseLit.value == "false")
 
     trueLit match {
-      case LiteralValue(value) => assert(value == "true")
+      case LiteralValue(value, javaType) =>
+        assert(value == "true" && javaType.typeName == "boolean" && javaType.isPrimitive)
       case _ => fail()
     }
 
     falseLit match {
-      case LiteralValue(value) => assert(value == "false")
+      case LiteralValue(value, javaType) =>
+        assert(value == "false" && javaType.typeName == "boolean" && javaType.isPrimitive)
       case _ => fail()
     }
   }

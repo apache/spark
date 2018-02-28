@@ -191,7 +191,8 @@ case class CaseWhen(
     // It is initialized to `NOT_MATCHED`, and if it's set to `HAS_NULL` or `HAS_NONNULL`,
     // We won't go on anymore on the computation.
     val resultState = ctx.freshName("caseWhenResultState")
-    ev.value = GlobalValue(ctx.addMutableState(ctx.javaType(dataType), ev.value))
+    ev.value = GlobalValue(ctx.addMutableState(ctx.javaType(dataType), ev.value),
+      ExprType(ctx, dataType))
 
     // these blocks are meant to be inside a
     // do {

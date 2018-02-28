@@ -218,7 +218,7 @@ case class Stack(children: Seq[Expression]) extends Generator {
       s"""
          |$code
          |$wrapperClass<InternalRow> ${ev.value} = $wrapperClass$$.MODULE$$.make($rowData);
-       """.stripMargin, isNull = LiteralValue("false"))
+       """.stripMargin, isNull = FalseLiteral)
   }
 }
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, LiteralValue, VariableValue}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExprType, FalseLiteral, VariableValue}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
@@ -52,9 +52,9 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val javaType = ctx.javaType(dataType)
     val value = ctx.getValueFromVector(columnVar, dataType, ordinal)
     val isNullVar = if (nullable) {
-      VariableValue(ctx.freshName("isNull"))
+      VariableValue(ctx.freshName("isNull"), ExprType(ctx.JAVA_BOOLEAN, true))
     } else {
-      LiteralValue("false")
+      FalseLiteral
     }
     val valueVar = ctx.freshName("value")
     val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
@@ -66,7 +66,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     } else {
       s"$javaType $valueVar = $value;"
     }).trim
-    ExprCode(code, isNullVar, VariableValue(valueVar))
+    ExprCode(code, isNullVar, VariableValue(valueVar, ExprType(ctx, dataType)))
   }
 
   /**

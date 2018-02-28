@@ -72,7 +72,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = GlobalValue(ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull))
+    ev.isNull = GlobalValue(ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull),
+      ExprType(ctx.JAVA_BOOLEAN, true))
 
     // all the evals are meant to be in a do { ... } while (false); loop
     val evals = children.map { e =>
@@ -236,7 +237,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
           ${eval.code}
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""",
-          isNull = LiteralValue("false"))
+          isNull = FalseLiteral)
     }
   }
 }
@@ -322,11 +323,11 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     val value = if (eval.isNull.isInstanceOf[LiteralValue]) {
-      LiteralValue(eval.isNull)
+      LiteralValue(eval.isNull, ExprType(ctx.JAVA_BOOLEAN, true))
     } else {
-      VariableValue(eval.isNull)
+      VariableValue(eval.isNull, ExprType(ctx.JAVA_BOOLEAN, true))
     }
-    ExprCode(code = eval.code, isNull = LiteralValue("false"), value = value)
+    ExprCode(code = eval.code, isNull = FalseLiteral, value = value)
   }
 
   override def sql: String = s"(${child.sql} IS NULL)"
@@ -352,14 +353,14 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    val value = if (eval.isNull == LiteralValue("true")) {
-      LiteralValue("false")
-    } else if (eval.isNull == LiteralValue("false")) {
-      LiteralValue("true")
+    val value = if (eval.isNull == TrueLiteral) {
+      FalseLiteral
+    } else if (eval.isNull == FalseLiteral) {
+      TrueLiteral
     } else {
-      StatementValue(s"(!(${eval.isNull}))")
+      StatementValue(s"(!(${eval.isNull}))", ExprType(ctx, dataType))
     }
-    ExprCode(code = eval.code, isNull = LiteralValue("false"), value = value)
+    ExprCode(code = eval.code, isNull = FalseLiteral, value = value)
   }
 
   override def sql: String = s"(${child.sql} IS NOT NULL)"
@@ -454,6 +455,6 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
          |  $codes
          |} while (false);
          |${ctx.JAVA_BOOLEAN} ${ev.value} = $nonnull >= $n;
-       """.stripMargin, isNull = LiteralValue("false"))
+       """.stripMargin, isNull = FalseLiteral)
   }
 }

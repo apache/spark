@@ -23,7 +23,7 @@ import java.util.{Map => JavaMap}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.language.{existentials, implicitConversions}
+import scala.language.existentials
 import scala.util.control.NonFatal
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
@@ -57,42 +57,6 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
  *              valid if `isNull` is set to `true`.
  */
 case class ExprCode(var code: String, var isNull: ExprValue, var value: ExprValue)
-
-
-// An abstraction that represents the evaluation result of [[ExprCode]].
-abstract class ExprValue
-
-object ExprValue {
-  implicit def exprValueToString(exprValue: ExprValue): String = exprValue.toString
-}
-
-// A literal evaluation of [[ExprCode]].
-class LiteralValue(val value: String) extends ExprValue {
-  override def toString: String = value
-}
-
-object LiteralValue {
-  def apply(value: String): LiteralValue = new LiteralValue(value)
-  def unapply(literal: LiteralValue): Option[String] = Some(literal.value)
-}
-
-// A variable evaluation of [[ExprCode]].
-case class VariableValue(val variableName: String) extends ExprValue {
-  override def toString: String = variableName
-}
-
-// A statement evaluation of [[ExprCode]].
-case class StatementValue(val statement: String) extends ExprValue {
-  override def toString: String = statement
-}
-
-// A global variable evaluation of [[ExprCode]].
-case class GlobalValue(val value: String) extends ExprValue {
-  override def toString: String = value
-}
-
-case object TrueLiteral extends LiteralValue("true")
-case object FalseLiteral extends LiteralValue("false")
 
 object ExprCode {
   def forNonNullValue(value: ExprValue): ExprCode = {
@@ -359,7 +323,8 @@ class CodegenContext {
       case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
       case _ => s"$value = $initCode;"
     }
-    ExprCode(code, LiteralValue("false"), GlobalValue(value))
+    ExprCode(code, FalseLiteral,
+      GlobalValue(value, ExprType(this, dataType)))
   }
 
   def declareMutableStates(): String = {
@@ -1244,7 +1209,8 @@ class CodegenContext {
       // at least two nodes) as the cost of doing it is expected to be low.
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      val state = SubExprEliminationState(GlobalValue(isNull), GlobalValue(value))
+      val state = SubExprEliminationState(GlobalValue(isNull, ExprType(JAVA_BOOLEAN, true)),
+        GlobalValue(value, ExprType(this, expr.dataType)))
       e.foreach(subExprEliminationExprs.put(_, state))
     }
   }

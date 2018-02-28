@@ -69,7 +69,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
               |${ev.code}
               |$isNull = ${ev.isNull};
               |$value = ${ev.value};
-            """.stripMargin, GlobalValue(isNull), value, i)
+            """.stripMargin, GlobalValue(isNull, ExprType(ctx.JAVA_BOOLEAN, true)), value, i)
         } else {
           (s"""
               |${ev.code}
@@ -83,7 +83,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
 
     val updates = validExpr.zip(projectionCodes).map {
       case (e, (_, isNull, value, i)) =>
-        val ev = ExprCode("", isNull, GlobalValue(value))
+        val ev = ExprCode("", isNull, GlobalValue(value, ExprType(ctx, e.dataType)))
         ctx.updateColumn("mutableRow", e.dataType, i, ev, e.nullable)
     }
 

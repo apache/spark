@@ -63,9 +63,9 @@ trait InvokeLike extends Expression with NonSQLExpression {
 
     val resultIsNull = if (needNullCheck) {
       val resultIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "resultIsNull")
-      GlobalValue(resultIsNull)
+      GlobalValue(resultIsNull, ExprType(ctx.JAVA_BOOLEAN, true))
     } else {
-      LiteralValue("false")
+      FalseLiteral
     }
     val argValues = arguments.map { e =>
       val argValue = ctx.addMutableState(ctx.javaType(e.dataType), "argValue")
@@ -146,7 +146,7 @@ case class StaticInvoke(
     val prepareIsNull = if (nullable) {
       s"boolean ${ev.isNull} = $resultIsNull;"
     } else {
-      ev.isNull = LiteralValue("false")
+      ev.isNull = FalseLiteral
       ""
     }
 
@@ -428,7 +428,7 @@ case class WrapOption(child: Expression, optType: DataType)
         ${inputObject.isNull} ?
         scala.Option$$.MODULE$$.apply(null) : new scala.Some(${inputObject.value});
     """
-    ev.copy(code = code, isNull = LiteralValue("false"))
+    ev.copy(code = code, isNull = FalseLiteral)
   }
 }
 
@@ -444,8 +444,12 @@ case class LambdaVariable(
   with Unevaluable with NonSQLExpression {
 
   override def genCode(ctx: CodegenContext): ExprCode = {
-    ExprCode(code = "", value = VariableValue(value),
-      isNull = if (nullable) VariableValue(isNull) else LiteralValue("false"))
+    val isNullValue = if (nullable) {
+      VariableValue(isNull, ExprType(ctx.JAVA_BOOLEAN, true))
+    } else {
+      FalseLiteral
+    }
+    ExprCode(code = "", value = VariableValue(value, ExprType(ctx, dataType)), isNull = isNullValue)
   }
 }
 
@@ -1133,7 +1137,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
          |$childrenCode
          |final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, $schemaField);
        """.stripMargin
-    ev.copy(code = code, isNull = LiteralValue("false"))
+    ev.copy(code = code, isNull = FalseLiteral)
   }
 }
 
@@ -1327,7 +1331,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
         throw new NullPointerException($errMsgField);
       }
      """
-    ev.copy(code = code, isNull = LiteralValue("false"), value = childGen.value)
+    ev.copy(code = code, isNull = FalseLiteral, value = childGen.value)
   }
 }
 
@@ -1370,7 +1374,7 @@ case class GetExternalRowField(
 
       final Object ${ev.value} = ${row.value}.get($index);
      """
-    ev.copy(code = code, isNull = LiteralValue("false"))
+    ev.copy(code = code, isNull = FalseLiteral)
   }
 }
 

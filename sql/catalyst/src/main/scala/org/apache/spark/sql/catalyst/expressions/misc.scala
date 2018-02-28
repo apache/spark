@@ -85,7 +85,8 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
     ExprCode(code = s"""${eval.code}
        |if (${eval.isNull} || !${eval.value}) {
        |  throw new RuntimeException($errMsgField);
-       |}""".stripMargin, isNull = LiteralValue("true"), value = LiteralValue("null"))
+       |}""".stripMargin, isNull = TrueLiteral,
+      value = LiteralValue("null", ExprType(ctx, dataType)))
   }
 
   override def sql: String = s"assert_true(${child.sql})"
@@ -130,6 +131,6 @@ case class Uuid() extends LeafExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     ev.copy(code = s"final UTF8String ${ev.value} = " +
       s"UTF8String.fromString(java.util.UUID.randomUUID().toString());",
-      isNull = LiteralValue("false"))
+      isNull = FalseLiteral)
   }
 }

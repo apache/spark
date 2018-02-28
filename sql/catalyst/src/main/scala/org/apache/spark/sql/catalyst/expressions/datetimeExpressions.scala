@@ -677,7 +677,8 @@ abstract class UnixTime
       case StringType if right.foldable =>
         val df = classOf[DateFormat].getName
         if (formatter == null) {
-          ExprCode("", LiteralValue("true"), LiteralValue(ctx.defaultValue(dataType)))
+          ExprCode("", TrueLiteral, LiteralValue(ctx.defaultValue(dataType),
+            ExprType(ctx, dataType)))
         } else {
           val formatterName = ctx.addReferenceObj("formatter", formatter, df)
           val eval1 = left.genCode(ctx)
@@ -812,7 +813,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     val df = classOf[DateFormat].getName
     if (format.foldable) {
       if (formatter == null) {
-        ExprCode("", LiteralValue("true"), LiteralValue("(UTF8String) null"))
+        ExprCode("", TrueLiteral, LiteralValue("(UTF8String) null", ExprType(ctx, dataType)))
       } else {
         val formatterName = ctx.addReferenceObj("formatter", formatter, df)
         val t = left.genCode(ctx)
