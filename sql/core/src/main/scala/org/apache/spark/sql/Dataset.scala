@@ -2250,21 +2250,10 @@ class Dataset[T] private[sql](
     */
   def withAllColumnsRenamed(convert: String => String): DataFrame = {
     val output = queryExecution.analyzed.output
-    var containsRename = false
     val columns = output.map { col =>
-      val newName = convert(col.name)
-      if (newName == col.name) {
-        Column(col)
-      } else {
-        containsRename = true
-        Column(col).as(newName)
-      }
+      Column(col).as(convert(col.name))
     }
-    if (containsRename) {
-      select(columns : _*)
-    } else {
-      toDF()
-    }
+    select(columns : _*)
   }
 
   /**
