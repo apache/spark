@@ -118,7 +118,7 @@ struct<plan:string>
 
 == Analyzed Logical Plan ==
 id: bigint, id: bigint
-Project [id#xL, id#xL]
+Project [id#xL: bigint, id#xL: bigint]
 +- Join Cross
    :- Range (0, 3, step=1, splits=None)
    +- Range (0, 3, step=1, splits=None)

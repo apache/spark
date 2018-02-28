@@ -42,17 +42,17 @@ struct<plan:string>
 
 == Analyzed Logical Plan ==
 col: string
-Project [concat(concat(concat(cast(col1#xL as string), cast(col2#xL as string)), cast(col3#xL as string)), cast(col4#xL as string)) AS col#x]
+Project [concat(concat(concat(cast(col1#xL: bigint as string), cast(col2#xL: bigint as string)), cast(col3#xL: bigint as string)), cast(col4#xL: bigint as string)) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
-   +- Project [id#xL AS col1#xL, id#xL AS col2#xL, id#xL AS col3#xL, id#xL AS col4#xL]
+   +- Project [id#xL: bigint AS col1#xL, id#xL: bigint AS col2#xL, id#xL: bigint AS col3#xL, id#xL: bigint AS col4#xL]
       +- Range (0, 10, step=1, splits=None)
 
 == Optimized Logical Plan ==
-Project [concat(cast(id#xL as string), cast(id#xL as string), cast(id#xL as string), cast(id#xL as string)) AS col#x]
+Project [concat(cast(id#xL: bigint as string), cast(id#xL: bigint as string), cast(id#xL: bigint as string), cast(id#xL: bigint as string)) AS col#x]
 +- Range (0, 10, step=1, splits=None)
 
 == Physical Plan ==
-*Project [concat(cast(id#xL as string), cast(id#xL as string), cast(id#xL as string), cast(id#xL as string)) AS col#x]
+*Project [concat(cast(id#xL: bigint as string), cast(id#xL: bigint as string), cast(id#xL: bigint as string), cast(id#xL: bigint as string)) AS col#x]
 +- *Range (0, 10, step=1, splits=2)
 
 
@@ -142,7 +142,7 @@ FROM (
 struct<plan:string>
 -- !query 13 output
 == Physical Plan ==
-*Project [concat(cast(id#xL as string), cast((id#xL + 1) as string), cast(encode(cast((id#xL + 2) as string), utf-8) as string), cast(encode(cast((id#xL + 3) as string), utf-8) as string)) AS col#x]
+*Project [concat(cast(id#xL: bigint as string), cast((id#xL: bigint + 1) as string), cast(encode(cast((id#xL: bigint + 2) as string), utf-8) as string), cast(encode(cast((id#xL: bigint + 3) as string), utf-8) as string)) AS col#x]
 +- *Range (0, 10, step=1, splits=2)
 
 
@@ -159,5 +159,5 @@ FROM (
 struct<plan:string>
 -- !query 14 output
 == Physical Plan ==
-*Project [concat(cast(id#xL as string), cast(encode(cast((id#xL + 2) as string), utf-8) as string), cast(encode(cast((id#xL + 3) as string), utf-8) as string)) AS col#x]
+*Project [concat(cast(id#xL: bigint as string), cast(encode(cast((id#xL: bigint + 2) as string), utf-8) as string), cast(encode(cast((id#xL: bigint + 3) as string), utf-8) as string)) AS col#x]
 +- *Range (0, 10, step=1, splits=2)
