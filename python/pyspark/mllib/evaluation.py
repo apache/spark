@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 import warnings
 
 from pyspark import since

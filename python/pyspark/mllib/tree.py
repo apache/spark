@@ -17,6 +17,7 @@
 
 from __future__ import absolute_import
 
+import sys
 import random
 
 from pyspark import SparkContext, RDD, since
