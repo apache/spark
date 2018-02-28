@@ -273,7 +273,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     nameToField.getOrElse(name,
       throw new IllegalArgumentException(
         s"""Field "$name" does not exist.
-           |Available fields: ${fieldNamesSet.mkString(",")}""".stripMargin))
+           |Available fields: ${fieldNamesSet.mkString(", ")}""".stripMargin))
   }
 
   /**
@@ -286,8 +286,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val nonExistFields = names -- fieldNamesSet
     if (nonExistFields.nonEmpty) {
       throw new IllegalArgumentException(
-        s"""Fields ${nonExistFields.mkString(",")} does not exist.
-           |Available fields: ${fieldNamesSet.mkString(",")}""".stripMargin)
+        s"""Fields ${nonExistFields.mkString(", ")} does not exist.
+           |Available fields: ${fieldNamesSet.mkString(", ")}""".stripMargin)
     }
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
@@ -302,7 +302,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     nameToIndex.getOrElse(name,
       throw new IllegalArgumentException(
         s"""Field "$name" does not exist.
-           |Available fields: ${fieldNamesSet.mkString(",")}""".stripMargin))
+           |Available fields: ${fieldNamesSet.mkString(", ")}""".stripMargin))
   }
 
   private[sql] def getFieldIndex(name: String): Option[Int] = {
