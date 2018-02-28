@@ -610,10 +610,10 @@ case class AlterTableRecoverPartitionsCommand(
 
     val root = new Path(table.location)
     logInfo(s"Recover all the partitions in $root")
-    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val fs = root.getFileSystem(hadoopConf)
 
     val threshold = spark.conf.get("spark.rdd.parallelListingThreshold", "10").toInt
-    val hadoopConf = spark.sparkContext.hadoopConfiguration
     val pathFilter = getPathFilter(hadoopConf)
 
     val evalPool = ThreadUtils.newForkJoinPool("AlterTableRecoverPartitionsCommand", 8)
@@ -697,7 +697,7 @@ case class AlterTableRecoverPartitionsCommand(
       pathFilter: PathFilter,
       threshold: Int): GenMap[String, PartitionStatistics] = {
     if (partitionSpecsAndLocs.length > threshold) {
-      val hadoopConf = spark.sparkContext.hadoopConfiguration
+      val hadoopConf = spark.sessionState.newHadoopConf()
       val serializableConfiguration = new SerializableConfiguration(hadoopConf)
       val serializedPaths = partitionSpecsAndLocs.map(_._2.toString).toArray
 
