@@ -22,35 +22,26 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 
 /**
-* push down operations into [[CreateNamedStructLike]].
-*/
-object SimplifyCreateStructOps extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformExpressionsUp {
-      // push down field extraction
+ * Simplify redundant [[CreateNamedStructLike]], [[CreateArray]] and [[CreateMap]] expressions.
+ */
+object SimplifyExtractValueOps extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform { case p =>
+    p.transformExpressionsUp {
+      // Remove redundant field extraction.
       case GetStructField(createNamedStructLike: CreateNamedStructLike, ordinal, _) =>
         createNamedStructLike.valExprs(ordinal)
-    }
-  }
-}
 
-/**
-* push down operations into [[CreateArray]].
-*/
-object SimplifyCreateArrayOps extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformExpressionsUp {
-      // push down field selection (array of structs)
-      case GetArrayStructFields(CreateArray(elems), field, ordinal, numFields, containsNull) =>
-        // instead f selecting the field on the entire array,
-        // select it from each member of the array.
-        // pushing down the operation this way open other optimizations opportunities
-        // (i.e. struct(...,x,...).x)
+      // Remove redundant array indexing.
+      case GetArrayStructFields(CreateArray(elems), field, ordinal, _, _) =>
+        // Instead of selecting the field on the entire array, select it from each member
+        // of the array. Pushing down the operation this way may open other optimizations
+        // opportunities (i.e. struct(...,x,...).x)
         CreateArray(elems.map(GetStructField(_, ordinal, Some(field.name))))
-      // push down item selection.
+
+      // Remove redundant map lookup.
       case ga @ GetArrayItem(CreateArray(elems), IntegerLiteral(idx)) =>
-        // instead of creating the array and then selecting one row,
-        // remove array creation altgether.
+        // Instead of creating the array and then selecting one row, remove array creation
+        // altogether.
         if (idx >= 0 && idx < elems.size) {
           // valid index
           elems(idx)
@@ -58,18 +49,7 @@ object SimplifyCreateArrayOps extends Rule[LogicalPlan] {
           // out of bounds, mimic the runtime behavior and return null
           Literal(null, ga.dataType)
         }
-    }
-  }
-}
-
-/**
-* push down operations into [[CreateMap]].
-*/
-object SimplifyCreateMapOps extends Rule[LogicalPlan] {
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transformExpressionsUp {
       case GetMapValue(CreateMap(elems), key) => CaseKeyWhen(key, elems)
     }
   }
 }
-
