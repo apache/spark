@@ -127,11 +127,13 @@ _functions_1_4 = {
     'sin': """:param col: angle in radians
            :return: sine of the angle, as if computed by `java.lang.Math.sin()`""",
     'sinh': """:param col: hyperbolic angle
-           :return: hyperbolic sine of the given value, as if computed by `java.lang.Math.sinh()`""",
+           :return: hyperbolic sine of the given value,
+           as if computed by `java.lang.Math.sinh()`""",
     'tan': """:param col: angle in radians
            :return: tangent of the given value, as if computed by `java.lang.Math.tan()`""",
     'tanh': """:param col: hyperbolic angle
-            :return: hyperbolic tangent of the given value, as if computed by `java.lang.Math.tanh()`""",
+            :return: hyperbolic tangent of the given value,
+            as if computed by `java.lang.Math.tanh()`""",
     'toDegrees': '.. note:: Deprecated in 2.1, use :func:`degrees` instead.',
     'toRadians': '.. note:: Deprecated in 2.1, use :func:`radians` instead.',
     'bitwiseNOT': 'Computes bitwise not.',
@@ -170,7 +172,7 @@ _functions_1_6 = {
 
 _functions_2_1 = {
     # unary math functions
-    'degrees': """Converts an angle measured in radians to an approximately equivalent angle 
+    'degrees': """Converts an angle measured in radians to an approximately equivalent angle
                measured in degrees.
                :param col: angle in radians
                :return: angle in degrees, as if computed by `java.lang.Math.toDegrees()`""",
