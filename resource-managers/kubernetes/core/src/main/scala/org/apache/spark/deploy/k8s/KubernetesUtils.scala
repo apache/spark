@@ -16,8 +16,6 @@
  */
 package org.apache.spark.deploy.k8s
 
-import java.io.File
-
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
@@ -43,23 +41,10 @@ private[spark] object KubernetesUtils {
 
   /**
    * For the given collection of file URIs, resolves them as follows:
-   * - File URIs with scheme file:// are resolved to the spark working directory.
    * - File URIs with scheme local:// resolve to just the path of the URI.
    * - Otherwise, the URIs are returned as-is.
    */
-  def resolveFileUris(
-      fileUris: Iterable[String]): Iterable[String] = {
-    fileUris.map { uri =>
-      resolveFileUri(uri)
-    }
-  }
-
-  /**
-   * If any file uri has any scheme other than local:// it is mapped as if the file
-   * was downloaded to the spark working directory. Otherwise, it is mapped to the path
-   * part of the URI.
-   */
-  def resolveFilePaths(fileUris: Iterable[String]): Iterable[String] = {
+  def resolveFileUrisAndPath(fileUris: Iterable[String]): Iterable[String] = {
     fileUris.map { uri =>
       resolveFileUri(uri)
     }
@@ -71,20 +56,16 @@ private[spark] object KubernetesUtils {
   def getOnlyRemoteFiles(uris: Iterable[String]): Iterable[String] = {
     uris.filter { uri =>
       val scheme = Utils.resolveURI(uri).getScheme
-      scheme != "file" && scheme != "local"
+      scheme != "local"
     }
   }
 
   private def resolveFileUri(uri: String): String = {
     val fileUri = Utils.resolveURI(uri)
-    val fileScheme = Option(fileUri.getScheme).getOrElse("file")
+    val fileScheme = Option(fileUri.getScheme).getOrElse("non-local")
     fileScheme match {
-      case "local" =>
-        fileUri.getPath
-      case "file" =>
-        new File(fileUri.getPath).getName
-      case _ =>
-        uri
+      case "local" => fileUri.getPath
+      case _ => uri
     }
   }
 }

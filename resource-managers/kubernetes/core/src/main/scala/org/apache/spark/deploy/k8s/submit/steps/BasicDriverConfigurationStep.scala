@@ -57,8 +57,6 @@ private[spark] class BasicDriverConfigurationStep(
 
   // Memory settings
   private val driverMemoryMiB = sparkConf.get(DRIVER_MEMORY)
-  private val driverMemoryString = sparkConf.get(
-    DRIVER_MEMORY.key, DRIVER_MEMORY.defaultValueString)
   private val memoryOverheadMiB = sparkConf
     .get(DRIVER_MEMORY_OVERHEAD)
     .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * driverMemoryMiB).toInt, MEMORY_OVERHEAD_MIN_MIB))
@@ -104,28 +102,12 @@ private[spark] class BasicDriverConfigurationStep(
       ("cpu", new QuantityBuilder(false).withAmount(limitCores).build())
     }
 
-    val driverContainer = new ContainerBuilder(driverSpec.driverContainer)
+    val driverContainerWithoutArgs = new ContainerBuilder(driverSpec.driverContainer)
       .withName(DRIVER_CONTAINER_NAME)
       .withImage(driverContainerImage)
       .withImagePullPolicy(imagePullPolicy)
       .addAllToEnv(driverCustomEnvs.asJava)
       .addToEnv(driverExtraClasspathEnv.toSeq: _*)
-      .addNewEnv()
-        .withName(ENV_DRIVER_MEMORY)
-        .withValue(driverMemoryString)
-        .endEnv()
-      .addNewEnv()
-        .withName(ENV_DRIVER_MEMORY)
-        .withValue(driverMemoryString)
-        .endEnv()
-      .addNewEnv()
-        .withName(ENV_DRIVER_MAIN_CLASS)
-        .withValue(mainClass)
-      .endEnv()
-      .addNewEnv()
-        .withName(ENV_DRIVER_ARGS)
-        .withValue(appArgs.mkString(" "))
-        .endEnv()
       .addNewEnv()
         .withName(ENV_DRIVER_BIND_ADDRESS)
         .withValueFrom(new EnvVarSourceBuilder()
@@ -144,8 +126,11 @@ private[spark] class BasicDriverConfigurationStep(
       // The user application jar is merged into the spark.jars list and managed through that
       // property, so there is no need to reference it explicitly here.
       .addToArgs(SparkLauncher.NO_RESOURCE)
-      .addToArgs(appArgs: _*)
-      .build()
+
+    val driverContainer = appArgs.toList match {
+      case "" :: Nil | Nil => driverContainerWithoutArgs.build()
+      case _ => driverContainerWithoutArgs.addToArgs(appArgs: _*).build()
+    }
 
     val baseDriverPod = new PodBuilder(driverSpec.driverPod)
       .editOrNewMetadata()

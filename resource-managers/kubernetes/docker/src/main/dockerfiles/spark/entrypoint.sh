@@ -53,14 +53,10 @@ fi
 case "$SPARK_K8S_CMD" in
   driver)
     CMD=(
-      ${JAVA_HOME}/bin/java
-      "${SPARK_JAVA_OPTS[@]}"
-      -cp "$SPARK_CLASSPATH"
-      -Xms$SPARK_DRIVER_MEMORY
-      -Xmx$SPARK_DRIVER_MEMORY
-      -Dspark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS
-      $SPARK_DRIVER_CLASS
-      $SPARK_DRIVER_ARGS
+      "$SPARK_HOME/bin/spark-submit"
+      --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
+      --deploy-mode client
+      "$@"
     )
     ;;
 

@@ -37,7 +37,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] class ExecutorPodFactory(
     sparkConf: SparkConf,
-    mountSecretsBootstrap: Option[MountSecretsBootstrap]){
+    mountSecretsBootstrap: Option[MountSecretsBootstrap]) {
 
   private val executorExtraClasspath = sparkConf.get(EXECUTOR_CLASS_PATH)
 
