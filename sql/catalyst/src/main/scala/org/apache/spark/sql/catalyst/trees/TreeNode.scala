@@ -439,37 +439,45 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
 
   /** Returns a string representing the arguments to this node, minus any children */
-  def argString: String = stringArgs.flatMap {
-    case tn: TreeNode[_] if allChildren.contains(tn) => Nil
-    case Some(tn: TreeNode[_]) if allChildren.contains(tn) => Nil
-    case Some(tn: TreeNode[_]) => tn.simpleString :: Nil
-    case tn: TreeNode[_] => tn.simpleString :: Nil
-    case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
-    case iter: Iterable[_] if iter.isEmpty => Nil
-    case seq: Seq[_] => Utils.truncatedString(seq, "[", ", ", "]") :: Nil
-    case set: Set[_] => Utils.truncatedString(set.toSeq, "{", ", ", "}") :: Nil
-    case array: Array[_] if array.isEmpty => Nil
-    case array: Array[_] => Utils.truncatedString(array, "[", ", ", "]") :: Nil
-    case null => Nil
-    case None => Nil
-    case Some(null) => Nil
-    case Some(any) => any :: Nil
-    case table: CatalogTable =>
-      table.storage.serde match {
-        case Some(serde) => table.identifier :: serde :: Nil
-        case _ => table.identifier :: Nil
-      }
-    case other => other :: Nil
-  }.mkString(", ")
+  def argString(isLeaf: Boolean): String = {
+    val anyToString = (x: Any) => x match {
+      case a: Attribute if isLeaf => a.stringWithType
+      case o => o.toString
+    }
+    stringArgs.flatMap {
+      case tn: TreeNode[_] if allChildren.contains(tn) => Nil
+      case Some(tn: TreeNode[_]) if allChildren.contains(tn) => Nil
+      case Some(tn: TreeNode[_]) => if (isLeaf) tn.simpleStringLeaf else tn.simpleString :: Nil
+      case tn: TreeNode[_] => if (isLeaf) tn.simpleStringLeaf else tn.simpleString :: Nil
+      case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
+      case iter: Iterable[_] if iter.isEmpty => Nil
+      case seq: Seq[_] => Utils.truncatedString(seq.map(anyToString), "[", ", ", "]") :: Nil
+      case set: Set[_] => Utils.truncatedString(set.map(anyToString).toSeq, "{", ", ", "}") :: Nil
+      case array: Array[_] if array.isEmpty => Nil
+      case array: Array[_] => Utils.truncatedString(array.map(anyToString), "[", ", ", "]") :: Nil
+      case null => Nil
+      case None => Nil
+      case Some(null) => Nil
+      case Some(any) => any :: Nil
+      case table: CatalogTable =>
+        table.storage.serde match {
+          case Some(serde) => table.identifier :: serde :: Nil
+          case _ => table.identifier :: Nil
+        }
+      case other => other :: Nil
+    }.mkString(", ")
+  }
 
   /** ONE line description of this node. */
-  def simpleString: String = s"$nodeName $argString".trim
+  def simpleString: String = s"$nodeName ${argString(false)}".trim
+
+  def simpleStringLeaf: String = s"$nodeName ${argString(true)}".trim
 
   /** ONE line description of this node with more information */
-  def verboseString: String
+  def verboseString(isLeaf: Boolean): String
 
   /** ONE line description of this node with some suffix information */
-  def verboseStringWithSuffix: String = verboseString
+  def verboseStringWithSuffix(isLeaf: Boolean): String = verboseString(isLeaf)
 
   override def toString: String = treeString
 
@@ -552,10 +560,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       builder.append(if (lastChildren.last) "+- " else ":- ")
     }
 
+    val isLeaf = innerChildren.isEmpty && children.isEmpty
+
     val str = if (verbose) {
-      if (addSuffix) verboseStringWithSuffix else verboseString
+      if (addSuffix) verboseStringWithSuffix(isLeaf) else verboseString(isLeaf)
     } else {
-      simpleString
+      if (isLeaf) simpleStringLeaf else simpleString
     }
     builder.append(prefix)
     builder.append(str)

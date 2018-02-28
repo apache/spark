@@ -118,6 +118,10 @@ case class ExternalRDDScanExec[T](
   override def simpleString: String = {
     s"Scan $nodeName${output.mkString("[", ",", "]")}"
   }
+
+  override def simpleStringLeaf: String = {
+    s"Scan $nodeName${output.map(_.stringWithType).mkString("[", ",", "]")}"
+  }
 }
 
 /** Logical plan node for scanning data from an RDD of InternalRow. */
@@ -190,5 +194,9 @@ case class RDDScanExec(
 
   override def simpleString: String = {
     s"Scan $nodeName${Utils.truncatedString(output, "[", ",", "]")}"
+  }
+
+  override def simpleStringLeaf: String = {
+    s"Scan $nodeName${Utils.truncatedString(output.map(_.stringWithType), "[", ",", "]")}"
   }
 }

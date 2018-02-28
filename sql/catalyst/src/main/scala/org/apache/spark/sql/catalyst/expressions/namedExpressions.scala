@@ -106,7 +106,7 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
 
   override def toAttribute: Attribute = this
   def newInstance(): Attribute
-
+  def stringWithType: String = s"$toString: ${dataType.simpleString}"
 }
 
 /**
@@ -308,8 +308,7 @@ case class AttributeReference(
     ""
   }
 
-  override def toString: String =
-    s"$name#${exprId.id}$typeSuffix$delaySuffix: ${dataType.simpleString}"
+  override def toString: String = s"$name#${exprId.id}$typeSuffix$delaySuffix"
 
   // Since the expression id is not in the first constructor it is missing from the default
   // tree string.

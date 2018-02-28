@@ -64,6 +64,9 @@ case class LogicalRelation(
   }
 
   override def simpleString: String = s"Relation[${Utils.truncatedString(output, ",")}] $relation"
+
+  override def simpleStringLeaf: String =
+    s"Relation[${Utils.truncatedString(output.map(_.stringWithType), ",")}] $relation"
 }
 
 object LogicalRelation {

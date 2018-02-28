@@ -2266,24 +2266,23 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-23531: explain should show attributes' type") {
-    val df = spark.range(1).select($"id", $"id" + lit(1))
-    val consoleOut = new ByteArrayOutputStream()
-    try {
-      Console.withOut(consoleOut) {
-        df.explain()
+    withTempPath { path =>
+      spark.range(1).select($"id", ($"id" + lit(1)).as("plusone")).write.save(path.getAbsolutePath)
+      val df = spark.read.load(path.getAbsolutePath).select($"id", $"plusone" - lit(1))
+      val consoleOut = new ByteArrayOutputStream()
+      try {
+        Seq(true, false).foreach { extended =>
+          Console.withOut(consoleOut) {
+            df.explain(extended)
+          }
+          val explainOut = consoleOut.toString
+          assert(explainOut.contains("bigint"))
+          assert(!explainOut.contains(": bigint - 1"))
+          consoleOut.reset()
+        }
+      } finally {
+        consoleOut.close()
       }
-      val explainOut = consoleOut.toString
-      assert(explainOut.contains("bigint"))
-      assert(explainOut.contains(": bigint + 1"))
-      consoleOut.reset()
-      Console.withOut(consoleOut) {
-        df.explain(true)
-      }
-      val explainOutExtended = consoleOut.toString
-      assert(explainOutExtended.contains("bigint"))
-      assert(explainOutExtended.contains(": bigint + 1"))
-    } finally {
-      consoleOut.close()
     }
   }
 }

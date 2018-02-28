@@ -79,16 +79,16 @@ struct<plan:string>
 
 == Analyzed Logical Plan ==
 ifnull(`id`, 'x'): string, nullif(`id`, 'x'): bigint, nvl(`id`, 'x'): string, nvl2(`id`, 'x', 'y'): string
-Project [ifnull(id#xL: bigint, x) AS ifnull(`id`, 'x')#x, nullif(id#xL: bigint, x) AS nullif(`id`, 'x')#xL, nvl(id#xL: bigint, x) AS nvl(`id`, 'x')#x, nvl2(id#xL: bigint, x, y) AS nvl2(`id`, 'x', 'y')#x]
-+- Range (0, 2, step=1, splits=None)
+Project [ifnull(id#xL, x) AS ifnull(`id`, 'x')#x, nullif(id#xL, x) AS nullif(`id`, 'x')#xL, nvl(id#xL, x) AS nvl(`id`, 'x')#x, nvl2(id#xL, x, y) AS nvl2(`id`, 'x', 'y')#x]
++- Range (0, 2, step=1, splits=None, output=[id#xL: bigint])
 
 == Optimized Logical Plan ==
-Project [coalesce(cast(id#xL: bigint as string), x) AS ifnull(`id`, 'x')#x, id#xL: bigint AS nullif(`id`, 'x')#xL, coalesce(cast(id#xL: bigint as string), x) AS nvl(`id`, 'x')#x, x AS nvl2(`id`, 'x', 'y')#x]
-+- Range (0, 2, step=1, splits=None)
+Project [coalesce(cast(id#xL as string), x) AS ifnull(`id`, 'x')#x, id#xL AS nullif(`id`, 'x')#xL, coalesce(cast(id#xL as string), x) AS nvl(`id`, 'x')#x, x AS nvl2(`id`, 'x', 'y')#x]
++- Range (0, 2, step=1, splits=None, output=[id#xL: bigint])
 
 == Physical Plan ==
-*Project [coalesce(cast(id#xL: bigint as string), x) AS ifnull(`id`, 'x')#x, id#xL: bigint AS nullif(`id`, 'x')#xL, coalesce(cast(id#xL: bigint as string), x) AS nvl(`id`, 'x')#x, x AS nvl2(`id`, 'x', 'y')#x]
-+- *Range (0, 2, step=1, splits=2)
+*Project [coalesce(cast(id#xL as string), x) AS ifnull(`id`, 'x')#x, id#xL AS nullif(`id`, 'x')#xL, coalesce(cast(id#xL as string), x) AS nvl(`id`, 'x')#x, x AS nvl2(`id`, 'x', 'y')#x]
++- *Range (0, 2, step=1, splits=2, output=[id#xL: bigint])
 
 
 -- !query 9

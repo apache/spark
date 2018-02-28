@@ -907,7 +907,7 @@ case class HashAggregateExec(
      """
   }
 
-  override def verboseString: String = toString(verbose = true)
+  override def verboseString(isLeaf: Boolean): String = toString(verbose = true)
 
   override def simpleString: String = toString(verbose = false)
 
