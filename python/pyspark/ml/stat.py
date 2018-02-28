@@ -154,24 +154,28 @@ class Summarizer(object):
     +-----------------------------------+
     |[[1.0,1.0,1.0], 1]                 |
     +-----------------------------------+
+    <BLANKLINE>
     >>> df.select(summarizer.summary(df.features)).show(truncate=False)
     +--------------------------------+
     |aggregate_metrics(features, 1.0)|
     +--------------------------------+
     |[[1.0,1.5,2.0], 2]              |
     +--------------------------------+
+    <BLANKLINE>
     >>> df.select(Summarizer.mean(df.features, df.weight)).show(truncate=False)
     +--------------+
     |mean(features)|
     +--------------+
     |[1.0,1.0,1.0] |
     +--------------+
+    <BLANKLINE>
     >>> df.select(Summarizer.mean(df.features)).show(truncate=False)
     +--------------+
     |mean(features)|
     +--------------+
     |[1.0,1.5,2.0] |
     +--------------+
+    <BLANKLINE>
 
     .. versionadded:: 2.3.0
 
