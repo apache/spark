@@ -1986,7 +1986,7 @@ class DataFrame(object):
             timezone = None
 
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
-            should_fallback = False
+            use_arrow = True
             try:
                 from pyspark.sql.types import to_arrow_schema
                 from pyspark.sql.utils import require_minimum_pyarrow_version
@@ -2005,7 +2005,7 @@ class DataFrame(object):
                         "'spark.sql.execution.arrow.fallback.enabled' is set to "
                         "true." % _exception_message(e))
                     warnings.warn(msg)
-                    should_fallback = True
+                    use_arrow = False
                 else:
                     msg = (
                         "toPandas attempted Arrow optimization because "
@@ -2015,7 +2015,9 @@ class DataFrame(object):
                         "'spark.sql.execution.arrow.fallback.enabled'." % _exception_message(e))
                     raise RuntimeError(msg)
 
-            if not should_fallback:
+            # Try to use Arrow optimization when the schema is supported and the required version
+            # of PyArrow is found, if 'spark.sql.execution.arrow.fallback.enabled' is enabled.
+            if use_arrow:
                 try:
                     from pyspark.sql.types import _check_dataframe_convert_date, \
                         _check_dataframe_localize_timestamps

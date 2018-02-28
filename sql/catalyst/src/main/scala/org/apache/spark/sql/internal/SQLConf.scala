@@ -1525,9 +1525,9 @@ class SQLConf extends Serializable with Logging {
 
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 
-  def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLED)
+  def arrowEnabled: Boolean = getConf(ARROW_EXECUTION_ENABLED)
 
-  def arrowFallbackEnable: Boolean = getConf(ARROW_FALLBACK_ENABLED)
+  def arrowFallbackEnabled: Boolean = getConf(ARROW_FALLBACK_ENABLED)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 

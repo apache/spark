@@ -1689,9 +1689,9 @@ using the call `toPandas()` and when creating a Spark DataFrame from a Pandas Da
 `createDataFrame(pandas_df)`. To use Arrow when executing these calls, users need to first set
 the Spark configuration 'spark.sql.execution.arrow.enabled' to 'true'. This is disabled by default.
 
-In addition, optimizations enabled by 'spark.sql.execution.arrow.enabled' will fallback automatically
-to non-optimized implementations if an error occurs. This can be controlled by
-'spark.sql.execution.arrow.fallback.enabled'.
+In addition, optimizations enabled by 'spark.sql.execution.arrow.enabled' could fallback automatically
+to non-optimized implementations if an error occurs before the actual computation within Spark.
+This can be controlled by 'spark.sql.execution.arrow.fallback.enabled'.
 
 <div class="codetabs">
 <div data-lang="python" markdown="1">

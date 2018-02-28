@@ -198,21 +198,26 @@ class ReusedSQLTestCase(ReusedPySparkTestCase):
         cls.spark.stop()
 
     @contextmanager
-    def sql_conf(self, key, value):
+    def sql_conf(self, pairs):
         """
         A convenient context manager to test some configuration specific logic. This sets
         `value` to the configuration `key` and then restores it back when it exits.
         """
+        assert isinstance(pairs, dict), "pairs should be a dictionary."
 
-        orig_value = self.spark.conf.get(key, None)
-        self.spark.conf.set(key, value)
+        keys = pairs.keys()
+        new_values = pairs.values()
+        old_values = [self.spark.conf.get(key, None) for key in keys]
+        for key, new_value in zip(keys, new_values):
+            self.spark.conf.set(key, new_value)
         try:
             yield
         finally:
-            if orig_value is None:
-                self.spark.conf.unset(key)
-            else:
-                self.spark.conf.set(key, orig_value)
+            for key, old_value in zip(keys, old_values):
+                if old_value is None:
+                    self.spark.conf.unset(key)
+                else:
+                    self.spark.conf.set(key, old_value)
 
     def assertPandasEqual(self, expected, result):
         msg = ("DataFrames are not equal: " +
@@ -3517,7 +3522,7 @@ class ArrowTests(ReusedSQLTestCase):
     def test_toPandas_fallback_enabled(self):
         import pandas as pd
 
-        with self.sql_conf("spark.sql.execution.arrow.fallback.enabled", True):
+        with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": True}):
             schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
             df = self.spark.createDataFrame([({u'a': 1},)], schema=schema)
             with QuietTest(self.sc):
@@ -3532,7 +3537,7 @@ class ArrowTests(ReusedSQLTestCase):
                     self.assertPandasEqual(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
 
     def test_toPandas_fallback_disabled(self):
-        with self.sql_conf("spark.sql.execution.arrow.fallback.enabled", False):
+        with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": False}):
             schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
             df = self.spark.createDataFrame([(None,)], schema=schema)
             with QuietTest(self.sc):
@@ -3741,7 +3746,7 @@ class ArrowTests(ReusedSQLTestCase):
         import pandas as pd
 
         with QuietTest(self.sc):
-            with self.sql_conf("spark.sql.execution.arrow.fallback.enabled", True):
+            with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": True}):
                 with warnings.catch_warnings(record=True) as warns:
                     df = self.spark.createDataFrame(
                         pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
@@ -3757,7 +3762,7 @@ class ArrowTests(ReusedSQLTestCase):
         import pandas as pd
 
         with QuietTest(self.sc):
-            with self.sql_conf("spark.sql.execution.arrow.fallback.enabled", False):
+            with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": False}):
                 with self.assertRaisesRegexp(Exception, 'Unsupported type'):
                     self.spark.createDataFrame(
                         pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
