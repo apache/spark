@@ -23,6 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -678,6 +679,33 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructsToJson(Map.empty, struct2, gmtId),
         null
       )
+    }
+  }
+
+  test("from_json missing fields") {
+    val conf = SQLConf.get
+    for (forceJsonNullableSchema <- Seq(false, true)) {
+      conf.setConf(SQLConf.FROM_JSON_FORCE_NULLABLE_SCHEMA, forceJsonNullableSchema)
+      val input =
+        """{
+          |  "a": 1,
+          |  "c": "foo"
+          |}
+          |"""
+          .stripMargin
+      val jsonSchema = new StructType()
+        .add("a", LongType, nullable = false)
+        .add("b", StringType, nullable = false)
+        .add("c", StringType, nullable = false)
+      val output = InternalRow(1L, null, UTF8String.fromString("foo"))
+      checkEvaluation(
+        JsonToStructs(jsonSchema, Map.empty, Literal.create(input, StringType), gmtId),
+        output
+      )
+      val schema = JsonToStructs(jsonSchema, Map.empty, Literal.create(input, StringType), gmtId)
+        .dataType
+      val schemaToCompare = if (forceJsonNullableSchema) jsonSchema.asNullable else jsonSchema
+      assert(schemaToCompare == schema);
     }
   }
 }
