@@ -95,7 +95,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         Array(6), Gini, QuantileStrategy.Sort,
         0, 0, 0.0, 0, 0
       )
-      val featureSamples = Array.fill(200000)(math.random)
+      val featureSamples = Array.fill(10000)(math.random).filter(_ != 0.0)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
       assert(splits.length === 5)
       assert(fakeMetadata.numSplits(0) === 5)
@@ -114,7 +114,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
       // possibleSplits <= numSplits
       {
-        val featureSamples = Array(0, 1, 0, 0, 1, 0, 1, 1).map(_.toDouble)
+        val featureSamples = Array(0, 1, 0, 0, 1, 0, 1, 1).map(_.toDouble).filter(_ != 0.0)
         val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
         val expectedSplits = Array((0.0 + 1.0) / 2)
         assert(splits === expectedSplits)
@@ -122,7 +122,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
       // possibleSplits > numSplits
       {
-        val featureSamples = Array(0, 0, 1, 1, 2, 2, 3, 3).map(_.toDouble)
+        val featureSamples = Array(0, 0, 1, 1, 2, 2, 3, 3).map(_.toDouble).filter(_ != 0.0)
         val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
         val expectedSplits = Array((0.0 + 1.0) / 2, (2.0 + 3.0) / 2)
         assert(splits === expectedSplits)
@@ -166,7 +166,8 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         Array(2), Gini, QuantileStrategy.Sort,
         0, 0, 0.0, 0, 0
       )
-      val featureSamples = Array(0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2).map(_.toDouble)
+      val featureSamples = Array(0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2)
+        .map(_.toDouble).filter(_ != 0.0)
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
       val expectedSplits = Array((1.0 + 2.0) / 2)
       assert(splits === expectedSplits)
@@ -179,7 +180,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
         Array(3), Gini, QuantileStrategy.Sort,
         0, 0, 0.0, 0, 0
       )
-      val featureSamples = Array(0, 0, 0).map(_.toDouble)
+      val featureSamples = Array(0, 0, 0).map(_.toDouble).filter(_ != 0.0)
       val featureSamplesEmpty = Array.empty[Double]
       val splits = RandomForest.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
       assert(splits === Array.empty[Double])
