@@ -41,6 +41,10 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   override def afterEach() {
     try {
       resetSparkContext()
+      // Reset semaphores if used by multiple tests.
+      // Note: if other semaphores are shared by multiple tests, please reset them in this block
+      JobCancellationSuite.taskStartedSemaphore.drainPermits()
+      JobCancellationSuite.taskCancelledSemaphore.drainPermits()
     } finally {
       super.afterEach()
     }
@@ -326,22 +330,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // execution and a counter is used to make sure that the corresponding tasks are indeed
     // cancelled.
     import JobCancellationSuite._
-    sc = new SparkContext(s"local", "test")
-
-    val f = sc.parallelize(1 to 1000).map { i => (i, i) }
-      .repartitionAndSortWithinPartitions(new HashPartitioner(1))
-      .mapPartitions { iter =>
-        taskStartedSemaphore.release()
-        iter
-      }.foreachAsync { x =>
-        if (x._1 >= 10) {
-          // This block of code is partially executed. It will be blocked when x._1 >= 10 and the
-          // next iteration will be cancelled if the source iterator is interruptible. Then in this
-          // case, the maximum num of increment would be 10(|1...10|)
-          taskCancelledSemaphore.acquire()
-        }
-        executionOfInterruptibleCounter.getAndIncrement()
-    }
+    sc = new SparkContext("local[2]", "test interruptible iterator")
 
     val taskCompletedSem = new Semaphore(0)
 
@@ -359,6 +348,21 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
         }
       }
     })
+
+    val f = sc.parallelize(1 to 1000).map { i => (i, i) }
+      .repartitionAndSortWithinPartitions(new HashPartitioner(1))
+      .mapPartitions { iter =>
+        taskStartedSemaphore.release()
+        iter
+      }.foreachAsync { x =>
+        if (x._1 >= 10) {
+          // This block of code is partially executed. It will be blocked when x._1 >= 10 and the
+          // next iteration will be cancelled if the source iterator is interruptible. Then in this
+          // case, the maximum num of increment would be 10(|1...10|)
+          taskCancelledSemaphore.acquire()
+        }
+        executionOfInterruptibleCounter.getAndIncrement()
+    }
 
     taskStartedSemaphore.acquire()
     // Job is cancelled when:
