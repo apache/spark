@@ -282,20 +282,23 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
-  protected def supportsContinuousBlockBatchFetch(serializer: Serializer): Boolean = {
-    if (serializer == null || !serializer.supportsRelocationOfSerializedObjects) {
-      return false
+  protected def supportsContinuousBlockBatchFetch(serializerRelocatable: Boolean): Boolean = {
+    if (!serializerRelocatable) {
+      false
+    } else {
+      if (!conf.getBoolean("spark.shuffle.compress", true)) {
+        true
+      } else {
+        val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
+        CompressionCodec.supportsConcatenationOfSerializedStreams(compressionCodec)
+      }
     }
-    val compressionEnabled: Boolean = conf.getBoolean("spark.shuffle.compress", true)
-    val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
-    !compressionEnabled ||
-      CompressionCodec.supportsConcatenationOfSerializedStreams(compressionCodec)
   }
 
   // For testing
   def getMapSizesByExecutorId(shuffleId: Int, reduceId: Int)
       : Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
-    getMapSizesByExecutorId(shuffleId, reduceId, reduceId + 1)
+    getMapSizesByExecutorId(shuffleId, reduceId, reduceId + 1, serializerRelocatable = false)
   }
 
   /**
@@ -308,7 +311,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    *         describing the shuffle blocks that are stored at that block manager.
    */
   def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int,
-      serializer: Serializer = null): Seq[(BlockManagerId, Seq[(BlockId, Long)])]
+      serializerRelocatable: Boolean): Seq[(BlockManagerId, Seq[(BlockId, Long)])]
 
   /**
    * Deletes map output status information for the specified shuffle stage.
@@ -646,13 +649,13 @@ private[spark] class MapOutputTrackerMaster(
 
   // This method is only called in local-mode.
   def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int,
-      serializer: Serializer): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+      serializerRelocatable: Boolean): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
     shuffleStatuses.get(shuffleId) match {
       case Some (shuffleStatus) =>
         shuffleStatus.withMapStatuses { statuses =>
           MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses,
-            supportsContinuousBlockBatchFetch(serializer))
+            supportsContinuousBlockBatchFetch(serializerRelocatable))
         }
       case None =>
         Seq.empty
@@ -683,12 +686,12 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   private val fetching = new HashSet[Int]
 
   override def getMapSizesByExecutorId(shuffleId: Int, startPartition: Int, endPartition: Int,
-      serializer: Serializer): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
+      serializerRelocatable: Boolean): Seq[(BlockManagerId, Seq[(BlockId, Long)])] = {
     logDebug(s"Fetching outputs for shuffle $shuffleId, partitions $startPartition-$endPartition")
     val statuses = getStatuses(shuffleId)
     try {
       MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, statuses,
-        supportsContinuousBlockBatchFetch(serializer))
+        supportsContinuousBlockBatchFetch(serializerRelocatable))
     } catch {
       case e: MetadataFetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
