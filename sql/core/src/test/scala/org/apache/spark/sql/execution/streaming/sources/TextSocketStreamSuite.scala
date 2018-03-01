@@ -146,6 +146,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       var batch1Stamp: Timestamp = null
       var batch2Stamp: Timestamp = null
 
+      val curr = System.currentTimeMillis()
       testStream(socket)(
         StartStream(),
         AddSocketData("hello"),
@@ -168,6 +169,10 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
         StopStream
       )
 
+      // Timestamp for rate stream is round to second which leads to milliseconds lost, that will
+      // make batch1stamp smaller than current timestamp if both of them are in the same second.
+      // Comparing by second to make sure the correct behavior.
+      assert(batch1Stamp.getTime >= curr / 1000 * 1000)
       assert(!batch2Stamp.before(batch1Stamp))
     }
   }
