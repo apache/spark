@@ -326,11 +326,10 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // execution and a counter is used to make sure that the corresponding tasks are indeed
     // cancelled.
     import JobCancellationSuite._
-    val numSlice = 1
-    sc = new SparkContext(s"local[$numSlice]", "test")
+    sc = new SparkContext(s"local", "test")
 
-    val f = sc.parallelize(1 to 1000, numSlice).map { i => (i, i) }
-      .repartitionAndSortWithinPartitions(new HashPartitioner(numSlice))
+    val f = sc.parallelize(1 to 1000).map { i => (i, i) }
+      .repartitionAndSortWithinPartitions(new HashPartitioner(1))
       .mapPartitions { iter =>
         taskStartedSemaphore.release()
         iter
@@ -374,7 +373,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
 
     // Make sure tasks are indeed completed.
-    taskCompletedSem.acquire(numSlice)
+    taskCompletedSem.acquire()
     assert(executionOfInterruptibleCounter.get() <= 10)
  }
 
