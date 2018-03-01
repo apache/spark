@@ -912,8 +912,9 @@ private[spark] object RandomForest extends Logging {
       val numPartitions = math.min(continuousFeatures.length, input.partitions.length)
 
       input
-        .flatMap(point => continuousFeatures.map(idx => (idx, point.features(idx))).filter(_._2 != 0.0))
-        .groupByKey(numPartitions)
+        .flatMap { point =>
+          continuousFeatures.map(idx => (idx, point.features(idx))).filter(_._2 != 0.0)
+        }.groupByKey(numPartitions)
         .map { case (idx, samples) =>
           val thresholds = findSplitsForContinuousFeature(samples, metadata, idx)
           val splits: Array[Split] = thresholds.map(thresh => new ContinuousSplit(idx, thresh))
