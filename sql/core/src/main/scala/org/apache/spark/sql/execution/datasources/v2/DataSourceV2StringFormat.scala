@@ -73,13 +73,17 @@ trait DataSourceV2StringFormat {
     }
 
     // TODO: we should only display some standard options like path, table, etc.
-    entries ++= options
+    if (options.nonEmpty) {
+      entries += "Options" -> Utils.redact(options).map {
+        case (k, v) => s"$k=$v"
+      }.mkString("[", ",", "]")
+    }
 
     val outputStr = Utils.truncatedString(output, "[", ", ", "]")
 
     val entriesStr = if (entries.nonEmpty) {
       Utils.truncatedString(entries.map {
-        case (key, value) => StringUtils.abbreviate(redact(key + ":" + value), 100)
+        case (key, value) => key + ": " + StringUtils.abbreviate(redact(value), 100)
       }, " (", ", ", ")")
     } else {
       ""
