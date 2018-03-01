@@ -999,7 +999,7 @@ private[spark] object RandomForest extends Logging {
       // get count for each distinct value except zero value
       val partNumSamples = featureSamples.size
       val partValueCountMap = scala.collection.mutable.Map[Double, Int]()
-      featureSamples.foreach{ x =>
+      featureSamples.foreach { x =>
         partValueCountMap(x) = partValueCountMap.getOrElse(x, 0) + 1
       }
 
@@ -1158,6 +1158,7 @@ private[spark] object RandomForest extends Logging {
 
   /**
    * Calculate the subsample fraction for finding splits
+   *
    * @param metadata decision tree metadata
    * @return subsample fraction
    */
