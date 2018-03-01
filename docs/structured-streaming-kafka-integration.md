@@ -354,6 +354,13 @@ The following configurations are optional:
   <td>The timeout in milliseconds to poll data from Kafka in executors.</td>
 </tr>
 <tr>
+  <td>kafkaConsumer.useConsumerCache</td>
+  <td>true or false</td>
+  <td>true</td>
+  <td>streaming and batch</td>
+  <td>Whether enable or disable caching for Kafka consumers. Disabling the cache may be needed to workaround the problem described in SPARK-19185. This property may be removed in later versions of Spark, once SPARK-19185 is resolved.</td>
+</tr>
+<tr>
   <td>fetchOffset.numRetries</td>
   <td>int</td>
   <td>3</td>
@@ -375,6 +382,8 @@ The following configurations are optional:
   <td>Rate limit on maximum number of offsets processed per trigger interval. The specified total number of offsets will be proportionally split across topicPartitions of different volume.</td>
 </tr>
 </table>
+
+If you would like to disable the caching for Kafka consumers, you can set `spark.streaming.kafka.consumer.cache.enabled` to `false`. Disabling the cache may be needed to workaround the problem described in SPARK-19185. This property may be removed in later versions of Spark, once SPARK-19185 is resolved.
 
 ## Writing Data to Kafka
 
