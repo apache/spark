@@ -25,7 +25,7 @@ import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.{Channels, FileChannel}
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
+import java.nio.file.{Files, Paths}
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
@@ -271,9 +271,9 @@ private[spark] object Utils extends Logging {
   def createDirectory(root: String, namePrefix: String = "spark"): File = {
     val prefix = namePrefix + "-"
     val dir = if (root != null) {
-      val rootDir = new File(root)
-      require(rootDir.isDirectory(), s"Root path $root must be an existing directory.")
-      Files.createTempDirectory(rootDir.toPath(), prefix)
+      val rootDir = Paths.get(root)
+      require(Files.isDirectory(rootDir), s"Root path $root must be an existing directory.")
+      Files.createTempDirectory(rootDir, prefix)
     } else {
       Files.createTempDirectory(prefix)
     }
