@@ -925,8 +925,8 @@ private[spark] object RandomForest extends Logging {
     val numFeatures = metadata.numFeatures
     val splits: Array[Array[Split]] = Array.tabulate(numFeatures) {
       case i if metadata.isContinuous(i) =>
-        // some features may only contains zero, so continuousSplits will not have a record
-        val split = if (continuousSplits.contains(i)) continuousSplits(i) else Array.empty[Split]
+        // some features may contain only zero, so continuousSplits will not have a record
+        val split = continuousSplits.getOrElse(i, Array.empty[Split])
         metadata.setNumSplits(i, split.length)
         split
 
@@ -997,16 +997,22 @@ private[spark] object RandomForest extends Logging {
       val numSplits = metadata.numSplits(featureIndex)
 
       // get count for each distinct value except zero value
-      val (partValueCountMap, partNumSamples) = featureSamples.foldLeft((Map.empty[Double, Int], 0)) {
-        case ((m, cnt), x) =>
-          (m + ((x, m.getOrElse(x, 0) + 1)), cnt + 1)
+      val partNumSamples = featureSamples.size
+      val partValueCountMap = scala.collection.mutable.Map[Double, Int]()
+      featureSamples.foreach{ x =>
+        partValueCountMap(x) = partValueCountMap.getOrElse(x, 0) + 1
       }
 
-      // Calculate the number of samples for finding splits
-      val numSamples: Int = (samplesFractionForFindSplits(metadata) * metadata.numExamples).toInt
-
+      // Calculate the expected number of samples for finding splits
+      val numSamples = (samplesFractionForFindSplits(metadata) * metadata.numExamples).toInt
+      // Calculate the expected number of zeros
+      val numZeros = if (numSamples - partNumSamples >= 0) {
+        numSamples - partNumSamples
+      } else {
+        0
+      }
       // add zero value count and get complete statistics
-      val valueCountMap: Map[Double, Int] = partValueCountMap + (0.0 -> (numSamples - partNumSamples))
+      val valueCountMap: Map[Double, Int] = partValueCountMap.toMap + (0.0 -> numZeros)
 
       // sort distinct values
       val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray
