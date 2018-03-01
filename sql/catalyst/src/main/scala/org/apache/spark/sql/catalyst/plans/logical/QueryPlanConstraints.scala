@@ -26,15 +26,9 @@ trait QueryPlanConstraints { self: LogicalPlan =>
    * An [[ExpressionSet]] that contains an additional set of constraints, such as equality
    * constraints and `isNotNull` constraints, etc.
    */
-  lazy val allConstraints: ExpressionSet = {
-    if (conf.constraintPropagationEnabled) {
-      ExpressionSet(validConstraints
+  lazy val allConstraints: ExpressionSet = ExpressionSet(validConstraints
         .union(inferAdditionalConstraints(validConstraints))
         .union(constructIsNotNullConstraints(validConstraints)))
-    } else {
-      ExpressionSet(Set.empty)
-    }
-  }
 
   /**
    * An [[ExpressionSet]] that contains invariants about the rows output by this operator. For

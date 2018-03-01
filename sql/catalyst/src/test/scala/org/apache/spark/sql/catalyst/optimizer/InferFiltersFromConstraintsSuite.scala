@@ -200,8 +200,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val originalQuery = x.join(y, LeftSemi, condition).analyze
     val left = x.where(IsNotNull('a))
     val right = y.where(IsNotNull('a))
-    val correctAnswer = left.join(right, LeftSemi, condition)
-        .analyze
+    val correctAnswer = left.join(right, LeftSemi, condition).analyze
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
