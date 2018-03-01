@@ -41,10 +41,10 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
   override def afterEach() {
     try {
       resetSparkContext()
-      // Reset semaphores if used by multiple tests.
-      // Note: if other semaphores are shared by multiple tests, please reset them in this block
       JobCancellationSuite.taskStartedSemaphore.drainPermits()
       JobCancellationSuite.taskCancelledSemaphore.drainPermits()
+      JobCancellationSuite.twoJobsSharingStageSemaphore.drainPermits()
+      JobCancellationSuite.executionOfInterruptibleCounter.set(0)
     } finally {
       super.afterEach()
     }
@@ -442,6 +442,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
 
 
 object JobCancellationSuite {
+  // To avoid any headaches, reset these global variables in the companion class's afterEach block
   val taskStartedSemaphore = new Semaphore(0)
   val taskCancelledSemaphore = new Semaphore(0)
   val twoJobsSharingStageSemaphore = new Semaphore(0)
