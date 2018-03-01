@@ -199,6 +199,38 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     })
   }
 
+  test("properly wraps and escapes parameters passed to driver command") {
+    setScheduler()
+
+    val mem = 1000
+    val cpu = 1
+
+    val response = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", mem, cpu, true,
+        command,
+        Map("spark.mesos.executor.home" -> "test",
+          "spark.app.name" -> "test",
+          // no special characters, wrap only
+          "spark.driver.extraJavaOptions" ->
+            "-XX+PrintGC -Dparam1=val1 -Dparam2=val2",
+          // special characters, to be escaped
+          "spark.executor.extraJavaOptions" ->
+            """-Dparam1="value 1" -Dparam2=value\ 2 -Dpath=$PATH"""),
+        "s1",
+        new Date()))
+    assert(response.success)
+
+    val offer = Utils.createOffer("o1", "s1", mem, cpu)
+    scheduler.resourceOffers(driver, List(offer).asJava)
+    val tasks = Utils.verifyTaskLaunched(driver, "o1")
+    val driverCmd = tasks.head.getCommand.getValue
+    assert(driverCmd.contains(
+      """--conf spark.driver.extraJavaOptions="-XX+PrintGC -Dparam1=val1 -Dparam2=val2""""))
+    assert(driverCmd.contains(
+      """--conf spark.executor.extraJavaOptions="""
+      + """"-Dparam1=\"value 1\" -Dparam2=value\\ 2 -Dpath=\$PATH""""))
+  }
+
   test("supports spark.mesos.driverEnv.*") {
     setScheduler()
 
