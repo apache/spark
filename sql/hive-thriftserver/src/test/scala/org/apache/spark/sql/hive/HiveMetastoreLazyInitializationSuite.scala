@@ -19,19 +19,17 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.test.SQLTestUtilsBase
 import org.apache.spark.util.Utils
 
-class HiveMetastoreLazyInitializationSuite extends SparkFunSuite with SQLTestUtilsBase {
+class HiveMetastoreLazyInitializationSuite extends SparkFunSuite {
 
-  override def spark: SparkSession = SparkSession.builder()
+  test("lazily initialize Hive client") {
+    val spark = SparkSession.builder()
       .appName("HiveMetastoreLazyInitializationSuite")
       .master("local[2]")
       .enableHiveSupport()
       .config("spark.hadoop.hive.metastore.uris", "thrift://127.0.0.1:11111")
       .getOrCreate()
-
-  test("lazily initialize Hive client") {
     val originalLevel = org.apache.log4j.Logger.getRootLogger().getLevel
     try {
       // Avoid outputting a lot of expected warning logs
@@ -45,9 +43,13 @@ class HiveMetastoreLazyInitializationSuite extends SparkFunSuite with SQLTestUti
       assert(spark.range(0, 1).count() === 1)
 
       // We should be able to use fs
-      withTempPath { dir =>
-        spark.range(0, 1).write.parquet(dir.getAbsolutePath)
-        assert(spark.read.parquet(dir.getAbsolutePath).count() === 1)
+      val path = Utils.createTempDir()
+      path.delete()
+      try {
+        spark.range(0, 1).write.parquet(path.getAbsolutePath)
+        assert(spark.read.parquet(path.getAbsolutePath).count() === 1)
+      } finally {
+        Utils.deleteRecursively(path)
       }
 
       // Make sure that we are not using the local derby metastore.
