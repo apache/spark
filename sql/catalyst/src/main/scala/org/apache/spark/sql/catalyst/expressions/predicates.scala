@@ -157,7 +157,8 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   require(list != null, "list should not be null")
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType))
+    val mismatchOpt = list.find(l => !DataType.equalsStructurally(l.dataType, value.dataType,
+      ignoreNullability = true))
     if (mismatchOpt.isDefined) {
       list match {
         case ListQuery(_, _, _, childOutputs) :: Nil =>

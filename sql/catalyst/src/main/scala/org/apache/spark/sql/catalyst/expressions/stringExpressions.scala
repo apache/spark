@@ -1653,19 +1653,19 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
  * A function that returns the char length of the given string expression or
  * number of bytes of the given binary expression.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the character length of `expr` or number of bytes in binary data.",
+  usage = "_FUNC_(expr) - Returns the character length of string data or number of bytes of " +
+    "binary data. The length of string data includes the trailing spaces. The length of binary " +
+    "data includes binary zeros.",
   examples = """
     Examples:
-      > SELECT _FUNC_('Spark SQL');
-       9
-      > SELECT CHAR_LENGTH('Spark SQL');
-       9
-      > SELECT CHARACTER_LENGTH('Spark SQL');
-       9
+      > SELECT _FUNC_('Spark SQL ');
+       10
+      > SELECT CHAR_LENGTH('Spark SQL ');
+       10
+      > SELECT CHARACTER_LENGTH('Spark SQL ');
+       10
   """)
-// scalastyle:on line.size.limit
 case class Length(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
@@ -1687,7 +1687,7 @@ case class Length(child: Expression) extends UnaryExpression with ImplicitCastIn
  * A function that returns the bit length of the given string or binary expression.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the bit length of `expr` or number of bits in binary data.",
+  usage = "_FUNC_(expr) - Returns the bit length of string data or number of bits of binary data.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
@@ -1716,7 +1716,8 @@ case class BitLength(child: Expression) extends UnaryExpression with ImplicitCas
  * A function that returns the byte length of the given string or binary expression.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the byte length of `expr` or number of bytes in binary data.",
+  usage = "_FUNC_(expr) - Returns the byte length of string data or number of bytes of binary " +
+    "data.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');

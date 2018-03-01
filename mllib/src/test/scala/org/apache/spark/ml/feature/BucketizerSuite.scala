@@ -172,7 +172,10 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
       .setSplits(Array(0.1, 0.8, 0.9))
-    testDefaultReadWrite(t)
+
+    val bucketizer = testDefaultReadWrite(t)
+    val data = Seq((1.0, 2.0), (10.0, 100.0), (101.0, -1.0)).toDF("myInputCol", "myInputCol2")
+    bucketizer.transform(data)
   }
 
   test("Bucket numeric features") {
@@ -327,7 +330,12 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("myInputCol"))
       .setOutputCols(Array("myOutputCol"))
       .setSplitsArray(Array(Array(0.1, 0.8, 0.9)))
-    testDefaultReadWrite(t)
+
+    val bucketizer = testDefaultReadWrite(t)
+    val data = Seq((1.0, 2.0), (10.0, 100.0), (101.0, -1.0)).toDF("myInputCol", "myInputCol2")
+    bucketizer.transform(data)
+    assert(t.hasDefault(t.outputCol))
+    assert(bucketizer.hasDefault(bucketizer.outputCol))
   }
 
   test("Bucketizer in a pipeline") {

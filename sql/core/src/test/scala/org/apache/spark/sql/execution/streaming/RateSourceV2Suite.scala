@@ -26,8 +26,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamBatchTask, RateStreamMicroBatchReader, RateStreamSourceV2}
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, MicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.{ContinuousReadSupport, MicroBatchReadSupport}
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.util.ManualClock
 

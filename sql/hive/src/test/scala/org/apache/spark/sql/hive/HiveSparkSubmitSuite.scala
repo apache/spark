@@ -50,7 +50,6 @@ class HiveSparkSubmitSuite
 
   override def beforeEach() {
     super.beforeEach()
-    System.setProperty("spark.testing", "true")
   }
 
   test("temporary Hive UDF: define a UDF and use it") {

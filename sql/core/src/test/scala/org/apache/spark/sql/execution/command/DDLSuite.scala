@@ -37,6 +37,8 @@ import org.apache.spark.util.Utils
 
 
 class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with BeforeAndAfterEach {
+  import testImplicits._
+
   override def afterEach(): Unit = {
     try {
       // drop all databases, tables and functions after each test
@@ -130,6 +132,32 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       checkAnswer(spark.table("t"), Row(Row("a", 1)) :: Nil)
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
       checkAnswer(spark.table("t"), Row(Row("a", 1)) :: Nil)
+    }
+  }
+
+  // TODO: This test is copied from HiveDDLSuite, unify it later.
+  test("SPARK-23348: append data to data source table with saveAsTable") {
+    withTable("t", "t1") {
+      Seq(1 -> "a").toDF("i", "j").write.saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(1, "a"))
+
+      sql("INSERT INTO t SELECT 2, 'b'")
+      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Nil)
+
+      Seq(3 -> "c").toDF("i", "j").write.mode("append").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Row(3, "c") :: Nil)
+
+      Seq("c" -> 3).toDF("i", "j").write.mode("append").saveAsTable("t")
+      checkAnswer(spark.table("t"), Row(1, "a") :: Row(2, "b") :: Row(3, "c")
+        :: Row(null, "3") :: Nil)
+
+      Seq(4 -> "d").toDF("i", "j").write.saveAsTable("t1")
+
+      val e = intercept[AnalysisException] {
+        Seq(5 -> "e").toDF("i", "j").write.mode("append").format("json").saveAsTable("t1")
+      }
+      assert(e.message.contains("The format of the existing table default.t1 is " +
+        "`ParquetFileFormat`. It doesn't match the specified format `JsonFileFormat`."))
     }
   }
 }
@@ -504,6 +532,35 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              """.stripMargin)
         }.getMessage
         assert(errMsg.contains("Found duplicate column(s) in the sort definition"))
+      }
+    }
+  }
+
+  test("create table - append to a non-partitioned table created with different paths") {
+    import testImplicits._
+    withTempDir { dir1 =>
+      withTempDir { dir2 =>
+        withTable("path_test") {
+          Seq(1L -> "a").toDF("v1", "v2")
+            .write
+            .mode(SaveMode.Append)
+            .format("json")
+            .option("path", dir1.getCanonicalPath)
+            .saveAsTable("path_test")
+
+          val ex = intercept[AnalysisException] {
+            Seq((3L, "c")).toDF("v1", "v2")
+              .write
+              .mode(SaveMode.Append)
+              .format("json")
+              .option("path", dir2.getCanonicalPath)
+              .saveAsTable("path_test")
+          }.getMessage
+          assert(ex.contains("The location of the existing table `default`.`path_test`"))
+
+          checkAnswer(
+            spark.table("path_test"), Row(1L, "a") :: Nil)
+        }
       }
     }
   }
