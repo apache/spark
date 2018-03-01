@@ -68,6 +68,30 @@ public class JavaBinaryClassificationMetricsExample {
     JavaRDD<?> recall = metrics.recallByThreshold().toJavaRDD();
     System.out.println("Recall by threshold: " + recall.collect());
 
+    // False omission rate
+    JavaRDD<?> falseOmissionRate = metrics.forByThreshold().toJavaRDD();
+    System.out.println("False omission rate by threshold: " + falseOmissionRate.collect());
+
+    // False discovery rate
+    JavaRDD<?> falseDiscoveryRate = metrics.fdrByThreshold().toJavaRDD();
+    System.out.println("False discovery rate by threshold: " + falseDiscoveryRate.collect());
+
+    // Negative predictive value
+    JavaRDD<?> negativePredictiveValue = metrics.npvByThreshold().toJavaRDD();
+    System.out.println("Negative predictive value by threshold: " + negativePredictiveValue.collect());
+
+    // False negative rate
+    JavaRDD<?> falseNegativeRate = metrics.fnrByThreshold().toJavaRDD();
+    System.out.println("False negative rate by threshold: " + falseNegativeRate.collect());
+
+    // True negative rate
+    JavaRDD<?> trueNegativeRate = metrics.specificityByThreshold().toJavaRDD();
+    System.out.println("True negative rate by threshold: " + trueNegativeRate.collect());
+
+    // False positive rate
+    JavaRDD<?> falsePositiveate = metrics.fprByThreshold().toJavaRDD();
+    System.out.println("False positive rate by threshold: " + falsePositiveate.collect());
+
     // F Score by threshold
     JavaRDD<?> f1Score = metrics.fMeasureByThreshold().toJavaRDD();
     System.out.println("F1 Score by threshold: " + f1Score.collect());

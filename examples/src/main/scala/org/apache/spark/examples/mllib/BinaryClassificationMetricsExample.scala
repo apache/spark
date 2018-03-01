@@ -69,6 +69,43 @@ object BinaryClassificationMetricsExample {
       println(s"Threshold: $t, Recall: $r")
     }
 
+    // False omission rate
+    val falseOmissionRate = metrics.forByThreshold
+    falseOmissionRate.foreach { case (t, r) =>
+      println(s"Threshold: $t, False omission rate: $r")
+    }
+
+    // False discovery rate
+    val falseDiscoveryRate = metrics.fdrByThreshold()
+    falseDiscoveryRate.foreach { case (t, r) =>
+      println(s"Threshold: $t, False discovery rate: $r")
+    }
+
+    // Negative predictive value
+    val negativePredictiveValue = metrics.npvByThreshold()
+    negativePredictiveValue.foreach { case (t, r) =>
+      println(s"Threshold: $t, Negative predictive value: $r")
+    }
+
+    // False negative rate
+    val falseNegativeRate = metrics.fnrByThreshold()
+    falseNegativeRate.foreach { case (t, r) =>
+      println(s"Threshold: $t, Negative predictive value: $r")
+    }
+
+    // True negative rate
+    val trueNegativeRate = metrics.specificityByThreshold()
+    trueNegativeRate.foreach { case (t, r) =>
+      println(s"Threshold: $t, True negative rate: $r")
+    }
+
+    // False positive rate
+    val falsePositiveate = metrics.fprByThreshold()
+    falsePositiveate.foreach { case (t, r) =>
+      println(s"Threshold: $t, False positive rate: $r")
+    }
+
+
     // Precision-Recall Curve
     val PRC = metrics.pr
 
