@@ -33,6 +33,6 @@ public interface ContinuousDataReaderFactory<T> extends DataReaderFactory<T> {
    */
   default DataReader<T> createDataReaderWithOffset(PartitionOffset offset) {
     throw new IllegalStateException(
-      "createDataReaderFactories not supported by default within SupportsScanUnsafeRow");
+      "createDataReaderWithOffset not supported by default within ContinuousDataReaderFactory");
   }
 }
