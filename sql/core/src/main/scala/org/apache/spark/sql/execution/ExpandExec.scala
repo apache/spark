@@ -156,7 +156,7 @@ case class ExpandExec(
           |boolean $isNull = true;
           |${ctx.javaType(firstExpr.dataType)} $value = ${ctx.defaultValue(firstExpr.dataType)};
          """.stripMargin
-        ExprCode(code, VariableValue(isNull, ExprType(ctx.JAVA_BOOLEAN, true)),
+        ExprCode(code, VariableValue(isNull, ExprType(ctx.JAVA_BOOLEAN)),
           VariableValue(value, ExprType(ctx, firstExpr.dataType)))
       }
     }

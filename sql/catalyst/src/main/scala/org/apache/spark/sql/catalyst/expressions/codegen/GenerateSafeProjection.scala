@@ -75,7 +75,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
          |final InternalRow $output = new $rowClass($values);
        """.stripMargin
 
-    ExprCode(code, FalseLiteral, VariableValue(output, ExprType("InternalRow", false)))
+    ExprCode(code, FalseLiteral, VariableValue(output, ExprType("InternalRow")))
   }
 
   private def createCodeForArray(
@@ -106,7 +106,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final ArrayData $output = new $arrayClass($values);
     """
 
-    ExprCode(code, FalseLiteral, VariableValue(output, ExprType("ArrayData", false)))
+    ExprCode(code, FalseLiteral, VariableValue(output, ExprType("ArrayData")))
   }
 
   private def createCodeForMap(
@@ -127,7 +127,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final MapData $output = new $mapClass(${keyConverter.value}, ${valueConverter.value});
     """
 
-    ExprCode(code, FalseLiteral, VariableValue(output, ExprType("MapData", false)))
+    ExprCode(code, FalseLiteral, VariableValue(output, ExprType("MapData")))
   }
 
   @tailrec

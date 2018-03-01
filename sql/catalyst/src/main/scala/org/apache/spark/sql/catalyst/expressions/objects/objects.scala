@@ -63,7 +63,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
 
     val resultIsNull = if (needNullCheck) {
       val resultIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "resultIsNull")
-      GlobalValue(resultIsNull, ExprType(ctx.JAVA_BOOLEAN, true))
+      GlobalValue(resultIsNull, ExprType(ctx.JAVA_BOOLEAN))
     } else {
       FalseLiteral
     }
@@ -445,7 +445,7 @@ case class LambdaVariable(
 
   override def genCode(ctx: CodegenContext): ExprCode = {
     val isNullValue = if (nullable) {
-      VariableValue(isNull, ExprType(ctx.JAVA_BOOLEAN, true))
+      VariableValue(isNull, ExprType(ctx.JAVA_BOOLEAN))
     } else {
       FalseLiteral
     }

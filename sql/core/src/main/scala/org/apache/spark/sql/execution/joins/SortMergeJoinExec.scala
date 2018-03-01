@@ -531,7 +531,7 @@ case class SortMergeJoinExec(
              |boolean $isNull = false;
              |$javaType $value = $defaultValue;
            """.stripMargin
-        (ExprCode(code, VariableValue(isNull, ExprType(ctx.JAVA_BOOLEAN, true)),
+        (ExprCode(code, VariableValue(isNull, ExprType(ctx.JAVA_BOOLEAN)),
           VariableValue(value, ExprType(ctx, a.dataType))), leftVarsDecl)
       } else {
         val code = s"$value = $valueCode;"

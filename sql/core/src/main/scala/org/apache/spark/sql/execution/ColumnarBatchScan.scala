@@ -52,7 +52,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val javaType = ctx.javaType(dataType)
     val value = ctx.getValueFromVector(columnVar, dataType, ordinal)
     val isNullVar = if (nullable) {
-      VariableValue(ctx.freshName("isNull"), ExprType(ctx.JAVA_BOOLEAN, true))
+      VariableValue(ctx.freshName("isNull"), ExprType(ctx.JAVA_BOOLEAN))
     } else {
       FalseLiteral
     }

@@ -69,7 +69,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
               |${ev.code}
               |$isNull = ${ev.isNull};
               |$value = ${ev.value};
-            """.stripMargin, GlobalValue(isNull, ExprType(ctx.JAVA_BOOLEAN, true)), value, i)
+            """.stripMargin, GlobalValue(isNull, ExprType(ctx.JAVA_BOOLEAN)), value, i)
         } else {
           (s"""
               |${ev.code}

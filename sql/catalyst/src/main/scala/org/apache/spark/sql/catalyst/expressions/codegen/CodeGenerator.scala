@@ -1208,7 +1208,7 @@ class CodegenContext {
       // at least two nodes) as the cost of doing it is expected to be low.
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      val state = SubExprEliminationState(GlobalValue(isNull, ExprType(JAVA_BOOLEAN, true)),
+      val state = SubExprEliminationState(GlobalValue(isNull, ExprType(JAVA_BOOLEAN)),
         GlobalValue(value, ExprType(this, expr.dataType)))
       e.foreach(subExprEliminationExprs.put(_, state))
     }

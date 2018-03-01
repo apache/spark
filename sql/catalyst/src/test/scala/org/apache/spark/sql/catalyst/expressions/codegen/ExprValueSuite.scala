@@ -28,15 +28,17 @@ class ExprValueSuite extends SparkFunSuite {
     assert(trueLit.value == "true")
     assert(falseLit.value == "false")
 
+    val ctx = new CodegenContext()
+
     trueLit match {
       case LiteralValue(value, javaType) =>
-        assert(value == "true" && javaType.typeName == "boolean" && javaType.isPrimitive)
+        assert(value == "true" && javaType.typeName == "boolean" && javaType.isPrimitive(ctx))
       case _ => fail()
     }
 
     falseLit match {
       case LiteralValue(value, javaType) =>
-        assert(value == "false" && javaType.typeName == "boolean" && javaType.isPrimitive)
+        assert(value == "false" && javaType.typeName == "boolean" && javaType.isPrimitive(ctx))
       case _ => fail()
     }
   }

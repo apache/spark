@@ -194,7 +194,7 @@ case class HashAggregateExec(
          | $isNull = ${ev.isNull};
          | $value = ${ev.value};
        """.stripMargin
-      ExprCode(ev.code + initVars, GlobalValue(isNull, ExprType(ctx.JAVA_BOOLEAN, true)),
+      ExprCode(ev.code + initVars, GlobalValue(isNull, ExprType(ctx.JAVA_BOOLEAN)),
         GlobalValue(value, ExprType(ctx, e.dataType)))
     }
     val initBufVar = evaluateVariables(bufVars)
