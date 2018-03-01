@@ -72,8 +72,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = GlobalValue(ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull),
-      ExprType(ctx.JAVA_BOOLEAN))
+    ev.isNull = GlobalValue(ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull), ctx.JAVA_BOOLEAN)
 
     // all the evals are meant to be in a do { ... } while (false); loop
     val evals = children.map { e =>
@@ -323,9 +322,9 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     val value = if (eval.isNull.isInstanceOf[LiteralValue]) {
-      LiteralValue(eval.isNull, ExprType(ctx.JAVA_BOOLEAN))
+      LiteralValue(eval.isNull, ctx.JAVA_BOOLEAN)
     } else {
-      VariableValue(eval.isNull, ExprType(ctx.JAVA_BOOLEAN))
+      VariableValue(eval.isNull, ctx.JAVA_BOOLEAN)
     }
     ExprCode(code = eval.code, isNull = FalseLiteral, value = value)
   }
@@ -358,7 +357,7 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
     } else if (eval.isNull == FalseLiteral) {
       TrueLiteral
     } else {
-      StatementValue(s"(!(${eval.isNull}))", ExprType(ctx, dataType))
+      StatementValue(s"(!(${eval.isNull}))", ctx.javaType(dataType))
     }
     ExprCode(code = eval.code, isNull = FalseLiteral, value = value)
   }

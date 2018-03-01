@@ -170,10 +170,10 @@ case class GenerateExec(
     // Add position
     val position = if (e.position) {
       if (outer) {
-        Seq(ExprCode("", StatementValue(s"$index == -1", ExprType(ctx.JAVA_BOOLEAN)),
-          VariableValue(index, ExprType(ctx.JAVA_INT))))
+        Seq(ExprCode("", StatementValue(s"$index == -1", ctx.JAVA_BOOLEAN),
+          VariableValue(index, ctx.JAVA_INT)))
       } else {
-        Seq(ExprCode("", FalseLiteral, VariableValue(index, ExprType(ctx.JAVA_INT))))
+        Seq(ExprCode("", FalseLiteral, VariableValue(index, ctx.JAVA_INT)))
       }
     } else {
       Seq.empty
@@ -316,11 +316,11 @@ case class GenerateExec(
            |boolean $isNull = ${checks.mkString(" || ")};
            |$javaType $value = $isNull ? ${ctx.defaultValue(dt)} : $getter;
          """.stripMargin
-      ExprCode(code, VariableValue(isNull, ExprType(ctx.JAVA_BOOLEAN)),
-        VariableValue(value, ExprType(ctx, dt)))
+      ExprCode(code, VariableValue(isNull, ctx.JAVA_BOOLEAN),
+        VariableValue(value, javaType))
     } else {
       ExprCode(s"$javaType $value = $getter;", FalseLiteral,
-        VariableValue(value, ExprType(ctx, dt)))
+        VariableValue(value, javaType))
     }
   }
 

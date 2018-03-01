@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExprType, GlobalValue}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GlobalValue}
 import org.apache.spark.sql.types._
 
 /**
@@ -54,8 +54,8 @@ abstract class HashMapGenerator(
            | $isNull = ${ev.isNull};
            | $value = ${ev.value};
        """.stripMargin
-      ExprCode(ev.code + initVars, GlobalValue(isNull, ExprType(ctx.JAVA_BOOLEAN)),
-        GlobalValue(value, ExprType(ctx, e.dataType)))
+      ExprCode(ev.code + initVars, GlobalValue(isNull, ctx.JAVA_BOOLEAN),
+        GlobalValue(value, ctx.javaType(e.dataType)))
     }
   }
 

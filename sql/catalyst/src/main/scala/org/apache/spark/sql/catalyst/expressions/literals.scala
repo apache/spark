@@ -278,46 +278,45 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
-    val exprType = ExprType(ctx, dataType)
     if (value == null) {
       val defaultValueLiteral = ctx.defaultValue(javaType) match {
         case "null" => s"(($javaType)null)"
         case lit => lit
       }
-      ExprCode(code = "", isNull = TrueLiteral, value = LiteralValue(defaultValueLiteral, exprType))
+      ExprCode(code = "", isNull = TrueLiteral, value = LiteralValue(defaultValueLiteral, javaType))
     } else {
       dataType match {
         case BooleanType | IntegerType | DateType =>
-          ExprCode.forNonNullValue(LiteralValue(value.toString, exprType))
+          ExprCode.forNonNullValue(LiteralValue(value.toString, javaType))
         case FloatType =>
           value.asInstanceOf[Float] match {
             case v if v.isNaN =>
-              ExprCode.forNonNullValue(LiteralValue("Float.NaN", exprType))
+              ExprCode.forNonNullValue(LiteralValue("Float.NaN", javaType))
             case Float.PositiveInfinity =>
-              ExprCode.forNonNullValue(LiteralValue("Float.POSITIVE_INFINITY", exprType))
+              ExprCode.forNonNullValue(LiteralValue("Float.POSITIVE_INFINITY", javaType))
             case Float.NegativeInfinity =>
-              ExprCode.forNonNullValue(LiteralValue("Float.NEGATIVE_INFINITY", exprType))
+              ExprCode.forNonNullValue(LiteralValue("Float.NEGATIVE_INFINITY", javaType))
             case _ =>
-              ExprCode.forNonNullValue(LiteralValue(s"${value}F", exprType))
+              ExprCode.forNonNullValue(LiteralValue(s"${value}F", javaType))
           }
         case DoubleType =>
           value.asInstanceOf[Double] match {
             case v if v.isNaN =>
-              ExprCode.forNonNullValue(LiteralValue("Double.NaN", exprType))
+              ExprCode.forNonNullValue(LiteralValue("Double.NaN", javaType))
             case Double.PositiveInfinity =>
-              ExprCode.forNonNullValue(LiteralValue("Double.POSITIVE_INFINITY", exprType))
+              ExprCode.forNonNullValue(LiteralValue("Double.POSITIVE_INFINITY", javaType))
             case Double.NegativeInfinity =>
-              ExprCode.forNonNullValue(LiteralValue("Double.NEGATIVE_INFINITY", exprType))
+              ExprCode.forNonNullValue(LiteralValue("Double.NEGATIVE_INFINITY", javaType))
             case _ =>
-              ExprCode.forNonNullValue(LiteralValue(s"${value}D", exprType))
+              ExprCode.forNonNullValue(LiteralValue(s"${value}D", javaType))
           }
         case ByteType | ShortType =>
-          ExprCode.forNonNullValue(LiteralValue(s"($javaType)$value", exprType))
+          ExprCode.forNonNullValue(LiteralValue(s"($javaType)$value", javaType))
         case TimestampType | LongType =>
-          ExprCode.forNonNullValue(LiteralValue(s"${value}L", exprType))
+          ExprCode.forNonNullValue(LiteralValue(s"${value}L", javaType))
         case _ =>
           val constRef = ctx.addReferenceObj("literal", value, javaType)
-          ExprCode.forNonNullValue(GlobalValue(constRef, exprType))
+          ExprCode.forNonNullValue(GlobalValue(constRef, javaType))
       }
     }
   }

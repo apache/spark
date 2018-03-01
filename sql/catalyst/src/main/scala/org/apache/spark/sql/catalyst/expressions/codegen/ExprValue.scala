@@ -24,14 +24,14 @@ import org.apache.spark.sql.types.DataType
 // An abstraction that represents the evaluation result of [[ExprCode]].
 abstract class ExprValue {
 
-  val javaType: ExprType
+  val javaType: String
 
   // Whether we can directly access the evaluation value anywhere.
   // For example, a variable created outside a method can not be accessed inside the method.
   // For such cases, we may need to pass the evaluation as parameter.
   val canDirectAccess: Boolean
 
-  def isPrimitive(ctx: CodegenContext): Boolean = javaType.isPrimitive(ctx)
+  def isPrimitive(ctx: CodegenContext): Boolean = ctx.isPrimitiveType(javaType)
 }
 
 object ExprValue {
@@ -39,21 +39,21 @@ object ExprValue {
 }
 
 // A literal evaluation of [[ExprCode]].
-class LiteralValue(val value: String, val javaType: ExprType) extends ExprValue {
+class LiteralValue(val value: String, val javaType: String) extends ExprValue {
   override def toString: String = value
   override val canDirectAccess: Boolean = true
 }
 
 object LiteralValue {
-  def apply(value: String, javaType: ExprType): LiteralValue = new LiteralValue(value, javaType)
-  def unapply(literal: LiteralValue): Option[(String, ExprType)] =
+  def apply(value: String, javaType: String): LiteralValue = new LiteralValue(value, javaType)
+  def unapply(literal: LiteralValue): Option[(String, String)] =
     Some((literal.value, literal.javaType))
 }
 
 // A variable evaluation of [[ExprCode]].
 case class VariableValue(
     val variableName: String,
-    val javaType: ExprType) extends ExprValue {
+    val javaType: String) extends ExprValue {
   override def toString: String = variableName
   override val canDirectAccess: Boolean = false
 }
@@ -61,25 +61,16 @@ case class VariableValue(
 // A statement evaluation of [[ExprCode]].
 case class StatementValue(
     val statement: String,
-    val javaType: ExprType,
+    val javaType: String,
     val canDirectAccess: Boolean = false) extends ExprValue {
   override def toString: String = statement
 }
 
 // A global variable evaluation of [[ExprCode]].
-case class GlobalValue(val value: String, val javaType: ExprType) extends ExprValue {
+case class GlobalValue(val value: String, val javaType: String) extends ExprValue {
   override def toString: String = value
   override val canDirectAccess: Boolean = true
 }
 
-case object TrueLiteral extends LiteralValue("true", ExprType("boolean"))
-case object FalseLiteral extends LiteralValue("false", ExprType("boolean"))
-
-// Represents the java type of an evaluation.
-case class ExprType(val typeName: String) {
-  def isPrimitive(ctx: CodegenContext): Boolean = ctx.isPrimitiveType(typeName)
-}
-
-object ExprType {
-  def apply(ctx: CodegenContext, dataType: DataType): ExprType = ExprType(ctx.javaType(dataType))
-}
+case object TrueLiteral extends LiteralValue("true", "boolean")
+case object FalseLiteral extends LiteralValue("false", "boolean")

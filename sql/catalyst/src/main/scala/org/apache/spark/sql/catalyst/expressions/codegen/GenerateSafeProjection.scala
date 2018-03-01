@@ -54,7 +54,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
 
     val fieldWriters = schema.map(_.dataType).zipWithIndex.map { case (dt, i) =>
       val converter = convertToSafe(ctx, StatementValue(ctx.getValue(tmpInput, dt, i.toString),
-        ExprType(ctx, dt)), dt)
+        ctx.javaType(dt)), dt)
       s"""
         if (!$tmpInput.isNullAt($i)) {
           ${converter.code}
@@ -75,7 +75,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
          |final InternalRow $output = new $rowClass($values);
        """.stripMargin
 
-    ExprCode(code, FalseLiteral, VariableValue(output, ExprType("InternalRow")))
+    ExprCode(code, FalseLiteral, VariableValue(output, "InternalRow"))
   }
 
   private def createCodeForArray(
@@ -91,7 +91,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val arrayClass = classOf[GenericArrayData].getName
 
     val elementConverter = convertToSafe(
-      ctx, StatementValue(ctx.getValue(tmpInput, elementType, index), ExprType(ctx, elementType)),
+      ctx, StatementValue(ctx.getValue(tmpInput, elementType, index), ctx.javaType(elementType)),
       elementType)
     val code = s"""
       final ArrayData $tmpInput = $input;
@@ -106,7 +106,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final ArrayData $output = new $arrayClass($values);
     """
 
-    ExprCode(code, FalseLiteral, VariableValue(output, ExprType("ArrayData")))
+    ExprCode(code, FalseLiteral, VariableValue(output, "ArrayData"))
   }
 
   private def createCodeForMap(
@@ -127,7 +127,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final MapData $output = new $mapClass(${keyConverter.value}, ${valueConverter.value});
     """
 
-    ExprCode(code, FalseLiteral, VariableValue(output, ExprType("MapData")))
+    ExprCode(code, FalseLiteral, VariableValue(output, "MapData"))
   }
 
   @tailrec

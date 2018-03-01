@@ -323,7 +323,7 @@ class CodegenContext {
       case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
       case _ => s"$value = $initCode;"
     }
-    ExprCode(code, FalseLiteral, GlobalValue(value, ExprType(this, dataType)))
+    ExprCode(code, FalseLiteral, GlobalValue(value, javaType(dataType)))
   }
 
   def declareMutableStates(): String = {
@@ -1208,8 +1208,8 @@ class CodegenContext {
       // at least two nodes) as the cost of doing it is expected to be low.
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      val state = SubExprEliminationState(GlobalValue(isNull, ExprType(JAVA_BOOLEAN)),
-        GlobalValue(value, ExprType(this, expr.dataType)))
+      val state = SubExprEliminationState(GlobalValue(isNull, JAVA_BOOLEAN),
+        GlobalValue(value, javaType(expr.dataType)))
       e.foreach(subExprEliminationExprs.put(_, state))
     }
   }
