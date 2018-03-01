@@ -697,13 +697,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
        |$buffer.append("[");
        |if ($array.numElements() > 0) {
        |  if (!$array.isNullAt(0)) {
-       |    $buffer.append($elementToStringFunc(${ctx.getValue(array, et, "0")}));
+       |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
        |    $buffer.append(",");
        |    if (!$array.isNullAt($loopIndex)) {
        |      $buffer.append(" ");
-       |      $buffer.append($elementToStringFunc(${ctx.getValue(array, et, loopIndex)}));
+       |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
        |    }
        |  }
        |}
@@ -737,20 +737,20 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     s"""
        |$buffer.append("[");
        |if ($map.numElements() > 0) {
-       |  $buffer.append($keyToStringFunc(${ctx.getValue(s"$map.keyArray()", kt, "0")}));
+       |  $buffer.append($keyToStringFunc(${CodeGenerator.getValue(s"$map.keyArray()", kt, "0")}));
        |  $buffer.append(" ->");
        |  if (!$map.valueArray().isNullAt(0)) {
        |    $buffer.append(" ");
-       |    $buffer.append($valueToStringFunc(${ctx.getValue(s"$map.valueArray()", vt, "0")}));
+       |    $buffer.append($valueToStringFunc(${CodeGenerator.getValue(s"$map.valueArray()", vt, "0")}));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
        |    $buffer.append(", ");
-       |    $buffer.append($keyToStringFunc(${ctx.getValue(s"$map.keyArray()", kt, loopIndex)}));
+       |    $buffer.append($keyToStringFunc(${CodeGenerator.getValue(s"$map.keyArray()", kt, loopIndex)}));
        |    $buffer.append(" ->");
        |    if (!$map.valueArray().isNullAt($loopIndex)) {
        |      $buffer.append(" ");
        |      $buffer.append($valueToStringFunc(
-       |        ${ctx.getValue(s"$map.valueArray()", vt, loopIndex)}));
+       |        ${CodeGenerator.getValue(s"$map.valueArray()", vt, loopIndex)}));
        |    }
        |  }
        |}
@@ -773,7 +773,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
          |  ${if (i != 0) s"""$buffer.append(" ");""" else ""}
          |
          |  // Append $i field into the string buffer
-         |  ${ctx.javaType(ft)} $field = ${ctx.getValue(row, ft, s"$i")};
+         |  ${ctx.javaType(ft)} $field = ${CodeGenerator.getValue(row, ft, s"$i")};
          |  UTF8String $fieldStr = null;
          |  ${fieldToStringCode(field, fieldStr, null /* resultIsNull won't be used */)}
          |  $buffer.append($fieldStr);
@@ -1203,7 +1203,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           } else {
             boolean $fromElementNull = false;
             ${ctx.javaType(fromType)} $fromElementPrim =
-              ${ctx.getValue(c, fromType, j)};
+              ${CodeGenerator.getValue(c, fromType, j)};
             ${castCode(ctx, fromElementPrim,
               fromElementNull, toElementPrim, toElementNull, toType, elementCast)}
             if ($toElementNull) {
@@ -1266,13 +1266,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
           $tmpResult.setNullAt($i);
         } else {
           $fromType $fromFieldPrim =
-            ${ctx.getValue(tmpInput, from.fields(i).dataType, i.toString)};
+            ${CodeGenerator.getValue(tmpInput, from.fields(i).dataType, i.toString)};
           ${castCode(ctx, fromFieldPrim,
             fromFieldNull, toFieldPrim, toFieldNull, to.fields(i).dataType, cast)}
           if ($toFieldNull) {
             $tmpResult.setNullAt($i);
           } else {
-            ${ctx.setColumn(tmpResult, to.fields(i).dataType, i, toFieldPrim)};
+            ${CodeGenerator.setColumn(tmpResult, to.fields(i).dataType, i, toFieldPrim)};
           }
         }
        """

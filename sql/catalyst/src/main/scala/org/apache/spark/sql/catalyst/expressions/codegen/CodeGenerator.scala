@@ -537,13 +537,38 @@ class CodegenContext {
     extraClasses.append(code)
   }
 
-  final val JAVA_BOOLEAN = "boolean"
-  final val JAVA_BYTE = "byte"
-  final val JAVA_SHORT = "short"
-  final val JAVA_INT = "int"
-  final val JAVA_LONG = "long"
-  final val JAVA_FLOAT = "float"
-  final val JAVA_DOUBLE = "double"
+  /**
+   * Returns true if the Java type has a special accessor and setter in [[InternalRow]].
+   */
+  def isPrimitiveType(jt: String): Boolean = CodeGenerator.isPrimitiveType(jt)
+
+  def isPrimitiveType(dt: DataType): Boolean = CodeGenerator.isPrimitiveType(dt)
+
+  /**
+   * Returns the name used in accessor and setter for a Java primitive type.
+   */
+  def primitiveTypeName(jt: String): String = CodeGenerator.primitiveTypeName(jt)
+
+  def primitiveTypeName(dt: DataType): String = CodeGenerator.primitiveTypeName(dt)
+
+  /**
+   * Returns the Java type for a DataType.
+   */
+  def javaType(dt: DataType): String = CodeGenerator.javaType(dt)
+
+  /**
+   * Returns the boxed type in Java.
+   */
+  def boxedType(jt: String): String = CodeGenerator.boxedType(jt)
+
+  def boxedType(dt: DataType): String = CodeGenerator.boxedType(dt)
+
+  /**
+   * Returns the representation of default value for a given Java Type.
+   */
+  def defaultValue(jt: String): String = CodeGenerator.defaultValue(jt)
+
+  def defaultValue(dt: DataType): String = CodeGenerator.defaultValue(dt)
 
   /**
    * The map from a variable name to it's next ID.
@@ -579,196 +604,6 @@ class CodegenContext {
       fullName
     }
   }
-
-  /**
-   * Returns the specialized code to access a value from `inputRow` at `ordinal`.
-   */
-  def getValue(input: String, dataType: DataType, ordinal: String): String = {
-    val jt = javaType(dataType)
-    dataType match {
-      case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
-      case t: DecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
-      case StringType => s"$input.getUTF8String($ordinal)"
-      case BinaryType => s"$input.getBinary($ordinal)"
-      case CalendarIntervalType => s"$input.getInterval($ordinal)"
-      case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
-      case _: ArrayType => s"$input.getArray($ordinal)"
-      case _: MapType => s"$input.getMap($ordinal)"
-      case NullType => "null"
-      case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
-      case _ => s"($jt)$input.get($ordinal, null)"
-    }
-  }
-
-  /**
-   * Returns the code to update a column in Row for a given DataType.
-   */
-  def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
-    val jt = javaType(dataType)
-    dataType match {
-      case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
-      case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
-      case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
-      // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
-      // it to avoid keeping a "pointer" to a memory region which may get updated afterwards.
-      case StringType | _: StructType | _: ArrayType | _: MapType =>
-        s"$row.update($ordinal, $value.copy())"
-      case _ => s"$row.update($ordinal, $value)"
-    }
-  }
-
-  /**
-   * Update a column in MutableRow from ExprCode.
-   *
-   * @param isVectorized True if the underlying row is of type `ColumnarBatch.Row`, false otherwise
-   */
-  def updateColumn(
-      row: String,
-      dataType: DataType,
-      ordinal: Int,
-      ev: ExprCode,
-      nullable: Boolean,
-      isVectorized: Boolean = false): String = {
-    if (nullable) {
-      // Can't call setNullAt on DecimalType, because we need to keep the offset
-      if (!isVectorized && dataType.isInstanceOf[DecimalType]) {
-        s"""
-           if (!${ev.isNull}) {
-             ${setColumn(row, dataType, ordinal, ev.value)};
-           } else {
-             ${setColumn(row, dataType, ordinal, "null")};
-           }
-         """
-      } else {
-        s"""
-           if (!${ev.isNull}) {
-             ${setColumn(row, dataType, ordinal, ev.value)};
-           } else {
-             $row.setNullAt($ordinal);
-           }
-         """
-      }
-    } else {
-      s"""${setColumn(row, dataType, ordinal, ev.value)};"""
-    }
-  }
-
-  /**
-   * Returns the specialized code to set a given value in a column vector for a given `DataType`.
-   */
-  def setValue(vector: String, rowId: String, dataType: DataType, value: String): String = {
-    val jt = javaType(dataType)
-    dataType match {
-      case _ if isPrimitiveType(jt) =>
-        s"$vector.put${primitiveTypeName(jt)}($rowId, $value);"
-      case t: DecimalType => s"$vector.putDecimal($rowId, $value, ${t.precision});"
-      case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
-      case _ =>
-        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
-    }
-  }
-
-  /**
-   * Returns the specialized code to set a given value in a column vector for a given `DataType`
-   * that could potentially be nullable.
-   */
-  def updateColumn(
-      vector: String,
-      rowId: String,
-      dataType: DataType,
-      ev: ExprCode,
-      nullable: Boolean): String = {
-    if (nullable) {
-      s"""
-         if (!${ev.isNull}) {
-           ${setValue(vector, rowId, dataType, ev.value)}
-         } else {
-           $vector.putNull($rowId);
-         }
-       """
-    } else {
-      s"""${setValue(vector, rowId, dataType, ev.value)};"""
-    }
-  }
-
-  /**
-   * Returns the specialized code to access a value from a column vector for a given `DataType`.
-   */
-  def getValueFromVector(vector: String, dataType: DataType, rowId: String): String = {
-    if (dataType.isInstanceOf[StructType]) {
-      // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
-      // `ordinal` parameter.
-      s"$vector.getStruct($rowId)"
-    } else {
-      getValue(vector, dataType, rowId)
-    }
-  }
-
-  /**
-   * Returns the name used in accessor and setter for a Java primitive type.
-   */
-  def primitiveTypeName(jt: String): String = jt match {
-    case JAVA_INT => "Int"
-    case _ => boxedType(jt)
-  }
-
-  def primitiveTypeName(dt: DataType): String = primitiveTypeName(javaType(dt))
-
-  /**
-   * Returns the Java type for a DataType.
-   */
-  def javaType(dt: DataType): String = dt match {
-    case BooleanType => JAVA_BOOLEAN
-    case ByteType => JAVA_BYTE
-    case ShortType => JAVA_SHORT
-    case IntegerType | DateType => JAVA_INT
-    case LongType | TimestampType => JAVA_LONG
-    case FloatType => JAVA_FLOAT
-    case DoubleType => JAVA_DOUBLE
-    case dt: DecimalType => "Decimal"
-    case BinaryType => "byte[]"
-    case StringType => "UTF8String"
-    case CalendarIntervalType => "CalendarInterval"
-    case _: StructType => "InternalRow"
-    case _: ArrayType => "ArrayData"
-    case _: MapType => "MapData"
-    case udt: UserDefinedType[_] => javaType(udt.sqlType)
-    case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
-    case ObjectType(cls) => cls.getName
-    case _ => "Object"
-  }
-
-  /**
-   * Returns the boxed type in Java.
-   */
-  def boxedType(jt: String): String = jt match {
-    case JAVA_BOOLEAN => "Boolean"
-    case JAVA_BYTE => "Byte"
-    case JAVA_SHORT => "Short"
-    case JAVA_INT => "Integer"
-    case JAVA_LONG => "Long"
-    case JAVA_FLOAT => "Float"
-    case JAVA_DOUBLE => "Double"
-    case other => other
-  }
-
-  def boxedType(dt: DataType): String = boxedType(javaType(dt))
-
-  /**
-   * Returns the representation of default value for a given Java Type.
-   */
-  def defaultValue(jt: String): String = jt match {
-    case JAVA_BOOLEAN => "false"
-    case JAVA_BYTE => "(byte)-1"
-    case JAVA_SHORT => "(short)-1"
-    case JAVA_INT => "-1"
-    case JAVA_LONG => "-1L"
-    case JAVA_FLOAT => "-1.0f"
-    case JAVA_DOUBLE => "-1.0"
-    case _ => "null"
-  }
-
-  def defaultValue(dt: DataType): String = defaultValue(javaType(dt))
 
   /**
    * Generates code for equal expression in Java.
@@ -812,6 +647,7 @@ class CodegenContext {
       val isNullB = freshName("isNullB")
       val compareFunc = freshName("compareArray")
       val minLength = freshName("minLength")
+      val jt = javaType(elementType)
       val funcCode: String =
         s"""
           public int $compareFunc(ArrayData a, ArrayData b) {
@@ -833,8 +669,8 @@ class CodegenContext {
               } else if ($isNullB) {
                 return 1;
               } else {
-                ${javaType(elementType)} $elementA = ${getValue("a", elementType, "i")};
-                ${javaType(elementType)} $elementB = ${getValue("b", elementType, "i")};
+                $jt $elementA = ${CodeGenerator.getValue("a", elementType, "i")};
+                $jt $elementB = ${CodeGenerator.getValue("b", elementType, "i")};
                 int comp = ${genComp(elementType, elementA, elementB)};
                 if (comp != 0) {
                   return comp;
@@ -882,7 +718,8 @@ class CodegenContext {
    * @param c2 name of the variable of expression 2's output
    */
   def genGreater(dataType: DataType, c1: String, c2: String): String = javaType(dataType) match {
-    case JAVA_BYTE | JAVA_SHORT | JAVA_INT | JAVA_LONG => s"$c1 > $c2"
+    case CodeGenerator.JAVA_BYTE | CodeGenerator.JAVA_SHORT |
+         CodeGenerator.JAVA_INT | CodeGenerator.JAVA_LONG => s"$c1 > $c2"
     case _ => s"(${genComp(dataType, c1, c2)}) > 0"
   }
 
@@ -906,20 +743,7 @@ class CodegenContext {
     }
   }
 
-  /**
-   * List of java data types that have special accessors and setters in [[InternalRow]].
-   */
-  val primitiveTypes =
-    Seq(JAVA_BOOLEAN, JAVA_BYTE, JAVA_SHORT, JAVA_INT, JAVA_LONG, JAVA_FLOAT, JAVA_DOUBLE)
-
-  /**
-   * Returns true if the Java type has a special accessor and setter in [[InternalRow]].
-   */
-  def isPrimitiveType(jt: String): Boolean = primitiveTypes.contains(jt)
-
-  def isPrimitiveType(dt: DataType): Boolean = isPrimitiveType(javaType(dt))
-
-  /**
+ /**
    * Splits the generated code of expressions into multiple functions, because function has
    * 64kb code size limit in JVM. If the class to which the function would be inlined would grow
    * beyond 1000kb, we declare a private, inner sub-class, and the function is inlined to it
@@ -1179,7 +1003,7 @@ class CodegenContext {
     commonExprs.foreach { e =>
       val expr = e.head
       val fnName = freshName("subExpr")
-      val isNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
+      val isNull = addMutableState(CodeGenerator.JAVA_BOOLEAN, "subExprIsNull")
       val value = addMutableState(javaType(expr.dataType), "subExprValue")
 
       // Generate the code for this expression tree and wrap it in a function.
@@ -1276,7 +1100,7 @@ class CodegenContext {
     def paramLengthForExpr(input: Expression): Int = {
       // For a nullable expression, we need to pass in an extra boolean parameter.
       (if (input.nullable) 1 else 0) + javaType(input.dataType) match {
-        case JAVA_LONG | JAVA_DOUBLE => 2
+        case CodeGenerator.JAVA_LONG | CodeGenerator.JAVA_DOUBLE => 2
         case _ => 1
       }
     }
@@ -1524,4 +1348,215 @@ object CodeGenerator extends Logging {
           result
         }
       })
+
+  final val JAVA_BOOLEAN = "boolean"
+  final val JAVA_BYTE = "byte"
+  final val JAVA_SHORT = "short"
+  final val JAVA_INT = "int"
+  final val JAVA_LONG = "long"
+  final val JAVA_FLOAT = "float"
+  final val JAVA_DOUBLE = "double"
+
+  /**
+   * List of java data types that have special accessors and setters in [[InternalRow]].
+   */
+  val primitiveTypes =
+    Seq(JAVA_BOOLEAN, JAVA_BYTE, JAVA_SHORT, JAVA_INT, JAVA_LONG, JAVA_FLOAT, JAVA_DOUBLE)
+
+  /**
+   * Returns true if the Java type has a special accessor and setter in [[InternalRow]].
+   */
+  def isPrimitiveType(jt: String): Boolean = primitiveTypes.contains(jt)
+
+  def isPrimitiveType(dt: DataType): Boolean = isPrimitiveType(javaType(dt))
+
+  /**
+   * Returns the specialized code to access a value from `inputRow` at `ordinal`.
+   */
+  def getValue(input: String, dataType: DataType, ordinal: String): String = {
+    val jt = javaType(dataType)
+    dataType match {
+      case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
+      case t: DecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
+      case StringType => s"$input.getUTF8String($ordinal)"
+      case BinaryType => s"$input.getBinary($ordinal)"
+      case CalendarIntervalType => s"$input.getInterval($ordinal)"
+      case t: StructType => s"$input.getStruct($ordinal, ${t.size})"
+      case _: ArrayType => s"$input.getArray($ordinal)"
+      case _: MapType => s"$input.getMap($ordinal)"
+      case NullType => "null"
+      case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
+      case _ => s"($jt)$input.get($ordinal, null)"
+    }
+  }
+
+  /**
+   * Returns the code to update a column in Row for a given DataType.
+   */
+  def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
+    val jt = javaType(dataType)
+    dataType match {
+      case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
+      case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
+      case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
+      // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
+      // it to avoid keeping a "pointer" to a memory region which may get updated afterwards.
+      case StringType | _: StructType | _: ArrayType | _: MapType =>
+        s"$row.update($ordinal, $value.copy())"
+      case _ => s"$row.update($ordinal, $value)"
+    }
+  }
+
+  /**
+   * Update a column in MutableRow from ExprCode.
+   *
+   * @param isVectorized True if the underlying row is of type `ColumnarBatch.Row`, false otherwise
+   */
+  def updateColumn(
+      row: String,
+      dataType: DataType,
+      ordinal: Int,
+      ev: ExprCode,
+      nullable: Boolean,
+      isVectorized: Boolean = false): String = {
+    if (nullable) {
+      // Can't call setNullAt on DecimalType, because we need to keep the offset
+      if (!isVectorized && dataType.isInstanceOf[DecimalType]) {
+        s"""
+           |if (!${ev.isNull}) {
+           |  ${setColumn(row, dataType, ordinal, ev.value)};
+           |} else {
+           |  ${setColumn(row, dataType, ordinal, "null")};
+           |}
+         """.stripMargin
+      } else {
+        s"""
+           |if (!${ev.isNull}) {
+           |  ${setColumn(row, dataType, ordinal, ev.value)};
+           |} else {
+           |  $row.setNullAt($ordinal);
+           |}
+         """.stripMargin
+      }
+    } else {
+      s"""${setColumn(row, dataType, ordinal, ev.value)};"""
+    }
+  }
+
+  /**
+   * Returns the specialized code to set a given value in a column vector for a given `DataType`.
+   */
+  def setValue(vector: String, rowId: String, dataType: DataType, value: String): String = {
+    val jt = javaType(dataType)
+    dataType match {
+      case _ if isPrimitiveType(jt) =>
+        s"$vector.put${primitiveTypeName(jt)}($rowId, $value);"
+      case t: DecimalType => s"$vector.putDecimal($rowId, $value, ${t.precision});"
+      case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
+      case _ =>
+        throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
+    }
+  }
+
+  /**
+   * Returns the specialized code to set a given value in a column vector for a given `DataType`
+   * that could potentially be nullable.
+   */
+  def updateColumn(
+      vector: String,
+      rowId: String,
+      dataType: DataType,
+      ev: ExprCode,
+      nullable: Boolean): String = {
+    if (nullable) {
+      s"""
+         |if (!${ev.isNull}) {
+         |  ${setValue(vector, rowId, dataType, ev.value)}
+         |} else {
+         |  $vector.putNull($rowId);
+         |}
+       """.stripMargin
+    } else {
+      s"""${setValue(vector, rowId, dataType, ev.value)};"""
+    }
+  }
+
+  /**
+   * Returns the specialized code to access a value from a column vector for a given `DataType`.
+   */
+  def getValueFromVector(vector: String, dataType: DataType, rowId: String): String = {
+    if (dataType.isInstanceOf[StructType]) {
+      // `ColumnVector.getStruct` is different from `InternalRow.getStruct`, it only takes an
+      // `ordinal` parameter.
+      s"$vector.getStruct($rowId)"
+    } else {
+      getValue(vector, dataType, rowId)
+    }
+  }
+
+  /**
+   * Returns the name used in accessor and setter for a Java primitive type.
+   */
+  def primitiveTypeName(jt: String): String = jt match {
+    case JAVA_INT => "Int"
+    case _ => boxedType(jt)
+  }
+
+  def primitiveTypeName(dt: DataType): String = primitiveTypeName(javaType(dt))
+
+  /**
+   * Returns the Java type for a DataType.
+   */
+  def javaType(dt: DataType): String = dt match {
+    case BooleanType => JAVA_BOOLEAN
+    case ByteType => JAVA_BYTE
+    case ShortType => JAVA_SHORT
+    case IntegerType | DateType => JAVA_INT
+    case LongType | TimestampType => JAVA_LONG
+    case FloatType => JAVA_FLOAT
+    case DoubleType => JAVA_DOUBLE
+    case dt: DecimalType => "Decimal"
+    case BinaryType => "byte[]"
+    case StringType => "UTF8String"
+    case CalendarIntervalType => "CalendarInterval"
+    case _: StructType => "InternalRow"
+    case _: ArrayType => "ArrayData"
+    case _: MapType => "MapData"
+    case udt: UserDefinedType[_] => javaType(udt.sqlType)
+    case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
+    case ObjectType(cls) => cls.getName
+    case _ => "Object"
+  }
+
+  /**
+   * Returns the boxed type in Java.
+   */
+  def boxedType(jt: String): String = jt match {
+    case JAVA_BOOLEAN => "Boolean"
+    case JAVA_BYTE => "Byte"
+    case JAVA_SHORT => "Short"
+    case JAVA_INT => "Integer"
+    case JAVA_LONG => "Long"
+    case JAVA_FLOAT => "Float"
+    case JAVA_DOUBLE => "Double"
+    case other => other
+  }
+
+  def boxedType(dt: DataType): String = boxedType(javaType(dt))
+
+  /**
+   * Returns the representation of default value for a given Java Type.
+   */
+  def defaultValue(jt: String): String = jt match {
+    case JAVA_BOOLEAN => "false"
+    case JAVA_BYTE => "(byte)-1"
+    case JAVA_SHORT => "(short)-1"
+    case JAVA_INT => "-1"
+    case JAVA_LONG => "-1L"
+    case JAVA_FLOAT => "-1.0f"
+    case JAVA_DOUBLE => "-1.0"
+    case _ => "null"
+  }
+
+  def defaultValue(dt: DataType): String = defaultValue(javaType(dt))
 }

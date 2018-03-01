@@ -309,7 +309,7 @@ abstract class HashExpression[E] extends Expression {
 
     ctx.nullSafeExec(nullable, s"$input.isNullAt($index)") {
       s"""
-        final ${ctx.javaType(elementType)} $element = ${ctx.getValue(input, elementType, index)};
+        final ${ctx.javaType(elementType)} $element = ${CodeGenerator.getValue(input, elementType, index)};
         ${computeHash(element, elementType, result, ctx)}
       """
     }
@@ -651,11 +651,11 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = childrenHash,
       funcName = "computeHash",
-      extraArguments = Seq(ctx.JAVA_INT -> ev.value),
-      returnType = ctx.JAVA_INT,
+      extraArguments = Seq(CodeGenerator.JAVA_INT -> ev.value),
+      returnType = CodeGenerator.JAVA_INT,
       makeSplitFunction = body =>
         s"""
-           |${ctx.JAVA_INT} $childHash = 0;
+           |${CodeGenerator.JAVA_INT} $childHash = 0;
            |$body
            |return ${ev.value};
          """.stripMargin,
@@ -664,8 +664,8 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
 
     ev.copy(code =
       s"""
-         |${ctx.JAVA_INT} ${ev.value} = $seed;
-         |${ctx.JAVA_INT} $childHash = 0;
+         |${CodeGenerator.JAVA_INT} ${ev.value} = $seed;
+         |${CodeGenerator.JAVA_INT} $childHash = 0;
          |$codes
        """.stripMargin)
   }
@@ -780,14 +780,14 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
        """.stripMargin
     }
 
-    s"${ctx.JAVA_INT} $childResult = 0;\n" + ctx.splitExpressions(
+    s"${CodeGenerator.JAVA_INT} $childResult = 0;\n" + ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",
-      arguments = Seq("InternalRow" -> input, ctx.JAVA_INT -> result),
-      returnType = ctx.JAVA_INT,
+      arguments = Seq("InternalRow" -> input, CodeGenerator.JAVA_INT -> result),
+      returnType = CodeGenerator.JAVA_INT,
       makeSplitFunction = body =>
         s"""
-           |${ctx.JAVA_INT} $childResult = 0;
+           |${CodeGenerator.JAVA_INT} $childResult = 0;
            |$body
            |return $result;
            """.stripMargin,

@@ -222,7 +222,7 @@ case class ConcatWs(children: Seq[Expression])
                 if (!${eval.isNull}) {
                   final int $size = ${eval.value}.numElements();
                   for (int j = 0; j < $size; j ++) {
-                    $array[$idxInVararg ++] = ${ctx.getValue(eval.value, StringType, "j")};
+                    $array[$idxInVararg ++] = ${CodeGenerator.getValue(eval.value, StringType, "j")};
                   }
                 }
                 """)
@@ -350,10 +350,10 @@ case class Elt(children: Seq[Expression]) extends Expression {
       expressions = assignInputValue,
       funcName = "eltFunc",
       extraArguments = ("int", indexVal) :: Nil,
-      returnType = ctx.JAVA_BOOLEAN,
+      returnType = CodeGenerator.JAVA_BOOLEAN,
       makeSplitFunction = body =>
         s"""
-           |${ctx.JAVA_BOOLEAN} $indexMatched = false;
+           |${CodeGenerator.JAVA_BOOLEAN} $indexMatched = false;
            |do {
            |  $body
            |} while (false);
@@ -372,7 +372,7 @@ case class Elt(children: Seq[Expression]) extends Expression {
       s"""
          |${index.code}
          |final int $indexVal = ${index.value};
-         |${ctx.JAVA_BOOLEAN} $indexMatched = false;
+         |${CodeGenerator.JAVA_BOOLEAN} $indexMatched = false;
          |$inputVal = null;
          |do {
          |  $codes
@@ -2110,7 +2110,8 @@ case class FormatNumber(x: Expression, d: Expression)
       val usLocale = "US"
       val i = ctx.freshName("i")
       val dFormat = ctx.freshName("dFormat")
-      val lastDValue = ctx.addMutableState(ctx.JAVA_INT, "lastDValue", v => s"$v = -100;")
+      val lastDValue =
+        ctx.addMutableState(CodeGenerator.JAVA_INT, "lastDValue", v => s"$v = -100;")
       val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
       val numberFormat = ctx.addMutableState(df, "numberFormat",
         v => s"""$v = new $df("", new $dfs($l.$usLocale));""")
