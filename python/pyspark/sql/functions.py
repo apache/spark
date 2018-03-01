@@ -128,12 +128,12 @@ _functions_1_4 = {
            :return: sine of the angle, as if computed by `java.lang.Math.sin()`""",
     'sinh': """:param col: hyperbolic angle
            :return: hyperbolic sine of the given value,
-           as if computed by `java.lang.Math.sinh()`""",
+                    as if computed by `java.lang.Math.sinh()`""",
     'tan': """:param col: angle in radians
            :return: tangent of the given value, as if computed by `java.lang.Math.tan()`""",
     'tanh': """:param col: hyperbolic angle
             :return: hyperbolic tangent of the given value,
-            as if computed by `java.lang.Math.tanh()`""",
+                     as if computed by `java.lang.Math.tanh()`""",
     'toDegrees': '.. note:: Deprecated in 2.1, use :func:`degrees` instead.',
     'toRadians': '.. note:: Deprecated in 2.1, use :func:`radians` instead.',
     'bitwiseNOT': 'Computes bitwise not.',
@@ -183,13 +183,15 @@ _functions_2_1 = {
 
 # math functions that take two arguments as input
 _binary_mathfunctions = {
-    'atan2': """:param col1: coordinate on y-axis
+    'atan2': """
+             :param col1: coordinate on y-axis
              :param col2: coordinate on x-axis
              :return: the `theta` component of the point
-             (`r`, `theta`)
-             in polar coordinates that corresponds to the point
-             (`x`, `y`) in Cartesian coordinates,
-             as if computed by `java.lang.Math.atan2()`""",
+                (`r`, `theta`)
+                in polar coordinates that corresponds to the point
+                (`x`, `y`) in Cartesian coordinates,
+                as if computed by `java.lang.Math.atan2()`
+             """,
     'hypot': 'Computes ``sqrt(a^2 + b^2)`` without intermediate overflow or underflow.',
     'pow': 'Returns the value of the first argument raised to the power of the second argument.',
 }

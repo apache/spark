@@ -278,7 +278,7 @@ setMethod("abs",
           })
 
 #' @details
-#' \code{acos}: Computes the inverse cosine of the given value,
+#' \code{acos}: Returns the inverse cosine of the given value,
 #' as if computed by \code{java.lang.Math.acos()}
 #'
 #' @rdname column_math_functions
@@ -334,7 +334,7 @@ setMethod("ascii",
           })
 
 #' @details
-#' \code{asin}: Computes the inverse sine of the given value,
+#' \code{asin}: Returns the inverse sine of the given value,
 #' as if computed by \code{java.lang.Math.asin()}
 #'
 #' @rdname column_math_functions
@@ -349,7 +349,7 @@ setMethod("asin",
           })
 
 #' @details
-#' \code{atan}: Computes the inverse tangent of the given value,
+#' \code{atan}: Returns the inverse tangent of the given value,
 #' as if computed by \code{java.lang.Math.atan()}
 #'
 #' @rdname column_math_functions
@@ -613,7 +613,7 @@ setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOr
           })
 
 #' @details
-#' \code{cos}: Computes the cosine of the given value,
+#' \code{cos}: Returns the cosine of the given value,
 #' as if computed by \code{java.lang.Math.cos()}. Units in radians.
 #'
 #' @rdname column_math_functions
@@ -628,7 +628,7 @@ setMethod("cos",
           })
 
 #' @details
-#' \code{cosh}: Computes the hyperbolic cosine of the given value,
+#' \code{cosh}: Returns the hyperbolic cosine of the given value,
 #' as if computed by \code{java.lang.Math.cosh()}.
 #'
 #' @rdname column_math_functions
@@ -1465,7 +1465,7 @@ setMethod("sign", signature(x = "Column"),
           })
 
 #' @details
-#' \code{sin}: Computes the sine of the given value,
+#' \code{sin}: Returns the sine of the given value,
 #' as if computed by \code{java.lang.Math.sin()}. Units in radians.
 #'
 #' @rdname column_math_functions
@@ -1480,7 +1480,7 @@ setMethod("sin",
           })
 
 #' @details
-#' \code{sinh}: Computes the hyperbolic sine of the given value,
+#' \code{sinh}: Returns the hyperbolic sine of the given value,
 #' as if computed by \code{java.lang.Math.sinh()}.
 #'
 #' @rdname column_math_functions
@@ -1657,7 +1657,7 @@ setMethod("sumDistinct",
           })
 
 #' @details
-#' \code{tan}: Computes the tangent of the given value,
+#' \code{tan}: Returns the tangent of the given value,
 #' as if computed by \code{java.lang.Math.tan()}.
 #' Units in radians.
 #'
@@ -1673,7 +1673,7 @@ setMethod("tan",
           })
 
 #' @details
-#' \code{tanh}: Computes the hyperbolic tangent of the given value,
+#' \code{tanh}: Returns the hyperbolic tangent of the given value,
 #' as if computed by \code{java.lang.Math.tanh()}.
 #'
 #' @rdname column_math_functions
