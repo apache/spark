@@ -497,6 +497,7 @@ private[deploy] class Worker(
             val dirs = localRootDirs.flatMap { dir =>
               try {
                 val appDir = Utils.createDirectory(dir, namePrefix = "executor")
+                Utils.chmod700(appDir)
                 Some(appDir.getAbsolutePath())
               } catch {
                 case e: IOException =>

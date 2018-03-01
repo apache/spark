@@ -29,7 +29,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 class DataSourceScanExecRedactionSuite extends QueryTest with SharedSQLContext {
 
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set("spark.redaction.string.regex", "file:/[\\w-_/]+")
+    .set("spark.redaction.string.regex", "file:/[\\w_]+")
 
   test("treeString is redacted") {
     withTempDir { dir =>

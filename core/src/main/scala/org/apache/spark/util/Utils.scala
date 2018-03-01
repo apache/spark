@@ -25,7 +25,7 @@ import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.{Channels, FileChannel}
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths}
+import java.nio.file.Files
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
@@ -86,6 +86,7 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
 
+  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
   /**
@@ -265,19 +266,43 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * JDK equivalent of `chmod 700 file`.
+   *
+   * @param file the file whose permissions will be modified
+   * @return true if the permissions were successfully changed, false otherwise.
+   */
+  def chmod700(file: File): Boolean = {
+    file.setReadable(false, false) &&
+    file.setReadable(true, true) &&
+    file.setWritable(false, false) &&
+    file.setWritable(true, true) &&
+    file.setExecutable(false, false) &&
+    file.setExecutable(true, true)
+  }
+
+  /**
    * Create a directory inside the given parent directory. The directory is guaranteed to be
    * newly created, and is not marked for automatic deletion.
    */
   def createDirectory(root: String, namePrefix: String = "spark"): File = {
-    val prefix = namePrefix + "-"
-    val dir = if (root != null) {
-      val rootDir = Paths.get(root)
-      require(Files.isDirectory(rootDir), s"Root path $root must be an existing directory.")
-      Files.createTempDirectory(rootDir, prefix)
-    } else {
-      Files.createTempDirectory(prefix)
+    var attempts = 0
+    val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
+    var dir: File = null
+    while (dir == null) {
+      attempts += 1
+      if (attempts > maxAttempts) {
+        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
+          maxAttempts + " attempts!")
+      }
+      try {
+        dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
+        if (dir.exists() || !dir.mkdirs()) {
+          dir = null
+        }
+      } catch { case e: SecurityException => dir = null; }
     }
-    dir.toFile()
+
+    dir.getCanonicalFile
   }
 
   /**
@@ -818,7 +843,9 @@ private[spark] object Utils extends Logging {
       try {
         val rootDir = new File(root)
         if (rootDir.exists || rootDir.mkdirs()) {
-          Some(createTempDir(root).getAbsolutePath)
+          val dir = createTempDir(root)
+          chmod700(dir)
+          Some(dir.getAbsolutePath)
         } else {
           logError(s"Failed to create dir in $root. Ignoring this directory.")
           None
