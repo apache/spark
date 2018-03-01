@@ -214,11 +214,10 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
   test("no server up") {
     val provider = new TextSocketSourceProvider
     val parameters = Map("host" -> "localhost", "port" -> "0")
-    val exception = intercept[IOException] {
+    intercept[IOException] {
       batchReader = provider.createMicroBatchReader(
         Optional.empty(), "", new DataSourceOptions(parameters.asJava))
     }
-    assert(exception.getMessage.contains("Can't assign requested address"))
   }
 
   test("input row metrics") {
