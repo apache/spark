@@ -196,7 +196,7 @@ case class ConcatWs(children: Seq[Expression])
     } else {
       val array = ctx.freshName("array")
       val varargNum = ctx.freshName("varargNum")
-      val idxInVararg = ctx.freshName("idxInVararg")
+      val idxVararg = ctx.freshName("idxInVararg")
 
       val evals = children.map(_.genCode(ctx))
       val (varargCount, varargBuild) = children.tail.zip(evals.tail).map { case (child, eval) =>
@@ -206,7 +206,7 @@ case class ConcatWs(children: Seq[Expression])
              if (eval.isNull == "true") {
                ""
              } else {
-               s"$array[$idxInVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};"
+               s"$array[$idxVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};"
              })
           case _: ArrayType =>
             val size = ctx.freshName("n")
@@ -222,7 +222,7 @@ case class ConcatWs(children: Seq[Expression])
                 if (!${eval.isNull}) {
                   final int $size = ${eval.value}.numElements();
                   for (int j = 0; j < $size; j ++) {
-                    $array[$idxInVararg ++] = ${CodeGenerator.getValue(eval.value, StringType, "j")};
+                    $array[$idxVararg ++] = ${CodeGenerator.getValue(eval.value, StringType, "j")};
                   }
                 }
                 """)

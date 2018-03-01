@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.types._
 
 /**
@@ -46,7 +46,7 @@ abstract class HashMapGenerator(
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val initExpr = functions.flatMap(f => f.initialValues)
     initExpr.map { e =>
-      val isNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "bufIsNull")
+      val isNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "bufIsNull")
       val value = ctx.addMutableState(ctx.javaType(e.dataType), "bufValue")
       val ev = e.genCode(ctx)
       val initVars =

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
@@ -306,7 +306,7 @@ case class GenerateExec(
       initialChecks: Seq[String]): ExprCode = {
     val value = ctx.freshName(name)
     val javaType = ctx.javaType(dt)
-    val getter = ctx.getValue(source, dt, index)
+    val getter = CodeGenerator.getValue(source, dt, index)
     val checks = initialChecks ++ optionalCode(nullable, s"$source.isNullAt($index)")
     if (checks.nonEmpty) {
       val isNull = ctx.freshName("isNull")

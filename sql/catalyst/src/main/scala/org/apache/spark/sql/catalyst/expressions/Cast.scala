@@ -734,23 +734,26 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val keyToStringFunc = dataToStringFunc("keyToString", kt)
     val valueToStringFunc = dataToStringFunc("valueToString", vt)
     val loopIndex = ctx.freshName("loopIndex")
+    val getValueMapKeyArray0 = CodeGenerator.getValue(s"$map.keyArray()", kt, "0")
+    val getValueMapValArray0 = CodeGenerator.getValue(s"$map.valueArray()", vt, "0")
+    val getValueMapKeyArray = CodeGenerator.getValue(s"$map.keyArray()", kt, loopIndex)
+    val getValueMapValArray = CodeGenerator.getValue(s"$map.valueArray()", vt, loopIndex)
     s"""
        |$buffer.append("[");
        |if ($map.numElements() > 0) {
-       |  $buffer.append($keyToStringFunc(${CodeGenerator.getValue(s"$map.keyArray()", kt, "0")}));
+       |  $buffer.append($keyToStringFunc($getValueMapKeyArray0));
        |  $buffer.append(" ->");
        |  if (!$map.valueArray().isNullAt(0)) {
        |    $buffer.append(" ");
-       |    $buffer.append($valueToStringFunc(${CodeGenerator.getValue(s"$map.valueArray()", vt, "0")}));
+       |    $buffer.append($valueToStringFunc($getValueMapValArray0));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
        |    $buffer.append(", ");
-       |    $buffer.append($keyToStringFunc(${CodeGenerator.getValue(s"$map.keyArray()", kt, loopIndex)}));
+       |    $buffer.append($keyToStringFunc($getValueMapKeyArray));
        |    $buffer.append(" ->");
        |    if (!$map.valueArray().isNullAt($loopIndex)) {
        |      $buffer.append(" ");
-       |      $buffer.append($valueToStringFunc(
-       |        ${CodeGenerator.getValue(s"$map.valueArray()", vt, loopIndex)}));
+       |      $buffer.append($valueToStringFunc($getValueMapValArray));
        |    }
        |  }
        |}

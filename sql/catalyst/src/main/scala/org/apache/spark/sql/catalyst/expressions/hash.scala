@@ -307,9 +307,10 @@ abstract class HashExpression[E] extends Expression {
       ctx: CodegenContext): String = {
     val element = ctx.freshName("element")
 
+    val jt = ctx.javaType(elementType)
     ctx.nullSafeExec(nullable, s"$input.isNullAt($index)") {
       s"""
-        final ${ctx.javaType(elementType)} $element = ${CodeGenerator.getValue(input, elementType, index)};
+        final $jt $element = ${CodeGenerator.getValue(input, elementType, index)};
         ${computeHash(element, elementType, result, ctx)}
       """
     }

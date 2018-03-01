@@ -829,7 +829,8 @@ case class CatalystToExternalMap private(
     val getKeyLoopVar = CodeGenerator.getValue(keyArray, inputDataType(mapType.keyType), loopIndex)
     val getValueArray =
       s"${classOf[ArrayData].getName} $valueArray = ${genInputData.value}.valueArray();"
-    val getValueLoopVar = CodeGenerator.getValue(valueArray, inputDataType(mapType.valueType), loopIndex)
+    val getValueLoopVar = CodeGenerator.getValue(
+      valueArray, inputDataType(mapType.valueType), loopIndex)
 
     // Make a copy of the data if it's unsafe-backed
     def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
