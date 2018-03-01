@@ -77,7 +77,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       val socketSource = sources.head
 
       assert(serverThread != null && serverThread.port != 0)
-      val currOffset = socketSource.currentOffset
+      val currOffset = socketSource.getCurrentOffset()
       data.foreach(serverThread.enqueue)
 
       val newOffset = LongOffset(currOffset.offset + data.size)
@@ -154,6 +154,7 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
             assert(rows.size === 1)
             assert(rows.head.getAs[String](0) === "hello")
             batch1Stamp = rows.head.getAs[Timestamp](1)
+            Thread.sleep(10)
           },
           true),
         AddSocketData("world"),
@@ -213,10 +214,11 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
   test("no server up") {
     val provider = new TextSocketSourceProvider
     val parameters = Map("host" -> "localhost", "port" -> "0")
-    intercept[IOException] {
+    val exception = intercept[IOException] {
       batchReader = provider.createMicroBatchReader(
         Optional.empty(), "", new DataSourceOptions(parameters.asJava))
     }
+    assert(exception.getMessage.contains("Can't assign requested address"))
   }
 
   test("input row metrics") {

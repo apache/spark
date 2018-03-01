@@ -71,12 +71,17 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
   private val batches = new ListBuffer[(String, Timestamp)]
 
   @GuardedBy("this")
-  private[sources] var currentOffset: LongOffset = LongOffset(-1L)
+  private var currentOffset: LongOffset = LongOffset(-1L)
 
   @GuardedBy("this")
   private var lastOffsetCommitted: LongOffset = LongOffset(-1L)
 
   initialize()
+
+  /** This method is only used for unit test */
+  private[sources] def getCurrentOffset(): LongOffset = synchronized {
+    currentOffset.copy()
+  }
 
   private def initialize(): Unit = synchronized {
     socket = new Socket(host, port)
