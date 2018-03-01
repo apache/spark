@@ -38,7 +38,7 @@ import org.apache.spark.sql.functions.col
  * Kolmogorov-Smirnov test (Wikipedia)</a>
  */
 @Experimental
-@Since("2.3.0")
+@Since("2.4.0")
 object KolmogorovSmirnovTest {
 
   /** Used to construct output schema of test */
@@ -48,9 +48,7 @@ object KolmogorovSmirnovTest {
 
   private def getSampleRDD(dataset: DataFrame, sampleCol: String): RDD[Double] = {
     SchemaUtils.checkNumericType(dataset.schema, sampleCol)
-    dataset.select(col(sampleCol).cast("double")).rdd.map {
-      case Row(sample: Double) => sample
-    }
+    dataset.select(col(sampleCol).cast("double")).as[Double].rdd
   }
 
   /**
@@ -62,7 +60,7 @@ object KolmogorovSmirnovTest {
    * @param dataset a `DataFrame` containing the sample of data to test
    * @param sampleCol Name of sample column in dataset, of any numerical type
    * @param cdf a `Double => Double` function to calculate the theoretical CDF at a given value
-   * @return DataFrame containing the test result for every feature against the label.
+   * @return DataFrame containing the test result for the input sampled data.
    *         This DataFrame will contain a single Row with the following fields:
    *          - `pValue: Double`
    *          - `statistic: Double`
@@ -86,7 +84,7 @@ object KolmogorovSmirnovTest {
    * @param sampleCol Name of sample column in dataset, of any numerical type
    * @param distName a `String` name for a theoretical distribution, currently only support "norm".
    * @param params `Double*` specifying the parameters to be used for the theoretical distribution
-   * @return DataFrame containing the test result for every feature against the label.
+   * @return DataFrame containing the test result for the input sampled data.
    *         This DataFrame will contain a single Row with the following fields:
    *          - `pValue: Double`
    *          - `statistic: Double`
