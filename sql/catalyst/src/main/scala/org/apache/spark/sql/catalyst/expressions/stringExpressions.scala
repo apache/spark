@@ -247,20 +247,20 @@ case class ConcatWs(children: Seq[Expression])
       val varargBuilds = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargBuild,
         funcName = "varargBuildsConcatWs",
-        extraArguments = ("UTF8String []", array) :: ("int", idxInVararg) :: Nil,
+        extraArguments = ("UTF8String []", array) :: ("int", idxVararg) :: Nil,
         returnType = "int",
         makeSplitFunction = body =>
           s"""
              |$body
-             |return $idxInVararg;
+             |return $idxVararg;
            """.stripMargin,
-        foldFunctions = _.map(funcCall => s"$idxInVararg = $funcCall;").mkString("\n"))
+        foldFunctions = _.map(funcCall => s"$idxVararg = $funcCall;").mkString("\n"))
 
       ev.copy(
         s"""
         $codes
         int $varargNum = ${children.count(_.dataType == StringType) - 1};
-        int $idxInVararg = 0;
+        int $idxVararg = 0;
         $varargCounts
         UTF8String[] $array = new UTF8String[$varargNum];
         $varargBuilds
