@@ -389,7 +389,7 @@ private[kafka010] case class KafkaMicroBatchDataReader(
       } else {
         range.untilOffset
       }
-      KafkaOffsetRange(range.topicPartition, fromOffset, untilOffset)
+      KafkaOffsetRange(range.topicPartition, fromOffset, untilOffset, None)
     } else {
       range
     }

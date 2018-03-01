@@ -118,5 +118,4 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
   private val tp1 = new TopicPartition("t1", 1)
   private val tp2 = new TopicPartition("t2", 1)
   private val tp3 = new TopicPartition("t3", 1)
-
 }

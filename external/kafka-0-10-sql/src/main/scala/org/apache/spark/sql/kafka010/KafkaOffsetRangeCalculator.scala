@@ -22,6 +22,10 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 
 
+/**
+ * Class to calculate offset ranges to process based on the the from and until offsets, and
+ * the configured `minPartitions`.
+ */
 private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Int) {
   require(minPartitions >= 0)
 
@@ -42,7 +46,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Int) {
     val partitionsToRead = untilOffsets.keySet.intersect(fromOffsets.keySet)
 
     val offsetRanges = partitionsToRead.toSeq.map { tp =>
-      KafkaOffsetRange(tp, fromOffsets(tp), untilOffsets(tp))
+      KafkaOffsetRange(tp, fromOffsets(tp), untilOffsets(tp), preferredLoc = None)
     }
 
     // If minPartitions not set or there are enough partitions to satisfy minPartitions
@@ -97,9 +101,5 @@ private[kafka010] object KafkaOffsetRangeCalculator {
   }
 }
 
-
 private[kafka010] case class KafkaOffsetRange(
-  topicPartition: TopicPartition, fromOffset: Long, untilOffset: Long,
-  preferredLoc: Option[String] = None)
-
-
+  topicPartition: TopicPartition, fromOffset: Long, untilOffset: Long, preferredLoc: Option[String])
