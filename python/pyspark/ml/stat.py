@@ -177,14 +177,14 @@ class Summarizer(object):
     +--------------+
     <BLANKLINE>
 
-    .. versionadded:: 2.3.0
+    .. versionadded:: 2.4.0
 
     """
     def __init__(self, js):
         self._js = js
 
     @staticmethod
-    @since("2.3.0")
+    @since("2.4.0")
     def mean(col, weightCol=None):
         """
         return a column of mean summary
@@ -192,7 +192,7 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "mean")
 
     @staticmethod
-    @since("2.3.0")
+    @since("2.4.0")
     def variance(col, weightCol=None):
         """
         return a column of variance summary
@@ -200,7 +200,7 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "variance")
 
     @staticmethod
-    @since("2.3.0")
+    @since("2.4.0")
     def count(col, weightCol=None):
         """
         return a column of count summary
@@ -208,7 +208,7 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "count")
 
     @staticmethod
-    @since("2.3.0")
+    @since("2.4.0")
     def numNonZeros(col, weightCol=None):
         """
         return a column of numNonZero summary
@@ -216,7 +216,7 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "numNonZeros")
 
     @staticmethod
-    @since("2.3.0")
+    @since("2.4.0")
     def max(col, weightCol=None):
         """
         return a column of max summary
@@ -224,7 +224,7 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "max")
 
     @staticmethod
-    @since("2.3.0")
+    @since("2.4.0")
     def min(col, weightCol=None):
         """
         return a column of min summary
@@ -232,7 +232,7 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "min")
 
     @staticmethod
-    @since("2.3.0")
+    @since("2.4.0")
     def normL1(col, weightCol=None):
         """
         return a column of normL1 summary
@@ -240,7 +240,7 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "normL1")
 
     @staticmethod
-    @since("2.3.0")
+    @since("2.4.0")
     def normL2(col, weightCol=None):
         """
         return a column of normL2 summary
@@ -262,7 +262,7 @@ class Summarizer(object):
                                                 col._jc, weightCol._jc))
 
     @staticmethod
-    @since("2.3.0")
+    @since("2.4.0")
     def metrics(*metrics):
         """
         Given a list of metrics, provides a builder that it turns computes metrics from a column.
@@ -290,7 +290,7 @@ class Summarizer(object):
                                        _to_seq(sc, metrics))
         return Summarizer(js)
 
-    @since("2.3.0")
+    @since("2.4.0")
     def summary(self, featureCol, weightCol=None):
         """
         Returns an aggregate object that contains the summary of the column with the requested
