@@ -323,8 +323,7 @@ class CodegenContext {
       case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
       case _ => s"$value = $initCode;"
     }
-    ExprCode(code, FalseLiteral,
-      GlobalValue(value, ExprType(this, dataType)))
+    ExprCode(code, FalseLiteral, GlobalValue(value, ExprType(this, dataType)))
   }
 
   def declareMutableStates(): String = {
