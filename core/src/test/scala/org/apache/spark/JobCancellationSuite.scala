@@ -325,7 +325,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     f2.get()
   }
 
-  test("Interruptible iterator of shuffle reader") {
+  test("interruptible iterator of shuffle reader") {
     // In this test case, we create a Spark job of two stages. The second stage is cancelled during
     // execution and a counter is used to make sure that the corresponding tasks are indeed
     // cancelled.
