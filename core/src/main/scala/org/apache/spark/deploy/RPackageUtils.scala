@@ -140,7 +140,7 @@ private[deploy] object RPackageUtils extends Logging {
    * Extracts the files under /R in the jar to a temporary directory for building.
    */
   private def extractRFolder(jar: JarFile, printStream: PrintStream, verbose: Boolean): File = {
-    val tempDir = Utils.createTempDir(null)
+    val tempDir = Utils.createTempDir()
     val jarEntries = jar.entries()
     while (jarEntries.hasMoreElements) {
       val entry = jarEntries.nextElement()

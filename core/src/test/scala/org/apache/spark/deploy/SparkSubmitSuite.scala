@@ -35,6 +35,7 @@ import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
+import org.apache.spark.TestUtils
 import org.apache.spark.TestUtils.JavaSourceFromString
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.SparkSubmit._
@@ -761,18 +762,6 @@ class SparkSubmitSuite
     }
   }
 
-  test("comma separated list of files are unioned correctly") {
-    val left = Option("/tmp/a.jar,/tmp/b.jar")
-    val right = Option("/tmp/c.jar,/tmp/a.jar")
-    val emptyString = Option("")
-    Utils.unionFileLists(left, right) should be (Set("/tmp/a.jar", "/tmp/b.jar", "/tmp/c.jar"))
-    Utils.unionFileLists(emptyString, emptyString) should be (Set.empty)
-    Utils.unionFileLists(Option("/tmp/a.jar"), emptyString) should be (Set("/tmp/a.jar"))
-    Utils.unionFileLists(emptyString, Option("/tmp/a.jar")) should be (Set("/tmp/a.jar"))
-    Utils.unionFileLists(None, Option("/tmp/a.jar")) should be (Set("/tmp/a.jar"))
-    Utils.unionFileLists(Option("/tmp/a.jar"), None) should be (Set("/tmp/a.jar"))
-  }
-
   test("support glob path") {
     val tmpJarDir = Utils.createTempDir()
     val jar1 = TestUtils.createJarWithFiles(Map("test.resource" -> "1"), tmpJarDir)
@@ -1042,6 +1031,7 @@ class SparkSubmitSuite
 
     assert(exception.getMessage() === "hello")
   }
+
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
@@ -1076,7 +1066,7 @@ object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
 
 object JarCreationTest extends Logging {
   def main(args: Array[String]) {
-    Utils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
     val result = sc.makeRDD(1 to 100, 10).mapPartitions { x =>
@@ -1100,7 +1090,7 @@ object JarCreationTest extends Logging {
 
 object SimpleApplicationTest {
   def main(args: Array[String]) {
-    Utils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf()
     val sc = new SparkContext(conf)
     val configs = Seq("spark.master", "spark.app.name")
