@@ -1754,6 +1754,10 @@
             <artifactId>hadoop-common</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-mapreduce-client-core</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.apache.orc</groupId>
             <artifactId>orc-core</artifactId>
           </exclusion>
