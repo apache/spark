@@ -178,6 +178,17 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     verify(loggingPodStatusWatcher).awaitCompletion()
   }
 
+  test("Submission client should clean up Kubernetes resources upon application completion") {
+    val submissionClient = new Client(
+      submissionSteps,
+      new SparkConf(false),
+      kubernetesClient,
+      true,
+      "spark",
+      loggingPodStatusWatcher)
+    submissionClient.run()
+    verify(resourceList).delete()
+  }
 }
 
 private object FirstTestConfigurationStep extends DriverConfigurationStep {
