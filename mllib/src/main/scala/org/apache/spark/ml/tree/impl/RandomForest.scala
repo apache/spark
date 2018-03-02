@@ -1006,14 +1006,12 @@ private[spark] object RandomForest extends Logging {
 
       // Calculate the expected number of samples for finding splits
       val numSamples = (samplesFractionForFindSplits(metadata) * metadata.numExamples).toInt
-      // Calculate the expected number of zeros
-      val numZeros = if (numSamples - partNumSamples >= 0) {
-        numSamples - partNumSamples
+      // add expected zero value count and get complete statistics
+      val valueCountMap: Map[Double, Int] = if (numSamples - partNumSamples > 0) {
+        partValueCountMap.toMap + (0.0 -> numSamples - partNumSamples)
       } else {
-        0
+        partValueCountMap.toMap
       }
-      // add zero value count and get complete statistics
-      val valueCountMap: Map[Double, Int] = partValueCountMap.toMap + (0.0 -> numZeros)
 
       // sort distinct values
       val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray
