@@ -27,6 +27,7 @@ import java.util.*;
 import com.google.common.collect.ImmutableMap;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.OnHeapMemoryBlock;
 import org.junit.Test;
 
@@ -517,9 +518,8 @@ public class UTF8StringSuite {
     final byte[] test = "01234567".getBytes(StandardCharsets.UTF_8);
 
     for (int i = 1; i <= Platform.BYTE_ARRAY_OFFSET; ++i) {
-      UTF8String.fromAddress(ByteArrayMemoryBlock.fromArray(test),
-        - i, test.length + i)
-          .writeTo(outputStream);
+      UTF8String.fromMemoryBlock(ByteArrayMemoryBlock.fromArray(test)
+          .subBlock(-i, test.length + i)).writeTo(outputStream);
       final ByteBuffer buffer = ByteBuffer.wrap(outputStream.toByteArray(), i, test.length);
       assertEquals("01234567", StandardCharsets.UTF_8.decode(buffer).toString());
       outputStream.reset();
@@ -533,7 +533,7 @@ public class UTF8StringSuite {
 
     for (int i = 0; i < test.length; ++i) {
       for (int j = 0; j < test.length - i; ++j) {
-        UTF8String.fromAddress(ByteArrayMemoryBlock.fromArray(test), i, j)
+        UTF8String.fromMemoryBlock(ByteArrayMemoryBlock.fromArray(test).subBlock(i, j))
             .writeTo(outputStream);
 
         assertArrayEquals(Arrays.copyOfRange(test, i, i + j), outputStream.toByteArray());
@@ -564,7 +564,7 @@ public class UTF8StringSuite {
 
     for (final long offset : offsets) {
       try {
-        fromAddress(ByteArrayMemoryBlock.fromArray(test), offset, test.length)
+        fromMemoryBlock(ByteArrayMemoryBlock.fromArray(test).subBlock(offset, test.length))
             .writeTo(outputStream);
 
         throw new IllegalStateException(Long.toString(offset));
@@ -608,8 +608,7 @@ public class UTF8StringSuite {
     }
 
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    fromAddress(OnHeapMemoryBlock.fromArray(array), 0, length)
-        .writeTo(outputStream);
+    fromMemoryBlock(OnHeapMemoryBlock.fromArray(array)).writeTo(outputStream);
     assertEquals("3千大千世界", outputStream.toString("UTF-8"));
   }
 

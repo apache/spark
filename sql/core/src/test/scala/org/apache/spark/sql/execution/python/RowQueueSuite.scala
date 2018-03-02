@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
 class RowQueueSuite extends SparkFunSuite {
 
   test("in-memory queue") {
-    val page = OnHeapMemoryBlock.fromArray(new Array[Long](1<<10))
+    val page = new OnHeapMemoryBlock((1<<10) * 8L)
     val queue = new InMemoryRowQueue(page, 1) {
       override def close() {}
     }

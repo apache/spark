@@ -360,11 +360,8 @@ abstract class HashExpression[E] extends Expression {
   }
 
   protected def genHashString(input: String, result: String): String = {
-    val baseObject = s"$input.getBaseObject()"
-    val baseOffset = s"$input.getBaseOffset()"
-    val numBytes = s"$input.numBytes()"
-    s"$result = $hasherClassName.hashUnsafeBytesBlock(" +
-      s"$baseObject, $baseOffset, $numBytes, $result);"
+    val mb = s"$input.getMemoryBlock()"
+    s"$result = $hasherClassName.hashUnsafeBytesBlock($mb, $result);"
   }
 
   protected def genHashForMap(
@@ -466,8 +463,7 @@ abstract class InterpretedHashFunction {
 
   protected def hashUnsafeBytes(base: AnyRef, offset: Long, length: Int, seed: Long): Long
 
-  protected def hashUnsafeBytesBlock(
-    base: MemoryBlock, offset: Long, length: Int, seed: Long): Long
+  protected def hashUnsafeBytesBlock(base: MemoryBlock, seed: Long): Long
 
   /**
    * Computes hash of a given `value` of type `dataType`. The caller needs to check the validity
@@ -494,8 +490,7 @@ abstract class InterpretedHashFunction {
       case c: CalendarInterval => hashInt(c.months, hashLong(c.microseconds, seed))
       case a: Array[Byte] =>
         hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
-      case s: UTF8String =>
-        hashUnsafeBytesBlock(s.getBaseObject, s.getBaseOffset, s.numBytes(), seed)
+      case s: UTF8String => hashUnsafeBytesBlock(s.getMemoryBlock(), seed)
 
       case array: ArrayData =>
         val elementType = dataType match {
@@ -588,8 +583,8 @@ object Murmur3HashFunction extends InterpretedHashFunction {
   }
 
   override protected def hashUnsafeBytesBlock(
-      base: MemoryBlock, offset: Long, len: Int, seed: Long): Long = {
-    Murmur3_x86_32.hashUnsafeBytesBlock(base, offset, len, seed.toInt)
+      base: MemoryBlock, seed: Long): Long = {
+    Murmur3_x86_32.hashUnsafeBytesBlock(base, seed.toInt)
   }
 }
 
@@ -620,9 +615,8 @@ object XxHash64Function extends InterpretedHashFunction {
     XXH64.hashUnsafeBytes(base, offset, len, seed)
   }
 
-  override protected def hashUnsafeBytesBlock(
-      base: MemoryBlock, offset: Long, len: Int, seed: Long): Long = {
-    XXH64.hashUnsafeBytesBlock(base, offset, len, seed)
+  override protected def hashUnsafeBytesBlock(base: MemoryBlock, seed: Long): Long = {
+    XXH64.hashUnsafeBytesBlock(base, seed)
   }
 }
 
@@ -730,10 +724,8 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
      """
 
   override protected def genHashString(input: String, result: String): String = {
-    val baseObject = s"$input.getBaseObject()"
-    val baseOffset = s"$input.getBaseOffset()"
-    val numBytes = s"$input.numBytes()"
-    s"$result = $hasherClassName.hashUnsafeBytesBlock($baseObject, $baseOffset, $numBytes);"
+    val mb = s"$input.getMemoryBlock()"
+    s"$result = $hasherClassName.hashUnsafeBytesBlock($mb);"
   }
 
   override protected def genHashForArray(
@@ -827,9 +819,7 @@ object HiveHashFunction extends InterpretedHashFunction {
   }
 
   override protected def hashUnsafeBytesBlock(
-      base: MemoryBlock, offset: Long, len: Int, seed: Long): Long = {
-    HiveHasher.hashUnsafeBytesBlock(base, offset, len)
-  }
+    base: MemoryBlock, seed: Long): Long = HiveHasher.hashUnsafeBytesBlock(base)
 
   private val HIVE_DECIMAL_MAX_PRECISION = 38
   private val HIVE_DECIMAL_MAX_SCALE = 38

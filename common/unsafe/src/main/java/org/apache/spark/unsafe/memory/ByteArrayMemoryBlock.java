@@ -27,12 +27,16 @@ public final class ByteArrayMemoryBlock extends MemoryBlock {
   private final byte[] array;
 
   public ByteArrayMemoryBlock(byte[] obj, long offset, long length) {
-    super(obj, offset, length);
+    super(obj, offset, (long)length);
     this.array = obj;
   }
 
+  public ByteArrayMemoryBlock(long length) {
+    this(new byte[(int)length], Platform.BYTE_ARRAY_OFFSET, length);
+  }
+
   @Override
-  public MemoryBlock allocate(long offset, long size) {
+  public MemoryBlock subBlock(long offset, long size) {
     return new ByteArrayMemoryBlock(array, this.offset + offset, size);
   }
 
@@ -44,7 +48,6 @@ public final class ByteArrayMemoryBlock extends MemoryBlock {
   public static ByteArrayMemoryBlock fromArray(final byte[] array) {
     return new ByteArrayMemoryBlock(array, Platform.BYTE_ARRAY_OFFSET, array.length);
   }
-
 
   public final int getInt(long offset) {
     return Platform.getInt(array, offset);

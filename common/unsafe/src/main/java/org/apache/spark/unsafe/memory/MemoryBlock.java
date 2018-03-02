@@ -50,7 +50,7 @@ public abstract class MemoryBlock {
 
   protected long offset;
 
-  protected long length;
+  protected final long length;
 
   /**
    * Optional page number; used when this MemoryBlock represents a page allocated by a
@@ -125,9 +125,10 @@ public abstract class MemoryBlock {
   }
 
   /**
-   * Instantiate the same type of MemoryBlock with new offset and size
+   * Just instantiate the same type of MemoryBlock with new offset and size. The data is not
+   * copied.
    */
-  public abstract MemoryBlock allocate(long offset, long size);
+  public abstract MemoryBlock subBlock(long offset, long size);
 
 
   public abstract int getInt(long offset);

@@ -342,7 +342,7 @@ public final class UnsafeInMemorySorter {
           array, nullBoundaryPos, (pos - nullBoundaryPos) / 2L, 0, 7,
           radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
       } else {
-        MemoryBlock unused = array.memoryBlock().allocate(pos * 8L,(array.size() - pos) * 8L);
+        MemoryBlock unused = array.memoryBlock().subBlock(pos * 8L,(array.size() - pos) * 8L);
         LongArray buffer = new LongArray(unused);
         Sorter<RecordPointerAndKeyPrefix, LongArray> sorter =
           new Sorter<>(new UnsafeSortDataFormat(buffer));

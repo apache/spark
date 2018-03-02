@@ -64,7 +64,9 @@ public final class Murmur3_x86_32 {
     return fmix(h1, lengthInBytes);
   }
 
-  public static int hashUnsafeBytesBlock(MemoryBlock base, long offset, int lengthInBytes, int seed) {
+  public static int hashUnsafeBytesBlock(MemoryBlock base, int seed) {
+    long offset = base.getBaseOffset();
+    int lengthInBytes = (int)base.size();
     assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
     int lengthAligned = lengthInBytes - lengthInBytes % 4;
     int h1 = hashBytesByIntBlock(base, offset, lengthAligned, seed);

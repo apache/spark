@@ -26,8 +26,7 @@ public class LongArraySuite {
 
   @Test
   public void basicTest() {
-    long[] bytes = new long[2];
-    LongArray arr = new LongArray(OnHeapMemoryBlock.fromArray(bytes));
+    LongArray arr = new LongArray(new OnHeapMemoryBlock(16));
     arr.set(0, 1L);
     arr.set(1, 2L);
     arr.set(1, 3L);

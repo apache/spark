@@ -26,13 +26,8 @@ public class OffHeapMemoryBlock extends MemoryBlock {
     super(null, address, size);
   }
 
-  public void setAddressAndSize(long address, long size) {
-    this.offset = address;
-    this.length = size;
-  }
-
   @Override
-  public MemoryBlock allocate(long offset, long size) {
+  public MemoryBlock subBlock(long offset, long size) {
     return new OffHeapMemoryBlock(this.offset + offset, size);
   }
 

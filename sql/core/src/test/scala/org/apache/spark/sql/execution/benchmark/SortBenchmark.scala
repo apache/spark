@@ -36,8 +36,7 @@ import org.apache.spark.util.random.XORShiftRandom
 class SortBenchmark extends BenchmarkBase {
 
   private def referenceKeyPrefixSort(buf: LongArray, lo: Int, hi: Int, refCmp: PrefixComparator) {
-    val sortBuffer =
-      new LongArray(OnHeapMemoryBlock.fromArray(new Array[Long](buf.size().toInt)))
+    val sortBuffer = new LongArray(new OnHeapMemoryBlock(buf.size() * 8L))
     new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(
       buf, lo, hi, new Comparator[RecordPointerAndKeyPrefix] {
         override def compare(

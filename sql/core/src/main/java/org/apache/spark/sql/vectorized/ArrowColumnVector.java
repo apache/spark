@@ -366,7 +366,6 @@ public final class ArrowColumnVector extends ColumnVector {
 
     private final VarCharVector accessor;
     private final NullableVarCharHolder stringResult = new NullableVarCharHolder();
-    private final OffHeapMemoryBlock mb = new OffHeapMemoryBlock(0L, 0L);
 
     StringAccessor(VarCharVector vector) {
       super(vector);
@@ -380,9 +379,9 @@ public final class ArrowColumnVector extends ColumnVector {
         return null;
       } else {
         int size = stringResult.end - stringResult.start;
-        mb.setAddressAndSize(
+        OffHeapMemoryBlock mb = new OffHeapMemoryBlock(
           stringResult.buffer.memoryAddress() + stringResult.start, size);
-        return UTF8String.fromAddress(mb, 0, size);
+        return UTF8String.fromMemoryBlock(mb);
       }
     }
   }
