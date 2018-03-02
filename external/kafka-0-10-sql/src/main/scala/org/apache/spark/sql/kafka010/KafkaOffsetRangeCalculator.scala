@@ -47,7 +47,7 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
 
     val offsetRanges = partitionsToRead.toSeq.map { tp =>
       KafkaOffsetRange(tp, fromOffsets(tp), untilOffsets(tp), preferredLoc = None)
-    }
+    }.filter(_.size > 0)
 
     // If minPartitions not set or there are enough partitions to satisfy minPartitions
     if (minPartitions.isEmpty || offsetRanges.size > minPartitions.get) {
@@ -73,7 +73,6 @@ private[kafka010] class KafkaOffsetRangeCalculator(val minPartitions: Option[Int
           KafkaOffsetRange(
             range.topicPartition, splitStart.toLong, splitEnd.toLong, preferredLoc = None)
         }
-
       }
     }
   }
@@ -99,4 +98,9 @@ private[kafka010] object KafkaOffsetRangeCalculator {
 }
 
 private[kafka010] case class KafkaOffsetRange(
-  topicPartition: TopicPartition, fromOffset: Long, untilOffset: Long, preferredLoc: Option[String])
+    topicPartition: TopicPartition,
+    fromOffset: Long,
+    untilOffset: Long,
+    preferredLoc: Option[String]) {
+  def size: Long = untilOffset - fromOffset
+}
