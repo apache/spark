@@ -130,7 +130,10 @@ public abstract class MemoryBlock {
    */
   public abstract MemoryBlock subBlock(long offset, long size);
 
-
+  /**
+   * getXXX/putXXX does not ensure guarantee behavior if the offset is invalid. e.g  cause illegal
+   * memory access, throw an exception, or etc.
+   */
   public abstract int getInt(long offset);
 
   public abstract void putInt(long offset, int value);
@@ -161,20 +164,24 @@ public abstract class MemoryBlock {
 
   public static final void copyMemory(
       MemoryBlock src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    assert(length <= src.length && length <= dst.length);
     Platform.copyMemory(src.getBaseObject(), src.getBaseOffset() + srcOffset,
       dst.getBaseObject(), dst.getBaseOffset() + dstOffset, length);
   }
 
   public static final void copyMemory(MemoryBlock src, MemoryBlock dst, long length) {
+    assert(length <= src.length && length <= dst.length);
     Platform.copyMemory(src.getBaseObject(), src.getBaseOffset(),
       dst.getBaseObject(), dst.getBaseOffset(), length);
   }
 
   public final void copyFrom(Object src, long srcOffset, long dstOffset, long length) {
+    assert(length <= length);
     Platform.copyMemory(src, srcOffset, obj, offset + dstOffset, length);
   }
 
   public final void writeTo(long srcOffset, Object dst, long dstOffset, long length) {
+    assert(length <= length);
     Platform.copyMemory(obj, offset + srcOffset, dst, dstOffset, length);
   }
 }

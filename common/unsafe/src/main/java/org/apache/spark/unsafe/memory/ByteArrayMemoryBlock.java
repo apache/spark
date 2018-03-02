@@ -49,58 +49,72 @@ public final class ByteArrayMemoryBlock extends MemoryBlock {
     return new ByteArrayMemoryBlock(array, Platform.BYTE_ARRAY_OFFSET, array.length);
   }
 
+  @Override
   public final int getInt(long offset) {
     return Platform.getInt(array, offset);
   }
 
+  @Override
   public final void putInt(long offset, int value) {
     Platform.putInt(array, offset, value);
   }
 
+  @Override
   public final boolean getBoolean(long offset) {
     return Platform.getBoolean(array, offset);
   }
 
+  @Override
   public final void putBoolean(long offset, boolean value) {
     Platform.putBoolean(array, offset, value);
   }
 
+  @Override
   public final byte getByte(long offset) {
     return array[(int)(offset - Platform.BYTE_ARRAY_OFFSET)];
   }
 
+  @Override
   public final void putByte(long offset, byte value) {
     array[(int)(offset - Platform.BYTE_ARRAY_OFFSET)] = value;
   }
 
+  @Override
   public final short getShort(long offset) {
     return Platform.getShort(array, offset);
   }
 
+  @Override
   public final void putShort(long offset, short value) {
     Platform.putShort(array, offset, value);
   }
 
+  @Override
   public final long getLong(long offset) {
     return Platform.getLong(array, offset);
   }
 
+  @Override
   public final void putLong(long offset, long value) {
     Platform.putLong(array, offset, value);
   }
 
+  @Override
   public final float getFloat(long offset) {
     return Platform.getFloat(array, offset);
   }
 
+  @Override
   public final void putFloat(long offset, float value) {
     Platform.putFloat(array, offset, value);
   }
 
+  @Override
   public final double getDouble(long offset) {
     return Platform.getDouble(array, offset);
   }
 
+  @Override
   public final void putDouble(long offset, double value) {
     Platform.putDouble(array, offset, value);
   }

@@ -55,71 +55,85 @@ public final class OnHeapMemoryBlock extends MemoryBlock {
     return new OnHeapMemoryBlock(array, Platform.LONG_ARRAY_OFFSET, size);
   }
 
+  @Override
   public final int getInt(long offset) {
     assert(offset + 4 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     return Platform.getInt(array, offset);
   }
 
+  @Override
   public final void putInt(long offset, int value) {
     assert(offset + 4 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     Platform.putInt(array, offset, value);
   }
 
+  @Override
   public final boolean getBoolean(long offset) {
     assert(offset + 1 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     return Platform.getBoolean(array, offset);
   }
 
+  @Override
   public final void putBoolean(long offset, boolean value) {
     assert(offset + 1 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     Platform.putBoolean(array, offset, value);
   }
 
+  @Override
   public final byte getByte(long offset) {
     assert(offset + 1 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     return Platform.getByte(array, offset);
   }
 
+  @Override
   public final void putByte(long offset, byte value) {
     assert(offset + 1 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     Platform.putByte(array, offset, value);
   }
 
+  @Override
   public final short getShort(long offset) {
     assert(offset + 2 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     return Platform.getShort(array, offset);
   }
 
+  @Override
   public final void putShort(long offset, short value) {
     assert(offset + 2 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     Platform.putShort(array, offset, value);
   }
 
+  @Override
   public final long getLong(long offset) {
     assert(offset + 8 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     return Platform.getLong(array, offset);
   }
 
+  @Override
   public final void putLong(long offset, long value) {
     assert(offset + 8 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     Platform.putLong(array, offset, value);
   }
 
+  @Override
   public final float getFloat(long offset) {
     assert(offset + 4 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     return Platform.getFloat(array, offset);
   }
 
+  @Override
   public final void putFloat(long offset, float value) {
     assert(offset + 4 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     Platform.putFloat(array, offset, value);
   }
 
+  @Override
   public final double getDouble(long offset) {
     assert(offset + 8 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     return Platform.getDouble(array, offset);
   }
 
+  @Override
   public final void putDouble(long offset, double value) {
     assert(offset + 8 - Platform.LONG_ARRAY_OFFSET <= array.length * 8L);
     Platform.putDouble(array, offset, value);

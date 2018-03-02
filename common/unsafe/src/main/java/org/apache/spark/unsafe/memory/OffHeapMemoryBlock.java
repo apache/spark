@@ -31,58 +31,72 @@ public class OffHeapMemoryBlock extends MemoryBlock {
     return new OffHeapMemoryBlock(this.offset + offset, size);
   }
 
+  @Override
   public final int getInt(long offset) {
     return Platform.getInt(null, offset);
   }
 
+  @Override
   public final void putInt(long offset, int value) {
     Platform.putInt(null, offset, value);
   }
 
+  @Override
   public final boolean getBoolean(long offset) {
     return Platform.getBoolean(null, offset);
   }
 
+  @Override
   public final void putBoolean(long offset, boolean value) {
     Platform.putBoolean(null, offset, value);
   }
 
+  @Override
   public final byte getByte(long offset) {
     return Platform.getByte(null, offset);
   }
 
+  @Override
   public final void putByte(long offset, byte value) {
     Platform.putByte(null, offset, value);
   }
 
+  @Override
   public final short getShort(long offset) {
     return Platform.getShort(null, offset);
   }
 
+  @Override
   public final void putShort(long offset, short value) {
     Platform.putShort(null, offset, value);
   }
 
+  @Override
   public final long getLong(long offset) {
     return Platform.getLong(null, offset);
   }
 
+  @Override
   public final void putLong(long offset, long value) {
     Platform.putLong(null, offset, value);
   }
 
+  @Override
   public final float getFloat(long offset) {
     return Platform.getFloat(null, offset);
   }
 
+  @Override
   public final void putFloat(long offset, float value) {
     Platform.putFloat(null, offset, value);
   }
 
+  @Override
   public final double getDouble(long offset) {
     return Platform.getDouble(null, offset);
   }
 
+  @Override
   public final void putDouble(long offset, double value) {
     Platform.putDouble(null, offset, value);
   }

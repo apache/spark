@@ -50,14 +50,19 @@ public class ByteArrayMethods {
 
   private static final boolean unaligned = Platform.unaligned();
   /**
-   * Optimized byte array equality check for byte arrays.
+   * MemoryBlock equality check for MemoryBlocks.
    * @return true if the arrays are equal, false otherwise
    */
   public static boolean arrayEqualsBlock(
       MemoryBlock leftBase, long leftOffset, MemoryBlock rightBase, long rightOffset, final long length) {
-    return arrayEquals(leftBase.getBaseObject(), leftOffset, rightBase.getBaseObject(), rightOffset, length);
+    return arrayEquals(leftBase.getBaseObject(), leftBase.getBaseOffset() + leftOffset,
+      rightBase.getBaseObject(), rightBase.getBaseOffset() + rightOffset, length);
   }
 
+  /**
+   * Optimized byte array equality check for byte arrays.
+   * @return true if the arrays are equal, false otherwise
+   */
   public static boolean arrayEquals(
       Object leftBase, long leftOffset, Object rightBase, long rightOffset, final long length) {
     int i = 0;

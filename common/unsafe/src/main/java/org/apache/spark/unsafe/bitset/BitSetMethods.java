@@ -46,14 +46,6 @@ public final class BitSetMethods {
     Platform.putLong(baseObject, wordOffset, word | mask);
   }
 
-  public static void setBlock(MemoryBlock base, long baseOffset, int index) {
-    assert index >= 0 : "index (" + index + ") should >= 0";
-    final long mask = 1L << (index & 0x3f);  // mod 64 and shift
-    final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
-    final long word = base.getLong(wordOffset);
-    base.putLong(wordOffset, word | mask);
-  }
-
   /**
    * Sets the bit at the specified index to {@code false}.
    */
@@ -63,14 +55,6 @@ public final class BitSetMethods {
     final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
     final long word = Platform.getLong(baseObject, wordOffset);
     Platform.putLong(baseObject, wordOffset, word & ~mask);
-  }
-
-  public static void unsetBlock(MemoryBlock base, long baseOffset, int index) {
-    assert index >= 0 : "index (" + index + ") should >= 0";
-    final long mask = 1L << (index & 0x3f);  // mod 64 and shift
-    final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
-    final long word = base.getLong(wordOffset);
-    base.putLong(wordOffset, word & ~mask);
   }
 
   /**
@@ -84,14 +68,6 @@ public final class BitSetMethods {
     return (word & mask) != 0;
   }
 
-  public static boolean isSetBlock(MemoryBlock base, long baseOffset, int index) {
-    assert index >= 0 : "index (" + index + ") should >= 0";
-    final long mask = 1L << (index & 0x3f);  // mod 64 and shift
-    final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
-    final long word = base.getLong(wordOffset);
-    return (word & mask) != 0;
-  }
-
   /**
    * Returns {@code true} if any bit is set.
    */
@@ -99,16 +75,6 @@ public final class BitSetMethods {
     long addr = baseOffset;
     for (int i = 0; i < bitSetWidthInWords; i++, addr += WORD_SIZE) {
       if (Platform.getLong(baseObject, addr) != 0) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  public static boolean anySetBlock(MemoryBlock base, long baseOffset, long bitSetWidthInWords) {
-    long addr = baseOffset;
-    for (int i = 0; i < bitSetWidthInWords; i++, addr += WORD_SIZE) {
-      if (base.getLong(addr) != 0) {
         return true;
       }
     }
