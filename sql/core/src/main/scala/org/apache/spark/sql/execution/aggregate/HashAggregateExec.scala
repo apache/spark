@@ -187,7 +187,7 @@ case class HashAggregateExec(
     val initExpr = functions.flatMap(f => f.initialValues)
     bufVars = initExpr.map { e =>
       val isNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "bufIsNull")
-      val value = ctx.addMutableState(ctx.javaType(e.dataType), "bufValue")
+      val value = ctx.addMutableState(CodeGenerator.javaType(e.dataType), "bufValue")
       // The initial expression should not access any column
       val ev = e.genCode(ctx)
       val initVars = s"""
@@ -532,7 +532,7 @@ case class HashAggregateExec(
    */
   private def checkIfFastHashMapSupported(ctx: CodegenContext): Boolean = {
     val isSupported =
-      (groupingKeySchema ++ bufferSchema).forall(f => ctx.isPrimitiveType(f.dataType) ||
+      (groupingKeySchema ++ bufferSchema).forall(f => CodeGenerator.isPrimitiveType(f.dataType) ||
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType]) &&
         bufferSchema.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
 

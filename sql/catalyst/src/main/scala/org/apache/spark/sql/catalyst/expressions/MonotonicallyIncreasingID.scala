@@ -72,7 +72,7 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterminis
     ctx.addPartitionInitializationStatement(s"$partitionMaskTerm = ((long) partitionIndex) << 33;")
 
     ev.copy(code = s"""
-      final ${ctx.javaType(dataType)} ${ev.value} = $partitionMaskTerm + $countTerm;
+      final ${CodeGenerator.javaType(dataType)} ${ev.value} = $partitionMaskTerm + $countTerm;
       $countTerm++;""", isNull = "false")
   }
 

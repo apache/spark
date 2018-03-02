@@ -184,7 +184,7 @@ case class BroadcastHashJoinExec(
         val value = ctx.freshName("value")
         val code = s"""
           |boolean $isNull = true;
-          |${ctx.javaType(a.dataType)} $value = ${ctx.defaultValue(a.dataType)};
+          |${CodeGenerator.javaType(a.dataType)} $value = ${CodeGenerator.defaultValue(a.dataType)};
           |if ($matched != null) {
           |  ${ev.code}
           |  $isNull = ${ev.isNull};

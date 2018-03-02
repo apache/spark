@@ -66,13 +66,14 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
       ev.copy(code = oev.code)
     } else {
       assert(ctx.INPUT_ROW != null, "INPUT_ROW and currentVars cannot both be null.")
-      val javaType = ctx.javaType(dataType)
+      val javaType = CodeGenerator.javaType(dataType)
       val value = CodeGenerator.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
       if (nullable) {
         ev.copy(code =
           s"""
              |boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
-             |$javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);
+             |$javaType ${ev.value} = ${ev.isNull} ?
+             |  ${CodeGenerator.defaultValue(dataType)} : ($value);
            """.stripMargin)
       } else {
         ev.copy(code = s"$javaType ${ev.value} = $value;", isNull = "false")

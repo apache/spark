@@ -305,7 +305,7 @@ case class GenerateExec(
       nullable: Boolean,
       initialChecks: Seq[String]): ExprCode = {
     val value = ctx.freshName(name)
-    val javaType = ctx.javaType(dt)
+    val javaType = CodeGenerator.javaType(dt)
     val getter = CodeGenerator.getValue(source, dt, index)
     val checks = initialChecks ++ optionalCode(nullable, s"$source.isNullAt($index)")
     if (checks.nonEmpty) {
@@ -313,7 +313,7 @@ case class GenerateExec(
       val code =
         s"""
            |boolean $isNull = ${checks.mkString(" || ")};
-           |$javaType $value = $isNull ? ${ctx.defaultValue(dt)} : $getter;
+           |$javaType $value = $isNull ? ${CodeGenerator.defaultValue(dt)} : $getter;
          """.stripMargin
       ExprCode(code, isNull, value)
     } else {

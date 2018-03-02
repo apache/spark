@@ -278,7 +278,7 @@ abstract class HashExpression[E] extends Expression {
       }
     }
 
-    val hashResultType = ctx.javaType(dataType)
+    val hashResultType = CodeGenerator.javaType(dataType)
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = childrenHash,
       funcName = "computeHash",
@@ -307,7 +307,7 @@ abstract class HashExpression[E] extends Expression {
       ctx: CodegenContext): String = {
     val element = ctx.freshName("element")
 
-    val jt = ctx.javaType(elementType)
+    val jt = CodeGenerator.javaType(elementType)
     ctx.nullSafeExec(nullable, s"$input.isNullAt($index)") {
       s"""
         final $jt $element = ${CodeGenerator.getValue(input, elementType, index)};
@@ -408,7 +408,7 @@ abstract class HashExpression[E] extends Expression {
     val fieldsHash = fields.zipWithIndex.map { case (field, index) =>
       nullSafeElementHash(input, index.toString, field.nullable, field.dataType, result, ctx)
     }
-    val hashResultType = ctx.javaType(dataType)
+    val hashResultType = CodeGenerator.javaType(dataType)
     ctx.splitExpressions(
       expressions = fieldsHash,
       funcName = "computeHashForStruct",

@@ -49,7 +49,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
       ordinal: String,
       dataType: DataType,
       nullable: Boolean): ExprCode = {
-    val javaType = ctx.javaType(dataType)
+    val javaType = CodeGenerator.javaType(dataType)
     val value = CodeGenerator.getValueFromVector(columnVar, dataType, ordinal)
     val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
     val valueVar = ctx.freshName("value")
@@ -57,7 +57,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
       s"""
         boolean $isNullVar = $columnVar.isNullAt($ordinal);
-        $javaType $valueVar = $isNullVar ? ${ctx.defaultValue(dataType)} : ($value);
+        $javaType $valueVar = $isNullVar ? ${CodeGenerator.defaultValue(dataType)} : ($value);
       """
     } else {
       s"$javaType $valueVar = $value;"

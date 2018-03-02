@@ -59,6 +59,11 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
 case class ExprCode(var code: String, var isNull: String, var value: String)
 
 object ExprCode {
+  def forNullValue(dataType: DataType): ExprCode = {
+    val defaultValueLiteral = CodeGenerator.defaultValue(dataType, typedNull = true)
+    ExprCode(code = "", isNull = "true", value = defaultValueLiteral)
+  }
+
   def forNonNullValue(value: String): ExprCode = {
     ExprCode(code = "", isNull = "false", value = value)
   }
@@ -538,39 +543,6 @@ class CodegenContext {
   def addInnerClass(code: String): Unit = {
     extraClasses.append(code)
   }
-
-  /**
-   * Returns true if a Java type is Java primitive type
-   */
-  def isPrimitiveType(jt: String): Boolean = CodeGenerator.isPrimitiveType(jt)
-
-  def isPrimitiveType(dt: DataType): Boolean = CodeGenerator.isPrimitiveType(dt)
-
-  /**
-   * Returns the name used in accessor and setter for a Java primitive type.
-   */
-  def primitiveTypeName(jt: String): String = CodeGenerator.primitiveTypeName(jt)
-
-  def primitiveTypeName(dt: DataType): String = CodeGenerator.primitiveTypeName(dt)
-
-  /**
-   * Returns the Java type for a DataType.
-   */
-  def javaType(dt: DataType): String = CodeGenerator.javaType(dt)
-
-  /**
-   * Returns the boxed type in Java.
-   */
-  def boxedType(jt: String): String = boxedType(jt)
-
-  def boxedType(dt: DataType): String = CodeGenerator.boxedType(dt)
-
-  /**
-   * Returns the representation of default value for a given Java Type.
-   */
-  def defaultValue(jt: String): String = CodeGenerator.defaultValue(jt)
-
-  def defaultValue(dt: DataType): String = CodeGenerator.defaultValue(dt)
 
   /**
    * The map from a variable name to it's next ID.
@@ -1519,7 +1491,7 @@ object CodeGenerator extends Logging {
     case LongType | TimestampType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
-    case dt: DecimalType => "Decimal"
+    case _: DecimalType => "Decimal"
     case BinaryType => "byte[]"
     case StringType => "UTF8String"
     case CalendarIntervalType => "CalendarInterval"
@@ -1550,8 +1522,10 @@ object CodeGenerator extends Logging {
 
   /**
    * Returns the representation of default value for a given Java Type.
+   * @param jt the string name of the Java type
+   * @param typedNull if true, for null literals, return a typed (with a cast) version
    */
-  def defaultValue(jt: String): String = jt match {
+  def defaultValue(jt: String, typedNull: Boolean): String = jt match {
     case JAVA_BOOLEAN => "false"
     case JAVA_BYTE => "(byte)-1"
     case JAVA_SHORT => "(short)-1"
@@ -1559,8 +1533,9 @@ object CodeGenerator extends Logging {
     case JAVA_LONG => "-1L"
     case JAVA_FLOAT => "-1.0f"
     case JAVA_DOUBLE => "-1.0"
-    case _ => "null"
+    case _ => if (typedNull) s"(($jt)null)" else "null"
   }
 
-  def defaultValue(dt: DataType): String = defaultValue(javaType(dt))
+  def defaultValue(dt: DataType, typedNull: Boolean = false): String =
+    defaultValue(javaType(dt), typedNull)
 }

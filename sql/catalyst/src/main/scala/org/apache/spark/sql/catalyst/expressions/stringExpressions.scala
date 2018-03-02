@@ -102,11 +102,11 @@ case class Concat(children: Seq[Expression]) extends Expression {
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = inputs,
       funcName = "valueConcat",
-      extraArguments = (s"${ctx.javaType(dataType)}[]", args) :: Nil)
+      extraArguments = (s"${CodeGenerator.javaType(dataType)}[]", args) :: Nil)
     ev.copy(s"""
       $initCode
       $codes
-      ${ctx.javaType(dataType)} ${ev.value} = $concatenator.concat($args);
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = $concatenator.concat($args);
       boolean ${ev.isNull} = ${ev.value} == null;
     """)
   }
@@ -333,7 +333,7 @@ case class Elt(children: Seq[Expression]) extends Expression {
     val indexVal = ctx.freshName("index")
     val indexMatched = ctx.freshName("eltIndexMatched")
 
-    val inputVal = ctx.addMutableState(ctx.javaType(dataType), "inputVal")
+    val inputVal = ctx.addMutableState(CodeGenerator.javaType(dataType), "inputVal")
 
     val assignInputValue = inputs.zipWithIndex.map { case (eval, index) =>
       s"""
@@ -377,7 +377,7 @@ case class Elt(children: Seq[Expression]) extends Expression {
          |do {
          |  $codes
          |} while (false);
-         |final ${ctx.javaType(dataType)} ${ev.value} = $inputVal;
+         |final ${CodeGenerator.javaType(dataType)} ${ev.value} = $inputVal;
          |final boolean ${ev.isNull} = ${ev.value} == null;
        """.stripMargin)
   }
@@ -1410,10 +1410,10 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val numArgLists = argListGen.length
     val argListCode = argListGen.zipWithIndex.map { case(v, index) =>
       val value =
-        if (ctx.boxedType(v._1) != ctx.javaType(v._1)) {
+        if (CodeGenerator.boxedType(v._1) != CodeGenerator.javaType(v._1)) {
           // Java primitives get boxed in order to allow null values.
-          s"(${v._2.isNull}) ? (${ctx.boxedType(v._1)}) null : " +
-            s"new ${ctx.boxedType(v._1)}(${v._2.value})"
+          s"(${v._2.isNull}) ? (${CodeGenerator.boxedType(v._1)}) null : " +
+            s"new ${CodeGenerator.boxedType(v._1)}(${v._2.value})"
         } else {
           s"(${v._2.isNull}) ? null : ${v._2.value}"
         }
@@ -1434,7 +1434,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     ev.copy(code = s"""
       ${pattern.code}
       boolean ${ev.isNull} = ${pattern.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
       if (!${ev.isNull}) {
         $stringBuffer $sb = new $stringBuffer();
         $formatter $form = new $formatter($sb, ${classOf[Locale].getName}.US);

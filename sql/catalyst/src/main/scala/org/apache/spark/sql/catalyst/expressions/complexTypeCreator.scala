@@ -90,7 +90,7 @@ private [sql] object GenArrayData {
     val arrayDataName = ctx.freshName("arrayData")
     val numElements = elementsCode.length
 
-    if (!ctx.isPrimitiveType(elementType)) {
+    if (!CodeGenerator.isPrimitiveType(elementType)) {
       val arrayName = ctx.freshName("arrayObject")
       val genericArrayClass = classOf[GenericArrayData].getName
 
@@ -124,7 +124,7 @@ private [sql] object GenArrayData {
         ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
       val baseOffset = Platform.BYTE_ARRAY_OFFSET
 
-      val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
+      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
         val isNullAssignment = if (!isMapKey) {
           s"$arrayDataName.setNullAt($i);"

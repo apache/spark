@@ -195,11 +195,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case other => other
     }
 
-    val jt = ctx.javaType(et)
+    val jt = CodeGenerator.javaType(et)
 
     val elementOrOffsetSize = et match {
       case t: DecimalType if t.precision <= Decimal.MAX_LONG_DIGITS => 8
-      case _ if ctx.isPrimitiveType(jt) => et.defaultSize
+      case _ if CodeGenerator.isPrimitiveType(jt) => et.defaultSize
       case _ => 8  // we need 8 bytes to store offset and length
     }
 
@@ -235,7 +235,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ => s"$arrayWriter.write($index, $element);"
     }
 
-    val primitiveTypeName = if (ctx.isPrimitiveType(jt)) ctx.primitiveTypeName(et) else ""
+    val primitiveTypeName =
+      if (CodeGenerator.isPrimitiveType(jt)) CodeGenerator.primitiveTypeName(et) else ""
     s"""
       final ArrayData $tmpInput = $input;
       if ($tmpInput instanceof UnsafeArrayData) {

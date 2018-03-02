@@ -517,8 +517,8 @@ case class SortMergeJoinExec(
     left.output.zipWithIndex.map { case (a, i) =>
       val value = ctx.freshName("value")
       val valueCode = CodeGenerator.getValue(leftRow, a.dataType, i.toString)
-      val javaType = ctx.javaType(a.dataType)
-      val defaultValue = ctx.defaultValue(a.dataType)
+      val javaType = CodeGenerator.javaType(a.dataType)
+      val defaultValue = CodeGenerator.defaultValue(a.dataType)
       if (a.nullable) {
         val isNull = ctx.freshName("isNull")
         val code =

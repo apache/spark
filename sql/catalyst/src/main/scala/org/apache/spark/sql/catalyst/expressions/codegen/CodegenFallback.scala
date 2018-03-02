@@ -44,20 +44,21 @@ trait CodegenFallback extends Expression {
     }
     val objectTerm = ctx.freshName("obj")
     val placeHolder = ctx.registerComment(this.toString)
+    val javaType = CodeGenerator.javaType(this.dataType)
     if (nullable) {
       ev.copy(code = s"""
         $placeHolder
         Object $objectTerm = ((Expression) references[$idx]).eval($input);
         boolean ${ev.isNull} = $objectTerm == null;
-        ${ctx.javaType(this.dataType)} ${ev.value} = ${ctx.defaultValue(this.dataType)};
+        $javaType ${ev.value} = ${CodeGenerator.defaultValue(this.dataType)};
         if (!${ev.isNull}) {
-          ${ev.value} = (${ctx.boxedType(this.dataType)}) $objectTerm;
+          ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
         }""")
     } else {
       ev.copy(code = s"""
         $placeHolder
         Object $objectTerm = ((Expression) references[$idx]).eval($input);
-        ${ctx.javaType(this.dataType)} ${ev.value} = (${ctx.boxedType(this.dataType)}) $objectTerm;
+        $javaType ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
         """, isNull = "false")
     }
   }

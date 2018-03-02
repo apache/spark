@@ -87,14 +87,14 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
        """.stripMargin
     }
 
-    val resultType = ctx.javaType(dataType)
+    val resultType = CodeGenerator.javaType(dataType)
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = evals,
       funcName = "coalesce",
       returnType = resultType,
       makeSplitFunction = func =>
         s"""
-           |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
+           |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
            |do {
            |  $func
            |} while (false);
@@ -113,7 +113,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     ev.copy(code =
       s"""
          |${ev.isNull} = true;
-         |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
+         |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |do {
          |  $codes
          |} while (false);
@@ -234,7 +234,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
       case DoubleType | FloatType =>
         ev.copy(code = s"""
           ${eval.code}
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""", isNull = "false")
     }
   }
@@ -281,7 +281,7 @@ case class NaNvl(left: Expression, right: Expression)
         ev.copy(code = s"""
           ${leftGen.code}
           boolean ${ev.isNull} = false;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (${leftGen.isNull}) {
             ${ev.isNull} = true;
           } else {
