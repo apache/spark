@@ -1349,6 +1349,9 @@ object CodeGenerator extends Logging {
         }
       })
 
+  /**
+   * Name of Java primitive data type
+   */
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
   final val JAVA_SHORT = "short"
