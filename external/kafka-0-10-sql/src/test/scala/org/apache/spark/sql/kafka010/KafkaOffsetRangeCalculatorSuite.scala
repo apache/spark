@@ -113,9 +113,20 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
         untilOffsets = Map(tp1 -> 5, tp2 -> 21)) ==
         Seq(
           KafkaOffsetRange(tp1, 1, 5, None),
-          KafkaOffsetRange(tp2, 1, 7, None),     // 1 + 20 / 3 => 1 + 6 = 7
-          KafkaOffsetRange(tp2, 7, 14, None),    // 7 + 14 / 2 => 7 + 7 = 14
-          KafkaOffsetRange(tp2, 14, 21, None)))  // 14 + 7 / 1 => 14 + 7 = 21
+          KafkaOffsetRange(tp2, 1, 7, None),
+          KafkaOffsetRange(tp2, 7, 14, None),
+          KafkaOffsetRange(tp2, 14, 21, None)))
+  }
+
+  testWithMinPartitions("range inexact multiple of minPartitions", 3) { calc =>
+    assert(
+      calc.getRanges(
+        fromOffsets = Map(tp1 -> 1),
+        untilOffsets = Map(tp1 -> 11)) ==
+        Seq(
+          KafkaOffsetRange(tp1, 1, 4, None),
+          KafkaOffsetRange(tp1, 4, 7, None),
+          KafkaOffsetRange(tp1, 7, 11, None)))
   }
 
   testWithMinPartitions("empty ranges ignored", 3) { calc =>
@@ -125,9 +136,9 @@ class KafkaOffsetRangeCalculatorSuite extends SparkFunSuite {
         untilOffsets = Map(tp1 -> 5, tp2 -> 21, tp3 -> 1)) ==
         Seq(
           KafkaOffsetRange(tp1, 1, 5, None),
-          KafkaOffsetRange(tp2, 1, 7, None), // 1 + 20 / 3 => 1 + 6 = 7
-          KafkaOffsetRange(tp2, 7, 14, None), // 7 + 14 / 2 => 7 + 7 = 14
-          KafkaOffsetRange(tp2, 14, 21, None))) // 14 + 7 / 1 => 14 + 7 = 21
+          KafkaOffsetRange(tp2, 1, 7, None),
+          KafkaOffsetRange(tp2, 7, 14, None),
+          KafkaOffsetRange(tp2, 14, 21, None)))
   }
 
   private val tp1 = new TopicPartition("t1", 1)
