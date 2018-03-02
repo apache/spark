@@ -76,6 +76,10 @@ private[kafka010] class KafkaMicroBatchReader(
   private val maxOffsetsPerTrigger =
     Option(options.get("maxOffsetsPerTrigger").orElse(null)).map(_.toLong)
 
+  private val useConsumerCache = options.getBoolean(
+    "kafkaConsumer.useConsumerCache",
+    SparkEnv.get.conf.getBoolean("spark.streaming.kafka.consumer.cache.enabled", true))
+
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
    * called in StreamExecutionThread. Otherwise, interrupting a thread while running
@@ -157,8 +161,8 @@ private[kafka010] class KafkaMicroBatchReader(
         } else None
         val range = KafkaOffsetRange(tp, fromOffset, untilOffset)
         Some(
-          new KafkaMicroBatchDataReaderFactory(
-            range, preferredLoc, executorKafkaParams, pollTimeoutMs, failOnDataLoss))
+          new KafkaMicroBatchDataReaderFactory(range, preferredLoc, executorKafkaParams,
+            pollTimeoutMs, failOnDataLoss, useConsumerCache))
       } else {
         reportDataLoss(
           s"Partition $tp's offset was changed from " +
@@ -325,12 +329,13 @@ private[kafka010] class KafkaMicroBatchDataReaderFactory(
     preferredLoc: Option[String],
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends DataReaderFactory[UnsafeRow] {
+    failOnDataLoss: Boolean,
+    useConsumerCache: Boolean) extends DataReaderFactory[UnsafeRow] {
 
   override def preferredLocations(): Array[String] = preferredLoc.toArray
 
   override def createDataReader(): DataReader[UnsafeRow] = new KafkaMicroBatchDataReader(
-    range, executorKafkaParams, pollTimeoutMs, failOnDataLoss)
+    range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, useConsumerCache)
 }
 
 /** A [[DataReader]] for reading Kafka data in a micro-batch streaming query. */
@@ -338,10 +343,16 @@ private[kafka010] class KafkaMicroBatchDataReader(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends DataReader[UnsafeRow] with Logging {
+    failOnDataLoss: Boolean,
+    useConsumerCache: Boolean) extends DataReader[UnsafeRow] with Logging {
 
-  private val consumer = CachedKafkaConsumer.getOrCreate(
-    offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
+  private val consumer = if (useConsumerCache) {
+    CachedKafkaConsumer.getOrCreate(
+      offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
+  } else {
+    CachedKafkaConsumer.createUncached(
+      offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
+  }
   private val rangeToRead = resolveRange(offsetRange)
   private val converter = new KafkaRecordToUnsafeRowConverter
 
@@ -369,9 +380,15 @@ private[kafka010] class KafkaMicroBatchDataReader(
   }
 
   override def close(): Unit = {
-    // Indicate that we're no longer using this consumer
-    CachedKafkaConsumer.releaseKafkaConsumer(
-      offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
+    if (useConsumerCache) {
+      // Indicate that we're no longer using this consumer
+      CachedKafkaConsumer.releaseKafkaConsumer(
+        offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
+    } else {
+      if (consumer != null) {
+        consumer.close()
+      }
+    }
   }
 
   private def resolveRange(range: KafkaOffsetRange): KafkaOffsetRange = {

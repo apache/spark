@@ -567,6 +567,7 @@ abstract class KafkaMicroBatchSourceSuiteBase extends KafkaSourceSuiteBase {
       .readStream
       .format("kafka")
       .option("subscribe", topic)
+      .option("kafkaConsumer.useConsumerCache", false)
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
       .load()
