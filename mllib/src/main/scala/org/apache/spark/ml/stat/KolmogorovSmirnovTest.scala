@@ -66,7 +66,7 @@ object KolmogorovSmirnovTest {
    *          - `pValue: Double`
    *          - `statistic: Double`
    */
-  @Since("2.3.0")
+  @Since("2.4.0")
   def test(dataset: DataFrame, sampleCol: String, cdf: Double => Double): DataFrame = {
     val spark = dataset.sparkSession
 
@@ -90,7 +90,7 @@ object KolmogorovSmirnovTest {
    *          - `pValue: Double`
    *          - `statistic: Double`
    */
-  @Since("2.3.0")
+  @Since("2.4.0")
   @varargs
   def test(dataset: DataFrame, sampleCol: String, distName: String, params: Double*): DataFrame = {
     val spark = dataset.sparkSession
