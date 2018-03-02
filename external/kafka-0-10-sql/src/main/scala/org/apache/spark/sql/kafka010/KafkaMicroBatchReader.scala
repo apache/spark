@@ -179,10 +179,10 @@ private[kafka010] class KafkaMicroBatchReader(
     // Make sure that `KafkaConsumer.poll` is only called in StreamExecutionThread.
     // Otherwise, interrupting a thread while running `KafkaConsumer.poll` may hang forever
     // (KAFKA-1894).
-    require(Thread.currentThread().isInstanceOf[UninterruptibleThread])
+    assert(Thread.currentThread().isInstanceOf[UninterruptibleThread])
 
     // SparkSession is required for getting Hadoop configuration for writing to checkpoints
-    require(SparkSession.getActiveSession.nonEmpty)
+    assert(SparkSession.getActiveSession.nonEmpty)
 
     val metadataLog =
       new KafkaSourceInitialOffsetWriter(SparkSession.getActiveSession.get, metadataPath)
@@ -323,8 +323,8 @@ private[kafka010] case class KafkaMicroBatchDataReader(
 
   private val consumer = {
     if (!reuseKafkaConsumer) {
-      // If we can't reuse CachedKafkaConsumers, creating a new CachedKafkaConsumer. As here we
-      // uses `assign`, we don't need to worry about the "group.id" conflicts.
+      // If we can't reuse CachedKafkaConsumers, creating a new CachedKafkaConsumer. We
+      // uses `assign` here, hence we don't need to worry about the "group.id" conflicts.
       CachedKafkaConsumer.createUncached(
         offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
     } else {
@@ -360,7 +360,6 @@ private[kafka010] case class KafkaMicroBatchDataReader(
   }
 
   override def close(): Unit = {
-    // Indicate that we're no longer using this consumer
     if (!reuseKafkaConsumer) {
       // Don't forget to close non-reuse KafkaConsumers. You may take down your cluster!
       consumer.close()
