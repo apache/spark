@@ -134,6 +134,11 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
       ReplaceDistinctWithAggregate) ::
+    Batch("RewriteSubquery", Once,
+        RewritePredicateSubquery,
+        ColumnPruning,
+        CollapseProject,
+        RemoveRedundantProject) ::
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions) :: Nil ++
@@ -150,12 +155,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PropagateEmptyRelation) :+
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts) :+
-    Batch("RewriteSubquery", Once,
-      RewritePredicateSubquery,
-      ColumnPruning,
-      CollapseProject,
-      RemoveRedundantProject)
+      CheckCartesianProducts) 
   }
 
   /**
