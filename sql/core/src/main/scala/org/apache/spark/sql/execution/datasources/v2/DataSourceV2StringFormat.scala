@@ -69,7 +69,7 @@ trait DataSourceV2StringFormat {
     val entries = scala.collection.mutable.ArrayBuffer.empty[(String, String)]
 
     if (filters.nonEmpty) {
-      entries += "Pushed Filters" -> filters.mkString("[", ", ", "]")
+      entries += "Filters" -> filters.mkString("[", ", ", "]")
     }
 
     // TODO: we should only display some standard options like path, table, etc.
@@ -83,16 +83,12 @@ trait DataSourceV2StringFormat {
 
     val entriesStr = if (entries.nonEmpty) {
       Utils.truncatedString(entries.map {
-        case (key, value) => key + ": " + StringUtils.abbreviate(redact(value), 100)
+        case (key, value) => key + ": " + StringUtils.abbreviate(value, 100)
       }, " (", ", ", ")")
     } else {
       ""
     }
 
     s"$sourceName$outputStr$entriesStr"
-  }
-
-  private def redact(text: String): String = {
-    Utils.redact(SQLConf.get.stringRedationPattern, text)
   }
 }
