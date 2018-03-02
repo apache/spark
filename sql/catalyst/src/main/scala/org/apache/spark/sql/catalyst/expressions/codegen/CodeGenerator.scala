@@ -105,6 +105,8 @@ private[codegen] case class NewFunctionSpec(
  */
 class CodegenContext {
 
+  import CodeGenerator._
+
   /**
    * Holding a list of objects that could be used passed into generated class.
    */
@@ -196,11 +198,11 @@ class CodegenContext {
 
     /**
      * Returns the reference of next available slot in current compacted array. The size of each
-     * compacted array is controlled by the constant `CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT`.
+     * compacted array is controlled by the constant `MUTABLESTATEARRAY_SIZE_LIMIT`.
      * Once reaching the threshold, new compacted array is created.
      */
     def getNextSlot(): String = {
-      if (currentIndex < CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT) {
+      if (currentIndex < MUTABLESTATEARRAY_SIZE_LIMIT) {
         val res = s"${arrayNames.last}[$currentIndex]"
         currentIndex += 1
         res
@@ -247,10 +249,10 @@ class CodegenContext {
    *         are satisfied:
    *         1. forceInline is true
    *         2. its type is primitive type and the total number of the inlined mutable variables
-   *            is less than `CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD`
+   *            is less than `OUTER_CLASS_VARIABLES_THRESHOLD`
    *         3. its type is multi-dimensional array
    *         When a variable is compacted into an array, the max size of the array for compaction
-   *         is given by `CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT`.
+   *         is given by `MUTABLESTATEARRAY_SIZE_LIMIT`.
    */
   def addMutableState(
       javaType: String,
@@ -261,7 +263,7 @@ class CodegenContext {
 
     // want to put a primitive type variable at outerClass for performance
     val canInlinePrimitive = isPrimitiveType(javaType) &&
-      (inlinedMutableStates.length < CodeGenerator.OUTER_CLASS_VARIABLES_THRESHOLD)
+      (inlinedMutableStates.length < OUTER_CLASS_VARIABLES_THRESHOLD)
     if (forceInline || canInlinePrimitive || javaType.contains("[][]")) {
       val varName = if (useFreshName) freshName(variableName) else variableName
       val initCode = initFunc(varName)
@@ -339,7 +341,7 @@ class CodegenContext {
         val length = if (index + 1 == numArrays) {
           mutableStateArrays.getCurrentIndex
         } else {
-          CodeGenerator.MUTABLESTATEARRAY_SIZE_LIMIT
+          MUTABLESTATEARRAY_SIZE_LIMIT
         }
         if (javaType.contains("[]")) {
           // initializer had an one-dimensional array variable
@@ -468,7 +470,7 @@ class CodegenContext {
       inlineToOuterClass: Boolean): NewFunctionSpec = {
     val (className, classInstance) = if (inlineToOuterClass) {
       outerClassName -> ""
-    } else if (currClassSize > CodeGenerator.GENERATED_CLASS_SIZE_THRESHOLD) {
+    } else if (currClassSize > GENERATED_CLASS_SIZE_THRESHOLD) {
       val className = freshName("NestedClass")
       val classInstance = freshName("nestedClassInstance")
 
@@ -538,7 +540,7 @@ class CodegenContext {
   }
 
   /**
-   * Returns true if the Java type has a special accessor and setter in [[InternalRow]].
+   * Returns true if a Java type is Java primitive type
    */
   def isPrimitiveType(jt: String): Boolean = CodeGenerator.isPrimitiveType(jt)
 
@@ -559,7 +561,7 @@ class CodegenContext {
   /**
    * Returns the boxed type in Java.
    */
-  def boxedType(jt: String): String = CodeGenerator.boxedType(jt)
+  def boxedType(jt: String): String = boxedType(jt)
 
   def boxedType(dt: DataType): String = CodeGenerator.boxedType(dt)
 
@@ -669,8 +671,8 @@ class CodegenContext {
               } else if ($isNullB) {
                 return 1;
               } else {
-                $jt $elementA = ${CodeGenerator.getValue("a", elementType, "i")};
-                $jt $elementB = ${CodeGenerator.getValue("b", elementType, "i")};
+                $jt $elementA = ${getValue("a", elementType, "i")};
+                $jt $elementB = ${getValue("b", elementType, "i")};
                 int comp = ${genComp(elementType, elementA, elementB)};
                 if (comp != 0) {
                   return comp;
@@ -718,8 +720,7 @@ class CodegenContext {
    * @param c2 name of the variable of expression 2's output
    */
   def genGreater(dataType: DataType, c1: String, c2: String): String = javaType(dataType) match {
-    case CodeGenerator.JAVA_BYTE | CodeGenerator.JAVA_SHORT |
-         CodeGenerator.JAVA_INT | CodeGenerator.JAVA_LONG => s"$c1 > $c2"
+    case JAVA_BYTE | JAVA_SHORT | JAVA_INT | JAVA_LONG => s"$c1 > $c2"
     case _ => s"(${genComp(dataType, c1, c2)}) > 0"
   }
 
@@ -913,7 +914,7 @@ class CodegenContext {
         // for performance reasons, the functions are prepended, instead of appended,
         // thus here they are in reversed order
         val orderedFunctions = innerClassFunctions.reverse
-        if (orderedFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
+        if (orderedFunctions.size > MERGE_SPLIT_METHODS_THRESHOLD) {
           // Adding a new function to each inner class which contains the invocation of all the
           // ones which have been added to that inner class. For example,
           //   private class NestedClass {
@@ -1003,7 +1004,7 @@ class CodegenContext {
     commonExprs.foreach { e =>
       val expr = e.head
       val fnName = freshName("subExpr")
-      val isNull = addMutableState(CodeGenerator.JAVA_BOOLEAN, "subExprIsNull")
+      val isNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
       val value = addMutableState(javaType(expr.dataType), "subExprValue")
 
       // Generate the code for this expression tree and wrap it in a function.
@@ -1100,7 +1101,7 @@ class CodegenContext {
     def paramLengthForExpr(input: Expression): Int = {
       // For a nullable expression, we need to pass in an extra boolean parameter.
       (if (input.nullable) 1 else 0) + javaType(input.dataType) match {
-        case CodeGenerator.JAVA_LONG | CodeGenerator.JAVA_DOUBLE => 2
+        case JAVA_LONG | JAVA_DOUBLE => 2
         case _ => 1
       }
     }
@@ -1113,7 +1114,7 @@ class CodegenContext {
    * length less than a pre-defined constant.
    */
   def isValidParamLength(paramLength: Int): Boolean = {
-    paramLength <= CodeGenerator.MAX_JVM_METHOD_PARAMS_LENGTH
+    paramLength <= MAX_JVM_METHOD_PARAMS_LENGTH
   }
 }
 
