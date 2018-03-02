@@ -327,6 +327,7 @@ case class GetMapValue(child: Expression, key: Expression)
     } else {
       ""
     }
+    val keyJavaType = CodeGenerator.javaType(keyType)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         final int $length = $eval1.numElements();
@@ -336,7 +337,7 @@ case class GetMapValue(child: Expression, key: Expression)
         int $index = 0;
         boolean $found = false;
         while ($index < $length && !$found) {
-          final ${CodeGenerator.javaType(keyType)} $key = ${CodeGenerator.getValue(keys, keyType, index)};
+          final $keyJavaType $key = ${CodeGenerator.getValue(keys, keyType, index)};
           if (${ctx.genEqual(keyType, key, eval2)}) {
             $found = true;
           } else {
