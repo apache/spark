@@ -16,7 +16,6 @@
 #
 
 import sys
-
 from abc import abstractmethod, ABCMeta
 
 from pyspark import since, keyword_only
