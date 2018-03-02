@@ -2504,10 +2504,13 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val model1 = lr.fit(smallBinaryDataset)
     val lr2 = new LogisticRegression().setInitialModel(model1).setMaxIter(5).setFamily("binomial")
     val model2 = lr2.fit(smallBinaryDataset)
-    val predictions1 = model1.transform(smallBinaryDataset).select("prediction").collect()
-    val predictions2 = model2.transform(smallBinaryDataset).select("prediction").collect()
-    predictions1.zip(predictions2).foreach { case (Row(p1: Double), Row(p2: Double)) =>
-      assert(p1 === p2)
+    val binaryExpected = model1.transform(smallBinaryDataset).select("prediction").collect()
+      .map(_.getDouble(0))
+    for (model <- Seq(model1, model2)) {
+      testTransformerByGlobalCheckFunc[(Double, Vector)](smallBinaryDataset.toDF(), model,
+        "prediction") { rows: Seq[Row] =>
+        rows.map(_.getDouble(0)).toArray === binaryExpected
+      }
     }
     assert(model2.summary.totalIterations === 1)
 
@@ -2516,10 +2519,13 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     val lr4 = new LogisticRegression()
       .setInitialModel(model3).setMaxIter(5).setFamily("multinomial")
     val model4 = lr4.fit(smallMultinomialDataset)
-    val predictions3 = model3.transform(smallMultinomialDataset).select("prediction").collect()
-    val predictions4 = model4.transform(smallMultinomialDataset).select("prediction").collect()
-    predictions3.zip(predictions4).foreach { case (Row(p1: Double), Row(p2: Double)) =>
-      assert(p1 === p2)
+    val multinomialExpected = model3.transform(smallMultinomialDataset).select("prediction")
+      .collect().map(_.getDouble(0))
+    for (model <- Seq(model3, model4)) {
+      testTransformerByGlobalCheckFunc[(Double, Vector)](smallMultinomialDataset.toDF(), model,
+        "prediction") { rows: Seq[Row] =>
+        rows.map(_.getDouble(0)).toArray === multinomialExpected
+      }
     }
     assert(model4.summary.totalIterations === 1)
   }
