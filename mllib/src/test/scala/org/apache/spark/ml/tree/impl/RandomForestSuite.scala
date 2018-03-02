@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.tree.impl
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
@@ -640,9 +641,9 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
   // impurity measure, but always leading to the same prediction).
   ///////////////////////////////////////////////////////////////////////////////
 
-  test("SPARK-3159 tree model redundancy - binary classification") {
-    // The following dataset is set up such that splitting over feature 1 for points having
-    // feature 0 = 0 improves the impurity measure, despite the prediction will always be 0
+  test("SPARK-3159 tree model redundancy - classification") {
+    // The following dataset is set up such that splitting over feature_1 for points having
+    // feature_0 = 0 improves the impurity measure, despite the prediction will always be 0
     // in both branches.
     val arr = Array(
       LabeledPoint(0.0, Vectors.dense(0.0, 1.0)),
@@ -666,11 +667,13 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(prunedTree.numNodes === 5)
     assert(unprunedTree.numNodes === 7)
+
+    assert(RandomForestSuite.getSumLeafCounters(List(prunedTree.rootNode)) === arr.size)
   }
 
   test("SPARK-3159 tree model redundancy - regression") {
-    // The following dataset is set up such that splitting over feature 0 for points having
-    // feature 1 = 1 improves the impurity measure, despite the prediction will always be 0.5
+    // The following dataset is set up such that splitting over feature_0 for points having
+    // feature_1 = 1 improves the impurity measure, despite the prediction will always be 0.5
     // in both branches.
     val arr = Array(
       LabeledPoint(0.0, Vectors.dense(0.0, 1.0)),
@@ -694,6 +697,7 @@ class RandomForestSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(prunedTree.numNodes === 3)
     assert(unprunedTree.numNodes === 5)
+    assert(RandomForestSuite.getSumLeafCounters(List(prunedTree.rootNode)) === arr.size)
   }
 }
 
@@ -703,4 +707,16 @@ private object RandomForestSuite {
     val (indices, values) = map.toSeq.sortBy(_._1).unzip
     Vectors.sparse(size, indices.toArray, values.toArray)
   }
+
+  @tailrec
+  private def getSumLeafCounters(nodes: List[Node], acc: Long = 0): Long =
+    if (nodes.isEmpty) {
+      acc
+    }
+    else {
+      nodes.head match {
+        case i: InternalNode => getSumLeafCounters(i.leftChild :: i.rightChild :: nodes.tail, acc)
+        case l: LeafNode => getSumLeafCounters(nodes.tail, acc + l.impurityStats.count)
+      }
+    }
 }
