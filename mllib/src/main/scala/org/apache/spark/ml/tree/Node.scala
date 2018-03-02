@@ -276,14 +276,10 @@ private[tree] class LearningNode(
       new InternalNode(stats.impurityCalculator.predict, stats.impurity, stats.gain,
         leftChild.get.toNode, rightChild.get.toNode, split.get, stats.impurityCalculator)
     } else {
-      if (stats.valid) {
-        new LeafNode(stats.impurityCalculator.predict, stats.impurity,
-          stats.impurityCalculator)
-      } else {
-        // Here we want to keep same behavior with the old mllib.DecisionTreeModel
-        new LeafNode(stats.impurityCalculator.predict, -1.0, stats.impurityCalculator)
-      }
-
+      assert(stats != null, "Unknown error during Decision Tree learning. Could not convert " +
+        "LearningNode to Node")
+      new LeafNode(stats.impurityCalculator.predict, stats.impurity,
+        stats.impurityCalculator)
     }
   }
 
@@ -334,7 +330,7 @@ private[tree] object LearningNode {
       id: Int,
       isLeaf: Boolean,
       stats: ImpurityStats): LearningNode = {
-    new LearningNode(id, None, None, None, false, stats)
+    new LearningNode(id, None, None, None, isLeaf, stats)
   }
 
   /** Create an empty node with the given node index.  Values must be set later on. */
