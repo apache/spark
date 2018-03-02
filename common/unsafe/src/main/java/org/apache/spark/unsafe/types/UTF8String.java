@@ -481,8 +481,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     for (int i = 0; i < numBytes; i++) {
       if (getByte(i) == (byte) ',') {
         if (i - (lastComma + 1) == match.numBytes &&
-          ByteArrayMethods.arrayEqualsBlock(base, (lastComma + 1), match.base, 0,
-            match.numBytes)) {
+          ByteArrayMethods.arrayEqualsBlock(base, lastComma + 1, match.base, 0, match.numBytes)) {
           return n;
         }
         lastComma = i;
@@ -490,7 +489,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
     }
     if (numBytes - (lastComma + 1) == match.numBytes &&
-      ByteArrayMethods.arrayEqualsBlock(base, (lastComma + 1), match.base, 0, match.numBytes)) {
+      ByteArrayMethods.arrayEqualsBlock(base, lastComma + 1, match.base, 0, match.numBytes)) {
       return n;
     }
     return 0;

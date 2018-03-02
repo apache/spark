@@ -176,12 +176,12 @@ public abstract class MemoryBlock {
   }
 
   public final void copyFrom(Object src, long srcOffset, long dstOffset, long length) {
-    assert(length <= length);
+    assert(length <= this.length);
     Platform.copyMemory(src, srcOffset, obj, offset + dstOffset, length);
   }
 
   public final void writeTo(long srcOffset, Object dst, long dstOffset, long length) {
-    assert(length <= length);
+    assert(length <= this.length);
     Platform.copyMemory(obj, offset + srcOffset, dst, dstOffset, length);
   }
 }
