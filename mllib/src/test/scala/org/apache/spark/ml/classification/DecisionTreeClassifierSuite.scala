@@ -261,7 +261,7 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     }
 
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, DecisionTreeClassificationModel](newTree, newData)
+      Vector, DecisionTreeClassificationModel](this, newTree, newData)
   }
 
   test("training with 1-category categorical feature") {

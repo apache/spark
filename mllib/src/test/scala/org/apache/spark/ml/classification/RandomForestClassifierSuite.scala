@@ -152,7 +152,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     }
 
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, RandomForestClassificationModel](model, df)
+      Vector, RandomForestClassificationModel](this, model, df)
   }
 
   test("Fitting without numClasses in metadata") {

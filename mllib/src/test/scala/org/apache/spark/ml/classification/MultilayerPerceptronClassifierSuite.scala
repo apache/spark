@@ -97,7 +97,7 @@ class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTe
       case Row(p: Vector, e: Vector) => assert(p ~== e absTol 1e-3)
     }
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, MultilayerPerceptronClassificationModel](model, strongDataset)
+      Vector, MultilayerPerceptronClassificationModel](this, model, strongDataset)
   }
 
   test("test model probability") {

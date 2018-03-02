@@ -468,7 +468,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     }
 
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, LogisticRegressionModel](model, smallMultinomialDataset)
+      Vector, LogisticRegressionModel](this, model, smallMultinomialDataset)
   }
 
   test("binary logistic regression: Predictor, Classifier methods") {
@@ -496,7 +496,7 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
     }
 
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, LogisticRegressionModel](model, smallBinaryDataset)
+      Vector, LogisticRegressionModel](this, model, smallBinaryDataset)
   }
 
   test("coefficients and intercept methods") {

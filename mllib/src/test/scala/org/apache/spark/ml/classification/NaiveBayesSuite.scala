@@ -164,7 +164,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     }
 
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, NaiveBayesModel](model, testDataset)
+      Vector, NaiveBayesModel](this, model, testDataset)
   }
 
   test("Naive Bayes with weighted samples") {
@@ -223,7 +223,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     }
 
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, NaiveBayesModel](model, testDataset)
+      Vector, NaiveBayesModel](this, model, testDataset)
   }
 
   test("detect negative values") {

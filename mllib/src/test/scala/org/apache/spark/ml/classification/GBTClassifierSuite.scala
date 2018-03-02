@@ -194,7 +194,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     }
 
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, GBTClassificationModel](gbtModel, validationDataset)
+      Vector, GBTClassificationModel](this, gbtModel, validationDataset)
   }
 
   test("GBT parameter stepSize should be in interval (0, 1]") {
