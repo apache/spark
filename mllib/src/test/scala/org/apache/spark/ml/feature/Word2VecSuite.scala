@@ -227,9 +227,7 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
       .fit(ngramDF)
 
     // Just test that this transformation succeeds
-    testTransformerByGlobalCheckFunc[(Seq[String], Seq[String])](ngramDF, model, "result") { rows =>
-      Unit
-    }
+    testTransformerByGlobalCheckFunc[(Seq[String], Seq[String])](ngramDF, model, "result") { _ => }
   }
 
 }

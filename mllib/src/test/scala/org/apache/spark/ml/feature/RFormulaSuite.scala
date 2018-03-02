@@ -34,8 +34,8 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
       expected: DataFrame,
       expectedAttributes: AttributeGroup*): Unit = {
     val resultSchema = formulaModel.transformSchema(dataframe.schema)
-    assert(resultSchema.json == expected.schema.json)
-    assert(resultSchema == expected.schema)
+    assert(resultSchema.json === expected.schema.json)
+    assert(resultSchema === expected.schema)
     val (first +: rest) = expected.schema.fieldNames.toSeq
     val expectedRows = expected.collect()
     testTransformerByGlobalCheckFunc[A](dataframe, formulaModel, first, rest: _*) { rows =>
@@ -43,7 +43,7 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
       for (expectedAttributeGroup <- expectedAttributes) {
         val attributeGroup =
           AttributeGroup.fromStructField(rows.head.schema(expectedAttributeGroup.name))
-        assert(attributeGroup == expectedAttributeGroup)
+        assert(attributeGroup === expectedAttributeGroup)
       }
       assert(rows === expectedRows)
     }

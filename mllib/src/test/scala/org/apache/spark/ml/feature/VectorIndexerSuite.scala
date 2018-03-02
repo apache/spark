@@ -127,9 +127,9 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
     MLTestingUtils.checkCopyAndUids(vectorIndexer, model)
 
     // should work
-    testTransformer[FeatureData](densePoints1, model, "indexed") { r: Row => Unit }
+    testTransformer[FeatureData](densePoints1, model, "indexed") { _ => }
     // should work
-    testTransformer[FeatureData](sparsePoints1, model, "indexed") { r: Row => Unit }
+    testTransformer[FeatureData](sparsePoints1, model, "indexed") { _ => }
 
     // If the data is local Dataset, it throws AssertionError directly.
     withClue("Did not found expected error message when fit, " +

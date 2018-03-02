@@ -398,9 +398,7 @@ class OneHotEncoderEstimatorSuite extends MLTest with DefaultReadWriteTest {
       firstResultCol = "output")
 
     model.setHandleInvalid("keep")
-    testTransformerByGlobalCheckFunc[(Double, Vector)](testDF, model, "output") { _ =>
-      Unit
-    }
+    testTransformerByGlobalCheckFunc[(Double, Vector)](testDF, model, "output") { _ => }
   }
 
   test("Transforming on mismatched attributes") {

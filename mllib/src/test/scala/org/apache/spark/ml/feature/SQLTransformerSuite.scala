@@ -74,11 +74,7 @@ class SQLTransformerSuite extends MLTest with DefaultReadWriteTest {
     assert(df.storageLevel != StorageLevel.NONE)
     val sqlTrans = new SQLTransformer()
       .setStatement("SELECT id + 1 AS id1 FROM __THIS__")
-    testTransformerByGlobalCheckFunc[Long](
-      df,
-      sqlTrans,
-      "id1") { rows =>
-      assert(df.storageLevel != StorageLevel.NONE)
-    }
+    testTransformerByGlobalCheckFunc[Long](df, sqlTrans, "id1") { _ => }
+    assert(df.storageLevel != StorageLevel.NONE)
   }
 }

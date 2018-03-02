@@ -382,7 +382,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
       "result1",
       "result2",
       "result3") { rows =>
-        assert(rows == expected)
+        assert(rows === expected)
       }
 
     testTransformerByGlobalCheckFunc[(Double, Double, Double)](
@@ -391,7 +391,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
       "result1",
       "result2",
       "result3") { rows =>
-      assert(rows == expected)
+      assert(rows === expected)
     }
   }
 
@@ -450,7 +450,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
       "result1",
       "result2",
       "result3") { rows =>
-      assert(rows == expected)
+      assert(rows === expected)
     }
 
     testTransformerByGlobalCheckFunc[(Double, Double, Double)](
@@ -459,7 +459,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
       "result1",
       "result2",
       "result3") { rows =>
-      assert(rows == expected)
+      assert(rows === expected)
     }
   }
 
