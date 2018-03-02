@@ -42,7 +42,7 @@ Look through the GitHub issues for features. Anything tagged with
 
 We've created the operators, hooks, macros and executors we needed, but we
 made sure that this part of Airflow is extensible. New operators,
-hooks and operators are very welcomed!
+hooks, macros and executors are very welcomed!
 
 ### Improve Documentation
 
