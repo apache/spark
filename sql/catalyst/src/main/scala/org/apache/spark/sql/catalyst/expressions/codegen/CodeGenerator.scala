@@ -1362,13 +1362,13 @@ object CodeGenerator extends Logging {
   final val JAVA_DOUBLE = "double"
 
   /**
-   * List of java data types that have special accessors and setters in [[InternalRow]].
+   * List of java primitive data types
    */
   val primitiveTypes =
     Seq(JAVA_BOOLEAN, JAVA_BYTE, JAVA_SHORT, JAVA_INT, JAVA_LONG, JAVA_FLOAT, JAVA_DOUBLE)
 
   /**
-   * Returns true if the Java type has a special accessor and setter in [[InternalRow]].
+   * Returns true if a Java type is Java primitive primitive type
    */
   def isPrimitiveType(jt: String): Boolean = primitiveTypes.contains(jt)
 
