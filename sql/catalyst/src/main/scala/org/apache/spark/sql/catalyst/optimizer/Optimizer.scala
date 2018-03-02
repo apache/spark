@@ -638,7 +638,8 @@ object CollapseWindow extends Rule[LogicalPlan] {
  * Note: While this optimization is applicable to all types of join, it primarily benefits Inner and
  * LeftSemi joins.
  */
-object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelper {
+object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelper
+    with NotNullConstraintHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (SQLConf.get.constraintPropagationEnabled) {
@@ -663,7 +664,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
       // right child
       val constraints = join.allConstraints.filter { c =>
         c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)
-      }
+      } ++ extraJoinConstraints(join).toSet
       // Remove those constraints that are already enforced by either the left or the right child
       val additionalConstraints = constraints -- (left.constraints ++ right.constraints)
       val newConditionOpt = conditionOpt match {
@@ -674,6 +675,22 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
           additionalConstraints.reduceOption(And)
       }
       if (newConditionOpt.isDefined) Join(left, right, joinType, newConditionOpt) else join
+  }
+
+  /**
+   * Returns additional constraints which are not enforced on the result of join operations, but
+   * which can be enforced either on the left or the right side
+   */
+  def extraJoinConstraints(join: Join): Seq[Expression] = {
+    join match {
+      case Join(_, right, LeftAnti | LeftOuter, condition) if condition.isDefined =>
+        splitConjunctivePredicates(condition.get).flatMap(inferIsNotNullConstraints).filter(
+          _.references.subsetOf(right.outputSet))
+      case Join(left, _, RightOuter, condition) if condition.isDefined =>
+        splitConjunctivePredicates(condition.get).flatMap(inferIsNotNullConstraints).filter(
+          _.references.subsetOf(left.outputSet))
+      case _ => Seq.empty[Expression]
+    }
   }
 }
 

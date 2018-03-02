@@ -204,4 +204,40 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-23564: left anti join should filter out null join keys on right side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val condition = Some("x.a".attr === "y.a".attr)
+    val originalQuery = x.join(y, LeftAnti, condition).analyze
+    val left = x
+    val right = y.where(IsNotNull('a))
+    val correctAnswer = left.join(right, LeftAnti, condition).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-23564: left outer join should filter out null join keys on right side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val condition = Some("x.a".attr === "y.a".attr)
+    val originalQuery = x.join(y, LeftOuter, condition).analyze
+    val left = x
+    val right = y.where(IsNotNull('a))
+    val correctAnswer = left.join(right, LeftOuter, condition).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-23564: right outer join should filter out null join keys on left side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val condition = Some("x.a".attr === "y.a".attr)
+    val originalQuery = x.join(y, RightOuter, condition).analyze
+    val left = x.where(IsNotNull('a))
+    val right = y
+    val correctAnswer = left.join(right, RightOuter, condition).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
 }
