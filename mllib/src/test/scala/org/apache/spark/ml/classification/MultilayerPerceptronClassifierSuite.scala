@@ -26,7 +26,6 @@ import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.sql.{Dataset, Row}
-import org.apache.spark.sql.functions._
 
 class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTest {
 
