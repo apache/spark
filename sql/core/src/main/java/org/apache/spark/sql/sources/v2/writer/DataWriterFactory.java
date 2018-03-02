@@ -48,9 +48,9 @@ public interface DataWriterFactory<T> extends Serializable {
    *                      same task id but different attempt number, which means there are multiple
    *                      tasks with the same task id running at the same time. Implementations can
    *                      use this attempt number to distinguish writers of different task attempts.
-   * @param epochId A monotonically increasing id for streaming queries that are split in to discrete
-   *                periods of execution. For queries that execute as a single batch, this id will
-   *                always be zero.
+   * @param epochId A monotonically increasing id for streaming queries that are split in to
+   *                discrete periods of execution. For queries that execute as a single batch, this
+   *                id will always be zero.
    */
   DataWriter<T> createDataWriter(int partitionId, int attemptNumber, long epochId);
 }
