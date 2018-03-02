@@ -172,13 +172,18 @@ _functions_1_6 = {
 
 _functions_2_1 = {
     # unary math functions
-    'degrees': """Converts an angle measured in radians to an approximately equivalent angle
+    'degrees': """
+               Converts an angle measured in radians to an approximately equivalent angle
                measured in degrees.
                :param col: angle in radians
-               :return: angle in degrees, as if computed by `java.lang.Math.toDegrees()`""",
-    'radians': """Converts an angle measured in degrees to an approximately equivalent angle measured in radians.
+               :return: angle in degrees, as if computed by `java.lang.Math.toDegrees()`
+               """,
+    'radians': """
+               Converts an angle measured in degrees to an approximately equivalent angle
+               measured in radians.
                :param col: angle in degrees
-               :return: angle in radians, as if computed by `java.lang.Math.toRadians()`""",
+               :return: angle in radians, as if computed by `java.lang.Math.toRadians()`
+               """,
 }
 
 # math functions that take two arguments as input
