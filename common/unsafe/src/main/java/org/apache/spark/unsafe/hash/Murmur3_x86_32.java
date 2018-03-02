@@ -69,7 +69,7 @@ public final class Murmur3_x86_32 {
     int lengthInBytes = (int)base.size();
     assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
     int lengthAligned = lengthInBytes - lengthInBytes % 4;
-    int h1 = hashBytesByIntBlock(base, offset, lengthAligned, seed);
+    int h1 = hashBytesByIntBlock(base.subBlock(offset, lengthAligned), seed);
     for (int i = lengthAligned; i < lengthInBytes; i++) {
       int halfWord = base.getByte(offset + i);
       int k1 = mixK1(halfWord);
@@ -106,13 +106,14 @@ public final class Murmur3_x86_32 {
     return fmix(h1, lengthInBytes);
   }
 
-  public static int hashUnsafeBytes2Block(
-      MemoryBlock base, long offset, int lengthInBytes, int seed) {
+  public static int hashUnsafeBytes2Block(MemoryBlock base, int seed) {
     // This is compatible with original and another implementations.
     // Use this method for new components after Spark 2.3.
+    long offset = base.getBaseOffset();
+    int lengthInBytes = (int)base.size();
     assert (lengthInBytes >= 0) : "lengthInBytes cannot be negative";
     int lengthAligned = lengthInBytes - lengthInBytes % 4;
-    int h1 = hashBytesByIntBlock(base, offset, lengthAligned, seed);
+    int h1 = hashBytesByIntBlock(base.subBlock(offset, lengthAligned), seed);
     int k1 = 0;
     for (int i = lengthAligned, shift = 0; i < lengthInBytes; i++, shift += 8) {
       k1 ^= (base.getByte(offset + i) & 0xFF) << shift;
@@ -121,7 +122,9 @@ public final class Murmur3_x86_32 {
     return fmix(h1, lengthInBytes);
   }
 
-  private static int hashBytesByIntBlock(MemoryBlock base, long offset, int lengthInBytes, int seed) {
+  private static int hashBytesByIntBlock(MemoryBlock base, int seed) {
+    long offset = base.getBaseOffset();
+    int lengthInBytes = (int)base.size();
     assert (lengthInBytes % 4 == 0);
     int h1 = seed;
     for (int i = 0; i < lengthInBytes; i += 4) {
