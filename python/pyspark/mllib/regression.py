@@ -16,9 +16,10 @@
 #
 
 import sys
+import warnings
+
 import numpy as np
 from numpy import array
-import warnings
 
 from pyspark import RDD, since
 from pyspark.streaming.dstream import DStream

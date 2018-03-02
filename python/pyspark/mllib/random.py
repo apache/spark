@@ -20,7 +20,6 @@ Python package for random data generation.
 """
 
 import sys
-
 from functools import wraps
 
 from pyspark import since

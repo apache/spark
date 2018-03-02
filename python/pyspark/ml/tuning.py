@@ -16,8 +16,9 @@
 #
 import itertools
 import sys
-import numpy as np
 from multiprocessing.pool import ThreadPool
+
+import numpy as np
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
