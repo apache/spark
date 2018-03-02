@@ -1023,7 +1023,7 @@ case class ScalaUDF(
       s"""
          |$boxedType $resultTerm = null;
          |try {
-         |  $resultTerm = (boxedType)$resultConverter.apply($getFuncResult);
+         |  $resultTerm = ($boxedType)$resultConverter.apply($getFuncResult);
          |} catch (Exception e) {
          |  throw new org.apache.spark.SparkException($errorMsgTerm, e);
          |}

@@ -479,7 +479,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
         """
       case _ =>
         s"""
-          $javaType(dataType) $remainder = ${eval1.value} % ${eval2.value};
+          $javaType $remainder = ${eval1.value} % ${eval2.value};
           if ($remainder < 0) {
             ${ev.value}=($remainder + ${eval2.value}) % ${eval2.value};
           } else {
