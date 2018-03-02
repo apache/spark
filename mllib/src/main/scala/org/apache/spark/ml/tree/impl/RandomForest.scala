@@ -1008,7 +1008,7 @@ private[spark] object RandomForest extends Logging {
       val numSamples = (samplesFractionForFindSplits(metadata) * metadata.numExamples).toInt
       // add expected zero value count and get complete statistics
       val valueCountMap: Map[Double, Int] = if (numSamples - partNumSamples > 0) {
-        partValueCountMap.toMap + (0.0 -> numSamples - partNumSamples)
+        partValueCountMap.toMap + (0.0 -> (numSamples - partNumSamples))
       } else {
         partValueCountMap.toMap
       }
