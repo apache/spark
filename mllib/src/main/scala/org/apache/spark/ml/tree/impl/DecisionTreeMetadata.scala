@@ -73,7 +73,7 @@ private[spark] class DecisionTreeMetadata(
    * For ordered features, there is 1 more bin than split.
    */
   def numSplits(featureIndex: Int): Int = if (isUnordered(featureIndex)) {
-    numBins(featureIndex)
+    DecisionTreeMetadata.numUnorderedSplits(numBins(featureIndex))
   } else {
     numBins(featureIndex) - 1
   }
@@ -152,15 +152,13 @@ private[spark] object DecisionTreeMetadata extends Logging {
         // TODO(SPARK-9957): Handle this properly by filtering out those features.
         if (numCategories > 1) {
           // Decide if some categorical features should be treated as unordered features,
-          //  which require 2 * ((1 << numCategories - 1) - 1) bins.
+          //  Both ordered and unordered features require numCategories bins.
           // We do this check with log values to prevent overflows in case numCategories is large.
           // The next check is equivalent to: 2 * ((1 << numCategories - 1) - 1) <= maxBins
           if (numCategories <= maxCategoriesForUnorderedFeature) {
             unorderedFeatures.add(featureIndex)
-            numBins(featureIndex) = numUnorderedBins(numCategories)
-          } else {
-            numBins(featureIndex) = numCategories
           }
+          numBins(featureIndex) = numCategories
         }
       }
     } else {
@@ -226,8 +224,7 @@ private[spark] object DecisionTreeMetadata extends Logging {
    * return the number of bins for the feature if it is to be treated as an unordered feature.
    * There is 1 split for every partitioning of categories into 2 disjoint, non-empty sets;
    * there are math.pow(2, arity - 1) - 1 such splits.
-   * Each split has 2 corresponding bins.
    */
-  def numUnorderedBins(arity: Int): Int = (1 << arity - 1) - 1
+  def numUnorderedSplits(arity: Int): Int = (1 << arity - 1) - 1
 
 }
