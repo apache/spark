@@ -709,7 +709,7 @@ private object RandomForestSuite {
   }
 
   @tailrec
-  private def getSumLeafCounters(nodes: List[Node], acc: Long = 0): Long =
+  private def getSumLeafCounters(nodes: List[Node], acc: Long = 0): Long = {
     if (nodes.isEmpty) {
       acc
     }
@@ -719,4 +719,5 @@ private object RandomForestSuite {
         case l: LeafNode => getSumLeafCounters(nodes.tail, acc + l.impurityStats.count)
       }
     }
+  }
 }
