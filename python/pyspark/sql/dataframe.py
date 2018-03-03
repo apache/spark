@@ -588,6 +588,8 @@ class DataFrame(object):
         """
         Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
 
+        :param numPartitions: int, to specify the target number of partitions
+
         Similar to coalesce defined on an :class:`RDD`, this operation results in a
         narrow dependency, e.g. if you go from 1000 partitions to 100 partitions,
         there will not be a shuffle, instead each of the 100 new partitions will
@@ -612,7 +614,7 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting DataFrame is hash partitioned.
 
-        ``numPartitions`` can be an int to specify the target number of partitions or a Column.
+        :param numPartitions: can be an int to specify the target number of partitions or a Column.
         If it is a Column, it will be used as the first partitioning column. If not specified,
         the default number of partitions is used.
 
@@ -673,7 +675,7 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting DataFrame is range partitioned.
 
-        ``numPartitions`` can be an int to specify the target number of partitions or a Column.
+        :param numPartitions: can be an int to specify the target number of partitions or a Column.
         If it is a Column, it will be used as the first partitioning column. If not specified,
         the default number of partitions is used.
 
@@ -891,6 +893,8 @@ class DataFrame(object):
     @since(1.3)
     def alias(self, alias):
         """Returns a new :class:`DataFrame` with an alias set.
+
+        :param alias: string, alias names to be set for the DataFrame.
 
         >>> from pyspark.sql.functions import *
         >>> df_as1 = df.alias("df_as1")
