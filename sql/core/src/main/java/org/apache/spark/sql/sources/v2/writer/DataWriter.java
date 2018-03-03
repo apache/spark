@@ -31,6 +31,9 @@ import org.apache.spark.annotation.InterfaceStability;
  * the {@link #write(Object)}, {@link #abort()} is called afterwards and the remaining records will
  * not be processed. If all records are successfully written, {@link #commit()} is called.
  *
+ * Once a data writer returns successfully from {@link #commit()} or {@link #abort()}, its lifecycle
+ * is over and Spark will not use it again.
+ *
  * If this data writer succeeds(all records are successfully written and {@link #commit()}
  * succeeds), a {@link WriterCommitMessage} will be sent to the driver side and pass to
  * {@link DataSourceWriter#commit(WriterCommitMessage[])} with commit messages from other data
