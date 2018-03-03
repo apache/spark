@@ -20,10 +20,11 @@ package org.apache.spark.sql.kafka010
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
-import java.util.{Locale, Properties}
+import java.util.{Locale, Optional, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.io.Source
 import scala.util.Random
@@ -34,15 +35,19 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{Dataset, ForeachWriter}
+import org.apache.spark.sql.{Dataset, ForeachWriter, SparkSession}
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.Update
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider._
+import org.apache.spark.sql.sources.v2.DataSourceOptions
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
+import org.apache.spark.sql.types.StructType
 
 abstract class KafkaSourceTest extends StreamTest with SharedSQLContext {
 
@@ -642,6 +647,53 @@ class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBase {
       }
     )
   }
+
+  testWithUninterruptibleThread("minPartitions is supported") {
+    import testImplicits._
+
+    val topic = newTopic()
+    val tp = new TopicPartition(topic, 0)
+    testUtils.createTopic(topic, partitions = 1)
+
+    def test(
+        minPartitions: String,
+        numPartitionsGenerated: Int,
+        reusesConsumers: Boolean): Unit = {
+
+      SparkSession.setActiveSession(spark)
+      withTempDir { dir =>
+        val provider = new KafkaSourceProvider()
+        val options = Map(
+          "kafka.bootstrap.servers" -> testUtils.brokerAddress,
+          "subscribe" -> topic
+        ) ++ Option(minPartitions).map { p => "minPartitions" -> p}
+        val reader = provider.createMicroBatchReader(
+          Optional.empty[StructType], dir.getAbsolutePath, new DataSourceOptions(options.asJava))
+        reader.setOffsetRange(
+          Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 0L))),
+          Optional.of[OffsetV2](KafkaSourceOffset(Map(tp -> 100L)))
+        )
+        val factories = reader.createUnsafeRowReaderFactories().asScala
+          .map(_.asInstanceOf[KafkaMicroBatchDataReaderFactory])
+        withClue(s"minPartitions = $minPartitions generated factories $factories\n\t") {
+          assert(factories.size == numPartitionsGenerated)
+          factories.foreach { f => assert(f.reuseKafkaConsumer == reusesConsumers) }
+        }
+      }
+    }
+
+    // Test cases when minPartitions is used and not used
+    test(minPartitions = null, numPartitionsGenerated = 1, reusesConsumers = true)
+    test(minPartitions = "1", numPartitionsGenerated = 1, reusesConsumers = true)
+    test(minPartitions = "4", numPartitionsGenerated = 4, reusesConsumers = false)
+
+    // Test illegal minPartitions values
+    intercept[IllegalArgumentException] { test(minPartitions = "a", 1, true) }
+    intercept[IllegalArgumentException] { test(minPartitions = "1.0", 1, true) }
+    intercept[IllegalArgumentException] { test(minPartitions = "0", 1, true) }
+    intercept[IllegalArgumentException] { test(minPartitions = "-1", 1, true) }
+  }
+
 }
 
 abstract class KafkaSourceSuiteBase extends KafkaSourceTest {
