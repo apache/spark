@@ -119,7 +119,8 @@ public abstract class MemoryBlock {
       // we assume that to pass null pointer means off-heap
       mb = new OffHeapMemoryBlock(offset, length);
     } else {
-      throw new UnsupportedOperationException(obj.getClass() + " is not supported now");
+      throw new UnsupportedOperationException(
+        "Instantiate MemoryBlock for type " + obj.getClass() + " is not supported now");
     }
     return mb;
   }

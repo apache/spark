@@ -29,12 +29,13 @@ public final class OnHeapMemoryBlock extends MemoryBlock {
   public OnHeapMemoryBlock(long[] obj, long offset, long size) {
     super(obj, offset, size);
     this.array = obj;
-    assert(offset - Platform.LONG_ARRAY_OFFSET + size <= obj.length * 8L);
+    assert(offset - Platform.LONG_ARRAY_OFFSET + size <= obj.length * 8L) :
+     "The size " + size + " and size " + size + " are larger than the array size " +
+       ((obj.length * 8L) - Platform.LONG_ARRAY_OFFSET);
   }
 
   public OnHeapMemoryBlock(long size) {
-    this(new long[(int)((size + 7) / 8)], Platform.LONG_ARRAY_OFFSET,
-      ((size + 7) / 8) * 8L);
+    this(new long[(int)((size + 7) / 8)], Platform.LONG_ARRAY_OFFSET, size);
   }
 
   @Override

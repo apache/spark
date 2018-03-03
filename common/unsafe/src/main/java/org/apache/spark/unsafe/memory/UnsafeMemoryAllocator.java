@@ -42,7 +42,8 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
 
   @Override
   public void free(MemoryBlock memory) {
-    assert(memory instanceof OffHeapMemoryBlock);
+    assert(memory instanceof OffHeapMemoryBlock) :
+      "UnsafeMemoryAllocator can only free OffHeapMemoryBlock.";
     if (memory == OffHeapMemoryBlock.NULL) return;
     assert (memory.getBaseObject() == null) :
       "baseObject not null; are you trying to use the off-heap allocator to free on-heap memory?";
