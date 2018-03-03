@@ -39,16 +39,18 @@ public class HiveHasher {
     return (int) ((input >>> 32) ^ input);
   }
 
-  public static int hashUnsafeBytesBlock(MemoryBlock base) {
-    return hashUnsafeBytes(base.getBaseObject(), base.getBaseOffset(), (int)base.size());
-  }
-
-  public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes) {
+  public static int hashUnsafeBytesBlock(MemoryBlock mb) {
+    long offset = mb.getBaseOffset();
+    int lengthInBytes = (int)mb.size();
     assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
     int result = 0;
     for (int i = 0; i < lengthInBytes; i++) {
-      result = (result * 31) + (int) Platform.getByte(base, offset + i);
+      result = (result * 31) + (int) mb.getByte(offset + i);
     }
     return result;
+  }
+
+  public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes) {
+    return hashUnsafeBytesBlock(MemoryBlock.allocateFromObject(base, offset, lengthInBytes));
   }
 }

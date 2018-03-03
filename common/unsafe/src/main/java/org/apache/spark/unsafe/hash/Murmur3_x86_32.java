@@ -50,21 +50,27 @@ public final class Murmur3_x86_32 {
   }
 
   public int hashUnsafeWords(Object base, long offset, int lengthInBytes) {
-    return hashUnsafeWords(base, offset, lengthInBytes, seed);
+    return hashUnsafeWordsBlock(MemoryBlock.allocateFromObject(base, offset, lengthInBytes), seed);
   }
 
-  public static int hashUnsafeWordsBlock(MemoryBlock base, long offset, int lengthInBytes, int seed) {
-    return hashUnsafeWords(base.getBaseObject(), offset, lengthInBytes, seed);
+  public static int hashUnsafeWordsBlock(MemoryBlock base, int seed) {
+    // This is based on Guava's `Murmur32_Hasher.processRemaining(ByteBuffer)` method.
+    int lengthInBytes = (int)base.size();
+    assert (lengthInBytes % 8 == 0): "lengthInBytes must be a multiple of 8 (word-aligned)";
+    int h1 = hashBytesByIntBlock(base, seed);
+    return fmix(h1, lengthInBytes);
   }
 
   public static int hashUnsafeWords(Object base, long offset, int lengthInBytes, int seed) {
     // This is based on Guava's `Murmur32_Hasher.processRemaining(ByteBuffer)` method.
     assert (lengthInBytes % 8 == 0): "lengthInBytes must be a multiple of 8 (word-aligned)";
-    int h1 = hashBytesByInt(base, offset, lengthInBytes, seed);
+    int h1 = hashBytesByIntBlock(MemoryBlock.allocateFromObject(base, offset, lengthInBytes), seed);
     return fmix(h1, lengthInBytes);
   }
 
   public static int hashUnsafeBytesBlock(MemoryBlock base, int seed) {
+    // This is not compatible with original and another implementations.
+    // But remain it for backward compatibility for the components existing before 2.3.
     long offset = base.getBaseOffset();
     int lengthInBytes = (int)base.size();
     assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
@@ -79,31 +85,11 @@ public final class Murmur3_x86_32 {
   }
 
   public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes, int seed) {
-    // This is not compatible with original and another implementations.
-    // But remain it for backward compatibility for the components existing before 2.3.
-    assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
-    int lengthAligned = lengthInBytes - lengthInBytes % 4;
-    int h1 = hashBytesByInt(base, offset, lengthAligned, seed);
-    for (int i = lengthAligned; i < lengthInBytes; i++) {
-      int halfWord = Platform.getByte(base, offset + i);
-      int k1 = mixK1(halfWord);
-      h1 = mixH1(h1, k1);
-    }
-    return fmix(h1, lengthInBytes);
+    return hashUnsafeBytesBlock(MemoryBlock.allocateFromObject(base, offset, lengthInBytes), seed);
   }
 
   public static int hashUnsafeBytes2(Object base, long offset, int lengthInBytes, int seed) {
-    // This is compatible with original and another implementations.
-    // Use this method for new components after Spark 2.3.
-    assert (lengthInBytes >= 0) : "lengthInBytes cannot be negative";
-    int lengthAligned = lengthInBytes - lengthInBytes % 4;
-    int h1 = hashBytesByInt(base, offset, lengthAligned, seed);
-    int k1 = 0;
-    for (int i = lengthAligned, shift = 0; i < lengthInBytes; i++, shift += 8) {
-      k1 ^= (Platform.getByte(base, offset + i) & 0xFF) << shift;
-    }
-    h1 ^= mixK1(k1);
-    return fmix(h1, lengthInBytes);
+    return hashUnsafeBytes2Block(MemoryBlock.allocateFromObject(base, offset, lengthInBytes), seed);
   }
 
   public static int hashUnsafeBytes2Block(MemoryBlock base, int seed) {
@@ -113,7 +99,7 @@ public final class Murmur3_x86_32 {
     int lengthInBytes = (int)base.size();
     assert (lengthInBytes >= 0) : "lengthInBytes cannot be negative";
     int lengthAligned = lengthInBytes - lengthInBytes % 4;
-    int h1 = hashBytesByIntBlock(base, seed);
+    int h1 = hashBytesByIntBlock(base.subBlock(0, lengthAligned), seed);
     int k1 = 0;
     for (int i = lengthAligned, shift = 0; i < lengthInBytes; i++, shift += 8) {
       k1 ^= (base.getByte(offset + i) & 0xFF) << shift;
@@ -136,14 +122,7 @@ public final class Murmur3_x86_32 {
   }
 
   private static int hashBytesByInt(Object base, long offset, int lengthInBytes, int seed) {
-    assert (lengthInBytes % 4 == 0);
-    int h1 = seed;
-    for (int i = 0; i < lengthInBytes; i += 4) {
-      int halfWord = Platform.getInt(base, offset + i);
-      int k1 = mixK1(halfWord);
-      h1 = mixH1(h1, k1);
-    }
-    return h1;
+    return hashBytesByIntBlock(MemoryBlock.allocateFromObject(base, offset, lengthInBytes), seed);
   }
 
   public int hashLong(long input) {

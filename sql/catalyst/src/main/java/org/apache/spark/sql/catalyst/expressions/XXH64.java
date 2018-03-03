@@ -86,28 +86,31 @@ public final class XXH64 {
     return hashUnsafeBytes(base, offset, length, seed);
   }
 
-  public static long hashUnsafeBytesBlock(MemoryBlock base, long seed) {
-    return hashUnsafeBytes(base.getBaseObject(), base.getBaseOffset(), (int)base.size(), seed);
-  }
-
-  public static long hashUnsafeBytes(Object base, long offset, int length, long seed) {
+  public static long hashUnsafeBytesBlock(MemoryBlock mb, long seed) {
+    Object base = mb.getBaseObject();
+    long offset = mb.getBaseOffset();
+    int length = (int)mb.size();
     assert (length >= 0) : "lengthInBytes cannot be negative";
     long hash = hashBytesByWords(base, offset, length, seed);
     long end = offset + length;
     offset += length & -8;
 
     if (offset + 4L <= end) {
-      hash ^= (Platform.getInt(base, offset) & 0xFFFFFFFFL) * PRIME64_1;
+      hash ^= (mb.getInt(offset) & 0xFFFFFFFFL) * PRIME64_1;
       hash = Long.rotateLeft(hash, 23) * PRIME64_2 + PRIME64_3;
       offset += 4L;
     }
 
     while (offset < end) {
-      hash ^= (Platform.getByte(base, offset) & 0xFFL) * PRIME64_5;
+      hash ^= (mb.getByte(offset) & 0xFFL) * PRIME64_5;
       hash = Long.rotateLeft(hash, 11) * PRIME64_1;
       offset++;
     }
     return fmix(hash);
+  }
+
+  public static long hashUnsafeBytes(Object base, long offset, int length, long seed) {
+    return hashUnsafeBytesBlock(MemoryBlock.allocateFromObject(base, offset, length), seed);
   }
 
   private static long fmix(long hash) {
