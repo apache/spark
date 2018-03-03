@@ -614,7 +614,7 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting DataFrame is hash partitioned.
 
-        :param numPartitions: 
+        :param numPartitions:
             can be an int to specify the target number of partitions or a Column.
             If it is a Column, it will be used as the first partitioning column. If not specified,
             the default number of partitions is used.
@@ -676,7 +676,7 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting DataFrame is range partitioned.
 
-        :param numPartitions: 
+        :param numPartitions:
             can be an int to specify the target number of partitions or a Column.
             If it is a Column, it will be used as the first partitioning column. If not specified,
             the default number of partitions is used.
