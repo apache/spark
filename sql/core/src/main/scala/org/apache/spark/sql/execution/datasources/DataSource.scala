@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.sources.TextSocketSourceProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
@@ -563,6 +564,7 @@ object DataSource extends Logging {
     val libsvm = "org.apache.spark.ml.source.libsvm.LibSVMFileFormat"
     val orc = "org.apache.spark.sql.hive.orc.OrcFileFormat"
     val nativeOrc = classOf[OrcFileFormat].getCanonicalName
+    val socket = classOf[TextSocketSourceProvider].getCanonicalName
 
     Map(
       "org.apache.spark.sql.jdbc" -> jdbc,
@@ -583,7 +585,8 @@ object DataSource extends Logging {
       "org.apache.spark.sql.execution.datasources.orc" -> nativeOrc,
       "org.apache.spark.ml.source.libsvm.DefaultSource" -> libsvm,
       "org.apache.spark.ml.source.libsvm" -> libsvm,
-      "com.databricks.spark.csv" -> csv
+      "com.databricks.spark.csv" -> csv,
+      "org.apache.spark.sql.execution.streaming.TextSocketSourceProvider" -> socket
     )
   }
 

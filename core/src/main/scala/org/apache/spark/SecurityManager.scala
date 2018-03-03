@@ -520,19 +520,25 @@ private[spark] class SecurityManager(
    *
    * If authentication is disabled, do nothing.
    *
-   * In YARN mode, generate a new secret and store it in the current user's credentials.
+   * In YARN and local mode, generate a new secret and store it in the current user's credentials.
    *
    * In other modes, assert that the auth secret is set in the configuration.
    */
   def initializeAuth(): Unit = {
+    import SparkMasterRegex._
+
     if (!sparkConf.get(NETWORK_AUTH_ENABLED)) {
       return
     }
 
-    if (sparkConf.get(SparkLauncher.SPARK_MASTER, null) != "yarn") {
-      require(sparkConf.contains(SPARK_AUTH_SECRET_CONF),
-        s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config.")
-      return
+    val master = sparkConf.get(SparkLauncher.SPARK_MASTER, "")
+    master match {
+      case "yarn" | "local" | LOCAL_N_REGEX(_) | LOCAL_N_FAILURES_REGEX(_, _) =>
+        // Secret generation allowed here
+      case _ =>
+        require(sparkConf.contains(SPARK_AUTH_SECRET_CONF),
+          s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config.")
+        return
     }
 
     val rnd = new SecureRandom()

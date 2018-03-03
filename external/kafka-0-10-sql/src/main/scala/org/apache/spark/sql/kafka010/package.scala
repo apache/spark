@@ -14,14 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql
 
-package org.apache.spark.sql.hive.client
+import org.apache.kafka.common.TopicPartition
 
-import scala.collection.immutable.IndexedSeq
-
-import org.apache.spark.SparkFunSuite
-
-private[client] trait HiveClientVersions {
-  protected val versions =
-    IndexedSeq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3")
+package object kafka010 {   // scalastyle:ignore
+  // ^^ scalastyle:ignore is for ignoring warnings about digits in package name
+  type PartitionOffsetMap = Map[TopicPartition, Long]
 }
