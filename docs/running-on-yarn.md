@@ -2,6 +2,8 @@
 layout: global
 title: Running Spark on YARN
 ---
+* This will become a table of contents (this text will be scraped).
+{:toc}
 
 Support for running on [YARN (Hadoop
 NextGen)](http://hadoop.apache.org/docs/stable/hadoop-yarn/hadoop-yarn-site/YARN.html)
@@ -217,8 +219,8 @@ To use a custom metrics.properties for the application master and executors, upd
   <td><code>spark.yarn.dist.forceDownloadSchemes</code></td>
   <td><code>(none)</code></td>
   <td>
-    Comma-separated list of schemes for which files will be downloaded to the local disk prior to 
-    being added to YARN's distributed cache. For use in cases where the YARN service does not 
+    Comma-separated list of schemes for which files will be downloaded to the local disk prior to
+    being added to YARN's distributed cache. For use in cases where the YARN service does not
     support schemes that are supported by Spark, like http, https and ftp.
   </td>
 </tr>
@@ -425,17 +427,6 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.security.credentials.${service}.enabled</code></td>
-  <td><code>true</code></td>
-  <td>
-  Controls whether to obtain credentials for services when security is enabled.
-  By default, credentials for all supported services are retrieved when those services are
-  configured, but it's possible to disable that behavior if it somehow conflicts with the
-  application being run. For further details please see
-  [Running in a Secure Cluster](running-on-yarn.html#running-in-a-secure-cluster)
-  </td>
-</tr>
-<tr>
   <td><code>spark.yarn.rolledLog.includePattern</code></td>
   <td>(none)</td>
   <td>
@@ -468,48 +459,59 @@ To use a custom metrics.properties for the application master and executors, upd
 - The `--files` and `--archives` options support specifying file names with the # similar to Hadoop. For example you can specify: `--files localtest.txt#appSees.txt` and this will upload the file you have locally named `localtest.txt` into HDFS but this will be linked to by the name `appSees.txt`, and your application should use the name as `appSees.txt` to reference it when running on YARN.
 - The `--jars` option allows the `SparkContext.addJar` function to work if you are using it with local files and running in `cluster` mode. It does not need to be used if you are using it with HDFS, HTTP, HTTPS, or FTP files.
 
-# Running in a Secure Cluster
+# Kerberos
 
-As covered in [security](security.html), Kerberos is used in a secure Hadoop cluster to
-authenticate principals associated with services and clients. This allows clients to
-make requests of these authenticated services; the services to grant rights
-to the authenticated principals.
+Standard Kerberos support in Spark is covered in the [Security](security.html#kerberos) page.
 
-Hadoop services issue *hadoop tokens* to grant access to the services and data.
-Clients must first acquire tokens for the services they will access and pass them along with their
-application as it is launched in the YARN cluster.
+In YARN mode, when accessing Hadoop file systems, aside from the service hosting the user's home
+directory, Spark will also automatically obtain delegation tokens for the service hosting the
+staging directory of the Spark application.
 
-For a Spark application to interact with any of the Hadoop filesystem (for example hdfs, webhdfs, etc), HBase and Hive, it must acquire the relevant tokens
-using the Kerberos credentials of the user launching the application
-—that is, the principal whose identity will become that of the launched Spark application.
-
-This is normally done at launch time: in a secure cluster Spark will automatically obtain a
-token for the cluster's default Hadoop filesystem, and potentially for HBase and Hive.
-
-An HBase token will be obtained if HBase is in on classpath, the HBase configuration declares
-the application is secure (i.e. `hbase-site.xml` sets `hbase.security.authentication` to `kerberos`),
-and `spark.security.credentials.hbase.enabled` is not set to `false`.
-
-Similarly, a Hive token will be obtained if Hive is on the classpath, its configuration
-includes a URI of the metadata store in `"hive.metastore.uris`, and
-`spark.security.credentials.hive.enabled` is not set to `false`.
-
-If an application needs to interact with other secure Hadoop filesystems, then
-the tokens needed to access these clusters must be explicitly requested at
-launch time. This is done by listing them in the `spark.yarn.access.hadoopFileSystems` property.
+If an application needs to interact with other secure Hadoop filesystems, their URIs need to be
+explicitly provided to Spark at launch time. This is done by listing them in the
+`spark.yarn.access.hadoopFileSystems` property, for example:
 
 ```
 spark.yarn.access.hadoopFileSystems hdfs://ireland.example.org:8020/,webhdfs://frankfurt.example.org:50070/
 ```
 
-Spark supports integrating with other security-aware services through Java Services mechanism (see
-`java.util.ServiceLoader`). To do that, implementations of `org.apache.spark.deploy.yarn.security.ServiceCredentialProvider`
-should be available to Spark by listing their names in the corresponding file in the jar's
-`META-INF/services` directory. These plug-ins can be disabled by setting
-`spark.security.credentials.{service}.enabled` to `false`, where `{service}` is the name of
-credential provider.
+The YARN integration also supports custom delegation token providers using the Java Services
+mechanism (see `java.util.ServiceLoader`). Implementations of
+`org.apache.spark.deploy.yarn.security.ServiceCredentialProvider` can be made available to Spark
+by listing their names in the corresponding file in the jar's `META-INF/services` directory. These
+providers can be disabled individually by setting `spark.security.credentials.{service}.enabled` to
+`false`, where `{service}` is the name of the credential provider.
 
-## Configuring the External Shuffle Service
+## Troubleshooting Kerberos
+
+Debugging Hadoop/Kerberos problems can be "difficult". One useful technique is to
+enable extra logging of Kerberos operations in Hadoop by setting the `HADOOP_JAAS_DEBUG`
+environment variable.
+
+```bash
+export HADOOP_JAAS_DEBUG=true
+```
+
+The JDK classes can be configured to enable extra logging of their Kerberos and
+SPNEGO/REST authentication via the system properties `sun.security.krb5.debug`
+and `sun.security.spnego.debug=true`
+
+```
+-Dsun.security.krb5.debug=true -Dsun.security.spnego.debug=true
+```
+
+All these options can be enabled in the Application Master:
+
+```
+spark.yarn.appMasterEnv.HADOOP_JAAS_DEBUG true
+spark.yarn.am.extraJavaOptions -Dsun.security.krb5.debug=true -Dsun.security.spnego.debug=true
+```
+
+Finally, if the log level for `org.apache.spark.deploy.yarn.Client` is set to `DEBUG`, the log
+will include a list of all tokens obtained, and their expiry details
+
+
+# Configuring the External Shuffle Service
 
 To start the Spark Shuffle Service on each `NodeManager` in your YARN cluster, follow these
 instructions:
@@ -542,7 +544,7 @@ The following extra configuration options are available when the shuffle service
 </tr>
 </table>
 
-## Launching your application with Apache Oozie
+# Launching your application with Apache Oozie
 
 Apache Oozie can launch Spark applications as part of a workflow.
 In a secure cluster, the launched application will need the relevant tokens to access the cluster's
@@ -576,35 +578,7 @@ spark.security.credentials.hbase.enabled  false
 
 The configuration option `spark.yarn.access.hadoopFileSystems` must be unset.
 
-## Troubleshooting Kerberos
-
-Debugging Hadoop/Kerberos problems can be "difficult". One useful technique is to
-enable extra logging of Kerberos operations in Hadoop by setting the `HADOOP_JAAS_DEBUG`
-environment variable.
-
-```bash
-export HADOOP_JAAS_DEBUG=true
-```
-
-The JDK classes can be configured to enable extra logging of their Kerberos and
-SPNEGO/REST authentication via the system properties `sun.security.krb5.debug`
-and `sun.security.spnego.debug=true`
-
-```
--Dsun.security.krb5.debug=true -Dsun.security.spnego.debug=true
-```
-
-All these options can be enabled in the Application Master:
-
-```
-spark.yarn.appMasterEnv.HADOOP_JAAS_DEBUG true
-spark.yarn.am.extraJavaOptions -Dsun.security.krb5.debug=true -Dsun.security.spnego.debug=true
-```
-
-Finally, if the log level for `org.apache.spark.deploy.yarn.Client` is set to `DEBUG`, the log
-will include a list of all tokens obtained, and their expiry details
-
-## Using the Spark History Server to replace the Spark Web UI
+# Using the Spark History Server to replace the Spark Web UI
 
 It is possible to use the Spark History Server application page as the tracking URL for running
 applications when the application UI is disabled. This may be desirable on secure clusters, or to
