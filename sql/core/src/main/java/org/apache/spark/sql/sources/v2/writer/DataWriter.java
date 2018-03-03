@@ -38,7 +38,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * succeeds), a {@link WriterCommitMessage} will be sent to the driver side and pass to
  * {@link DataSourceWriter#commit(WriterCommitMessage[])} with commit messages from other data
  * writers. If this data writer fails(one record fails to write or {@link #commit()} fails), an
- * exception will be sent to the driver side, and Spark will retry this writing task for some times,
+ * exception will be sent to the driver side, and Spark may retry this writing task for some times,
  * each time {@link DataWriterFactory#createDataWriter(int, int, long)} gets a different
  * `attemptNumber`, and finally call {@link DataSourceWriter#abort(WriterCommitMessage[])} if all
  * retry fail.
