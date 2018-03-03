@@ -57,6 +57,16 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
   val timeZone = TimeZone.getDefault()
   val timeZoneId = timeZone.getID
 
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "parquet")
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.conf.unset(SQLConf.DEFAULT_DATA_SOURCE_NAME.key)
+    super.afterAll()
+  }
+
   test("column type inference") {
     def check(raw: String, literal: Literal, timeZone: TimeZone = timeZone): Unit = {
       assert(inferPartitionColumnValue(raw, true, timeZone) === literal)
@@ -739,7 +749,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     withTempPath { dir =>
       df.write.format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name).cast(f.dataType))
-      checkAnswer(spark.read.parquet(dir.toString).select(fields: _*), row)
+      checkAnswer(spark.read.load(dir.toString).select(fields: _*), row)
     }
 
     withTempPath { dir =>
@@ -747,7 +757,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name).cast(f.dataType))
       checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
-        .parquet(dir.toString).select(fields: _*), row)
+        .load(dir.toString).select(fields: _*), row)
     }
   }
 
@@ -781,7 +791,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     withTempPath { dir =>
       df.write.format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name))
-      checkAnswer(spark.read.parquet(dir.toString).select(fields: _*), row)
+      checkAnswer(spark.read.load(dir.toString).select(fields: _*), row)
     }
 
     withTempPath { dir =>
@@ -789,7 +799,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name))
       checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "GMT")
-        .parquet(dir.toString).select(fields: _*), row)
+        .load(dir.toString).select(fields: _*), row)
     }
   }
 
@@ -1095,7 +1105,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
     withTempPath { path =>
       df.write.format("parquet").partitionBy("str").save(path.getAbsolutePath)
-      checkAnswer(spark.read.parquet(path.getAbsolutePath), df)
+      checkAnswer(spark.read.load(path.getAbsolutePath), df)
     }
   }
 
@@ -1104,7 +1114,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       val df = Seq((1, "2014-01-01"), (2, "2016-01-01"), (3, "2015-01-01 00:01:00")).toDF("i", "ts")
       df.write.format("parquet").partitionBy("ts").save(path.getAbsolutePath)
       checkAnswer(
-        spark.read.parquet(path.getAbsolutePath),
+        spark.read.load(path.getAbsolutePath),
         Row(1, Timestamp.valueOf("2014-01-01 00:00:00")) ::
           Row(2, Timestamp.valueOf("2016-01-01 00:00:00")) ::
           Row(3, Timestamp.valueOf("2015-01-01 00:01:00")) :: Nil)
@@ -1114,7 +1124,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       val df = Seq((1, "1"), (2, "3"), (3, "2" * 30)).toDF("i", "decimal")
       df.write.format("parquet").partitionBy("decimal").save(path.getAbsolutePath)
       checkAnswer(
-        spark.read.parquet(path.getAbsolutePath),
+        spark.read.load(path.getAbsolutePath),
         Row(1, BigDecimal("1")) ::
           Row(2, BigDecimal("3")) ::
           Row(3, BigDecimal("2" * 30)) :: Nil)
