@@ -526,7 +526,7 @@ object SQLConf {
   val DEFAULT_DATA_SOURCE_NAME = buildConf("spark.sql.sources.default")
     .doc("The default data source to use in input/output.")
     .stringConf
-    .createWithDefault("orc")
+    .createWithDefault("json")
 
   val CONVERT_CTAS = buildConf("spark.sql.hive.convertCTAS")
     .internal()
