@@ -896,7 +896,7 @@ class DataFrame(object):
     def alias(self, alias):
         """Returns a new :class:`DataFrame` with an alias set.
 
-        :param alias: string, alias names to be set for the DataFrame.
+        :param alias: string, an alias name to be set for the DataFrame.
 
         >>> from pyspark.sql.functions import *
         >>> df_as1 = df.alias("df_as1")
