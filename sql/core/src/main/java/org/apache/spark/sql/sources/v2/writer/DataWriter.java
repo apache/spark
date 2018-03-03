@@ -38,10 +38,10 @@ import org.apache.spark.annotation.InterfaceStability;
  * succeeds), a {@link WriterCommitMessage} will be sent to the driver side and pass to
  * {@link DataSourceWriter#commit(WriterCommitMessage[])} with commit messages from other data
  * writers. If this data writer fails(one record fails to write or {@link #commit()} fails), an
- * exception will be sent to the driver side, and Spark may retry this writing task for some times,
- * each time {@link DataWriterFactory#createDataWriter(int, int, long)} gets a different
- * `attemptNumber`, and finally call {@link DataSourceWriter#abort(WriterCommitMessage[])} if all
- * retry fail.
+ * exception will be sent to the driver side, and Spark may retry this writing task a few times.
+ * In each retry, {@link DataWriterFactory#createDataWriter(int, int, long)} will receive a
+ * different `attemptNumber`. Spark will call {@link DataSourceWriter#abort(WriterCommitMessage[])}
+ * when the configured number of retries is exhausted.
  *
  * Besides the retry mechanism, Spark may launch speculative tasks if the existing writing task
  * takes too long to finish. Different from retried tasks, which are launched one by one after the
