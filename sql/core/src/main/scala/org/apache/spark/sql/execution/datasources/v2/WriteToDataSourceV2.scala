@@ -186,7 +186,9 @@ object DataWritingSparkTask extends Logging {
         try {
           dataWriter = writeTask.createDataWriter(
             context.partitionId(), context.attemptNumber(), currentEpoch)
-          iter.foreach(dataWriter.write)
+          while (iter.hasNext) {
+            dataWriter.write(iter.next())
+          }
           logInfo(s"Writer for partition ${context.partitionId()} is committing.")
           val msg = dataWriter.commit()
           logInfo(s"Writer for partition ${context.partitionId()} committed.")
@@ -199,7 +201,8 @@ object DataWritingSparkTask extends Logging {
             // Continuous shutdown always involves an interrupt. Just finish the task.
         }
       })(catchBlock = {
-        // If there is an error, abort this writer
+        // If there is an error, abort this writer. We enter this callback in the middle of
+        // rethrowing an exception, so runContinuous will stop executing at this point.
         logError(s"Writer for partition ${context.partitionId()} is aborting.")
         if (dataWriter != null) dataWriter.abort()
         logError(s"Writer for partition ${context.partitionId()} aborted.")
