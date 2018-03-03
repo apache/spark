@@ -23,8 +23,10 @@ import org.apache.spark.sql.sources.v2.writer.DataWriter;
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage;
 
 /**
- * A {@link DataSourceWriter} for use with structured streaming. This writer handles commits and
- * aborts relative to an epoch ID provided by the execution engine.
+ * A {@link DataSourceWriter} for use with structured streaming.
+ *
+ * Streaming queries are divided into intervals of data called epochs, with a monotonically
+ * increasing numeric ID. This writer handles commits and aborts for each successive epoch.
  */
 @InterfaceStability.Evolving
 public interface StreamWriter extends DataSourceWriter {
