@@ -4070,13 +4070,14 @@ class ArrowTests(ReusedSQLTestCase):
             StructField("5_double_t", DoubleType(), True),
             StructField("6_decimal_t", DecimalType(38, 18), True),
             StructField("7_date_t", DateType(), True),
-            StructField("8_timestamp_t", TimestampType(), True)])
+            StructField("8_timestamp_t", TimestampType(), True),
+            StructField("9_binary_t", BinaryType(), True)])
         cls.data = [(u"a", 1, 10, 0.2, 2.0, Decimal("2.0"),
-                     date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+                     date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1), bytearray(b"a")),
                     (u"b", 2, 20, 0.4, 4.0, Decimal("4.0"),
-                     date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
+                     date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2), bytearray(b"bb")),
                     (u"c", 3, 30, 0.8, 6.0, Decimal("6.0"),
-                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3))]
+                     date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3), bytearray(b"ccc"))]
 
     @classmethod
     def tearDownClass(cls):
@@ -4232,7 +4233,9 @@ class ArrowTests(ReusedSQLTestCase):
 
     def test_createDataFrame_with_incorrect_schema(self):
         pdf = self.create_pandas_data_frame()
-        wrong_schema = StructType(list(reversed(self.schema)))
+        fields = list(self.schema)
+        fields[0], fields[7] = fields[7], fields[0]  # swap str with timestamp
+        wrong_schema = StructType(fields)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, ".*No cast.*string.*timestamp.*"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
@@ -4240,11 +4243,11 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_with_names(self):
         pdf = self.create_pandas_data_frame()
         # Test that schema as a list of column names gets applied
-        df = self.spark.createDataFrame(pdf, schema=list('abcdefgh'))
-        self.assertEquals(df.schema.fieldNames(), list('abcdefgh'))
+        df = self.spark.createDataFrame(pdf, schema=list('abcdefghi'))
+        self.assertEquals(df.schema.fieldNames(), list('abcdefghi'))
         # Test that schema as tuple of column names gets applied
-        df = self.spark.createDataFrame(pdf, schema=tuple('abcdefgh'))
-        self.assertEquals(df.schema.fieldNames(), list('abcdefgh'))
+        df = self.spark.createDataFrame(pdf, schema=tuple('abcdefghi'))
+        self.assertEquals(df.schema.fieldNames(), list('abcdefghi'))
 
     def test_createDataFrame_column_name_encoding(self):
         import pandas as pd
@@ -4834,12 +4837,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                     NotImplementedError,
                     'Invalid returnType.*scalar Pandas UDF.*MapType'):
                 pandas_udf(lambda x: x, MapType(StringType(), IntegerType()))
-
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    NotImplementedError,
-                    'Invalid returnType.*scalar Pandas UDF.*BinaryType'):
-                pandas_udf(lambda x: x, BinaryType())
 
     def test_vectorized_udf_dates(self):
         from pyspark.sql.functions import pandas_udf, col
