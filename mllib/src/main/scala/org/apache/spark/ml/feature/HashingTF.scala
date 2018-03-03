@@ -74,13 +74,19 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   setDefault(numFeatures -> (1 << 18), binary -> false)
 
+  private[this] var hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
+
   /** @group getParam */
   @Since("1.2.0")
   def getNumFeatures: Int = $(numFeatures)
 
   /** @group setParam */
   @Since("1.2.0")
-  def setNumFeatures(value: Int): this.type = set(numFeatures, value)
+  def setNumFeatures(value: Int): this.type = {
+    val t = set(numFeatures, value)
+    hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
+    t
+  }
 
   /** @group getParam */
   @Since("2.0.0")
@@ -88,12 +94,21 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   /** @group setParam */
   @Since("2.0.0")
-  def setBinary(value: Boolean): this.type = set(binary, value)
+  def setBinary(value: Boolean): this.type = {
+    val t = set(binary, value)
+    hashingTF.setBinary($(binary))
+    t
+  }
+
+  /**
+   * Returns the index of the input term.
+   */
+  @Since("2.3.0")
+  def indexOf(term: Any): Int = hashingTF.indexOf(term)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    val hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
     // TODO: Make the hashingTF.transform natively in ml framework to avoid extra conversion.
     val t = udf { terms: Seq[_] => hashingTF.transform(terms).asML }
     val metadata = outputSchema($(outputCol)).metadata

@@ -76,6 +76,20 @@ class HashingTFSuite extends MLTest with DefaultReadWriteTest {
     assert(features ~== expected absTol 1e-14)
   }
 
+  test("indexOf method") {
+    val df = Seq((0, "a a b b c d".split(" ").toSeq)).toDF("id", "words")
+    val n = 100
+    val hashingTF = new HashingTF()
+      .setInputCol("words")
+      .setOutputCol("features")
+      .setNumFeatures(n)
+    val mLlibHashingTF = new MLlibHashingTF(n)
+    assert(hashingTF.indexOf("a") === mLlibHashingTF.indexOf("a"))
+    assert(hashingTF.indexOf("b") === mLlibHashingTF.indexOf("b"))
+    assert(hashingTF.indexOf("c") === mLlibHashingTF.indexOf("c"))
+    assert(hashingTF.indexOf("d") === mLlibHashingTF.indexOf("d"))
+  }
+
   test("read/write") {
     val t = new HashingTF()
       .setInputCol("myInputCol")
