@@ -69,7 +69,7 @@ public final class Murmur3_x86_32 {
     int lengthInBytes = (int)base.size();
     assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
     int lengthAligned = lengthInBytes - lengthInBytes % 4;
-    int h1 = hashBytesByIntBlock(base, seed);
+    int h1 = hashBytesByIntBlock(base.subBlock(0, lengthAligned), seed);
     for (int i = lengthAligned; i < lengthInBytes; i++) {
       int halfWord = base.getByte(offset + i);
       int k1 = mixK1(halfWord);
