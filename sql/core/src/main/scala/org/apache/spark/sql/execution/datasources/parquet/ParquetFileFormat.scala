@@ -68,9 +68,16 @@ class ParquetFileFormat
 
   override def toString: String = "Parquet"
 
+  def xinVerify(schema: StructType): Boolean = {
+   schema.size == 0 || schema.find{
+     case StructField(_, b: StructType, _, _) => xinVerify(b)
+     case _ => false
+   }.isDefined
+  }
+
   private def verifySchema(schema: StructType): Unit = {
     if (schema.size == 0) {
-      throw new AnalysisException(
+      throw new AnalysisExcdeeption(
         s"""
            |Parquet data source does not support writing empty groups.
            |Please make sure the data schema has at least one or more column(s).
