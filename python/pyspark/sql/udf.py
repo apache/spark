@@ -48,6 +48,8 @@ def _create_udf(f, returnType, evalType):
         require_minimum_pyarrow_version()
 
         if sys.version_info[0] < 3:
+            # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
+            # See SPARK-23569.
             argspec = inspect.getargspec(f)
         else:
             argspec = inspect.getfullargspec(f)
