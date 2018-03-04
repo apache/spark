@@ -2072,6 +2072,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val fileName = "json-tests/utf16WithBOM.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
+      // The mode filters null rows produced because new line delimiter
+      // for UTF-8 is used by default.
       .option("mode", "DROPMALFORMED")
       .json(testFile(fileName))
 
@@ -2210,5 +2212,29 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(causedBy.isInstanceOf[java.nio.charset.UnsupportedCharsetException])
     assert(causedBy.getMessage == charset)
+  }
+
+  test("read written json in UTF-16") {
+    val charset = "UTF-16"
+    case class Rec(f1: String, f2: Int)
+    withTempPath { path =>
+      val ds = spark.createDataset(Seq(
+        ("a", 1), ("b", 2), ("c", 3))
+      ).repartition(2)
+      ds.write
+        .option("charset", charset)
+        .format("json").mode("overwrite")
+        .save(path.getCanonicalPath)
+      val savedDf = spark
+        .read
+        .schema(ds.schema)
+        .option("charset", charset)
+        // Wrong (nulls) rows are produced because new line delimiter
+        // for UTF-8 is used by default.
+        .option("mode", "DROPMALFORMED")
+        .json(path.getCanonicalPath)
+
+      checkAnswer(savedDf.toDF(), ds.toDF())
+    }
   }
 }
