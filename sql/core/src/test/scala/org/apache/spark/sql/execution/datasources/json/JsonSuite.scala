@@ -2143,20 +2143,24 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(errMsg.contains("Malformed records are detected in record parsing"))
   }
 
-  def readJsonFiles(path: String, charset: String): String = {
-    val jsonFiles = new File(path)
+  def checkCharset(
+    expectedCharset: String,
+    pathToJsonFiles: String,
+    expectedContent: String
+  ): Unit = {
+    val jsonFiles = new File(pathToJsonFiles)
       .listFiles()
       .filter(_.isFile)
       .filter(_.getName.endsWith("json"))
-    val content = jsonFiles.map { file =>
-      scala.io.Source.fromFile(file, charset).mkString
+    val jsonContent = jsonFiles.map { file =>
+      scala.io.Source.fromFile(file, expectedCharset).mkString
     }
-    val result = content
+    val cleanedContent = jsonContent
       .mkString
       .trim
       .replaceAll(" ", "")
 
-    result
+    assert(cleanedContent == expectedContent)
   }
 
   test("save json in UTF-32BE") {
@@ -2167,9 +2171,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .option("charset", charset)
         .format("json").mode("overwrite")
         .save(path.getCanonicalPath)
-      val written = readJsonFiles(path.getCanonicalPath, charset)
 
-      assert(written == """{"_1":"Dog","_2":42}""")
+      checkCharset(
+        expectedCharset = charset,
+        pathToJsonFiles = path.getCanonicalPath,
+        expectedContent = """{"_1":"Dog","_2":42}"""
+      )
     }
   }
 
@@ -2179,9 +2186,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       df.write
         .format("json").mode("overwrite")
         .save(path.getCanonicalPath)
-      val written = readJsonFiles(path.getCanonicalPath, "UTF-8")
 
-      assert(written == """{"_1":"Dog","_2":42}""")
+      checkCharset(
+        expectedCharset = "UTF-8",
+        pathToJsonFiles = path.getCanonicalPath,
+        expectedContent = """{"_1":"Dog","_2":42}"""
+      )
     }
   }
 
