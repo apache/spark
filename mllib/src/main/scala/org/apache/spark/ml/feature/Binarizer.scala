@@ -24,9 +24,10 @@ import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.BinaryAttribute
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
+import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -34,8 +35,9 @@ import org.apache.spark.sql.types._
  * Binarize a column of continuous features given a threshold.
  */
 @Since("1.4.0")
-final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
+final class Binarizer @Since("1.4.0")(@Since("1.4.0") override val uid: String)
+  extends Transformer with HasInputCol with HasOutputCol with HasInputCols with HasOutputCols
+    with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("binarizer"))
@@ -45,15 +47,25 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    * The features greater than the threshold, will be binarized to 1.0.
    * The features equal to or less than the threshold, will be binarized to 0.0.
    * Default: 0.0
+   *
    * @group param
    */
   @Since("1.4.0")
   val threshold: DoubleParam =
-    new DoubleParam(this, "threshold", "threshold used to binarize continuous features")
+  new DoubleParam(this, "threshold", "threshold used to binarize continuous features")
+
+  /** @group param */
+  @Since("2.3.1")
+  val thresholds: DoubleArrayParam =
+    new DoubleArrayParam(this, "thresholds", "thresholds used to binarize continuous features")
 
   /** @group getParam */
   @Since("1.4.0")
   def getThreshold: Double = $(threshold)
+
+  /** @group getParam */
+  @Since("2.3.1")
+  def getThresholds: Array[Double] = $(thresholds)
 
   /** @group setParam */
   @Since("1.4.0")
@@ -62,49 +74,90 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   setDefault(threshold -> 0.0)
 
   /** @group setParam */
+  @Since("2.3.1")
+  def setThresholds(value: Array[Double]): this.type = set(thresholds, value)
+
+  /** @group setParam */
   @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
+
+  /** @group setParam */
+  @Since("2.3.1")
+  def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
   /** @group setParam */
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
+  @Since("2.3.1")
+  def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
+
+  @Since("2.3.1")
+  private[feature] def isBinarizerMultipleColumns(): Boolean = {
+    if (isSet(inputCols) && isSet(inputCol)) {
+      logWarning("Both `inputCol` and `inputCols` are set, we ignore `inputCols` and this " +
+        "`Binarizer` only maps one column specified by `inputCol`")
+      false
+    } else if (isSet(inputCols)) {
+      true
+    } else {
+      false
+    }
+  }
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
     val schema = dataset.schema
-    val inputType = schema($(inputCol)).dataType
-    val td = $(threshold)
 
-    val binarizerDouble = udf { in: Double => if (in > td) 1.0 else 0.0 }
-    val binarizerVector = udf { (data: Vector) =>
-      val indices = ArrayBuilder.make[Int]
-      val values = ArrayBuilder.make[Double]
+    val (inputColName, outputColName, td) = if (isBinarizerMultipleColumns()) {
+      ($(inputCols).toSeq, $(outputCols).toSeq, $(thresholds).toSeq)
+    }
+    else {
+      (Seq($(inputCol)), Seq($(outputCol)), Seq($(threshold)))
+    }
 
-      data.foreachActive { (index, value) =>
-        if (value > td) {
-          indices += index
-          values +=  1.0
+    val inputType = inputColName.map { col => schema(col).dataType }
+
+    val binarizerDouble: Seq[UserDefinedFunction] = td.map {
+      td => udf { (in: Double) => if (in > td) 1.0 else 0.0 }
+    }
+
+    val binarizerVector = td.map { td =>
+      udf { (data: Vector) =>
+        val indices = ArrayBuilder.make[Int]
+        val values = ArrayBuilder.make[Double]
+
+        data.foreachActive { (index, value) =>
+          if (value > td) {
+            indices += index
+            values += 1.0
+          }
         }
+
+        Vectors.sparse(data.size, indices.result(), values.result()).compressed
       }
-
-      Vectors.sparse(data.size, indices.result(), values.result()).compressed
     }
 
-    val metadata = outputSchema($(outputCol)).metadata
-
-    inputType match {
-      case DoubleType =>
-        dataset.select(col("*"), binarizerDouble(col($(inputCol))).as($(outputCol), metadata))
-      case _: VectorUDT =>
-        dataset.select(col("*"), binarizerVector(col($(inputCol))).as($(outputCol), metadata))
+    val metadata = outputColName.map { col =>
+      outputSchema(col).metadata
     }
+
+    val newCols = inputType.zip(inputColName).zip(td).zipWithIndex.map {
+      case (((inputType, inputColName), td), idx) =>
+        inputType match {
+          case DoubleType => binarizerDouble(idx)(col(inputColName))
+          case _ => binarizerVector(idx)(col(inputColName))
+        }
+    }
+    dataset.withColumns(outputColName, newCols, metadata)
   }
 
-  @Since("1.4.0")
-  override def transformSchema(schema: StructType): StructType = {
-    val inputType = schema($(inputCol)).dataType
-    val outputColName = $(outputCol)
+  @Since("2.3.1")
+  def validateSchema(schema: StructType,
+                     inputColName: String,
+                     outputColName: String): StructField = {
+    val inputType = schema(inputColName).dataType
 
     val outCol: StructField = inputType match {
       case DoubleType =>
@@ -118,7 +171,22 @@ final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     if (schema.fieldNames.contains(outputColName)) {
       throw new IllegalArgumentException(s"Output column $outputColName already exists.")
     }
-    StructType(schema.fields :+ outCol)
+    outCol
+  }
+
+  @Since("1.4.0")
+  override def transformSchema(schema: StructType): StructType = {
+    val (inputColName, outputColName) = if (isBinarizerMultipleColumns()) {
+      ($(inputCols), $(outputCols))
+    }
+    else {
+      (Array($(inputCol)), Array($(outputCol)))
+    }
+
+    val outputField = for (i <- 0 until inputColName.length) yield {
+      validateSchema(schema, inputColName(i), outputColName(i))
+    }
+    StructType(schema.fields ++ outputField.filter(_ != null))
   }
 
   @Since("1.4.1")

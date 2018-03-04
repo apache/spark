@@ -45,7 +45,23 @@ object BinarizerExample {
     binarizedDataFrame.show()
     // $example off$
 
+    // $example on$
+    val data2 = Array((0, 0.1), (1, 0.8), (2, 0.2))
+    val dataFrame2 = spark.createDataFrame((0 until data.length).map { idx =>
+      (data(idx), data2(idx))
+    }).toDF("feature1", "feature2")
+
+    val binarizer2: Binarizer = new Binarizer()
+      .setInputCols(Array("feature1", "feature2"))
+      .setOutputCols(Array("result1", "result2"))
+      .setThresholds(Array(0.5, 0.5))
+
+    val binarizedDataFrame2 = binarizer2.transform(dataFrame2)
+    binarizedDataFrame2.show()
+    // $example off$
+
     spark.stop()
   }
 }
+
 // scalastyle:on println
