@@ -127,7 +127,7 @@ public abstract class MemoryBlock {
 
   /**
    * Just instantiate the same type of MemoryBlock with new offset and size. The data is not
-   * copied.
+   * copied. If parameters are invalid, an exception is thrown
    */
   public abstract MemoryBlock subBlock(long offset, long size);
 

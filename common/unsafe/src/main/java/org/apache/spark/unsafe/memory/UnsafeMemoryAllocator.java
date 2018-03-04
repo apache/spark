@@ -45,8 +45,6 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
     assert(memory instanceof OffHeapMemoryBlock) :
       "UnsafeMemoryAllocator can only free OffHeapMemoryBlock.";
     if (memory == OffHeapMemoryBlock.NULL) return;
-    assert (memory.getBaseObject() == null) :
-      "baseObject not null; are you trying to use the off-heap allocator to free on-heap memory?";
     assert (memory.getPageNumber() != MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER) :
       "page has already been freed";
     assert ((memory.getPageNumber() == MemoryBlock.NO_PAGE_NUMBER)
