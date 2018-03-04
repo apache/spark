@@ -5,10 +5,17 @@ title: Overview
 description: Apache Spark SPARK_VERSION_SHORT documentation homepage
 ---
 
-Apache Spark is a fast and general-purpose cluster computing system.
-It provides high-level APIs in Java, Scala, Python and R,
-and an optimized engine that supports general execution graphs.
-It also supports a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [MLlib](ml-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
+Apache Spark is a fast and general-purpose cluster computing system. It is highly modular and can interact with many other entities, provided by either Apache Spark itself or by third parties. 
+
+It provides high-level APIs in Java, Scala, Python and R, and at its core an optimized engine that supports general execution graphs. It also allows the core functionality to be extended through a rich set of higher-level tools including [Spark SQL](sql-programming-guide.html) for SQL and structured data processing, [MLlib](ml-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html). 
+
+Apache Spark also supports the use of third party modules to provide essential functionalities. For example, some modules from Apache Hadoop can be used with Apache Spark, YARN for cluster management and HDFS for distributed storage. 
+
+More than just the technical aspect, the image below describes how Apache Spark fits into the world around it. This ranges from the modules that extend its functionality to how people communicate about it. 
+
+<p style="text-align: center;">
+    <img src="img/Context-Model.png" title="Context model for Apache Spark" alt="Context model for Apache Spark">
+</p>
 
 # Downloading
 
