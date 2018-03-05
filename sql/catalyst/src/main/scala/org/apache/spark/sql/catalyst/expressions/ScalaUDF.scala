@@ -1018,11 +1018,12 @@ case class ScalaUDF(
     val udf = ctx.addReferenceObj("udf", function, s"scala.Function${children.length}")
     val getFuncResult = s"$udf.apply(${funcArgs.mkString(", ")})"
     val resultConverter = s"$convertersTerm[${children.length}]"
+    val boxedType = CodeGenerator.boxedType(dataType)
     val callFunc =
       s"""
-         |${ctx.boxedType(dataType)} $resultTerm = null;
+         |$boxedType $resultTerm = null;
          |try {
-         |  $resultTerm = (${ctx.boxedType(dataType)})$resultConverter.apply($getFuncResult);
+         |  $resultTerm = ($boxedType)$resultConverter.apply($getFuncResult);
          |} catch (Exception e) {
          |  throw new org.apache.spark.SparkException($errorMsgTerm, e);
          |}
@@ -1035,7 +1036,7 @@ case class ScalaUDF(
          |$callFunc
          |
          |boolean ${ev.isNull} = $resultTerm == null;
-         |${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${ev.isNull}) {
          |  ${ev.value} = $resultTerm;
          |}

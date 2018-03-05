@@ -124,7 +124,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
           Seq("1").toDF("a").write.format(format).save(new Path(basePath, "second").toString)
 
           val thirdPath = new Path(basePath, "third")
-          val fs = thirdPath.getFileSystem(spark.sparkContext.hadoopConfiguration)
+          val fs = thirdPath.getFileSystem(spark.sessionState.newHadoopConf())
           Seq("2").toDF("a").write.format(format).save(thirdPath.toString)
           val files = fs.listStatus(thirdPath).filter(_.isFile).map(_.getPath)
 

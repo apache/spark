@@ -234,7 +234,7 @@ trait CodegenSupport extends SparkPlan {
 
     variables.zipWithIndex.foreach { case (ev, i) =>
       val paramName = ctx.freshName(s"expr_$i")
-      val paramType = ctx.javaType(attributes(i).dataType)
+      val paramType = CodeGenerator.javaType(attributes(i).dataType)
 
       arguments += ev.value
       parameters += s"$paramType $paramName"
