@@ -184,7 +184,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
                 // when the data is read back as mentioned above, b/c int96 is unsigned.  This
                 // assert makes sure this holds even if we change parquet versions (if eg. there
                 // were ever statistics even on unsigned columns).
-                assert(columnStats.isEmpty)
+                assert(!columnStats.hasNonNullValue)
               }
 
               // These queries should return the entire dataset with the conversion applied,
