@@ -47,7 +47,11 @@ case class DataSourceV2ScanExec(
     case r: SupportsScanColumnarBatch if r.enableBatchRead() && batchReaderFactories.size == 1 =>
       SinglePartition
 
-    case _ if readerFactories.size == 1 => SinglePartition
+    case r: SupportsScanColumnarBatch if !r.enableBatchRead() && readerFactories.size == 1 =>
+      SinglePartition
+
+    case r if !r.isInstanceOf[SupportsScanColumnarBatch] && readerFactories.size == 1 =>
+      SinglePartition
 
     case s: SupportsReportPartitioning =>
       new DataSourcePartitioning(
@@ -81,7 +85,7 @@ case class DataSourceV2ScanExec(
         .asInstanceOf[RDD[InternalRow]]
 
     case r: SupportsScanColumnarBatch if r.enableBatchRead() =>
-      new DataSourceRDD(sparkContext, readerFactories).asInstanceOf[RDD[InternalRow]]
+      new DataSourceRDD(sparkContext, batchReaderFactories).asInstanceOf[RDD[InternalRow]]
 
     case _ =>
       new DataSourceRDD(sparkContext, readerFactories).asInstanceOf[RDD[InternalRow]]
