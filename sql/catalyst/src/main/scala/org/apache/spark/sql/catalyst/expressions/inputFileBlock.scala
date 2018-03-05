@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.rdd.InputFileBlockHolder
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.types.{DataType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -42,7 +42,7 @@ case class InputFileName() extends LeafExpression with Nondeterministic {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val className = InputFileBlockHolder.getClass.getName.stripSuffix("$")
-    ev.copy(code = s"final ${ctx.javaType(dataType)} ${ev.value} = " +
+    ev.copy(code = s"final ${CodeGenerator.javaType(dataType)} ${ev.value} = " +
       s"$className.getInputFilePath();", isNull = "false")
   }
 }
@@ -65,7 +65,7 @@ case class InputFileBlockStart() extends LeafExpression with Nondeterministic {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val className = InputFileBlockHolder.getClass.getName.stripSuffix("$")
-    ev.copy(code = s"final ${ctx.javaType(dataType)} ${ev.value} = " +
+    ev.copy(code = s"final ${CodeGenerator.javaType(dataType)} ${ev.value} = " +
       s"$className.getStartOffset();", isNull = "false")
   }
 }
@@ -88,7 +88,7 @@ case class InputFileBlockLength() extends LeafExpression with Nondeterministic {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val className = InputFileBlockHolder.getClass.getName.stripSuffix("$")
-    ev.copy(code = s"final ${ctx.javaType(dataType)} ${ev.value} = " +
+    ev.copy(code = s"final ${CodeGenerator.javaType(dataType)} ${ev.value} = " +
       s"$className.getLength();", isNull = "false")
   }
 }
