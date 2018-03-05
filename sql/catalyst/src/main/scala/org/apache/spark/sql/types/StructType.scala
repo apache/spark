@@ -286,7 +286,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val nonExistFields = names -- fieldNamesSet
     if (nonExistFields.nonEmpty) {
       throw new IllegalArgumentException(
-        s"""Fields ${nonExistFields.mkString(", ")} does not exist.
+        s"""Nonexistent field(s): ${nonExistFields.mkString(", ")}.
            |Available fields: ${fieldNamesSet.mkString(", ")}""".stripMargin)
     }
     // Preserve the original order of fields.
