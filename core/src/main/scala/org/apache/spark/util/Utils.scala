@@ -671,7 +671,6 @@ private[spark] object Utils extends Logging {
           logDebug("fetchFile not using security")
           uc = new URL(url).openConnection()
         }
-        Utils.setupSecureURLConnection(uc, securityMgr)
 
         val timeoutMs =
           conf.getTimeAsSeconds("spark.files.fetchTimeout", "60s").toInt * 1000
@@ -2266,20 +2265,6 @@ private[spark] object Utils extends Logging {
    */
   def setLogLevel(l: org.apache.log4j.Level) {
     org.apache.log4j.Logger.getRootLogger().setLevel(l)
-  }
-
-  /**
-   * If the given URL connection is HttpsURLConnection, it sets the SSL socket factory and
-   * the host verifier from the given security manager.
-   */
-  def setupSecureURLConnection(urlConnection: URLConnection, sm: SecurityManager): URLConnection = {
-    urlConnection match {
-      case https: HttpsURLConnection =>
-        sm.sslSocketFactory.foreach(https.setSSLSocketFactory)
-        sm.hostnameVerifier.foreach(https.setHostnameVerifier)
-        https
-      case connection => connection
-    }
   }
 
   /**

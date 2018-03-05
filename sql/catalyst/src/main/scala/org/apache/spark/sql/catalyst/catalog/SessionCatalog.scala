@@ -54,8 +54,8 @@ object SessionCatalog {
  * This class must be thread-safe.
  */
 class SessionCatalog(
-    val externalCatalog: ExternalCatalog,
-    globalTempViewManager: GlobalTempViewManager,
+    externalCatalogBuilder: () => ExternalCatalog,
+    globalTempViewManagerBuilder: () => GlobalTempViewManager,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
     hadoopConf: Configuration,
@@ -70,8 +70,8 @@ class SessionCatalog(
       functionRegistry: FunctionRegistry,
       conf: SQLConf) {
     this(
-      externalCatalog,
-      new GlobalTempViewManager("global_temp"),
+      () => externalCatalog,
+      () => new GlobalTempViewManager("global_temp"),
       functionRegistry,
       conf,
       new Configuration(),
@@ -86,6 +86,9 @@ class SessionCatalog(
       new SimpleFunctionRegistry,
       new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
   }
+
+  lazy val externalCatalog = externalCatalogBuilder()
+  lazy val globalTempViewManager = globalTempViewManagerBuilder()
 
   /** List of temporary views, mapping from table name to their logical plan. */
   @GuardedBy("this")
