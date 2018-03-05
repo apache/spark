@@ -672,10 +672,7 @@ public class HiveSessionImpl implements HiveSession {
     String sessionID = hiveConf.getVar(ConfVars.HIVESESSIONID);
 
     File[] fileAry = new File(lScratchDir).listFiles(
-            file -> {
-              String name = file.getName();
-              return (name.startsWith(sessionID) && name.endsWith(".pipeout"));
-            });
+            (dir, name) -> name.startsWith(sessionID) && name.endsWith(".pipeout"));
 
     for (File file : fileAry) {
       try {
