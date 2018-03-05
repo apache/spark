@@ -79,10 +79,9 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-23586: WrapOption should support interpreted execution") {
     val cls = ObjectType(classOf[java.lang.Integer])
     val inputObject = BoundReference(0, cls, nullable = true)
-    val unwrapObject = WrapOption(inputObject, cls)
-    unwrapObject.resolved
+    val wrapObject = WrapOption(inputObject, cls)
     Seq((1, Some(1)), (null, None)).foreach { case (input, expected) =>
-      checkEvaluation(unwrapObject, expected, InternalRow.fromSeq(Seq(input)))
+      checkEvaluation(wrapObject, expected, InternalRow.fromSeq(Seq(input)))
     }
   }
 }
