@@ -215,12 +215,20 @@ case class GetJsonObject(json: Expression, path: Expression)
       path: List[PathInstruction]): Boolean = {
     (p.getCurrentToken, path) match {
       case (VALUE_STRING, Nil) if style == RawStyle =>
-        // there is no array wildcard or slice parent, emit this string without quotes
-        if (p.hasTextCharacters) {
-          g.writeRaw(p.getTextCharacters, p.getTextOffset, p.getTextLength)
-        } else {
-          g.writeRaw(p.getText)
-        }
+
+        // Jackson(>=2.7.7) fixes the possibility of missing tail data
+        // when the length of the value is in a range
+        // Now we use the jackson version is 2.6.x
+        // So comment calls the code for this method ( writeRaw(char[] text, int offset, int len) )
+        // Although using writeRaw(String text) will lose some performance
+        g.writeRaw(p.getText)
+
+        // there is no array wildcard or slice parent, emit this string without quote
+        // if (p.hasTextCharacters) {
+        //   g.writeRaw(p.getTextCharacters, p.getTextOffset, p.getTextLength)
+        // } else {
+        //   g.writeRaw(p.getText)
+        // }
         true
 
       case (START_ARRAY, Nil) if style == FlattenStyle =>
@@ -474,7 +482,11 @@ case class JsonTuple(children: Seq[Expression])
       case JsonToken.VALUE_STRING if parser.hasTextCharacters =>
         // slight optimization to avoid allocating a String instance, though the characters
         // still have to be decoded... Jackson doesn't have a way to access the raw bytes
-        generator.writeRaw(parser.getTextCharacters, parser.getTextOffset, parser.getTextLength)
+        // generator.writeRaw(parser.getTextCharacters, parser.getTextOffset, parser.getTextLength)
+
+        // jackson 2.6.x writeRaw(char[] text, int offset, int len) has a bug
+        generator.writeRaw(parser.getText)
+
 
       case JsonToken.VALUE_STRING =>
         // the normal String case, pass it through to the output without enclosing quotes
