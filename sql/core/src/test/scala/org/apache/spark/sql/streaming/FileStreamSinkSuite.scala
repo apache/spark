@@ -353,7 +353,7 @@ class FileStreamSinkSuite extends StreamTest {
   }
 
   test("FileStreamSink.ancestorIsMetadataDirectory()") {
-    val hadoopConf = spark.sparkContext.hadoopConfiguration
+    val hadoopConf = spark.sessionState.newHadoopConf()
     def assertAncestorIsMetadataDirectory(path: String): Unit =
       assert(FileStreamSink.ancestorIsMetadataDirectory(new Path(path), hadoopConf))
     def assertAncestorIsNotMetadataDirectory(path: String): Unit =
