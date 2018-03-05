@@ -2016,7 +2016,7 @@ class DataFrame(object):
                     raise RuntimeError(msg)
 
             # Try to use Arrow optimization when the schema is supported and the required version
-            # of PyArrow is found, if 'spark.sql.execution.arrow.fallback.enabled' is enabled.
+            # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
             if use_arrow:
                 try:
                     from pyspark.sql.types import _check_dataframe_convert_date, \
