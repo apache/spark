@@ -278,8 +278,8 @@ setMethod("abs",
           })
 
 #' @details
-#' \code{acos}: Computes the cosine inverse of the given value; the returned angle is in
-#' the range 0.0 through pi.
+#' \code{acos}: Returns the inverse cosine of the given value,
+#' as if computed by \code{java.lang.Math.acos()}
 #'
 #' @rdname column_math_functions
 #' @export
@@ -334,8 +334,8 @@ setMethod("ascii",
           })
 
 #' @details
-#' \code{asin}: Computes the sine inverse of the given value; the returned angle is in
-#' the range -pi/2 through pi/2.
+#' \code{asin}: Returns the inverse sine of the given value,
+#' as if computed by \code{java.lang.Math.asin()}
 #'
 #' @rdname column_math_functions
 #' @export
@@ -349,8 +349,8 @@ setMethod("asin",
           })
 
 #' @details
-#' \code{atan}: Computes the tangent inverse of the given value; the returned angle is in the range
-#' -pi/2 through pi/2.
+#' \code{atan}: Returns the inverse tangent of the given value,
+#' as if computed by \code{java.lang.Math.atan()}
 #'
 #' @rdname column_math_functions
 #' @export
@@ -613,7 +613,8 @@ setMethod("covar_pop", signature(col1 = "characterOrColumn", col2 = "characterOr
           })
 
 #' @details
-#' \code{cos}: Computes the cosine of the given value. Units in radians.
+#' \code{cos}: Returns the cosine of the given value,
+#' as if computed by \code{java.lang.Math.cos()}. Units in radians.
 #'
 #' @rdname column_math_functions
 #' @aliases cos cos,Column-method
@@ -627,7 +628,8 @@ setMethod("cos",
           })
 
 #' @details
-#' \code{cosh}: Computes the hyperbolic cosine of the given value.
+#' \code{cosh}: Returns the hyperbolic cosine of the given value,
+#' as if computed by \code{java.lang.Math.cosh()}.
 #'
 #' @rdname column_math_functions
 #' @aliases cosh cosh,Column-method
@@ -1463,7 +1465,8 @@ setMethod("sign", signature(x = "Column"),
           })
 
 #' @details
-#' \code{sin}: Computes the sine of the given value. Units in radians.
+#' \code{sin}: Returns the sine of the given value,
+#' as if computed by \code{java.lang.Math.sin()}. Units in radians.
 #'
 #' @rdname column_math_functions
 #' @aliases sin sin,Column-method
@@ -1477,7 +1480,8 @@ setMethod("sin",
           })
 
 #' @details
-#' \code{sinh}: Computes the hyperbolic sine of the given value.
+#' \code{sinh}: Returns the hyperbolic sine of the given value,
+#' as if computed by \code{java.lang.Math.sinh()}.
 #'
 #' @rdname column_math_functions
 #' @aliases sinh sinh,Column-method
@@ -1653,7 +1657,9 @@ setMethod("sumDistinct",
           })
 
 #' @details
-#' \code{tan}: Computes the tangent of the given value. Units in radians.
+#' \code{tan}: Returns the tangent of the given value,
+#' as if computed by \code{java.lang.Math.tan()}.
+#' Units in radians.
 #'
 #' @rdname column_math_functions
 #' @aliases tan tan,Column-method
@@ -1667,7 +1673,8 @@ setMethod("tan",
           })
 
 #' @details
-#' \code{tanh}: Computes the hyperbolic tangent of the given value.
+#' \code{tanh}: Returns the hyperbolic tangent of the given value,
+#' as if computed by \code{java.lang.Math.tanh()}.
 #'
 #' @rdname column_math_functions
 #' @aliases tanh tanh,Column-method
@@ -1973,7 +1980,8 @@ setMethod("year",
 
 #' @details
 #' \code{atan2}: Returns the angle theta from the conversion of rectangular coordinates
-#' (x, y) to polar coordinates (r, theta). Units in radians.
+#' (x, y) to polar coordinates (r, theta),
+#' as if computed by \code{java.lang.Math.atan2()}. Units in radians.
 #'
 #' @rdname column_math_functions
 #' @aliases atan2 atan2,Column-method
