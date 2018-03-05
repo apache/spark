@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, UnwrapOption}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types.{IntegerType, ObjectType}
 
@@ -65,5 +65,17 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         new GenericArrayData(Array(300, 400)))))
     checkEvalutionWithUnsafeProjection(
       mapEncoder.serializer.head, mapExpected, mapInputRow)
+  }
+
+  test("SPARK-23586: UnwrapOption should support interpreted execution") {
+    val inputRowWithSome = InternalRow.fromSeq(Seq(Some(1)))
+    val inputRowWithNone = InternalRow.fromSeq(Seq(None))
+    val inputRowWithNull = InternalRow.fromSeq(Seq(null))
+    val cls = classOf[Option[Int]]
+    val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
+    val unwrapObject = UnwrapOption(IntegerType, inputObject)
+    assert(unwrapObject.eval(inputRowWithSome) == 1)
+    assert(unwrapObject.eval(inputRowWithNone) == null)
+    assert(unwrapObject.eval(inputRowWithNull) == null)
   }
 }
