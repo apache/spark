@@ -183,6 +183,111 @@ case class StaticInvoke(
 }
 
 /**
+ * Invokes a call to reference to a static field.
+ *
+ * @param staticObject The target of the static call.  This can either be the object itself
+ *                     (methods defined on scala objects), or the class object
+ *                     (static methods defined in java).
+ * @param dataType The expected return type of the function call.
+ * @param fieldName The field to reference.
+ */
+case class StaticField(
+  staticObject: Class[_],
+  dataType: DataType,
+  fieldName: String) extends Expression with NonSQLExpression {
+
+  val objectName = staticObject.getName.stripSuffix("$")
+
+  override def nullable: Boolean = false
+  override def children: Seq[Expression] = Nil
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = ctx.javaType(dataType)
+
+    val code = s"""
+      final $javaType ${ev.value} = $objectName.$fieldName;
+    """
+
+    ev.copy(code = code, isNull = "false")
+  }
+}
+
+/**
+ * Wraps an expression in a try-catch block, which can be used if the body expression may throw a
+ * exception.
+ *
+ * @param body The expression body to wrap in a try-catch block.
+ * @param dataType The return type of the try block.
+ * @param returnNullable When false, indicating the invoked method will always return
+ *                       non-null value.
+ */
+case class WrapException(
+    body: Expression,
+    dataType: DataType,
+    returnNullable: Boolean = true) extends Expression with NonSQLExpression {
+
+  override def nullable: Boolean = returnNullable
+  override def children: Seq[Expression] = Seq(body)
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = ctx.javaType(dataType)
+    val returnName = ctx.freshName("returnName")
+
+    val bodyExpr = body.genCode(ctx)
+
+    val code =
+      s"""
+         |final $javaType $returnName;
+         |try {
+         |  ${bodyExpr.code}
+         |  $returnName = ${bodyExpr.value};
+         |} catch (Exception e) {
+         |  org.apache.spark.unsafe.Platform.throwException(e);
+         |}
+       """.stripMargin
+
+    ev.copy(code = code, isNull = bodyExpr.isNull, value = returnName)
+  }
+}
+
+/**
+ * Determines if the given value is an instanceof a given class
+ *
+ * @param value the value to check
+ * @param checkedType the class to check the value against
+ */
+case class InstanceOf(
+    value: Expression,
+    checkedType: Class[_]) extends Expression with NonSQLExpression {
+
+  override def nullable: Boolean = false
+  override def children: Seq[Expression] = value :: Nil
+  override def dataType: DataType = BooleanType
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+
+    val obj = value.genCode(ctx)
+
+    val code =
+      s"""
+         ${obj.code}
+         final boolean ${ev.value} = ${obj.value} instanceof ${checkedType.getName};
+       """
+
+    ev.copy(code = code, isNull = "false")
+  }
+}
+
+/**
  * Calls the specified function on an object, optionally passing arguments.  If the `targetObject`
  * expression evaluates to null then null will be returned.
  *
@@ -962,7 +1067,7 @@ object ExternalMapToCatalyst {
  *                       format.
  * @param child An expression that when evaluated returns the input map object.
  */
-case class ExternalMapToCatalyst private(
+case class ExternalMapToCatalyst(
     key: String,
     keyIsNull: String,
     keyType: DataType,
@@ -1238,46 +1343,90 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
 }
 
 /**
- * Initialize a Java Bean instance by setting its field values via setters.
+ * Initialize an object by invoking the given sequence of method names and method arguments.
+ *
+ * @param objectInstance An expression evaluating to a new instance of the object to initialize
+ * @param setters A sequence of method names and their sequence of argument expressions to apply in
+ *                series to the object instance
  */
-case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Expression])
+case class InitializeObject(
+  objectInstance: Expression,
+  setters: Seq[(String, Seq[Expression])])
   extends Expression with NonSQLExpression {
 
-  override def nullable: Boolean = beanInstance.nullable
-  override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
-  override def dataType: DataType = beanInstance.dataType
+  override def nullable: Boolean = objectInstance.nullable
+  override def children: Seq[Expression] = objectInstance +: setters.flatMap(_._2)
+  override def dataType: DataType = objectInstance.dataType
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val instanceGen = beanInstance.genCode(ctx)
+    val instanceGen = objectInstance.genCode(ctx)
 
-    val javaBeanInstance = ctx.freshName("javaBean")
-    val beanInstanceJavaType = ctx.javaType(beanInstance.dataType)
+    val objectInstanceName = ctx.freshName("objectInstance")
+    val objectInstanceType = ctx.javaType(objectInstance.dataType)
 
-    val initialize = setters.map {
-      case (setterMethod, fieldValue) =>
-        val fieldGen = fieldValue.genCode(ctx)
+    lazy val initialize = setters.map {
+      case (setterMethod, args) =>
+        val argGen = args.map {
+          case (arg) =>
+            arg.genCode(ctx)
+        }
+
         s"""
-           |${fieldGen.code}
-           |$javaBeanInstance.$setterMethod(${fieldGen.value});
+           |${argGen.map(arg => arg.code).mkString("\n")}
+           |$objectInstanceName.$setterMethod(${argGen.map(arg => arg.value).mkString(", ")});
          """.stripMargin
     }
+
     val initializeCode = ctx.splitExpressionsWithCurrentInputs(
-      expressions = initialize.toSeq,
-      funcName = "initializeJavaBean",
-      extraArguments = beanInstanceJavaType -> javaBeanInstance :: Nil)
+      expressions = initialize,
+      funcName = "initializeObject",
+      extraArguments = objectInstanceType -> objectInstanceName :: Nil)
 
     val code =
       s"""
          |${instanceGen.code}
-         |$beanInstanceJavaType $javaBeanInstance = ${instanceGen.value};
+         |$objectInstanceType $objectInstanceName = ${instanceGen.value};
          |if (!${instanceGen.isNull}) {
          |  $initializeCode
          |}
        """.stripMargin
+
     ev.copy(code = code, isNull = instanceGen.isNull, value = instanceGen.value)
+  }
+
+}
+
+/**
+ * Casts the result of an expression to another type.
+ *
+ * @param value The value to cast
+ * @param resultType The type to which the value should be cast
+ */
+case class ObjectCast(value: Expression, resultType: DataType)
+  extends Expression with NonSQLExpression {
+
+  override def nullable: Boolean = value.nullable
+  override def dataType: DataType = resultType
+  override def children: Seq[Expression] = value :: Nil
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+
+    val javaType = ctx.javaType(resultType)
+    val obj = value.genCode(ctx)
+
+    val code =
+      s"""
+         ${obj.code}
+         final $javaType ${ev.value} = ($javaType) ${obj.value};
+       """
+
+    ev.copy(code = code, isNull = obj.isNull)
   }
 }
 
