@@ -67,7 +67,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       mapEncoder.serializer.head, mapExpected, mapInputRow)
   }
 
-  test("SPARK-23586: UnwrapOption should support interpreted execution") {
+  test("SPARK-23585: UnwrapOption should support interpreted execution") {
     val cls = classOf[Option[Int]]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
     val unwrapObject = UnwrapOption(IntegerType, inputObject)
