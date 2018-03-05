@@ -586,7 +586,7 @@
       <dependency>
         <groupId>commons-net</groupId>
         <artifactId>commons-net</artifactId>
-        <version>2.2</version>
+        <version>3.1</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -1931,6 +1931,10 @@
           <exclusion>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-mapreduce-client-core</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.apache.orc</groupId>

@@ -24,7 +24,6 @@ import java.nio.charset.StandardCharsets
 import scala.collection.JavaConverters._
 
 import org.apache.commons.io.IOUtils
-import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
@@ -64,8 +63,6 @@ private[kafka010] class KafkaMicroBatchReader(
     failOnDataLoss: Boolean)
   extends MicroBatchReader with SupportsScanUnsafeRow with Logging {
 
-  type PartitionOffsetMap = Map[TopicPartition, Long]
-
   private var startPartitionOffsets: PartitionOffsetMap = _
   private var endPartitionOffsets: PartitionOffsetMap = _
 
@@ -76,6 +73,7 @@ private[kafka010] class KafkaMicroBatchReader(
   private val maxOffsetsPerTrigger =
     Option(options.get("maxOffsetsPerTrigger").orElse(null)).map(_.toLong)
 
+  private val rangeCalculator = KafkaOffsetRangeCalculator(options)
   /**
    * Lazily initialize `initialPartitionOffsets` to make sure that `KafkaConsumer.poll` is only
    * called in StreamExecutionThread. Otherwise, interrupting a thread while running
@@ -106,15 +104,15 @@ private[kafka010] class KafkaMicroBatchReader(
   override def createUnsafeRowReaderFactories(): ju.List[DataReaderFactory[UnsafeRow]] = {
     // Find the new partitions, and get their earliest offsets
     val newPartitions = endPartitionOffsets.keySet.diff(startPartitionOffsets.keySet)
-    val newPartitionOffsets = kafkaOffsetReader.fetchEarliestOffsets(newPartitions.toSeq)
-    if (newPartitionOffsets.keySet != newPartitions) {
+    val newPartitionInitialOffsets = kafkaOffsetReader.fetchEarliestOffsets(newPartitions.toSeq)
+    if (newPartitionInitialOffsets.keySet != newPartitions) {
       // We cannot get from offsets for some partitions. It means they got deleted.
-      val deletedPartitions = newPartitions.diff(newPartitionOffsets.keySet)
+      val deletedPartitions = newPartitions.diff(newPartitionInitialOffsets.keySet)
       reportDataLoss(
         s"Cannot find earliest offsets of ${deletedPartitions}. Some data may have been missed")
     }
-    logInfo(s"Partitions added: $newPartitionOffsets")
-    newPartitionOffsets.filter(_._2 != 0).foreach { case (p, o) =>
+    logInfo(s"Partitions added: $newPartitionInitialOffsets")
+    newPartitionInitialOffsets.filter(_._2 != 0).foreach { case (p, o) =>
       reportDataLoss(
         s"Added partition $p starts from $o instead of 0. Some data may have been missed")
     }
@@ -125,46 +123,28 @@ private[kafka010] class KafkaMicroBatchReader(
       reportDataLoss(s"$deletedPartitions are gone. Some data may have been missed")
     }
 
-    // Use the until partitions to calculate offset ranges to ignore partitions that have
+    // Use the end partitions to calculate offset ranges to ignore partitions that have
     // been deleted
     val topicPartitions = endPartitionOffsets.keySet.filter { tp =>
       // Ignore partitions that we don't know the from offsets.
-      newPartitionOffsets.contains(tp) || startPartitionOffsets.contains(tp)
+      newPartitionInitialOffsets.contains(tp) || startPartitionOffsets.contains(tp)
     }.toSeq
     logDebug("TopicPartitions: " + topicPartitions.mkString(", "))
 
-    val sortedExecutors = getSortedExecutorList()
-    val numExecutors = sortedExecutors.length
-    logDebug("Sorted executors: " + sortedExecutors.mkString(", "))
-
     // Calculate offset ranges
-    val factories = topicPartitions.flatMap { tp =>
-      val fromOffset = startPartitionOffsets.get(tp).getOrElse {
-        newPartitionOffsets.getOrElse(
-        tp, {
-          // This should not happen since newPartitionOffsets contains all partitions not in
-          // fromPartitionOffsets
-          throw new IllegalStateException(s"$tp doesn't have a from offset")
-        })
-      }
-      val untilOffset = endPartitionOffsets(tp)
+    val offsetRanges = rangeCalculator.getRanges(
+      fromOffsets = startPartitionOffsets ++ newPartitionInitialOffsets,
+      untilOffsets = endPartitionOffsets,
+      executorLocations = getSortedExecutorList())
 
-      if (untilOffset >= fromOffset) {
-        // This allows cached KafkaConsumers in the executors to be re-used to read the same
-        // partition in every batch.
-        val preferredLoc = if (numExecutors > 0) {
-          Some(sortedExecutors(Math.floorMod(tp.hashCode, numExecutors)))
-        } else None
-        val range = KafkaOffsetRange(tp, fromOffset, untilOffset)
-        Some(
-          new KafkaMicroBatchDataReaderFactory(
-            range, preferredLoc, executorKafkaParams, pollTimeoutMs, failOnDataLoss))
-      } else {
-        reportDataLoss(
-          s"Partition $tp's offset was changed from " +
-            s"$fromOffset to $untilOffset, some data may have been missed")
-        None
-      }
+    // Reuse Kafka consumers only when all the offset ranges have distinct TopicPartitions,
+    // that is, concurrent tasks will not read the same TopicPartitions.
+    val reuseKafkaConsumer = offsetRanges.map(_.topicPartition).toSet.size == offsetRanges.size
+
+    // Generate factories based on the offset ranges
+    val factories = offsetRanges.map { range =>
+      new KafkaMicroBatchDataReaderFactory(
+        range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer)
     }
     factories.map(_.asInstanceOf[DataReaderFactory[UnsafeRow]]).asJava
   }
@@ -320,28 +300,39 @@ private[kafka010] class KafkaMicroBatchReader(
 }
 
 /** A [[DataReaderFactory]] for reading Kafka data in a micro-batch streaming query. */
-private[kafka010] class KafkaMicroBatchDataReaderFactory(
-    range: KafkaOffsetRange,
-    preferredLoc: Option[String],
-    executorKafkaParams: ju.Map[String, Object],
-    pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends DataReaderFactory[UnsafeRow] {
-
-  override def preferredLocations(): Array[String] = preferredLoc.toArray
-
-  override def createDataReader(): DataReader[UnsafeRow] = new KafkaMicroBatchDataReader(
-    range, executorKafkaParams, pollTimeoutMs, failOnDataLoss)
-}
-
-/** A [[DataReader]] for reading Kafka data in a micro-batch streaming query. */
-private[kafka010] class KafkaMicroBatchDataReader(
+private[kafka010] case class KafkaMicroBatchDataReaderFactory(
     offsetRange: KafkaOffsetRange,
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends DataReader[UnsafeRow] with Logging {
+    failOnDataLoss: Boolean,
+    reuseKafkaConsumer: Boolean) extends DataReaderFactory[UnsafeRow] {
 
-  private val consumer = CachedKafkaConsumer.getOrCreate(
-    offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
+  override def preferredLocations(): Array[String] = offsetRange.preferredLoc.toArray
+
+  override def createDataReader(): DataReader[UnsafeRow] = new KafkaMicroBatchDataReader(
+    offsetRange, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer)
+}
+
+/** A [[DataReader]] for reading Kafka data in a micro-batch streaming query. */
+private[kafka010] case class KafkaMicroBatchDataReader(
+    offsetRange: KafkaOffsetRange,
+    executorKafkaParams: ju.Map[String, Object],
+    pollTimeoutMs: Long,
+    failOnDataLoss: Boolean,
+    reuseKafkaConsumer: Boolean) extends DataReader[UnsafeRow] with Logging {
+
+  private val consumer = {
+    if (!reuseKafkaConsumer) {
+      // If we can't reuse CachedKafkaConsumers, creating a new CachedKafkaConsumer. We
+      // uses `assign` here, hence we don't need to worry about the "group.id" conflicts.
+      CachedKafkaConsumer.createUncached(
+        offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
+    } else {
+      CachedKafkaConsumer.getOrCreate(
+        offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
+    }
+  }
+
   private val rangeToRead = resolveRange(offsetRange)
   private val converter = new KafkaRecordToUnsafeRowConverter
 
@@ -369,9 +360,14 @@ private[kafka010] class KafkaMicroBatchDataReader(
   }
 
   override def close(): Unit = {
-    // Indicate that we're no longer using this consumer
-    CachedKafkaConsumer.releaseKafkaConsumer(
-      offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
+    if (!reuseKafkaConsumer) {
+      // Don't forget to close non-reuse KafkaConsumers. You may take down your cluster!
+      consumer.close()
+    } else {
+      // Indicate that we're no longer using this consumer
+      CachedKafkaConsumer.releaseKafkaConsumer(
+        offsetRange.topicPartition.topic, offsetRange.topicPartition.partition, executorKafkaParams)
+    }
   }
 
   private def resolveRange(range: KafkaOffsetRange): KafkaOffsetRange = {
@@ -392,12 +388,9 @@ private[kafka010] class KafkaMicroBatchDataReader(
       } else {
         range.untilOffset
       }
-      KafkaOffsetRange(range.topicPartition, fromOffset, untilOffset)
+      KafkaOffsetRange(range.topicPartition, fromOffset, untilOffset, None)
     } else {
       range
     }
   }
 }
-
-private[kafka010] case class KafkaOffsetRange(
-  topicPartition: TopicPartition, fromOffset: Long, untilOffset: Long)
