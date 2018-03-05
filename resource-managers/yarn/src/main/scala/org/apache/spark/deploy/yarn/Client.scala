@@ -93,11 +93,24 @@ private[spark] class Client(
 
   private val distCacheMgr = new ClientDistributedCacheManager()
 
-  private var loginFromKeytab = false
-  private var principal: String = null
-  private var keytab: String = null
-  private var credentials: Credentials = null
-  private var amKeytabFileName: String = null
+  private val principal = sparkConf.get(PRINCIPAL).orNull
+  private val keytab = sparkConf.get(KEYTAB).orNull
+  private val loginFromKeytab = principal != null
+  private val amKeytabFileName: String = {
+    require((principal == null) == (keytab == null),
+      "Both principal and keytab must be defined, or neither.")
+    if (loginFromKeytab) {
+      logInfo(s"Kerberos credentials: principal = $principal, keytab = $keytab")
+      // Generate a file name that can be used for the keytab file, that does not conflict
+      // with any user file.
+      new File(keytab).getName() + "-" + UUID.randomUUID().toString
+    } else {
+      null
+    }
+  }
+
+  // Defensive copy of the credentials
+  private val credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
 
   private val launcherBackend = new LauncherBackend() {
     override protected def conf: SparkConf = sparkConf
@@ -140,9 +153,6 @@ private[spark] class Client(
     var appId: ApplicationId = null
     try {
       launcherBackend.connect()
-      // Setup the credentials before doing anything else,
-      // so we have don't have issues at any point.
-      setupCredentials()
       yarnClient.init(hadoopConf)
       yarnClient.start()
 
@@ -984,24 +994,6 @@ private[spark] class Client(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
     setupSecurityToken(amContainer)
     amContainer
-  }
-
-  def setupCredentials(): Unit = {
-    loginFromKeytab = sparkConf.contains(PRINCIPAL)
-    if (loginFromKeytab) {
-      principal = sparkConf.get(PRINCIPAL).get
-      keytab = sparkConf.get(KEYTAB).orNull
-
-      require(keytab != null, "Keytab must be specified when principal is specified.")
-      logInfo("Attempting to login to the Kerberos" +
-        s" using principal: $principal and keytab: $keytab")
-      val f = new File(keytab)
-      // Generate a file name that can be used for the keytab file, that does not conflict
-      // with any user file.
-      amKeytabFileName = f.getName + "-" + UUID.randomUUID().toString
-    }
-    // Defensive copy of the credentials
-    credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
   }
 
   /**

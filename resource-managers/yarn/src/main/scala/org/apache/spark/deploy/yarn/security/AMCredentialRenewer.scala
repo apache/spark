@@ -137,8 +137,8 @@ private[yarn] class AMCredentialRenewer(
     } catch {
       case e: Exception =>
         val delay = TimeUnit.SECONDS.toMillis(sparkConf.get(CREDENTIALS_RENEWAL_RETRY_WAIT))
-        logWarning(s"Failed to update tokens, will try again ${UIUtils.formatDuration(delay)}! " +
-          "If this happens too often tasks will fail.", e)
+        logWarning(s"Failed to update tokens, will try again in ${UIUtils.formatDuration(delay)}!" +
+          " If this happens too often tasks will fail.", e)
         scheduleRenewal(delay)
     }
   }
