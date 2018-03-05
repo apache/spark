@@ -234,7 +234,7 @@ trait CodegenSupport extends SparkPlan {
 
     variables.zipWithIndex.foreach { case (ev, i) =>
       val paramName = ctx.freshName(s"expr_$i")
-      val paramType = ctx.javaType(attributes(i).dataType)
+      val paramType = CodeGenerator.javaType(attributes(i).dataType)
 
       arguments += ev.value
       parameters += s"$paramType $paramName"
@@ -540,7 +540,9 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
 
       ${ctx.registerComment(
         s"""Codegend pipeline for stage (id=$codegenStageId)
-           |${this.treeString.trim}""".stripMargin)}
+           |${this.treeString.trim}""".stripMargin,
+         "wsc_codegenPipeline")}
+      ${ctx.registerComment(s"codegenStageId=$codegenStageId", "wsc_codegenStageId", true)}
       final class $className extends ${classOf[BufferedRowIterator].getName} {
 
         private Object[] references;

@@ -21,6 +21,7 @@ import java.io.{ByteArrayOutputStream, File, PrintStream, PrintWriter}
 import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
@@ -110,7 +111,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
   }
 
-  private val versions = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1")
+  private val versions =
+    Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2", "2.0", "2.1", "2.2", "2.3")
 
   private var client: HiveClient = null
 
@@ -125,7 +127,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       // Hive changed the default of datanucleus.schema.autoCreateAll from true to false and
       // hive.metastore.schema.verification from false to true since 2.0
       // For details, see the JIRA HIVE-6113 and HIVE-12463
-      if (version == "2.0" || version == "2.1") {
+      if (version == "2.0" || version == "2.1" || version == "2.2" || version == "2.3") {
         hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
         hadoopConf.set("hive.metastore.schema.verification", "false")
       }
@@ -422,15 +424,18 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: alterPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "2")
+      val parameters = Map(StatsSetupConst.TOTAL_SIZE -> "0", StatsSetupConst.NUM_FILES -> "1")
       val newLocation = new URI(Utils.createTempDir().toURI.toString.stripSuffix("/"))
       val storage = storageFormat.copy(
         locationUri = Some(newLocation),
         // needed for 0.12 alter partitions
         serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-      val partition = CatalogTablePartition(spec, storage)
+      val partition = CatalogTablePartition(spec, storage, parameters)
       client.alterPartitions("default", "src_part", Seq(partition))
       assert(client.getPartition("default", "src_part", spec)
         .storage.locationUri == Some(newLocation))
+      assert(client.getPartition("default", "src_part", spec)
+        .parameters.get(StatsSetupConst.TOTAL_SIZE) == Some("0"))
     }
 
     test(s"$version: dropPartitions") {
@@ -629,6 +634,46 @@ class VersionsSuite extends SparkFunSuite with Logging {
           assert(totalSize.isEmpty)
         } else {
           assert(totalSize.nonEmpty && totalSize.get > 0)
+        }
+      }
+    }
+
+    test(s"$version: CREATE Partitioned TABLE AS SELECT") {
+      withTable("tbl") {
+        versionSpark.sql(
+          """
+            |CREATE TABLE tbl(c1 string)
+            |PARTITIONED BY (ds STRING)
+          """.stripMargin)
+        versionSpark.sql("INSERT OVERWRITE TABLE tbl partition (ds='2') SELECT '1'")
+
+        assert(versionSpark.table("tbl").collect().toSeq == Seq(Row("1", "2")))
+        val partMeta = versionSpark.sessionState.catalog.getPartition(
+          TableIdentifier("tbl"), spec = Map("ds" -> "2")).parameters
+        val totalSize = partMeta.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+        val numFiles = partMeta.get(StatsSetupConst.NUM_FILES).map(_.toLong)
+        // Except 0.12, all the following versions will fill the Hive-generated statistics
+        if (version == "0.12") {
+          assert(totalSize.isEmpty && numFiles.isEmpty)
+        } else {
+          assert(totalSize.nonEmpty && numFiles.nonEmpty)
+        }
+
+        versionSpark.sql(
+          """
+            |ALTER TABLE tbl PARTITION (ds='2')
+            |SET SERDEPROPERTIES ('newKey' = 'vvv')
+          """.stripMargin)
+        val newPartMeta = versionSpark.sessionState.catalog.getPartition(
+          TableIdentifier("tbl"), spec = Map("ds" -> "2")).parameters
+
+        val newTotalSize = newPartMeta.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+        val newNumFiles = newPartMeta.get(StatsSetupConst.NUM_FILES).map(_.toLong)
+        // Except 0.12, all the following versions will fill the Hive-generated statistics
+        if (version == "0.12") {
+          assert(newTotalSize.isEmpty && newNumFiles.isEmpty)
+        } else {
+          assert(newTotalSize.nonEmpty && newNumFiles.nonEmpty)
         }
       }
     }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.kafka010
 
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.streaming.Trigger
 
 // Run tests in KafkaSourceSuiteBase in continuous execution mode.
@@ -60,8 +60,7 @@ class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
         eventually(timeout(streamingTimeout)) {
           assert(
             query.lastExecution.logical.collectFirst {
-              case r: DataSourceV2Relation if r.reader.isInstanceOf[KafkaContinuousReader] =>
-                r.reader.asInstanceOf[KafkaContinuousReader]
+              case StreamingDataSourceV2Relation(_, r: KafkaContinuousReader) => r
             }.exists { r =>
               // Ensure the new topic is present and the old topic is gone.
               r.knownPartitions.exists(_.topic == topic2)

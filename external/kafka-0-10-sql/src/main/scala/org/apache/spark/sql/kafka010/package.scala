@@ -14,18 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.sql
 
-package org.apache.spark.util
+import org.apache.kafka.common.TopicPartition
 
-/**
- * Used for shipping per-thread stacktraces from the executors to driver.
- */
-private[spark] case class ThreadStackTrace(
-  threadId: Long,
-  threadName: String,
-  threadState: Thread.State,
-  stackTrace: String,
-  blockedByThreadId: Option[Long],
-  blockedByLock: String,
-  holdingLocks: Seq[String])
-
+package object kafka010 {   // scalastyle:ignore
+  // ^^ scalastyle:ignore is for ignoring warnings about digits in package name
+  type PartitionOffsetMap = Map[TopicPartition, Long]
+}

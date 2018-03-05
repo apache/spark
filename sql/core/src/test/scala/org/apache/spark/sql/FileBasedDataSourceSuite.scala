@@ -20,13 +20,28 @@ package org.apache.spark.sql
 import java.io.FileNotFoundException
 
 import org.apache.hadoop.fs.Path
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
-class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
+
+class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
   import testImplicits._
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.sessionState.conf.setConf(SQLConf.ORC_IMPLEMENTATION, "native")
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      spark.sessionState.conf.unsetConf(SQLConf.ORC_IMPLEMENTATION)
+    } finally {
+      super.afterAll()
+    }
+  }
 
   private val allFileBasedDataSources = Seq("orc", "parquet", "csv", "json", "text")
   private val nameWithSpecialChars = "sp&cial%c hars"
@@ -109,7 +124,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
           Seq("1").toDF("a").write.format(format).save(new Path(basePath, "second").toString)
 
           val thirdPath = new Path(basePath, "third")
-          val fs = thirdPath.getFileSystem(spark.sparkContext.hadoopConfiguration)
+          val fs = thirdPath.getFileSystem(spark.sessionState.newHadoopConf())
           Seq("2").toDF("a").write.format(format).save(thirdPath.toString)
           val files = fs.listStatus(thirdPath).filter(_.isFile).map(_.getPath)
 

@@ -29,7 +29,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.kafka010.KafkaSource.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
+import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.StructType
@@ -66,7 +66,7 @@ class KafkaContinuousReader(
   // Initialized when creating reader factories. If this diverges from the partitions at the latest
   // offsets, we need to reconfigure.
   // Exposed outside this object only for unit tests.
-  private[sql] var knownPartitions: Set[TopicPartition] = _
+  @volatile private[sql] var knownPartitions: Set[TopicPartition] = _
 
   override def readSchema: StructType = KafkaOffsetReader.kafkaSchema
 
@@ -187,13 +187,9 @@ class KafkaContinuousDataReader(
     kafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean) extends ContinuousDataReader[UnsafeRow] {
-  private val topic = topicPartition.topic
-  private val kafkaPartition = topicPartition.partition
-  private val consumer = CachedKafkaConsumer.createUncached(topic, kafkaPartition, kafkaParams)
-
-  private val sharedRow = new UnsafeRow(7)
-  private val bufferHolder = new BufferHolder(sharedRow)
-  private val rowWriter = new UnsafeRowWriter(bufferHolder, 7)
+  private val consumer =
+    CachedKafkaConsumer.createUncached(topicPartition.topic, topicPartition.partition, kafkaParams)
+  private val converter = new KafkaRecordToUnsafeRowConverter
 
   private var nextKafkaOffset = startOffset
   private var currentRecord: ConsumerRecord[Array[Byte], Array[Byte]] = _
@@ -232,22 +228,7 @@ class KafkaContinuousDataReader(
   }
 
   override def get(): UnsafeRow = {
-    bufferHolder.reset()
-
-    if (currentRecord.key == null) {
-      rowWriter.setNullAt(0)
-    } else {
-      rowWriter.write(0, currentRecord.key)
-    }
-    rowWriter.write(1, currentRecord.value)
-    rowWriter.write(2, UTF8String.fromString(currentRecord.topic))
-    rowWriter.write(3, currentRecord.partition)
-    rowWriter.write(4, currentRecord.offset)
-    rowWriter.write(5,
-      DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(currentRecord.timestamp)))
-    rowWriter.write(6, currentRecord.timestampType.id)
-    sharedRow.setTotalSize(bufferHolder.totalSize)
-    sharedRow
+    converter.toUnsafeRow(currentRecord)
   }
 
   override def getOffset(): KafkaSourcePartitionOffset = {

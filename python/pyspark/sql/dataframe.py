@@ -588,6 +588,8 @@ class DataFrame(object):
         """
         Returns a new :class:`DataFrame` that has exactly `numPartitions` partitions.
 
+        :param numPartitions: int, to specify the target number of partitions
+
         Similar to coalesce defined on an :class:`RDD`, this operation results in a
         narrow dependency, e.g. if you go from 1000 partitions to 100 partitions,
         there will not be a shuffle, instead each of the 100 new partitions will
@@ -612,9 +614,10 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting DataFrame is hash partitioned.
 
-        ``numPartitions`` can be an int to specify the target number of partitions or a Column.
-        If it is a Column, it will be used as the first partitioning column. If not specified,
-        the default number of partitions is used.
+        :param numPartitions:
+            can be an int to specify the target number of partitions or a Column.
+            If it is a Column, it will be used as the first partitioning column. If not specified,
+            the default number of partitions is used.
 
         .. versionchanged:: 1.6
            Added optional arguments to specify the partitioning columns. Also made numPartitions
@@ -673,9 +676,10 @@ class DataFrame(object):
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The
         resulting DataFrame is range partitioned.
 
-        ``numPartitions`` can be an int to specify the target number of partitions or a Column.
-        If it is a Column, it will be used as the first partitioning column. If not specified,
-        the default number of partitions is used.
+        :param numPartitions:
+            can be an int to specify the target number of partitions or a Column.
+            If it is a Column, it will be used as the first partitioning column. If not specified,
+            the default number of partitions is used.
 
         At least one partition-by expression must be specified.
         When no explicit sort order is specified, "ascending nulls first" is assumed.
@@ -891,6 +895,8 @@ class DataFrame(object):
     @since(1.3)
     def alias(self, alias):
         """Returns a new :class:`DataFrame` with an alias set.
+
+        :param alias: string, an alias name to be set for the DataFrame.
 
         >>> from pyspark.sql.functions import *
         >>> df_as1 = df.alias("df_as1")
@@ -1900,7 +1906,7 @@ class DataFrame(object):
         This is a no-op if schema doesn't contain the given column name.
 
         :param existing: string, name of the existing column to rename.
-        :param col: string, new name of the column.
+        :param new: string, new name of the column.
 
         >>> df.withColumnRenamed('age', 'age2').collect()
         [Row(age2=2, name=u'Alice'), Row(age2=5, name=u'Bob')]
@@ -1988,10 +1994,11 @@ class DataFrame(object):
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
                 from pyspark.sql.types import _check_dataframe_convert_date, \
-                    _check_dataframe_localize_timestamps
+                    _check_dataframe_localize_timestamps, to_arrow_schema
                 from pyspark.sql.utils import require_minimum_pyarrow_version
-                import pyarrow
                 require_minimum_pyarrow_version()
+                import pyarrow
+                to_arrow_schema(self.schema)
                 tables = self._collectAsArrow()
                 if tables:
                     table = pyarrow.concat_tables(tables)
@@ -2000,10 +2007,12 @@ class DataFrame(object):
                     return _check_dataframe_localize_timestamps(pdf, timezone)
                 else:
                     return pd.DataFrame.from_records([], columns=self.columns)
-            except ImportError as e:
-                msg = "note: pyarrow must be installed and available on calling Python process " \
-                      "if using spark.sql.execution.arrow.enabled=true"
-                raise ImportError("%s\n%s" % (_exception_message(e), msg))
+            except Exception as e:
+                msg = (
+                    "Note: toPandas attempted Arrow optimization because "
+                    "'spark.sql.execution.arrow.enabled' is set to true. Please set it to false "
+                    "to disable this.")
+                raise RuntimeError("%s\n%s" % (_exception_message(e), msg))
         else:
             pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
 

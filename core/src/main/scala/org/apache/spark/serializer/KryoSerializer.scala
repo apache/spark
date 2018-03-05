@@ -206,6 +206,7 @@ class KryoSerializer(conf: SparkConf)
         kryo.register(clazz)
       } catch {
         case NonFatal(_) => // do nothing
+        case _: NoClassDefFoundError if Utils.isTesting => // See SPARK-23422.
       }
     }
 

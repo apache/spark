@@ -3497,7 +3497,14 @@ class ArrowTests(ReusedSQLTestCase):
         schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
+            with self.assertRaisesRegexp(Exception, 'Unsupported type'):
+                df.toPandas()
+
+        df = self.spark.createDataFrame([(None,)], schema="a binary")
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    Exception,
+                    'Unsupported type.*\nNote: toPandas attempted Arrow optimization because'):
                 df.toPandas()
 
     def test_null_conversion(self):
@@ -4373,6 +4380,24 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         foo_udf = pandas_udf(lambda x: x, 'timestamp')
         result = df.withColumn('time', foo_udf(df.time))
         self.assertEquals(df.collect(), result.collect())
+
+    @unittest.skipIf(sys.version_info[:2] < (3, 5), "Type hints are supported from Python 3.5.")
+    def test_type_annotation(self):
+        from pyspark.sql.functions import pandas_udf
+        # Regression test to check if type hints can be used. See SPARK-23569.
+        # Note that it throws an error during compilation in lower Python versions if 'exec'
+        # is not used. Also, note that we explicitly use another dictionary to avoid modifications
+        # in the current 'locals()'.
+        #
+        # Hyukjin: I think it's an ugly way to test issues about syntax specific in
+        # higher versions of Python, which we shouldn't encourage. This was the last resort
+        # I could come up with at that time.
+        _locals = {}
+        exec(
+            "import pandas as pd\ndef noop(col: pd.Series) -> pd.Series: return col",
+            _locals)
+        df = self.spark.range(1).select(pandas_udf(f=_locals['noop'], returnType='bigint')('id'))
+        self.assertEqual(df.first()[0], 0)
 
 
 @unittest.skipIf(

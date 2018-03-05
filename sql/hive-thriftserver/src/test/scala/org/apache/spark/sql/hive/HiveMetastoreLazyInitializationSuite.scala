@@ -38,6 +38,20 @@ class HiveMetastoreLazyInitializationSuite extends SparkFunSuite {
       // We should be able to run Spark jobs without Hive client.
       assert(spark.sparkContext.range(0, 1).count() === 1)
 
+      // We should be able to use Spark SQL if no table references.
+      assert(spark.sql("select 1 + 1").count() === 1)
+      assert(spark.range(0, 1).count() === 1)
+
+      // We should be able to use fs
+      val path = Utils.createTempDir()
+      path.delete()
+      try {
+        spark.range(0, 1).write.parquet(path.getAbsolutePath)
+        assert(spark.read.parquet(path.getAbsolutePath).count() === 1)
+      } finally {
+        Utils.deleteRecursively(path)
+      }
+
       // Make sure that we are not using the local derby metastore.
       val exceptionString = Utils.exceptionString(intercept[AnalysisException] {
         spark.sql("show tables")
