@@ -382,8 +382,14 @@ case class UnwrapOption(
 
   override def inputTypes: Seq[AbstractDataType] = ObjectType :: Nil
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  override def eval(input: InternalRow): Any = {
+    val inputObject = child.eval(input)
+    if (inputObject == null) {
+      null
+    } else {
+      inputObject.asInstanceOf[Option[_]].orNull
+    }
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
