@@ -673,19 +673,19 @@ abstract class UnixTime
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = CodeGenerator.javaType(dataType)
     left.dataType match {
       case StringType if right.foldable =>
         val df = classOf[DateFormat].getName
         if (formatter == null) {
-          ExprCode("", TrueLiteral, LiteralValue(ctx.defaultValue(dataType),
-            ctx.javaType(dataType)))
+          ExprCode.forNullValue(dataType)
         } else {
           val formatterName = ctx.addReferenceObj("formatter", formatter, df)
           val eval1 = left.genCode(ctx)
           ev.copy(code = s"""
             ${eval1.code}
             boolean ${ev.isNull} = ${eval1.isNull};
-            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+            $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
             if (!${ev.isNull}) {
               try {
                 ${ev.value} = $formatterName.parse(${eval1.value}.toString()).getTime() / 1000L;
@@ -714,7 +714,7 @@ abstract class UnixTime
         ev.copy(code = s"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = ${eval1.value} / 1000000L;
           }""")
@@ -725,7 +725,7 @@ abstract class UnixTime
         ev.copy(code = s"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = $dtu.daysToMillis(${eval1.value}, $tz) / 1000L;
           }""")
@@ -813,14 +813,15 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     val df = classOf[DateFormat].getName
     if (format.foldable) {
       if (formatter == null) {
-        ExprCode("", TrueLiteral, LiteralValue("(UTF8String) null", ctx.javaType(dataType)))
+        ExprCode("", TrueLiteral, LiteralValue("(UTF8String) null",
+          CodeGenerator.javaType(dataType)))
       } else {
         val formatterName = ctx.addReferenceObj("formatter", formatter, df)
         val t = left.genCode(ctx)
         ev.copy(code = s"""
           ${t.code}
           boolean ${ev.isNull} = ${t.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             try {
               ${ev.value} = UTF8String.fromString($formatterName.format(
@@ -1345,18 +1346,19 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
     : ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
 
+    val javaType = CodeGenerator.javaType(dataType)
     if (format.foldable) {
       if (truncLevel == DateTimeUtils.TRUNC_INVALID || truncLevel > maxLevel) {
         ev.copy(code = s"""
           boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};""")
       } else {
         val t = instant.genCode(ctx)
         val truncFuncStr = truncFunc(t.value, truncLevel.toString)
         ev.copy(code = s"""
           ${t.code}
           boolean ${ev.isNull} = ${t.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = $dtu.$truncFuncStr;
           }""")

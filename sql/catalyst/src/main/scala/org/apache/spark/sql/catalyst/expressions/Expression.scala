@@ -105,8 +105,8 @@ abstract class Expression extends TreeNode[Expression] {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
       val eval = doGenCode(ctx, ExprCode("",
-        VariableValue(isNull, ctx.JAVA_BOOLEAN),
-        VariableValue(value, ctx.javaType(dataType))))
+        VariableValue(isNull, CodeGenerator.JAVA_BOOLEAN),
+        VariableValue(value, CodeGenerator.javaType(dataType))))
       reduceCodeSize(ctx, eval)
       if (eval.code.nonEmpty) {
         // Add `this` in the comment.
@@ -121,15 +121,15 @@ abstract class Expression extends TreeNode[Expression] {
     // TODO: support whole stage codegen too
     if (eval.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
       val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {
-        val globalIsNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "globalIsNull")
+        val globalIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull
-        eval.isNull = GlobalValue(globalIsNull, ctx.JAVA_BOOLEAN)
+        eval.isNull = GlobalValue(globalIsNull, CodeGenerator.JAVA_BOOLEAN)
         s"$globalIsNull = $localIsNull;"
       } else {
         ""
       }
 
-      val javaType = ctx.javaType(dataType)
+      val javaType = CodeGenerator.javaType(dataType)
       val newValue = ctx.freshName("value")
 
       val funcName = ctx.freshName(nodeName)
@@ -413,14 +413,14 @@ abstract class UnaryExpression extends Expression {
       ev.copy(code = s"""
         ${childGen.code}
         boolean ${ev.isNull} = ${childGen.isNull};
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval
       """)
     } else {
       ev.copy(code = s"""
         boolean ${ev.isNull} = false;
         ${childGen.code}
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
     }
   }
@@ -512,7 +512,7 @@ abstract class BinaryExpression extends Expression {
 
       ev.copy(code = s"""
         boolean ${ev.isNull} = true;
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval
       """)
     } else {
@@ -520,7 +520,7 @@ abstract class BinaryExpression extends Expression {
         boolean ${ev.isNull} = false;
         ${leftGen.code}
         ${rightGen.code}
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
     }
   }
@@ -656,7 +656,7 @@ abstract class TernaryExpression extends Expression {
 
       ev.copy(code = s"""
         boolean ${ev.isNull} = true;
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval""")
     } else {
       ev.copy(code = s"""
@@ -664,7 +664,7 @@ abstract class TernaryExpression extends Expression {
         ${leftGen.code}
         ${midGen.code}
         ${rightGen.code}
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $resultCode""", isNull = FalseLiteral)
     }
   }

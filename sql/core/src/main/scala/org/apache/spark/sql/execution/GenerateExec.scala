@@ -170,10 +170,10 @@ case class GenerateExec(
     // Add position
     val position = if (e.position) {
       if (outer) {
-        Seq(ExprCode("", StatementValue(s"$index == -1", ctx.JAVA_BOOLEAN),
-          VariableValue(index, ctx.JAVA_INT)))
+        Seq(ExprCode("", StatementValue(s"$index == -1", CodeGenerator.JAVA_BOOLEAN),
+          VariableValue(index, CodeGenerator.JAVA_INT)))
       } else {
-        Seq(ExprCode("", FalseLiteral, VariableValue(index, ctx.JAVA_INT)))
+        Seq(ExprCode("", FalseLiteral, VariableValue(index, CodeGenerator.JAVA_INT)))
       }
     } else {
       Seq.empty
@@ -306,17 +306,17 @@ case class GenerateExec(
       nullable: Boolean,
       initialChecks: Seq[String]): ExprCode = {
     val value = ctx.freshName(name)
-    val javaType = ctx.javaType(dt)
-    val getter = ctx.getValue(source, dt, index)
+    val javaType = CodeGenerator.javaType(dt)
+    val getter = CodeGenerator.getValue(source, dt, index)
     val checks = initialChecks ++ optionalCode(nullable, s"$source.isNullAt($index)")
     if (checks.nonEmpty) {
       val isNull = ctx.freshName("isNull")
       val code =
         s"""
            |boolean $isNull = ${checks.mkString(" || ")};
-           |$javaType $value = $isNull ? ${ctx.defaultValue(dt)} : $getter;
+           |$javaType $value = $isNull ? ${CodeGenerator.defaultValue(dt)} : $getter;
          """.stripMargin
-      ExprCode(code, VariableValue(isNull, ctx.JAVA_BOOLEAN),
+      ExprCode(code, VariableValue(isNull, CodeGenerator.JAVA_BOOLEAN),
         VariableValue(value, javaType))
     } else {
       ExprCode(s"$javaType $value = $getter;", FalseLiteral,

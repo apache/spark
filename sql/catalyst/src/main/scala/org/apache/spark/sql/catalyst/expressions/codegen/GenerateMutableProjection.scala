@@ -62,14 +62,14 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
     val projectionCodes: Seq[(String, ExprValue, String, Int)] = exprVals.zip(index).map {
       case (ev, i) =>
         val e = expressions(i)
-        val value = ctx.addMutableState(ctx.javaType(e.dataType), "value")
+        val value = ctx.addMutableState(CodeGenerator.javaType(e.dataType), "value")
         if (e.nullable) {
-          val isNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "isNull")
+          val isNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "isNull")
           (s"""
               |${ev.code}
               |$isNull = ${ev.isNull};
               |$value = ${ev.value};
-            """.stripMargin, GlobalValue(isNull, ctx.JAVA_BOOLEAN), value, i)
+            """.stripMargin, GlobalValue(isNull, CodeGenerator.JAVA_BOOLEAN), value, i)
         } else {
           (s"""
               |${ev.code}
@@ -83,8 +83,8 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
 
     val updates = validExpr.zip(projectionCodes).map {
       case (e, (_, isNull, value, i)) =>
-        val ev = ExprCode("", isNull, GlobalValue(value, ctx.javaType(e.dataType)))
-        ctx.updateColumn("mutableRow", e.dataType, i, ev, e.nullable)
+        val ev = ExprCode("", isNull, GlobalValue(value, CodeGenerator.javaType(e.dataType)))
+        CodeGenerator.updateColumn("mutableRow", e.dataType, i, ev, e.nullable)
     }
 
     val allProjections = ctx.splitExpressionsWithCurrentInputs(projectionCodes.map(_._1))

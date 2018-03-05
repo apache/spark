@@ -234,7 +234,7 @@ trait CodegenSupport extends SparkPlan {
 
     variables.zipWithIndex.foreach { case (ev, i) =>
       val paramName = ctx.freshName(s"expr_$i")
-      val paramType = ctx.javaType(attributes(i).dataType)
+      val paramType = CodeGenerator.javaType(attributes(i).dataType)
 
       arguments += ev.value
       parameters += s"$paramType $paramName"
@@ -245,11 +245,11 @@ trait CodegenSupport extends SparkPlan {
         val isNull = ctx.freshName(s"exprIsNull_$i")
         arguments += ev.isNull
         parameters += s"boolean $isNull"
-        VariableValue(isNull, ctx.JAVA_BOOLEAN)
+        VariableValue(isNull, CodeGenerator.JAVA_BOOLEAN)
       }
 
       paramVars += ExprCode("", paramIsNull,
-        VariableValue(paramName, ctx.javaType(attributes(i).dataType)))
+        VariableValue(paramName, CodeGenerator.javaType(attributes(i).dataType)))
     }
     (arguments, parameters, paramVars)
   }

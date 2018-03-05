@@ -97,6 +97,8 @@ private[hive] object IsolatedClientLoader extends Logging {
     case "1.2" | "1.2.0" | "1.2.1" | "1.2.2" => hive.v1_2
     case "2.0" | "2.0.0" | "2.0.1" => hive.v2_0
     case "2.1" | "2.1.0" | "2.1.1" => hive.v2_1
+    case "2.2" | "2.2.0" => hive.v2_2
+    case "2.3" | "2.3.0" | "2.3.1" | "2.3.2" => hive.v2_3
   }
 
   private def downloadVersion(

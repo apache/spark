@@ -31,7 +31,7 @@ abstract class ExprValue {
   // For such cases, we may need to pass the evaluation as parameter.
   val canDirectAccess: Boolean
 
-  def isPrimitive(ctx: CodegenContext): Boolean = ctx.isPrimitiveType(javaType)
+  def isPrimitive: Boolean = CodeGenerator.isPrimitiveType(javaType)
 }
 
 object ExprValue {

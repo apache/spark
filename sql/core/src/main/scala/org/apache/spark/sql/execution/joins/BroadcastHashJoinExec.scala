@@ -182,17 +182,18 @@ case class BroadcastHashJoinExec(
         // the variables are needed even there is no matched rows
         val isNull = ctx.freshName("isNull")
         val value = ctx.freshName("value")
+        val javaType = CodeGenerator.javaType(a.dataType)
         val code = s"""
           |boolean $isNull = true;
-          |${ctx.javaType(a.dataType)} $value = ${ctx.defaultValue(a.dataType)};
+          |$javaType $value = ${CodeGenerator.defaultValue(a.dataType)};
           |if ($matched != null) {
           |  ${ev.code}
           |  $isNull = ${ev.isNull};
           |  $value = ${ev.value};
           |}
          """.stripMargin
-        ExprCode(code, VariableValue(isNull, ctx.JAVA_BOOLEAN),
-          VariableValue(value, ctx.javaType(a.dataType)))
+        ExprCode(code, VariableValue(isNull, CodeGenerator.JAVA_BOOLEAN),
+          VariableValue(value, CodeGenerator.javaType(a.dataType)))
       }
     }
   }
@@ -488,7 +489,7 @@ case class BroadcastHashJoinExec(
     }
 
     val resultVar = input ++ Seq(ExprCode("", FalseLiteral,
-      VariableValue(existsVar, ctx.JAVA_BOOLEAN)))
+      VariableValue(existsVar, CodeGenerator.JAVA_BOOLEAN)))
     if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side

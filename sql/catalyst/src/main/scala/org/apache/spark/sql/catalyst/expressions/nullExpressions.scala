@@ -72,7 +72,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = GlobalValue(ctx.addMutableState(ctx.JAVA_BOOLEAN, ev.isNull), ctx.JAVA_BOOLEAN)
+    ev.isNull = GlobalValue(ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, ev.isNull),
+      CodeGenerator.JAVA_BOOLEAN)
 
     // all the evals are meant to be in a do { ... } while (false); loop
     val evals = children.map { e =>
@@ -87,14 +88,14 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
        """.stripMargin
     }
 
-    val resultType = ctx.javaType(dataType)
+    val resultType = CodeGenerator.javaType(dataType)
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = evals,
       funcName = "coalesce",
       returnType = resultType,
       makeSplitFunction = func =>
         s"""
-           |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
+           |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
            |do {
            |  $func
            |} while (false);
@@ -113,7 +114,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     ev.copy(code =
       s"""
          |${ev.isNull} = true;
-         |$resultType ${ev.value} = ${ctx.defaultValue(dataType)};
+         |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |do {
          |  $codes
          |} while (false);
@@ -234,9 +235,8 @@ case class IsNaN(child: Expression) extends UnaryExpression
       case DoubleType | FloatType =>
         ev.copy(code = s"""
           ${eval.code}
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""",
-          isNull = FalseLiteral)
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""", isNull = FalseLiteral)
     }
   }
 }
@@ -282,7 +282,7 @@ case class NaNvl(left: Expression, right: Expression)
         ev.copy(code = s"""
           ${leftGen.code}
           boolean ${ev.isNull} = false;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (${leftGen.isNull}) {
             ${ev.isNull} = true;
           } else {
@@ -322,9 +322,9 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
     val value = if (eval.isNull.isInstanceOf[LiteralValue]) {
-      LiteralValue(eval.isNull, ctx.JAVA_BOOLEAN)
+      LiteralValue(eval.isNull, CodeGenerator.JAVA_BOOLEAN)
     } else {
-      VariableValue(eval.isNull, ctx.JAVA_BOOLEAN)
+      VariableValue(eval.isNull, CodeGenerator.JAVA_BOOLEAN)
     }
     ExprCode(code = eval.code, isNull = FalseLiteral, value = value)
   }
@@ -357,7 +357,7 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
     } else if (eval.isNull == FalseLiteral) {
       TrueLiteral
     } else {
-      StatementValue(s"(!(${eval.isNull}))", ctx.javaType(dataType))
+      StatementValue(s"(!(${eval.isNull}))", CodeGenerator.javaType(dataType))
     }
     ExprCode(code = eval.code, isNull = FalseLiteral, value = value)
   }
@@ -429,8 +429,8 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = evals,
       funcName = "atLeastNNonNulls",
-      extraArguments = (ctx.JAVA_INT, nonnull) :: Nil,
-      returnType = ctx.JAVA_INT,
+      extraArguments = (CodeGenerator.JAVA_INT, nonnull) :: Nil,
+      returnType = CodeGenerator.JAVA_INT,
       makeSplitFunction = body =>
         s"""
            |do {
@@ -449,11 +449,11 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
 
     ev.copy(code =
       s"""
-         |${ctx.JAVA_INT} $nonnull = 0;
+         |${CodeGenerator.JAVA_INT} $nonnull = 0;
          |do {
          |  $codes
          |} while (false);
-         |${ctx.JAVA_BOOLEAN} ${ev.value} = $nonnull >= $n;
+         |${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = $nonnull >= $n;
        """.stripMargin, isNull = FalseLiteral)
   }
 }

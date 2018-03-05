@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, VariableValue}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, VariableValue}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
@@ -154,10 +154,11 @@ case class ExpandExec(
         val value = ctx.freshName("value")
         val code = s"""
           |boolean $isNull = true;
-          |${ctx.javaType(firstExpr.dataType)} $value = ${ctx.defaultValue(firstExpr.dataType)};
+          |${CodeGenerator.javaType(firstExpr.dataType)} $value =
+          |  ${CodeGenerator.defaultValue(firstExpr.dataType)};
          """.stripMargin
-        ExprCode(code, VariableValue(isNull, ctx.JAVA_BOOLEAN),
-          VariableValue(value, ctx.javaType(firstExpr.dataType)))
+        ExprCode(code, VariableValue(isNull, CodeGenerator.JAVA_BOOLEAN),
+          VariableValue(value, CodeGenerator.javaType(firstExpr.dataType)))
       }
     }
 
