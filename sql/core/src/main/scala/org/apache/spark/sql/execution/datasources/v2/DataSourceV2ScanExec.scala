@@ -44,11 +44,11 @@ case class DataSourceV2ScanExec(
   override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2ScanExec]
 
   override def outputPartitioning: physical.Partitioning = reader match {
+    case _ if readerFactories.size == 1 => SinglePartition
+
     case s: SupportsReportPartitioning =>
       new DataSourcePartitioning(
         s.outputPartitioning(), AttributeMap(output.map(a => a -> a.name)))
-
-    case _ if readerFactories.size == 1 => SinglePartition
 
     case _ => super.outputPartitioning
   }

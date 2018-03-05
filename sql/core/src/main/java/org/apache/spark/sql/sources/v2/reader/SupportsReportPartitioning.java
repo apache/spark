@@ -23,6 +23,10 @@ import org.apache.spark.sql.sources.v2.reader.partitioning.Partitioning;
 /**
  * A mix in interface for {@link DataSourceReader}. Data source readers can implement this
  * interface to report data partitioning and try to avoid shuffle at Spark side.
+ *
+ * Note that Spark will always infer a
+ * {@link org.apache.spark.sql.catalyst.plans.physical.SinglePartition} partitioning when the
+ * reader creates exactly 1 {@link DataReaderFactory}.
  */
 @InterfaceStability.Evolving
 public interface SupportsReportPartitioning extends DataSourceReader {
