@@ -1510,7 +1510,7 @@ object CodeGenerator extends Logging {
    * weak keys/values and thus does not respond to memory pressure.
    */
   private val cache = CacheBuilder.newBuilder()
-    .maximumSize(SparkEnv.get.conf.getInt(SQLConf.CODEGEN_COMPILE_MAX_CACHE_SIZE.key, 100))
+    .maximumSize(SparkEnv.get.conf.getInt(SQLConf.CODEGEN_COMPILE_MAX_CACHE_SIZE.key, SQLConf.CODEGEN_COMPILE_MAX_CACHE_SIZE.defaultValue.get))
     .build(
       new CacheLoader[CodeAndComment, (GeneratedClass, Int)]() {
         override def load(code: CodeAndComment): (GeneratedClass, Int) = {
