@@ -160,13 +160,19 @@ def read_udfs(pickleSer, infile, eval_type):
     if eval_type == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
         # Create function like this:
         #   lambda a: f([a[0]], [a[0], a[1]])
+
+        # We assume there is only one UDF here because grouped map doesn't
+        # support combining multiple UDFs.
         assert num_udfs == 1
+
+        # See FlatMapGroupsInPandasExec for how arg_offsets are used to
+        # distinguish between grouping attributes and data attributes
         arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type)
         udfs['f'] = udf
         split_offset = arg_offsets[0] + 1
         arg0 = ["a[%d]" % o for o in arg_offsets[1: split_offset]]
         arg1 = ["a[%d]" % o for o in arg_offsets[split_offset:]]
-        mapper_str = ("lambda a: f([%s], [%s])" % (", ".join(arg0), ", ".join(arg1)))
+        mapper_str = "lambda a: f([%s], [%s])" % (", ".join(arg0), ", ".join(arg1))
     else:
         # Create function like this:
         #   lambda a: (f0(a[0]), f1(a[1], a[2]), f2(a[3]))
@@ -177,7 +183,7 @@ def read_udfs(pickleSer, infile, eval_type):
             udfs['f%d' % i] = udf
             args = ["a[%d]" % o for o in arg_offsets]
             call_udf.append("f%d(%s)" % (i, ", ".join(args)))
-            mapper_str = "lambda a: (%s)" % (", ".join(call_udf))
+        mapper_str = "lambda a: (%s)" % (", ".join(call_udf))
 
     mapper = eval(mapper_str, udfs)
     func = lambda _, it: map(mapper, it)

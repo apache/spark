@@ -90,34 +90,39 @@ case class FlatMapGroupsInPandasExec(
     // argOffsets[1 .. argOffsets[0]+1] is the arg offsets for grouping attributes
     // argOffsets[argOffsets[0]+1 .. ] is the arg offsets for data attributes
 
-    val dupGroupingIndices = new ArrayBuffer[Int]
-    val groupingArgOffsets = new ArrayBuffer[Int]
-    val extraGroupingAttributes = new ArrayBuffer[Attribute]
-
     val dataAttributes = child.output.drop(groupingAttributes.length)
-    groupingAttributes.foreach { attribute =>
-      val index = dataAttributes.indexWhere(
-        childAttribute => attribute.semanticEquals(childAttribute))
-      dupGroupingIndices += index
+    val groupingIndicesInData = groupingAttributes.map { attribute =>
+      dataAttributes.indexWhere(attribute.semanticEquals)
     }
 
-    val extraGroupingSize = dupGroupingIndices.count(_ == -1)
-    (groupingAttributes zip dupGroupingIndices).foreach {
+    val groupingArgOffsets = new ArrayBuffer[Int]
+    val nonDupGroupingAttributes = new ArrayBuffer[Attribute]
+    val nonDupGroupingSize = groupingIndicesInData.count(_ == -1)
+
+    // Non duplicate grouping attributes are added to nonDupGroupingAttributes and
+    // their offsets are 0, 1, 2 ...
+    // Duplicate grouping attributes are NOT added to nonDupGroupingAttributes and
+    // their offsets are n + index, where n is the total number of non duplicate grouping
+    // attributes and index is the index in the data attributes that the grouping attribute
+    // is a duplicate of.
+
+    groupingAttributes.zip(groupingIndicesInData).foreach {
       case (attribute, index) =>
         if (index == -1) {
-          groupingArgOffsets += extraGroupingAttributes.length
-          extraGroupingAttributes += attribute
+          groupingArgOffsets += nonDupGroupingAttributes.length
+          nonDupGroupingAttributes += attribute
         } else {
-          groupingArgOffsets += index + extraGroupingSize
+          groupingArgOffsets += index + nonDupGroupingSize
         }
     }
 
-    val dataArgOffsets = extraGroupingAttributes.length until
-      (extraGroupingAttributes.length + dataAttributes.length)
+    val dataArgOffsets = nonDupGroupingAttributes.length until
+      (nonDupGroupingAttributes.length + dataAttributes.length)
 
     val argOffsets = Array(Array(groupingAttributes.length) ++ groupingArgOffsets ++ dataArgOffsets)
 
-    val dedupAttributes = extraGroupingAttributes ++ dataAttributes
+    // Attributes after deduplication
+    val dedupAttributes = nonDupGroupingAttributes ++ dataAttributes
     val dedupSchema = StructType.fromAttributes(dedupAttributes)
 
     inputRDD.mapPartitionsInternal { iter =>
