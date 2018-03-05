@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReader
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
  * Physical plan node for scanning data from a data source.
@@ -47,36 +48,46 @@ case class DataSourceV2ScanExec(
       new DataSourcePartitioning(
         s.outputPartitioning(), AttributeMap(output.map(a => a -> a.name)))
 
-    case _ if readerFactories.size() == 1 => SinglePartition
+    case _ if readerFactories.size == 1 => SinglePartition
 
     case _ => super.outputPartitioning
   }
 
-  private lazy val readerFactories: java.util.List[DataReaderFactory[UnsafeRow]] = reader match {
-    case r: SupportsScanUnsafeRow => r.createUnsafeRowReaderFactories()
-    case _ =>
-      reader.createDataReaderFactories().asScala.map {
-        new RowToUnsafeRowDataReaderFactory(_, reader.readSchema()): DataReaderFactory[UnsafeRow]
-      }.asJava
-  }
-
-  private lazy val inputRDD: RDD[InternalRow] = reader match {
+  private lazy val readerFactories: Seq[DataReaderFactory[_]] = reader match {
+    case r: SupportsScanUnsafeRow => r.createUnsafeRowReaderFactories().asScala
     case r: SupportsScanColumnarBatch if r.enableBatchRead() =>
       assert(!reader.isInstanceOf[ContinuousReader],
         "continuous stream reader does not support columnar read yet.")
-      new DataSourceRDD(sparkContext, r.createBatchDataReaderFactories())
-        .asInstanceOf[RDD[InternalRow]]
+      r.createBatchDataReaderFactories().asScala
+    case _ =>
+      reader.createDataReaderFactories().asScala.map {
+        new RowToUnsafeRowDataReaderFactory(_, reader.readSchema()): DataReaderFactory[UnsafeRow]
+      }
+  }
 
+  private lazy val inputRDD: RDD[InternalRow] = reader match {
     case _: ContinuousReader =>
       EpochCoordinatorRef.get(
           sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
           sparkContext.env)
-        .askSync[Unit](SetReaderPartitions(readerFactories.size()))
-      new ContinuousDataSourceRDD(sparkContext, sqlContext, readerFactories)
+        .askSync[Unit](SetReaderPartitions(readerFactories.size))
+      new ContinuousDataSourceRDD(
+        sparkContext,
+        sqlContext,
+        readerFactories.asInstanceOf[Seq[DataReaderFactory[UnsafeRow]]])
+        .asInstanceOf[RDD[InternalRow]]
+
+    case r: SupportsScanColumnarBatch if r.enableBatchRead() =>
+      new DataSourceRDD(
+        sparkContext,
+        readerFactories.asInstanceOf[Seq[DataReaderFactory[ColumnarBatch]]])
         .asInstanceOf[RDD[InternalRow]]
 
     case _ =>
-      new DataSourceRDD(sparkContext, readerFactories).asInstanceOf[RDD[InternalRow]]
+      new DataSourceRDD(
+        sparkContext,
+        readerFactories.asInstanceOf[Seq[DataReaderFactory[UnsafeRow]]])
+        .asInstanceOf[RDD[InternalRow]]
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(inputRDD)
