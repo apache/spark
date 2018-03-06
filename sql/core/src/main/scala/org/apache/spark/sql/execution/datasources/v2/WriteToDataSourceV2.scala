@@ -58,7 +58,9 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
       case w: MicroBatchWriter =>
         new StreamingInternalRowDataWriterFactory(w.createWriterFactory(), query.schema)
       case w: StreamWriter =>
-        new StreamingInternalRowDataWriterFactory(w.createWriterFactory(), query.schema)
+        new StreamingInternalRowDataWriterFactory(
+          w.createWriterFactory().asInstanceOf[StreamingDataWriterFactory[Row]],
+          query.schema)
       case _ =>
         new InternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
     }
