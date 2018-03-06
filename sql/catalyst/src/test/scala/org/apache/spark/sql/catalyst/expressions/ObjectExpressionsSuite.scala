@@ -91,4 +91,23 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val createExternalRow = CreateExternalRow(Seq(Literal(1), Literal("x")), schema)
     checkEvaluation(createExternalRow, Row.fromSeq(Seq(1, "x")), InternalRow.fromSeq(Seq()))
   }
+
+  test("SPARK-23594 GetExternalRowField should support interpreted execution") {
+    val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
+    val getRowField = GetExternalRowField(inputObject, index = 0, fieldName = "c0")
+    Seq((Row(1), 1), (Row(3), 3)).foreach { case (input, expected) =>
+      checkEvaluation(getRowField, expected, InternalRow.fromSeq(Seq(input)))
+    }
+
+    // If an input row or a field are null, a runtime exception will be thrown
+    val errMsg1 = intercept[RuntimeException] {
+      evaluate(getRowField, InternalRow.fromSeq(Seq(null)))
+    }.getMessage
+    assert(errMsg1 === "The input external row cannot be null.")
+
+    val errMsg2 = intercept[RuntimeException] {
+      evaluate(getRowField, InternalRow.fromSeq(Seq(Row(null))))
+    }.getMessage
+    assert(errMsg2 === "The 0th field 'c0' of input row cannot be null.")
+  }
 }

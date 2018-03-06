@@ -1360,10 +1360,18 @@ case class GetExternalRowField(
 
   override def dataType: DataType = ObjectType(classOf[Object])
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
-
   private val errMsg = s"The ${index}th field '$fieldName' of input row cannot be null."
+
+  override def eval(input: InternalRow): Any = {
+    val inputRow = child.eval(input).asInstanceOf[Row]
+    if (inputRow == null) {
+      throw new RuntimeException("The input external row cannot be null.")
+    }
+    if (inputRow.isNullAt(index)) {
+      throw new RuntimeException(errMsg)
+    }
+    inputRow.get(index)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
