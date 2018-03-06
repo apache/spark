@@ -352,29 +352,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
       .setStages(Array(discretizerForCol1, discretizerForCol2, discretizerForCol3))
       .fit(df)
 
-    val expected = Seq(
-      (0.0, 0.0, 0.0),
-      (0.0, 0.0, 1.0),
-      (0.0, 0.0, 1.0),
-      (0.0, 1.0, 2.0),
-      (0.0, 1.0, 2.0),
-      (0.0, 1.0, 2.0),
-      (0.0, 1.0, 3.0),
-      (0.0, 2.0, 4.0),
-      (0.0, 2.0, 4.0),
-      (1.0, 2.0, 5.0),
-      (1.0, 2.0, 5.0),
-      (1.0, 2.0, 5.0),
-      (1.0, 3.0, 6.0),
-      (1.0, 3.0, 6.0),
-      (1.0, 3.0, 7.0),
-      (1.0, 4.0, 8.0),
-      (1.0, 4.0, 8.0),
-      (1.0, 4.0, 9.0),
-      (1.0, 4.0, 9.0),
-      (1.0, 4.0, 9.0)
-      ).toDF("result1", "result2", "result3")
-        .collect().toSeq
+    val expected = plForSingleCol.transform(df).select("result1", "result2", "result3").collect()
 
     testTransformerByGlobalCheckFunc[(Double, Double, Double)](
       df,
@@ -419,34 +397,13 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
       .setOutputCols(Array("result1", "result2", "result3"))
       .setNumBucketsArray(Array(10, 10, 10))
 
-    val expected = Seq(
-      (0.0, 0.0, 0.0),
-      (1.0, 1.0, 1.0),
-      (1.0, 1.0, 1.0),
-      (2.0, 2.0, 2.0),
-      (2.0, 2.0, 2.0),
-      (2.0, 2.0, 2.0),
-      (3.0, 3.0, 3.0),
-      (4.0, 4.0, 4.0),
-      (4.0, 4.0, 4.0),
-      (5.0, 5.0, 5.0),
-      (5.0, 5.0, 5.0),
-      (5.0, 5.0, 5.0),
-      (6.0, 6.0, 6.0),
-      (6.0, 6.0, 6.0),
-      (7.0, 7.0, 7.0),
-      (8.0, 8.0, 8.0),
-      (8.0, 8.0, 8.0),
-      (9.0, 9.0, 9.0),
-      (9.0, 9.0, 9.0),
-      (9.0, 9.0, 9.0)
-    ).toDF("result1", "result2", "result3")
-      .collect()
-      .toSeq
+    val model = discretizerSingleNumBuckets.fit(df)
+    val expected = model.transform(df).select("result1", "result2", "result3").collect()
+
 
     testTransformerByGlobalCheckFunc[(Double, Double, Double)](
       df,
-      discretizerSingleNumBuckets.fit(df),
+      model,
       "result1",
       "result2",
       "result3") { rows =>
@@ -455,7 +412,7 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
 
     testTransformerByGlobalCheckFunc[(Double, Double, Double)](
       df,
-      discretizerNumBucketsArray.fit(df),
+      model,
       "result1",
       "result2",
       "result3") { rows =>
