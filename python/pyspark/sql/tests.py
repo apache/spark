@@ -3537,12 +3537,11 @@ class ArrowTests(ReusedSQLTestCase):
                     self.assertPandasEqual(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
 
     def test_toPandas_fallback_disabled(self):
-        with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": False}):
-            schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
-            df = self.spark.createDataFrame([(None,)], schema=schema)
-            with QuietTest(self.sc):
-                with self.assertRaisesRegexp(Exception, 'Unsupported type'):
-                    df.toPandas()
+        schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
+        df = self.spark.createDataFrame([(None,)], schema=schema)
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, 'Unsupported type'):
+                df.toPandas()
 
     def test_null_conversion(self):
         df_null = self.spark.createDataFrame([tuple([None for _ in range(len(self.data[0]))])] +
@@ -3762,10 +3761,9 @@ class ArrowTests(ReusedSQLTestCase):
         import pandas as pd
 
         with QuietTest(self.sc):
-            with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": False}):
-                with self.assertRaisesRegexp(Exception, 'Unsupported type'):
-                    self.spark.createDataFrame(
-                        pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
+            with self.assertRaisesRegexp(Exception, 'Unsupported type'):
+                self.spark.createDataFrame(
+                    pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
