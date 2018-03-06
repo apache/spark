@@ -131,7 +131,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
         .foreach(new TestForeachWriter() {
           override def process(value: Int): Unit = {
             super.process(value)
-            throw new RuntimeException("error")
+            throw new RuntimeException("ForeachSinkSuite error")
           }
         }).start()
       input.addData(1, 2, 3, 4)
@@ -141,7 +141,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
         query.processAllAvailable()
       }
       assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.getMessage === "error")
+      assert(e.getCause.getCause.getCause.getMessage === "ForeachSinkSuite error")
       assert(query.isActive === false)
 
       val allEvents = ForeachSinkSuite.allEvents()
@@ -152,7 +152,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
       // `close` should be called with the error
       val errorEvent = allEvents(0)(2).asInstanceOf[ForeachSinkSuite.Close]
       assert(errorEvent.error.get.isInstanceOf[RuntimeException])
-      assert(errorEvent.error.get.getMessage === "error")
+      assert(errorEvent.error.get.getMessage === "ForeachSinkSuite error")
     }
   }
 

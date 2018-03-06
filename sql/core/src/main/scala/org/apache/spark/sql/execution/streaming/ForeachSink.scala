@@ -17,52 +17,81 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.TaskContext
-import org.apache.spark.sql.{DataFrame, Encoder, ForeachWriter}
+import org.apache.spark.sql.{Encoder, ForeachWriter, SparkSession}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, SupportsWriteInternalRow, WriterCommitMessage}
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.types.StructType
 
-/**
- * A [[Sink]] that forwards all data into [[ForeachWriter]] according to the contract defined by
- * [[ForeachWriter]].
- *
- * @param writer The [[ForeachWriter]] to process all data.
- * @tparam T The expected type of the sink.
- */
-class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Serializable {
+case class ForeachWriterProvider[T: Encoder](writer: ForeachWriter[T]) extends StreamWriteSupport {
+  override def createStreamWriter(
+      queryId: String,
+      schema: StructType,
+      mode: OutputMode,
+      options: DataSourceOptions): StreamWriter = {
+    new StreamWriter with SupportsWriteInternalRow {
+      override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
+      override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {}
 
-  override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    // This logic should've been as simple as:
-    // ```
-    //   data.as[T].foreachPartition { iter => ... }
-    // ```
-    //
-    // Unfortunately, doing that would just break the incremental planing. The reason is,
-    // `Dataset.foreachPartition()` would further call `Dataset.rdd()`, but `Dataset.rdd()` will
-    // create a new plan. Because StreamExecution uses the existing plan to collect metrics and
-    // update watermark, we should never create a new plan. Otherwise, metrics and watermark are
-    // updated in the new plan, and StreamExecution cannot retrieval them.
-    //
-    // Hence, we need to manually convert internal rows to objects using encoder.
-    val encoder = encoderFor[T].resolveAndBind(
-      data.logicalPlan.output,
-      data.sparkSession.sessionState.analyzer)
-    data.queryExecution.toRdd.foreachPartition { iter =>
-      if (writer.open(TaskContext.getPartitionId(), batchId)) {
-        try {
-          while (iter.hasNext) {
-            writer.process(encoder.fromRow(iter.next()))
-          }
-        } catch {
-          case e: Throwable =>
-            writer.close(e)
-            throw e
-        }
-        writer.close(null)
-      } else {
-        writer.close(null)
+      override def createInternalRowWriterFactory(): DataWriterFactory[InternalRow] = {
+        val encoder = encoderFor[T].resolveAndBind(
+          schema.toAttributes,
+          SparkSession.getActiveSession.get.sessionState.analyzer)
+        ForeachWriterFactory(writer, encoder)
       }
+
+      override def toString: String = "ForeachSink"
+    }
+  }
+}
+
+case class ForeachWriterFactory[T: Encoder](
+    writer: ForeachWriter[T],
+    encoder: ExpressionEncoder[T])
+  extends DataWriterFactory[InternalRow] {
+  override def createDataWriter(
+      partitionId: Int,
+      attemptNumber: Int,
+      epochId: Long): ForeachDataWriter[T] = {
+    new ForeachDataWriter(writer, encoder, partitionId, epochId)
+  }
+}
+
+class ForeachDataWriter[T : Encoder](
+    writer: ForeachWriter[T],
+    encoder: ExpressionEncoder[T],
+    partitionId: Int,
+    epochId: Long)
+  extends DataWriter[InternalRow] {
+
+  // If open returns false, we should skip writing rows.
+  private val opened = writer.open(partitionId, epochId)
+
+  override def write(record: InternalRow): Unit = {
+    if (!opened) return
+
+    try {
+      writer.process(encoder.fromRow(record))
+    } catch {
+      case t: Throwable =>
+        writer.close(t)
+        throw t
     }
   }
 
-  override def toString(): String = "ForeachSink"
+  override def commit(): WriterCommitMessage = {
+    writer.close(null)
+    ForeachWriterCommitMessage
+  }
+
+  override def abort(): Unit = {}
 }
+
+/**
+ * An empty [[WriterCommitMessage]]. [[ForeachWriter]] implementations have no global coordination.
+ */
+case object ForeachWriterCommitMessage extends WriterCommitMessage
