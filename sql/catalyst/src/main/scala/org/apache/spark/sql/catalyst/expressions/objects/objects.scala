@@ -1672,10 +1672,36 @@ case class ValidateExternalType(child: Expression, expected: DataType)
 
   override def dataType: DataType = RowEncoder.externalDataTypeForInput(expected)
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
-
   private val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
+
+  private lazy val checkType = expected match {
+    case _: DecimalType =>
+      (value: Any) => {
+        Seq(classOf[java.math.BigDecimal], classOf[scala.math.BigDecimal], classOf[Decimal])
+          .exists { x => value.getClass.isAssignableFrom(x) }
+      }
+    case _: ArrayType =>
+      (value: Any) => {
+        value.getClass.isAssignableFrom(classOf[Seq[_]]) || value.getClass.isArray
+      }
+    case _ if ScalaReflection.isNativeType(expected) =>
+      (value: Any) => {
+        value.getClass.isAssignableFrom(ScalaReflection.classForNativeTypeOf(expected))
+      }
+    case _ =>
+      (value: Any) => {
+        value.getClass.isAssignableFrom(dataType.asInstanceOf[ObjectType].cls)
+      }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val result = child.eval(input)
+    if (checkType(result)) {
+      result
+    } else {
+      throw new RuntimeException(s"${result.getClass.getName}$errMsg")
+    }
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
