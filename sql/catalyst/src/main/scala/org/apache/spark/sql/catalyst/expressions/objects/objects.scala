@@ -382,8 +382,14 @@ case class UnwrapOption(
 
   override def inputTypes: Seq[AbstractDataType] = ObjectType :: Nil
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  override def eval(input: InternalRow): Any = {
+    val inputObject = child.eval(input)
+    if (inputObject == null) {
+      null
+    } else {
+      inputObject.asInstanceOf[Option[_]].orNull
+    }
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
@@ -416,8 +422,7 @@ case class WrapOption(child: Expression, optType: DataType)
 
   override def inputTypes: Seq[AbstractDataType] = optType :: Nil
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  override def eval(input: InternalRow): Any = Option(child.eval(input))
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val inputObject = child.genCode(ctx)
@@ -1106,8 +1111,10 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
 
   override def nullable: Boolean = false
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  override def eval(input: InternalRow): Any = {
+    val values = children.map(_.eval(input)).toArray
+    new GenericRowWithSchema(values, schema)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericRowWithSchema].getName
@@ -1353,10 +1360,18 @@ case class GetExternalRowField(
 
   override def dataType: DataType = ObjectType(classOf[Object])
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
-
   private val errMsg = s"The ${index}th field '$fieldName' of input row cannot be null."
+
+  override def eval(input: InternalRow): Any = {
+    val inputRow = child.eval(input).asInstanceOf[Row]
+    if (inputRow == null) {
+      throw new RuntimeException("The input external row cannot be null.")
+    }
+    if (inputRow.isNullAt(index)) {
+      throw new RuntimeException(errMsg)
+    }
+    inputRow.get(index)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields
