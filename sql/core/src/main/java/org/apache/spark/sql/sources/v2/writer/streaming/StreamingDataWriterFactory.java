@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.sources.v2.writer.streaming;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.v2.writer.DataWriter;
 import org.apache.spark.sql.sources.v2.writer.DataWriterFactory;
 
+@InterfaceStability.Evolving
 public interface StreamingDataWriterFactory<T> extends DataWriterFactory<T> {
   /**
    * Returns a data writer to do the actual writing work.
