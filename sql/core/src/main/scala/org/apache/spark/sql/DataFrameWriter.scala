@@ -587,7 +587,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names (`none`, `bzip2`, `gzip`, `lz4`,
    * `snappy` and `deflate`). </li>
-   * <li>`lineSep` (default is `\n`): defines the line separator that should
+   * <li>`lineSep` (default `\n`): defines the line separator that should
    * be used for writing.</li>
    * </ul>
    *
