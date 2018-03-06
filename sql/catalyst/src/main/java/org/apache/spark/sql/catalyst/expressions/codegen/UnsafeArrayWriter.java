@@ -30,7 +30,7 @@ import static org.apache.spark.sql.catalyst.expressions.UnsafeArrayData.calculat
  * A helper class to write data into global row buffer using `UnsafeArrayData` format,
  * used by {@link org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection}.
  */
-public class UnsafeArrayWriter {
+public final class UnsafeArrayWriter extends UnsafeWriter {
 
   private BufferHolder holder;
 
@@ -83,10 +83,10 @@ public class UnsafeArrayWriter {
     return startingOffset + headerInBytes + ordinal * elementSize;
   }
 
-  public void setOffsetAndSize(int ordinal, long currentCursor, int size) {
+  public void setOffsetAndSize(int ordinal, long currentCursor, long size) {
     assertIndexIsValid(ordinal);
     final long relativeOffset = currentCursor - startingOffset;
-    final long offsetAndSize = (relativeOffset << 32) | (long)size;
+    final long offsetAndSize = (relativeOffset << 32) | size;
 
     write(ordinal, offsetAndSize);
   }
@@ -138,7 +138,7 @@ public class UnsafeArrayWriter {
     Platform.putDouble(holder.buffer, getElementOffset(ordinal, 8), (double)0);
   }
 
-  public void setNull(int ordinal) { setNullLong(ordinal); }
+  public void setNullAt(int ordinal) { setNullLong(ordinal); }
 
   public void write(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);
@@ -205,7 +205,7 @@ public class UnsafeArrayWriter {
         holder.cursor += roundedSize;
       }
     } else {
-      setNull(ordinal);
+      setNullAt(ordinal);
     }
   }
 

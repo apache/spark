@@ -38,7 +38,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * beginning of the global row buffer, we don't need to update `startingOffset` and can just call
  * `zeroOutNullBytes` before writing new data.
  */
-public class UnsafeRowWriter {
+public final class UnsafeRowWriter extends UnsafeWriter {
 
   private final BufferHolder holder;
   // The offset of the global buffer where we start to write this row.
