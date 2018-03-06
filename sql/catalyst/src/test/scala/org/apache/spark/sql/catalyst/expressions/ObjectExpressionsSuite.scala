@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -83,5 +84,24 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq((1, Some(1)), (null, None)).foreach { case (input, expected) =>
       checkEvaluation(wrapObject, expected, InternalRow.fromSeq(Seq(input)))
     }
+  }
+
+  test("SPARK-23594 GetExternalRowField should support interpreted execution") {
+    val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
+    val getRowField = GetExternalRowField(inputObject, index = 0, fieldName = "c0")
+    Seq((Row(1), 1), (Row(3), 3)).foreach { case (input, expected) =>
+      checkEvaluation(getRowField, expected, InternalRow.fromSeq(Seq(input)))
+    }
+
+    // If an input row or a field are null, a runtime exception will be thrown
+    val errMsg1 = intercept[RuntimeException] {
+      evaluate(getRowField, InternalRow.fromSeq(Seq(null)))
+    }.getMessage
+    assert(errMsg1 === "The input external row cannot be null.")
+
+    val errMsg2 = intercept[RuntimeException] {
+      evaluate(getRowField, InternalRow.fromSeq(Seq(Row(null))))
+    }.getMessage
+    assert(errMsg2 === "The 0th field 'c0' of input row cannot be null.")
   }
 }
