@@ -422,8 +422,7 @@ case class WrapOption(child: Expression, optType: DataType)
 
   override def inputTypes: Seq[AbstractDataType] = optType :: Nil
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  override def eval(input: InternalRow): Any = Option(child.eval(input))
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val inputObject = child.genCode(ctx)
