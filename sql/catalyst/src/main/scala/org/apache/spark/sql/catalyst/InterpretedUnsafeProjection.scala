@@ -17,7 +17,7 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, Expression, GenericInternalRow, Nondeterministic, SpecializedGetters, UnsafeArrayData, UnsafeMapData, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, Nondeterministic, SpecializedGetters, UnsafeArrayData, UnsafeMapData, UnsafeProjection, UnsafeProjectionCreator, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeArrayWriter, UnsafeRowWriter, UnsafeWriter}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.{UserDefinedType, _}
@@ -93,11 +93,13 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
 /**
  * Helper functions for creating an [[InterpretedUnsafeProjection]].
  */
-object InterpretedUnsafeProjection {
+object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
 
-  def apply(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
-    val boundExprs = exprs.toArray.map(BindReferences.bindReference(_, inputSchema))
-    new InterpretedUnsafeProjection(boundExprs)
+  /**
+   * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
+   */
+  override protected def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
+    new InterpretedUnsafeProjection(exprs.toArray)
   }
 
   /**

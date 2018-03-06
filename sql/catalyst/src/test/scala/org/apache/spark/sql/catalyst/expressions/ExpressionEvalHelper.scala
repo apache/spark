@@ -24,7 +24,7 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, InterpretedUnsafeProjection}
 import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
@@ -154,11 +154,20 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       expression: Expression,
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
+    checkEvalutionWithUnsafeProjection(expression, expected, inputRow, UnsafeProjection)
+    checkEvalutionWithUnsafeProjection(expression, expected, inputRow, InterpretedUnsafeProjection)
+  }
+
+  protected def checkEvalutionWithUnsafeProjection(
+      expression: Expression,
+      expected: Any,
+      inputRow: InternalRow,
+      factory: UnsafeProjectionCreator): Unit = {
     // SPARK-16489 Explicitly doing code generation twice so code gen will fail if
     // some expression is reusing variable names across different instances.
     // This behavior is tested in ExpressionEvalHelperSuite.
     val plan = generateProject(
-      UnsafeProjection.create(
+      factory.create(
         Alias(expression, s"Optimized($expression)1")() ::
           Alias(expression, s"Optimized($expression)2")() :: Nil),
       expression)
@@ -175,7 +184,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     } else {
       val lit = InternalRow(expected, expected)
       val expectedRow =
-        UnsafeProjection.create(Array(expression.dataType, expression.dataType)).apply(lit)
+        factory.create(Array(expression.dataType, expression.dataType)).apply(lit)
       if (unsafeRow != expectedRow) {
         fail("Incorrect evaluation in unsafe mode: " +
           s"$expression, actual: $unsafeRow, expected: $expectedRow$input")

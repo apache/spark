@@ -108,8 +108,7 @@ abstract class UnsafeProjection extends Projection {
   override def apply(row: InternalRow): UnsafeRow
 }
 
-object UnsafeProjection {
-
+trait UnsafeProjectionCreator {
   /**
    * Returns an UnsafeProjection for given StructType.
    *
@@ -127,7 +126,7 @@ object UnsafeProjection {
   }
 
   /**
-   * Returns an UnsafeProjection for given sequence of Expressions (bounded).
+   * Returns an UnsafeProjection for given sequence of bound Expressions.
    */
   def create(exprs: Seq[Expression]): UnsafeProjection = {
     val unsafeExprs = exprs.map(_ transform {
@@ -144,6 +143,18 @@ object UnsafeProjection {
    */
   def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
     create(exprs.map(BindReferences.bindReference(_, inputSchema)))
+  }
+
+  /**
+   * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
+   */
+  protected def createProjection(exprs: Seq[Expression]): UnsafeProjection
+}
+
+object UnsafeProjection extends UnsafeProjectionCreator {
+
+  override protected def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
+    GenerateUnsafeProjection.generate(exprs)
   }
 
   /**
