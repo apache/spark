@@ -53,11 +53,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   // These are only updated by readExternal() or read()
   @Nonnull
   private MemoryBlock base;
-  // While numBytes has the same value as base, length, to keep as int avoids cast from long to int
+  // While numBytes has the same value as base.size(), to keep as int avoids cast from long to int
   private int numBytes;
 
   public MemoryBlock getMemoryBlock() { return base; }
-  private long getBaseOffset() { return base.getBaseOffset(); }
+  public Object getBaseObject() { return base.getBaseObject(); }
+  public long getBaseOffset() { return base.getBaseOffset(); }
 
   private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
     2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
@@ -99,13 +100,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Creates an UTF8String from given memory block.
-   */
-  public static UTF8String fromMemoryBlock(MemoryBlock base) {
-    return new UTF8String(base);
-  }
-
-  /**
    * Creates an UTF8String from String.
    */
   public static UTF8String fromString(String str) {
@@ -125,7 +119,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     this(new ByteArrayMemoryBlock(bytes, offset, numBytes));
   }
 
-  protected UTF8String(MemoryBlock base) {
+  public UTF8String(MemoryBlock base) {
     this.base = base;
     if (base != null) {
       if ((long) Integer.MAX_VALUE < base.size()) {
@@ -146,7 +140,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * The target memory address must already been allocated, and have enough space to hold all the
    * bytes in this string.
    */
-  public void writeToMemory(byte[] target, long targetOffset) {
+  public void writeToMemory(Object target, long targetOffset) {
     base.writeTo(0, target, targetOffset, numBytes);
   }
 

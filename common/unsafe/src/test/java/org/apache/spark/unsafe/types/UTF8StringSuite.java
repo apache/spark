@@ -518,7 +518,7 @@ public class UTF8StringSuite {
     final byte[] test = "01234567".getBytes(StandardCharsets.UTF_8);
 
     for (int i = 1; i <= Platform.BYTE_ARRAY_OFFSET; ++i) {
-      UTF8String.fromMemoryBlock(ByteArrayMemoryBlock.fromArray(test)
+      new UTF8String(ByteArrayMemoryBlock.fromArray(test)
           .subBlock(-i, test.length + i)).writeTo(outputStream);
       final ByteBuffer buffer = ByteBuffer.wrap(outputStream.toByteArray(), i, test.length);
       assertEquals("01234567", StandardCharsets.UTF_8.decode(buffer).toString());
@@ -533,7 +533,7 @@ public class UTF8StringSuite {
 
     for (int i = 0; i < test.length; ++i) {
       for (int j = 0; j < test.length - i; ++j) {
-        UTF8String.fromMemoryBlock(ByteArrayMemoryBlock.fromArray(test).subBlock(i, j))
+        new UTF8String(ByteArrayMemoryBlock.fromArray(test).subBlock(i, j))
             .writeTo(outputStream);
 
         assertArrayEquals(Arrays.copyOfRange(test, i, i + j), outputStream.toByteArray());
@@ -564,7 +564,7 @@ public class UTF8StringSuite {
 
     for (final long offset : offsets) {
       try {
-        fromMemoryBlock(ByteArrayMemoryBlock.fromArray(test).subBlock(offset, test.length))
+        new UTF8String(ByteArrayMemoryBlock.fromArray(test).subBlock(offset, test.length))
             .writeTo(outputStream);
 
         throw new IllegalStateException(Long.toString(offset));
@@ -608,7 +608,7 @@ public class UTF8StringSuite {
     }
 
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    fromMemoryBlock(OnHeapMemoryBlock.fromArray(array)).writeTo(outputStream);
+    new UTF8String(OnHeapMemoryBlock.fromArray(array)).writeTo(outputStream);
     assertEquals("3千大千世界", outputStream.toString("UTF-8"));
   }
 

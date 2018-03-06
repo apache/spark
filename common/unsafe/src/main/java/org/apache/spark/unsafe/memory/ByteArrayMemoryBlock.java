@@ -17,6 +17,8 @@
 
 package org.apache.spark.unsafe.memory;
 
+import com.google.common.primitives.Ints;
+
 import org.apache.spark.unsafe.Platform;
 
 /**
@@ -35,7 +37,7 @@ public final class ByteArrayMemoryBlock extends MemoryBlock {
   }
 
   public ByteArrayMemoryBlock(long length) {
-    this(new byte[(int)length], Platform.BYTE_ARRAY_OFFSET, length);
+    this(new byte[Ints.checkedCast(length)], Platform.BYTE_ARRAY_OFFSET, length);
   }
 
   @Override

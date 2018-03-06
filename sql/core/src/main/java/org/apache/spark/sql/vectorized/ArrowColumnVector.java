@@ -381,7 +381,7 @@ public final class ArrowColumnVector extends ColumnVector {
         int size = stringResult.end - stringResult.start;
         OffHeapMemoryBlock mb = new OffHeapMemoryBlock(
           stringResult.buffer.memoryAddress() + stringResult.start, size);
-        return UTF8String.fromMemoryBlock(mb);
+        return new UTF8String(mb);
       }
     }
   }

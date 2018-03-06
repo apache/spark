@@ -17,6 +17,8 @@
 
 package org.apache.spark.unsafe.memory;
 
+import com.google.common.primitives.Ints;
+
 import org.apache.spark.unsafe.Platform;
 
 /**
@@ -35,7 +37,7 @@ public final class OnHeapMemoryBlock extends MemoryBlock {
   }
 
   public OnHeapMemoryBlock(long size) {
-    this(new long[(int)((size + 7) / 8)], Platform.LONG_ARRAY_OFFSET, size);
+    this(new long[Ints.checkedCast((size + 7) / 8)], Platform.LONG_ARRAY_OFFSET, size);
   }
 
   @Override
