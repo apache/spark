@@ -46,11 +46,15 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     InternalRow.fromSeq(values.map(CatalystTypeConverters.convertToCatalyst))
   }
 
-  protected def checkEvaluation(
-      expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
+  private def prepareEvaluation(expression: Expression): Expression = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance
     val resolver = ResolveTimeZone(new SQLConf)
-    val expr = resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
+    resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
+  }
+
+  protected def checkEvaluation(
+      expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
+    val expr = prepareEvaluation(expression)
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expr, catalystValue, inputRow)
@@ -95,41 +99,31 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
   }
 
-  protected def checkExceptionInExpression[T <: Throwable](
+  protected def checkExceptionInExpression[T <: Throwable : ClassTag](
       expression: => Expression,
       inputRow: InternalRow,
-      expectedErrMsg: String)(
-      implicit classTag: ClassTag[T]): Unit = {
-    val clazz = classTag.runtimeClass
-    val serializer = new JavaSerializer(new SparkConf()).newInstance
-    val resolver = ResolveTimeZone(new SQLConf)
-    val expr = resolver.resolveTimeZones(
-      serializer.deserialize[Expression](serializer.serialize(expression)))
+      expectedErrMsg: String): Unit = {
 
     def checkException(eval: => Unit, testMode: String): Unit = {
-      try {
-        eval
-        fail(s"Expected exception ${clazz.getSimpleName} to be thrown, " +
-          s"but no exception was thrown ($testMode)")
-      } catch {
-        case e: Throwable =>
-          if (!clazz.isAssignableFrom(e.getClass)) {
-            fail(s"Expected exception ${clazz.getSimpleName} to be thrown, " +
-              s"but ${e.getClass.getSimpleName} was thrown ($testMode)")
-          } else if (e.getMessage != expectedErrMsg) {
-            fail(s"Expected error message is `$expectedErrMsg`, " +
-              s"but `${e.getMessage}` found ($testMode)")
-          }
+      withClue(s"($testMode)") {
+        val errMsg = intercept[T] {
+          eval
+        }.getMessage
+        if (errMsg != expectedErrMsg) {
+          fail(s"Expected error message is `$expectedErrMsg`, but `$errMsg` found")
+        }
       }
     }
-    checkException(evaluateWithoutCodegen(expression, inputRow), "non-codegen mode")
-    checkException(evaluateWithGeneratedMutableProjection(expression, inputRow), "codegen mode")
+    val expr = prepareEvaluation(expression)
+    checkException(evaluateWithoutCodegen(expr, inputRow), "non-codegen mode")
+    checkException(evaluateWithGeneratedMutableProjection(expr, inputRow), "codegen mode")
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
-      checkException(evaluateWithUnsafeProjection(expression, inputRow), "unsafe mode")
+      checkException(evaluateWithUnsafeProjection(expr, inputRow), "unsafe mode")
     }
   }
 
-  protected def evaluate(expression: Expression, inputRow: InternalRow = EmptyRow): Any = {
+  protected def evaluateWithoutCodegen(
+      expression: Expression, inputRow: InternalRow = EmptyRow): Any = {
     expression.foreach {
       case n: Nondeterministic => n.initialize(0)
       case _ =>
@@ -167,12 +161,6 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
         s"actual: $actual, " +
         s"expected: $expected$input")
     }
-  }
-
-  private def evaluateWithoutCodegen(
-      expression: Expression,
-      inputRow: InternalRow = EmptyRow): Any = {
-    evaluate(expression, inputRow)
   }
 
   protected def checkEvaluationWithGeneratedMutableProjection(
@@ -345,7 +333,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
 
   private def cmpInterpretWithCodegen(inputRow: InternalRow, expr: Expression): Unit = {
     val interpret = try {
-      evaluate(expr, inputRow)
+      evaluateWithoutCodegen(expr, inputRow)
     } catch {
       case e: Exception => fail(s"Exception evaluating $expr", e)
     }
