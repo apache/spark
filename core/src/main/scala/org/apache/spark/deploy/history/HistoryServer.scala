@@ -148,14 +148,14 @@ class HistoryServer(
       appId: String,
       attemptId: Option[String],
       ui: SparkUI,
-      completed: Boolean) {
+      completed: Boolean) = this.synchronized {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     ui.getHandlers.foreach(attachHandler)
     addFilters(ui.getHandlers, conf)
   }
 
   /** Detach a reconstructed UI from this server. Only valid after bind(). */
-  override def detachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI): Unit = {
+  override def detachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI): Unit = this.synchronized {
     assert(serverInfo.isDefined, "HistoryServer must be bound before detaching SparkUIs")
     ui.getHandlers.foreach(detachHandler)
     provider.onUIDetached(appId, attemptId, ui)
