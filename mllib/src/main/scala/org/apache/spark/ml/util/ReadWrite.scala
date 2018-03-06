@@ -363,28 +363,41 @@ private[ml] object DefaultParamsReader {
       metadata: JValue,
       metadataJson: String) {
 
-    /**
-     * Get the JSON value of the [[org.apache.spark.ml.param.Param]] of the given name.
-     * This can be useful for getting a Param value before an instance of `Params`
-     * is available.
-     *
-     * @param isDefaultParam Whether the given param name is a default param. Default is false.
-     */
-    def getParamValue(paramName: String, isDefaultParam: Boolean = false): JValue = {
-      implicit val format = DefaultFormats
-      val paramsToLookup = if (isDefaultParam) defaultParams else params
-      paramsToLookup match {
-        case JObject(pairs) =>
-          val values = pairs.filter { case (pName, jsonValue) =>
-            pName == paramName
-          }.map(_._2)
-          assert(values.length == 1, s"Expected one instance of Param '$paramName' but found" +
-            s" ${values.length} in JSON Params: " + pairs.map(_.toString).mkString(", "))
-          values.head
+
+    private def getValueFromParams(params: JValue): Seq[(String, JValue)] = {
+      params match {
+        case JObject(pairs) => pairs
         case _ =>
           throw new IllegalArgumentException(
             s"Cannot recognize JSON metadata: $metadataJson.")
       }
+    }
+
+    /**
+     * Get the JSON value of the [[org.apache.spark.ml.param.Param]] of the given name.
+     * This can be useful for getting a Param value before an instance of `Params`
+     * is available. This will look up `params` first, if not existing then looking up
+     * `defaultParams`.
+     */
+    def getParamValue(paramName: String): JValue = {
+      implicit val format = DefaultFormats
+
+      // Looking up for `params` first.
+      var pairs = getValueFromParams(params)
+      var foundPairs = pairs.filter { case (pName, jsonValue) =>
+        pName == paramName
+      }
+      if (foundPairs.length == 0) {
+        // Looking up for `defaultParams` then.
+        pairs = getValueFromParams(defaultParams)
+        foundPairs = pairs.filter { case (pName, jsonValue) =>
+          pName == paramName
+        }
+      }
+      assert(foundPairs.length == 1, s"Expected one instance of Param '$paramName' but found" +
+        s" ${foundPairs.length} in JSON Params: " + pairs.map(_.toString).mkString(", "))
+
+      foundPairs.map(_._2).head
     }
 
     /**
