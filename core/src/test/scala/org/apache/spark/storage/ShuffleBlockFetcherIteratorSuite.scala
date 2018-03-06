@@ -352,7 +352,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     intercept[FetchFailedException] { iterator.next() }
   }
 
-  test("big corrupt blocks will not be retiried") {
+  test("big blocks are not checked for corruption") {
     val corruptStream = mock(classOf[InputStream])
     when(corruptStream.read(any(), any(), any())).thenThrow(new IOException("corrupt"))
     val corruptBuffer = mock(classOf[ManagedBuffer])
