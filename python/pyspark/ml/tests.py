@@ -640,6 +640,23 @@ class FeatureTests(SparkSessionTestCase):
             feature, expected = r
             self.assertEqual(feature, expected)
 
+    def test_count_vectorizer_from_vocab(self):
+        model = CountVectorizerModel.from_vocabulary(["a", "b", "c"], inputCol="words",
+                                                     outputCol="features", minTF=2)
+        self.assertEqual(model.vocabulary, ["a", "b", "c"])
+        self.assertEqual(model.getMinTF(), 2)
+
+        dataset = self.spark.createDataFrame([
+            (0, "a a a b b c".split(' '), SparseVector(3, {0: 3.0, 1: 2.0}),),
+            (1, "a a".split(' '), SparseVector(3, {0: 2.0}),),
+            (2, "a b".split(' '), SparseVector(3, {}),)], ["id", "words", "expected"])
+
+        transformed_list = model.transform(dataset).select("features", "expected").collect()
+
+        for r in transformed_list:
+            feature, expected = r
+            self.assertEqual(feature, expected)
+
     def test_rformula_force_index_label(self):
         df = self.spark.createDataFrame([
             (1.0, 1.0, "a"),
