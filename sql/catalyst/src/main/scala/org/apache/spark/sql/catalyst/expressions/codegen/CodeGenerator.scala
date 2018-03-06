@@ -1297,6 +1297,12 @@ object CodeGenerator extends Logging {
     codeSizes.max
   }
 
+  lazy val maxCacheSize: Int = if (SparkEnv.get != null)  {
+    SparkEnv.get.conf.getInt(
+      SQLConf.CODEGEN_COMPILE_MAX_CACHE_SIZE.key,
+      SQLConf.CODEGEN_COMPILE_MAX_CACHE_SIZE.defaultValue.get)
+  } else 100
+
   /**
    * A cache of generated classes.
    *
@@ -1306,8 +1312,8 @@ object CodeGenerator extends Logging {
    * automatically, in order to constrain its memory footprint.  Note that this cache does not use
    * weak keys/values and thus does not respond to memory pressure.
    */
-  private val cache = CacheBuilder.newBuilder()
-    .maximumSize(100)
+  private lazy val cache = CacheBuilder.newBuilder()
+    .maximumSize(maxCacheSize)
     .build(
       new CacheLoader[CodeAndComment, (GeneratedClass, Int)]() {
         override def load(code: CodeAndComment): (GeneratedClass, Int) = {
