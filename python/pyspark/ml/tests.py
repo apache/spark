@@ -1997,8 +1997,8 @@ class DefaultValuesTests(PySparkTestCase):
                    pyspark.ml.regression]
         for module in modules:
             for name, cls in inspect.getmembers(module, inspect.isclass):
-                if not name.endswith('Model') and issubclass(cls, JavaParams)\
-                        and not inspect.isabstract(cls):
+                if not name.endswith('Model') and not name.endswith('Params')\
+                        and issubclass(cls, JavaParams) and not inspect.isabstract(cls):
                     # NOTE: disable check_params_exist until there is parity with Scala API
                     ParamTests.check_params(self, cls(), check_params_exist=False)
 
