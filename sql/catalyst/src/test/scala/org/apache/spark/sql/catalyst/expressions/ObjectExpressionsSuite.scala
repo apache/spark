@@ -26,6 +26,8 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types._
 
+import scala.reflect.ClassTag
+
 
 class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -121,6 +123,19 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val encodeUsingSerializer = EncodeUsingSerializer(inputObject, useKryo)
       checkEvaluation(encodeUsingSerializer, expected, InternalRow.fromSeq(Seq(1)))
       checkEvaluation(encodeUsingSerializer, null, InternalRow.fromSeq(Seq(null)))
+    }
+  }
+
+  test("SPARK-23592: DecodeUsingSerializer should support interpreted execution") {
+    val cls = classOf[java.lang.Integer]
+    val inputObject = BoundReference(0, ObjectType(classOf[Array[Byte]]), nullable = true)
+    val conf = new SparkConf()
+    Seq(true, false).foreach { useKryo =>
+      val serializer = if (useKryo) new KryoSerializer(conf) else new JavaSerializer(conf)
+      val input = serializer.newInstance().serialize(new Integer(1)).array()
+      val decodeUsingSerializer = DecodeUsingSerializer(inputObject, ClassTag(cls), useKryo)
+      checkEvaluation(decodeUsingSerializer, new Integer(1), InternalRow.fromSeq(Seq(input)))
+      checkEvaluation(decodeUsingSerializer, null, InternalRow.fromSeq(Seq(null)))
     }
   }
 }
