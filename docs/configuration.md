@@ -878,12 +878,12 @@ Apart from these, the following properties are also available, and may be useful
     javax servlet Filter</a>.
 
     <br />Filter parameters can also be specified in the configuration, by setting config entries
-    of the form <code>spark.&lt;class name of filter&gt;.param.&lt;paramname&gt;=&lt;value&gt;</code>
+    of the form <code>spark.&lt;class name of filter&gt;.param.&lt;param name&gt;=&lt;value&gt;</code>
 
     <br />For example:
-    <code>spark.ui.filters=com.test.filter1</code> <br />
-    <code>spark.com.test.filter1.param.name1=foo</code>
-    <code>spark.com.test.filter1.param.name2=bar</code>
+    <br /><code>spark.ui.filters=com.test.filter1</code>
+    <br /><code>spark.com.test.filter1.param.name1=foo</code>
+    <br /><code>spark.com.test.filter1.param.name2=bar</code>
   </td>
 </tr>
 </table>
