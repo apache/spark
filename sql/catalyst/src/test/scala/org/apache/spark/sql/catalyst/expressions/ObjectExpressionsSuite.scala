@@ -18,11 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
-import org.apache.spark.sql.types.{IntegerType, ObjectType}
+import org.apache.spark.sql.types._
 
 
 class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -83,5 +84,11 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq((1, Some(1)), (null, None)).foreach { case (input, expected) =>
       checkEvaluation(wrapObject, expected, InternalRow.fromSeq(Seq(input)))
     }
+  }
+
+  test("SPARK-23590: CreateExternalRow should support interpreted execution") {
+    val schema = new StructType().add("a", IntegerType).add("b", StringType)
+    val createExternalRow = CreateExternalRow(Seq(Literal(1), Literal("x")), schema)
+    checkEvaluation(createExternalRow, Row.fromSeq(Seq(1, "x")), InternalRow.fromSeq(Seq()))
   }
 }

@@ -1111,8 +1111,10 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
 
   override def nullable: Boolean = false
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  override def eval(input: InternalRow): Any = {
+    val values = children.map(_.eval(input)).toArray
+    new GenericRowWithSchema(values, schema)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericRowWithSchema].getName
