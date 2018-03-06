@@ -292,6 +292,9 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
+    if (outputPlan.collect { case e: ShuffleExchangeExec => true }.isEmpty) {
+      fail(s"Exchange should have been added:\n$outputPlan")
+    }
   }
 
   test("EnsureRequirements with compatible child partitionings that do not satisfy distribution") {
@@ -359,9 +362,7 @@ class PlannerSuite extends SharedSQLContext {
   }
 
   test("EnsureRequirements eliminates Exchange if child has same partitioning") {
-    val distribution = ClusteredDistribution(Literal(1) :: Nil)
     val partitioning = HashPartitioning(Literal(1) :: Nil, 5)
-    assert(partitioning.satisfies(distribution))
 
     val inputPlan = ShuffleExchangeExec(
       partitioning,
@@ -369,23 +370,22 @@ class PlannerSuite extends SharedSQLContext {
       None)
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 2) {
+    if (outputPlan.collect { case e: ShuffleExchangeExec => true }.nonEmpty) {
       fail(s"Topmost Exchange should have been eliminated:\n$outputPlan")
     }
   }
 
   test("EnsureRequirements does not eliminate Exchange with different partitioning") {
-    val distribution = ClusteredDistribution(Literal(1) :: Nil)
+    val childPartitioning = HashPartitioning(Literal(1) :: Nil, 5)
     val partitioning = HashPartitioning(Literal(2) :: Nil, 5)
-    assert(!partitioning.satisfies(distribution))
 
     val inputPlan = ShuffleExchangeExec(
       partitioning,
-      DummySparkPlan(outputPartitioning = partitioning),
+      DummySparkPlan(outputPartitioning = childPartitioning),
       None)
     val outputPlan = EnsureRequirements(spark.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 1) {
+    if (outputPlan.collect { case e: ShuffleExchangeExec => true }.isEmpty) {
       fail(s"Topmost Exchange should not have been eliminated:\n$outputPlan")
     }
   }
