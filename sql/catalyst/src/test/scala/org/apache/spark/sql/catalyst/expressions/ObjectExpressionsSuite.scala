@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types.{IntegerType, ObjectType}
 
@@ -65,5 +65,23 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         new GenericArrayData(Array(300, 400)))))
     checkEvalutionWithUnsafeProjection(
       mapEncoder.serializer.head, mapExpected, mapInputRow)
+  }
+
+  test("SPARK-23585: UnwrapOption should support interpreted execution") {
+    val cls = classOf[Option[Int]]
+    val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
+    val unwrapObject = UnwrapOption(IntegerType, inputObject)
+    Seq((Some(1), 1), (None, null), (null, null)).foreach { case (input, expected) =>
+      checkEvaluation(unwrapObject, expected, InternalRow.fromSeq(Seq(input)))
+    }
+  }
+
+  test("SPARK-23586: WrapOption should support interpreted execution") {
+    val cls = ObjectType(classOf[java.lang.Integer])
+    val inputObject = BoundReference(0, cls, nullable = true)
+    val wrapObject = WrapOption(inputObject, cls)
+    Seq((1, Some(1)), (null, None)).foreach { case (input, expected) =>
+      checkEvaluation(wrapObject, expected, InternalRow.fromSeq(Seq(input)))
+    }
   }
 }

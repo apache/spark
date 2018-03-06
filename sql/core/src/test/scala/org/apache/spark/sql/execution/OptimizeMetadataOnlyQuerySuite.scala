@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.execution
 
+import java.io.File
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_METADATA_ONLY
 import org.apache.spark.sql.test.SharedSQLContext
 
 class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
@@ -123,6 +126,25 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
       sql("CREATE TABLE t_1000 (a INT, p INT) USING PARQUET PARTITIONED BY (p)")
       (1 to 1000).foreach(p => sql(s"ALTER TABLE t_1000 ADD PARTITION (p=$p)"))
       sql("SELECT COUNT(DISTINCT p) FROM t_1000").collect()
+    }
+  }
+
+  test("Incorrect result caused by the rule OptimizeMetadataOnlyQuery") {
+    withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true") {
+      withTempPath { path =>
+        val tablePath = new File(s"${path.getCanonicalPath}/cOl3=c/cOl1=a/cOl5=e")
+        Seq(("a", "b", "c", "d", "e")).toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")
+          .write.json(tablePath.getCanonicalPath)
+
+        val df = spark.read.json(path.getCanonicalPath).select("CoL1", "CoL5", "CoL3").distinct()
+        checkAnswer(df, Row("a", "e", "c"))
+
+        val localRelation = df.queryExecution.optimizedPlan.collectFirst {
+          case l: LocalRelation => l
+        }
+        assert(localRelation.nonEmpty, "expect to see a LocalRelation")
+        assert(localRelation.get.output.map(_.name) == Seq("cOl3", "cOl1", "cOl5"))
+      }
     }
   }
 }

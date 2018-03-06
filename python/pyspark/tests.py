@@ -2293,6 +2293,17 @@ class KeywordOnlyTests(unittest.TestCase):
         self.assertEqual(b._x, 2)
 
 
+class UtilTests(PySparkTestCase):
+    def test_py4j_exception_message(self):
+        from pyspark.util import _exception_message
+
+        with self.assertRaises(Py4JJavaError) as context:
+            # This attempts java.lang.String(null) which throws an NPE.
+            self.sc._jvm.java.lang.String(None)
+
+        self.assertTrue('NullPointerException' in _exception_message(context.exception))
+
+
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
 

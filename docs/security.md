@@ -45,10 +45,6 @@ component-specific configuration namespaces used to override the default setting
     <th>Component</th>
   </tr>
   <tr>
-    <td><code>spark.ssl.fs</code></td>
-    <td>File download client (used to download jars and files from HTTPS-enabled servers).</td>
-  </tr>
-  <tr>
     <td><code>spark.ssl.ui</code></td>
     <td>Spark application Web UI</td>
   </tr>

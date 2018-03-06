@@ -42,10 +42,17 @@ def _create_udf(f, returnType, evalType):
                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
 
         import inspect
+        import sys
         from pyspark.sql.utils import require_minimum_pyarrow_version
 
         require_minimum_pyarrow_version()
-        argspec = inspect.getargspec(f)
+
+        if sys.version_info[0] < 3:
+            # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
+            # See SPARK-23569.
+            argspec = inspect.getargspec(f)
+        else:
+            argspec = inspect.getfullargspec(f)
 
         if evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF and len(argspec.args) == 0 and \
                 argspec.varargs is None:
