@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.SimpleAnalyzer
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types._
@@ -148,5 +149,21 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(AtLeastNNonNulls(4, nanOnly), false, EmptyRow)
     checkEvaluation(AtLeastNNonNulls(3, nullOnly), true, EmptyRow)
     checkEvaluation(AtLeastNNonNulls(4, nullOnly), false, EmptyRow)
+  }
+
+  test("Coalesce should not throw 64kb exception") {
+    val inputs = (1 to 2500).map(x => Literal(s"x_$x"))
+    checkEvaluation(Coalesce(inputs), "x_1")
+  }
+
+  test("SPARK-22705: Coalesce should use less global variables") {
+    val ctx = new CodegenContext()
+    Coalesce(Seq(Literal("a"), Literal("b"))).genCode(ctx)
+    assert(ctx.inlinedMutableStates.size == 1)
+  }
+
+  test("AtLeastNNonNulls should not throw 64kb exception") {
+    val inputs = (1 to 4000).map(x => Literal(s"x_$x"))
+    checkEvaluation(AtLeastNNonNulls(1, inputs), true)
   }
 }

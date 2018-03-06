@@ -17,10 +17,14 @@
 
 package org.apache.spark
 
-import org.scalatest.concurrent.TimeLimits._
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.time.{Millis, Span}
 
-class UnpersistSuite extends SparkFunSuite with LocalSparkContext {
+class UnpersistSuite extends SparkFunSuite with LocalSparkContext with TimeLimits {
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val defaultSignaler: Signaler = ThreadSignaler
+
   test("unpersist RDD") {
     sc = new SparkContext("local", "test")
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()

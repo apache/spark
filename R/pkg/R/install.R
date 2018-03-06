@@ -152,6 +152,11 @@ install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
                      })
   if (!tarExists || overwrite || !success) {
     unlink(packageLocalPath)
+    if (success) {
+      # if tar file was not there before (or it was, but we are told to overwrite it),
+      # and untar is successful - set a flag that we have downloaded (and untar) Spark package.
+      assign(".sparkDownloaded", TRUE, envir = .sparkREnv)
+    }
   }
   if (!success) stop("Extract archive failed.")
   message("DONE.")
@@ -266,6 +271,7 @@ hadoopVersionName <- function(hadoopVersion) {
 
 # The implementation refers to appdirs package: https://pypi.python.org/pypi/appdirs and
 # adapt to Spark context
+# see also sparkCacheRelPathLength()
 sparkCachePath <- function() {
   if (is_windows()) {
     winAppPath <- Sys.getenv("LOCALAPPDATA", unset = NA)
@@ -282,7 +288,7 @@ sparkCachePath <- function() {
     }
   } else if (.Platform$OS.type == "unix") {
     if (Sys.info()["sysname"] == "Darwin") {
-      path <- file.path(Sys.getenv("HOME"), "Library/Caches", "spark")
+      path <- file.path(Sys.getenv("HOME"), "Library", "Caches", "spark")
     } else {
       path <- file.path(
         Sys.getenv("XDG_CACHE_HOME", file.path(Sys.getenv("HOME"), ".cache")), "spark")
@@ -293,6 +299,16 @@ sparkCachePath <- function() {
   normalizePath(path, mustWork = FALSE)
 }
 
+# Length of the Spark cache specific relative path segments for each platform
+# eg. "Apache\Spark\Cache" is 3 in Windows, or "spark" is 1 in unix
+# Must match sparkCachePath() exactly.
+sparkCacheRelPathLength <- function() {
+  if (is_windows()) {
+    3
+  } else {
+    1
+  }
+}
 
 installInstruction <- function(mode) {
   if (mode == "remote") {
@@ -308,5 +324,24 @@ installInstruction <- function(mode) {
            "contact the administrators of the cluster.")
   } else {
     stop(paste0("No instruction found for ", mode, " mode."))
+  }
+}
+
+uninstallDownloadedSpark <- function() {
+  # clean up if Spark was downloaded
+  sparkDownloaded <- getOne(".sparkDownloaded",
+                            envir = .sparkREnv,
+                            inherits = TRUE,
+                            ifnotfound = FALSE)
+  sparkDownloadedDir <- Sys.getenv("SPARK_HOME")
+  if (sparkDownloaded && nchar(sparkDownloadedDir) > 0) {
+    unlink(sparkDownloadedDir, recursive = TRUE, force = TRUE)
+
+    dirs <- traverseParentDirs(sparkCachePath(), sparkCacheRelPathLength())
+    lapply(dirs, function(d) {
+      if (length(list.files(d, all.files = TRUE, include.dirs = TRUE, no.. = TRUE)) == 0) {
+        unlink(d, recursive = TRUE, force = TRUE)
+      }
+    })
   }
 }

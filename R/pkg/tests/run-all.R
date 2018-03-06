@@ -27,7 +27,10 @@ if (.Platform$OS.type == "windows") {
 
 # Setup global test environment
 # Install Spark first to set SPARK_HOME
-install.spark()
+
+# NOTE(shivaram): We set overwrite to handle any old tar.gz files or directories left behind on
+# CRAN machines. For Jenkins we should already have SPARK_HOME set.
+install.spark(overwrite = TRUE)
 
 sparkRDir <- file.path(Sys.getenv("SPARK_HOME"), "R")
 sparkRWhitelistSQLDirs <- c("spark-warehouse", "metastore_db")
@@ -46,7 +49,7 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   tmpDir <- tempdir()
   tmpArg <- paste0("-Djava.io.tmpdir=", tmpDir)
   sparkRTestConfig <- list(spark.driver.extraJavaOptions = tmpArg,
-                            spark.executor.extraJavaOptions = tmpArg)
+                           spark.executor.extraJavaOptions = tmpArg)
 }
 
 test_package("SparkR")
@@ -60,3 +63,5 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
                        NULL,
                        "summary")
 }
+
+SparkR:::uninstallDownloadedSpark()

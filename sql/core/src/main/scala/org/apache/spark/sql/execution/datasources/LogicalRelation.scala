@@ -41,7 +41,7 @@ case class LogicalRelation(
 
   override def computeStats(): Statistics = {
     catalogTable
-      .flatMap(_.stats.map(_.toPlanStats(output)))
+      .flatMap(_.stats.map(_.toPlanStats(output, conf.cboEnabled)))
       .getOrElse(Statistics(sizeInBytes = relation.sizeInBytes))
   }
 

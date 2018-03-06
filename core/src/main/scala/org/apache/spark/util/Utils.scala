@@ -50,6 +50,7 @@ import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
@@ -59,8 +60,10 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+import org.apache.spark.status.api.v1.ThreadStackTrace
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
 private[spark] case class CallSite(shortForm: String, longForm: String)
@@ -827,7 +830,18 @@ private[spark] object Utils extends Logging {
   }
 
   private def getOrCreateLocalRootDirsImpl(conf: SparkConf): Array[String] = {
-    getConfiguredLocalDirs(conf).flatMap { root =>
+    val configuredLocalDirs = getConfiguredLocalDirs(conf)
+    val uris = configuredLocalDirs.filter { root =>
+      // Here, we guess if the given value is a URI at its best - check if scheme is set.
+      Try(new URI(root).getScheme != null).getOrElse(false)
+    }
+    if (uris.nonEmpty) {
+      logWarning(
+        "The configured local directories are not expected to be URIs; however, got suspicious " +
+        s"values [${uris.mkString(", ")}]. Please check your configured local directories.")
+    }
+
+    configuredLocalDirs.flatMap { root =>
       try {
         val rootDir = new File(root)
         if (rootDir.exists || rootDir.mkdirs()) {
@@ -2155,7 +2169,22 @@ private[spark] object Utils extends Logging {
     // We need to filter out null values here because dumpAllThreads() may return null array
     // elements for threads that are dead / don't exist.
     val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
-    threadInfos.sortBy(_.getThreadId).map(threadInfoToThreadStackTrace)
+    threadInfos.sortWith { case (threadTrace1, threadTrace2) =>
+        val v1 = if (threadTrace1.getThreadName.contains("Executor task launch")) 1 else 0
+        val v2 = if (threadTrace2.getThreadName.contains("Executor task launch")) 1 else 0
+        if (v1 == v2) {
+          val name1 = threadTrace1.getThreadName().toLowerCase(Locale.ROOT)
+          val name2 = threadTrace2.getThreadName().toLowerCase(Locale.ROOT)
+          val nameCmpRes = name1.compareTo(name2)
+          if (nameCmpRes == 0) {
+            threadTrace1.getThreadId < threadTrace2.getThreadId
+          } else {
+            nameCmpRes < 0
+          }
+        } else {
+          v1 > v2
+        }
+    }.map(threadInfoToThreadStackTrace)
   }
 
   def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {
@@ -2405,8 +2434,8 @@ private[spark] object Utils extends Logging {
    */
   def getSparkOrYarnConfig(conf: SparkConf, key: String, default: String): String = {
     val sparkValue = conf.get(key, default)
-    if (SparkHadoopUtil.get.isYarnMode) {
-      SparkHadoopUtil.get.newConfiguration(conf).get(key, sparkValue)
+    if (conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn") {
+      new YarnConfiguration(SparkHadoopUtil.get.newConfiguration(conf)).get(key, sparkValue)
     } else {
       sparkValue
     }
@@ -2638,14 +2667,28 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
+   * its value is replaced with a dummy text.
+   */
+  def redact(regex: Option[Regex], kvs: Seq[(String, String)]): Seq[(String, String)] = {
+    regex match {
+      case None => kvs
+      case Some(r) => redact(r, kvs)
+    }
+  }
+
+  /**
    * Redact the sensitive information in the given string.
    */
-  def redact(conf: SparkConf, text: String): String = {
-    if (text == null || text.isEmpty || conf == null || !conf.contains(STRING_REDACTION_PATTERN)) {
-      text
-    } else {
-      val regex = conf.get(STRING_REDACTION_PATTERN).get
-      regex.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+  def redact(regex: Option[Regex], text: String): String = {
+    regex match {
+      case None => text
+      case Some(r) =>
+        if (text == null || text.isEmpty) {
+          text
+        } else {
+          r.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+        }
     }
   }
 
@@ -2742,6 +2785,42 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * Check the validity of the given Kubernetes master URL and return the resolved URL. Prefix
+   * "k8s://" is appended to the resolved URL as the prefix is used by KubernetesClusterManager
+   * in canCreate to determine if the KubernetesClusterManager should be used.
+   */
+  def checkAndGetK8sMasterUrl(rawMasterURL: String): String = {
+    require(rawMasterURL.startsWith("k8s://"),
+      "Kubernetes master URL must start with k8s://.")
+    val masterWithoutK8sPrefix = rawMasterURL.substring("k8s://".length)
+
+    // To handle master URLs, e.g., k8s://host:port.
+    if (!masterWithoutK8sPrefix.contains("://")) {
+      val resolvedURL = s"https://$masterWithoutK8sPrefix"
+      logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
+        s"URL is $resolvedURL.")
+      return s"k8s://$resolvedURL"
+    }
+
+    val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
+    val resolvedURL = masterScheme.toLowerCase match {
+      case "https" =>
+        masterWithoutK8sPrefix
+      case "http" =>
+        logWarning("Kubernetes master URL uses HTTP instead of HTTPS.")
+        masterWithoutK8sPrefix
+      case null =>
+        val resolvedURL = s"https://$masterWithoutK8sPrefix"
+        logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
+          s"URL is $resolvedURL.")
+        resolvedURL
+      case _ =>
+        throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme)
+    }
+
+    s"k8s://$resolvedURL"
+  }
 }
 
 private[util] object CallerContext extends Logging {

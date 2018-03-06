@@ -17,22 +17,19 @@
 
 package org.apache.spark.sql.sources.v2.writer;
 
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
 
 /**
- * A mix-in interface for {@link DataSourceV2Writer}. Data source writers can implement this
+ * A mix-in interface for {@link DataSourceWriter}. Data source writers can implement this
  * interface to write {@link InternalRow} directly and avoid the row conversion at Spark side.
  * This is an experimental and unstable interface, as {@link InternalRow} is not public and may get
  * changed in the future Spark versions.
  */
 
-@InterfaceStability.Evolving
-@Experimental
 @InterfaceStability.Unstable
-public interface SupportsWriteInternalRow extends DataSourceV2Writer {
+public interface SupportsWriteInternalRow extends DataSourceWriter {
 
   @Override
   default DataWriterFactory<Row> createWriterFactory() {

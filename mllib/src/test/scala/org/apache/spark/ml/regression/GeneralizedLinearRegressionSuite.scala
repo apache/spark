@@ -25,7 +25,7 @@ import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.feature.{LabeledPoint, RFormula}
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.random._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -33,8 +33,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.FloatType
 
-class GeneralizedLinearRegressionSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -279,8 +278,8 @@ class GeneralizedLinearRegressionSuite
           s"$link link and fitIntercept = $fitIntercept.")
 
         val familyLink = FamilyAndLink(trainer)
-        model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
-          .foreach {
+        testTransformer[(Double, Vector)](dataset, model,
+          "features", "prediction", "linkPrediction") {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
               val eta = BLAS.dot(features, model.coefficients) + model.intercept
               val prediction2 = familyLink.fitted(eta)
@@ -289,7 +288,7 @@ class GeneralizedLinearRegressionSuite
                 s"gaussian family, $link link and fitIntercept = $fitIntercept.")
               assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
                 s"GLM with gaussian family, $link link and fitIntercept = $fitIntercept.")
-          }
+        }
 
         idx += 1
       }
@@ -395,8 +394,8 @@ class GeneralizedLinearRegressionSuite
           s"$link link and fitIntercept = $fitIntercept.")
 
         val familyLink = FamilyAndLink(trainer)
-        model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
-          .foreach {
+        testTransformer[(Double, Vector)](dataset, model,
+          "features", "prediction", "linkPrediction") {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
               val eta = BLAS.dot(features, model.coefficients) + model.intercept
               val prediction2 = familyLink.fitted(eta)
@@ -405,7 +404,7 @@ class GeneralizedLinearRegressionSuite
                 s"binomial family, $link link and fitIntercept = $fitIntercept.")
               assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
                 s"GLM with binomial family, $link link and fitIntercept = $fitIntercept.")
-          }
+        }
 
         idx += 1
       }
@@ -467,8 +466,8 @@ class GeneralizedLinearRegressionSuite
           s"$link link and fitIntercept = $fitIntercept.")
 
         val familyLink = FamilyAndLink(trainer)
-        model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
-          .foreach {
+        testTransformer[(Double, Vector)](dataset, model,
+          "features", "prediction", "linkPrediction") {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
               val eta = BLAS.dot(features, model.coefficients) + model.intercept
               val prediction2 = familyLink.fitted(eta)
@@ -477,7 +476,7 @@ class GeneralizedLinearRegressionSuite
                 s"poisson family, $link link and fitIntercept = $fitIntercept.")
               assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
                 s"GLM with poisson family, $link link and fitIntercept = $fitIntercept.")
-          }
+        }
 
         idx += 1
       }
@@ -573,8 +572,8 @@ class GeneralizedLinearRegressionSuite
           s"$link link and fitIntercept = $fitIntercept.")
 
         val familyLink = FamilyAndLink(trainer)
-        model.transform(dataset).select("features", "prediction", "linkPrediction").collect()
-          .foreach {
+        testTransformer[(Double, Vector)](dataset, model,
+          "features", "prediction", "linkPrediction") {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
               val eta = BLAS.dot(features, model.coefficients) + model.intercept
               val prediction2 = familyLink.fitted(eta)
@@ -583,7 +582,7 @@ class GeneralizedLinearRegressionSuite
                 s"gamma family, $link link and fitIntercept = $fitIntercept.")
               assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
                 s"GLM with gamma family, $link link and fitIntercept = $fitIntercept.")
-          }
+        }
 
         idx += 1
       }
@@ -660,8 +659,8 @@ class GeneralizedLinearRegressionSuite
         s"and variancePower = $variancePower.")
 
       val familyLink = FamilyAndLink(trainer)
-      model.transform(datasetTweedie).select("features", "prediction", "linkPrediction").collect()
-        .foreach {
+      testTransformer[(Double, Double, Vector)](datasetTweedie, model,
+        "features", "prediction", "linkPrediction") {
           case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
             val eta = BLAS.dot(features, model.coefficients) + model.intercept
             val prediction2 = familyLink.fitted(eta)
@@ -672,7 +671,8 @@ class GeneralizedLinearRegressionSuite
             assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
               s"GLM with tweedie family, linkPower = $linkPower, fitIntercept = $fitIntercept " +
               s"and variancePower = $variancePower.")
-        }
+      }
+
       idx += 1
     }
   }
@@ -735,8 +735,8 @@ class GeneralizedLinearRegressionSuite
           s"fitIntercept = $fitIntercept and variancePower = $variancePower.")
 
         val familyLink = FamilyAndLink(trainer)
-        model.transform(datasetTweedie).select("features", "prediction", "linkPrediction").collect()
-          .foreach {
+        testTransformer[(Double, Double, Vector)](datasetTweedie, model,
+          "features", "prediction", "linkPrediction") {
             case Row(features: DenseVector, prediction1: Double, linkPrediction1: Double) =>
               val eta = BLAS.dot(features, model.coefficients) + model.intercept
               val prediction2 = familyLink.fitted(eta)
@@ -747,7 +747,8 @@ class GeneralizedLinearRegressionSuite
               assert(linkPrediction1 ~= linkPrediction2 relTol 1E-5, "Link Prediction mismatch: " +
                 s"GLM with tweedie family, fitIntercept = $fitIntercept " +
                 s"and variancePower = $variancePower.")
-          }
+        }
+
         idx += 1
       }
     }
@@ -872,8 +873,8 @@ class GeneralizedLinearRegressionSuite
           s" and fitIntercept = $fitIntercept.")
 
         val familyLink = FamilyAndLink(trainer)
-        model.transform(dataset).select("features", "offset", "prediction", "linkPrediction")
-          .collect().foreach {
+        testTransformer[(Double, Double, Double, Vector)](dataset, model,
+          "features", "offset", "prediction", "linkPrediction") {
           case Row(features: DenseVector, offset: Double, prediction1: Double,
           linkPrediction1: Double) =>
             val eta = BLAS.dot(features, model.coefficients) + model.intercept + offset

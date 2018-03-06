@@ -44,11 +44,12 @@ class HiveSparkSubmitSuite
   with BeforeAndAfterEach
   with ResetSystemProperties {
 
+  override protected val enableAutoThreadAudit = false
+
   // TODO: rewrite these or mark them as slow tests to be run sparingly
 
   override def beforeEach() {
     super.beforeEach()
-    System.setProperty("spark.testing", "true")
   }
 
   test("temporary Hive UDF: define a UDF and use it") {

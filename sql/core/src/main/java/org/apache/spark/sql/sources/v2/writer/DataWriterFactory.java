@@ -22,7 +22,7 @@ import java.io.Serializable;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A factory of {@link DataWriter} returned by {@link DataSourceV2Writer#createWriterFactory()},
+ * A factory of {@link DataWriter} returned by {@link DataSourceWriter#createWriterFactory()},
  * which is responsible for creating and initializing the actual data writer at executor side.
  *
  * Note that, the writer factory will be serialized and sent to executors, then the data writer
@@ -34,6 +34,9 @@ public interface DataWriterFactory<T> extends Serializable {
 
   /**
    * Returns a data writer to do the actual writing work.
+   *
+   * If this method fails (by throwing an exception), the action would fail and no Spark job was
+   * submitted.
    *
    * @param partitionId A unique id of the RDD partition that the returned writer will process.
    *                    Usually Spark processes many RDD partitions at the same time,

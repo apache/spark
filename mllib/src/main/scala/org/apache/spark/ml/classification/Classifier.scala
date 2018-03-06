@@ -109,7 +109,7 @@ abstract class Classifier[
       case None =>
         // Get number of classes from dataset itself.
         val maxLabelRow: Array[Row] = dataset.select(max($(labelCol))).take(1)
-        if (maxLabelRow.isEmpty) {
+        if (maxLabelRow.isEmpty || maxLabelRow(0).get(0) == null) {
           throw new SparkException("ML algorithm was given empty dataset.")
         }
         val maxDoubleLabel: Double = maxLabelRow.head.getDouble(0)

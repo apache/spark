@@ -206,7 +206,7 @@ abstract class BaseSessionStateBuilder(
   /**
    * Logical query plan optimizer.
    *
-   * Note: this depends on the `conf`, `catalog` and `experimentalMethods` fields.
+   * Note: this depends on `catalog` and `experimentalMethods` fields.
    */
   protected def optimizer: Optimizer = {
     new SparkOptimizer(catalog, experimentalMethods) {
@@ -263,7 +263,7 @@ abstract class BaseSessionStateBuilder(
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
    *
-   * This gets cloned from parent if available, otherwise is a new instance is created.
+   * This gets cloned from parent if available, otherwise a new instance is created.
    */
   protected def listenerManager: ExecutionListenerManager = {
     parentState.map(_.listenerManager.clone()).getOrElse(

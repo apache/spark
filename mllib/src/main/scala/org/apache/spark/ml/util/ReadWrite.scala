@@ -18,6 +18,9 @@
 package org.apache.spark.ml.util
 
 import java.io.IOException
+import java.util.Locale
+
+import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 import org.json4s._
@@ -106,6 +109,22 @@ abstract class MLWriter extends BaseReadWrite with Logging {
    */
   @Since("1.6.0")
   protected def saveImpl(path: String): Unit
+
+  /**
+   * Map to store extra options for this writer.
+   */
+  protected val optionMap: mutable.Map[String, String] = new mutable.HashMap[String, String]()
+
+  /**
+   * Adds an option to the underlying MLWriter. See the documentation for the specific model's
+   * writer for possible options. The option name (key) is case-insensitive.
+   */
+  @Since("2.3.0")
+  def option(key: String, value: String): this.type = {
+    require(key != null && !key.isEmpty)
+    optionMap.put(key.toLowerCase(Locale.ROOT), value)
+    this
+  }
 
   /**
    * Overwrites if the output path already exists.
