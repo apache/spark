@@ -17,6 +17,8 @@
 """
 User-defined function related classes and functions
 """
+import sys
+import inspect
 import functools
 
 from pyspark import SparkContext, since
@@ -35,24 +37,29 @@ def _wrap_function(sc, func, returnType):
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
+def _get_argspec(f):
+    """
+    Get argspec of a function.
+    """
+    # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
+    # See SPARK-23569.
+    if sys.version_info[0] < 3:
+        argspec = inspect.getargspec(f)
+    else:
+        argspec = inspect.getfullargspec(f)
+    return argspec
+
+
 def _create_udf(f, returnType, evalType):
 
     if evalType in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
 
-        import inspect
-        import sys
         from pyspark.sql.utils import require_minimum_pyarrow_version
-
         require_minimum_pyarrow_version()
 
-        if sys.version_info[0] < 3:
-            # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
-            # See SPARK-23569.
-            argspec = inspect.getargspec(f)
-        else:
-            argspec = inspect.getfullargspec(f)
+        argspec = _get_argspec(f)
 
         if evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF and len(argspec.args) == 0 and \
                 argspec.varargs is None:
