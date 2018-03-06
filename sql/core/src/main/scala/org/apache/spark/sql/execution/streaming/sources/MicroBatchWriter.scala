@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming.sources
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, DataWriterFactory, SupportsWriteInternalRow, WriterCommitMessage}
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamWriter}
 
 /**
  * A [[DataSourceWriter]] used to hook V2 stream writers into a microbatch plan. It implements
@@ -34,7 +34,13 @@ class MicroBatchWriter(batchId: Long, writer: StreamWriter) extends DataSourceWr
 
   override def abort(messages: Array[WriterCommitMessage]): Unit = writer.abort(batchId, messages)
 
-  override def createWriterFactory(): DataWriterFactory[Row] = writer.createWriterFactory()
+  override def createWriterFactory(): StreamingDataWriterFactory[Row] = {
+    writer.createWriterFactory() match {
+      case s: StreamingDataWriterFactory[Row] => s
+      case _ =>
+        throw new IllegalStateException("StreamWriter did not give a StreamingDataWriterFactory")
+    }
+  }
 }
 
 class InternalRowMicroBatchWriter(batchId: Long, writer: StreamWriter)

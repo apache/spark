@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.streaming.InternalOutputModes.{Append, Comp
 import org.apache.spark.sql.execution.streaming.Sink
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, StreamWriteSupport}
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamWriter}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
@@ -146,7 +146,7 @@ class MemoryStreamWriter(val sink: MemorySinkV2, outputMode: OutputMode)
   }
 }
 
-case class MemoryWriterFactory(outputMode: OutputMode) extends DataWriterFactory[Row] {
+case class MemoryWriterFactory(outputMode: OutputMode) extends StreamingDataWriterFactory[Row] {
   override def createDataWriter(
       partitionId: Int,
       attemptNumber: Int,

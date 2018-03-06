@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources.v2.writer.streaming;
 
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.sources.v2.writer.DataSourceWriter;
 import org.apache.spark.sql.sources.v2.writer.DataWriter;
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage;
@@ -27,6 +28,9 @@ import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage;
  *
  * Streaming queries are divided into intervals of data called epochs, with a monotonically
  * increasing numeric ID. This writer handles commits and aborts for each successive epoch.
+ *
+ * Note that StreamWriter implementations should provide instances of
+ * {@link StreamingDataWriterFactory}.
  */
 @InterfaceStability.Evolving
 public interface StreamWriter extends DataSourceWriter {
@@ -58,6 +62,14 @@ public interface StreamWriter extends DataSourceWriter {
    * clean up the data left by data writers.
    */
   void abort(long epochId, WriterCommitMessage[] messages);
+
+  /**
+   * Creates a writer factory which will be serialized and sent to executors.
+   *
+   * If this method fails (by throwing an exception), the query will fail and no Spark job will be
+   * submitted.
+   */
+  StreamingDataWriterFactory<Row> createWriterFactory();
 
   default void commit(WriterCommitMessage[] messages) {
     throw new UnsupportedOperationException(

@@ -31,8 +31,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{MicroBatchExecution, StreamExecution}
 import org.apache.spark.sql.execution.streaming.continuous.{CommitPartitionEpoch, ContinuousExecution, EpochCoordinatorRef, SetWriterPartitions}
+import org.apache.spark.sql.execution.streaming.sources.MicroBatchWriter
 import org.apache.spark.sql.sources.v2.writer._
-import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
+import org.apache.spark.sql.sources.v2.writer.streaming.{StreamingDataWriterFactory, StreamWriter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -54,7 +55,12 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
   override protected def doExecute(): RDD[InternalRow] = {
     val writeTask = writer match {
       case w: SupportsWriteInternalRow => w.createInternalRowWriterFactory()
-      case _ => new InternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
+      case w: MicroBatchWriter =>
+        new StreamingInternalRowDataWriterFactory(w.createWriterFactory(), query.schema)
+      case w: StreamWriter =>
+        new StreamingInternalRowDataWriterFactory(w.createWriterFactory(), query.schema)
+      case _ =>
+        new InternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
     }
 
     val useCommitCoordinator = writer.useCommitCoordinator
@@ -75,7 +81,8 @@ case class WriteToDataSourceV2Exec(writer: DataSourceWriter, query: SparkPlan) e
             .askSync[Unit](SetWriterPartitions(rdd.getNumPartitions))
 
           (context: TaskContext, iter: Iterator[InternalRow]) =>
-            DataWritingSparkTask.runContinuous(writeTask, context, iter)
+            DataWritingSparkTask.runContinuous(
+              writeTask.asInstanceOf[StreamingDataWriterFactory[InternalRow]], context, iter)
         case _ =>
           (context: TaskContext, iter: Iterator[InternalRow]) =>
             DataWritingSparkTask.run(writeTask, context, iter, useCommitCoordinator)
@@ -132,8 +139,13 @@ object DataWritingSparkTask extends Logging {
     val stageId = context.stageId()
     val partId = context.partitionId()
     val attemptId = context.attemptNumber()
-    val epochId = Option(context.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)).getOrElse("0")
-    val dataWriter = writeTask.createDataWriter(partId, attemptId, epochId.toLong)
+    val dataWriter = writeTask match {
+      case w: StreamingDataWriterFactory[InternalRow] =>
+        val epochId = Option(context.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)).get
+        w.createDataWriter(partId, attemptId, epochId.toLong)
+
+      case w => w.createDataWriter(partId, attemptId)
+    }
 
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
@@ -170,7 +182,7 @@ object DataWritingSparkTask extends Logging {
   }
 
   def runContinuous(
-      writeTask: DataWriterFactory[InternalRow],
+      writeTask: StreamingDataWriterFactory[InternalRow],
       context: TaskContext,
       iter: Iterator[InternalRow]): WriterCommitMessage = {
     val epochCoordinator = EpochCoordinatorRef.get(
@@ -216,6 +228,17 @@ object DataWritingSparkTask extends Logging {
 class InternalRowDataWriterFactory(
     rowWriterFactory: DataWriterFactory[Row],
     schema: StructType) extends DataWriterFactory[InternalRow] {
+
+  override def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
+    new InternalRowDataWriter(
+      rowWriterFactory.createDataWriter(partitionId, attemptNumber),
+      RowEncoder.apply(schema).resolveAndBind())
+  }
+}
+
+class StreamingInternalRowDataWriterFactory(
+    rowWriterFactory: StreamingDataWriterFactory[Row],
+    schema: StructType) extends StreamingDataWriterFactory[InternalRow] {
 
   override def createDataWriter(
       partitionId: Int,
