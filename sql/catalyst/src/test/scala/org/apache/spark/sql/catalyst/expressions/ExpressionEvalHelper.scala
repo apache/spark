@@ -53,7 +53,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expr, catalystValue, inputRow)
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
-      checkEvalutionWithUnsafeProjection(expr, catalystValue, inputRow)
+      checkEvaluationWithUnsafeProjection(expr, catalystValue, inputRow)
     }
     checkEvaluationWithOptimization(expr, catalystValue, inputRow)
   }
@@ -150,15 +150,15 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
   }
 
-  protected def checkEvalutionWithUnsafeProjection(
+  protected def checkEvaluationWithUnsafeProjection(
       expression: Expression,
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
-    checkEvalutionWithUnsafeProjection(expression, expected, inputRow, UnsafeProjection)
-    checkEvalutionWithUnsafeProjection(expression, expected, inputRow, InterpretedUnsafeProjection)
+    checkEvaluationWithUnsafeProjection(expression, expected, inputRow, UnsafeProjection)
+    checkEvaluationWithUnsafeProjection(expression, expected, inputRow, InterpretedUnsafeProjection)
   }
 
-  protected def checkEvalutionWithUnsafeProjection(
+  protected def checkEvaluationWithUnsafeProjection(
       expression: Expression,
       expected: Any,
       inputRow: InternalRow,
