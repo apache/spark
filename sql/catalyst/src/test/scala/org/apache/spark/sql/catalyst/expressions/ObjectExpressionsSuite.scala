@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -103,5 +104,18 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       evaluate(getRowField, InternalRow.fromSeq(Seq(Row(null))))
     }.getMessage
     assert(errMsg2 === "The 0th field 'c0' of input row cannot be null.")
+  }
+
+  test("SPARK-23591: EncodeUsingSerializer should support interpreted execution") {
+    val cls = ObjectType(classOf[java.lang.Integer])
+    val inputObject = BoundReference(0, cls, nullable = true)
+    val conf = new SparkConf()
+    Seq(true, false).foreach { useKryo =>
+      val serializer = if (useKryo) new KryoSerializer(conf) else new JavaSerializer(conf)
+      val expected = serializer.newInstance().serialize(new Integer(1)).array()
+      val encodeUsingSerializer = EncodeUsingSerializer(inputObject, useKryo)
+      checkEvaluation(encodeUsingSerializer, expected, InternalRow.fromSeq(Seq(1)))
+      checkEvaluation(encodeUsingSerializer, null, InternalRow.fromSeq(Seq(null)))
+    }
   }
 }

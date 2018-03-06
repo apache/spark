@@ -1154,8 +1154,18 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
 case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
   extends UnaryExpression with NonSQLExpression {
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  override def eval(input: InternalRow): Any = {
+    val obj = child.eval(input)
+    if (obj == null) return null
+
+    val conf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+    val serializer = if (kryo) {
+      new KryoSerializer(conf)
+    } else {
+      new JavaSerializer(conf)
+    }
+    serializer.newInstance().serialize(obj).array()
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Code to initialize the serializer.
