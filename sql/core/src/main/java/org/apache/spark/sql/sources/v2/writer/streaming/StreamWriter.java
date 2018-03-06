@@ -63,14 +63,6 @@ public interface StreamWriter extends DataSourceWriter {
    */
   void abort(long epochId, WriterCommitMessage[] messages);
 
-  /**
-   * Creates a writer factory which will be serialized and sent to executors.
-   *
-   * If this method fails (by throwing an exception), the query will fail and no Spark job will be
-   * submitted.
-   */
-  StreamingDataWriterFactory<Row> createWriterFactory();
-
   default void commit(WriterCommitMessage[] messages) {
     throw new UnsupportedOperationException(
         "Commit without epoch should not be called with StreamWriter");
