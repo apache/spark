@@ -43,7 +43,7 @@ class ScalaUDFSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(e1.getMessage.contains("Failed to execute user defined function"))
 
     val e2 = intercept[SparkException] {
-      checkEvalutionWithUnsafeProjection(udf, null)
+      checkEvaluationWithUnsafeProjection(udf, null)
     }
     assert(e2.getMessage.contains("Failed to execute user defined function"))
   }
