@@ -39,8 +39,10 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
    */
   val wholeText = parameters.getOrElse(WHOLETEXT, "false").toBoolean
 
-  val lineSeparator: String = parameters.getOrElse(LINE_SEPARATOR, "\n")
-  require(lineSeparator.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
+  val lineSeparator: Option[String] = parameters.get(LINE_SEPARATOR).map { sep =>
+    require(sep.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
+    sep
+  }
 }
 
 private[text] object TextOptions {

@@ -207,7 +207,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  Seq("|", "^", "::", "!!!@3").foreach { lineSep =>
+  Seq("|", "^", "::", "!!!@3", 0x1E.toChar.toString).foreach { lineSep =>
     testLineSeparator(lineSep)
   }
 

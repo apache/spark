@@ -402,7 +402,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * considered in every trigger.</li>
    * <li>`wholetext` (default `false`): If true, read a file as a single row and not split by "\n".
    * </li>
-   * <li>`lineSep` (default is `\n`, covering `\r`, `\r\n` and `\n`): defines the line separator
+   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing.</li>
    * </ul>
    *
@@ -432,7 +432,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * considered in every trigger.</li>
    * <li>`wholetext` (default `false`): If true, read a file as a single row and not split by "\n".
    * </li>
-   * <li>`lineSep` (default is `\n`, covering `\r`, `\r\n` and `\n`): defines the line separator
+   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing.</li>
    * </ul>
    *

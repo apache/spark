@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.Closeable
 import java.net.URI
+import java.nio.charset.StandardCharsets
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -32,16 +33,16 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
  * in that file.
  *
  * @param file A part (i.e. "block") of a single file that should be read line by line.
- * @param lineSeparator A line separator that should be used for each line. If the value is `\n`,
+ * @param lineSeparator A line separator that should be used for each line. If the value is `None`,
  *                      it covers `\r`, `\r\n` and `\n`.
  * @param conf Hadoop configuration
  */
 class HadoopFileLinesReader(
     file: PartitionedFile,
-    lineSeparator: String,
+    lineSeparator: Option[String],
     conf: Configuration) extends Iterator[Text] with Closeable {
 
-  def this(file: PartitionedFile, conf: Configuration) = this(file, "\n", conf)
+  def this(file: PartitionedFile, conf: Configuration) = this(file, None, conf)
 
   private val iterator = {
     val fileSplit = new FileSplit(
@@ -52,12 +53,14 @@ class HadoopFileLinesReader(
       Array.empty)
     val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
-    val reader = if (lineSeparator != "\n") {
-      new LineRecordReader(lineSeparator.getBytes("UTF-8"))
-    } else {
-      // This behavior follows Hive. `\n` covers `\r`, `\r\n` and `\n`.
-      new LineRecordReader()
+    val reader = lineSeparator match {
+      case Some(sep) =>
+        new LineRecordReader(sep.getBytes(StandardCharsets.UTF_8))
+      case _ =>
+        // If the line separator is `None`, it covers `\r`, `\r\n` and `\n`.
+        new LineRecordReader()
     }
+
     reader.initialize(fileSplit, hadoopAttemptContext)
     new RecordReaderIterator(reader)
   }

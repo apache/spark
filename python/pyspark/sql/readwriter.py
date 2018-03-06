@@ -315,7 +315,7 @@ class DataFrameReader(OptionUtils):
         :param paths: string, or list of strings, for input path(s).
         :param wholetext: if true, read each file from input path(s) as a single row.
         :param lineSep: defines the line separator that should be used for parsing. If None is
-                        set, it uses ``\\n`` by default, covering ``\\r``, ``\\r\\n`` and ``\\n``.
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
