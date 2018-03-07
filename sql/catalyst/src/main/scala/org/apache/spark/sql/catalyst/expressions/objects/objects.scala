@@ -1261,20 +1261,27 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
   override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
   override def dataType: DataType = beanInstance.dataType
 
+  private lazy val resolvedSetters = {
+    val ObjectType(beanClass) = beanInstance.dataType
+
+    setters.map { case (setterMethod, fieldExpr) =>
+      val foundMethods = beanClass.getMethods.filter { method =>
+        method.getName == setterMethod && Modifier.isPublic(method.getModifiers) &&
+          method.getParameterTypes.length == 1
+      }
+      assert(foundMethods.length == 1,
+        throw new RuntimeException("The Java Bean class should have only one " +
+          s"setter $setterMethod method, but ${foundMethods.length} methods found."))
+      (foundMethods.head, fieldExpr)
+    }
+  }
+
   override def eval(input: InternalRow): Any = {
     val instance = beanInstance.eval(input).asInstanceOf[Object]
     if (instance != null) {
-      setters.foreach { case (setterMethod, fieldExpr) =>
+      resolvedSetters.foreach { case (setterMethod, fieldExpr) =>
         val fieldValue = fieldExpr.eval(input).asInstanceOf[Object]
-
-        val foundMethods = instance.getClass.getMethods.filter { method =>
-          method.getName == setterMethod && Modifier.isPublic(method.getModifiers) &&
-            method.getParameterTypes.length == 1
-        }
-        assert(foundMethods.length == 1,
-          throw new RuntimeException("The Java Bean instance should have only one " +
-            s"setter $setterMethod method, but ${foundMethods.length} methods found."))
-        foundMethods.head.invoke(instance, fieldValue)
+        setterMethod.invoke(instance, fieldValue)
       }
     }
     instance
