@@ -144,4 +144,3 @@ def require_minimum_pyarrow_version():
     if LooseVersion(pyarrow.__version__) < LooseVersion(minimum_pyarrow_version):
         raise ImportError("PyArrow >= %s must be installed; however, "
                           "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__))
-
