@@ -26,7 +26,6 @@
 
   <artifactId>spark-kubernetes-integration-tests_2.11</artifactId>
   <groupId>spark-kubernetes-integration-tests</groupId>
-  <version>0.1-SNAPSHOT</version>
   <properties>
     <maven.version>3.3.9</maven.version>
     <commons-lang3.version>3.5</commons-lang3.version>
@@ -57,6 +56,20 @@
   <name>Spark Project Kubernetes Integration Tests</name>
 
   <dependencies>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+
     <dependency>
       <groupId>commons-logging</groupId>
       <artifactId>commons-logging</artifactId>

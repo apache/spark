@@ -29,10 +29,12 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Seconds, Span}
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
 import org.apache.spark.deploy.k8s.integrationtest.config._
 
-private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfter {
+private[spark] class KubernetesSuite extends SparkFunSuite
+  with BeforeAndAfterAll with BeforeAndAfter {
 
   import KubernetesSuite._
 
