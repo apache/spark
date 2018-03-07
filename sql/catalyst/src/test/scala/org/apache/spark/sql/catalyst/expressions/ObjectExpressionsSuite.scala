@@ -18,11 +18,12 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
-import org.apache.spark.sql.types.{IntegerType, ObjectType}
+import org.apache.spark.sql.types._
 
 
 class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -74,5 +75,48 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val initializeBean = InitializeJavaBean(Literal.fromObject(new java.util.LinkedList[Int]),
       Map("add" -> Literal(1)))
     checkEvaluation(initializeBean, list, InternalRow.fromSeq(Seq()))
+  }
+
+  test("SPARK-23585: UnwrapOption should support interpreted execution") {
+    val cls = classOf[Option[Int]]
+    val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
+    val unwrapObject = UnwrapOption(IntegerType, inputObject)
+    Seq((Some(1), 1), (None, null), (null, null)).foreach { case (input, expected) =>
+      checkEvaluation(unwrapObject, expected, InternalRow.fromSeq(Seq(input)))
+    }
+  }
+
+  test("SPARK-23586: WrapOption should support interpreted execution") {
+    val cls = ObjectType(classOf[java.lang.Integer])
+    val inputObject = BoundReference(0, cls, nullable = true)
+    val wrapObject = WrapOption(inputObject, cls)
+    Seq((1, Some(1)), (null, None)).foreach { case (input, expected) =>
+      checkEvaluation(wrapObject, expected, InternalRow.fromSeq(Seq(input)))
+    }
+  }
+
+  test("SPARK-23590: CreateExternalRow should support interpreted execution") {
+    val schema = new StructType().add("a", IntegerType).add("b", StringType)
+    val createExternalRow = CreateExternalRow(Seq(Literal(1), Literal("x")), schema)
+    checkEvaluation(createExternalRow, Row.fromSeq(Seq(1, "x")), InternalRow.fromSeq(Seq()))
+  }
+
+  test("SPARK-23594 GetExternalRowField should support interpreted execution") {
+    val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
+    val getRowField = GetExternalRowField(inputObject, index = 0, fieldName = "c0")
+    Seq((Row(1), 1), (Row(3), 3)).foreach { case (input, expected) =>
+      checkEvaluation(getRowField, expected, InternalRow.fromSeq(Seq(input)))
+    }
+
+    // If an input row or a field are null, a runtime exception will be thrown
+    val errMsg1 = intercept[RuntimeException] {
+      evaluate(getRowField, InternalRow.fromSeq(Seq(null)))
+    }.getMessage
+    assert(errMsg1 === "The input external row cannot be null.")
+
+    val errMsg2 = intercept[RuntimeException] {
+      evaluate(getRowField, InternalRow.fromSeq(Seq(Row(null))))
+    }.getMessage
+    assert(errMsg2 === "The 0th field 'c0' of input row cannot be null.")
   }
 }
