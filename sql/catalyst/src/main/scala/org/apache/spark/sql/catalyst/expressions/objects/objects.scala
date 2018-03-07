@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.objects
 
 import java.lang.reflect.Modifier
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.Builder
 import scala.language.existentials
 import scala.reflect.ClassTag
@@ -446,12 +447,22 @@ case class LambdaVariable(
     value: String,
     isNull: String,
     dataType: DataType,
-    nullable: Boolean = true) extends LeafExpression
-  with Unevaluable with NonSQLExpression {
+    nullable: Boolean = true) extends LeafExpression with NonSQLExpression {
+
+  // Interpreted execution of `LambdaVariable` always get the 0-index element from input row.
+  override def eval(input: InternalRow): Any = {
+    assert(input.numFields == 1,
+      "The input row of interpreted LambdaVariable should have only 1 field.")
+    input.get(0, dataType)
+  }
 
   override def genCode(ctx: CodegenContext): ExprCode = {
     ExprCode(code = "", value = value, isNull = if (nullable) isNull else "false")
   }
+
+  // This won't be called as `genCode` is overrided, just overriding it to make
+  // `LambdaVariable` non-abstract.
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev
 }
 
 /**
@@ -544,8 +555,71 @@ case class MapObjects private(
 
   override def children: Seq[Expression] = lambdaFunction :: inputData :: Nil
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  // The data with PythonUserDefinedType are actually stored with the data type of its sqlType.
+  // When we want to apply MapObjects on it, we have to use it.
+  private val inputDataType = inputData.dataType match {
+    case p: PythonUserDefinedType => p.sqlType
+    case _ => inputData.dataType
+  }
+
+  private def executeFuncOnCollection(inputCollection: Seq[_]): Seq[_] = {
+    inputCollection.map { element =>
+      val row = InternalRow.fromSeq(Seq(element))
+      lambdaFunction.eval(row)
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val inputCollection = inputData.eval(input)
+
+    if (inputCollection == null) {
+      return inputCollection
+    }
+
+    val results = inputDataType match {
+      case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
+        executeFuncOnCollection(inputCollection.asInstanceOf[Seq[_]])
+      case ObjectType(cls) if cls.isArray =>
+        executeFuncOnCollection(inputCollection.asInstanceOf[Array[_]].toSeq)
+      case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
+        executeFuncOnCollection(inputCollection.asInstanceOf[java.util.List[_]].asScala)
+      case ObjectType(cls) if cls == classOf[Object] =>
+        if (inputCollection.getClass.isArray) {
+          executeFuncOnCollection(inputCollection.asInstanceOf[Array[_]].toSeq)
+        } else {
+          executeFuncOnCollection(inputCollection.asInstanceOf[Seq[_]])
+        }
+      case ArrayType(et, _) =>
+        executeFuncOnCollection(inputCollection.asInstanceOf[ArrayData].array)
+    }
+
+    customCollectionCls match {
+      case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
+        // Scala sequence
+        results.toSeq
+      case Some(cls) if classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
+        // Scala set
+        results.toSet
+      case Some(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
+        // Java list
+        if (cls == classOf[java.util.List[_]] || cls == classOf[java.util.AbstractList[_]] ||
+            cls == classOf[java.util.AbstractSequentialList[_]]) {
+          results.asJava
+        } else {
+          val builder = Try(cls.getConstructor(Integer.TYPE)).map { constructor =>
+            constructor.newInstance()
+          }.getOrElse {
+            cls.getConstructor().newInstance(results.length.asInstanceOf[Object])
+          }.asInstanceOf[java.util.List[Any]]
+
+          results.foreach(builder.add(_))
+          builder
+        }
+      case None =>
+        // array
+        new GenericArrayData(results.toArray)
+    }
+  }
 
   override def dataType: DataType =
     customCollectionCls.map(ObjectType.apply).getOrElse(
@@ -590,13 +664,6 @@ case class MapObjects private(
           }
          """
       case _ => ""
-    }
-
-    // The data with PythonUserDefinedType are actually stored with the data type of its sqlType.
-    // When we want to apply MapObjects on it, we have to use it.
-    val inputDataType = inputData.dataType match {
-      case p: PythonUserDefinedType => p.sqlType
-      case _ => inputData.dataType
     }
 
     // `MapObjects` generates a while loop to traverse the elements of the input collection. We
