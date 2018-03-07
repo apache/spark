@@ -106,6 +106,61 @@ trait InvokeLike extends Expression with NonSQLExpression {
 }
 
 /**
+ * Common trait for [[DecodeUsingSerializer]] and [[EncodeUsingSerializer]]
+ */
+trait SerializerSupport {
+  /**
+   * If true, Kryo serialization is used, otherwise the Java one is used
+   */
+  val kryo: Boolean
+
+  /**
+   * The serializer instance to be used for serialization/deserialization in interpreted execution
+   */
+  lazy val serializerInstance: SerializerInstance = SerializerSupport.newSerializer(kryo)
+
+  /**
+   * Adds a immutable state to the generated class containing a reference to the serializer.
+   * @return a string containing the name of the variable referencing the serializer
+   */
+  def addImmutableSerializerIfNeeded(ctx: CodegenContext): String = {
+    val (serializerInstance, serializerInstanceClass) = {
+      if (kryo) {
+        ("kryoSerializer",
+          classOf[KryoSerializerInstance].getName)
+      } else {
+        ("javaSerializer",
+          classOf[JavaSerializerInstance].getName)
+      }
+    }
+    val newSerializerMethod = s"${classOf[SerializerSupport].getName}$$.MODULE$$.newSerializer"
+    // Code to initialize the serializer
+    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializerInstance, v =>
+      s"""
+         |$v = ($serializerInstanceClass) $newSerializerMethod($kryo);
+       """.stripMargin)
+    serializerInstance
+  }
+}
+
+object SerializerSupport {
+  /**
+   * It creates a new `SerializerInstance` which is either a `KryoSerializerInstance` (is
+   * `useKryo` is set to `true`) or a `JavaSerializerInstance`.
+   */
+  def newSerializer(useKryo: Boolean): SerializerInstance = {
+    // try conf from env, otherwise create a new one
+    val conf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+    val s = if (useKryo) {
+      new KryoSerializer(conf)
+    } else {
+      new JavaSerializer(conf)
+    }
+    s.newInstance()
+  }
+}
+
+/**
  * Invokes a static function, returning the result.  By default, any of the arguments being null
  * will result in returning null instead of calling the function.
  *
@@ -1154,36 +1209,14 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
  * @param kryo if true, use Kryo. Otherwise, use Java.
  */
 case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
-  extends UnaryExpression with NonSQLExpression {
+  extends UnaryExpression with NonSQLExpression with SerializerSupport {
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  override def nullSafeEval(input: Any): Any = {
+    serializerInstance.serialize(input).array()
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // Code to initialize the serializer.
-    val (serializer, serializerClass, serializerInstanceClass) = {
-      if (kryo) {
-        ("kryoSerializer",
-          classOf[KryoSerializer].getName,
-          classOf[KryoSerializerInstance].getName)
-      } else {
-        ("javaSerializer",
-          classOf[JavaSerializer].getName,
-          classOf[JavaSerializerInstance].getName)
-      }
-    }
-    // try conf from env, otherwise create a new one
-    val env = s"${classOf[SparkEnv].getName}.get()"
-    val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializer, v =>
-      s"""
-         |if ($env == null) {
-         |  $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-         |} else {
-         |  $v = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
-         |}
-       """.stripMargin)
-
+    val serializer = addImmutableSerializerIfNeeded(ctx)
     // Code to serialize.
     val input = child.genCode(ctx)
     val javaType = CodeGenerator.javaType(dataType)
@@ -1207,33 +1240,10 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
  * @param kryo if true, use Kryo. Otherwise, use Java.
  */
 case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: Boolean)
-  extends UnaryExpression with NonSQLExpression {
+  extends UnaryExpression with NonSQLExpression with SerializerSupport {
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // Code to initialize the serializer.
-    val (serializer, serializerClass, serializerInstanceClass) = {
-      if (kryo) {
-        ("kryoSerializer",
-          classOf[KryoSerializer].getName,
-          classOf[KryoSerializerInstance].getName)
-      } else {
-        ("javaSerializer",
-          classOf[JavaSerializer].getName,
-          classOf[JavaSerializerInstance].getName)
-      }
-    }
-    // try conf from env, otherwise create a new one
-    val env = s"${classOf[SparkEnv].getName}.get()"
-    val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializer, v =>
-      s"""
-         |if ($env == null) {
-         |  $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-         |} else {
-         |  $v = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
-         |}
-       """.stripMargin)
-
+    val serializer = addImmutableSerializerIfNeeded(ctx)
     // Code to deserialize.
     val input = child.genCode(ctx)
     val javaType = CodeGenerator.javaType(dataType)
