@@ -19,6 +19,7 @@ by a small set of latent factors that can be used to predict missing entries.
 algorithm to learn these latent factors. The implementation in `spark.ml` has the
 following parameters:
 
+* *checkpointInterval* helps with recovery when nodes fail and StackOverflow exceptions caused by long lineage. **Will be silently ignored if *SparkContext.CheckpointDir* is not set.** (defaults to 10).
 * *numBlocks* is the number of blocks the users and items will be partitioned into in order to parallelize computation (defaults to 10).
 * *rank* is the number of latent factors in the model (defaults to 10).
 * *maxIter* is the maximum number of iterations to run (defaults to 10).
