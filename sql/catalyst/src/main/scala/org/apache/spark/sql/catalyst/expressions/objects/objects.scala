@@ -1254,8 +1254,24 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
   override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
   override def dataType: DataType = beanInstance.dataType
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+  override def eval(input: InternalRow): Any = {
+    val instance = beanInstance.eval(input).asInstanceOf[Object]
+    if (instance != null) {
+      setters.foreach { case (setterMethod, fieldExpr) =>
+        val fieldValue = fieldExpr.eval(input).asInstanceOf[Object]
+
+        val foundMethods = instance.getClass.getMethods.filter { method =>
+          method.getName == setterMethod && Modifier.isPublic(method.getModifiers) &&
+            method.getParameterTypes.length == 1
+        }
+        assert(foundMethods.length == 1,
+          throw new RuntimeException("The Java Bean instance should have only one " +
+            s"setter $setterMethod method, but ${foundMethods.length} methods found."))
+        foundMethods.head.invoke(instance, fieldValue)
+      }
+    }
+    instance
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val instanceGen = beanInstance.genCode(ctx)

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.objects.Invoke
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types.{IntegerType, ObjectType}
 
@@ -65,5 +65,14 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         new GenericArrayData(Array(300, 400)))))
     checkEvalutionWithUnsafeProjection(
       mapEncoder.serializer.head, mapExpected, mapInputRow)
+  }
+
+  test("SPARK-23593: InitializeJavaBean should support interpreted execution") {
+    val list = new java.util.LinkedList[Int]()
+    list.add(1)
+
+    val initializeBean = InitializeJavaBean(Literal.fromObject(new java.util.LinkedList[Int]),
+      Map("add" -> Literal(1)))
+    checkEvaluation(initializeBean, list, InternalRow.fromSeq(Seq()))
   }
 }

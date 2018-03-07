@@ -48,7 +48,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance
     val resolver = ResolveTimeZone(new SQLConf)
-    val expr = resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
+    // Make it as method to obtain fresh expression everytime.
+    def expr = resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expr, catalystValue, inputRow)
