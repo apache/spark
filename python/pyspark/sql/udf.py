@@ -26,6 +26,7 @@ from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.types import StringType, DataType, ArrayType, StructType, MapType, \
     _parse_datatype_string, to_arrow_type, to_arrow_schema
+from pyspark.sql.utils import get_argspec
 
 __all__ = ["UDFRegistration"]
 
@@ -37,19 +38,6 @@ def _wrap_function(sc, func, returnType):
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
-def _get_argspec(f):
-    """
-    Get argspec of a function.
-    """
-    # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
-    # See SPARK-23569.
-    if sys.version_info[0] < 3:
-        argspec = inspect.getargspec(f)
-    else:
-        argspec = inspect.getfullargspec(f)
-    return argspec
-
-
 def _create_udf(f, returnType, evalType):
 
     if evalType in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
@@ -59,7 +47,7 @@ def _create_udf(f, returnType, evalType):
         from pyspark.sql.utils import require_minimum_pyarrow_version
         require_minimum_pyarrow_version()
 
-        argspec = _get_argspec(f)
+        argspec = get_argspec(f)
 
         if evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF and len(argspec.args) == 0 and \
                 argspec.varargs is None:
