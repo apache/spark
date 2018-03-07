@@ -147,6 +147,13 @@ public final class Platform {
     _UNSAFE.freeMemory(address);
   }
 
+  public static long reallocateMemory(long address, long oldSize, long newSize) {
+    long newMemory = _UNSAFE.allocateMemory(newSize);
+    copyMemory(null, address, null, newMemory, oldSize);
+    freeMemory(address);
+    return newMemory;
+  }
+
   /**
    * Uses internal JDK APIs to allocate a DirectByteBuffer while ignoring the JVM's
    * MaxDirectMemorySize limit (the default limit is too low and we do not want to require users

@@ -23,9 +23,8 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.types.UTF8String;
-import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.OffHeapMemoryBlock;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * Column data backed using offheap memory.
@@ -59,20 +58,20 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   // The data stored in these two allocations need to maintain binary compatible. We can
   // directly pass this buffer to external components.
-  private OffHeapMemoryBlock nulls;
-  private OffHeapMemoryBlock data;
+  private long nulls;
+  private long data;
 
   // Only set if type is Array or Map.
-  private OffHeapMemoryBlock lengthData;
-  private OffHeapMemoryBlock offsetData;
+  private long lengthData;
+  private long offsetData;
 
   public OffHeapColumnVector(int capacity, DataType type) {
     super(capacity, type);
 
-    nulls = OffHeapMemoryBlock.NULL;
-    data = OffHeapMemoryBlock.NULL;
-    lengthData = OffHeapMemoryBlock.NULL;
-    offsetData = OffHeapMemoryBlock.NULL;
+    nulls = 0;
+    data = 0;
+    lengthData = 0;
+    offsetData = 0;
 
     reserveInternal(capacity);
     reset();
@@ -83,20 +82,20 @@ public final class OffHeapColumnVector extends WritableColumnVector {
    */
   @VisibleForTesting
   public long valuesNativeAddress() {
-    return data.getBaseOffset();
+    return data;
   }
 
   @Override
   public void close() {
     super.close();
-    MemoryAllocator.UNSAFE.free(nulls);
-    MemoryAllocator.UNSAFE.free(data);
-    MemoryAllocator.UNSAFE.free(lengthData);
-    MemoryAllocator.UNSAFE.free(offsetData);
-    nulls = OffHeapMemoryBlock.NULL;
-    data = OffHeapMemoryBlock.NULL;
-    lengthData = OffHeapMemoryBlock.NULL;
-    offsetData = OffHeapMemoryBlock.NULL;
+    Platform.freeMemory(nulls);
+    Platform.freeMemory(data);
+    Platform.freeMemory(lengthData);
+    Platform.freeMemory(offsetData);
+    nulls = 0;
+    data = 0;
+    lengthData = 0;
+    offsetData = 0;
   }
 
   //
@@ -105,20 +104,20 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putNotNull(int rowId) {
-    nulls.putByte(nulls.getBaseOffset() + rowId, (byte) 0);
+    Platform.putByte(null, nulls + rowId, (byte) 0);
   }
 
   @Override
   public void putNull(int rowId) {
-    nulls.putByte(nulls.getBaseOffset() + rowId, (byte) 1);
+    Platform.putByte(null, nulls + rowId, (byte) 1);
     ++numNulls;
   }
 
   @Override
   public void putNulls(int rowId, int count) {
-    long offset = nulls.getBaseOffset() + rowId;
+    long offset = nulls + rowId;
     for (int i = 0; i < count; ++i, ++offset) {
-      nulls.putByte(offset, (byte) 1);
+      Platform.putByte(null, offset, (byte) 1);
     }
     numNulls += count;
   }
@@ -126,15 +125,15 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public void putNotNulls(int rowId, int count) {
     if (!hasNull()) return;
-    long offset = nulls.getBaseOffset() + rowId;
+    long offset = nulls + rowId;
     for (int i = 0; i < count; ++i, ++offset) {
-      nulls.putByte(offset, (byte) 0);
+      Platform.putByte(null, offset, (byte) 0);
     }
   }
 
   @Override
   public boolean isNullAt(int rowId) {
-    return nulls.getByte(nulls.getBaseOffset() + rowId) == 1;
+    return Platform.getByte(null, nulls + rowId) == 1;
   }
 
   //
@@ -143,26 +142,26 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBoolean(int rowId, boolean value) {
-    data.putByte(data.getBaseOffset() + rowId, (byte)((value) ? 1 : 0));
+    Platform.putByte(null, data + rowId, (byte)((value) ? 1 : 0));
   }
 
   @Override
   public void putBooleans(int rowId, int count, boolean value) {
     byte v = (byte)((value) ? 1 : 0);
     for (int i = 0; i < count; ++i) {
-      data.putByte(data.getBaseOffset() + rowId + i, v);
+      Platform.putByte(null, data + rowId + i, v);
     }
   }
 
   @Override
-  public boolean getBoolean(int rowId) { return data.getByte(data.getBaseOffset() + rowId) == 1; }
+  public boolean getBoolean(int rowId) { return Platform.getByte(null, data + rowId) == 1; }
 
   @Override
   public boolean[] getBooleans(int rowId, int count) {
     assert(dictionary == null);
     boolean[] array = new boolean[count];
     for (int i = 0; i < count; ++i) {
-      array[i] = (data.getByte(data.getBaseOffset() + rowId + i) == 1);
+      array[i] = (Platform.getByte(null, data + rowId + i) == 1);
     }
     return array;
   }
@@ -173,26 +172,26 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putByte(int rowId, byte value) {
-    data.putByte(data.getBaseOffset() + rowId, value);
+    Platform.putByte(null, data + rowId, value);
 
   }
 
   @Override
   public void putBytes(int rowId, int count, byte value) {
     for (int i = 0; i < count; ++i) {
-      data.putByte(data.getBaseOffset() + rowId + i, value);
+      Platform.putByte(null, data + rowId + i, value);
     }
   }
 
   @Override
   public void putBytes(int rowId, int count, byte[] src, int srcIndex) {
-    data.copyFrom(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, rowId, count);
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, null, data + rowId, count);
   }
 
   @Override
   public byte getByte(int rowId) {
     if (dictionary == null) {
-      return data.getByte(data.getBaseOffset() + rowId);
+      return Platform.getByte(null, data + rowId);
     } else {
       return (byte) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
@@ -202,13 +201,13 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public byte[] getBytes(int rowId, int count) {
     assert(dictionary == null);
     byte[] array = new byte[count];
-    data.writeTo(rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
+    Platform.copyMemory(null, data + rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
     return array;
   }
 
   @Override
   protected UTF8String getBytesAsUTF8String(int rowId, int count) {
-    return new UTF8String(data.subBlock(rowId, count));
+    return new UTF8String(new OffHeapMemoryBlock(data + rowId, count));
   }
 
   //
@@ -217,33 +216,33 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putShort(int rowId, short value) {
-    data.putShort(data.getBaseOffset() + 2 * rowId, value);
+    Platform.putShort(null, data + 2 * rowId, value);
   }
 
   @Override
   public void putShorts(int rowId, int count, short value) {
-    long offset = data.getBaseOffset() + 2 * rowId;
+    long offset = data + 2 * rowId;
     for (int i = 0; i < count; ++i, offset += 2) {
-      data.putShort(offset, value);
+      Platform.putShort(null, offset, value);
     }
   }
 
   @Override
   public void putShorts(int rowId, int count, short[] src, int srcIndex) {
-    data.copyFrom(src, Platform.SHORT_ARRAY_OFFSET + srcIndex * 2,
-        2 * rowId, count * 2);
+    Platform.copyMemory(src, Platform.SHORT_ARRAY_OFFSET + srcIndex * 2,
+        null, data + 2 * rowId, count * 2);
   }
 
   @Override
   public void putShorts(int rowId, int count, byte[] src, int srcIndex) {
-    data.copyFrom(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
-      rowId * 2, count * 2);
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+      null, data + rowId * 2, count * 2);
   }
 
   @Override
   public short getShort(int rowId) {
     if (dictionary == null) {
-      return data.getShort(data.getBaseOffset() + 2 * rowId);
+      return Platform.getShort(null, data + 2 * rowId);
     } else {
       return (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
@@ -253,7 +252,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public short[] getShorts(int rowId, int count) {
     assert(dictionary == null);
     short[] array = new short[count];
-    data.writeTo(rowId * 2, array, Platform.SHORT_ARRAY_OFFSET, count * 2);
+    Platform.copyMemory(null, data + rowId * 2, array, Platform.SHORT_ARRAY_OFFSET, count * 2);
     return array;
   }
 
@@ -263,39 +262,40 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putInt(int rowId, int value) {
-    data.putInt(data.getBaseOffset() + 4 * rowId, value);
+    Platform.putInt(null, data + 4 * rowId, value);
   }
 
   @Override
   public void putInts(int rowId, int count, int value) {
-    long offset = data.getBaseOffset() + 4 * rowId;
+    long offset = data + 4 * rowId;
     for (int i = 0; i < count; ++i, offset += 4) {
-      data.putInt(offset, value);
+      Platform.putInt(null, offset, value);
     }
   }
 
   @Override
   public void putInts(int rowId, int count, int[] src, int srcIndex) {
-    data.copyFrom(src, Platform.INT_ARRAY_OFFSET + srcIndex * 4,
-        4 * rowId, count * 4);
+    Platform.copyMemory(src, Platform.INT_ARRAY_OFFSET + srcIndex * 4,
+        null, data + 4 * rowId, count * 4);
   }
 
   @Override
   public void putInts(int rowId, int count, byte[] src, int srcIndex) {
-    data.copyFrom(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
-      rowId * 4, count * 4);
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+      null, data + rowId * 4, count * 4);
   }
 
   @Override
   public void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
-      data.copyFrom(src, srcIndex + Platform.BYTE_ARRAY_OFFSET,
-        4 * rowId, count * 4);
+      Platform.copyMemory(src, srcIndex + Platform.BYTE_ARRAY_OFFSET,
+          null, data + 4 * rowId, count * 4);
     } else {
       int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
-      long offset = data.getBaseOffset() + 4 * rowId;
+      long offset = data + 4 * rowId;
       for (int i = 0; i < count; ++i, offset += 4, srcOffset += 4) {
-        data.putInt(offset, java.lang.Integer.reverseBytes(Platform.getInt(src, srcOffset)));
+        Platform.putInt(null, offset,
+            java.lang.Integer.reverseBytes(Platform.getInt(src, srcOffset)));
       }
     }
   }
@@ -303,7 +303,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public int getInt(int rowId) {
     if (dictionary == null) {
-      return data.getInt(data.getBaseOffset() + 4 * rowId);
+      return Platform.getInt(null, data + 4 * rowId);
     } else {
       return dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
@@ -313,7 +313,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public int[] getInts(int rowId, int count) {
     assert(dictionary == null);
     int[] array = new int[count];
-    data.writeTo(rowId * 4, array, Platform.INT_ARRAY_OFFSET, count * 4);
+    Platform.copyMemory(null, data + rowId * 4, array, Platform.INT_ARRAY_OFFSET, count * 4);
     return array;
   }
 
@@ -325,7 +325,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public int getDictId(int rowId) {
     assert(dictionary == null)
             : "A ColumnVector dictionary should not have a dictionary for itself.";
-    return data.getInt(data.getBaseOffset() + 4 * rowId);
+    return Platform.getInt(null, data + 4 * rowId);
   }
 
   //
@@ -334,39 +334,40 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putLong(int rowId, long value) {
-    data.putLong(data.getBaseOffset() + 8 * rowId, value);
+    Platform.putLong(null, data + 8 * rowId, value);
   }
 
   @Override
   public void putLongs(int rowId, int count, long value) {
-    long offset = data.getBaseOffset() + 8 * rowId;
+    long offset = data + 8 * rowId;
     for (int i = 0; i < count; ++i, offset += 8) {
-      data.putLong(offset, value);
+      Platform.putLong(null, offset, value);
     }
   }
 
   @Override
   public void putLongs(int rowId, int count, long[] src, int srcIndex) {
-    data.copyFrom(src, Platform.LONG_ARRAY_OFFSET + srcIndex * 8,
-      8 * rowId, count * 8);
+    Platform.copyMemory(src, Platform.LONG_ARRAY_OFFSET + srcIndex * 8,
+        null, data + 8 * rowId, count * 8);
   }
 
   @Override
   public void putLongs(int rowId, int count, byte[] src, int srcIndex) {
-    data.copyFrom(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
-      rowId * 8, count * 8);
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+      null, data + rowId * 8, count * 8);
   }
 
   @Override
   public void putLongsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
-      data.copyFrom(src, srcIndex + Platform.BYTE_ARRAY_OFFSET,
-        8 * rowId, count * 8);
+      Platform.copyMemory(src, srcIndex + Platform.BYTE_ARRAY_OFFSET,
+          null, data + 8 * rowId, count * 8);
     } else {
       int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
-      long offset = data.getBaseOffset() + 8 * rowId;
+      long offset = data + 8 * rowId;
       for (int i = 0; i < count; ++i, offset += 8, srcOffset += 8) {
-        data.putLong(offset, java.lang.Long.reverseBytes(Platform.getLong(src, srcOffset)));
+        Platform.putLong(null, offset,
+            java.lang.Long.reverseBytes(Platform.getLong(src, srcOffset)));
       }
     }
   }
@@ -374,7 +375,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public long getLong(int rowId) {
     if (dictionary == null) {
-      return data.getLong(data.getBaseOffset() + 8 * rowId);
+      return Platform.getLong(null, data + 8 * rowId);
     } else {
       return dictionary.decodeToLong(dictionaryIds.getDictId(rowId));
     }
@@ -384,7 +385,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public long[] getLongs(int rowId, int count) {
     assert(dictionary == null);
     long[] array = new long[count];
-    data.writeTo(rowId * 8, array, Platform.LONG_ARRAY_OFFSET, count * 8);
+    Platform.copyMemory(null, data + rowId * 8, array, Platform.LONG_ARRAY_OFFSET, count * 8);
     return array;
   }
 
@@ -394,33 +395,33 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putFloat(int rowId, float value) {
-    data.putFloat(data.getBaseOffset() + rowId * 4, value);
+    Platform.putFloat(null, data + rowId * 4, value);
   }
 
   @Override
   public void putFloats(int rowId, int count, float value) {
-    long offset = data.getBaseOffset() + 4 * rowId;
+    long offset = data + 4 * rowId;
     for (int i = 0; i < count; ++i, offset += 4) {
-      data.putFloat(offset, value);
+      Platform.putFloat(null, offset, value);
     }
   }
 
   @Override
   public void putFloats(int rowId, int count, float[] src, int srcIndex) {
-    data.copyFrom(src, Platform.FLOAT_ARRAY_OFFSET + srcIndex * 4,
-      4 * rowId, count * 4);
+    Platform.copyMemory(src, Platform.FLOAT_ARRAY_OFFSET + srcIndex * 4,
+        null, data + 4 * rowId, count * 4);
   }
 
   @Override
   public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
-      data.copyFrom(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
-        rowId * 4, count * 4);
+      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+          null, data + rowId * 4, count * 4);
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
-      long offset = data.getBaseOffset() + 4 * rowId;
+      long offset = data + 4 * rowId;
       for (int i = 0; i < count; ++i, offset += 4) {
-        data.putFloat(offset, bb.getFloat(srcIndex + (4 * i)));
+        Platform.putFloat(null, offset, bb.getFloat(srcIndex + (4 * i)));
       }
     }
   }
@@ -428,7 +429,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public float getFloat(int rowId) {
     if (dictionary == null) {
-      return data.getFloat(data.getBaseOffset() + rowId * 4);
+      return Platform.getFloat(null, data + rowId * 4);
     } else {
       return dictionary.decodeToFloat(dictionaryIds.getDictId(rowId));
     }
@@ -438,7 +439,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public float[] getFloats(int rowId, int count) {
     assert(dictionary == null);
     float[] array = new float[count];
-    data.writeTo(rowId * 4, array, Platform.FLOAT_ARRAY_OFFSET, count * 4);
+    Platform.copyMemory(null, data + rowId * 4, array, Platform.FLOAT_ARRAY_OFFSET, count * 4);
     return array;
   }
 
@@ -449,33 +450,33 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putDouble(int rowId, double value) {
-    data.putDouble(data.getBaseOffset() + rowId * 8, value);
+    Platform.putDouble(null, data + rowId * 8, value);
   }
 
   @Override
   public void putDoubles(int rowId, int count, double value) {
-    long offset = data.getBaseOffset() + 8 * rowId;
+    long offset = data + 8 * rowId;
     for (int i = 0; i < count; ++i, offset += 8) {
-      data.putDouble(offset, value);
+      Platform.putDouble(null, offset, value);
     }
   }
 
   @Override
   public void putDoubles(int rowId, int count, double[] src, int srcIndex) {
-    data.copyFrom(src, Platform.DOUBLE_ARRAY_OFFSET + srcIndex * 8,
-      8 * rowId, count * 8);
+    Platform.copyMemory(src, Platform.DOUBLE_ARRAY_OFFSET + srcIndex * 8,
+      null, data + 8 * rowId, count * 8);
   }
 
   @Override
   public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
-      data.copyFrom(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
-        rowId * 8, count * 8);
+      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+        null, data + rowId * 8, count * 8);
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
-      long offset = data.getBaseOffset() + 8 * rowId;
+      long offset = data + 8 * rowId;
       for (int i = 0; i < count; ++i, offset += 8) {
-        data.putDouble(offset, bb.getDouble(srcIndex + (8 * i)));
+        Platform.putDouble(null, offset, bb.getDouble(srcIndex + (8 * i)));
       }
     }
   }
@@ -483,7 +484,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public double getDouble(int rowId) {
     if (dictionary == null) {
-      return data.getDouble(data.getBaseOffset() + rowId * 8);
+      return Platform.getDouble(null, data + rowId * 8);
     } else {
       return dictionary.decodeToDouble(dictionaryIds.getDictId(rowId));
     }
@@ -493,7 +494,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public double[] getDoubles(int rowId, int count) {
     assert(dictionary == null);
     double[] array = new double[count];
-    data.writeTo(rowId * 8, array, Platform.DOUBLE_ARRAY_OFFSET, count * 8);
+    Platform.copyMemory(null, data + rowId * 8, array, Platform.DOUBLE_ARRAY_OFFSET, count * 8);
     return array;
   }
 
@@ -503,55 +504,55 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public void putArray(int rowId, int offset, int length) {
     assert(offset >= 0 && offset + length <= childColumns[0].capacity);
-    lengthData.putInt(lengthData.getBaseOffset() + 4 * rowId, length);
-    offsetData.putInt(offsetData.getBaseOffset() + 4 * rowId, offset);
+    Platform.putInt(null, lengthData + 4 * rowId, length);
+    Platform.putInt(null, offsetData + 4 * rowId, offset);
   }
 
   @Override
   public int getArrayLength(int rowId) {
-    return lengthData.getInt(lengthData.getBaseOffset() + 4 * rowId);
+    return Platform.getInt(null, lengthData + 4 * rowId);
   }
 
   @Override
   public int getArrayOffset(int rowId) {
-    return offsetData.getInt(offsetData.getBaseOffset() + 4 * rowId);
+    return Platform.getInt(null, offsetData + 4 * rowId);
   }
 
   // APIs dealing with ByteArrays
   @Override
   public int putByteArray(int rowId, byte[] value, int offset, int length) {
     int result = arrayData().appendBytes(length, value, offset);
-    lengthData.putInt(lengthData.getBaseOffset() + 4 * rowId, length);
-    offsetData.putInt(offsetData.getBaseOffset() + 4 * rowId, result);
+    Platform.putInt(null, lengthData + 4 * rowId, length);
+    Platform.putInt(null, offsetData + 4 * rowId, result);
     return result;
   }
 
   // Split out the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
-    int oldCapacity = (nulls == OffHeapMemoryBlock.NULL) ? 0 : capacity;
+    int oldCapacity = (nulls == 0L) ? 0 : capacity;
     if (isArray() || type instanceof MapType) {
       this.lengthData =
-        MemoryAllocator.UNSAFE.reallocate(lengthData, oldCapacity * 4, newCapacity * 4);
+          Platform.reallocateMemory(lengthData, oldCapacity * 4, newCapacity * 4);
       this.offsetData =
-        MemoryAllocator.UNSAFE.reallocate(offsetData, oldCapacity * 4, newCapacity * 4);
+          Platform.reallocateMemory(offsetData, oldCapacity * 4, newCapacity * 4);
     } else if (type instanceof ByteType || type instanceof BooleanType) {
-      this.data = MemoryAllocator.UNSAFE.reallocate(data, oldCapacity, newCapacity);
+      this.data = Platform.reallocateMemory(data, oldCapacity, newCapacity);
     } else if (type instanceof ShortType) {
-      this.data = MemoryAllocator.UNSAFE.reallocate(data, oldCapacity * 2, newCapacity * 2);
+      this.data = Platform.reallocateMemory(data, oldCapacity * 2, newCapacity * 2);
     } else if (type instanceof IntegerType || type instanceof FloatType ||
         type instanceof DateType || DecimalType.is32BitDecimalType(type)) {
-      this.data = MemoryAllocator.UNSAFE.reallocate(data, oldCapacity * 4, newCapacity * 4);
+      this.data = Platform.reallocateMemory(data, oldCapacity * 4, newCapacity * 4);
     } else if (type instanceof LongType || type instanceof DoubleType ||
         DecimalType.is64BitDecimalType(type) || type instanceof TimestampType) {
-      this.data = MemoryAllocator.UNSAFE.reallocate(data, oldCapacity * 8, newCapacity * 8);
+      this.data = Platform.reallocateMemory(data, oldCapacity * 8, newCapacity * 8);
     } else if (childColumns != null) {
       // Nothing to store.
     } else {
       throw new RuntimeException("Unhandled " + type);
     }
-    this.nulls = MemoryAllocator.UNSAFE.reallocate(nulls, oldCapacity, newCapacity);
-    Platform.setMemory(nulls.getBaseOffset() + oldCapacity, (byte)0, newCapacity - oldCapacity);
+    this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
+    Platform.setMemory(nulls + oldCapacity, (byte)0, newCapacity - oldCapacity);
     capacity = newCapacity;
   }
 
