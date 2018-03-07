@@ -14,18 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s
+package org.apache.spark.deploy.k8s.submit.steps.initcontainer
 
-import io.fabric8.kubernetes.api.model.{Container, Pod}
+import org.apache.spark.deploy.k8s.MountSecretsBootstrap
 
 /**
- * Represents a pod with a detached init-container (not yet added to the pod).
+ * An init-container configuration step for mounting user-specified secrets onto user-specified
+ * paths.
  *
- * @param pod the pod
- * @param initContainer the init-container in the pod
- * @param mainContainer the main container in the pod
+ * @param bootstrap a utility actually handling mounting of the secrets
  */
-private[spark] case class PodWithDetachedInitContainer(
-    pod: Pod,
-    initContainer: Container,
-    mainContainer: Container)
+private[spark] class InitContainerMountSecretsStep(
+    bootstrap: MountSecretsBootstrap) extends InitContainerConfigurationStep {
+
+  override def configureInitContainer(spec: InitContainerSpec) : InitContainerSpec = {
+    // Mount the secret volumes given that the volumes have already been added to the driver pod
+    // when mounting the secrets into the main driver container.
+    val initContainer = bootstrap.mountSecrets(spec.initContainer)
+    spec.copy(initContainer = initContainer)
+  }
+}

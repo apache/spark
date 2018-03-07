@@ -14,18 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s
+package org.apache.spark.deploy.k8s.submit.steps
 
-import io.fabric8.kubernetes.api.model.{Container, Pod}
+import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 
 /**
- * Represents a pod with a detached init-container (not yet added to the pod).
- *
- * @param pod the pod
- * @param initContainer the init-container in the pod
- * @param mainContainer the main container in the pod
+ * Represents a step in configuring the Spark driver pod.
  */
-private[spark] case class PodWithDetachedInitContainer(
-    pod: Pod,
-    initContainer: Container,
-    mainContainer: Container)
+private[spark] trait DriverConfigurationStep {
+
+  /**
+   * Apply some transformation to the previous state of the driver to add a new feature to it.
+   */
+  def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec
+}

@@ -16,21 +16,22 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+import scala.collection.JavaConverters._
+
 import com.google.common.collect.Iterables
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, DoneablePod, HasMetadata, Pod, PodBuilder, PodList, Secret, SecretBuilder}
+import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
-import io.fabric8.kubernetes.client.dsl.{MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, NamespaceVisitFromServerGetWatchDeleteRecreateWaitApplicable, PodResource, Resource}
+import io.fabric8.kubernetes.client.dsl.{MixedOperation, NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable, PodResource}
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.Mockito.{doReturn, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
-import org.scalatest.mock.MockitoSugar._
-import scala.collection.JavaConverters._
+import org.scalatest.mockito.MockitoSugar._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.constants._
-import org.apache.spark.deploy.k8s.submit.submitsteps.{DriverConfigurationStep, KubernetesDriverSpec}
+import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit.steps.DriverConfigurationStep
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -82,39 +83,39 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     when(podOperations.withName(FirstTestConfigurationStep.podName)).thenReturn(namedPods)
     when(namedPods.watch(loggingPodStatusWatcher)).thenReturn(mock[Watch])
     doReturn(resourceList)
-        .when(kubernetesClient)
-        .resourceList(createdResourcesArgumentCaptor.capture())
+      .when(kubernetesClient)
+      .resourceList(createdResourcesArgumentCaptor.capture())
   }
 
   test("The client should configure the pod with the submission steps.") {
     val submissionClient = new Client(
-        submissionSteps,
-        new SparkConf(false),
-        kubernetesClient,
-        false,
-        "spark",
-        loggingPodStatusWatcher)
+      submissionSteps,
+      new SparkConf(false),
+      kubernetesClient,
+      false,
+      "spark",
+      loggingPodStatusWatcher)
     submissionClient.run()
     val createdPod = createdPodArgumentCaptor.getValue
     assert(createdPod.getMetadata.getName === FirstTestConfigurationStep.podName)
     assert(createdPod.getMetadata.getLabels.asScala ===
-        Map(FirstTestConfigurationStep.labelKey -> FirstTestConfigurationStep.labelValue))
+      Map(FirstTestConfigurationStep.labelKey -> FirstTestConfigurationStep.labelValue))
     assert(createdPod.getMetadata.getAnnotations.asScala ===
-        Map(SecondTestConfigurationStep.annotationKey ->
-            SecondTestConfigurationStep.annotationValue))
+      Map(SecondTestConfigurationStep.annotationKey ->
+        SecondTestConfigurationStep.annotationValue))
     assert(createdPod.getSpec.getContainers.size() === 1)
     assert(createdPod.getSpec.getContainers.get(0).getName ===
-        SecondTestConfigurationStep.containerName)
+      SecondTestConfigurationStep.containerName)
   }
 
   test("The client should create the secondary Kubernetes resources.") {
     val submissionClient = new Client(
-        submissionSteps,
-        new SparkConf(false),
-        kubernetesClient,
-        false,
-        "spark",
-        loggingPodStatusWatcher)
+      submissionSteps,
+      new SparkConf(false),
+      kubernetesClient,
+      false,
+      "spark",
+      loggingPodStatusWatcher)
     submissionClient.run()
     val createdPod = createdPodArgumentCaptor.getValue
     val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues
@@ -122,7 +123,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val createdResource = Iterables.getOnlyElement(otherCreatedResources).asInstanceOf[Secret]
     assert(createdResource.getMetadata.getName === FirstTestConfigurationStep.secretName)
     assert(createdResource.getData.asScala ===
-        Map(FirstTestConfigurationStep.secretKey -> FirstTestConfigurationStep.secretData))
+      Map(FirstTestConfigurationStep.secretKey -> FirstTestConfigurationStep.secretData))
     val ownerReference = Iterables.getOnlyElement(createdResource.getMetadata.getOwnerReferences)
     assert(ownerReference.getName === createdPod.getMetadata.getName)
     assert(ownerReference.getKind === DRIVER_POD_KIND)
@@ -132,17 +133,17 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("The client should attach the driver container with the appropriate JVM options.") {
     val sparkConf = new SparkConf(false)
-        .set("spark.logConf", "true")
-        .set(
-          org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS,
+      .set("spark.logConf", "true")
+      .set(
+        org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS,
           "-XX:+HeapDumpOnOutOfMemoryError -XX:+PrintGCDetails")
     val submissionClient = new Client(
-        submissionSteps,
-        sparkConf,
-        kubernetesClient,
-        false,
-        "spark",
-        loggingPodStatusWatcher)
+      submissionSteps,
+      sparkConf,
+      kubernetesClient,
+      false,
+      "spark",
+      loggingPodStatusWatcher)
     submissionClient.run()
     val createdPod = createdPodArgumentCaptor.getValue
     val driverContainer = Iterables.getOnlyElement(createdPod.getSpec.getContainers)
@@ -153,11 +154,11 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(driverJvmOptsEnvs.size === 4)
 
     val expectedJvmOptsValues = Seq(
-        "-Dspark.logConf=true",
-        s"-D${SecondTestConfigurationStep.sparkConfKey}=" +
-            s"${SecondTestConfigurationStep.sparkConfValue}",
-        s"-XX:+HeapDumpOnOutOfMemoryError",
-        s"-XX:+PrintGCDetails")
+      "-Dspark.logConf=true",
+      s"-D${SecondTestConfigurationStep.sparkConfKey}=" +
+        s"${SecondTestConfigurationStep.sparkConfValue}",
+      "-XX:+HeapDumpOnOutOfMemoryError",
+      "-XX:+PrintGCDetails")
     driverJvmOptsEnvs.zip(expectedJvmOptsValues).zipWithIndex.foreach {
       case ((resolvedEnv, expectedJvmOpt), index) =>
         assert(resolvedEnv.getName === s"$ENV_JAVA_OPT_PREFIX$index")

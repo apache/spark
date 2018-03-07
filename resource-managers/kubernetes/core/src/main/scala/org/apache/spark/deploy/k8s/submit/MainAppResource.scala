@@ -18,6 +18,4 @@ package org.apache.spark.deploy.k8s.submit
 
 private[spark] sealed trait MainAppResource
 
-private[spark] case class PythonMainAppResource(primaryPyFile: String) extends MainAppResource
-
 private[spark] case class JavaMainAppResource(primaryResource: String) extends MainAppResource

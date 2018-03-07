@@ -18,13 +18,13 @@
 package org.apache.spark.deploy
 
 import java.io._
-import java.lang.reflect.{InvocationTargetException, UndeclaredThrowableException}
+import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
 import java.security.PrivilegedExceptionAction
 import java.text.ParseException
 
 import scala.annotation.tailrec
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.{Properties, Try}
 
 import org.apache.commons.lang3.StringUtils
@@ -99,7 +99,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
   private[deploy] val REST_CLUSTER_SUBMIT_CLASS = classOf[RestSubmissionClientApp].getName()
   private[deploy] val STANDALONE_CLUSTER_SUBMIT_CLASS = classOf[ClientApp].getName()
   private[deploy] val KUBERNETES_CLUSTER_SUBMIT_CLASS =
-    "org.apache.spark.deploy.k8s.submit.Client"
+    "org.apache.spark.deploy.k8s.submit.KubernetesClientApplication"
 
   // scalastyle:off println
   private[spark] def printVersionAndExit(): Unit = {
@@ -310,10 +310,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     // Fail fast, the following modes are not supported or applicable
     (clusterManager, deployMode) match {
-      case (KUBERNETES, CLIENT) =>
-        printErrorAndExit("Client mode is currently not supported for Kubernetes.")
-      case (KUBERNETES, CLUSTER) if args.isR =>
-        printErrorAndExit("Kubernetes does not currently support R applications.")
       case (STANDALONE, CLUSTER) if args.isPython =>
         printErrorAndExit("Cluster deploy mode is currently not supported for python " +
           "applications on standalone clusters.")
@@ -324,6 +320,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
         printErrorAndExit("Python applications are currently not supported for Kubernetes.")
       case (KUBERNETES, _) if args.isR =>
         printErrorAndExit("R applications are currently not supported for Kubernetes.")
+      case (KUBERNETES, CLIENT) =>
+        printErrorAndExit("Client mode is currently not supported for Kubernetes.")
       case (LOCAL, CLUSTER) =>
         printErrorAndExit("Cluster deploy mode is not compatible with master \"local\"")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
@@ -343,8 +341,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
     }
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
-    val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
     val isStandAloneCluster = clusterManager == STANDALONE && deployMode == CLUSTER
+    val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
 
     if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
@@ -579,9 +577,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
       OptionAssigner(args.principal, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.principal"),
       OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, confKey = "spark.yarn.keytab"),
 
-      OptionAssigner(args.kubernetesNamespace, KUBERNETES, ALL_DEPLOY_MODES,
-        confKey = "spark.kubernetes.namespace"),
-
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN | KUBERNETES, ALL_DEPLOY_MODES,
         confKey = "spark.executor.cores"),
@@ -649,9 +644,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     // Add the application jar automatically so the user doesn't have to call sc.addJar
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
-    // In Kubernetes cluster mode, the jar will be uploaded by the client separately.
     // For python and R files, the primary resource is already distributed as a regular file
-    if (!isYarnCluster && !isKubernetesCluster && !args.isPython && !args.isR) {
+    if (!isYarnCluster && !args.isPython && !args.isR) {
       var jars = sparkConf.getOption("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
       if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
@@ -733,21 +727,14 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
     if (isKubernetesCluster) {
       childMainClass = KUBERNETES_CLUSTER_SUBMIT_CLASS
-      if (args.isPython) {
-        childArgs ++= Array("--primary-py-file", args.primaryResource)
-        childArgs ++= Array("--main-class", "org.apache.spark.deploy.PythonRunner")
-        if (args.pyFiles != null) {
-          childArgs ++= Array("--other-py-files", args.pyFiles)
-        }
-      } else {
-        if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
-          childArgs ++= Array("--primary-java-resource", args.primaryResource)
-        }
-        childArgs ++= Array("--main-class", args.mainClass)
+      if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
+        childArgs ++= Array("--primary-java-resource", args.primaryResource)
       }
-      args.childArgs.foreach { arg =>
-        childArgs += "--arg"
-        childArgs += arg
+      childArgs ++= Array("--main-class", args.mainClass)
+      if (args.childArgs != null) {
+        args.childArgs.foreach { arg =>
+          childArgs += ("--arg", arg)
+        }
       }
     }
 

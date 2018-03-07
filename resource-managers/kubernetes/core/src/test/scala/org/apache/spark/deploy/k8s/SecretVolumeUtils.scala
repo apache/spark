@@ -16,16 +16,21 @@
  */
 package org.apache.spark.deploy.k8s
 
+import scala.collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model.{Container, Pod}
 
-/**
- * Represents a pod with a detached init-container (not yet added to the pod).
- *
- * @param pod the pod
- * @param initContainer the init-container in the pod
- * @param mainContainer the main container in the pod
- */
-private[spark] case class PodWithDetachedInitContainer(
-    pod: Pod,
-    initContainer: Container,
-    mainContainer: Container)
+private[spark] object SecretVolumeUtils {
+
+  def podHasVolume(pod: Pod, volumeName: String): Boolean = {
+    pod.getSpec.getVolumes.asScala.exists { volume =>
+      volume.getName == volumeName
+    }
+  }
+
+  def containerHasVolume(container: Container, volumeName: String, mountPath: String): Boolean = {
+    container.getVolumeMounts.asScala.exists { volumeMount =>
+      volumeMount.getName == volumeName && volumeMount.getMountPath == mountPath
+    }
+  }
+}

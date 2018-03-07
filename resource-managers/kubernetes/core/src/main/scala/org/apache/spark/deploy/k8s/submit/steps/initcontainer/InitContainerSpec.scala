@@ -14,18 +14,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s
+package org.apache.spark.deploy.k8s.submit.steps.initcontainer
 
-import io.fabric8.kubernetes.api.model.{Container, Pod}
+import io.fabric8.kubernetes.api.model.{Container, HasMetadata, Pod}
 
 /**
- * Represents a pod with a detached init-container (not yet added to the pod).
+ * Represents a specification of the init-container for the driver pod.
  *
- * @param pod the pod
- * @param initContainer the init-container in the pod
- * @param mainContainer the main container in the pod
+ * @param properties properties that should be set on the init-container
+ * @param driverSparkConf Spark configuration properties that will be carried back to the driver
+ * @param initContainer the init-container object
+ * @param driverContainer the driver container object
+ * @param driverPod the driver pod object
+ * @param dependentResources resources the init-container depends on to work
  */
-private[spark] case class PodWithDetachedInitContainer(
-    pod: Pod,
+private[spark] case class InitContainerSpec(
+    properties: Map[String, String],
+    driverSparkConf: Map[String, String],
     initContainer: Container,
-    mainContainer: Container)
+    driverContainer: Container,
+    driverPod: Pod,
+    dependentResources: Seq[HasMetadata])
