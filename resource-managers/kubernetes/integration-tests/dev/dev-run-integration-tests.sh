@@ -107,4 +107,4 @@ then
   properties=( ${properties[@]} -Dspark.kubernetes.test.master=$SPARK_MASTER )
 fi
 
-build/mvn integration-test ${properties[@]}
+../../../build/mvn integration-test ${properties[@]}
