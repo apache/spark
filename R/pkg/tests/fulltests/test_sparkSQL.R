@@ -1649,6 +1649,7 @@ test_that("string operators", {
   expect_false(first(select(df, startsWith(df$name, "m")))[[1]])
   expect_true(first(select(df, endsWith(df$name, "el")))[[1]])
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
+  expect_equal(first(select(df, substr(df$name, 4, 6)))[[1]], "hae")
   if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
     expect_true(startsWith("Hello World", "Hello"))
     expect_false(endsWith("Hello World", "a"))
