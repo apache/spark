@@ -75,6 +75,14 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val initializeBean = InitializeJavaBean(Literal.fromObject(new java.util.LinkedList[Int]),
       Map("add" -> Literal(1)))
     checkEvaluation(initializeBean, list, InternalRow.fromSeq(Seq()))
+
+    val errMsg = intercept[RuntimeException] {
+      val initializeWithNonexistingMethod = InitializeJavaBean(
+        Literal.fromObject(new java.util.LinkedList[Int]),
+        Map("nonexisting" -> Literal(1)))
+      evaluate(initializeWithNonexistingMethod, InternalRow.fromSeq(Seq()))
+    }.getMessage
+    assert(errMsg.contains("but 0 methods found."))
   }
 
   test("SPARK-23585: UnwrapOption should support interpreted execution") {
