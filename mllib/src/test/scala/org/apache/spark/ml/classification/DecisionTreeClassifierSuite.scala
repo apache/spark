@@ -360,6 +360,32 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
 
     testDefaultReadWrite(model)
   }
+
+  test("label/impurity stats") {
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0)))))
+    val rdd = sc.parallelize(arr)
+    val df = TreeTests.setMetadata(rdd, Map.empty[Int, Int], 2)
+    val dt1 = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(2)
+      .setMinInstancesPerNode(2)
+    val model1 = dt1.fit(df)
+
+    val statInfo1 = model1.rootNode.statInfo.asTreeClassifierStatInfo
+    assert(Array(statInfo1.getLabelCount(0), statInfo1.getLabelCount(1)) === Array(2.0, 1.0))
+
+    val dt2 = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(2)
+      .setMinInstancesPerNode(2)
+    val model2 = dt2.fit(df)
+
+    val statInfo2 = model2.rootNode.statInfo.asTreeClassifierStatInfo
+    assert(Array(statInfo2.getLabelCount(0), statInfo2.getLabelCount(1)) === Array(2.0, 1.0))
+  }
 }
 
 private[ml] object DecisionTreeClassifierSuite extends SparkFunSuite {

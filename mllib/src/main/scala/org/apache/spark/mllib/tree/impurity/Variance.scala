@@ -129,6 +129,8 @@ private[spark] class VarianceCalculator(stats: Array[Double]) extends ImpurityCa
     stats(1) / count
   }
 
+  override def getStatInfo: TreeStatInfo = new TreeRegressorStatInfo(stats)
+
   override def toString: String = {
     s"VarianceAggregator(cnt = ${stats(0)}, sum = ${stats(1)}, sum2 = ${stats(2)})"
   }

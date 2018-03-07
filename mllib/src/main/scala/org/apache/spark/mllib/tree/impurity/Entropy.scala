@@ -160,6 +160,8 @@ private[spark] class EntropyCalculator(stats: Array[Double]) extends ImpurityCal
     }
   }
 
+  override def getStatInfo: TreeStatInfo = new TreeClassifierStatInfo(stats)
+
   override def toString: String = s"EntropyCalculator(stats = [${stats.mkString(", ")}])"
 
 }
