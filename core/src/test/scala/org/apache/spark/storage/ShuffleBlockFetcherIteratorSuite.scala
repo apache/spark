@@ -372,17 +372,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       ShuffleBlockId(0, 1, 0) -> corruptBuffer.size()
     )
 
-    val transfer = mock(classOf[BlockTransferService])
-    when(transfer.fetchBlocks(any(), any(), any(), any(), any(), any()))
-        .thenAnswer(new Answer[Unit] {
-          override def answer(invocation: InvocationOnMock): Unit = {
-            val listener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
-            val blocks = invocation.getArguments()(3).asInstanceOf[Array[String]]
-            Future {
-              blocks.foreach (listener.onBlockFetchSuccess(_, corruptBuffer))
-            }
-          }
-        })
+    val transfer = createMockTransfer(
+      Map(ShuffleBlockId(0, 0, 0) -> corruptBuffer, ShuffleBlockId(0, 1, 0) -> corruptBuffer))
 
     val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (localBmId, localBlockLengths),
@@ -402,11 +393,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       Int.MaxValue,
       true)
     // Blocks should be returned without exceptions.
-    val blockSet = collection.mutable.HashSet[BlockId]()
-    blockSet.add(iterator.next()._1)
-    blockSet.add(iterator.next()._1)
-    assert(blockSet == collection.immutable.HashSet(
-      ShuffleBlockId(0, 0, 0), ShuffleBlockId(0, 1, 0)))
+    assert(Set(iterator.next()._1, iterator.next()._1) ===
+        Set(ShuffleBlockId(0, 0, 0), ShuffleBlockId(0, 1, 0)))
   }
 
   test("retry corrupt blocks (disabled)") {

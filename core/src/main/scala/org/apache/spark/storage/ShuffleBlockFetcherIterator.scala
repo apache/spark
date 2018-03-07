@@ -588,7 +588,7 @@ object ShuffleBlockFetcherIterator {
    * @param blockId block id
    * @param address BlockManager that the block was fetched from.
    * @param size estimated size of the block. Note that this is NOT the exact bytes.
-    *            Size of remote block is used to calculate bytesInFlight.
+   *             Size of remote block is used to calculate bytesInFlight.
    * @param buf `ManagedBuffer` for the content.
    * @param isNetworkReqDone Is this the last network request for this host in this fetch request.
    */
