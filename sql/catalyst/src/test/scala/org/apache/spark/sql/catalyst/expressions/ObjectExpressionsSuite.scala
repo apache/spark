@@ -123,4 +123,17 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(encodeUsingSerializer, null, InternalRow.fromSeq(Seq(null)))
     }
   }
+
+  test("SPARK-23591: EncodeUsingSerializer should support interpreted execution") {
+    val cls = ObjectType(classOf[java.lang.Integer])
+    val inputObject = BoundReference(0, cls, nullable = true)
+    val conf = new SparkConf()
+    Seq(true, false).foreach { useKryo =>
+      val serializer = if (useKryo) new KryoSerializer(conf) else new JavaSerializer(conf)
+      val expected = serializer.newInstance().serialize(new Integer(1)).array()
+      val encodeUsingSerializer = EncodeUsingSerializer(inputObject, useKryo)
+      checkEvaluation(encodeUsingSerializer, expected, InternalRow.fromSeq(Seq(1)))
+      checkEvaluation(encodeUsingSerializer, null, InternalRow.fromSeq(Seq(null)))
+    }
+  }
 }
