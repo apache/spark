@@ -19,8 +19,8 @@ package org.apache.spark.deploy.k8s.integrationtest
 import java.nio.file.{Path, Paths}
 import java.util.UUID
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import io.fabric8.kubernetes.client.DefaultKubernetesClient
 import org.scalatest.concurrent.Eventually
 
