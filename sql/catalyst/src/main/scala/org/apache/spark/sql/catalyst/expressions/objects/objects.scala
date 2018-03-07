@@ -1670,27 +1670,30 @@ case class ValidateExternalType(child: Expression, expected: DataType)
 
   override def nullable: Boolean = child.nullable
 
-  override def dataType: DataType = RowEncoder.externalDataTypeForInput(expected)
+  override val dataType: DataType = RowEncoder.externalDataTypeForInput(expected)
 
   private val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
+
+  private lazy val dataTypeClazz = if (dataType.isInstanceOf[ObjectType]) {
+    dataType.asInstanceOf[ObjectType].cls
+  } else {
+    // Some external types (e.g., native types and `PythonUserDefinedType`) might not be ObjectType
+    ScalaReflection.classForNativeTypeOf(dataType)
+  }
 
   private lazy val checkType = expected match {
     case _: DecimalType =>
       (value: Any) => {
-        Seq(classOf[java.math.BigDecimal], classOf[scala.math.BigDecimal], classOf[Decimal])
-          .exists { x => value.getClass.isAssignableFrom(x) }
+        value.isInstanceOf[java.math.BigDecimal] || value.isInstanceOf[scala.math.BigDecimal] ||
+          value.isInstanceOf[Decimal]
       }
     case _: ArrayType =>
       (value: Any) => {
-        value.getClass.isAssignableFrom(classOf[Seq[_]]) || value.getClass.isArray
-      }
-    case _ if ScalaReflection.isNativeType(expected) =>
-      (value: Any) => {
-        value.getClass.isAssignableFrom(ScalaReflection.classForNativeTypeOf(expected))
+        value.getClass.isArray || value.isInstanceOf[Seq[_]]
       }
     case _ =>
       (value: Any) => {
-        value.getClass.isAssignableFrom(dataType.asInstanceOf[ObjectType].cls)
+        dataTypeClazz.isInstance(value)
       }
   }
 
@@ -1715,7 +1718,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
         Seq(classOf[java.math.BigDecimal], classOf[scala.math.BigDecimal], classOf[Decimal])
           .map(cls => s"$obj instanceof ${cls.getName}").mkString(" || ")
       case _: ArrayType =>
-        s"$obj instanceof ${classOf[Seq[_]].getName} || $obj.getClass().isArray()"
+        s"$obj.getClass().isArray() || $obj instanceof ${classOf[Seq[_]].getName}"
       case _ =>
         s"$obj instanceof ${CodeGenerator.boxedType(dataType)}"
     }
