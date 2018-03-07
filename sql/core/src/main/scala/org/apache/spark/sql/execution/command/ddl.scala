@@ -344,7 +344,8 @@ case class AlterTableChangeColumnCommand(
     schema.fields.collectFirst {
       case field if resolver(field.name, name) => field
     }.getOrElse(throw new AnalysisException(
-      s"Invalid column reference '$name', table data schema is '${schema}'"))
+      s"Can't find column `$name` given table data columns " +
+        s"${schema.fieldNames.mkString("[`", "`, `", "`]")}"))
   }
 
   // Add the comment to a column, if comment is empty, return the original column.

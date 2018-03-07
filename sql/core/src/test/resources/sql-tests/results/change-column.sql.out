@@ -154,7 +154,7 @@ ALTER TABLE test_change CHANGE invalid_col invalid_col INT
 struct<>
 -- !query 15 output
 org.apache.spark.sql.AnalysisException
-Invalid column reference 'invalid_col', table data schema is 'StructType(StructField(a,IntegerType,true), StructField(b,StringType,true), StructField(c,IntegerType,true))';
+Can't find column `invalid_col` given table data columns [`a`, `b`, `c`];
 
 
 -- !query 16
@@ -296,7 +296,7 @@ ALTER TABLE partition_table CHANGE COLUMN c c INT COMMENT 'this is column C'
 struct<>
 -- !query 30 output
 org.apache.spark.sql.AnalysisException
-Invalid column reference 'c', table data schema is 'StructType(StructField(a,IntegerType,true), StructField(b,StringType,true))';
+Can't find column `c` given table data columns [`a`, `b`];
 
 
 -- !query 31
