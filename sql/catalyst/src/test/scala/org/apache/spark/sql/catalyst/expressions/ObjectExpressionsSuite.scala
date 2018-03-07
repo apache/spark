@@ -100,14 +100,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // If an input row or a field are null, a runtime exception will be thrown
-    val errMsg1 = intercept[RuntimeException] {
-      evaluate(getRowField, InternalRow.fromSeq(Seq(null)))
-    }.getMessage
-    assert(errMsg1 === "The input external row cannot be null.")
-
-    val errMsg2 = intercept[RuntimeException] {
-      evaluate(getRowField, InternalRow.fromSeq(Seq(Row(null))))
-    }.getMessage
-    assert(errMsg2 === "The 0th field 'c0' of input row cannot be null.")
+    checkExceptionInExpression[RuntimeException](
+      getRowField,
+      InternalRow.fromSeq(Seq(null)),
+      "The input external row cannot be null.")
+    checkExceptionInExpression[RuntimeException](
+      getRowField,
+      InternalRow.fromSeq(Seq(Row(null))),
+      "The 0th field 'c0' of input row cannot be null.")
   }
 }

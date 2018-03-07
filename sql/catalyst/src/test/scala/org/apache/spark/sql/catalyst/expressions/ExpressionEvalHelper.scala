@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.reflect.ClassTag
+
 import org.scalacheck.Gen
 import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.exceptions.TestFailedException
@@ -45,11 +47,15 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     InternalRow.fromSeq(values.map(CatalystTypeConverters.convertToCatalyst))
   }
 
-  protected def checkEvaluation(
-      expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
+  private def prepareEvaluation(expression: Expression): Expression = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance
     val resolver = ResolveTimeZone(new SQLConf)
-    val expr = resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
+    resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
+  }
+
+  protected def checkEvaluation(
+      expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
+    val expr = prepareEvaluation(expression)
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expr, catalystValue, inputRow)
@@ -95,7 +101,31 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
   }
 
-  protected def evaluate(expression: Expression, inputRow: InternalRow = EmptyRow): Any = {
+  protected def checkExceptionInExpression[T <: Throwable : ClassTag](
+      expression: => Expression,
+      inputRow: InternalRow,
+      expectedErrMsg: String): Unit = {
+
+    def checkException(eval: => Unit, testMode: String): Unit = {
+      withClue(s"($testMode)") {
+        val errMsg = intercept[T] {
+          eval
+        }.getMessage
+        if (errMsg != expectedErrMsg) {
+          fail(s"Expected error message is `$expectedErrMsg`, but `$errMsg` found")
+        }
+      }
+    }
+    val expr = prepareEvaluation(expression)
+    checkException(evaluateWithoutCodegen(expr, inputRow), "non-codegen mode")
+    checkException(evaluateWithGeneratedMutableProjection(expr, inputRow), "codegen mode")
+    if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
+      checkException(evaluateWithUnsafeProjection(expr, inputRow), "unsafe mode")
+    }
+  }
+
+  protected def evaluateWithoutCodegen(
+      expression: Expression, inputRow: InternalRow = EmptyRow): Any = {
     expression.foreach {
       case n: Nondeterministic => n.initialize(0)
       case _ =>
@@ -124,7 +154,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
 
-    val actual = try evaluate(expression, inputRow) catch {
+    val actual = try evaluateWithoutCodegen(expression, inputRow) catch {
       case e: Exception => fail(s"Exception evaluating $expression", e)
     }
     if (!checkResult(actual, expected, expression.dataType)) {
@@ -139,33 +169,29 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       expression: Expression,
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
-
-    val plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
-      expression)
-    plan.initialize(0)
-
-    val actual = plan(inputRow).get(0, expression.dataType)
+    val actual = evaluateWithGeneratedMutableProjection(expression, inputRow)
     if (!checkResult(actual, expected, expression.dataType)) {
       val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
       fail(s"Incorrect evaluation: $expression, actual: $actual, expected: $expected$input")
     }
   }
 
+  private def evaluateWithGeneratedMutableProjection(
+      expression: Expression,
+      inputRow: InternalRow = EmptyRow): Any = {
+    val plan = generateProject(
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
+      expression)
+    plan.initialize(0)
+
+    plan(inputRow).get(0, expression.dataType)
+  }
+
   protected def checkEvalutionWithUnsafeProjection(
       expression: Expression,
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
-    // SPARK-16489 Explicitly doing code generation twice so code gen will fail if
-    // some expression is reusing variable names across different instances.
-    // This behavior is tested in ExpressionEvalHelperSuite.
-    val plan = generateProject(
-      UnsafeProjection.create(
-        Alias(expression, s"Optimized($expression)1")() ::
-          Alias(expression, s"Optimized($expression)2")() :: Nil),
-      expression)
-
-    val unsafeRow = plan(inputRow)
+    val unsafeRow = evaluateWithUnsafeProjection(expression, inputRow)
     val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
 
     if (expected == null) {
@@ -183,6 +209,21 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
           s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
       }
     }
+  }
+
+  private def evaluateWithUnsafeProjection(
+      expression: Expression,
+      inputRow: InternalRow = EmptyRow): InternalRow = {
+    // SPARK-16489 Explicitly doing code generation twice so code gen will fail if
+    // some expression is reusing variable names across different instances.
+    // This behavior is tested in ExpressionEvalHelperSuite.
+    val plan = generateProject(
+      UnsafeProjection.create(
+        Alias(expression, s"Optimized($expression)1")() ::
+          Alias(expression, s"Optimized($expression)2")() :: Nil),
+      expression)
+
+    plan(inputRow)
   }
 
   protected def checkEvaluationWithOptimization(
@@ -294,7 +335,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
 
   private def cmpInterpretWithCodegen(inputRow: InternalRow, expr: Expression): Unit = {
     val interpret = try {
-      evaluate(expr, inputRow)
+      evaluateWithoutCodegen(expr, inputRow)
     } catch {
       case e: Exception => fail(s"Exception evaluating $expr", e)
     }
