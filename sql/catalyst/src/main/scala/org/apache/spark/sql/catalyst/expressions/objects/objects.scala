@@ -24,7 +24,6 @@ import scala.collection.mutable.Builder
 import scala.language.existentials
 import scala.reflect.ClassTag
 import scala.util.Try
-
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
@@ -32,9 +31,10 @@ import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenerator, CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Common base class for [[StaticInvoke]], [[Invoke]], and [[NewInstance]].
@@ -221,8 +221,21 @@ case class StaticInvoke(
   override def nullable: Boolean = needNullCheck || returnNullable
   override def children: Seq[Expression] = arguments
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+  override def eval(input: InternalRow): Any = {
+    if (staticObject == null) {
+      throw new RuntimeException("The static class cannot be null.")
+    }
+
+    val parmTypes = arguments.map(e =>
+      CallMethodViaReflection.typeMapping.getOrElse(e.dataType,
+        Seq(e.dataType.asInstanceOf[ObjectType].cls))(0))
+    val parms = arguments.map(e => e.eval(input).asInstanceOf[Object])
+    val method = staticObject.getDeclaredMethod(functionName, parmTypes : _*)
+    val ret = method.invoke(null, parms : _*)
+    val retClass = CallMethodViaReflection.typeMapping.getOrElse(dataType,
+      Seq(dataType.asInstanceOf[ObjectType].cls))(0)
+    retClass.cast(ret)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
