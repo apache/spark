@@ -93,6 +93,26 @@ public final class UnsafeRowWriter extends UnsafeWriter {
     Platform.putLong(holder.buffer, getFieldOffset(ordinal), 0L);
   }
 
+  @Override
+  public void setNullByte(int ordinal) {
+    setNullAt(ordinal);
+  }
+
+  @Override
+  public void setNullShort(int ordinal) {
+    setNullAt(ordinal);
+  }
+
+  @Override
+  public void setNullInt(int ordinal) {
+    setNullAt(ordinal);
+  }
+
+  @Override
+  public void setNullLong(int ordinal) {
+    setNullAt(ordinal);
+  }
+
   public long getFieldOffset(int ordinal) {
     return startingOffset + nullBitsSize + 8 * ordinal;
   }

@@ -17,7 +17,8 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, Nondeterministic, SpecializedGetters, UnsafeArrayData, UnsafeMapData, UnsafeProjection, UnsafeProjectionCreator, UnsafeRow}
+import org.apache.spark.sql.catalyst.analysis.CleanupAliases
+import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, GenericInternalRow, Nondeterministic, SpecializedGetters, StatefulNondeterministic, UnsafeArrayData, UnsafeMapData, UnsafeProjection, UnsafeProjectionCreator, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeArrayWriter, UnsafeRowWriter, UnsafeWriter}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.{UserDefinedType, _}
@@ -85,7 +86,7 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
     // Write the intermediate row to an unsafe row.
     holder.reset()
     writer(intermediate)
-    result.setTotalSize(holder.cursor)
+    result.setTotalSize(holder.totalSize())
     result
   }
 }
@@ -99,7 +100,11 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
    * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
    */
   override protected def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
-    new InterpretedUnsafeProjection(exprs.toArray)
+    // We need to make sure that we do not reuse stateful non deterministic expressions.
+    val cleanedExpressions = exprs.map(_.transform {
+      case s: StatefulNondeterministic => s.freshCopy()
+    })
+    new InterpretedUnsafeProjection(cleanedExpressions.toArray)
   }
 
   /**
@@ -259,6 +264,9 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
 
     // Wrap the writer with a null safe version if the field is nullable.
     (dt, nullable) match {
+      case (_: UserDefinedType[_], _) =>
+        // The null wrapper depends on the sql type and not on the UDT.
+        unsafeWriter
       case (DecimalType.Fixed(precision, scale), true) if precision > Decimal.MAX_LONG_DIGITS =>
         (v, i) => {
           // We can't call setNullAt() for DecimalType with precision larger than 18.
@@ -268,21 +276,41 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
             writer.write(i, null.asInstanceOf[Decimal], precision, scale)
           }
         }
-      case (_: UserDefinedType[_], _) =>
-        // The null wrapper depends on the sql type and not on the UDT.
-        unsafeWriter
+      case (_, true) if dt.defaultSize == 1 =>
+        (v, i) => {
+          if (!v.isNullAt(i)) {
+            unsafeWriter(v, i)
+          } else {
+            writer.setNullByte(i)
+          }
+        }
+      case (_, true) if dt.defaultSize == 2 =>
+        (v, i) => {
+          if (!v.isNullAt(i)) {
+            unsafeWriter(v, i)
+          } else {
+            writer.setNullShort(i)
+          }
+        }
+      case (_, true) if dt.defaultSize == 4 =>
+        (v, i) => {
+          if (!v.isNullAt(i)) {
+            unsafeWriter(v, i)
+          } else {
+            writer.setNullInt(i)
+          }
+        }
       case (_, true) =>
         (v, i) => {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)
           } else {
-            writer.setNullAt(i)
+            writer.setNullLong(i)
           }
         }
       case _ => unsafeWriter
     }
   }
-
 
   /**
    * Get the number of bytes elements of a data type will occupy in the fixed part of an

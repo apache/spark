@@ -328,6 +328,21 @@ trait Nondeterministic extends Expression {
   protected def evalInternal(input: InternalRow): Any
 }
 
+/**
+ * A stateful nondeterministic expression. These expressions contain state
+ * that is not stored in the parameter list.
+ */
+trait StatefulNondeterministic extends Nondeterministic {
+  /**
+   * Return a fresh uninitialized copy of the current node.
+   */
+  def freshCopy(): Nondeterministic
+
+  /**
+   * Only the same reference is considered equal.
+   */
+  override def fastEquals(other: TreeNode[_]): Boolean = this eq other
+}
 
 /**
  * A leaf expression, i.e. one without any child expressions.

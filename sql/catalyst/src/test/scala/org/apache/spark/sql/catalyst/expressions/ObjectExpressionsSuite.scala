@@ -43,7 +43,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val structExpected = new GenericArrayData(
       Array(InternalRow.fromSeq(Seq(1, 2)), InternalRow.fromSeq(Seq(3, 4))))
     checkEvaluationWithUnsafeProjection(
-      structEncoder.serializer.head, structExpected, structInputRow)
+      structEncoder.serializer.head,
+      structExpected,
+      structInputRow,
+      UnsafeProjection) // TODO(hvanhovell) revert this when SPARK-23587 is fixed
 
     // test UnsafeArray-backed data
     val arrayEncoder = ExpressionEncoder[Array[Array[Int]]]
@@ -51,7 +54,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val arrayExpected = new GenericArrayData(
       Array(new GenericArrayData(Array(1, 2)), new GenericArrayData(Array(3, 4))))
     checkEvaluationWithUnsafeProjection(
-      arrayEncoder.serializer.head, arrayExpected, arrayInputRow)
+      arrayEncoder.serializer.head,
+      arrayExpected,
+      arrayInputRow,
+      UnsafeProjection) // TODO(hvanhovell) revert this when SPARK-23587 is fixed
 
     // test UnsafeMap-backed data
     val mapEncoder = ExpressionEncoder[Array[Map[Int, Int]]]
@@ -65,7 +71,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         new GenericArrayData(Array(3, 4)),
         new GenericArrayData(Array(300, 400)))))
     checkEvaluationWithUnsafeProjection(
-      mapEncoder.serializer.head, mapExpected, mapInputRow)
+      mapEncoder.serializer.head,
+      mapExpected,
+      mapInputRow,
+      UnsafeProjection) // TODO(hvanhovell) revert this when SPARK-23587 is fixed
   }
 
   test("SPARK-23585: UnwrapOption should support interpreted execution") {

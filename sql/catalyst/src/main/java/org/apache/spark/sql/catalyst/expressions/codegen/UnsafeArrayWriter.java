@@ -138,7 +138,7 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     Platform.putDouble(holder.buffer, getElementOffset(ordinal, 8), (double)0);
   }
 
-  public void setNullAt(int ordinal) { setNullLong(ordinal); }
+  public void setNull(int ordinal) { setNullLong(ordinal); }
 
   public void write(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);
@@ -205,7 +205,7 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
         holder.cursor += roundedSize;
       }
     } else {
-      setNullAt(ordinal);
+      setNull(ordinal);
     }
   }
 

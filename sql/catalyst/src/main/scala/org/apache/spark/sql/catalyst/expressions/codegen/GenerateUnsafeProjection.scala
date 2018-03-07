@@ -236,7 +236,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }
 
     val primitiveTypeName =
-      if (CodeGenerator.isPrimitiveType(jt)) CodeGenerator.primitiveTypeName(et) else "At"
+      if (CodeGenerator.isPrimitiveType(jt)) CodeGenerator.primitiveTypeName(et) else ""
     s"""
       final ArrayData $tmpInput = $input;
       if ($tmpInput instanceof UnsafeArrayData) {

@@ -24,7 +24,10 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Base class for writing Unsafe* structures.
  */
 public abstract class UnsafeWriter {
-  public abstract void setNullAt(int ordinal);
+  public abstract void setNullByte(int ordinal);
+  public abstract void setNullShort(int ordinal);
+  public abstract void setNullInt(int ordinal);
+  public abstract void setNullLong(int ordinal);
   public abstract void write(int ordinal, boolean value);
   public abstract void write(int ordinal, byte value);
   public abstract void write(int ordinal, short value);

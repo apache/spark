@@ -132,7 +132,7 @@ trait UnsafeProjectionCreator {
     val unsafeExprs = exprs.map(_ transform {
       case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
     })
-    GenerateUnsafeProjection.generate(unsafeExprs)
+    createProjection(unsafeExprs)
   }
 
   def create(expr: Expression): UnsafeProjection = create(Seq(expr))
