@@ -804,7 +804,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
   protected var metastorePath: File = _
   protected def metastoreJdbcUri = s"jdbc:derby:;databaseName=$metastorePath;create=true"
 
-  private val pidDir: File = Utils.createTempDir("thriftserver-pid")
+  private val pidDir: File = Utils.createTempDir(namePrefix = "thriftserver-pid")
   protected var logPath: File = _
   protected var operationLogPath: File = _
   private var logTailingProcess: Process = _
