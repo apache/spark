@@ -22,16 +22,17 @@ import java.util.UUID
 import java.util.regex.Pattern
 
 import scala.collection.JavaConverters._
+
 import com.google.common.io.PatternFilenameFilter
 import io.fabric8.kubernetes.api.model.{Container, Pod}
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Seconds, Span}
 
 import org.apache.spark.deploy.k8s.integrationtest.backend.{IntegrationTestBackend, IntegrationTestBackendFactory}
 import org.apache.spark.deploy.k8s.integrationtest.config._
 
-private[spark] class KubernetesSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter {
+private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfter {
 
   import KubernetesSuite._
 
@@ -101,111 +102,111 @@ private[spark] class KubernetesSuite extends FunSuite with BeforeAndAfterAll wit
     runSparkPiAndVerifyCompletion()
   }
 
-  test("Run SparkPi with a very long application name.") {
-    sparkAppConf.set("spark.app.name", "long" * 40)
-    runSparkPiAndVerifyCompletion()
-  }
-
-  test("Run SparkPi with a master URL without a scheme.") {
-    val url = kubernetesTestComponents.kubernetesClient.getMasterUrl
-    val k8sMasterUrl = if (url.getPort < 0) {
-      s"k8s://${url.getHost}"
-    } else {
-      s"k8s://${url.getHost}:${url.getPort}"
-    }
-    sparkAppConf.set("spark.master", k8sMasterUrl)
-    runSparkPiAndVerifyCompletion()
-  }
-
-  test("Run SparkPi with an argument.") {
-    runSparkPiAndVerifyCompletion(appArgs = Array("5"))
-  }
-
-  test("Run SparkPi with custom labels, annotations, and environment variables.") {
-    sparkAppConf
-      .set("spark.kubernetes.driver.label.label1", "label1-value")
-      .set("spark.kubernetes.driver.label.label2", "label2-value")
-      .set("spark.kubernetes.driver.annotation.annotation1", "annotation1-value")
-      .set("spark.kubernetes.driver.annotation.annotation2", "annotation2-value")
-      .set("spark.kubernetes.driverEnv.ENV1", "VALUE1")
-      .set("spark.kubernetes.driverEnv.ENV2", "VALUE2")
-      .set("spark.kubernetes.executor.label.label1", "label1-value")
-      .set("spark.kubernetes.executor.label.label2", "label2-value")
-      .set("spark.kubernetes.executor.annotation.annotation1", "annotation1-value")
-      .set("spark.kubernetes.executor.annotation.annotation2", "annotation2-value")
-      .set("spark.executorEnv.ENV1", "VALUE1")
-      .set("spark.executorEnv.ENV2", "VALUE2")
-
-    runSparkPiAndVerifyCompletion(
-      driverPodChecker = (driverPod: Pod) => {
-        doBasicDriverPodCheck(driverPod)
-        checkCustomSettings(driverPod)
-      },
-      executorPodChecker = (executorPod: Pod) => {
-        doBasicExecutorPodCheck(executorPod)
-        checkCustomSettings(executorPod)
-      })
-  }
-
-  test("Run SparkPi with a test secret mounted into the driver and executor pods") {
-    val secretName = TEST_SECRET_NAME_PREFIX + UUID.randomUUID().toString.replaceAll("-", "")
-    createTestSecret(secretName)
-
-    sparkAppConf
-      .set(s"spark.kubernetes.driver.secrets.$secretName", TEST_SECRET_MOUNT_PATH)
-      .set(s"spark.kubernetes.executor.secrets.$secretName", TEST_SECRET_MOUNT_PATH)
-
-    try {
-      runSparkPiAndVerifyCompletion(
-        driverPodChecker = (driverPod: Pod) => {
-          doBasicDriverPodCheck(driverPod)
-          checkTestSecret(secretName, driverPod)
-        },
-        executorPodChecker = (executorPod: Pod) => {
-          doBasicExecutorPodCheck(executorPod)
-          checkTestSecret(secretName, executorPod)
-        })
-    } finally {
-      deleteTestSecret(secretName)
-    }
-  }
-
-  test("Run PageRank using remote data file") {
-    sparkAppConf
-      .set("spark.kubernetes.mountDependencies.filesDownloadDir",
-        CONTAINER_LOCAL_FILE_DOWNLOAD_PATH)
-      .set("spark.files", REMOTE_PAGE_RANK_DATA_FILE)
-    runSparkPageRankAndVerifyCompletion(
-      appArgs = Array(CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE))
-  }
-
-  test("Run PageRank using remote data file with test secret mounted into the driver and " +
-    "executors") {
-    val secretName = TEST_SECRET_NAME_PREFIX + UUID.randomUUID().toString.replaceAll("-", "")
-    createTestSecret(secretName)
-
-    sparkAppConf
-      .set("spark.kubernetes.mountDependencies.filesDownloadDir",
-        CONTAINER_LOCAL_FILE_DOWNLOAD_PATH)
-      .set("spark.files", REMOTE_PAGE_RANK_DATA_FILE)
-      .set(s"spark.kubernetes.driver.secrets.$secretName", TEST_SECRET_MOUNT_PATH)
-      .set(s"spark.kubernetes.executor.secrets.$secretName", TEST_SECRET_MOUNT_PATH)
-
-    try {
-      runSparkPageRankAndVerifyCompletion(
-        appArgs = Array(CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE),
-        driverPodChecker = (driverPod: Pod) => {
-          doBasicDriverPodCheck(driverPod)
-          checkTestSecret(secretName, driverPod, withInitContainer = true)
-        },
-        executorPodChecker = (executorPod: Pod) => {
-          doBasicExecutorPodCheck(executorPod)
-          checkTestSecret(secretName, executorPod, withInitContainer = true)
-        })
-    } finally {
-      deleteTestSecret(secretName)
-    }
-  }
+//  test("Run SparkPi with a very long application name.") {
+//    sparkAppConf.set("spark.app.name", "long" * 40)
+//    runSparkPiAndVerifyCompletion()
+//  }
+//
+//  test("Run SparkPi with a master URL without a scheme.") {
+//    val url = kubernetesTestComponents.kubernetesClient.getMasterUrl
+//    val k8sMasterUrl = if (url.getPort < 0) {
+//      s"k8s://${url.getHost}"
+//    } else {
+//      s"k8s://${url.getHost}:${url.getPort}"
+//    }
+//    sparkAppConf.set("spark.master", k8sMasterUrl)
+//    runSparkPiAndVerifyCompletion()
+//  }
+//
+//  test("Run SparkPi with an argument.") {
+//    runSparkPiAndVerifyCompletion(appArgs = Array("5"))
+//  }
+//
+//  test("Run SparkPi with custom labels, annotations, and environment variables.") {
+//    sparkAppConf
+//      .set("spark.kubernetes.driver.label.label1", "label1-value")
+//      .set("spark.kubernetes.driver.label.label2", "label2-value")
+//      .set("spark.kubernetes.driver.annotation.annotation1", "annotation1-value")
+//      .set("spark.kubernetes.driver.annotation.annotation2", "annotation2-value")
+//      .set("spark.kubernetes.driverEnv.ENV1", "VALUE1")
+//      .set("spark.kubernetes.driverEnv.ENV2", "VALUE2")
+//      .set("spark.kubernetes.executor.label.label1", "label1-value")
+//      .set("spark.kubernetes.executor.label.label2", "label2-value")
+//      .set("spark.kubernetes.executor.annotation.annotation1", "annotation1-value")
+//      .set("spark.kubernetes.executor.annotation.annotation2", "annotation2-value")
+//      .set("spark.executorEnv.ENV1", "VALUE1")
+//      .set("spark.executorEnv.ENV2", "VALUE2")
+//
+//    runSparkPiAndVerifyCompletion(
+//      driverPodChecker = (driverPod: Pod) => {
+//        doBasicDriverPodCheck(driverPod)
+//        checkCustomSettings(driverPod)
+//      },
+//      executorPodChecker = (executorPod: Pod) => {
+//        doBasicExecutorPodCheck(executorPod)
+//        checkCustomSettings(executorPod)
+//      })
+//  }
+//
+//  test("Run SparkPi with a test secret mounted into the driver and executor pods") {
+//    val secretName = TEST_SECRET_NAME_PREFIX + UUID.randomUUID().toString.replaceAll("-", "")
+//    createTestSecret(secretName)
+//
+//    sparkAppConf
+//      .set(s"spark.kubernetes.driver.secrets.$secretName", TEST_SECRET_MOUNT_PATH)
+//      .set(s"spark.kubernetes.executor.secrets.$secretName", TEST_SECRET_MOUNT_PATH)
+//
+//    try {
+//      runSparkPiAndVerifyCompletion(
+//        driverPodChecker = (driverPod: Pod) => {
+//          doBasicDriverPodCheck(driverPod)
+//          checkTestSecret(secretName, driverPod)
+//        },
+//        executorPodChecker = (executorPod: Pod) => {
+//          doBasicExecutorPodCheck(executorPod)
+//          checkTestSecret(secretName, executorPod)
+//        })
+//    } finally {
+//      deleteTestSecret(secretName)
+//    }
+//  }
+//
+//  test("Run PageRank using remote data file") {
+//    sparkAppConf
+//      .set("spark.kubernetes.mountDependencies.filesDownloadDir",
+//        CONTAINER_LOCAL_FILE_DOWNLOAD_PATH)
+//      .set("spark.files", REMOTE_PAGE_RANK_DATA_FILE)
+//    runSparkPageRankAndVerifyCompletion(
+//      appArgs = Array(CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE))
+//  }
+//
+//  test("Run PageRank using remote data file with test secret mounted into the driver and " +
+//    "executors") {
+//    val secretName = TEST_SECRET_NAME_PREFIX + UUID.randomUUID().toString.replaceAll("-", "")
+//    createTestSecret(secretName)
+//
+//    sparkAppConf
+//      .set("spark.kubernetes.mountDependencies.filesDownloadDir",
+//        CONTAINER_LOCAL_FILE_DOWNLOAD_PATH)
+//      .set("spark.files", REMOTE_PAGE_RANK_DATA_FILE)
+//      .set(s"spark.kubernetes.driver.secrets.$secretName", TEST_SECRET_MOUNT_PATH)
+//      .set(s"spark.kubernetes.executor.secrets.$secretName", TEST_SECRET_MOUNT_PATH)
+//
+//    try {
+//      runSparkPageRankAndVerifyCompletion(
+//        appArgs = Array(CONTAINER_LOCAL_DOWNLOADED_PAGE_RANK_DATA_FILE),
+//        driverPodChecker = (driverPod: Pod) => {
+//          doBasicDriverPodCheck(driverPod)
+//          checkTestSecret(secretName, driverPod, withInitContainer = true)
+//        },
+//        executorPodChecker = (executorPod: Pod) => {
+//          doBasicExecutorPodCheck(executorPod)
+//          checkTestSecret(secretName, executorPod, withInitContainer = true)
+//        })
+//    } finally {
+//      deleteTestSecret(secretName)
+//    }
+//  }
 
   private def runSparkPiAndVerifyCompletion(
       appResource: String = containerLocalSparkDistroExamplesJar,
