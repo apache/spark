@@ -34,7 +34,7 @@ from pyspark.serializers import write_with_length, write_int, read_long, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
     BatchedSerializer, ArrowStreamPandasSerializer
 from pyspark.sql.types import to_arrow_type
-from pyspark.sql.utils import get_argspec
+from pyspark.util import _get_argspec
 from pyspark import shuffle
 
 pickleSer = PickleSerializer()
@@ -94,7 +94,7 @@ def wrap_scalar_pandas_udf(f, return_type):
 def wrap_grouped_map_pandas_udf(f, return_type):
     def wrapped(key_series, value_series):
         import pandas as pd
-        argspec = get_argspec(f)
+        argspec = _get_argspec(f)
 
         if len(argspec.args) == 1:
             result = f(pd.concat(value_series, axis=1))

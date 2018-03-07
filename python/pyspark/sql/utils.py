@@ -15,9 +15,7 @@
 # limitations under the License.
 #
 
-import sys
 import py4j
-import inspect
 
 
 class CapturedException(Exception):
@@ -147,15 +145,3 @@ def require_minimum_pyarrow_version():
         raise ImportError("PyArrow >= %s must be installed; however, "
                           "your version was %s." % (minimum_pyarrow_version, pyarrow.__version__))
 
-
-def get_argspec(f):
-    """
-    Get argspec of a function.
-    """
-    # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
-    # See SPARK-23569.
-    if sys.version_info[0] < 3:
-        argspec = inspect.getargspec(f)
-    else:
-        argspec = inspect.getfullargspec(f)
-    return argspec
