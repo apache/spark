@@ -738,6 +738,6 @@ private object YarnAllocator {
     val diag = if (matcher.find()) " " + matcher.group() + "." else ""
     s"Container killed by YARN for exceeding memory limits. $diag " +
       "Consider boosting spark.yarn.executor.memoryOverhead or " +
-      "disable yarn.nodemanager.vmem-check-enabled because of YARN-4714."
+      "disabling yarn.nodemanager.vmem-check-enabled because of YARN-4714."
   }
 }
