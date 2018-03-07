@@ -36,8 +36,7 @@ private[scheduler] sealed trait DAGSchedulerEvent
 /** A result-yielding job was submitted on a target RDD */
 private[scheduler] case class JobSubmitted(
     jobId: Int,
-    finalRDD: RDD[_],
-    func: (TaskContext, Iterator[_]) => _,
+    finalStage: ResultStage,
     partitions: Array[Int],
     callSite: CallSite,
     listener: JobListener,

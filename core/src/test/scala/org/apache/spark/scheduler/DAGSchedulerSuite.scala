@@ -313,9 +313,20 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       partitions: Array[Int],
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc,
       listener: JobListener = jobListener,
-      properties: Properties = null): Int = {
+      properties: Properties = null,
+      scheduler: DAGScheduler = scheduler): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
-    runEvent(JobSubmitted(jobId, rdd, func, partitions, CallSite("", ""), listener, properties))
+    var finalStage: ResultStage = null
+    val callSite = CallSite("", "")
+    try {
+      finalStage = scheduler.createResultStage(rdd, func, partitions, jobId, callSite)
+    } catch {
+      case e: Exception =>
+        logWarning("Creating new stage failed due to exception - job: " + jobId, e)
+        listener.jobFailed(e)
+        return jobId
+    }
+    runEvent(JobSubmitted(jobId, finalStage, partitions, callSite, listener, properties))
     jobId
   }
 
@@ -647,7 +658,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       blockManagerMaster,
       sc.env)
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(noKillScheduler)
-    val jobId = submit(new MyRDD(sc, 1, Nil), Array(0))
+    val jobId = submit(new MyRDD(sc, 1, Nil), Array(0), scheduler = noKillScheduler)
     cancel(jobId)
     // Because the job wasn't actually cancelled, we shouldn't have received a failure message.
     assert(failure === null)
