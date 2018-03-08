@@ -449,8 +449,44 @@ case class NewInstance(
     childrenResolved && !needOuterPointer
   }
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+  private lazy val constructor: (Seq[AnyRef]) => Any = {
+    val paramTypes = arguments.map { expr =>
+      CallMethodViaReflection.typeMapping.getOrElse(expr.dataType,
+        Seq(expr.dataType.asInstanceOf[ObjectType].cls))
+    }
+    val findConstructor = (types: Seq[Seq[Class[_]]]) => {
+      val constructorOption = cls.getConstructors.find { c =>
+        if (c.getParameterCount == types.length) {
+          c.getParameterTypes.zip(types).forall { case (constructorType, candidateTypes) =>
+            candidateTypes.exists {
+              case tpe => constructorType.isAssignableFrom(tpe)
+            }
+          }
+        } else {
+          false
+        }
+      }
+      assert(constructorOption.isDefined)
+      constructorOption.get
+    }
+    outerPointer.map { p =>
+      val outerObj = p()
+      val c = findConstructor(Seq(outerObj.getClass) +: paramTypes)
+      (args: Seq[AnyRef]) => {
+        c.newInstance(outerObj +: args: _*)
+      }
+    }.getOrElse {
+      val c = findConstructor(paramTypes)
+      (args: Seq[AnyRef]) => {
+        c.newInstance(args: _*)
+      }
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val argValues = arguments.map(_.eval(input))
+    constructor(argValues.map(_.asInstanceOf[AnyRef]))
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
