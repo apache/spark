@@ -17,8 +17,7 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.analysis.CleanupAliases
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, GenericInternalRow, Nondeterministic, SpecializedGetters, StatefulNondeterministic, UnsafeArrayData, UnsafeMapData, UnsafeProjection, UnsafeProjectionCreator, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, Nondeterministic, SpecializedGetters, StatefulNondeterministic, UnsafeArrayData, UnsafeMapData, UnsafeProjection, UnsafeProjectionCreator, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeArrayWriter, UnsafeRowWriter, UnsafeWriter}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.{UserDefinedType, _}
@@ -276,7 +275,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
             writer.write(i, null.asInstanceOf[Decimal], precision, scale)
           }
         }
-      case (_, true) if dt.defaultSize == 1 =>
+      case (BooleanType | ByteType, true) =>
         (v, i) => {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)
@@ -284,7 +283,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
             writer.setNullByte(i)
           }
         }
-      case (_, true) if dt.defaultSize == 2 =>
+      case (ShortType, true) =>
         (v, i) => {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)
@@ -292,7 +291,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
             writer.setNullShort(i)
           }
         }
-      case (_, true) if dt.defaultSize == 4 =>
+      case (IntegerType | DateType | FloatType, true) =>
         (v, i) => {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)
