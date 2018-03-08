@@ -205,7 +205,7 @@ def main(infile, outfile):
         boot_time = time.time()
         split_index = read_int(infile)
         if split_index == -1:  # for unit tests
-            exit(-1)
+            sys.exit(-1)
 
         version = utf8_deserializer.loads(infile)
         if version != "%d.%d" % sys.version_info[:2]:
@@ -279,7 +279,7 @@ def main(infile, outfile):
             # Write the error to stderr if it happened while serializing
             print("PySpark worker failed with exception:", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)
     write_long(shuffle.MemoryBytesSpilled, outfile)
@@ -297,7 +297,7 @@ def main(infile, outfile):
     else:
         # write a different value to tell JVM to not reuse this worker
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == '__main__':
