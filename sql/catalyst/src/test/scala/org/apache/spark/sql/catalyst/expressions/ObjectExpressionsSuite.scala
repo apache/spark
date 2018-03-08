@@ -19,12 +19,13 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 
 
@@ -102,15 +103,27 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // If an input row or a field are null, a runtime exception will be thrown
-    val errMsg1 = intercept[RuntimeException] {
-      evaluate(getRowField, InternalRow.fromSeq(Seq(null)))
-    }.getMessage
-    assert(errMsg1 === "The input external row cannot be null.")
+    checkExceptionInExpression[RuntimeException](
+      getRowField,
+      InternalRow.fromSeq(Seq(null)),
+      "The input external row cannot be null.")
+    checkExceptionInExpression[RuntimeException](
+      getRowField,
+      InternalRow.fromSeq(Seq(Row(null))),
+      "The 0th field 'c0' of input row cannot be null.")
+  }
 
-    val errMsg2 = intercept[RuntimeException] {
-      evaluate(getRowField, InternalRow.fromSeq(Seq(Row(null))))
-    }.getMessage
-    assert(errMsg2 === "The 0th field 'c0' of input row cannot be null.")
+  test("SPARK-23591: EncodeUsingSerializer should support interpreted execution") {
+    val cls = ObjectType(classOf[java.lang.Integer])
+    val inputObject = BoundReference(0, cls, nullable = true)
+    val conf = new SparkConf()
+    Seq(true, false).foreach { useKryo =>
+      val serializer = if (useKryo) new KryoSerializer(conf) else new JavaSerializer(conf)
+      val expected = serializer.newInstance().serialize(new Integer(1)).array()
+      val encodeUsingSerializer = EncodeUsingSerializer(inputObject, useKryo)
+      checkEvaluation(encodeUsingSerializer, expected, InternalRow.fromSeq(Seq(1)))
+      checkEvaluation(encodeUsingSerializer, null, InternalRow.fromSeq(Seq(null)))
+    }
   }
 
   test("SPARK-23587: MapObjects should support interpreted execution") {
@@ -147,16 +160,14 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
         customCollectionCls match {
           case null =>
-          case l if l.isAssignableFrom(classOf[java.util.AbstractList[_]]) =>
-            assert(result.asInstanceOf[java.util.List[_]].asScala.toSeq == expected.toSeq)
-          case l if l.isAssignableFrom(classOf[java.util.AbstractSequentialList[_]]) =>
-            assert(result.asInstanceOf[java.util.List[_]].asScala.toSeq == expected.toSeq)
-          case s if s.isAssignableFrom(classOf[Seq[_]]) =>
-            assert(result.asInstanceOf[Seq[_]].toSeq == expected.toSeq)
-          case s if s.isAssignableFrom(classOf[scala.collection.Set[_]]) =>
+            assert(result.asInstanceOf[ArrayData].array.toSeq == expected)
+          case l if classOf[java.util.List[_]].isAssignableFrom(l) =>
+            assert(result.asInstanceOf[java.util.List[_]].asScala.toSeq == expected)
+          case s if classOf[Seq[_]].isAssignableFrom(s) =>
+            assert(result.asInstanceOf[Seq[_]].toSeq == expected)
+          case s if classOf[scala.collection.Set[_]].isAssignableFrom(s) =>
             assert(result.asInstanceOf[scala.collection.Set[_]] == expected.toSet)
         }
-        optClass.foreach(_.isAssignableFrom(result.getClass))
       }
     }
   }
