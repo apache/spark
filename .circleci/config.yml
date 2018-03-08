@@ -51,10 +51,16 @@ jobs:
           # Make sbt fetch all the external deps to ~/.ivy2 so it gets cached
           set -o pipefail && ./build/sbt -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr externalDependencyClasspath | tee -a "$CIRCLE_ARTIFACTS/sbt-classpath.log"
       - save_cache:
-          key: dependency-cache
+          key: ??
           paths:
             - "build_classes"
+      - save_cache:
+          key: ??
+          paths:
             - "build"
+      - save_cache:
+          key: ??
+          paths:
             - "~/miniconda"
     environment:
       - TERM: dumb
@@ -83,18 +89,26 @@ jobs:
 
 workflows:
   version: 2
-  build_and_test_and_deploy:
+  build-test-deploy:
     jobs:
-      - build
+      - build:
+          filters:
+            # run on all branches and tags
+            tags:
+              only: /.*/
       - test:
           requires:
             - build
+          filters:
+            # run on all branches and tags
+            tags:
+              only: /.*/
       - deploy:
           requires:
             - build
             - test
           filters:
-            branches:
-              only: master
             tags:
               only: /[0-9]+(?:\.[0-9]+){2,}-palantir\.[0-9]+(?:\.[0-9]+)*/
+            branches:
+              only: master
