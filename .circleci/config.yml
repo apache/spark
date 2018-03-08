@@ -68,7 +68,6 @@ jobs:
       - R_HOME: /usr/lib/R
       - CONDA_BIN: $HOME/miniconda/bin/conda
       - CONDA_ROOT: $HOME/miniconda
-      - BASH_ENV: ~/.bash_profile
   test:
     docker:
       - image: circleci/build-image:ubuntu-14.04-XXL-1327-3401d20
