@@ -1,0 +1,94 @@
+version: 2
+jobs:
+  build: 
+    docker:
+      - image: circleci/java:oraclejdk8
+    steps:
+      # post machine
+      - run: sudo sh -c 'echo "deb http://cran.rstudio.com/bin/linux/ubuntu trusty/" >> /etc/apt/sources.list'
+      - run: gpg --keyserver keyserver.ubuntu.com --recv-key E084DAB9
+      - run: gpg -a --export E084DAB9 | sudo apt-key add -
+      - run: sudo apt-get update
+      - run: sudo apt-get --assume-yes install r-base r-base-dev qpdf
+      - run: sudo chmod 777 /usr/local/lib/R/site-library
+      - run: /usr/lib/R/bin/R -e "install.packages(c('devtools'), repos='http://cran.us.r-project.org', lib='/usr/local/lib/R/site-library'); devtools::install_github('r-lib/testthat@v1.0.2', lib='/usr/local/lib/R/site-library'); install.packages(c('knitr', 'rmarkdown', 'e1071', 'survival', 'roxygen2', 'lintr'), repos='http://cran.us.r-project.org', lib='/usr/local/lib/R/site-library')"
+      - run: |
+          if [[ ! -d ${CONDA_ROOT} ]]; then
+              echo "Installing Miniconda...";
+              wget --quiet https://repo.continuum.io/miniconda/Miniconda2-4.3.31-Linux-x86_64.sh &&
+                bash Miniconda2-4.3.31-Linux-x86_64.sh -b -p ${CONDA_ROOT};
+          else
+              echo "Using cached Miniconda install";
+          fi
+      - run: ln -s ~/miniconda $(pyenv root)/versions/miniconda3-latest
+      - run: 'pyenv versions | grep -q miniconda3-latest/envs/python2 || $CONDA_BIN create -y -n python2 python==2.7.11 numpy | tee -a "$CIRCLE_ARTIFACTS/run-conda.log"'
+      - run: 'pyenv versions | grep -q miniconda3-latest/envs/python3 || $CONDA_BIN create -y -n python3 python==3.4.4 numpy | tee -a "$CIRCLE_ARTIFACTS/run-conda.log"'
+      - run: pyenv global miniconda3-latest/envs/python2 miniconda3-latest/envs/python3 #pypy-4.0.1
+      - run: pyenv rehash
+      - checkout
+      # post checkout
+      - run: "[[ ! -s \"$(git rev-parse --git-dir)/shallow\" ]] || git fetch --unshallow"
+      - run: echo "user=$BINTRAY_USERNAME" > .credentials
+      - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
+      - run: echo "realm=Bintray API Realm" >> .credentials
+      - run: echo "host=api.bintray.com" >> .credentials
+      - restore_cache:
+          key: dependency-cache
+      # dependencies
+      - run: |
+          if [[ -d build_classes ]]; then
+            # Copy contents into current build directory
+            rsync --info=stats2,misc1,flist0 -a build_classes/ .
+          fi
+      - run: set -o pipefail && ./build/mvn -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install | tee -a "$CIRCLE_ARTIFACTS/mvn-install.log"
+      - run: >
+          rsync --info=stats2,misc1,flist0 -a --delete-excluded --prune-empty-dirs --exclude build_classes/ --exclude 'target/streams' --exclude 'assembly/target' --exclude 'common/network-yarn/target' --exclude 'examples/target' --exclude '***/*.jar' --include 'target/***' --include '**/' --exclude '*' . build_classes/
+      - run: |
+          # Make sbt fetch all the external deps to ~/.ivy2 so it gets cached
+          set -o pipefail && ./build/sbt -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr externalDependencyClasspath | tee -a "$CIRCLE_ARTIFACTS/sbt-classpath.log"
+      - save_cache:
+          key: dependency-cache
+          paths:
+            - "build_classes"
+            - "build"
+            - "~/miniconda"
+    environment:
+      - TERM: dumb
+      - R_HOME: /usr/lib/R
+      - CONDA_BIN: $HOME/miniconda/bin/conda
+      - CONDA_ROOT: $HOME/miniconda
+  test:
+    docker:
+      - image: circleci/java:oraclejdk8
+    steps:
+      - run: set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "$CIRCLE_ARTIFACTS/run-tests.log"
+      # post test
+      - run: find . -name unit-tests.log -exec rsync -R {} $CIRCLE_ARTIFACTS \;
+      - run: |
+                shopt -s nullglob
+                files=(resource-managers/yarn/target/./org.apache.spark.deploy.yarn.*/*-logDir-*)
+                if [[ ${#files[@]} != 0 ]]; then
+                  rsync -Rrm "${files[@]}" $CIRCLE_ARTIFACTS
+                fi
+  deploy:
+    docker:
+        - image: circleci/java:oraclejdk8
+    steps:
+      - run: dev/publish.sh
+      - run: curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/spark/$(git describe --tags)/publish
+
+workflows:
+  version: 2
+  build_and_test_and_deploy:
+    jobs:
+      - build
+      - test:
+          requires:
+            - build
+      - deploy:
+          requires:
+            - build
+            - test
+          filters:
+            branches:
+              only: master
