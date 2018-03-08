@@ -93,7 +93,6 @@ class KafkaDataConsumerSuite extends SharedSQLContext with PrivateMethodTester {
       } catch {
         case e: Throwable =>
           error = e
-          println(s"$i: Error $e")
           throw e
       } finally {
         consumer.release()
