@@ -1265,19 +1265,15 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
     val ObjectType(beanClass) = beanInstance.dataType
     setters.map {
       case (name, expr) =>
-        val methods = CallMethodViaReflection.typeMapping.getOrElse(expr.dataType,
-            Seq(expr.dataType.asInstanceOf[ObjectType].cls)).flatMap { fieldClass =>
+        // Looking for known type mapping first, then using Class attached in `ObjectType`.
+        // Finally also looking for general `Object`-type parameter for generic methods.
+        val paramTypes = CallMethodViaReflection.typeMapping.getOrElse(expr.dataType,
+            Seq(expr.dataType.asInstanceOf[ObjectType].cls)) ++ Seq(classOf[Object])
+        val methods = paramTypes.flatMap { fieldClass =>
           try {
-            // Looking up for specified parameter type first.
             Some(beanClass.getDeclaredMethod(name, fieldClass))
           } catch {
-            case e: NoSuchMethodException =>
-              try {
-                // Looking up for general `Object`-type parameter for generic methods.
-                Some(beanClass.getDeclaredMethod(name, classOf[Object]))
-              } catch {
-                case e: NoSuchMethodException => None
-              }
+            case e: NoSuchMethodException => None
           }
         }
         if (methods.isEmpty) {
