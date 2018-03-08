@@ -1263,25 +1263,37 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
 
   private lazy val resolvedSetters = {
     val ObjectType(beanClass) = beanInstance.dataType
-
-    setters.map { case (setterMethod, fieldExpr) =>
-      val foundMethods = beanClass.getMethods.filter { method =>
-        method.getName == setterMethod && Modifier.isPublic(method.getModifiers) &&
-          method.getParameterTypes.length == 1
-      }
-      assert(foundMethods.length == 1,
-        throw new RuntimeException("The Java Bean class should have only one " +
-          s"setter $setterMethod method, but ${foundMethods.length} methods found."))
-      (foundMethods.head, fieldExpr)
+    setters.map {
+      case (name, expr) =>
+        val methods = CallMethodViaReflection.typeMapping.getOrElse(expr.dataType,
+            Seq(expr.dataType.asInstanceOf[ObjectType].cls)).flatMap { fieldClass =>
+          try {
+            // Looking up for specified parameter type first.
+            Some(beanClass.getDeclaredMethod(name, fieldClass))
+          } catch {
+            case e: NoSuchMethodException =>
+              try {
+                // Looking up for general `Object`-type parameter for generic methods.
+                Some(beanClass.getDeclaredMethod(name, classOf[Object]))
+              } catch {
+                case e: NoSuchMethodException => None
+              }
+          }
+        }
+        if (methods.isEmpty) {
+          throw new NoSuchMethodException(s"""A method named "$name" is not declared """ +
+            "in any enclosing class nor any supertype, nor through a static import")
+        }
+        methods.head -> expr
     }
   }
 
   override def eval(input: InternalRow): Any = {
     val instance = beanInstance.eval(input).asInstanceOf[Object]
     if (instance != null) {
-      resolvedSetters.foreach { case (setterMethod, fieldExpr) =>
-        val fieldValue = fieldExpr.eval(input).asInstanceOf[Object]
-        setterMethod.invoke(instance, fieldValue)
+      resolvedSetters.foreach {
+        case (setter, expr) =>
+          setter.invoke(instance, expr.eval(input).asInstanceOf[Object])
       }
     }
     instance

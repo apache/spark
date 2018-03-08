@@ -76,13 +76,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Map("add" -> Literal(1)))
     checkEvaluation(initializeBean, list, InternalRow.fromSeq(Seq()))
 
-    val errMsg = intercept[RuntimeException] {
-      val initializeWithNonexistingMethod = InitializeJavaBean(
-        Literal.fromObject(new java.util.LinkedList[Int]),
-        Map("nonexisting" -> Literal(1)))
-      evaluate(initializeWithNonexistingMethod, InternalRow.fromSeq(Seq()))
-    }.getMessage
-    assert(errMsg.contains("but 0 methods found."))
+    val initializeWithNonexistingMethod = InitializeJavaBean(
+      Literal.fromObject(new java.util.LinkedList[Int]),
+      Map("nonexisting" -> Literal(1)))
+    checkExceptionInExpression[Exception](initializeWithNonexistingMethod,
+      InternalRow.fromSeq(Seq()),
+      """A method named "nonexisting" is not declared in any enclosing class """ +
+        "nor any supertype, nor through a static import")
   }
 
   test("SPARK-23585: UnwrapOption should support interpreted execution") {
@@ -117,14 +117,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     // If an input row or a field are null, a runtime exception will be thrown
-    val errMsg1 = intercept[RuntimeException] {
-      evaluate(getRowField, InternalRow.fromSeq(Seq(null)))
-    }.getMessage
-    assert(errMsg1 === "The input external row cannot be null.")
-
-    val errMsg2 = intercept[RuntimeException] {
-      evaluate(getRowField, InternalRow.fromSeq(Seq(Row(null))))
-    }.getMessage
-    assert(errMsg2 === "The 0th field 'c0' of input row cannot be null.")
+    checkExceptionInExpression[RuntimeException](
+      getRowField,
+      InternalRow.fromSeq(Seq(null)),
+      "The input external row cannot be null.")
+    checkExceptionInExpression[RuntimeException](
+      getRowField,
+      InternalRow.fromSeq(Seq(Row(null))),
+      "The 0th field 'c0' of input row cannot be null.")
   }
 }
