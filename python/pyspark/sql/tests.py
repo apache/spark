@@ -3903,7 +3903,7 @@ class PandasUDFTests(ReusedSQLTestCase):
                     return df
             with self.assertRaisesRegexp(ValueError, 'Invalid function'):
                 @pandas_udf(returnType='k int, v double', functionType=PandasUDFType.GROUPED_MAP)
-                def foo(k, v):
+                def foo(k, v, w):
                     return k
 
 
@@ -4476,20 +4476,45 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import pandas_udf, PandasUDFType, array, col
         df = self.data.withColumn("arr", array(col("id")))
 
-        foo_udf = pandas_udf(
+        # Different forms of group map pandas UDF, results of these are the same
+
+        output_schema = StructType(
+            [StructField('id', LongType()),
+             StructField('v', IntegerType()),
+             StructField('arr', ArrayType(LongType())),
+             StructField('v1', DoubleType()),
+             StructField('v2', LongType())])
+
+        udf1 = pandas_udf(
             lambda pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
-            StructType(
-                [StructField('id', LongType()),
-                 StructField('v', IntegerType()),
-                 StructField('arr', ArrayType(LongType())),
-                 StructField('v1', DoubleType()),
-                 StructField('v2', LongType())]),
+            output_schema,
             PandasUDFType.GROUPED_MAP
         )
 
-        result = df.groupby('id').apply(foo_udf).sort('id').toPandas()
-        expected = df.toPandas().groupby('id').apply(foo_udf.func).reset_index(drop=True)
-        self.assertPandasEqual(expected, result)
+        udf2 = pandas_udf(
+            lambda _, pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
+            output_schema,
+            PandasUDFType.GROUPED_MAP
+        )
+
+        udf3 = pandas_udf(
+            lambda key, pdf: pdf.assign(id=key[0], v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
+            output_schema,
+            PandasUDFType.GROUPED_MAP
+        )
+
+        result1 = df.groupby('id').apply(udf1).sort('id').toPandas()
+        expected1 = df.toPandas().groupby('id').apply(udf1.func).reset_index(drop=True)
+
+        result2 = df.groupby('id').apply(udf2).sort('id').toPandas()
+        expected2 = expected1
+
+        result3 = df.groupby('id').apply(udf3).sort('id').toPandas()
+        expected3 = expected1
+
+        self.assertPandasEqual(expected1, result1)
+        self.assertPandasEqual(expected2, result2)
+        self.assertPandasEqual(expected3, result3)
 
     def test_register_grouped_map_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
@@ -4647,6 +4672,80 @@ class GroupedMapPandasUDFTests(ReusedSQLTestCase):
         foo_udf = pandas_udf(lambda pdf: pdf, 'time timestamp', PandasUDFType.GROUPED_MAP)
         result = df.groupby('time').apply(foo_udf).sort('time')
         self.assertPandasEqual(df.toPandas(), result.toPandas())
+
+    def test_udf_with_key(self):
+        from pyspark.sql.functions import pandas_udf, col, PandasUDFType
+        df = self.data
+        pdf = df.toPandas()
+
+        def foo1(key, pdf):
+            import numpy as np
+            assert type(key) == tuple
+            assert type(key[0]) == np.int64
+
+            return pdf.assign(v1=key[0],
+                              v2=pdf.v * key[0],
+                              v3=pdf.v * pdf.id,
+                              v4=pdf.v * pdf.id.mean())
+
+        def foo2(key, pdf):
+            import numpy as np
+            assert type(key) == tuple
+            assert type(key[0]) == np.int64
+            assert type(key[1]) == np.int32
+
+            return pdf.assign(v1=key[0],
+                              v2=key[1],
+                              v3=pdf.v * key[0],
+                              v4=pdf.v + key[1])
+
+        def foo3(key, pdf):
+            assert type(key) == tuple
+            assert len(key) == 0
+            return pdf.assign(v1=pdf.v * pdf.id)
+
+        # v2 is int because numpy.int64 * pd.Series<int32> results in pd.Series<int32>
+        # v3 is long because pd.Series<int64> * pd.Series<int32> results in pd.Series<int64>
+        udf1 = pandas_udf(
+            foo1,
+            'id long, v int, v1 long, v2 int, v3 long, v4 double',
+            PandasUDFType.GROUPED_MAP)
+
+        udf2 = pandas_udf(
+            foo2,
+            'id long, v int, v1 long, v2 int, v3 int, v4 int',
+            PandasUDFType.GROUPED_MAP)
+
+        udf3 = pandas_udf(
+            foo3,
+            'id long, v int, v1 long',
+            PandasUDFType.GROUPED_MAP)
+
+        # Test groupby column
+        result1 = df.groupby('id').apply(udf1).sort('id', 'v').toPandas()
+        expected1 = pdf.groupby('id')\
+            .apply(lambda x: udf1.func((x.id.iloc[0],), x))\
+            .sort_values(['id', 'v']).reset_index(drop=True)
+        self.assertPandasEqual(expected1, result1)
+
+        # Test groupby expression
+        result2 = df.groupby(df.id % 2).apply(udf1).sort('id', 'v').toPandas()
+        expected2 = pdf.groupby(pdf.id % 2)\
+            .apply(lambda x: udf1.func((x.id.iloc[0] % 2,), x))\
+            .sort_values(['id', 'v']).reset_index(drop=True)
+        self.assertPandasEqual(expected2, result2)
+
+        # Test complex groupby
+        result3 = df.groupby(df.id, df.v % 2).apply(udf2).sort('id', 'v').toPandas()
+        expected3 = pdf.groupby([pdf.id, pdf.v % 2])\
+            .apply(lambda x: udf2.func((x.id.iloc[0], (x.v % 2).iloc[0],), x))\
+            .sort_values(['id', 'v']).reset_index(drop=True)
+        self.assertPandasEqual(expected3, result3)
+
+        # Test empty groupby
+        result4 = df.groupby().apply(udf3).sort('id', 'v').toPandas()
+        expected4 = udf3.func((), pdf)
+        self.assertPandasEqual(expected4, result4)
 
 
 @unittest.skipIf(
