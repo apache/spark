@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.io.PrintStream
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
 
@@ -42,5 +44,22 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("uuid") {
     checkEvaluation(Length(Uuid()), 36)
     assert(evaluateWithoutCodegen(Uuid()) !== evaluateWithoutCodegen(Uuid()))
+  }
+
+  test("PrintToStderr") {
+    val errorStream = new java.io.ByteArrayOutputStream()
+    val systemErr = System.err
+    System.setErr(new PrintStream(errorStream))
+    val inputExpr = Literal(1)
+    // check without codegen
+    checkEvaluationWithoutCodegen(PrintToStderr(inputExpr), 1)
+    val outputEval = errorStream.toString
+    errorStream.reset()
+    // check with codegen
+    checkEvaluationWithoutCodegen(PrintToStderr(inputExpr), 1)
+    val outputCodegen = errorStream.toString
+    System.setErr(systemErr)
+    assert(outputCodegen.contains(s"Result of $inputExpr is 1"))
+    assert(outputEval.contains(s"Result of $inputExpr is 1"))
   }
 }
