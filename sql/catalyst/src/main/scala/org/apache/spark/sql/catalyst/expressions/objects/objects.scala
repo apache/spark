@@ -1280,7 +1280,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
         }
         if (methods.isEmpty) {
           throw new NoSuchMethodException(s"""A method named "$name" is not declared """ +
-            "in any enclosing class nor any supertype, nor through a static import")
+            "in any enclosing class nor any supertype")
         }
         methods.head -> expr
     }

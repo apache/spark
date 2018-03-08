@@ -82,7 +82,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkExceptionInExpression[Exception](initializeWithNonexistingMethod,
       InternalRow.fromSeq(Seq()),
       """A method named "nonexisting" is not declared in any enclosing class """ +
-        "nor any supertype, nor through a static import")
+        "nor any supertype")
   }
 
   test("SPARK-23585: UnwrapOption should support interpreted execution") {
