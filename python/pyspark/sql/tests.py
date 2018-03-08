@@ -32,7 +32,9 @@ import time
 import datetime
 import array
 import ctypes
+import warnings
 import py4j
+from contextlib import contextmanager
 
 try:
     import xmlrunner
@@ -48,12 +50,13 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
+from pyspark.util import _exception_message
+
 _pandas_requirement_message = None
 try:
     from pyspark.sql.utils import require_minimum_pandas_version
     require_minimum_pandas_version()
 except ImportError as e:
-    from pyspark.util import _exception_message
     # If Pandas version requirement is not satisfied, skip related tests.
     _pandas_requirement_message = _exception_message(e)
 
@@ -62,7 +65,6 @@ try:
     from pyspark.sql.utils import require_minimum_pyarrow_version
     require_minimum_pyarrow_version()
 except ImportError as e:
-    from pyspark.util import _exception_message
     # If Arrow version requirement is not satisfied, skip related tests.
     _pyarrow_requirement_message = _exception_message(e)
 
@@ -194,6 +196,28 @@ class ReusedSQLTestCase(ReusedPySparkTestCase):
     def tearDownClass(cls):
         ReusedPySparkTestCase.tearDownClass()
         cls.spark.stop()
+
+    @contextmanager
+    def sql_conf(self, pairs):
+        """
+        A convenient context manager to test some configuration specific logic. This sets
+        `value` to the configuration `key` and then restores it back when it exits.
+        """
+        assert isinstance(pairs, dict), "pairs should be a dictionary."
+
+        keys = pairs.keys()
+        new_values = pairs.values()
+        old_values = [self.spark.conf.get(key, None) for key in keys]
+        for key, new_value in zip(keys, new_values):
+            self.spark.conf.set(key, new_value)
+        try:
+            yield
+        finally:
+            for key, old_value in zip(keys, old_values):
+                if old_value is None:
+                    self.spark.conf.unset(key)
+                else:
+                    self.spark.conf.set(key, old_value)
 
     def assertPandasEqual(self, expected, result):
         msg = ("DataFrames are not equal: " +
@@ -3458,6 +3482,8 @@ class ArrowTests(ReusedSQLTestCase):
 
         cls.spark.conf.set("spark.sql.session.timeZone", tz)
         cls.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
+        # Disable fallback by default to easily detect the failures.
+        cls.spark.conf.set("spark.sql.execution.arrow.fallback.enabled", "false")
         cls.schema = StructType([
             StructField("1_str_t", StringType(), True),
             StructField("2_int_t", IntegerType(), True),
@@ -3493,18 +3519,28 @@ class ArrowTests(ReusedSQLTestCase):
         data_dict["4_float_t"] = np.float32(data_dict["4_float_t"])
         return pd.DataFrame(data=data_dict)
 
-    def test_unsupported_datatype(self):
+    def test_toPandas_fallback_enabled(self):
+        import pandas as pd
+
+        with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": True}):
+            schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
+            df = self.spark.createDataFrame([({u'a': 1},)], schema=schema)
+            with QuietTest(self.sc):
+                with warnings.catch_warnings(record=True) as warns:
+                    pdf = df.toPandas()
+                    # Catch and check the last UserWarning.
+                    user_warns = [
+                        warn.message for warn in warns if isinstance(warn.message, UserWarning)]
+                    self.assertTrue(len(user_warns) > 0)
+                    self.assertTrue(
+                        "Attempts non-optimization" in _exception_message(user_warns[-1]))
+                    self.assertPandasEqual(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
+
+    def test_toPandas_fallback_disabled(self):
         schema = StructType([StructField("map", MapType(StringType(), IntegerType()), True)])
         df = self.spark.createDataFrame([(None,)], schema=schema)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Unsupported type'):
-                df.toPandas()
-
-        df = self.spark.createDataFrame([(None,)], schema="a binary")
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    Exception,
-                    'Unsupported type.*\nNote: toPandas attempted Arrow optimization because'):
                 df.toPandas()
 
     def test_null_conversion(self):
@@ -3625,7 +3661,7 @@ class ArrowTests(ReusedSQLTestCase):
         pdf = self.create_pandas_data_frame()
         wrong_schema = StructType(list(reversed(self.schema)))
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(TypeError, ".*field.*can.not.accept.*type"):
+            with self.assertRaisesRegexp(RuntimeError, ".*No cast.*string.*timestamp.*"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
@@ -3650,7 +3686,7 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_with_single_data_type(self):
         import pandas as pd
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(TypeError, ".*IntegerType.*tuple"):
+            with self.assertRaisesRegexp(RuntimeError, ".*IntegerType.*not supported.*"):
                 self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int")
 
     def test_createDataFrame_does_not_modify_input(self):
@@ -3704,6 +3740,30 @@ class ArrowTests(ReusedSQLTestCase):
         pdf_col_names = [str(c) for c in pdf.columns]
         self.assertEqual(pdf_col_names, df.columns)
         self.assertEqual(pdf_col_names, df_arrow.columns)
+
+    def test_createDataFrame_fallback_enabled(self):
+        import pandas as pd
+
+        with QuietTest(self.sc):
+            with self.sql_conf({"spark.sql.execution.arrow.fallback.enabled": True}):
+                with warnings.catch_warnings(record=True) as warns:
+                    df = self.spark.createDataFrame(
+                        pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
+                    # Catch and check the last UserWarning.
+                    user_warns = [
+                        warn.message for warn in warns if isinstance(warn.message, UserWarning)]
+                    self.assertTrue(len(user_warns) > 0)
+                    self.assertTrue(
+                        "Attempts non-optimization" in _exception_message(user_warns[-1]))
+                    self.assertEqual(df.collect(), [Row(a={u'a': 1})])
+
+    def test_createDataFrame_fallback_disabled(self):
+        import pandas as pd
+
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, 'Unsupported type'):
+                self.spark.createDataFrame(
+                    pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
 
     # Regression test for SPARK-23314
     def test_timestamp_dst(self):
