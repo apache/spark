@@ -1063,31 +1063,6 @@ class CodegenContext {
       ""
     }
   }
-
-  /**
-   * Returns the length of parameters for a Java method descriptor. `this` contributes one unit
-   * and a parameter of type long or double contributes two units. Besides, for nullable parameter,
-   * we also need to pass a boolean parameter for the null status.
-   */
-  def calculateParamLength(params: Seq[Expression]): Int = {
-    def paramLengthForExpr(input: Expression): Int = {
-      // For a nullable expression, we need to pass in an extra boolean parameter.
-      (if (input.nullable) 1 else 0) + javaType(input.dataType) match {
-        case JAVA_LONG | JAVA_DOUBLE => 2
-        case _ => 1
-      }
-    }
-    // Initial value is 1 for `this`.
-    1 + params.map(paramLengthForExpr(_)).sum
-  }
-
-  /**
-   * In Java, a method descriptor is valid only if it represents method parameters with a total
-   * length less than a pre-defined constant.
-   */
-  def isValidParamLength(paramLength: Int): Boolean = {
-    paramLength <= MAX_JVM_METHOD_PARAMS_LENGTH
-  }
 }
 
 /**
@@ -1538,4 +1513,30 @@ object CodeGenerator extends Logging {
 
   def defaultValue(dt: DataType, typedNull: Boolean = false): String =
     defaultValue(javaType(dt), typedNull)
+
+  /**
+   * Returns the length of parameters for a Java method descriptor. `this` contributes one unit
+   * and a parameter of type long or double contributes two units. Besides, for nullable parameter,
+   * we also need to pass a boolean parameter for the null status.
+   */
+  def calculateParamLength(params: Seq[Expression]): Int = {
+    def paramLengthForExpr(input: Expression): Int = {
+      val javaParamLength = javaType(input.dataType) match {
+        case JAVA_LONG | JAVA_DOUBLE => 2
+        case _ => 1
+      }
+      // For a nullable expression, we need to pass in an extra boolean parameter.
+      (if (input.nullable) 1 else 0) + javaParamLength
+    }
+    // Initial value is 1 for `this`.
+    1 + params.map(paramLengthForExpr).sum
+  }
+
+  /**
+   * In Java, a method descriptor is valid only if it represents method parameters with a total
+   * length less than a pre-defined constant.
+   */
+  def isValidParamLength(paramLength: Int): Boolean = {
+    paramLength <= MAX_JVM_METHOD_PARAMS_LENGTH
+  }
 }
