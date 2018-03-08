@@ -109,9 +109,6 @@ private[spark] class Client(
     }
   }
 
-  // Defensive copy of the credentials
-  private val credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
-
   private val launcherBackend = new LauncherBackend() {
     override protected def conf: SparkConf = sparkConf
 

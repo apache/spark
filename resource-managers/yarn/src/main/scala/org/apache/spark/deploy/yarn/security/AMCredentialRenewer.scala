@@ -41,10 +41,14 @@ import org.apache.spark.util.ThreadUtils
  * user-provided credentials, and contacts all the configured secure services to obtain delegation
  * tokens to be distributed to the rest of the application.
  *
+ * This class will manage the kerberos login, by renewing the TGT when needed. Because the UGI API
+ * does not expose the TTL of the TGT, a configuration controls how often to check that a relogin is
+ * necessary. This is done reasonably often since the check is a no-op when the relogin is not yet
+ * needed. The check period can be overridden in the configuration.
+ *
  * New delegation tokens are created once 75% of the renewal interval of the original tokens has
- * elapsed. The new tokens are both added to the current user, and also sent to the Spark driver
- * once it's registered with the AM. The driver is tasked with distributing the tokens to other
- * processes that might need them.
+ * elapsed. The new tokens are sent to the Spark driver endpoint once it's registered with the AM.
+ * The driver is tasked with distributing the tokens to other processes that might need them.
  */
 private[yarn] class AMCredentialRenewer(
     sparkConf: SparkConf,
