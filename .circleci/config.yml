@@ -18,8 +18,6 @@ jobs:
       - run: |
            curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer | bash
            echo 'export PATH="/root/.pyenv/bin:$PATH"' >> $BASH_ENV
-           echo 'eval "$(pyenv init -)"' >> $BASH_ENV
-           echo 'eval "$(pyenv virtualenv-init -)"' >> $BASH_ENV
       - restore_cache:
           key: Miniconda2-4.3.31-Linux-x86_64
       - run: |
