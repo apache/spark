@@ -222,20 +222,31 @@ case class StaticInvoke(
   override def nullable: Boolean = needNullCheck || returnNullable
   override def children: Seq[Expression] = arguments
 
-  override def eval(input: InternalRow): Any = {
-    if (staticObject == null) {
-      throw new RuntimeException("The static class cannot be null.")
-    }
 
-    val parmTypes = arguments.map(e =>
-      CallMethodViaReflection.typeMapping.getOrElse(e.dataType,
-        Seq(e.dataType.asInstanceOf[ObjectType].cls))(0))
-    val parms = arguments.map(e => e.eval(input).asInstanceOf[Object])
-    val method = staticObject.getDeclaredMethod(functionName, parmTypes : _*)
-    val ret = method.invoke(null, parms : _*)
-    val retClass = CallMethodViaReflection.typeMapping.getOrElse(dataType,
-      Seq(dataType.asInstanceOf[ObjectType].cls))(0)
-    retClass.cast(ret)
+
+  override def eval(input: InternalRow): Any = {
+    val args = arguments.map(e => e.eval(input).asInstanceOf[Object])
+    val argClasses = CallMethodViaReflection.expressionJavaClasses(arguments)
+    val cls = if (staticObject.getName == objectName) {
+      staticObject
+    } else {
+      Utils.classForName(objectName)
+    }
+    val method = cls.getDeclaredMethod(functionName, argClasses : _*)
+    if (needNullCheck && args.exists(_ == null)) {
+      // return null if one of arguments is null
+      null
+    } else {
+      val ret = method.invoke(null, args: _*)
+
+      if (CodeGenerator.defaultValue(dataType) == "null") {
+        ret
+      } else {
+        // cast a primitive value using Boxed class
+        val boxedClass = CallMethodViaReflection.typeBoxedJavaMapping(dataType)
+        boxedClass.cast(ret)
+      }
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
