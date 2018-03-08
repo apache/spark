@@ -2,7 +2,7 @@ version: 2
 jobs:
   build: 
     docker:
-      - image: java:oraclejdk8
+      - image: circleci/build-image:ubuntu-14.04-XXL-1327-3401d20
     steps:
       # post machine
       - run: sudo sh -c 'echo "deb http://cran.rstudio.com/bin/linux/ubuntu trusty/" >> /etc/apt/sources.list'
