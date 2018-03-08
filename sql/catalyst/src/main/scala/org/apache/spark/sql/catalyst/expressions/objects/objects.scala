@@ -222,8 +222,6 @@ case class StaticInvoke(
   override def nullable: Boolean = needNullCheck || returnNullable
   override def children: Seq[Expression] = arguments
 
-
-
   override def eval(input: InternalRow): Any = {
     val args = arguments.map(e => e.eval(input).asInstanceOf[Object])
     val argClasses = CallMethodViaReflection.expressionJavaClasses(arguments)

@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.{Date, Timestamp}
+
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import java.sql.{Date, Timestamp}
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
