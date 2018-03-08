@@ -612,7 +612,7 @@ case class MapObjects private(
 
   // The data with PythonUserDefinedType are actually stored with the data type of its sqlType.
   // When we want to apply MapObjects on it, we have to use it.
-  private val inputDataType = inputData.dataType match {
+  lazy private val inputDataType = inputData.dataType match {
     case p: PythonUserDefinedType => p.sqlType
     case _ => inputData.dataType
   }
