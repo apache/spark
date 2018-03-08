@@ -1262,6 +1262,8 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
   override def dataType: DataType = beanInstance.dataType
 
   private lazy val resolvedSetters = {
+    assert(beanInstance.dataType.isInstanceOf[ObjectType])
+
     val ObjectType(beanClass) = beanInstance.dataType
     setters.map {
       case (name, expr) =>
@@ -1285,11 +1287,12 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
   }
 
   override def eval(input: InternalRow): Any = {
-    val instance = beanInstance.eval(input).asInstanceOf[Object]
+    val instance = beanInstance.eval(input)
     if (instance != null) {
+      val bean = instance.asInstanceOf[Object]
       resolvedSetters.foreach {
         case (setter, expr) =>
-          setter.invoke(instance, expr.eval(input).asInstanceOf[Object])
+          setter.invoke(bean, expr.eval(input).asInstanceOf[Object])
       }
     }
     instance
