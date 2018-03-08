@@ -37,7 +37,7 @@ jobs:
       - run: echo "realm=Bintray API Realm" >> .credentials
       - run: echo "host=api.bintray.com" >> .credentials
       - restore_cache:
-          key: dependency-cache
+          key: dependency-cache-{{ checksum "pom.xml" }}
       # dependencies
       - run: |
           if [[ -d build_classes ]]; then
@@ -51,16 +51,10 @@ jobs:
           # Make sbt fetch all the external deps to ~/.ivy2 so it gets cached
           set -o pipefail && ./build/sbt -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr externalDependencyClasspath | tee -a "$CIRCLE_ARTIFACTS/sbt-classpath.log"
       - save_cache:
-          key: ??
+          key: dependency-cache-{{ checksum "pom.xml" }}
           paths:
             - "build_classes"
-      - save_cache:
-          key: ??
-          paths:
             - "build"
-      - save_cache:
-          key: ??
-          paths:
             - "~/miniconda"
     environment:
       - TERM: dumb
