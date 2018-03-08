@@ -2475,9 +2475,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-16975: Column-partition path starting '_' should be handled correctly") {
     withTempDir { dir =>
-      val parquetDir = new File(dir, "parquet").getCanonicalPath
-      spark.range(10).withColumn("_col", $"id").write.partitionBy("_col").save(parquetDir)
-      spark.read.load(parquetDir)
+      val dataDir = new File(dir, "data").getCanonicalPath
+      spark.range(10).withColumn("_col", $"id").write.partitionBy("_col").save(dataDir)
+      spark.read.load(dataDir)
     }
   }
 
