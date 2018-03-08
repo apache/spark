@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import sys
+
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 
@@ -80,7 +82,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(pyspark.sql.conf, globs=globs)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 if __name__ == "__main__":
     _test()
