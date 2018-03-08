@@ -14,10 +14,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Expression, GenericInternalRow, Nondeterministic, SpecializedGetters, StatefulNondeterministic, UnsafeArrayData, UnsafeMapData, UnsafeProjection, UnsafeProjectionCreator, UnsafeRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeArrayWriter, UnsafeRowWriter, UnsafeWriter}
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types.{UserDefinedType, _}
@@ -319,8 +319,8 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
    * underlying data type.
    */
   private def getElementSize(dataType: DataType): Int = dataType match {
-    case StringType | BinaryType | CalendarIntervalType | _: DecimalType |
-         _: StructType | _: ArrayType | _: MapType => 8
+    case NullType | StringType | BinaryType | CalendarIntervalType |
+         _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
     case _ => dataType.defaultSize
   }
 
