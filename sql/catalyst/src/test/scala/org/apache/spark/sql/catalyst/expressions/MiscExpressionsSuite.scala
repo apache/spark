@@ -47,18 +47,24 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("PrintToStderr") {
-    val errorStream = new java.io.ByteArrayOutputStream()
-    val systemErr = System.err
-    System.setErr(new PrintStream(errorStream))
     val inputExpr = Literal(1)
-    // check without codegen
-    checkEvaluationWithoutCodegen(PrintToStderr(inputExpr), 1)
-    val outputEval = errorStream.toString
-    errorStream.reset()
-    // check with codegen
-    checkEvaluationWithoutCodegen(PrintToStderr(inputExpr), 1)
-    val outputCodegen = errorStream.toString
-    System.setErr(systemErr)
+    val systemErr = System.err
+
+    val (outputEval, outputCodegen) = try {
+      val errorStream = new java.io.ByteArrayOutputStream()
+      System.setErr(new PrintStream(errorStream))
+      // check without codegen
+      checkEvaluationWithoutCodegen(PrintToStderr(inputExpr), 1)
+      val outputEval = errorStream.toString
+      errorStream.reset()
+      // check with codegen
+      checkEvaluationWithoutCodegen(PrintToStderr(inputExpr), 1)
+      val outputCodegen = errorStream.toString
+      (outputEval, outputCodegen)
+    } finally {
+      System.setErr(systemErr)
+    }
+
     assert(outputCodegen.contains(s"Result of $inputExpr is 1"))
     assert(outputEval.contains(s"Result of $inputExpr is 1"))
   }
