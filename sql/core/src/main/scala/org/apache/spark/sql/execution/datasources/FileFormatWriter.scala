@@ -211,7 +211,7 @@ object FileFormatWriter extends Logging {
             committer,
             iterator = iter)
         },
-        0 until rddWithNonEmptyPartitions.partitions.length,
+        rddWithNonEmptyPartitions.partitions.indices,
         (index, res: WriteTaskResult) => {
           committer.onTaskCommit(res.commitMsg)
           ret(index) = res
