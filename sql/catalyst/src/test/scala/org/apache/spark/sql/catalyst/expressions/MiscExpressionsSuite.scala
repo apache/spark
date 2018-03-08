@@ -58,7 +58,7 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val outputEval = errorStream.toString
       errorStream.reset()
       // check with codegen
-      checkEvaluationWithoutCodegen(PrintToStderr(inputExpr), 1)
+      checkEvaluationWithGeneratedMutableProjection(PrintToStderr(inputExpr), 1)
       val outputCodegen = errorStream.toString
       (outputEval, outputCodegen)
     } finally {
