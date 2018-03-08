@@ -150,7 +150,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "toJavaDate", ObjectType(classOf[SQLDate]), 77777, DateTimeUtils.toJavaDate(77777)),
       (DateTimeUtils.getClass, ObjectType(classOf[Timestamp]),
         "toJavaTimestamp", ObjectType(classOf[SQLTimestamp]),
-        88888888L, DateTimeUtils.toJavaTimestamp(88888888L))
+        88888888.toLong, DateTimeUtils.toJavaTimestamp(88888888))
     ).foreach { case (cls, dataType, methodName, argType, arg, expected) =>
       checkObjectExprEvaluation(StaticInvoke(cls, dataType, methodName,
         Seq(BoundReference(0, argType, true))), expected, InternalRow.fromSeq(Seq(arg)))
@@ -216,6 +216,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(createExternalRow, Row.fromSeq(Seq(1, "x")), InternalRow.fromSeq(Seq()))
   }
 
+  // This is an alternative version of `checkEvaluation` to compare results
   // by scala values instead of catalyst values.
   private def checkObjectExprEvaluation(
       expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
