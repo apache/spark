@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.expressions.scalalang.typed
-import org.apache.spark.sql.functions.{avg, broadcast, col, max}
+import org.apache.spark.sql.functions.{avg, broadcast, col, lit, max}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
@@ -249,12 +249,12 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Skip splitting consume function when parameter number exceeds JVM limit") {
-    import testImplicits._
-
-    Seq((255, false), (254, true)).foreach { case (columnNum, hasSplit) =>
+    // since every field is nullable we have 2 params for each input column (one for the value
+    // and one for the isNull variable)
+    Seq((128, false), (127, true)).foreach { case (columnNum, hasSplit) =>
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        spark.range(10).select(Seq.tabulate(columnNum) {i => ('id + i).as(s"c$i")} : _*)
+        spark.range(10).select(Seq.tabulate(columnNum) {i => lit(i).as(s"c$i")} : _*)
           .write.mode(SaveMode.Overwrite).parquet(path)
 
         withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "255",
@@ -263,10 +263,10 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
           val df = spark.read.parquet(path).selectExpr(projection: _*)
 
           val plan = df.queryExecution.executedPlan
-          val wholeStageCodeGenExec = plan.find(p => p match {
-            case wp: WholeStageCodegenExec => true
+          val wholeStageCodeGenExec = plan.find {
+            case _: WholeStageCodegenExec => true
             case _ => false
-          })
+          }
           assert(wholeStageCodeGenExec.isDefined)
           val code = wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()._2
           assert(code.body.contains("project_doConsume") == hasSplit)
