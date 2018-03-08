@@ -1242,6 +1242,11 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
 case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: Boolean)
   extends UnaryExpression with NonSQLExpression with SerializerSupport {
 
+  override def nullSafeEval(input: Any): Any = {
+    val inputBytes = java.nio.ByteBuffer.wrap(input.asInstanceOf[Array[Byte]])
+    serializerInstance.deserialize(inputBytes)
+  }
+
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val serializer = addImmutableSerializerIfNeeded(ctx)
     // Code to deserialize.
