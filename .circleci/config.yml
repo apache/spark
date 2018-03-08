@@ -3,6 +3,10 @@ jobs:
   build: 
     docker:
       - image: circleci/build-image:ubuntu-14.04-XXL-1327-3401d20
+    # project/CirclePlugin.scala does its own test splitting in SBT based on CIRCLE_NODE_INDEX, CIRCLE_NODE_TOTAL
+    parallelism: 6
+    # Spark runs a lot of tests in parallel, we need 16 GB of RAM for this
+    resource_class: xlarge
     steps:
       # post machine
       - run: sudo sh -c 'echo "deb http://cran.rstudio.com/bin/linux/ubuntu trusty/" >> /etc/apt/sources.list'
