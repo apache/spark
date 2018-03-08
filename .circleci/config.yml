@@ -17,9 +17,9 @@ jobs:
       - run: /usr/lib/R/bin/R -e "install.packages(c('devtools'), repos='http://cran.us.r-project.org', lib='/usr/local/lib/R/site-library'); devtools::install_github('r-lib/testthat@v1.0.2', lib='/usr/local/lib/R/site-library'); install.packages(c('knitr', 'rmarkdown', 'e1071', 'survival', 'roxygen2', 'lintr'), repos='http://cran.us.r-project.org', lib='/usr/local/lib/R/site-library')"
       - run: |
            curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer | bash
-           export PATH="/root/.pyenv/bin:$PATH"
-           eval "$(pyenv init -)"
-           eval "$(pyenv virtualenv-init -)"
+           echo 'export PATH="/root/.pyenv/bin:$PATH"' >> $BASH_ENV
+           echo 'eval "$(pyenv init -)"' >> $BASH_ENV
+           echo 'eval "$(pyenv virtualenv-init -)"' >> $BASH_ENV
       - restore_cache:
           key: Miniconda2-4.3.31-Linux-x86_64
       - run: |
@@ -68,6 +68,7 @@ jobs:
       - R_HOME: /usr/lib/R
       - CONDA_BIN: $HOME/miniconda/bin/conda
       - CONDA_ROOT: $HOME/miniconda
+      - BASH_ENV: ~/.bash_profile
   test:
     docker:
       - image: circleci/build-image:ubuntu-14.04-XXL-1327-3401d20
