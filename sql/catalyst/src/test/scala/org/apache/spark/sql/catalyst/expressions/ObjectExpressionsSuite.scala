@@ -127,9 +127,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-23587: MapObjects should support interpreted execution") {
-    val customCollectionClasses = Seq(classOf[Seq[_]], classOf[scala.collection.Set[_]],
-      classOf[java.util.List[_]], classOf[java.util.AbstractList[_]],
-      classOf[java.util.AbstractSequentialList[_]], null)
+    val customCollectionClasses = Seq(classOf[Seq[Int]], classOf[scala.collection.Set[Int]],
+      classOf[java.util.List[Int]], classOf[java.util.AbstractList[Int]],
+      classOf[java.util.AbstractSequentialList[Int]], classOf[java.util.Vector[Int]],
+      classOf[java.util.Stack[Int]], null)
     val function = (lambda: Expression) => Add(lambda, Literal(1))
     val elementType = IntegerType
     val expected = Seq(2, 3, 4)
@@ -143,6 +144,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     vector.add(1)
     vector.add(2)
     vector.add(3)
+    val stack = new java.util.Stack[Int]()
+    stack.add(1)
+    stack.add(2)
+    stack.add(3)
 
     Seq(
       (Seq(1, 2, 3), ObjectType(classOf[Seq[Int]])),

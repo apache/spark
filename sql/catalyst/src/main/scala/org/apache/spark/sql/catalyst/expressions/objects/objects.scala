@@ -662,9 +662,9 @@ case class MapObjects private(
           results.asJava
         } else {
           val builder = Try(cls.getConstructor(Integer.TYPE)).map { constructor =>
-            constructor.newInstance()
+            constructor.newInstance(results.length.asInstanceOf[Object])
           }.getOrElse {
-            cls.getConstructor().newInstance(results.length.asInstanceOf[Object])
+            cls.getConstructor().newInstance()
           }.asInstanceOf[java.util.List[Any]]
 
           results.foreach(builder.add(_))
