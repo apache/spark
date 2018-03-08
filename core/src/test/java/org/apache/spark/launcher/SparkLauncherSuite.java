@@ -25,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import org.junit.Ignore;
 import org.junit.Test;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
@@ -122,8 +121,7 @@ public class SparkLauncherSuite extends BaseSuite {
     assertEquals(0, app.waitFor());
   }
 
-  // TODO: [SPARK-23020] Re-enable this
-  @Ignore
+  @Test
   public void testInProcessLauncher() throws Exception {
     // Because this test runs SparkLauncher in process and in client mode, it pollutes the system
     // properties, and that can cause test failures down the test pipeline. So restore the original
@@ -159,12 +157,24 @@ public class SparkLauncherSuite extends BaseSuite {
 
     SparkAppHandle handle = null;
     try {
-      handle = new InProcessLauncher()
-        .setMaster("local")
-        .setAppResource(SparkLauncher.NO_RESOURCE)
-        .setMainClass(InProcessTestApp.class.getName())
-        .addAppArgs("hello")
-        .startApplication(listener);
+      synchronized (InProcessTestApp.LOCK) {
+        handle = new InProcessLauncher()
+          .setMaster("local")
+          .setAppResource(SparkLauncher.NO_RESOURCE)
+          .setMainClass(InProcessTestApp.class.getName())
+          .addAppArgs("hello")
+          .startApplication(listener);
+
+        // SPARK-23020: see doc for InProcessTestApp.LOCK for a description of the race. Here
+        // we wait until we know that the connection between the app and the launcher has been
+        // established before allowing the app to finish.
+        final SparkAppHandle _handle = handle;
+        eventually(Duration.ofSeconds(5), Duration.ofMillis(10), () -> {
+          assertNotEquals(SparkAppHandle.State.UNKNOWN, _handle.getState());
+        });
+
+        InProcessTestApp.LOCK.wait(5000);
+      }
 
       waitFor(handle);
       assertEquals(SparkAppHandle.State.FINISHED, handle.getState());
@@ -195,10 +205,26 @@ public class SparkLauncherSuite extends BaseSuite {
 
   public static class InProcessTestApp {
 
+    /**
+     * SPARK-23020: there's a race caused by a child app finishing too quickly. This would cause
+     * the InProcessAppHandle to dispose of itself even before the child connection was properly
+     * established, so no state changes would be detected for the application and its final
+     * state would be LOST.
+     *
+     * It's not really possible to fix that race safely in the handle code itself without changing
+     * the way in-process apps talk to the launcher library, so we work around that in the test by
+     * synchronizing on this object.
+     */
+    public static final Object LOCK = new Object();
+
     public static void main(String[] args) throws Exception {
       assertNotEquals(0, args.length);
       assertEquals(args[0], "hello");
       new SparkContext().stop();
+
+      synchronized (LOCK) {
+        LOCK.notifyAll();
+      }
     }
 
   }

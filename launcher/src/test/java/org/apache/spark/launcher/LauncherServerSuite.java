@@ -94,8 +94,8 @@ public class LauncherServerSuite extends BaseSuite {
       Message stopMsg = client.inbound.poll(30, TimeUnit.SECONDS);
       assertTrue(stopMsg instanceof Stop);
     } finally {
-      handle.kill();
       close(client);
+      handle.kill();
       client.clientThread.join();
     }
   }
