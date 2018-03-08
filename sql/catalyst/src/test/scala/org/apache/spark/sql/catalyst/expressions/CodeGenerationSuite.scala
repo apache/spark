@@ -436,4 +436,10 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     ctx.addImmutableStateIfNotExists("String", mutableState2)
     assert(ctx.inlinedMutableStates.length == 2)
   }
+
+  test("SPARK-23628: calculateParamLength should compute properly the param length") {
+    val ctx = new CodegenContext
+    assert(ctx.calculateParamLength(Seq.range(0, 100).map(Literal(_))) == 101)
+    assert(ctx.calculateParamLength(Seq.range(0, 100).map(x => Literal(x.toLong))) == 201)
+  }
 }
