@@ -17,7 +17,7 @@ jobs:
       - run: /usr/lib/R/bin/R -e "install.packages(c('devtools'), repos='http://cran.us.r-project.org', lib='/usr/local/lib/R/site-library'); devtools::install_github('r-lib/testthat@v1.0.2', lib='/usr/local/lib/R/site-library'); install.packages(c('knitr', 'rmarkdown', 'e1071', 'survival', 'roxygen2', 'lintr'), repos='http://cran.us.r-project.org', lib='/usr/local/lib/R/site-library')"
       - run: curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer | bash
       - restore_cache:
-        key: Miniconda2-4.3.31-Linux-x86_64
+          key: Miniconda2-4.3.31-Linux-x86_64
       - run: |
           if [[ ! -d ${CONDA_ROOT} ]]; then
               echo "Installing Miniconda...";
@@ -32,9 +32,9 @@ jobs:
       - run: pyenv global miniconda3-latest/envs/python2 miniconda3-latest/envs/python3 #pypy-4.0.1
       - run: pyenv rehash
       - save_cache:
-        key: Miniconda2-4.3.31-Linux-x86_64
-        paths:
-          - "~/miniconda"
+          key: Miniconda2-4.3.31-Linux-x86_64
+          paths:
+            - "~/miniconda"
       - checkout
       - run: "[[ ! -s \"$(git rev-parse --git-dir)/shallow\" ]] || git fetch --unshallow"
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
