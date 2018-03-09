@@ -1898,6 +1898,7 @@ setMethod("atan2", signature(y = "Column"),
 
 #' @details
 #' \code{datediff}: Returns the number of days from \code{y} to \code{x}.
+#' If \code{y} is later than \code{x} then the result is positive.
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases datediff datediff,Column-method
