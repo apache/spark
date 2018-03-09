@@ -290,7 +290,7 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
   private var _count = 0L
 
   /**
-   * Returns false if this accumulator instance has had any values added to it or the sum is non-zero.
+   * Returns false if this accumulator has had any values added to it or the sum is non-zero.
    *
    * @since 2.0.0
    */
@@ -370,7 +370,7 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   private var _count = 0L
 
   /**
-   * Returns false if this accumulator instance has had any values added to it or the sum is non-zero.
+   * Returns false if this accumulator has had any values added to it or the sum is non-zero.
    */
   override def isZero: Boolean = _sum == 0.0 && _count == 0
 
