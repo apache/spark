@@ -448,7 +448,11 @@ private[kafka010] object KafkaDataConsumer extends Logging {
   /**
    * Get a cached consumer for groupId, assigned to topic and partition.
    * If matching consumer doesn't already exist, will be created using kafkaParams.
-   * This will make a best effort attempt to
+   * The returned consumer must be released explicitly using [[KafkaDataConsumer.release()]].
+   *
+   * Note: This method guarantees that the consumer returned is not currently in use by any one
+   * else. Within this guarantee, this will make a best effort attempt to re-use consumers by
+   * caching them and tracking when they are in use.
    */
   def acquire(
       topicPartition: TopicPartition,
