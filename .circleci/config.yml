@@ -16,15 +16,17 @@ jobs:
       - run: echo "host=api.bintray.com" >> .credentials
       - restore_cache:
           key: dependency-cache-{{ checksum "pom.xml" }}
-      - run: >
-          set -o pipefail
-          && ./build/mvn -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install
+      - run: |
+          set -o pipefail \
+          && ./build/mvn -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install \
             | tee -a "/tmp/mvn-install.log"
       - store_artifacts:
           path: /tmp/mvn-install.log
       - run: |
           # Make sbt fetch all the external deps to ~/.ivy2 so it gets cached
-          set -o pipefail && ./build/sbt -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr externalDependencyClasspath | tee -a "/tmp/sbt-classpath.log"
+          set -o pipefail \
+            && ./build/sbt -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr externalDependencyClasspath \
+              | tee -a "/tmp/sbt-classpath.log"
       - store_artifacts:
           path: /tmp/sbt-classpath.log
       - save_cache:
