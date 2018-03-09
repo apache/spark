@@ -32,8 +32,6 @@ jobs:
           root: .
           paths:
             - "*/target/*"
-            - ~/.ivy2
-            - ~/.m2
 
     environment:
       - TERM: dumb
@@ -48,6 +46,8 @@ jobs:
     steps:
       - attach_workspace:
           at: .
+      - restore_cache:
+          key: dependency-cache-{{ checksum "pom.xml" }}
       - run: set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "/tmp/run-tests.log"
       - store_artifacts:
           path: /tmp/run-tests.log
