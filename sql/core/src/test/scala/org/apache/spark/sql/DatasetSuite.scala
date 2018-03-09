@@ -1154,10 +1154,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(errMsg3.getMessage.startsWith("cannot have circular references in class, but got the " +
       "circular reference of class"))
   }
-  
+
   test("SPARK-23627: provide isEmpty in DataSet") {
-    val data = Seq()
-    assert(data.isEmpty)
+    val ds1 = spark.emptyDataset[Int]
+    val ds2 = Seq(1, 2, 3).toDS()
+
+    assert(ds1.isEmpty == true)
+    assert(ds2.isEmpty == false)
   }
 }
 
