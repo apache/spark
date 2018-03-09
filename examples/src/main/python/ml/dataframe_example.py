@@ -17,7 +17,7 @@
 
 """
 An example of how to use DataFrame for ML. Run with::
-    bin/spark-submit examples/src/main/python/ml/dataframe_example.py <dataset>
+    bin/spark-submit examples/src/main/python/ml/dataframe_example.py <input_path>
 """
 from __future__ import print_function
 
@@ -35,18 +35,18 @@ if __name__ == "__main__":
         print("Usage: dataframe_example.py <libsvm file>", file=sys.stderr)
         sys.exit(-1)
     elif len(sys.argv) == 2:
-        dataset = sys.argv[1]
+        input_path = sys.argv[1]
     else:
-        dataset = "data/mllib/sample_libsvm_data.txt"
+        input_path = "data/mllib/sample_libsvm_data.txt"
 
     spark = SparkSession \
         .builder \
         .appName("DataFrameExample") \
         .getOrCreate()
 
-    # Load dataset
-    print("Loading LIBSVM file with UDT from " + dataset + ".")
-    df = spark.read.format("libsvm").load(dataset).cache()
+    # Load file from path
+    print("Loading LIBSVM file with UDT from " + input_path + ".")
+    df = spark.read.format("libsvm").load(input_path).cache()
     print("Schema from LIBSVM:")
     df.printSchema()
     print("Loaded training data as a DataFrame with " +
