@@ -1,8 +1,12 @@
 version: 2
+
+defaults: &defaults
+  docker:
+    - image: palantirtechnologies/circle-spark
+
 jobs:
   build:
-    docker:
-      - image: palantirtechnologies/circle-spark
+    <<: *defaults
     steps:
       - checkout
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
@@ -36,8 +40,7 @@ jobs:
       - TERM: dumb
 
   test:
-    docker:
-      - image: palantirtechnologies/circle-spark
+    <<: *defaults
     # project/CirclePlugin.scala does its own test splitting in SBT based on CIRCLE_NODE_INDEX, CIRCLE_NODE_TOTAL
     parallelism: 6
     # Spark runs a lot of tests in parallel, we need 16 GB of RAM for this
@@ -67,8 +70,7 @@ jobs:
       - store_artifacts:
           path: /tmp/yarn-tests
   deploy:
-    docker:
-      - image: palantirtechnologies/circle-spark
+    <<: *defaults
     steps:
       - run: dev/publish.sh
       - run: curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/spark/$(git describe --tags)/publish
