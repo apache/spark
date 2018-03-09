@@ -21,19 +21,26 @@ import java.io._
 import java.util.{ArrayList => JArrayList, Locale}
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
+import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.io.Text
+import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.token.Token
 import org.apache.log4j.{Level, Logger}
 import org.apache.thrift.transport.TSocket
 
@@ -42,7 +49,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.util.ShutdownHookManager
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
@@ -75,6 +82,12 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         }
       }
     })
+  }
+
+  private def isSecuredAndProxy(hiveConf: HiveConf): Boolean = {
+    UserGroupInformation.isSecurityEnabled &&
+      hiveConf.getTrimmed(ConfVars.METASTOREURIS.varname, "").nonEmpty &&
+      SparkHadoopUtil.get.isProxyUser(UserGroupInformation.getCurrentUser)
   }
 
   def main(args: Array[String]) {
@@ -118,6 +131,25 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       if (key != "javax.jdo.option.ConnectionURL") {
         conf.set(key, value)
         sessionState.getOverriddenConfigurations.put(key, value)
+      }
+    }
+
+    if (isSecuredAndProxy(conf)) {
+      val currentUser = UserGroupInformation.getCurrentUser
+      try {
+        SparkHadoopUtil.get.doAsRealUser {
+          val tokenStr = Hive.get(conf, classOf[HiveConf])
+             .getDelegationToken(currentUser.getShortUserName, currentUser.getRealUser.getUserName)
+          val token = new Token[DelegationTokenIdentifier]()
+          token.decodeFromUrlString(tokenStr)
+          currentUser.addToken(new Text("hive.metastore.delegation.token"), token)
+        }
+      } catch {
+        case NonFatal(_) =>
+        case e: NoClassDefFoundError =>
+          logWarning(e.getMessage)
+      } finally {
+        Utils.tryLogNonFatalError(Hive.closeCurrent())
       }
     }
 
