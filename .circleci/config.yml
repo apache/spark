@@ -5,7 +5,7 @@ defaults: &defaults
     - image: palantirtechnologies/circle-spark
   resource_class: xlarge
   environment:
-    - TERM: dumb
+    TERM: dumb
 
 jobs:
   build:
