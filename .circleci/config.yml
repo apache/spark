@@ -63,6 +63,7 @@ jobs:
     # Spark runs a lot of tests in parallel, we need 16 GB of RAM for this
     resource_class: xlarge
     steps:
+      - checkout
       - attach_workspace:
           at: .
       - restore_cache:
@@ -91,6 +92,11 @@ jobs:
   deploy:
     <<: *defaults
     steps:
+      - checkout
+      - restore_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+      - restore_cache:
+          key: maven-binaries-{{ checksum "build/mvn" }}
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
       - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
       - run: echo "realm=Bintray API Realm" >> .credentials
