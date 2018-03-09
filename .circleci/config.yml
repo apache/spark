@@ -2,41 +2,12 @@ version: 2
 jobs:
   build: 
     docker:
-      - image: circleci/build-image:ubuntu-14.04-XXL-1327-3401d20
+      - image: palantirtechnologies/circle-spark
     # project/CirclePlugin.scala does its own test splitting in SBT based on CIRCLE_NODE_INDEX, CIRCLE_NODE_TOTAL
     parallelism: 6
     # Spark runs a lot of tests in parallel, we need 16 GB of RAM for this
     resource_class: xlarge
     steps:
-      - run: sudo sh -c 'echo "deb http://cran.rstudio.com/bin/linux/ubuntu trusty/" >> /etc/apt/sources.list'
-      - run: gpg --keyserver keyserver.ubuntu.com --recv-key E084DAB9
-      - run: gpg -a --export E084DAB9 | sudo apt-key add -
-      - run: sudo apt-get update
-      - run: sudo apt-get --assume-yes install r-base r-base-dev qpdf
-      - run: sudo chmod 777 /usr/local/lib/R/site-library
-      - run: /usr/lib/R/bin/R -e "install.packages(c('devtools'), repos='http://cran.us.r-project.org', lib='/usr/local/lib/R/site-library'); devtools::install_github('r-lib/testthat@v1.0.2', lib='/usr/local/lib/R/site-library'); install.packages(c('knitr', 'rmarkdown', 'e1071', 'survival', 'roxygen2', 'lintr'), repos='http://cran.us.r-project.org', lib='/usr/local/lib/R/site-library')"
-      - run: |
-           curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-installer | bash
-           echo 'export PATH="/root/.pyenv/bin:$PATH"' >> $BASH_ENV
-      - restore_cache:
-          key: Miniconda2-4.3.31-Linux-x86_64
-      - run: |
-          if [[ ! -d ${CONDA_ROOT} ]]; then
-              echo "Installing Miniconda...";
-              wget --quiet https://repo.continuum.io/miniconda/Miniconda2-4.3.31-Linux-x86_64.sh &&
-                bash Miniconda2-4.3.31-Linux-x86_64.sh -b -p ${CONDA_ROOT};
-          else
-              echo "Using cached Miniconda install";
-          fi
-      - run: ln -s ~/miniconda $(pyenv root)/versions/miniconda3-latest
-      - run: 'pyenv versions | grep -q miniconda3-latest/envs/python2 || $CONDA_BIN create -y -n python2 python==2.7.11 numpy | tee -a "$CIRCLE_ARTIFACTS/run-conda.log"'
-      - run: 'pyenv versions | grep -q miniconda3-latest/envs/python3 || $CONDA_BIN create -y -n python3 python==3.4.4 numpy | tee -a "$CIRCLE_ARTIFACTS/run-conda.log"'
-      - run: pyenv global miniconda3-latest/envs/python2 miniconda3-latest/envs/python3 #pypy-4.0.1
-      - run: pyenv rehash
-      - save_cache:
-          key: Miniconda2-4.3.31-Linux-x86_64
-          paths:
-            - "~/miniconda"
       - checkout
       - run: "[[ ! -s \"$(git rev-parse --git-dir)/shallow\" ]] || git fetch --unshallow"
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
@@ -63,12 +34,9 @@ jobs:
             - "build"
     environment:
       - TERM: dumb
-      - R_HOME: /usr/lib/R
-      - CONDA_BIN: $HOME/miniconda/bin/conda
-      - CONDA_ROOT: $HOME/miniconda
   test:
     docker:
-      - image: circleci/build-image:ubuntu-14.04-XXL-1327-3401d20
+      - image: palantirtechnologies/circle-spark
     steps:
       - run: set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "$CIRCLE_ARTIFACTS/run-tests.log"
       - run: find . -name unit-tests.log -exec rsync -R {} $CIRCLE_ARTIFACTS \;
@@ -80,7 +48,7 @@ jobs:
                 fi
   deploy:
     docker:
-        - image: circleci/build-image:ubuntu-14.04-XXL-1327-3401d20
+        - image: palantirtechnologies/circle-spark
     steps:
       - run: dev/publish.sh
       - run: curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/spark/$(git describe --tags)/publish
