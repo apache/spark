@@ -1255,8 +1255,28 @@ case class ExternalMapToCatalyst private(
   override def dataType: MapType = MapType(
     keyConverter.dataType, valueConverter.dataType, valueContainsNull = valueConverter.nullable)
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  private lazy val keyCatalystConverter =
+    CatalystTypeConverters.createToCatalystConverter(dataType.keyType)
+  private lazy val valueCatalystConverter =
+    CatalystTypeConverters.createToCatalystConverter(dataType.valueType)
+
+  override def eval(input: InternalRow): Any = {
+    val result = child.eval(input)
+    if (result != null) {
+      val mapValue = result.asInstanceOf[Map[Any, Any]]
+      val keys = new Array[Any](mapValue.size)
+      val values = new Array[Any](mapValue.size)
+      var i = 0
+      for ((k, v) <- mapValue) {
+        keys(i) = if (k != null) keyCatalystConverter(k) else null
+        values(i) = if (v != null) valueCatalystConverter(v) else null
+        i += 1
+      }
+      new ArrayBasedMapData(ArrayData.toArrayData(keys), ArrayData.toArrayData(values))
+    } else {
+      null
+    }
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val inputMap = child.genCode(ctx)
