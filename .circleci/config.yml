@@ -124,6 +124,12 @@ jobs:
       - run: echo "realm=Bintray API Realm" >> .credentials
       - run: echo "host=api.bintray.com" >> .credentials
       - deploy: dev/publish.sh
+      - store_artifacts:
+          path: /tmp/make-distribution.log
+          destination: command-logs
+      - store_artifacts:
+          path: /tmp/publish_artifacts.log
+          destination: command-logs
       - deploy: curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/spark/$(git describe --tags)/publish
 
 workflows:
