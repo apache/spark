@@ -42,7 +42,7 @@ jobs:
                 fi
   deploy:
     docker:
-        - image: palantirtechnologies/circle-spark
+      - image: palantirtechnologies/circle-spark
     steps:
       - run: dev/publish.sh
       - run: curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/spark/$(git describe --tags)/publish
