@@ -1,6 +1,6 @@
 version: 2
 jobs:
-  build: 
+  build:
     docker:
       - image: palantirtechnologies/circle-spark
     steps:
@@ -13,7 +13,7 @@ jobs:
       - restore_cache:
           key: dependency-cache-{{ checksum "pom.xml" }}
       - run: >
-          set -o pipefail 
+          set -o pipefail
           && ./build/mvn -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install
             | tee -a "/tmp/mvn-install.log"
       - store_artifacts:
@@ -31,10 +31,10 @@ jobs:
       - persist_to_workspace:
           root: .
           paths:
-            - */target/*
+            - "*/target/*"
             - ~/.ivy2
             - ~/.m2
-          
+
     environment:
       - TERM: dumb
 
