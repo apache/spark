@@ -335,7 +335,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("saveAsTable()/load() - non-partitioned table - ErrorIfExists") {
     withTable("t") {
-      sql("CREATE TABLE t(i INT) USING parquet")
+      sql(s"CREATE TABLE t(i INT) USING $dataSourceName")
       intercept[AnalysisException] {
         testDF.write.format(dataSourceName).mode(SaveMode.ErrorIfExists).saveAsTable("t")
       }
@@ -344,7 +344,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("saveAsTable()/load() - non-partitioned table - Ignore") {
     withTable("t") {
-      sql("CREATE TABLE t(i INT) USING parquet")
+      sql(s"CREATE TABLE t(i INT) USING $dataSourceName")
       testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
       assert(spark.table("t").collect().isEmpty)
     }
