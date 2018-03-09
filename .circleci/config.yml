@@ -51,6 +51,8 @@ jobs:
           keys:
             - ivy-dependency-cache-{{ checksum "pom.xml" }}
             - ivy-dependency-cache-
+      - restore_cache:
+          key: sbt-binaries-{{ checksum "build/sbt" }}
       - run: |
           # Make sbt fetch all the external deps to ~/.ivy2 so it gets cached
           set -o pipefail \
@@ -58,6 +60,10 @@ jobs:
               | tee -a "/tmp/sbt-classpath.log"
       - store_artifacts:
           path: /tmp/sbt-classpath.log
+      - save_cache:
+          key: sbt-binaries-{{ checksum "build/sbt" }}
+          paths:
+            - "build/sbt-*"
       - save_cache:
           key: ivy-dependency-cache-{{ checksum "pom.xml" }}
           paths:
@@ -77,6 +83,10 @@ jobs:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: ivy-dependency-cache-{{ checksum "pom.xml" }}
+      - restore_cache:
+          key: sbt-binaries-{{ checksum "build/sbt" }}
+      - restore_cache:
+          key: maven-binaries-{{ checksum "build/mvn" }}
       - run: set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "/tmp/run-tests.log"
       - store_artifacts:
           path: /tmp/run-tests.log
@@ -104,6 +114,8 @@ jobs:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: maven-binaries-{{ checksum "build/mvn" }}
+      - restore_cache:
+          key: sbt-binaries-{{ checksum "build/sbt" }}
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
       - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
       - run: echo "realm=Bintray API Realm" >> .credentials
