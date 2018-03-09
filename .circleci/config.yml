@@ -92,8 +92,8 @@ jobs:
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
       - run:
-          name: Before running tests, ensure we created the CIRCLE_TEST_RESULTS directory
-          command: mkdir -p $CIRCLE_TEST_RESULTS
+          name: Before running tests, ensure we created the CIRCLE_TEST_REPORTS directory
+          command: mkdir -p $CIRCLE_TEST_REPORTS
       - run:
           name: Run all tests
           command: set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "/tmp/run-tests.log"
