@@ -148,7 +148,8 @@ private[spark] class Executor(
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
   // Executor for the heartbeat task.
-  private val heartbeater = ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-heartbeater")
+  private val heartbeater = new Heartbeater(reportHeartBeat,
+    conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"))
 
   // must be initialized before running startDriverHeartbeat()
   private val heartbeatReceiverRef =
@@ -167,7 +168,7 @@ private[spark] class Executor(
    */
   private var heartbeatFailures = 0
 
-  startDriverHeartbeater()
+  heartbeater.start()
 
   private[executor] def numRunningTasks: Int = runningTasks.size()
 
@@ -216,8 +217,7 @@ private[spark] class Executor(
 
   def stop(): Unit = {
     env.metricsSystem.report()
-    heartbeater.shutdown()
-    heartbeater.awaitTermination(10, TimeUnit.SECONDS)
+    heartbeater.stop()
     threadPool.shutdown()
     if (!isLocal) {
       env.stop()
@@ -787,6 +787,12 @@ private[spark] class Executor(
     val accumUpdates = new ArrayBuffer[(Long, Seq[AccumulatorV2[_, _]])]()
     val curGCTime = computeTotalGcTime()
 
+    // get executor level memory metrics
+    val executorUpdates = new ExecutorMetrics(System.currentTimeMillis(),
+      ManagementFactory.getMemoryMXBean.getHeapMemoryUsage().getUsed(),
+      env.memoryManager.onHeapExecutionMemoryUsed, env.memoryManager.offHeapExecutionMemoryUsed,
+      env.memoryManager.onHeapStorageMemoryUsed, env.memoryManager.offHeapStorageMemoryUsed)
+
     for (taskRunner <- runningTasks.values().asScala) {
       if (taskRunner.task != null) {
         taskRunner.task.metrics.mergeShuffleReadMetrics()
@@ -795,7 +801,8 @@ private[spark] class Executor(
       }
     }
 
-    val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId)
+    val message = Heartbeat(executorId, accumUpdates.toArray, env.blockManager.blockManagerId,
+      executorUpdates)
     try {
       val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
           message, RpcTimeout(conf, "spark.executor.heartbeatInterval", "10s"))
@@ -814,21 +821,6 @@ private[spark] class Executor(
           System.exit(ExecutorExitCode.HEARTBEAT_FAILURE)
         }
     }
-  }
-
-  /**
-   * Schedules a task to report heartbeat and partial metrics for active tasks to driver.
-   */
-  private def startDriverHeartbeater(): Unit = {
-    val intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s")
-
-    // Wait a random interval so the heartbeats don't end up in sync
-    val initialDelay = intervalMs + (math.random * intervalMs).asInstanceOf[Int]
-
-    val heartbeatTask = new Runnable() {
-      override def run(): Unit = Utils.logUncaughtExceptions(reportHeartBeat())
-    }
-    heartbeater.scheduleAtFixedRate(heartbeatTask, initialDelay, intervalMs, TimeUnit.MILLISECONDS)
   }
 }
 

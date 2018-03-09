@@ -236,6 +236,7 @@ private[spark] object JsonProtocol {
   def executorMetricsUpdateToJson(metricsUpdate: SparkListenerExecutorMetricsUpdate): JValue = {
     val execId = metricsUpdate.execId
     val accumUpdates = metricsUpdate.accumUpdates
+    val executorMetrics = metricsUpdate.executorUpdates.map(executorMetricsToJson(_))
     ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.metricsUpdate) ~
     ("Executor ID" -> execId) ~
     ("Metrics Updated" -> accumUpdates.map { case (taskId, stageId, stageAttemptId, updates) =>
@@ -243,7 +244,9 @@ private[spark] object JsonProtocol {
       ("Stage ID" -> stageId) ~
       ("Stage Attempt ID" -> stageAttemptId) ~
       ("Accumulator Updates" -> JArray(updates.map(accumulableInfoToJson).toList))
-    })
+    }) ~
+    ("Executor Metrics Updated" -> executorMetrics)
+
   }
 
   def blockUpdateToJson(blockUpdate: SparkListenerBlockUpdated): JValue = {
@@ -377,6 +380,21 @@ private[spark] object JsonProtocol {
     ("Input Metrics" -> inputMetrics) ~
     ("Output Metrics" -> outputMetrics) ~
     ("Updated Blocks" -> updatedBlocks)
+  }
+
+  /**
+   * Convert ExecutorMetrics to JSON.
+   *
+   * @param executorMetrics the executor metrics
+   * @return the JSON representation
+   */
+  def executorMetricsToJson(executorMetrics: ExecutorMetrics): JValue = {
+    ("Timestamp" -> executorMetrics.timestamp) ~
+    ("JVM Used Memory" -> executorMetrics.jvmUsedMemory) ~
+    ("Onheap Execution Memory" -> executorMetrics.onHeapExecutionMemory) ~
+    ("Offheap Execution Memory" -> executorMetrics.offHeapExecutionMemory) ~
+    ("Onheap Storage Memory" -> executorMetrics.onHeapStorageMemory) ~
+    ("Offheap Storage Memory" -> executorMetrics.offHeapStorageMemory)
   }
 
   def taskEndReasonToJson(taskEndReason: TaskEndReason): JValue = {
@@ -585,6 +603,23 @@ private[spark] object JsonProtocol {
     SparkListenerTaskGettingResult(taskInfo)
   }
 
+  /**
+   * Extract the ExecutorMetrics from JSON.
+   *
+   * @param json the JSON representation of executor metrics
+   * @return the ExecutorMetrics
+   */
+  def executorMetricsFromJson(json: JValue): ExecutorMetrics = {
+    val timeStamp = (json \ "Timestamp").extract[Long]
+    val jvmUsedMemory = (json \ "JVM Used Memory").extract[Long]
+    val onHeapExecutionMemory = (json \ "Onheap Execution Memory").extract[Long]
+    val offHeapExecutionMemory = (json \ "Offheap Execution Memory").extract[Long]
+    val onHeapStorageMemory = (json \ "Onheap Storage Memory").extract[Long]
+    val offHeapStorageMemory = (json \ "Offheap Storage Memory").extract[Long]
+    new ExecutorMetrics(timeStamp, jvmUsedMemory, onHeapExecutionMemory,
+      offHeapExecutionMemory, onHeapStorageMemory, offHeapStorageMemory)
+  }
+
   def taskEndFromJson(json: JValue): SparkListenerTaskEnd = {
     val stageId = (json \ "Stage ID").extract[Int]
     val stageAttemptId =
@@ -691,7 +726,11 @@ private[spark] object JsonProtocol {
         (json \ "Accumulator Updates").extract[List[JValue]].map(accumulableInfoFromJson)
       (taskId, stageId, stageAttemptId, updates)
     }
-    SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates)
+    val executorUpdates = jsonOption(json \ "Executor Metrics Updated") match {
+      case None => None
+      case Some(executorUpdate) => Some(executorMetricsFromJson(executorUpdate))
+    }
+    SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates, executorUpdates)
   }
 
   def blockUpdateFromJson(json: JValue): SparkListenerBlockUpdated = {
