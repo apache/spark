@@ -116,12 +116,11 @@ private[spark] class ExecutorAllocationManager(
   // TODO: The default value of 1 for spark.executor.cores works right now because dynamic
   // allocation is only supported for YARN and the default number of cores per executor in YARN is
   // 1, but it might need to be attained differently for different cluster managers
-  private val taskSlotPerExecutor =
+  private val tasksPerExecutorForFullParallelism =
     conf.getInt("spark.executor.cores", 1) / conf.getInt("spark.task.cpus", 1)
 
-  private val tasksPerExecutorSlot = conf.getInt("spark.dynamicAllocation.tasksPerExecutorSlot", 1)
-
-  private val tasksPerExecutor = tasksPerExecutorSlot * taskSlotPerExecutor
+  private val fullParallelismDivisor =
+    conf.getDouble("spark.dynamicAllocation.fullParallelismDivisor", 1.0)
 
   validateSettings()
 
@@ -213,8 +212,13 @@ private[spark] class ExecutorAllocationManager(
       throw new SparkException("Dynamic allocation of executors requires the external " +
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
-    if (tasksPerExecutor == 0) {
+    if (tasksPerExecutorForFullParallelism == 0) {
       throw new SparkException("spark.executor.cores must not be less than spark.task.cpus.")
+    }
+
+    if (fullParallelismDivisor < 1.0) {
+      throw new SparkException(
+        "spark.dynamicAllocation.fullParallelismDivisor must be higher than 1.0")
     }
   }
 
@@ -271,13 +275,16 @@ private[spark] class ExecutorAllocationManager(
     removeTimes.clear()
   }
 
+  private def tasksPerExecutor() =
+    fullParallelismDivisor * tasksPerExecutorForFullParallelism
+
   /**
    * The maximum number of executors we would need under the current load to satisfy all running
    * and pending tasks, rounded up.
    */
   private def maxNumExecutorsNeeded(): Int = {
     val numRunningOrPendingTasks = listener.totalPendingTasks + listener.totalRunningTasks
-    (numRunningOrPendingTasks + tasksPerExecutor - 1) / tasksPerExecutor
+    math.ceil(numRunningOrPendingTasks / tasksPerExecutor).toInt
   }
 
   private def totalRunningTasks(): Int = synchronized {

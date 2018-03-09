@@ -145,32 +145,27 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsToAdd(manager) === 1)
   }
 
-  test("tasksPerExecutorSlot is correctly handled") {
+  def testParallelismDivisor(cores:Int, divisor:Double, expected: Int): Unit = {
     val conf = new SparkConf()
       .setMaster("myDummyLocalExternalClusterManager")
       .setAppName("test-executor-allocation-manager")
       .set("spark.dynamicAllocation.enabled", "true")
       .set("spark.dynamicAllocation.testing", "true")
+      .set("spark.dynamicAllocation.fullParallelismDivisor", divisor.toString)
+      .set("spark.executor.cores", cores.toString)
+    val sc = new SparkContext(conf)
+    contexts += sc
+    var manager = sc.executorAllocationManager.get
+    post(sc.listenerBus, SparkListenerStageSubmitted(createStageInfo(0, 20)))
+    assert(maxNumExecutorsNeeded(manager) === expected)
+    sc.stop()
+  }
 
-    val sc0 = new SparkContext(conf)
-    contexts += sc0
-    var manager = sc0.executorAllocationManager.get
-    assert(tasksPerExecutor(manager) === 1)
-    sc0.stop()
-
-    val conf1 = conf.clone.set("spark.dynamicAllocation.tasksPerExecutorSlot", "2")
-    val sc1 = new SparkContext(conf1)
-    contexts += sc1
-    manager = sc1.executorAllocationManager.get
-    assert(tasksPerExecutor(manager) === 2)
-    sc1.stop()
-
-    val conf2 = conf1.clone.set("spark.executor.cores", "2")
-    val sc2 = new SparkContext(conf2)
-    contexts += sc2
-    manager = sc2.executorAllocationManager.get
-    assert(tasksPerExecutor(manager) === 4)
-    sc2.stop()
+  test("fullParallelismDivisor is correctly handled") {
+    testParallelismDivisor(1, 1.0, 20)
+    testParallelismDivisor(1, 3.0, 7)
+    testParallelismDivisor(2, 3.0, 4)
+    testParallelismDivisor(1, 2.6, 8)
   }
 
   test("add executors capped by num pending tasks") {
@@ -1223,7 +1218,6 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _hostToLocalTaskCount = PrivateMethod[Map[String, Int]]('hostToLocalTaskCount)
   private val _onSpeculativeTaskSubmitted = PrivateMethod[Unit]('onSpeculativeTaskSubmitted)
   private val _totalRunningTasks = PrivateMethod[Int]('totalRunningTasks)
-  private val _tasksPerExecutor = PrivateMethod[Int]('tasksPerExecutor)
 
   private def numExecutorsToAdd(manager: ExecutorAllocationManager): Int = {
     manager invokePrivate _numExecutorsToAdd()
@@ -1313,10 +1307,6 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private def hostToLocalTaskCount(manager: ExecutorAllocationManager): Map[String, Int] = {
     manager invokePrivate _hostToLocalTaskCount()
-  }
-
-  private def tasksPerExecutor(manager: ExecutorAllocationManager): Int = {
-    manager invokePrivate _tasksPerExecutor()
   }
 }
 
