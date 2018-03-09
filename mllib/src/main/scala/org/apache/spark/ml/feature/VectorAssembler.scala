@@ -55,11 +55,15 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     // Schema transformation.
     val schema = dataset.schema
     lazy val first = dataset.toDF.first()
+    val lengths = new Array[Int]($(inputCols).length)
     val attrs = $(inputCols).flatMap { c =>
       val field = schema(c)
       val index = schema.fieldIndex(c)
+      var inputColIndex = 1
       field.dataType match {
         case DoubleType =>
+          lengths(inputColIndex) = 1
+          inputColIndex += 1
           val attr = Attribute.fromStructField(field)
           // If the input column doesn't have ML attribute, assume numeric.
           if (attr == UnresolvedAttribute) {
@@ -68,10 +72,15 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
             Some(attr.withName(c))
           }
         case _: NumericType | BooleanType =>
+          lengths(inputColIndex) = 1
+          inputColIndex += 1
           // If the input column type is a compatible scalar type, assume numeric.
           Some(NumericAttribute.defaultAttr.withName(c))
         case _: VectorUDT =>
           val group = AttributeGroup.fromStructField(field)
+          val numAttrs = group.numAttributes.getOrElse(first.getAs[Vector](index).size)
+          lengths(inputColIndex) = numAttrs
+          inputColIndex += 1
           if (group.attributes.isDefined) {
             // If attributes are defined, copy them with updated names.
             group.attributes.get.zipWithIndex.map { case (attr, i) =>
@@ -85,7 +94,6 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           } else {
             // Otherwise, treat all attributes as numeric. If we cannot get the number of attributes
             // from metadata, check the first row.
-            val numAttrs = group.numAttributes.getOrElse(first.getAs[Vector](index).size)
             Array.tabulate(numAttrs)(i => NumericAttribute.defaultAttr.withName(c + "_" + i))
           }
         case otherType =>
@@ -96,7 +104,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
     // Data transformation.
     val assembleFunc = udf { r: Row =>
-      VectorAssembler.assemble(r.toSeq: _*)
+      VectorAssembler.assemble(lengths)(r.toSeq: _*)
     }.asNondeterministic()
     val args = $(inputCols).map { c =>
       schema(c).dataType match {
@@ -139,31 +147,44 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
   @Since("1.6.0")
   override def load(path: String): VectorAssembler = super.load(path)
 
-  private[feature] def assemble(vv: Any*): Vector = {
+  private[feature] def assemble(lengths: Array[Int])(vv: Any*): Vector = {
     val indices = ArrayBuilder.make[Int]
     val values = ArrayBuilder.make[Double]
-    var cur = 0
+    var featureIndex = 0
+
+    var inputColumnIndex = 0
+
     vv.foreach {
       case v: Double =>
         if (v != 0.0) {
-          indices += cur
+          indices += featureIndex
           values += v
         }
-        cur += 1
+        inputColumnIndex += 1
+        featureIndex += 1
       case vec: Vector =>
         vec.foreachActive { case (i, v) =>
           if (v != 0.0) {
-            indices += cur + i
+            indices += featureIndex + i
             values += v
           }
         }
-        cur += vec.size
+        inputColumnIndex += 1
+        featureIndex += vec.size
       case null =>
+        val length: Int = lengths(inputColumnIndex)
+        Array.range(0, length).foreach { case (i) =>
+            indices += featureIndex + i
+            values += Double.NaN
+        }
+        inputColumnIndex += 1
+        featureIndex += length
         // TODO: output Double.NaN?
-        throw new SparkException("Values to assemble cannot be null.")
+        // throw new SparkException("Values to assemble cannot be null.")
+
       case o =>
         throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
     }
-    Vectors.sparse(cur, indices.result(), values.result()).compressed
+    Vectors.sparse(featureIndex, indices.result(), values.result()).compressed
   }
 }
