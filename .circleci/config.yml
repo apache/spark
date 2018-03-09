@@ -113,6 +113,8 @@ jobs:
     <<: *defaults
     steps:
       - checkout
+      - attach_workspace:
+          at: .
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
