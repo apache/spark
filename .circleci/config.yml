@@ -16,7 +16,7 @@ jobs:
           keys:
             - whole-build-{{ .Branch }}-{{ .BuildNum }}
             - whole-build-{{ .Branch }}-
-            - whole-build-
+            - whole-build-master-
       - checkout
       # Given the whole-build cache, this is superfluous, but leave it in in case we will want to remove the former
       - restore_cache:
