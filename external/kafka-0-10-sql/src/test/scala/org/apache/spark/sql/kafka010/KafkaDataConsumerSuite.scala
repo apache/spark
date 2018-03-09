@@ -29,6 +29,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import org.scalatest.PrivateMethodTester
 
+import org.apache.spark.{TaskContext, TaskContextImpl}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.ThreadUtils
 
@@ -59,10 +60,11 @@ class KafkaDataConsumerSuite extends SharedSQLContext with PrivateMethodTester {
     assert(e.getCause === cause)
   }
 
-  test("concurrent use of KafkaDataConsumer") {
+  test("SPARK-23623: concurrent use of KafkaDataConsumer") {
     val topic = "topic" + Random.nextInt()
+    val data = (1 to 1000).map(_.toString)
     testUtils.createTopic(topic, 1)
-    testUtils.sendMessages(topic, (1 to 1000).map(_.toString).toArray)
+    testUtils.sendMessages(topic, data.toArray)
     val topicPartition = new TopicPartition(topic, 0)
 
     import ConsumerConfig._
@@ -78,18 +80,25 @@ class KafkaDataConsumerSuite extends SharedSQLContext with PrivateMethodTester {
     val numThreads = 50
     val numConsumerUsages = 500
 
-    val threadpool = Executors.newFixedThreadPool(numThreads)
-
     @volatile var error: Throwable = null
 
     def consume(i: Int): Unit = {
+      val useCache = Random.nextBoolean
+      val taskContext = if (Random.nextBoolean) {
+        new TaskContextImpl(0, 0, 0, 0, attemptNumber = Random.nextInt(2), null, null, null)
+      } else {
+        null
+      }
+      TaskContext.setTaskContext(taskContext)
       val consumer = KafkaDataConsumer.acquire(
-        topicPartition, kafkaParams.asJava, useCache = true)
+        topicPartition, kafkaParams.asJava, useCache)
       try {
         val range = consumer.getAvailableOffsetRange()
-        for (offset <- range.earliest until range.latest) {
-          consumer.get(offset, Long.MaxValue, 10000, failOnDataLoss = false)
+        val rcvd = range.earliest until range.latest map { offset =>
+          val bytes = consumer.get(offset, Long.MaxValue, 10000, failOnDataLoss = false).value()
+          new String(bytes)
         }
+        assert(rcvd == data)
       } catch {
         case e: Throwable =>
           error = e
@@ -99,13 +108,17 @@ class KafkaDataConsumerSuite extends SharedSQLContext with PrivateMethodTester {
       }
     }
 
-    // Sub
-    val futures = (1 to numConsumerUsages).map { i =>
-      threadpool.submit(new Runnable {
-        override def run(): Unit = { consume(i) }
-      })
+    val threadpool = Executors.newFixedThreadPool(numThreads)
+    try {
+      val futures = (1 to numConsumerUsages).map { i =>
+        threadpool.submit(new Runnable {
+          override def run(): Unit = { consume(i) }
+        })
+      }
+      futures.foreach(_.get(1, TimeUnit.MINUTES))
+      assert(error == null)
+    } finally {
+      threadpool.shutdown()
     }
-    futures.foreach(_.get(1, TimeUnit.MINUTES))
-    assert(error == null)
   }
 }
