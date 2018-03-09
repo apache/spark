@@ -79,6 +79,8 @@ jobs:
     parallelism: 6
     # Spark runs a lot of tests in parallel, we need 16 GB of RAM for this
     resource_class: xlarge
+    environment:
+      CIRCLE_TEST_REPORTS: /tmp/circle-test-reports
     steps:
       - checkout
       - attach_workspace:
@@ -89,15 +91,24 @@ jobs:
           key: ivy-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
-      - run: set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "/tmp/run-tests.log"
+      - run:
+          name: Before running tests, ensure we created the CIRCLE_TEST_RESULTS directory
+          command: mkdir -p $CIRCLE_TEST_RESULTS
+      - run:
+          name: Run all tests
+          command: set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "/tmp/run-tests.log"
       - store_artifacts:
           path: /tmp/run-tests.log
           destination: command-logs
       - run:
           name: Collect unit tests
           command: mkdir -p /tmp/unit-tests && find . -name unit-tests.log -exec rsync -R {} /tmp/unit-tests/ \;
+          when: always
       - store_artifacts:
           path: /tmp/unit-tests
+      - store_test_results:
+          # TODO(dsanduleac): can we use $CIRCLE_TEST_RESULTS here?
+          path: /tmp/circle-test-reports
       - run:
           name: Collect yarn integration test logs
           command: |
@@ -107,6 +118,7 @@ jobs:
             if [[ ${#files[@]} != 0 ]]; then
               rsync -Rrm "${files[@]}" /tmp/yarn-tests/
             fi
+          when: always
       - store_artifacts:
           path: /tmp/yarn-tests
   deploy:
