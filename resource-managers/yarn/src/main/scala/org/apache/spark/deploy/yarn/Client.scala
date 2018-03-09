@@ -696,7 +696,13 @@ private[spark] class Client(
       }
     }
 
-    Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
+    // SPARK-23630: during testing, Spark scripts filter out hadoop conf dirs so that user's
+    // environments do not interfere with tests. This allows a special env variable during
+    // tests so that custom conf dirs can be used by unit tests.
+    val confDirs = Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR") ++
+      (if (Utils.isTesting) Seq("SPARK_TEST_HADOOP_CONF_DIR") else Nil)
+
+    confDirs.foreach { envKey =>
       sys.env.get(envKey).foreach { path =>
         val dir = new File(path)
         if (dir.isDirectory()) {
@@ -753,7 +759,7 @@ private[spark] class Client(
 
       // Save the YARN configuration into a separate file that will be overlayed on top of the
       // cluster's Hadoop conf.
-      confStream.putNextEntry(new ZipEntry(SPARK_HADOOP_CONF_FILE))
+      confStream.putNextEntry(new ZipEntry(SparkHadoopUtil.SPARK_HADOOP_CONF_FILE))
       hadoopConf.writeXml(confStream)
       confStream.closeEntry()
 
@@ -1219,10 +1225,6 @@ private object Client extends Logging {
 
   // Name of the file in the conf archive containing Spark configuration.
   val SPARK_CONF_FILE = "__spark_conf__.properties"
-
-  // Name of the file containing the gateway's Hadoop configuration, to be overlayed on top of the
-  // cluster's Hadoop config.
-  val SPARK_HADOOP_CONF_FILE = "__spark_hadoop_conf__.xml"
 
   // Subdirectory where the user's python files (not archives) will be placed.
   val LOCALIZED_PYTHON_DIR = "__pyfiles__"

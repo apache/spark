@@ -114,12 +114,25 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       ))
   }
 
-  test("yarn-cluster should respect conf overrides in SparkHadoopUtil (SPARK-16414)") {
+  test("yarn-cluster should respect conf overrides in SparkHadoopUtil (SPARK-16414, SPARK-23630)") {
+    // Create a custom hadoop config file, to make sure it's contents are propagated to the driver.
+    val customConf = Utils.createTempDir()
+    val coreSite = """<?xml version="1.0" encoding="UTF-8"?>
+      |<configuration>
+      |  <property>
+      |    <name>spark.test.key</name>
+      |    <value>testvalue</value>
+      |  </property>
+      |</configuration>
+      |""".stripMargin
+    Files.write(coreSite, new File(customConf, "core-site.xml"), StandardCharsets.UTF_8)
+
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(false,
       mainClassName(YarnClusterDriverUseSparkHadoopUtilConf.getClass),
-      appArgs = Seq("key=value", result.getAbsolutePath()),
-      extraConf = Map("spark.hadoop.key" -> "value"))
+      appArgs = Seq("key=value", "spark.test.key=testvalue", result.getAbsolutePath()),
+      extraConf = Map("spark.hadoop.key" -> "value"),
+      extraEnv = Map("SPARK_TEST_HADOOP_CONF_DIR" -> customConf.getAbsolutePath()))
     checkResult(finalState, result)
   }
 
@@ -319,13 +332,13 @@ private object YarnClusterDriverWithFailure extends Logging with Matchers {
 
 private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matchers {
   def main(args: Array[String]): Unit = {
-    if (args.length != 2) {
+    if (args.length < 2) {
       // scalastyle:off println
       System.err.println(
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
-        |Usage: YarnClusterDriverUseSparkHadoopUtilConf [hadoopConfKey=value] [result file]
+        |Usage: YarnClusterDriverUseSparkHadoopUtilConf [hadoopConfKey=value]+ [result file]
         """.stripMargin)
       // scalastyle:on println
       System.exit(1)
@@ -335,11 +348,16 @@ private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matc
       .set("spark.extraListeners", classOf[SaveExecutorInfo].getName)
       .setAppName("yarn test using SparkHadoopUtil's conf"))
 
-    val kv = args(0).split("=")
-    val status = new File(args(1))
+    val kvs = args.take(args.length - 1).map { kv =>
+      val parsed = kv.split("=")
+      (parsed(0), parsed(1))
+    }
+    val status = new File(args.last)
     var result = "failure"
     try {
-      SparkHadoopUtil.get.conf.get(kv(0)) should be (kv(1))
+      kvs.foreach { case (k, v) =>
+        SparkHadoopUtil.get.conf.get(k) should be (v)
+      }
       result = "success"
     } finally {
       Files.write(result, status, StandardCharsets.UTF_8)
