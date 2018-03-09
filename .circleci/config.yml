@@ -29,7 +29,7 @@ jobs:
           path: /tmp/mvn-install.log
           destination: command-logs
       # Get sbt to run trivially, ensures its launcher is downloaded under build/
-      - run: ./build/sbt -h
+      - run: ./build/sbt -h || true
       - save_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
           paths:
