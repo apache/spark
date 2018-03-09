@@ -17,9 +17,11 @@
 
 package org.apache.spark.ml.tree
 
+import org.apache.spark.annotation.Since
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
-import org.apache.spark.mllib.tree.model.{ImpurityStats, InformationGainStats => OldInformationGainStats, Node => OldNode, Predict => OldPredict}
+import org.apache.spark.mllib.tree.model.{ImpurityStats, InformationGainStats => OldInformationGainStats,
+  Node => OldNode, Predict => OldPredict}
 
 /**
  * Decision tree node interface.
@@ -84,35 +86,73 @@ private[ml] object Node {
   /**
    * Create a new Node from the old Node format, recursively creating child nodes as needed.
    */
-  def fromOld(oldNode: OldNode, categoricalFeatures: Map[Int, Int]): Node = {
+  def fromOld(oldNode: OldNode, categoricalFeatures: Map[Int, Int],
+    isClassification: Boolean): Node = {
     if (oldNode.isLeaf) {
       // TODO: Once the implementation has been moved to this API, then include sufficient
       //       statistics here.
-      new LeafNode(prediction = oldNode.predict.predict,
-        impurity = oldNode.impurity, impurityStats = null)
+      if (isClassification) {
+        new ClassificationLeafNode(prediction = oldNode.predict.predict,
+          impurity = oldNode.impurity, impurityStats = null)
+      } else {
+        new RegressionLeafNode(prediction = oldNode.predict.predict,
+          impurity = oldNode.impurity, impurityStats = null)
+      }
     } else {
       val gain = if (oldNode.stats.nonEmpty) {
         oldNode.stats.get.gain
       } else {
         0.0
       }
-      new InternalNode(prediction = oldNode.predict.predict, impurity = oldNode.impurity,
-        gain = gain, leftChild = fromOld(oldNode.leftNode.get, categoricalFeatures),
-        rightChild = fromOld(oldNode.rightNode.get, categoricalFeatures),
-        split = Split.fromOld(oldNode.split.get, categoricalFeatures), impurityStats = null)
+      if (isClassification) {
+        new ClassificationInternalNode(prediction = oldNode.predict.predict,
+          impurity = oldNode.impurity, gain = gain,
+          leftChild = fromOld(oldNode.leftNode.get, categoricalFeatures, true)
+            .asInstanceOf[ClassificationNode],
+          rightChild = fromOld(oldNode.rightNode.get, categoricalFeatures, true)
+            .asInstanceOf[ClassificationNode],
+          split = Split.fromOld(oldNode.split.get, categoricalFeatures), impurityStats = null)
+      } else {
+        new RegressionInternalNode(prediction = oldNode.predict.predict,
+          impurity = oldNode.impurity, gain = gain,
+          leftChild = fromOld(oldNode.leftNode.get, categoricalFeatures, false)
+            .asInstanceOf[RegressionNode],
+          rightChild = fromOld(oldNode.rightNode.get, categoricalFeatures, false)
+            .asInstanceOf[RegressionNode],
+          split = Split.fromOld(oldNode.split.get, categoricalFeatures), impurityStats = null)
+      }
     }
   }
 }
 
-/**
- * Decision tree leaf node.
- * @param prediction  Prediction this node makes
- * @param impurity  Impurity measure at this node (for training data)
- */
-class LeafNode private[ml] (
-    override val prediction: Double,
-    override val impurity: Double,
-    override private[ml] val impurityStats: ImpurityCalculator) extends Node {
+trait ClassificationNode extends Node {
+
+  @Since("2.4.0")
+  def getLabelCount(label: Int): Double = {
+    require(label >= 0 && label < impurityStats.stats.length)
+    impurityStats.stats(label)
+  }
+}
+
+trait RegressionNode extends Node {
+
+  @Since("2.4.0")
+  def getCount(): Double = impurityStats.stats(0)
+
+  @Since("2.4.0")
+  def getSum(): Double = impurityStats.stats(1)
+
+  @Since("2.4.0")
+  def getSquareSum(): Double = impurityStats.stats(2)
+}
+
+trait LeafNode extends Node {
+
+  /** Prediction this node make. */
+  def prediction: Double
+
+  /** Impurity measure at this node (for training data) */
+  def impurity: Double
 
   override def toString: String =
     s"LeafNode(prediction = $prediction, impurity = $impurity)"
@@ -135,32 +175,59 @@ class LeafNode private[ml] (
 
   override private[ml] def maxSplitFeatureIndex(): Int = -1
 
+}
+
+/**
+ * Decision tree leaf node for classification.
+ * @param prediction  Prediction this node makes
+ * @param impurity  Impurity measure at this node (for training data)
+ */
+class ClassificationLeafNode private[ml] (
+    override val prediction: Double,
+    override val impurity: Double,
+    override private[ml] val impurityStats: ImpurityCalculator)
+  extends ClassificationNode with LeafNode {
+
   override private[tree] def deepCopy(): Node = {
-    new LeafNode(prediction, impurity, impurityStats)
+    new ClassificationLeafNode(prediction, impurity, impurityStats)
+  }
+}
+
+/**
+ * Decision tree leaf node for regression.
+ * @param prediction  Prediction this node makes
+ * @param impurity  Impurity measure at this node (for training data)
+ */
+class RegressionLeafNode private[ml] (
+    override val prediction: Double,
+    override val impurity: Double,
+    override private[ml] val impurityStats: ImpurityCalculator)
+  extends RegressionNode with LeafNode {
+
+  override private[tree] def deepCopy(): Node = {
+    new RegressionLeafNode(prediction, impurity, impurityStats)
   }
 }
 
 /**
  * Internal Decision Tree node.
- * @param prediction  Prediction this node would make if it were a leaf node
- * @param impurity  Impurity measure at this node (for training data)
- * @param gain Information gain value. Values less than 0 indicate missing values;
- *             this quirk will be removed with future updates.
- * @param leftChild  Left-hand child node
- * @param rightChild  Right-hand child node
- * @param split  Information about the test used to split to the left or right child.
  */
-class InternalNode private[ml] (
-    override val prediction: Double,
-    override val impurity: Double,
-    val gain: Double,
-    val leftChild: Node,
-    val rightChild: Node,
-    val split: Split,
-    override private[ml] val impurityStats: ImpurityCalculator) extends Node {
+trait InternalNode extends Node{
 
-  // Note to developers: The constructor argument impurityStats should be reconsidered before we
-  //                     make the constructor public.  We may be able to improve the representation.
+  /**
+   * Information gain value. Values less than 0 indicate missing values;
+   * this quirk will be removed with future updates.
+   */
+  def gain: Double
+
+  /** Left-hand child node */
+  def leftChild: Node
+
+  /** Right-hand child node */
+  def rightChild: Node
+
+  /** Information about the test used to split to the left or right child. */
+  def split: Split
 
   override def toString: String = {
     s"InternalNode(prediction = $prediction, impurity = $impurity, split = $split)"
@@ -205,11 +272,6 @@ class InternalNode private[ml] (
     math.max(split.featureIndex,
       math.max(leftChild.maxSplitFeatureIndex(), rightChild.maxSplitFeatureIndex()))
   }
-
-  override private[tree] def deepCopy(): Node = {
-    new InternalNode(prediction, impurity, gain, leftChild.deepCopy(), rightChild.deepCopy(),
-      split, impurityStats)
-  }
 }
 
 private object InternalNode {
@@ -241,6 +303,69 @@ private object InternalNode {
 }
 
 /**
+ * Internal Decision Tree node for regression.
+ * @param prediction  Prediction this node would make if it were a leaf node
+ * @param impurity  Impurity measure at this node (for training data)
+ * @param gain Information gain value. Values less than 0 indicate missing values;
+ *             this quirk will be removed with future updates.
+ * @param leftChild  Left-hand child node
+ * @param rightChild  Right-hand child node
+ * @param split  Information about the test used to split to the left or right child.
+ */
+class ClassificationInternalNode private[ml] (
+    override val prediction: Double,
+    override val impurity: Double,
+    override val gain: Double,
+    override val leftChild: ClassificationNode,
+    override val rightChild: ClassificationNode,
+    val split: Split,
+    override private[ml] val impurityStats: ImpurityCalculator)
+  extends ClassificationNode with InternalNode {
+
+  // Note to developers: The constructor argument impurityStats should be reconsidered before we
+  //                     make the constructor public.  We may be able to improve the representation.
+
+  override private[tree] def deepCopy(): Node = {
+    new ClassificationInternalNode(prediction, impurity, gain,
+      leftChild.deepCopy().asInstanceOf[ClassificationNode],
+      rightChild.deepCopy().asInstanceOf[ClassificationNode],
+      split, impurityStats)
+  }
+}
+
+/**
+ * Internal Decision Tree node for regression.
+ * @param prediction  Prediction this node would make if it were a leaf node
+ * @param impurity  Impurity measure at this node (for training data)
+ * @param gain Information gain value. Values less than 0 indicate missing values;
+ *             this quirk will be removed with future updates.
+ * @param leftChild  Left-hand child node
+ * @param rightChild  Right-hand child node
+ * @param split  Information about the test used to split to the left or right child.
+ */
+class RegressionInternalNode private[ml] (
+    override val prediction: Double,
+    override val impurity: Double,
+    override val gain: Double,
+    override val leftChild: RegressionNode,
+    override val rightChild: RegressionNode,
+    override val split: Split,
+    override private[ml] val impurityStats: ImpurityCalculator)
+  extends RegressionNode with InternalNode {
+
+  // Note to developers: The constructor argument impurityStats should be reconsidered before we
+  //                     make the constructor public.  We may be able to improve the representation.
+
+  override private[tree] def deepCopy(): Node = {
+    new RegressionInternalNode(prediction, impurity, gain,
+      leftChild.deepCopy().asInstanceOf[RegressionNode],
+      rightChild.deepCopy().asInstanceOf[RegressionNode],
+      split, impurityStats)
+  }
+}
+
+
+/**
  * Version of a node used in learning.  This uses vars so that we can modify nodes as we split the
  * tree by adding children, etc.
  *
@@ -265,30 +390,52 @@ private[tree] class LearningNode(
     var isLeaf: Boolean,
     var stats: ImpurityStats) extends Serializable {
 
-  def toNode: Node = toNode(prune = true)
+  def toNode(isClassification: Boolean): Node = toNode(isClassification, prune = true)
+
+  def toClassificationNode(prune: Boolean = true): ClassificationNode = {
+    toNode(true, prune).asInstanceOf[ClassificationNode]
+  }
+
+  def toRegressionNode(prune: Boolean = true): RegressionNode = {
+    toNode(false, prune).asInstanceOf[RegressionNode]
+  }
 
   /**
    * Convert this [[LearningNode]] to a regular [[Node]], and recurse on any children.
    */
-  def toNode(prune: Boolean = true): Node = {
+  def toNode(isClassification: Boolean, prune: Boolean): Node = {
 
     if (!leftChild.isEmpty || !rightChild.isEmpty) {
       assert(leftChild.nonEmpty && rightChild.nonEmpty && split.nonEmpty && stats != null,
         "Unknown error during Decision Tree learning.  Could not convert LearningNode to Node.")
-      (leftChild.get.toNode(prune), rightChild.get.toNode(prune)) match {
+      (leftChild.get.toNode(isClassification, prune),
+       rightChild.get.toNode(isClassification, prune)) match {
         case (l: LeafNode, r: LeafNode) if prune && l.prediction == r.prediction =>
-          new LeafNode(l.prediction, stats.impurity, stats.impurityCalculator)
+          if (isClassification) {
+            new ClassificationLeafNode(l.prediction, stats.impurity, stats.impurityCalculator)
+          } else {
+            new RegressionLeafNode(l.prediction, stats.impurity, stats.impurityCalculator)
+          }
         case (l, r) =>
-          new InternalNode(stats.impurityCalculator.predict, stats.impurity, stats.gain,
-            l, r, split.get, stats.impurityCalculator)
+          if (isClassification) {
+            new ClassificationInternalNode(stats.impurityCalculator.predict, stats.impurity,
+              stats.gain, l.asInstanceOf[ClassificationNode], r.asInstanceOf[ClassificationNode],
+              split.get, stats.impurityCalculator)
+          } else {
+            new RegressionInternalNode(stats.impurityCalculator.predict, stats.impurity, stats.gain,
+              l.asInstanceOf[RegressionNode], r.asInstanceOf[RegressionNode],
+              split.get, stats.impurityCalculator)
+          }
       }
     } else {
-      if (stats.valid) {
-        new LeafNode(stats.impurityCalculator.predict, stats.impurity,
+      // Here we want to keep same behavior with the old mllib.DecisionTreeModel
+      val impurity = if (stats.valid) stats.impurity else -1.0
+      if (isClassification) {
+        new ClassificationLeafNode(stats.impurityCalculator.predict, impurity,
           stats.impurityCalculator)
       } else {
-        // Here we want to keep same behavior with the old mllib.DecisionTreeModel
-        new LeafNode(stats.impurityCalculator.predict, -1.0, stats.impurityCalculator)
+        new RegressionLeafNode(stats.impurityCalculator.predict, impurity,
+          stats.impurityCalculator)
       }
     }
   }
