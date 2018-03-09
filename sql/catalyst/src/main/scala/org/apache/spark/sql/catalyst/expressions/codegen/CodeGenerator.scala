@@ -1253,14 +1253,15 @@ class CodegenContext {
    */
   def calculateParamLength(params: Seq[Expression]): Int = {
     def paramLengthForExpr(input: Expression): Int = {
-      // For a nullable expression, we need to pass in an extra boolean parameter.
-      (if (input.nullable) 1 else 0) + javaType(input.dataType) match {
+      val javaParamLength = javaType(input.dataType) match {
         case JAVA_LONG | JAVA_DOUBLE => 2
         case _ => 1
       }
+      // For a nullable expression, we need to pass in an extra boolean parameter.
+      (if (input.nullable) 1 else 0) + javaParamLength
     }
     // Initial value is 1 for `this`.
-    1 + params.map(paramLengthForExpr(_)).sum
+    1 + params.map(paramLengthForExpr).sum
   }
 
   /**
