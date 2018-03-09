@@ -1292,7 +1292,7 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
       val bean = instance.asInstanceOf[Object]
       resolvedSetters.foreach {
         case (setter, expr) =>
-          setter.invoke(bean, expr.eval(input).asInstanceOf[Object])
+          setter.invoke(bean, expr.eval(input).asInstanceOf[AnyRef])
       }
     }
     instance
