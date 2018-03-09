@@ -17,7 +17,11 @@
 
 package org.apache.spark.sql.api.python
 
-import org.apache.spark.api.java.JavaRDD
+import java.util.{ArrayList => JArrayList}
+
+import scala.collection.JavaConverters._
+
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
@@ -46,5 +50,14 @@ private[sql] object PythonSQLUtils {
       schemaString: String,
       sqlContext: SQLContext): DataFrame = {
     ArrowConverters.toDataFrame(arrowStreamRDD, schemaString, sqlContext)
+  }
+
+  def arrowReadStreamFromFiles(
+      sqlContext: SQLContext,
+      schemaString: String,
+      filenames: JArrayList[String]): DataFrame = {
+    JavaSparkContext.fromSparkContext(sqlContext.sparkContext)
+    val jrdd = ArrowConverters.readArrowStreamFromFiles(sqlContext, filenames.asScala.toArray)
+    arrowStreamToDataFrame(jrdd, schemaString, sqlContext)
   }
 }

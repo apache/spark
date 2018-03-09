@@ -501,7 +501,7 @@ class SparkSession(object):
         to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
-        from pyspark.serializers import ArrowSerializer, FramedSerializer, _create_batch
+        from pyspark.serializers import ArrowSerializer, _create_batch
         from pyspark.sql.types import from_arrow_schema, to_arrow_type, TimestampType
         from pyspark.sql.utils import require_minimum_pandas_version, \
             require_minimum_pyarrow_version
@@ -539,19 +539,23 @@ class SparkSession(object):
                 struct.names[i] = name
             schema = struct
 
-        class ArrowFramedSerializer(FramedSerializer):
+        import os
+        from tempfile import NamedTemporaryFile
+        serializer = ArrowSerializer()
+        temp_filenames = []
+        try:
+            for batch in batches:
+                temp_file = NamedTemporaryFile(delete=False, dir=self.sparkContext._temp_dir)
+                temp_filenames.append(temp_file.name)
+                serializer.dump_stream([batch], temp_file)
+                temp_file.close()
+            jdf = self._jvm.PythonSQLUtils.arrowReadStreamFromFiles(
+                self._wrapped._jsqlContext, schema.json(), temp_filenames)
+        finally:
+            # arrowReadStreamFromFile eagerly reads the file so we can delete right after.
+            for temp_filename in temp_filenames:
+                os.unlink(temp_filename)
 
-            def dumps(self, batch):
-                import io
-                sink = io.BytesIO()
-                serializer = ArrowSerializer()
-                serializer.dump_stream([batch], sink)
-                return sink.getvalue()
-
-        # Create the Spark DataFrame directly from the Arrow data and schema
-        jrdd = self._sc._serialize_to_jvm(batches, len(batches), ArrowFramedSerializer())
-        jdf = self._jvm.PythonSQLUtils.arrowStreamToDataFrame(
-            jrdd, schema.json(), self._wrapped._jsqlContext)
         df = DataFrame(jdf, self._wrapped)
         df._schema = schema
         return df
