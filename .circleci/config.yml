@@ -34,7 +34,7 @@ jobs:
             | tee -a "/tmp/mvn-install.log"
       - store_artifacts:
           path: /tmp/mvn-install.log
-          destination: command-logs
+          destination: mvn-install.log
       # Get sbt to run trivially, ensures its launcher is downloaded under build/
       - run: ./build/sbt -h || true
       - save_cache:
@@ -63,7 +63,7 @@ jobs:
               | tee -a "/tmp/sbt-classpath.log"
       - store_artifacts:
           path: /tmp/sbt-classpath.log
-          destination: command-logs
+          destination: sbt-classpath.log
       - save_cache:
           key: ivy-dependency-cache-{{ checksum "pom.xml" }}
           paths:
@@ -99,7 +99,7 @@ jobs:
           command: set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "/tmp/run-tests.log"
       - store_artifacts:
           path: /tmp/run-tests.log
-          destination: command-logs
+          destination: run-tests.log
       - run:
           name: Collect unit tests
           command: mkdir -p /tmp/unit-tests && find . -name unit-tests.log -exec rsync -R {} /tmp/unit-tests/ \;
@@ -138,10 +138,10 @@ jobs:
       - deploy: dev/publish.sh
       - store_artifacts:
           path: /tmp/make-distribution.log
-          destination: command-logs
+          destination: make-distribution.log
       - store_artifacts:
           path: /tmp/publish_artifacts.log
-          destination: command-logs
+          destination: publish_artifacts.log
       - deploy: curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/spark/$(git describe --tags)/publish
 
 workflows:
