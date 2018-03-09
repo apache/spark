@@ -4,6 +4,8 @@ defaults: &defaults
   docker:
     - image: palantirtechnologies/circle-spark
   resource_class: xlarge
+  environment:
+    - TERM: dumb
 
 jobs:
   build:
@@ -11,7 +13,7 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: dependency-cache-{{ checksum "pom.xml" }}
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: maven-binaries-{{ checksum "build/mvn" }}
       - run: |
@@ -26,6 +28,22 @@ jobs:
             - "build/zinc-*"
             - "build/scala-*"
             - "build/apache-maven-*"
+      - save_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+          paths:
+            - "~/.m2"
+      - persist_to_workspace:
+          root: .
+          paths:
+            - "*/target/*"
+
+  sbt-dependencies:
+    <<: *defaults
+    resource_class: medium
+    steps:
+      - checkout
+      - restore_cache:
+          key: ivy-dependency-cache-{{ checksum "pom.xml" }}
       - run: |
           # Make sbt fetch all the external deps to ~/.ivy2 so it gets cached
           set -o pipefail \
@@ -34,17 +52,9 @@ jobs:
       - store_artifacts:
           path: /tmp/sbt-classpath.log
       - save_cache:
-          key: dependency-cache-{{ checksum "pom.xml" }}
+          key: ivy-dependency-cache-{{ checksum "pom.xml" }}
           paths:
             - "~/.ivy2"
-            - "~/.m2"
-      - persist_to_workspace:
-          root: .
-          paths:
-            - "*/target/*"
-
-    environment:
-      - TERM: dumb
 
   test:
     <<: *defaults
@@ -56,7 +66,9 @@ jobs:
       - attach_workspace:
           at: .
       - restore_cache:
-          key: dependency-cache-{{ checksum "pom.xml" }}
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+      - restore_cache:
+          key: ivy-dependency-cache-{{ checksum "pom.xml" }}
       - run: set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "/tmp/run-tests.log"
       - store_artifacts:
           path: /tmp/run-tests.log
@@ -95,9 +107,15 @@ workflows:
             # run on all branches and tags
             tags:
               only: /.*/
+      - sbt-dependencies:
+          filters:
+            # run on all branches and tags
+            tags:
+              only: /.*/
       - test:
           requires:
             - build
+            - sbt-dependencies
           filters:
             # run on all branches and tags
             tags:
@@ -105,6 +123,7 @@ workflows:
       - deploy:
           requires:
             - build
+            - sbt-dependencies
             - test
           filters:
             tags:
