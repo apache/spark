@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.json
 import java.io.ByteArrayOutputStream
 
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.runtime.universe.{typeTag, TypeTag}
 import scala.util.Try
 
 import com.fasterxml.jackson.core._
@@ -33,21 +34,28 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
- * Constructs a parser for a given schema that translates a json string to an [[InternalRow]].
+ * Constructs a parser for a given schema that translates a json string to a [[Seq]]
+ * of [[InternalRow]]s or [[AtomicType]]s.
  */
-class JacksonParser(
-    schema: StructType,
+class JacksonParser private (
+    schema: DataType,
     val options: JSONOptions) extends Logging {
 
   import JacksonUtils._
   import com.fasterxml.jackson.core.JsonToken._
+
+  def this(schema: StructType, options: JSONOptions) = this(schema: DataType, options)
+  def this(schema: ArrayType, options: JSONOptions) = this(schema: DataType, options)
 
   // A `ValueConverter` is responsible for converting a value from `JsonParser`
   // to a value in a field for `InternalRow`.
   private type ValueConverter = JsonParser => AnyRef
 
   // `ValueConverter`s for the root schema for all fields in the schema
-  private val rootConverter = makeRootConverter(schema)
+  private val rootConverter = schema match {
+    case s: StructType => makeRootConverter(s) // For struct or array of struct.
+    case a: ArrayType => makeRootConverter(a) // For array of primitive types.
+  }
 
   private val factory = new JsonFactory()
   options.setJacksonOptions(factory)
@@ -83,6 +91,24 @@ class JacksonParser(
           Nil
         } else {
           array.toArray[InternalRow](schema).toSeq
+        }
+    }
+  }
+
+  /**
+   * Create a converter which converts the JSON documents held by the `JsonParser`
+   * to a value according to a desired schema. This is an overloaded method to the
+   * previous one which allows to handle array of primitive types.
+   */
+  private def makeRootConverter(at: ArrayType): JsonParser => Seq[Any] = {
+    val elementConverter = makeConverter(at.elementType)
+    (parser: JsonParser) => parseJsonToken[Seq[Any]](parser, at) {
+      case START_ARRAY =>
+        val array = convertArray(parser, elementConverter)
+        if (array.numElements() == 0) {
+          Nil
+        } else {
+          array.toArray(at.elementType).toSeq
         }
     }
   }
@@ -334,7 +360,11 @@ class JacksonParser(
   }
 
   /**
-   * Parse the JSON input to the set of [[InternalRow]]s.
+   * Parse the JSON input to the set of [[InternalRow]]s. This function can be safely
+   * used when a [[StructType]] is passed as schema. This means that it can parse JSON
+   * objects and array of JSON objects.
+   * If you need to support array of primitive types too (ie. when the schema is a
+   * [[ArrayType]]), then use [[parseWithArrayOfPrimitiveSupport]] instead.
    *
    * @param recordLiteral an optional function that will be used to generate
    *   the corrupt record text instead of record.toString
@@ -343,6 +373,28 @@ class JacksonParser(
       record: T,
       createParser: (JsonFactory, T) => JsonParser,
       recordLiteral: T => UTF8String): Seq[InternalRow] = {
+    schema match {
+      case _: ArrayType => throw BadRecordException(() => recordLiteral(record), () => None,
+        new RuntimeException("`parse` is only used to parse the JSON input to a set of " +
+          "`InternalRow`s. It can parse JSON objects and array of JSON objects. Use " +
+          "`parseWithArrayOfPrimitiveSupport` when parsing array of primitive data is needed."))
+      case _: StructType => parseWithArrayOfPrimitiveSupport(
+        record, createParser, recordLiteral).asInstanceOf[Seq[InternalRow]]
+    }
+  }
+
+  /**
+   * Parse the JSON input. This function can return a set of [[InternalRow]]s
+   * if a [[StructType]] is defined as schema, meanwhile it returns a set of
+   * objects if an [[ArrayType]] is defined as schema.
+   *
+   * @param recordLiteral an optional function that will be used to generate
+   *   the corrupt record text instead of record.toString
+   */
+  def parseWithArrayOfPrimitiveSupport[T](
+      record: T,
+      createParser: (JsonFactory, T) => JsonParser,
+      recordLiteral: T => UTF8String): Seq[Any] = {
     try {
       Utils.tryWithResource(createParser(factory, record)) { parser =>
         // a null first token is equivalent to testing for input.trim.isEmpty

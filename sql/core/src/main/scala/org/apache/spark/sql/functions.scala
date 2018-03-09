@@ -3120,8 +3120,8 @@ object functions {
 
   /**
    * (Scala-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
-   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
-   * string.
+   * of `StructType`s or primitive types with the specified schema. Returns `null`, in the case of
+   * an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
@@ -3152,8 +3152,8 @@ object functions {
 
   /**
    * (Java-specific) Parses a column containing a JSON string into a `StructType` or `ArrayType`
-   * of `StructType`s with the specified schema. Returns `null`, in the case of an unparseable
-   * string.
+   * of `StructType`s or primitive types with the specified schema. Returns `null`, in the case of
+   * an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string
@@ -3181,7 +3181,8 @@ object functions {
 
   /**
    * Parses a column containing a JSON string into a `StructType` or `ArrayType` of `StructType`s
-   * with the specified schema. Returns `null`, in the case of an unparseable string.
+   * of `StructType`s or primitive types with the specified schema. Returns `null`, in the case of
+   * an unparseable string.
    *
    * @param e a string column containing JSON data.
    * @param schema the schema to use when parsing the json string

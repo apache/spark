@@ -495,7 +495,7 @@ case class JsonTuple(children: Seq[Expression])
 
 /**
  * Converts an json input string to a [[StructType]] or [[ArrayType]] of [[StructType]]s
- * with the specified schema.
+ * or [[AtomicType]]s with the specified schema.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -536,32 +536,32 @@ case class JsonToStructs(
       timeZoneId = None)
 
   override def checkInputDataTypes(): TypeCheckResult = schema match {
-    case _: StructType | ArrayType(_: StructType, _) =>
+    case _: StructType | ArrayType(_: StructType | _: AtomicType, _) =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input schema ${schema.simpleString} must be a struct or an array of structs.")
-  }
-
-  @transient
-  lazy val rowSchema = schema match {
-    case st: StructType => st
-    case ArrayType(st: StructType, _) => st
+      s"Input schema ${schema.simpleString} must be a struct or " +
+        s"an array of structs or primitive types.")
   }
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
   lazy val converter = schema match {
     case _: StructType =>
-      (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
-    case ArrayType(_: StructType, _) =>
-      (rows: Seq[InternalRow]) => new GenericArrayData(rows)
+      (rows: Seq[Any]) => if (rows.length == 1) rows.head else null
+    case ArrayType(_: StructType| _: AtomicType, _) =>
+      (rows: Seq[Any]) => new GenericArrayData(rows)
   }
 
   @transient
-  lazy val parser =
-    new JacksonParser(
-      rowSchema,
-      new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get))
+  lazy val jsonOptions = new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get)
+
+  @transient
+  lazy val parser: JacksonParser = schema match {
+    case st: StructType => new JacksonParser(st, jsonOptions)
+    case ArrayType(st: StructType, _) => new JacksonParser(st, jsonOptions)
+    case ArrayType(at: AtomicType, _) => new JacksonParser(ArrayType(at), jsonOptions)
+  }
+
 
   override def dataType: DataType = schema
 
@@ -591,7 +591,7 @@ case class JsonToStructs(
     if (json.toString.trim.isEmpty) return null
 
     try {
-      converter(parser.parse(
+      converter(parser.parseWithArrayOfPrimitiveSupport(
         json.asInstanceOf[UTF8String],
         CreateJacksonParser.utf8String,
         identity[UTF8String]))
