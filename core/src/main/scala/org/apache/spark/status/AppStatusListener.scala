@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1
@@ -666,6 +666,14 @@ private[spark] class AppStatusListener(
           val esummary = stage.executorSummary(event.execId)
           esummary.metrics = LiveEntityHelpers.addMetrics(esummary.metrics, delta)
           maybeUpdate(esummary, now)
+        }
+      }
+    }
+    event.executorUpdates.foreach { updates: ExecutorMetrics =>
+      // check if there is a new peak value for any of the executor level memory metrics
+      liveExecutors.get(event.execId).foreach { exec: LiveExecutor =>
+        if (exec.peakExecutorMetrics.compareAndUpdate(updates)) {
+          maybeUpdate(exec, now)
         }
       }
     }

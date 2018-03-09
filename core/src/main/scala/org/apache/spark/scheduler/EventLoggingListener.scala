@@ -36,6 +36,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
@@ -92,6 +93,9 @@ private[spark] class EventLoggingListener(
 
   // Visible for tests only.
   private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
+
+  // Peak metric values for each executor
+  private var peakExecutorMetrics = new mutable.HashMap[String, PeakExecutorMetrics]()
 
   /**
    * Creates the log file in the configured log directory.
@@ -155,7 +159,11 @@ private[spark] class EventLoggingListener(
   }
 
   // Events that do not trigger a flush
-  override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = logEvent(event)
+  override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
+    logEvent(event)
+    // clear the peak metrics when a new stage starts
+    peakExecutorMetrics.values.foreach(_.reset())
+  }
 
   override def onTaskStart(event: SparkListenerTaskStart): Unit = logEvent(event)
 
@@ -197,10 +205,12 @@ private[spark] class EventLoggingListener(
   }
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     logEvent(event, flushLogger = true)
+    peakExecutorMetrics.put(event.executorId, new PeakExecutorMetrics())
   }
 
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
     logEvent(event, flushLogger = true)
+    peakExecutorMetrics.remove(event.executorId)
   }
 
   override def onExecutorBlacklisted(event: SparkListenerExecutorBlacklisted): Unit = {
@@ -234,8 +244,22 @@ private[spark] class EventLoggingListener(
     }
   }
 
-  // No-op because logging every update would be overkill
-  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = { }
+  /**
+   * Log if there is a new peak value for one of the memory metrics for the given executor.
+   * Metrics are cleared out when a new stage is started in onStageSubmitted, so this will
+   * log new peak memory metric values per executor per stage.
+   */
+  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
+    var log: Boolean = false
+    event.executorUpdates.foreach { executorUpdates =>
+      val peakMetrics = peakExecutorMetrics.getOrElseUpdate(event.execId, new PeakExecutorMetrics())
+      if (peakMetrics.compareAndUpdate(executorUpdates)) {
+        val accumUpdates = new ArrayBuffer[(Long, Int, Int, Seq[AccumulableInfo])]()
+        logEvent(new SparkListenerExecutorMetricsUpdate(event.execId, accumUpdates,
+          event.executorUpdates), flushLogger = true)
+      }
+    }
+  }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     if (event.logEvent) {
