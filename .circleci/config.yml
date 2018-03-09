@@ -3,7 +3,7 @@ version: 2
 defaults: &defaults
   docker:
     - image: palantirtechnologies/circle-spark
-  resource_class: large
+  resource_class: xlarge
 
 jobs:
   build:
