@@ -13,9 +13,14 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+          keys:
+            - maven-dependency-cache-{{ checksum "pom.xml" }}
+            # Fallback - see https://circleci.com/docs/2.0/configuration-reference/#example-2
+            - key: maven-dependency-cache-
       - restore_cache:
-          key: maven-binaries-{{ checksum "build/mvn" }}
+          keys:
+            - maven-binaries-{{ checksum "build/mvn" }}
+            - maven-binaries-
       - run: |
           set -o pipefail \
           && ./build/mvn -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install \
@@ -43,7 +48,9 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: ivy-dependency-cache-{{ checksum "pom.xml" }}
+          keys:
+            - ivy-dependency-cache-{{ checksum "pom.xml" }}
+            - ivy-dependency-cache-
       - run: |
           # Make sbt fetch all the external deps to ~/.ivy2 so it gets cached
           set -o pipefail \
