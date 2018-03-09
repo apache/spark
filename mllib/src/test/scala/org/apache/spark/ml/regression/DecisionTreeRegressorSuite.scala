@@ -144,6 +144,20 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
       }
   }
 
+  test("label/impurity stats") {
+    val categoricalFeatures = Map(0 -> 2, 1 -> 2)
+    val df = TreeTests.setMetadata(categoricalDataPointsRDD, categoricalFeatures, numClasses = 0)
+    val dtr = new DecisionTreeRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(2)
+      .setMaxBins(8)
+    val model = dtr.fit(df)
+    val statInfo = model.rootNode.statInfo.asTreeRegressorStatInfo
+
+    assert(statInfo.getCount() == 1000.0 && statInfo.getSum() == 600.0
+      && statInfo.getSquareSum() == 600.0)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
   /////////////////////////////////////////////////////////////////////////////

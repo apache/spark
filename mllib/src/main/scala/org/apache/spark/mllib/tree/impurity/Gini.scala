@@ -157,6 +157,8 @@ private[spark] class GiniCalculator(stats: Array[Double]) extends ImpurityCalcul
     }
   }
 
+  override def getStatInfo: TreeStatInfo = new TreeClassifierStatInfo(stats)
+
   override def toString: String = s"GiniCalculator(stats = [${stats.mkString(", ")}])"
 
 }

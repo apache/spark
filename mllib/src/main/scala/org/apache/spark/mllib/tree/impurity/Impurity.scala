@@ -177,6 +177,7 @@ private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) exten
     result._1
   }
 
+  def getStatInfo: TreeStatInfo
 }
 
 private[spark] object ImpurityCalculator {
@@ -195,4 +196,40 @@ private[spark] object ImpurityCalculator {
           s"ImpurityCalculator builder did not recognize impurity type: $impurity")
     }
   }
+}
+
+@Since("2.4.0")
+trait TreeStatInfo extends Serializable {
+
+  @Since("2.4.0")
+  def asTreeClassifierStatInfo: TreeClassifierStatInfo = this.asInstanceOf[TreeClassifierStatInfo]
+
+  @Since("2.4.0")
+  def asTreeRegressorStatInfo: TreeRegressorStatInfo = this.asInstanceOf[TreeRegressorStatInfo]
+}
+
+@Since("2.4.0")
+class TreeClassifierStatInfo(val stats: Array[Double]) extends TreeStatInfo {
+
+  @Since("2.4.0")
+  def getLabelCount(label: Int): Double = {
+    require(label >= 0 && label < stats.length,
+      s"label must be between 0(inclusive) and ${stats.length}(exclusive).")
+    stats(label)
+  }
+}
+
+@Since("2.4.0")
+class TreeRegressorStatInfo(val stats: Array[Double]) extends TreeStatInfo {
+
+  require(stats.length == 3)
+
+  @Since("2.4.0")
+  def getCount(): Double = stats(0)
+
+  @Since("2.4.0")
+  def getSum(): Double = stats(1)
+
+  @Since("2.4.0")
+  def getSquareSum(): Double = stats(2)
 }

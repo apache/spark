@@ -18,7 +18,7 @@
 package org.apache.spark.ml.tree
 
 import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
+import org.apache.spark.mllib.tree.impurity.{ImpurityCalculator, TreeStatInfo}
 import org.apache.spark.mllib.tree.model.{ImpurityStats, InformationGainStats => OldInformationGainStats, Node => OldNode, Predict => OldPredict}
 
 /**
@@ -34,6 +34,9 @@ sealed abstract class Node extends Serializable {
 
   /** Impurity measure at this node (for training data) */
   def impurity: Double
+
+  /** label/impurity stats at this node */
+  def statInfo: TreeStatInfo = impurityStats.getStatInfo
 
   /**
    * Statistics aggregated from training data at this node, used to compute prediction, impurity,
