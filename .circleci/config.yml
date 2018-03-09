@@ -10,10 +10,6 @@ jobs:
     <<: *defaults
     steps:
       - checkout
-      - run: echo "user=$BINTRAY_USERNAME" > .credentials
-      - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
-      - run: echo "realm=Bintray API Realm" >> .credentials
-      - run: echo "host=api.bintray.com" >> .credentials
       - restore_cache:
           key: dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
@@ -83,6 +79,10 @@ jobs:
   deploy:
     <<: *defaults
     steps:
+      - run: echo "user=$BINTRAY_USERNAME" > .credentials
+      - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
+      - run: echo "realm=Bintray API Realm" >> .credentials
+      - run: echo "host=api.bintray.com" >> .credentials
       - run: dev/publish.sh
       - run: curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/spark/$(git describe --tags)/publish
 
