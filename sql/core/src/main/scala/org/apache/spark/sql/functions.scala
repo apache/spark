@@ -2708,7 +2708,8 @@ object functions {
   def minute(e: Column): Column = withExpr { Minute(e.expr) }
 
   /**
-   * Returns number of months between dates `date1` and `date2`.
+   * Returns number of months between dates `date1` and `date2`. If `date1` is later than `date2`,
+   * then the result is positive.
    * @group datetime_funcs
    * @since 1.5.0
    */
