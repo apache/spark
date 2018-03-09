@@ -34,11 +34,11 @@ class NGramSuite extends MLTest with DefaultReadWriteTest {
     val nGram = new NGram()
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
-    val dataFrame = Seq(NGramTestData(
+    val dataset = Seq(NGramTestData(
       Array("Test", "for", "ngram", "."),
       Array("Test for", "for ngram", "ngram .")
     )).toDF()
-    testNGram(nGram, dataFrame)
+    testNGram(nGram, dataset)
   }
 
   test("NGramLength=4 yields length 4 n-grams") {
@@ -46,11 +46,11 @@ class NGramSuite extends MLTest with DefaultReadWriteTest {
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
       .setN(4)
-    val dataFrame = Seq(NGramTestData(
+    val dataset = Seq(NGramTestData(
       Array("a", "b", "c", "d", "e"),
       Array("a b c d", "b c d e")
     )).toDF()
-    testNGram(nGram, dataFrame)
+    testNGram(nGram, dataset)
   }
 
   test("empty input yields empty output") {
@@ -58,8 +58,8 @@ class NGramSuite extends MLTest with DefaultReadWriteTest {
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
       .setN(4)
-    val dataFrame = Seq(NGramTestData(Array(), Array())).toDF()
-    testNGram(nGram, dataFrame)
+    val dataset = Seq(NGramTestData(Array(), Array())).toDF()
+    testNGram(nGram, dataset)
   }
 
   test("input array < n yields empty output") {
@@ -67,11 +67,11 @@ class NGramSuite extends MLTest with DefaultReadWriteTest {
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
       .setN(6)
-    val dataFrame = Seq(NGramTestData(
+    val dataset = Seq(NGramTestData(
       Array("a", "b", "c", "d", "e"),
       Array()
     )).toDF()
-    testNGram(nGram, dataFrame)
+    testNGram(nGram, dataset)
   }
 
   test("read/write") {
