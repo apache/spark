@@ -1154,6 +1154,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(errMsg3.getMessage.startsWith("cannot have circular references in class, but got the " +
       "circular reference of class"))
   }
+  
+  test("SPARK-23627: provide isEmpty in DataSet") {
+    val data = Seq()
+    assert(data.isEmpty)
+  }
 }
 
 case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])
