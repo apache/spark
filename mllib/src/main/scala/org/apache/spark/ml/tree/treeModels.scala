@@ -212,15 +212,13 @@ private[ml] object TreeEnsembleModel {
   def computeFeatureImportance(
       node: Node,
       importances: OpenHashMap[Int, Double]): Unit = {
-    node match {
-      case n: InternalNode =>
-        val feature = n.split.featureIndex
-        val scaledGain = n.gain * n.impurityStats.count
-        importances.changeValue(feature, scaledGain, _ + scaledGain)
-        computeFeatureImportance(n.leftChild, importances)
-        computeFeatureImportance(n.rightChild, importances)
-      case n: LeafNode =>
-      // do nothing
+    if (node.isInstanceOf[InternalNode]) {
+      val n = node.asInstanceOf[InternalNode]
+      val feature = n.split.featureIndex
+      val scaledGain = n.gain * n.impurityStats.count
+      importances.changeValue(feature, scaledGain, _ + scaledGain)
+      computeFeatureImportance(n.leftChild, importances)
+      computeFeatureImportance(n.rightChild, importances)
     }
   }
 
@@ -306,19 +304,21 @@ private[ml] object DecisionTreeModelReadWrite {
      *         The nodes are returned in pre-order traversal (root first) so that it is easy to
      *         get the ID of the subtree's root node.
      */
-    def build(node: Node, id: Int): (Seq[NodeData], Int) = node match {
-      case n: InternalNode =>
+    def build(node: Node, id: Int): (Seq[NodeData], Int) = {
+      if (node.isInstanceOf[InternalNode]) {
+        val n = node.asInstanceOf[InternalNode]
         val (leftNodeData, leftIdx) = build(n.leftChild, id + 1)
         val (rightNodeData, rightIdx) = build(n.rightChild, leftIdx + 1)
         val thisNodeData = NodeData(id, n.prediction, n.impurity, n.impurityStats.stats,
           n.gain, leftNodeData.head.id, rightNodeData.head.id, SplitData(n.split))
         (thisNodeData +: (leftNodeData ++ rightNodeData), rightIdx)
-      case _: LeafNode =>
+      } else if (node.isInstanceOf[LeafNode]) {
         (Seq(NodeData(id, node.prediction, node.impurity, node.impurityStats.stats,
           -1.0, -1, -1, SplitData(-1, Array.empty[Double], -1))),
           id)
-      case _ => throw new IllegalArgumentException(
-        s"unexpected node type: ${Node.getClass.toString}")
+      } else {
+        throw new IllegalArgumentException(s"unexpected node type: ${Node.getClass.toString}")
+      }
     }
   }
 
