@@ -16,12 +16,20 @@ jobs:
       - run: echo "host=api.bintray.com" >> .credentials
       - restore_cache:
           key: dependency-cache-{{ checksum "pom.xml" }}
+      - restore_cache:
+          key: maven-binaries-{{ checksum "build/mvn" }}
       - run: |
           set -o pipefail \
           && ./build/mvn -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install \
             | tee -a "/tmp/mvn-install.log"
       - store_artifacts:
           path: /tmp/mvn-install.log
+      - save_cache:
+          key: maven-binaries-{{ checksum "build/mvn" }}
+          paths:
+            - "build/zinc-*"
+            - "build/scala-*"
+            - "build/apache-maven-*"
       - run: |
           # Make sbt fetch all the external deps to ~/.ivy2 so it gets cached
           set -o pipefail \
