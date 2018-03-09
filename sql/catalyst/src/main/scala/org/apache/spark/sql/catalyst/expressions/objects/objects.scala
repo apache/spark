@@ -610,10 +610,10 @@ case class MapObjects private(
 
   override def children: Seq[Expression] = lambdaFunction :: inputData :: Nil
 
-  // The data with PythonUserDefinedType are actually stored with the data type of its sqlType.
+  // The data with UserDefinedType are actually stored with the data type of its sqlType.
   // When we want to apply MapObjects on it, we have to use it.
   lazy private val inputDataType = inputData.dataType match {
-    case p: PythonUserDefinedType => p.sqlType
+    case u: UserDefinedType[_] => u.sqlType
     case _ => inputData.dataType
   }
 
@@ -624,43 +624,41 @@ case class MapObjects private(
     }
   }
 
-  override def eval(input: InternalRow): Any = {
-    val inputCollection = inputData.eval(input)
-
-    if (inputCollection == null) {
-      return inputCollection
-    }
-
-    val results = inputDataType match {
-      case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
-        executeFuncOnCollection(inputCollection.asInstanceOf[Seq[_]])
-      case ObjectType(cls) if cls.isArray =>
-        executeFuncOnCollection(inputCollection.asInstanceOf[Array[_]].toSeq)
-      case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
-        executeFuncOnCollection(inputCollection.asInstanceOf[java.util.List[_]].asScala)
-      case ObjectType(cls) if cls == classOf[Object] =>
+  // Executes lambda function on input collection.
+  private lazy val executeFunc: Any => Seq[_] = inputDataType match {
+    case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
+      x => executeFuncOnCollection(x.asInstanceOf[Seq[_]])
+    case ObjectType(cls) if cls.isArray =>
+      x => executeFuncOnCollection(x.asInstanceOf[Array[_]].toSeq)
+    case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
+      x => executeFuncOnCollection(x.asInstanceOf[java.util.List[_]].asScala)
+    case ObjectType(cls) if cls == classOf[Object] =>
+      (inputCollection) => {
         if (inputCollection.getClass.isArray) {
           executeFuncOnCollection(inputCollection.asInstanceOf[Array[_]].toSeq)
         } else {
           executeFuncOnCollection(inputCollection.asInstanceOf[Seq[_]])
         }
-      case ArrayType(et, _) =>
-        executeFuncOnCollection(inputCollection.asInstanceOf[ArrayData].array)
-    }
+      }
+    case ArrayType(et, _) =>
+      x => executeFuncOnCollection(x.asInstanceOf[ArrayData].array)
+  }
 
-    customCollectionCls match {
-      case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
-        // Scala sequence
-        results.toSeq
-      case Some(cls) if classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
-        // Scala set
-        results.toSet
-      case Some(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
-        // Java list
-        if (cls == classOf[java.util.List[_]] || cls == classOf[java.util.AbstractList[_]] ||
-            cls == classOf[java.util.AbstractSequentialList[_]]) {
-          results.asJava
-        } else {
+  // Converts the processed collection to custom collection class if any.
+  private lazy val getResults: Seq[_] => Any = customCollectionCls match {
+    case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
+      // Scala sequence
+      _.toSeq
+    case Some(cls) if classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
+      // Scala set
+      _.toSet
+    case Some(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
+      // Java list
+      if (cls == classOf[java.util.List[_]] || cls == classOf[java.util.AbstractList[_]] ||
+          cls == classOf[java.util.AbstractSequentialList[_]]) {
+        _.asJava
+      } else {
+        (results) => {
           val builder = Try(cls.getConstructor(Integer.TYPE)).map { constructor =>
             constructor.newInstance(results.length.asInstanceOf[Object])
           }.getOrElse {
@@ -670,10 +668,20 @@ case class MapObjects private(
           results.foreach(builder.add(_))
           builder
         }
-      case None =>
-        // array
-        new GenericArrayData(results.toArray)
+      }
+    case None =>
+      // array
+      x => new GenericArrayData(x.toArray)
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val inputCollection = inputData.eval(input)
+
+    if (inputCollection == null) {
+      return null
     }
+
+    getResults(executeFunc(inputCollection))
   }
 
   override def dataType: DataType =
@@ -1308,6 +1316,11 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
  */
 case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: Boolean)
   extends UnaryExpression with NonSQLExpression with SerializerSupport {
+
+  override def nullSafeEval(input: Any): Any = {
+    val inputBytes = java.nio.ByteBuffer.wrap(input.asInstanceOf[Array[Byte]])
+    serializerInstance.deserialize(inputBytes)
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val serializer = addImmutableSerializerIfNeeded(ctx)

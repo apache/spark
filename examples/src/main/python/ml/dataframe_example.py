@@ -33,7 +33,7 @@ from pyspark.mllib.util import MLUtils
 if __name__ == "__main__":
     if len(sys.argv) > 2:
         print("Usage: dataframe_example.py <libsvm file>", file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
     elif len(sys.argv) == 2:
         input = sys.argv[1]
     else:
