@@ -403,7 +403,8 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
         return self.getOrDefault(self.splits)
 
 
-class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
+@inherit_doc
+class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     Params for :py:attr:`CountVectorizer` and :py:attr:`CountVectorizerModel`.
     """
@@ -528,24 +529,25 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
     """
 
     @keyword_only
-    def __init__(self, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False,
+    def __init__(self, minTF=1.0, minDF=1.0, maxDF=sys.maxsize, vocabSize=1 << 18, binary=False,
                  inputCol=None, outputCol=None):
         """
-        __init__(self, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False,\
+        __init__(self, minTF=1.0, minDF=1.0, maxDF=sys.maxsize, vocabSize=1 << 18, binary=False,\
                  inputCol=None, outputCol=None)
         """
         super(CountVectorizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer",
                                             self.uid)
+        self._setDefault(minTF=1.0, minDF=1.0, maxDF=sys.maxsize, vocabSize=1 << 18, binary=False)
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.6.0")
-    def setParams(self, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False,
+    def setParams(self, minTF=1.0, minDF=1.0, maxDF=sys.maxsize, vocabSize=1 << 18, binary=False,
                   inputCol=None, outputCol=None):
         """
-        setParams(self, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False,\
+        setParams(self, minTF=1.0, minDF=1.0, maxDF=sys.maxsize, vocabSize=1 << 18, binary=False,\
                   inputCol=None, outputCol=None)
         Set the params for the CountVectorizer
         """
@@ -572,7 +574,7 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
         Gets the value of maxDF or its default value.
         """
         return self.getOrDefault(self.maxDF)
-        
+
     @since("1.6.0")
     def setVocabSize(self, value):
         """
@@ -3795,4 +3797,4 @@ if __name__ == "__main__":
         except OSError:
             pass
     if failure_count:
-        sys.exit(-1)
+        exit(-1)
