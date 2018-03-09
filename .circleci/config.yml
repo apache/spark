@@ -3,10 +3,6 @@ jobs:
   build: 
     docker:
       - image: palantirtechnologies/circle-spark
-    # project/CirclePlugin.scala does its own test splitting in SBT based on CIRCLE_NODE_INDEX, CIRCLE_NODE_TOTAL
-    parallelism: 6
-    # Spark runs a lot of tests in parallel, we need 16 GB of RAM for this
-    resource_class: xlarge
     steps:
       - checkout
       - run: "[[ ! -s \"$(git rev-parse --git-dir)/shallow\" ]] || git fetch --unshallow"
@@ -16,27 +12,25 @@ jobs:
       - run: echo "host=api.bintray.com" >> .credentials
       - restore_cache:
           key: dependency-cache-{{ checksum "pom.xml" }}
-      - run: |
-          if [[ -d build_classes ]]; then
-            # Copy contents into current build directory
-            rsync --info=stats2,misc1,flist0 -a build_classes/ .
-          fi
       - run: set -o pipefail && ./build/mvn -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install | tee -a "$CIRCLE_ARTIFACTS/mvn-install.log"
-      - run: >
-          rsync --info=stats2,misc1,flist0 -a --delete-excluded --prune-empty-dirs --exclude build_classes/ --exclude 'target/streams' --exclude 'assembly/target' --exclude 'common/network-yarn/target' --exclude 'examples/target' --exclude '***/*.jar' --include 'target/***' --include '**/' --exclude '*' . build_classes/
       - run: |
           # Make sbt fetch all the external deps to ~/.ivy2 so it gets cached
           set -o pipefail && ./build/sbt -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr externalDependencyClasspath | tee -a "$CIRCLE_ARTIFACTS/sbt-classpath.log"
       - save_cache:
           key: dependency-cache-{{ checksum "pom.xml" }}
           paths:
-            - "build_classes"
-            - "build"
+            - "~/.ivy2"
+            - "~/.m2"
     environment:
       - TERM: dumb
+
   test:
     docker:
       - image: palantirtechnologies/circle-spark
+    # project/CirclePlugin.scala does its own test splitting in SBT based on CIRCLE_NODE_INDEX, CIRCLE_NODE_TOTAL
+    parallelism: 6
+    # Spark runs a lot of tests in parallel, we need 16 GB of RAM for this
+    resource_class: xlarge
     steps:
       - run: set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "$CIRCLE_ARTIFACTS/run-tests.log"
       - run: find . -name unit-tests.log -exec rsync -R {} $CIRCLE_ARTIFACTS \;
