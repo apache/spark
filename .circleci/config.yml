@@ -42,11 +42,8 @@ jobs:
           paths:
             - "*/target/*"
 
-  sbt-dependencies:
-    <<: *defaults
-    resource_class: medium
-    steps:
-      - checkout
+      # SBT dependencies
+
       - restore_cache:
           keys:
             - ivy-dependency-cache-{{ checksum "pom.xml" }}
@@ -132,15 +129,9 @@ workflows:
             # run on all branches and tags
             tags:
               only: /.*/
-      - sbt-dependencies:
-          filters:
-            # run on all branches and tags
-            tags:
-              only: /.*/
       - test:
           requires:
             - build
-            - sbt-dependencies
           filters:
             # run on all branches and tags
             tags:
@@ -148,7 +139,6 @@ workflows:
       - deploy:
           requires:
             - build
-            - sbt-dependencies
             - test
           filters:
             tags:
