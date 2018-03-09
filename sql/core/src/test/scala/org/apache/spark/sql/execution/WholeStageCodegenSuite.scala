@@ -32,6 +32,8 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
 
+  import testImplicits._
+
   test("range/filter should be combined") {
     val df = spark.range(10).filter("id = 1").selectExpr("id + 1")
     val plan = df.queryExecution.executedPlan
@@ -305,6 +307,49 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
       assert(after1 == after2, "Should hit codegen cache. No new compilation to bytecode expected")
 
       // a different query can result in codegen cache miss, that's by design
+    }
+  }
+
+  test("SPARK-23598: Avoid compilation error with a lot of aggregation operations") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val df = Seq((8, "bat"), (15, "mouse"), (5, "horse")).toDF("age", "name")
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).groupBy("name").agg(avg("age").alias("age"))
+        .groupBy("name").agg(avg("age").alias("age")).limit(1)
+      assert(df.collect() === Array(Row("bat", 8.0)))
     }
   }
 }
