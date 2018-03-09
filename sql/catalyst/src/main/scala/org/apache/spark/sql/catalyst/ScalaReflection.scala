@@ -125,19 +125,6 @@ object ScalaReflection extends ScalaReflection {
     case _ => false
   }
 
-  def classForNativeTypeOf(dt: DataType): Class[_] = dt match {
-    case NullType => classOf[Object]
-    case BooleanType => classOf[java.lang.Boolean]
-    case ByteType => classOf[java.lang.Byte]
-    case ShortType => classOf[java.lang.Short]
-    case IntegerType => classOf[java.lang.Integer]
-    case LongType => classOf[java.lang.Long]
-    case FloatType => classOf[java.lang.Float]
-    case DoubleType => classOf[java.lang.Double]
-    case BinaryType => classOf[Array[Byte]]
-    case CalendarIntervalType => classOf[CalendarInterval]
-  }
-
   /**
    * Returns an expression that can be used to deserialize an input row to an object of type `T`
    * with a compatible schema.  Fields of the row will be extracted using UnresolvedAttributes

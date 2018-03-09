@@ -26,9 +26,9 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
  * A factory for constructing encoders that convert external row to/from the Spark SQL
@@ -233,6 +233,26 @@ object RowEncoder {
     case _: StructType => ObjectType(classOf[Row])
     case p: PythonUserDefinedType => externalDataTypeFor(p.sqlType)
     case udt: UserDefinedType[_] => ObjectType(udt.userClass)
+  }
+
+  // Returns the runtime class corresponding to the provided external type that
+  // is retrieved by `externalDataTypeForInput`. Note that `PythonUserDefinedType` and
+  // `UserDefinedType` are converted into native types or `ObjectType`s in `externalDataTypeFor`,
+  // so this method can handle both types correctly.
+  def getClassFromExternalType(externalType: DataType): Class[_] = externalType match {
+    case NullType => classOf[Object]
+    case BooleanType => classOf[java.lang.Boolean]
+    case ByteType => classOf[java.lang.Byte]
+    case ShortType => classOf[java.lang.Short]
+    case IntegerType => classOf[java.lang.Integer]
+    case LongType => classOf[java.lang.Long]
+    case FloatType => classOf[java.lang.Float]
+    case DoubleType => classOf[java.lang.Double]
+    case BinaryType => classOf[Array[Byte]]
+    case CalendarIntervalType => classOf[CalendarInterval]
+    // External types for the other types (e.g., array, map, and struct)
+    // must be `ObjectType`.
+    case ObjectType(cls) => cls
   }
 
   private def deserializerFor(schema: StructType): Expression = {

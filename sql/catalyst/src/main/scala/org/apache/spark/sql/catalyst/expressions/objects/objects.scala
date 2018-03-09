@@ -1674,7 +1674,6 @@ case class ValidateExternalType(child: Expression, expected: DataType)
 
   private val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
 
-
   private lazy val checkType: (Any) => Boolean = expected match {
     case _: DecimalType =>
       (value: Any) => {
@@ -1686,13 +1685,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
         value.getClass.isArray || value.isInstanceOf[Seq[_]]
       }
     case _ =>
-      val dataTypeClazz = if (dataType.isInstanceOf[ObjectType]) {
-        dataType.asInstanceOf[ObjectType].cls
-      } else {
-        // Some external types (e.g., native types and `PythonUserDefinedType`)
-        // might not be ObjectType
-        ScalaReflection.classForNativeTypeOf(dataType)
-      }
+      val dataTypeClazz = RowEncoder.getClassFromExternalType(dataType)
       (value: Any) => {
         dataTypeClazz.isInstance(value)
       }
