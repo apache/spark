@@ -1078,7 +1078,8 @@ def add_months(start, months):
 @since(1.5)
 def months_between(date1, date2):
     """
-    Returns the number of months between date1 and date2.
+    Returns the number of months between date1 and date2. If date1 is later than date2,
+    then the result is positive.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00', '1996-10-30')], ['date1', 'date2'])
     >>> df.select(months_between(df.date1, df.date2).alias('months')).collect()
