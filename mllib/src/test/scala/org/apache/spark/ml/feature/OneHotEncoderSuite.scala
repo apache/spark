@@ -105,20 +105,16 @@ class OneHotEncoderSuite
   }
 
 
-  ignore("input column without ML attribute") {
-    // Ignored as in streaming throws:
-    // org.apache.spark.sql.AnalysisException: Queries with streaming sources must be executed
-    // with writeStream.start()
+  test("input column without ML attribute") {
     val df = Seq(0.0, 1.0, 2.0, 1.0).map(Tuple1.apply).toDF("index")
     val encoder = new OneHotEncoder()
       .setInputCol("index")
       .setOutputCol("encoded")
-    testTransformerByGlobalCheckFunc[(Double)](df, encoder, "encoded") { rows =>
-      val group = AttributeGroup.fromStructField(rows.head.schema("encoded"))
-      assert(group.size === 2)
-      assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("0").withIndex(0))
-      assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("1").withIndex(1))
-    }
+    val rows = encoder.transform(df).select("encoded").collect()
+    val group = AttributeGroup.fromStructField(rows.head.schema("encoded"))
+    assert(group.size === 2)
+    assert(group.getAttr(0) === BinaryAttribute.defaultAttr.withName("0").withIndex(0))
+    assert(group.getAttr(1) === BinaryAttribute.defaultAttr.withName("1").withIndex(1))
   }
 
   test("read/write") {
