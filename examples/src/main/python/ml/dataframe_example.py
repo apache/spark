@@ -44,7 +44,7 @@ if __name__ == "__main__":
         .appName("DataFrameExample") \
         .getOrCreate()
 
-    # Load file from path
+    # Load an input file
     print("Loading LIBSVM file with UDT from " + input_path + ".")
     df = spark.read.format("libsvm").load(input_path).cache()
     print("Schema from LIBSVM:")
