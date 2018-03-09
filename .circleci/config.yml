@@ -27,6 +27,7 @@ jobs:
             | tee -a "/tmp/mvn-install.log"
       - store_artifacts:
           path: /tmp/mvn-install.log
+          destination: command-logs
       # Get sbt to run trivially, ensures its launcher is downloaded under build/
       - run: ./build/sbt -h
       - save_cache:
@@ -55,6 +56,7 @@ jobs:
               | tee -a "/tmp/sbt-classpath.log"
       - store_artifacts:
           path: /tmp/sbt-classpath.log
+          destination: command-logs
       - save_cache:
           key: ivy-dependency-cache-{{ checksum "pom.xml" }}
           paths:
@@ -79,6 +81,7 @@ jobs:
       - run: set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "/tmp/run-tests.log"
       - store_artifacts:
           path: /tmp/run-tests.log
+          destination: command-logs
       - run:
           name: Collect unit tests
           command: mkdir -p /tmp/unit-tests && find . -name unit-tests.log -exec rsync -R {} /tmp/unit-tests/ \;
