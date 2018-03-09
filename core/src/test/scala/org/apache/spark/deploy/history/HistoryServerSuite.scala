@@ -127,6 +127,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "succeeded&failed job list json" ->
       "applications/local-1422981780767/jobs?status=succeeded&status=failed",
     "executor list json" -> "applications/local-1422981780767/executors",
+    "executor list with executor metrics json" ->
+      "applications/application_1506645932520_24630151/executors",
     "stage list json" -> "applications/local-1422981780767/stages",
     "complete stage list json" -> "applications/local-1422981780767/stages?status=complete",
     "failed stage list json" -> "applications/local-1422981780767/stages?status=failed",
