@@ -242,12 +242,11 @@ private[yarn] class YarnAllocator(
    * Request that the ResourceManager release the container running the specified executor.
    */
   def killExecutor(executorId: String): Unit = synchronized {
-    if (executorIdToContainer.contains(executorId)) {
-      val container = executorIdToContainer.get(executorId).get
-      internalReleaseContainer(container)
-      numExecutorsRunning.decrementAndGet()
-    } else {
-      logWarning(s"Attempted to kill unknown executor $executorId!")
+    executorIdToContainer.get(executorId) match {
+      case Some(container) if !releasedContainers.contains(container.getId) =>
+        internalReleaseContainer(container)
+        numExecutorsRunning.decrementAndGet()
+      case _ => logWarning(s"Attempted to kill unknown executor $executorId!")
     }
   }
 
