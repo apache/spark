@@ -11,7 +11,14 @@ jobs:
   build:
     <<: *defaults
     steps:
+      # Saves us from recompiling every time...
+      - restore_cache:
+          keys:
+            - whole-build-{{ .Branch }}-{{ .BuildNum }}
+            - whole-build-{{ .Branch }}-
+            - whole-build-
       - checkout
+      # Given the whole-build cache, this is superfluous, but leave it in in case we will want to remove the former
       - restore_cache:
           keys:
             - maven-dependency-cache-{{ checksum "pom.xml" }}
@@ -61,6 +68,10 @@ jobs:
           key: ivy-dependency-cache-{{ checksum "pom.xml" }}
           paths:
             - "~/.ivy2"
+      # And finally save the whole project directory
+      - save_cache:
+          key: whole-build-{{ .Branch }}-{{ .BuildNum }}
+          paths: .
 
   test:
     <<: *defaults
