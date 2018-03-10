@@ -2434,7 +2434,8 @@ private[spark] object Utils extends Logging {
    */
   def getSparkOrYarnConfig(conf: SparkConf, key: String, default: String): String = {
     val sparkValue = conf.get(key, default)
-    if (conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn") {
+    if (conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn"
+      && (key.startsWith("spark.hadoop.") || !key.startsWith("spark."))) {
       new YarnConfiguration(SparkHadoopUtil.get.newConfiguration(conf)).get(key, sparkValue)
     } else {
       sparkValue
