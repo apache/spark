@@ -313,7 +313,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
   test("SPARK-23598: Codegen working for lots of aggregation operations without runtime errors") {
     withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
       var df = Seq((8, "bat"), (15, "mouse"), (5, "horse")).toDF("age", "name")
-      for (i <- 0 until 73) {
+      for (i <- 0 until 70) {
         df = df.groupBy("name").agg(avg("age").alias("age"))
       }
       assert(df.limit(1).collect() === Array(Row("bat", 8.0)))
