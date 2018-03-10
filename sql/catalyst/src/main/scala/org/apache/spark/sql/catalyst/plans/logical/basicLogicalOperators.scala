@@ -342,11 +342,9 @@ case class Join(
     case _ => resolvedExceptNatural
   }
 
-  /**
-    * Returns additional constraints which are not enforced on the result of join operations, but
-    * which can be enforced either on the left or the right side
-    */
   override protected def constructAllConstraints: Set[Expression] = {
+    // additional constraints which are not enforced on the result of join operations, but can be
+    // enforced either on the left or the right side
     val additionalConstraints = joinType match {
       case LeftAnti | LeftOuter if condition.isDefined =>
         splitConjunctivePredicates(condition.get).flatMap(inferIsNotNullConstraints).filter(

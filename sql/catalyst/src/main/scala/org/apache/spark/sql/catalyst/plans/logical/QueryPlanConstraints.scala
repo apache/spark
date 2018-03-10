@@ -84,7 +84,7 @@ trait QueryPlanConstraints { self: LogicalPlan =>
    */
   protected def inferIsNotNullConstraints(constraint: Expression): Seq[Expression] =
     constraint match {
-      // When the root is IsNotNull, we can push IsNotNull thro0ugh the child null intolerant
+      // When the root is IsNotNull, we can push IsNotNull through the child null intolerant
       // expressions
       case IsNotNull(expr) => scanNullIntolerantAttribute(expr).map(IsNotNull(_))
       // Constraints always return true for all the inputs. That means, null will never be returned.
