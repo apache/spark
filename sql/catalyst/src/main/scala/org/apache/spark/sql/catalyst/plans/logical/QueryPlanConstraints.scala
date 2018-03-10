@@ -20,21 +20,13 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.expressions._
 
 
-trait QueryPlanConstraints extends NotNullConstraintHelper { self: LogicalPlan =>
+trait QueryPlanConstraints { self: LogicalPlan =>
 
   /**
    * An [[ExpressionSet]] that contains an additional set of constraints, such as equality
    * constraints and `isNotNull` constraints, etc.
    */
-  lazy val allConstraints: ExpressionSet = {
-    if (conf.constraintPropagationEnabled) {
-      ExpressionSet(validConstraints
-        .union(inferAdditionalConstraints(validConstraints))
-        .union(constructIsNotNullConstraints(validConstraints)))
-    } else {
-      ExpressionSet(Set.empty)
-    }
-  }
+  lazy val allConstraints: ExpressionSet = ExpressionSet(constructAllConstraints)
 
   /**
    * An [[ExpressionSet]] that contains invariants about the rows output by this operator. For
@@ -56,6 +48,20 @@ trait QueryPlanConstraints extends NotNullConstraintHelper { self: LogicalPlan =
   protected def validConstraints: Set[Expression] = Set.empty
 
   /**
+   * Returns the [[Expression]]s representing all the constraints which can be enforced on the
+   * current operator.
+   */
+  protected def constructAllConstraints: Set[Expression] = {
+    if (conf.constraintPropagationEnabled) {
+      validConstraints
+        .union(inferAdditionalConstraints(validConstraints))
+        .union(constructIsNotNullConstraints(validConstraints))
+    } else {
+      Set.empty
+    }
+  }
+
+  /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
    * non-nullable attributes. For e.g., if an expression is of the form (`a > 5`), this
    * returns a constraint of the form `isNotNull(a)`
@@ -70,6 +76,31 @@ trait QueryPlanConstraints extends NotNullConstraintHelper { self: LogicalPlan =
     isNotNullConstraints ++= nonNullableAttributes.map(IsNotNull).toSet
 
     isNotNullConstraints -- constraints
+  }
+
+  /**
+   * Infer the Attribute-specific IsNotNull constraints from the null intolerant child expressions
+   * of constraints.
+   */
+  protected def inferIsNotNullConstraints(constraint: Expression): Seq[Expression] =
+    constraint match {
+      // When the root is IsNotNull, we can push IsNotNull thro0ugh the child null intolerant
+      // expressions
+      case IsNotNull(expr) => scanNullIntolerantAttribute(expr).map(IsNotNull(_))
+      // Constraints always return true for all the inputs. That means, null will never be returned.
+      // Thus, we can infer `IsNotNull(constraint)`, and also push IsNotNull through the child
+      // null intolerant expressions.
+      case _ => scanNullIntolerantAttribute(constraint).map(IsNotNull(_))
+    }
+
+  /**
+   * Recursively explores the expressions which are null intolerant and returns all attributes
+   * in these expressions.
+   */
+  protected def scanNullIntolerantAttribute(expr: Expression): Seq[Attribute] = expr match {
+    case a: Attribute => Seq(a)
+    case _: NullIntolerant => expr.children.flatMap(scanNullIntolerantAttribute)
+    case _ => Seq.empty[Attribute]
   }
 
   /**
