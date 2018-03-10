@@ -633,12 +633,10 @@ case class MapObjects private(
     case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
       x => executeFuncOnCollection(x.asInstanceOf[java.util.List[_]].asScala)
     case ObjectType(cls) if cls == classOf[Object] =>
-      (inputCollection) => {
-        if (inputCollection.getClass.isArray) {
-          executeFuncOnCollection(inputCollection.asInstanceOf[Array[_]].toSeq)
-        } else {
-          executeFuncOnCollection(inputCollection.asInstanceOf[Seq[_]])
-        }
+      if (cls.isArray) {
+        x => executeFuncOnCollection(x.asInstanceOf[Array[_]].toSeq)
+      } else {
+        x => executeFuncOnCollection(x.asInstanceOf[Seq[_]])
       }
     case ArrayType(et, _) =>
       x => executeFuncOnCollection(x.asInstanceOf[ArrayData].array)
@@ -648,7 +646,7 @@ case class MapObjects private(
   private lazy val getResults: Seq[_] => Any = customCollectionCls match {
     case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
-      _.toSeq
+      identity _
     case Some(cls) if classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
       // Scala set
       _.toSet
@@ -656,13 +654,22 @@ case class MapObjects private(
       // Java list
       if (cls == classOf[java.util.List[_]] || cls == classOf[java.util.AbstractList[_]] ||
           cls == classOf[java.util.AbstractSequentialList[_]]) {
+        // Specifying non concrete implementations of `java.util.List`
         _.asJava
       } else {
+        // Specifying concrete implementations of `java.util.List`
         (results) => {
-          val builder = Try(cls.getConstructor(Integer.TYPE)).map { constructor =>
+          val constructors = cls.getConstructors()
+          val intParamConstructor = constructors.find { constructor =>
+            constructor.getParameterCount == 1 && constructor.getParameterTypes()(0) == classOf[Int]
+          }
+          val noParamConstructor = constructors.find { constructor =>
+            constructor.getParameterCount == 0
+          }
+          val builder = intParamConstructor.map { constructor =>
             constructor.newInstance(results.length.asInstanceOf[Object])
           }.getOrElse {
-            cls.getConstructor().newInstance()
+            noParamConstructor.get.newInstance()
           }.asInstanceOf[java.util.List[Any]]
 
           results.foreach(builder.add(_))
