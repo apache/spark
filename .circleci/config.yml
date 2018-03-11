@@ -107,11 +107,11 @@ jobs:
     <<: *defaults
     steps:
       # Saves us from recompiling every time...
-      # - restore_cache:
-      #     keys:
-      #       - build-sbt-{{ .Branch }}-{{ .BuildNum }}
-      #       - build-sbt-{{ .Branch }}-
-      #       - build-sbt-master-
+      - restore_cache:
+          keys:
+            - build-sbt-{{ .Branch }}-{{ .BuildNum }}
+            - build-sbt-{{ .Branch }}-
+            - build-sbt-master-
       - checkout
       - restore_cache:
           keys:
