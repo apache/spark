@@ -42,9 +42,7 @@ jobs:
           keys:
             - build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
             - build-binaries-
-      - run: |
-          set -o pipefail \
-          && ./build/mvn -T1C -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install \
+      - run: ./build/mvn -T1C -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install \
             | tee -a "/tmp/mvn-install.log"
       - store_artifacts:
           path: /tmp/mvn-install.log
@@ -70,8 +68,7 @@ jobs:
             - ivy-dependency-cache-{{ checksum "pom.xml" }}
       - run: |
           # Make sbt fetch all the external deps to ~/.ivy2 so it gets cached
-          set -o pipefail \
-            && ./dev/sbt externalDependencyClasspath \
+          ./dev/sbt externalDependencyClasspath \
               | tee -a "/tmp/sbt-classpath.log"
       - store_artifacts:
           path: /tmp/sbt-classpath.log
@@ -98,8 +95,7 @@ jobs:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
-      - run: |
-          set -o pipefail && dev/run-style-tests.py | tee /tmp/run-style-tests.log
+      - run: dev/run-style-tests.py | tee /tmp/run-style-tests.log
       - store_artifacts:
           path: /tmp/run-style-tests.log
           destination: run-style-tests.log
@@ -256,9 +252,7 @@ jobs:
           key: v1-home-sbt-{{ checksum "build/sbt" }}
       - run:
           name: Run all tests
-          command: |
-            set -o pipefail \
-            && ./dev/run-scala-tests.py \
+          command: ./dev/run-scala-tests.py \
               | tee -a "/tmp/run-scala-tests.log"
       - store_artifacts:
           path: /tmp/run-scala-tests.log
