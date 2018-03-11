@@ -83,7 +83,7 @@ jobs:
           key: build-maven-{{ .Branch }}-{{ .BuildNum }}
           paths: .
 
-  style-tests:
+  run-style-tests:
     # depends only on build-maven
     <<: *test-defaults
     steps:
@@ -102,7 +102,7 @@ jobs:
           path: /tmp/run-style-tests.log
           destination: run-style-tests.log
 
-  build-tests:
+  run-build-tests:
     # depends only on build-maven
     <<: *test-defaults
     steps:
@@ -156,7 +156,7 @@ jobs:
           paths:
             - "*/target/*"
 
-  backcompat-tests:
+  run-backcompat-tests:
     # depends on build-sbt
     <<: *defaults
     steps:
@@ -181,7 +181,7 @@ jobs:
           destination: run-backcompat-tests.log
 
 
-  python-tests:
+  run-python-tests:
     # depends on build-sbt, so we're restoring the build-sbt cache
     <<: *defaults
     steps:
@@ -202,7 +202,7 @@ jobs:
       - run: dev/run-python-tests.py
 
 
-  r-tests:
+  run-r-tests:
     # depends on build-sbt, so we're restoring the build-sbt cache
     <<: *defaults
     steps:
@@ -223,7 +223,7 @@ jobs:
       - run: dev/run-r-tests.py
 
 
-  scala-tests:
+  run-scala-tests:
     <<: *test-defaults
     # project/CirclePlugin.scala does its own test splitting in SBT based on CIRCLE_NODE_INDEX, CIRCLE_NODE_TOTAL
     parallelism: 6
@@ -305,11 +305,11 @@ workflows:
     jobs:
       - build-maven:
           <<: *all-branches-and-tags
-      - style-tests:
+      - run-style-tests:
           requires:
             - build-maven
           <<: *all-branches-and-tags
-      - build-tests:
+      - run-build-tests:
           requires:
             - build-maven
           <<: *all-branches-and-tags
@@ -317,19 +317,19 @@ workflows:
           requires:
             - build-maven
           <<: *all-branches-and-tags
-      - backcompat-tests:
+      - run-backcompat-tests:
           requires:
             - build-sbt
           <<: *all-branches-and-tags
-      - scala-tests:
+      - run-scala-tests:
           requires:
             - build-sbt
           <<: *all-branches-and-tags
-      - python-tests:
+      - run-python-tests:
           requires:
             - build-sbt
           <<: *all-branches-and-tags
-      - r-tests:
+      - run-r-tests:
           requires:
             - build-sbt
           <<: *all-branches-and-tags
@@ -338,11 +338,11 @@ workflows:
             - build-maven
             - build-sbt
             # Tests
-            - build-tests
-            - backcompat-tests
-            - scala-tests
-            - python-tests
-            - r-tests
+            - run-build-tests
+            - run-backcompat-tests
+            - run-scala-tests
+            - run-python-tests
+            - run-r-tests
           filters:
             tags:
               only: /[0-9]+(?:\.[0-9]+){2,}-palantir\.[0-9]+(?:\.[0-9]+)*/
