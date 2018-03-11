@@ -89,6 +89,7 @@ jobs:
   run-style-tests:
     # depends only on build-maven
     <<: *test-defaults
+    resource_class: small
     steps:
       - checkout
       - restore_cache:
@@ -107,6 +108,7 @@ jobs:
   run-build-tests:
     # depends only on build-maven
     <<: *test-defaults
+    resource_class: small
     steps:
       - checkout
       - restore_cache:
