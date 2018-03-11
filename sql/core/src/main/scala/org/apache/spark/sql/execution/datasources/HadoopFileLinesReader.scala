@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.Closeable
 import java.net.URI
-import java.nio.charset.StandardCharsets
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
