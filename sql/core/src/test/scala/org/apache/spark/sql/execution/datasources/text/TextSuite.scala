@@ -24,6 +24,7 @@ import java.nio.file.Files
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
+import org.apache.spark.TestUtils
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -192,7 +193,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
       withTempPath { path =>
         values.toDF().coalesce(1)
           .write.option("lineSep", lineSep).text(path.getAbsolutePath)
-        val partFile = Utils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
+        val partFile = TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
         val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
         assert(readBack === s"a${lineSep}b${lineSep}\nc${lineSep}")
       }
