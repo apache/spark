@@ -267,8 +267,26 @@ case class Invoke(
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+  override def eval(input: InternalRow): Any = {
+    val obj = targetObject.eval(input)
+    val args = arguments.map(e => e.eval(input).asInstanceOf[Object])
+    val argClasses = CallMethodViaReflection.expressionJavaClasses(arguments)
+    val method = obj.getClass.getDeclaredMethod(functionName, argClasses : _*)
+    if (needNullCheck && args.exists(_ == null)) {
+      // return null if one of arguments is null
+      null
+    } else {
+      val ret = method.invoke(obj, args: _*)
+
+      if (CodeGenerator.defaultValue(dataType) == "null") {
+        ret
+      } else {
+        // cast a primitive value using Boxed class
+        val boxedClass = CallMethodViaReflection.typeBoxedJavaMapping(dataType)
+        boxedClass.cast(ret)
+      }
+    }
+  }
 
   private lazy val encodedFunctionName = TermName(functionName).encodedName.toString
 

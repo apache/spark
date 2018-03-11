@@ -24,11 +24,18 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+class InvokeTargetClass extends Serializable {
+  def filterInt(e: Any): Any = e.asInstanceOf[Int] > 0
+  def filterPrimitiveInt(e: Int): Boolean = e > 0
+}
 
 class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -81,6 +88,27 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       UnsafeProjection) // TODO(hvanhovell) revert this when SPARK-23587 is fixed
   }
 
+  test("SPARK-23583: Invoke should support interpreted execution") {
+    val targetObject = new InvokeTargetClass
+    val funcClass = classOf[InvokeTargetClass]
+    val funcObj = Literal.create(targetObject, ObjectType(funcClass))
+
+    val inputInt = Seq(BoundReference(0, ObjectType(classOf[Any]), true))
+    val inputPrimitiveInt = Seq(BoundReference(0, IntegerType, true))
+
+    checkObjectExprEvaluation(
+      Invoke(funcObj, "filterInt", ObjectType(classOf[Any]), inputInt),
+      java.lang.Boolean.valueOf(true), InternalRow.fromSeq(Seq(Integer.valueOf(1))))
+
+    checkObjectExprEvaluation(
+      Invoke(funcObj, "filterPrimitiveInt", BooleanType, inputPrimitiveInt),
+      false, InternalRow.fromSeq(Seq(-1)))
+
+    checkObjectExprEvaluation(
+      Invoke(funcObj, "filterInt", ObjectType(classOf[Any]), inputInt),
+      null, InternalRow.fromSeq(Seq(null)))
+  }
+
   test("SPARK-23585: UnwrapOption should support interpreted execution") {
     val cls = classOf[Option[Int]]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
@@ -103,6 +131,20 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val schema = new StructType().add("a", IntegerType).add("b", StringType)
     val createExternalRow = CreateExternalRow(Seq(Literal(1), Literal("x")), schema)
     checkEvaluation(createExternalRow, Row.fromSeq(Seq(1, "x")), InternalRow.fromSeq(Seq()))
+  }
+
+  // by scala values instead of catalyst values.
+  private def checkObjectExprEvaluation(
+      expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
+    val serializer = new JavaSerializer(new SparkConf()).newInstance
+    val resolver = ResolveTimeZone(new SQLConf)
+    val expr = resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
+    checkEvaluationWithoutCodegen(expr, expected, inputRow)
+    checkEvaluationWithGeneratedMutableProjection(expr, expected, inputRow)
+    if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
+      checkEvalutionWithUnsafeProjection(expr, expected, inputRow)
+      }
+    checkEvaluationWithOptimization(expr, expected, inputRow)
   }
 
   test("SPARK-23594 GetExternalRowField should support interpreted execution") {

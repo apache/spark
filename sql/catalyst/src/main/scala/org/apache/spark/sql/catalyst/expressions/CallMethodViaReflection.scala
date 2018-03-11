@@ -23,8 +23,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 /**
@@ -127,6 +128,44 @@ object CallMethodViaReflection {
     StringType -> Seq(classOf[String])
   )
 
+  val typeJavaMapping = Map[DataType, Class[_]](
+    BooleanType -> classOf[Boolean],
+    ByteType -> classOf[Byte],
+    ShortType -> classOf[Short],
+    IntegerType -> classOf[Int],
+    LongType -> classOf[Long],
+    FloatType -> classOf[Float],
+    DoubleType -> classOf[Double],
+    StringType -> classOf[UTF8String],
+    DateType -> classOf[DateType.InternalType],
+    TimestampType -> classOf[TimestampType.InternalType],
+    BinaryType -> classOf[BinaryType.InternalType],
+    CalendarIntervalType -> classOf[CalendarInterval]
+  )
+
+  val typeBoxedJavaMapping = Map[DataType, Class[_]](
+    BooleanType -> classOf[java.lang.Boolean],
+    ByteType -> classOf[java.lang.Byte],
+    ShortType -> classOf[java.lang.Short],
+    IntegerType -> classOf[java.lang.Integer],
+    LongType -> classOf[java.lang.Long],
+    FloatType -> classOf[java.lang.Float],
+    DoubleType -> classOf[java.lang.Double],
+    DateType -> classOf[java.lang.Integer],
+    TimestampType -> classOf[java.lang.Long]
+  )
+
+  def dataTypeJavaClass(dt: DataType): Class[_] = {
+    dt match {
+      case _: DecimalType => classOf[Decimal]
+      case _: StructType => classOf[InternalRow]
+      case _: ArrayType => classOf[ArrayData]
+      case _: MapType => classOf[MapData]
+      case ObjectType(cls) => cls
+      case _ => typeJavaMapping.getOrElse(dt, classOf[java.lang.Object])
+    }
+  }
+
   /**
    * Returns true if the class can be found and loaded.
    */
@@ -136,6 +175,14 @@ object CallMethodViaReflection {
       true
     } catch {
       case e: ClassNotFoundException => false
+    }
+  }
+
+  def expressionJavaClasses(arguments: Seq[Expression]): Seq[Class[_]] = {
+    if (arguments != Nil) {
+      arguments.map(e => dataTypeJavaClass(e.dataType))
+    } else {
+      Seq.empty
     }
   }
 
