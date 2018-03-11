@@ -2,7 +2,7 @@ version: 2
 
 defaults: &defaults
   docker:
-    - image: palantirtechnologies/circle-spark
+    - image: palantirtechnologies/circle-spark-base
   resource_class: xlarge
   environment:
     TERM: dumb
@@ -186,10 +186,14 @@ jobs:
   run-python-tests:
     # depends on build-sbt, so we're restoring the build-sbt cache
     <<: *defaults
+    docker:
+      - image: palantirtechnologies/circle-spark-python
     steps:
       # - restore_cache:
       #     key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
       - checkout
+      # Python tests need assembly files build by the `build-sbt` job
+      # e.g. external/kafka-0-8-assembly/target/scala-2.11/spark-streaming-kafka-0-8-assembly-2.4.0-SNAPSHOT.jar
       - attach_workspace:
           at: .
       - restore_cache:
@@ -207,6 +211,8 @@ jobs:
   run-r-tests:
     # depends on build-sbt, so we're restoring the build-sbt cache
     <<: *defaults
+    docker:
+      - image: palantirtechnologies/circle-spark-r
     steps:
       # - restore_cache:
       #     key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
