@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
 from test_functions import *
 from build_environment import get_build_environment
 
@@ -7,7 +8,7 @@ if __name__ == '__main__':
     env = get_build_environment()
 
     build_apache_spark(env.build_tool, env.hadoop_version)
-    
+
     if env.build_tool == "sbt":
         # TODO(dsanduleac): since this is required for tests, might as well run it right
         # away in our build step.

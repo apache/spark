@@ -1,4 +1,5 @@
 import os
+from __future__ import print_function
 from test_functions import \
     identify_changed_files_from_git_commits, \
     determine_modules_for_files, \
