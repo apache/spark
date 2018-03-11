@@ -62,19 +62,19 @@ jobs:
 
       - restore_cache:
           keys:
-            - v1-ivy-dependency-cache-{{ checksum "pom.xml" }}
-            - v1-ivy-dependency-cache-
+            - v2-ivy-dependency-cache-{{ checksum "pom.xml" }}
+            - v2-ivy-dependency-cache-
             # TODO(dsanduleac): remove after a successful run
-            - ivy-dependency-cache-{{ checksum "pom.xml" }}
+            - v1-ivy-dependency-cache-{{ checksum "pom.xml" }}
       - run: |
           # Make sbt fetch all the external deps to ~/.ivy2 so it gets cached
-          ./dev/sbt externalDependencyClasspath \
+          ./dev/sbt externalDependencyClasspath test:externalDependencyClasspath \
               | tee -a "/tmp/sbt-classpath.log"
       - store_artifacts:
           path: /tmp/sbt-classpath.log
           destination: sbt-classpath.log
       - save_cache:
-          key: v1-ivy-dependency-cache-{{ checksum "pom.xml" }}
+          key: v2-ivy-dependency-cache-{{ checksum "pom.xml" }}
           paths:
             - "~/.ivy2"
       # And finally save the whole project directory
@@ -128,7 +128,7 @@ jobs:
       #       - build-sbt-master-
       - checkout
       - restore_cache:
-          key: v1-ivy-dependency-cache-{{ checksum "pom.xml" }}
+          key: v2-ivy-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
@@ -164,7 +164,7 @@ jobs:
       - attach_workspace:
           at: .
       - restore_cache:
-          key: v1-ivy-dependency-cache-{{ checksum "pom.xml" }}
+          key: v2-ivy-dependency-cache-{{ checksum "pom.xml" }}
       # TODO(dsanduleac): do we need the maven cache?
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
@@ -193,7 +193,7 @@ jobs:
       - attach_workspace:
           at: .
       - restore_cache:
-          key: v1-ivy-dependency-cache-{{ checksum "pom.xml" }}
+          key: v2-ivy-dependency-cache-{{ checksum "pom.xml" }}
       # TODO(dsanduleac): do we need the maven cache?
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
@@ -216,7 +216,7 @@ jobs:
       - attach_workspace:
           at: .
       - restore_cache:
-          key: v1-ivy-dependency-cache-{{ checksum "pom.xml" }}
+          key: v2-ivy-dependency-cache-{{ checksum "pom.xml" }}
       # TODO(dsanduleac): do we need the maven cache?
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
@@ -245,7 +245,7 @@ jobs:
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
-          key: v1-ivy-dependency-cache-{{ checksum "pom.xml" }}
+          key: v2-ivy-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
       - restore_cache:
