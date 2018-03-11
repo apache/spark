@@ -17,12 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
-import java.io.Closeable
-import java.nio.charset.StandardCharsets
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
 import org.apache.spark.TaskContext
@@ -90,7 +86,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
           path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new TextOutputWriter(path, dataSchema, textOptions.lineSeparator, context)
+        new TextOutputWriter(path, dataSchema, textOptions.lineSeparatorInWrite, context)
       }
 
       override def getFileExtension(context: TaskAttemptContext): String = {
@@ -125,7 +121,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
     (file: PartitionedFile) => {
       val confValue = conf.value.value
       val reader = if (!textOptions.wholeText) {
-        new HadoopFileLinesReader(file, textOptions.lineSeparator, confValue)
+        new HadoopFileLinesReader(file, textOptions.lineSeparatorInRead, confValue)
       } else {
         new HadoopFileWholeTextReader(file, confValue)
       }
@@ -153,11 +149,9 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 class TextOutputWriter(
     path: String,
     dataSchema: StructType,
-    lineSeparator: Option[String],
+    lineSeparator: Array[Byte],
     context: TaskAttemptContext)
   extends OutputWriter {
-
-  private val lineSep = lineSeparator.getOrElse("\n").getBytes(StandardCharsets.UTF_8)
 
   private val writer = CodecStreams.createOutputStream(context, new Path(path))
 
@@ -166,7 +160,7 @@ class TextOutputWriter(
       val utf8string = row.getUTF8String(0)
       utf8string.writeTo(writer)
     }
-    writer.write(lineSep)
+    writer.write(lineSeparator)
   }
 
   override def close(): Unit = {
