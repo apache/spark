@@ -66,7 +66,7 @@ def modules_to_test(env):
 
     fields = {
         'test_modules': determine_modules_to_test(changed_modules),
-        'changed_files': changed_files, # Used in run-style-checks.py
+        'changed_files': changed_files,  # Used in run-style-checks.py
         'excluded_tags': excluded_tags
     }
 
