@@ -42,7 +42,8 @@ jobs:
           keys:
             - build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
             - build-binaries-
-      - run: ./build/mvn -T1C -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install \
+      - run: |
+          ./build/mvn -T1C -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install \
             | tee -a "/tmp/mvn-install.log"
       - store_artifacts:
           path: /tmp/mvn-install.log
