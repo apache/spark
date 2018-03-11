@@ -216,6 +216,9 @@ jobs:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
       - restore_cache:
           key: v1-home-sbt-{{ checksum "build/sbt" }}
+      - run:
+          name: Install SparkR
+          command: R/install-dev.sh
       - run: dev/run-r-tests.py
 
 

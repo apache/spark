@@ -27,11 +27,5 @@ if __name__ == '__main__':
     env = get_build_environment()
     mtt = modules_to_test(env)
 
-    # install SparkR
-    if which("R"):
-        run_cmd([os.path.join(SPARK_HOME, "R", "install-dev.sh")])
-    else:
-        raise Exception("Cannot install SparkR as R was not found in PATH")
-
     if any(m.should_run_r_tests for m in mtt.test_modules):
         run_sparkr_tests()
