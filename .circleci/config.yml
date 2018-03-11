@@ -133,6 +133,8 @@ jobs:
           key: ivy-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
+      - restore_cache:
+          key: v1-home-sbt-{{ checksum "build/sbt" }}
       # Given the build-sbt cache, this is superfluous, but leave it in in case we will want to remove the former
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
@@ -145,6 +147,9 @@ jobs:
       - save_cache:
           key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
           paths: .
+      - save_cache:
+          key: v1-home-sbt-{{ checksum "build/sbt" }}
+          paths: ~/.sbt
       # Also save all the target files to the workspace, as we will need them in the future
       - persist_to_workspace:
           root: .
@@ -167,6 +172,8 @@ jobs:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - restore_cache:
+          key: v1-home-sbt-{{ checksum "build/sbt" }}
       - run: |
           dev/run-backcompat-tests.py | tee /tmp/run-backcompat-tests.log
       - store_artifacts:
@@ -190,6 +197,8 @@ jobs:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - restore_cache:
+          key: v1-home-sbt-{{ checksum "build/sbt" }}
       - run: dev/run-python-tests.py
 
 
@@ -209,6 +218,8 @@ jobs:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - restore_cache:
+          key: v1-home-sbt-{{ checksum "build/sbt" }}
       - run: dev/run-r-tests.py
 
 
@@ -226,13 +237,15 @@ jobs:
       #     key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
       - checkout
       - attach_workspace:
-          at: .
+         at: .
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: ivy-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - restore_cache:
+          key: v1-home-sbt-{{ checksum "build/sbt" }}
       - run:
           name: Run all tests
           command: set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "/tmp/run-tests.log"
@@ -271,6 +284,8 @@ jobs:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - restore_cache:
+          key: v1-home-sbt-{{ checksum "build/sbt" }}
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
       - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
       - run: echo "realm=Bintray API Realm" >> .credentials
