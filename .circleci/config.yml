@@ -2,7 +2,7 @@ version: 2
 
 defaults: &defaults
   docker:
-    - image: palantirtechnologies/circle-spark-r
+    - image: palantirtechnologies/circle-spark-base
   resource_class: xlarge
   environment:
     TERM: dumb
@@ -24,6 +24,9 @@ all-branches-and-tags: &all-branches-and-tags
 jobs:
   build-maven:
     <<: *defaults
+    # Some part of the maven setup fails if there's no R, so we need to use the R image here
+    docker:
+      - image: palantirtechnologies/circle-spark-r
     steps:
       # Saves us from recompiling every time...
       - restore_cache:
