@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import org.scalatest.Matchers
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
@@ -45,7 +47,7 @@ object TestForTypeAlias {
   def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
 }
 
-class DatasetSuite extends QueryTest with SharedSQLContext {
+class DatasetSuite extends QueryTest with SharedSQLContext with Matchers {
   import testImplicits._
 
   private implicit val ordering = Ordering.by((c: ClassData) => c.a -> c.b)
@@ -548,19 +550,29 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("sample with replacement") {
-    val n = 100
-    val data = sparkContext.parallelize(1 to n, 2).toDS()
-    checkDataset(
-      data.sample(withReplacement = true, 0.05, seed = 13),
-      5, 10, 52, 73)
+    val n = 1000
+    val fraction = 0.05
+    val range = 1 to n
+    val data = sparkContext.parallelize(range, 2).toDS()
+    val sampled = data
+      .sample(withReplacement = true, fraction, seed = 13)
+      .collect()
+
+    assert(sampled.forall(elem => range.contains(elem)))
+    (sampled.size/n.toDouble) shouldBe fraction +- 0.005
   }
 
   test("sample without replacement") {
-    val n = 100
-    val data = sparkContext.parallelize(1 to n, 2).toDS()
-    checkDataset(
-      data.sample(withReplacement = false, 0.05, seed = 13),
-      3, 17, 27, 58, 62)
+    val n = 1000
+    val fraction = 0.05
+    val range = 1 to n
+    val data = sparkContext.parallelize(range, 2).toDS()
+    val sampled = data
+      .sample(withReplacement = false, fraction, seed = 13)
+      .collect()
+
+    assert(sampled.forall(elem => range.contains(elem)))
+    (sampled.size/n.toDouble) shouldBe fraction +- 0.005
   }
 
   test("sample fraction should not be negative with replacement") {
