@@ -90,6 +90,10 @@ jobs:
       - checkout
       - restore_cache:
           key: build-maven-{{ .Branch }}-{{ .BuildNum }}
+      # Need maven dependency cache, otherwise checkstyle tests fail as such:
+      # Failed to execute goal on project spark-assembly_2.11: Could not resolve dependencies for project org.apache.spark:spark-assembly_2.11:pom:2.4.0-SNAPSHOT
+      - restore_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
       - run: |
@@ -105,7 +109,6 @@ jobs:
       - checkout
       - restore_cache:
           key: build-maven-{{ .Branch }}-{{ .BuildNum }}
-      # TODO(dsanduleac): do we need the maven cache?
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
