@@ -155,8 +155,11 @@ jobs:
     # depends on build-sbt
     <<: *defaults
     steps:
-      - restore_cache:
-          key: build-maven-{{ .Branch }}-{{ .BuildNum }}
+      # - restore_cache:
+      #     key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
+      - checkout
+      - attach_workspace:
+          at: .
       - restore_cache:
           key: ivy-dependency-cache-{{ checksum "pom.xml" }}
       # TODO(dsanduleac): do we need the maven cache?
@@ -175,8 +178,11 @@ jobs:
     # depends on build-sbt, so we're restoring the build-sbt cache
     <<: *defaults
     steps:
-      - restore_cache:
-          key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
+      # - restore_cache:
+      #     key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
+      - checkout
+      - attach_workspace:
+          at: .
       - restore_cache:
           key: ivy-dependency-cache-{{ checksum "pom.xml" }}
       # TODO(dsanduleac): do we need the maven cache?
@@ -191,8 +197,11 @@ jobs:
     # depends on build-sbt, so we're restoring the build-sbt cache
     <<: *defaults
     steps:
-      - restore_cache:
-          key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
+      # - restore_cache:
+      #     key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
+      - checkout
+      - attach_workspace:
+          at: .
       - restore_cache:
           key: ivy-dependency-cache-{{ checksum "pom.xml" }}
       # TODO(dsanduleac): do we need the maven cache?
@@ -213,8 +222,11 @@ jobs:
       - run:
           name: Before running tests, ensure we created the CIRCLE_TEST_REPORTS directory
           command: mkdir -p $CIRCLE_TEST_REPORTS
-      - restore_cache:
-          key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
+      # - restore_cache:
+      #     key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
+      - checkout
+      - attach_workspace:
+          at: .
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
