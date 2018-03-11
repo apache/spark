@@ -186,8 +186,6 @@ jobs:
       # e.g. external/kafka-0-8-assembly/target/scala-2.11/spark-streaming-kafka-0-8-assembly-2.4.0-SNAPSHOT.jar
       - attach_workspace:
           at: .
-      - restore_cache:
-          key: v3-ivy-dependency-cache-{{ checksum "pom.xml" }}
       # TODO(dsanduleac): do we need the maven cache?
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
@@ -209,8 +207,6 @@ jobs:
       - checkout
       - attach_workspace:
           at: .
-      - restore_cache:
-          key: v3-ivy-dependency-cache-{{ checksum "pom.xml" }}
       # TODO(dsanduleac): do we need the maven cache?
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
