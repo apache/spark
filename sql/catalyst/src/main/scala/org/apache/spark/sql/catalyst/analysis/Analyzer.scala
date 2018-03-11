@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
 
@@ -1209,10 +1210,18 @@ class Analyzer(
    * @see https://issues.apache.org/jira/browse/SPARK-19737
    */
   object LookupFunctions extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
-      case f: UnresolvedFunction if !catalog.functionExists(f.name) =>
-        withPosition(f) {
-          throw new NoSuchFunctionException(f.name.database.getOrElse("default"), f.name.funcName)
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      val catalogFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
+        plan.transformAllExpressions {
+          case f: UnresolvedFunction if catalogFunctionNameSet.contains(f.name) => f
+          case f: UnresolvedFunction if catalog.functionExists(f.name) =>
+            catalogFunctionNameSet.add(f.name)
+            f
+          case f: UnresolvedFunction =>
+            withPosition(f) {
+              throw new NoSuchFunctionException(f.name.database.getOrElse("default"),
+                f.name.funcName)
+            }
         }
     }
   }
