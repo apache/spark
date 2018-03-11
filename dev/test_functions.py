@@ -284,14 +284,19 @@ def exec_sbt(sbt_args=()):
     # with failure (either resolution or compilation) prompts the user for
     # input either q, r, etc to quit or retry. This echo is there to make it
     # not block.
-    echo_proc = subprocess.Popen(["echo", "\"q\n\""], stdout=subprocess.PIPE)
+    echo_proc = subprocess.Popen(["echo", "q\n"], stdout=subprocess.PIPE)
     sbt_proc = subprocess.Popen(sbt_cmd,
                                 stdin=echo_proc.stdout,
                                 stdout=subprocess.PIPE)
     echo_proc.wait()
-    for line in iter(sbt_proc.stdout.readline, b''):
+    lines = iter(sbt_proc.stdout.readline, b'')
+    if sys.version_info > (3,):
+        write_bytes = sys.stdout.buffer.write
+    else:
+        write_bytes = lambda bytes: print(bytes, end='')
+    for line in lines:
         if not sbt_output_filter.match(line):
-            print(line, end='')
+            write_bytes(line)
     retcode = sbt_proc.wait()
 
     if retcode != 0:
