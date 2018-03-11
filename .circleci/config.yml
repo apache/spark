@@ -147,6 +147,8 @@ jobs:
           root: .
           paths:
             - "*/target/*"
+            - "external/*"
+
 
   run-backcompat-tests:
     # depends on build-sbt
