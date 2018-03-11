@@ -248,10 +248,13 @@ jobs:
           key: v1-home-sbt-{{ checksum "build/sbt" }}
       - run:
           name: Run all tests
-          command: set -o pipefail && HADOOP_PROFILE=hadooppalantir ./dev/run-tests | tee -a "/tmp/run-tests.log"
+          command: |
+            set -o pipefail \
+            && ./dev/run-scala-tests.py \
+              | tee -a "/tmp/run-scala-tests.log"
       - store_artifacts:
-          path: /tmp/run-tests.log
-          destination: run-tests.log
+          path: /tmp/run-scala-tests.log
+          destination: run-scala-tests.log
       - run:
           name: Collect unit tests
           command: mkdir -p /tmp/unit-tests && find . -name unit-tests.log -exec rsync -R {} /tmp/unit-tests/ \;
