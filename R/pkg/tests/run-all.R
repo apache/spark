@@ -20,6 +20,7 @@ library(SparkR)
 
 # Turn all warnings into errors
 options("warn" = 2)
+option(testthat.default_reporter = "junit")
 
 if (.Platform$OS.type == "windows") {
   Sys.setenv(TZ = "GMT")
@@ -58,19 +59,11 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   if (identical(Sys.getenv("CONDA_TESTS"), "true")) {
       # set random seed for predictable results. mostly for base's sample() in tree and classification
       set.seed(42)
-      # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
-      testthat:::run_tests("SparkR",
-      file.path(sparkRDir, "pkg", "tests", "condatests"),
-      NULL,
-      "summary")
+      test_dir(file.path(sparkRDir, "pkg", "tests", "condatests"))
   } else {
       # set random seed for predictable results. mostly for base's sample() in tree and classification
       set.seed(42)
-      # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
-      testthat:::run_tests("SparkR",
-      file.path(sparkRDir, "pkg", "tests", "fulltests"),
-      NULL,
-      "summary")
+      test_dir(file.path(sparkRDir, "pkg", "tests", "fulltests"))
   }
 }
 
