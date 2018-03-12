@@ -135,56 +135,10 @@ jobs:
       - store_artifacts:
           path: /tmp/build-apache-spark.log
           destination: build-apache-spark.log
-      # And finally save all the individual target directories
-      - save_cache:
-          key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
-          paths:
-            - assembly/target
-            - common/kvstore/target
-            - common/network-common/target
-            - common/network-shuffle/target
-            - common/network-yarn/target
-            - common/sketch/target
-            - common/tags/target
-            - common/unsafe/target
-            - core/target
-            - dists/hadoop-palantir/target
-            - dists/without-hadoop/target
-            - examples/target
-            - external/docker-integration-tests/target
-            - external/flume-assembly/target
-            - external/flume-sink/target
-            - external/flume/target
-            - external/kafka-0-10-assembly/target
-            - external/kafka-0-10-sql/target
-            - external/kafka-0-10/target
-            - external/kafka-0-8-assembly/target
-            - external/kafka-0-8/target
-            - external/kinesis-asl-assembly/target
-            - external/kinesis-asl/target
-            - external/spark-ganglia-lgpl/target
-            - graphx/target
-            - hadoop-cloud/target
-            - launcher/target
-            - mllib-local/target
-            - mllib/target
-            - project/project/target
-            - project/target
-            - repl/target
-            - resource-managers/kubernetes/core/target
-            - resource-managers/kubernetes/docker-minimal-bundle/target
-            - resource-managers/kubernetes/integration-tests-spark-jobs-helpers/target
-            - resource-managers/kubernetes/integration-tests-spark-jobs/target
-            - resource-managers/kubernetes/integration-tests/target
-            - resource-managers/mesos/target
-            - resource-managers/yarn/target
-            - sql/catalyst/target
-            - sql/core/target
-            - sql/hive-thriftserver/target
-            - sql/hive/target
-            - streaming/target
-            - target
-            - tools/target
+      # And finally save the whole build directory
+    #   - save_cache:
+    #       key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
+    #       paths: .
       - save_cache:
           key: v1-home-sbt-{{ checksum "build/sbt" }}
           paths: ~/.sbt
