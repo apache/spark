@@ -62,16 +62,16 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
       testthat:::test_package_dir("SparkR",
       file.path(sparkRDir, "pkg", "tests", "condatests"),
       NULL,
-      default_reporter())
+      MultiReporter$new(reporters = list(MinimalReporter$new(), default_reporter())))
   } else {
       options(testthat.output_file = "target/R/R/r-tests.xml")
       # set random seed for predictable results. mostly for base's sample() in tree and classification
-      test_package("SparkR", reporter = default_reporter())
+      test_package("SparkR", reporter = MultiReporter$new(reporters = list(MinimalReporter$new(), default_reporter())))
       set.seed(42)
       testthat:::test_package_dir("SparkR",
       file.path(sparkRDir, "pkg", "tests", "fulltests"),
       NULL,
-      default_reporter())
+      MultiReporter$new(reporters = list(MinimalReporter$new(), default_reporter())))
   }
 }
 
