@@ -26,7 +26,8 @@ from test_functions import *
 def java_version():
     java_exe = determine_java_executable()
     if not java_exe:
-        raise Exception("Cannot find a version of `java` on the system; please install one and retry.")
+        raise Exception("Cannot find a version of `java` on the system; " +
+                        "please install one and retry.")
     return determine_java_version(java_exe)
 
 
