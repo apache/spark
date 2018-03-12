@@ -20,7 +20,7 @@ library(SparkR)
 
 # Turn all warnings into errors
 options("warn" = 2)
-option(testthat.default_reporter = "junit")
+options(testthat.default_reporter = "junit")
 
 if (.Platform$OS.type == "windows") {
   Sys.setenv(TZ = "GMT")
