@@ -20,7 +20,6 @@ library(SparkR)
 
 # Turn all warnings into errors
 options("warn" = 2)
-options(testthat.default_reporter = "junit")
 
 if (.Platform$OS.type == "windows") {
   Sys.setenv(TZ = "GMT")
@@ -53,26 +52,29 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
                            spark.executor.extraJavaOptions = tmpArg)
 }
 
-
 if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   if (identical(Sys.getenv("CONDA_TESTS"), "true")) {
+      summaryReporter <- ProgressReporter$new()
       options(testthat.output_file = "target/R/R/conda/r-tests.xml")
+      junitReporter <- JunitReporter$new()
       # set random seed for predictable results. mostly for base's sample() in tree and classification
       set.seed(42)
       testthat:::test_package_dir("SparkR",
       file.path(sparkRDir, "pkg", "tests", "condatests"),
       NULL,
-      MultiReporter$new(reporters = list(MinimalReporter$new(), default_reporter())))
+      MultiReporter$new(reporters = list(summaryReporter, junitReporter)))
   } else {
+      summaryReporter <- ProgressReporter$new()
       options(testthat.output_file = "target/R/R/r-tests.xml")
+      junitReporter <- JunitReporter$new()
+      reporter <- MultiReporter$new(reporters = list(summaryReporter, junitReporter))
       # set random seed for predictable results. mostly for base's sample() in tree and classification
-      test_package("SparkR", reporter = MultiReporter$new(reporters = list(MinimalReporter$new(), default_reporter())))
+      test_package("SparkR", reporter = reporter)
       set.seed(42)
       testthat:::test_package_dir("SparkR",
       file.path(sparkRDir, "pkg", "tests", "fulltests"),
       NULL,
-      MultiReporter$new(reporters = list(MinimalReporter$new(), default_reporter())))
+      reporter)
   }
 }
 
-SparkR:::uninstallDownloadedSpark()
