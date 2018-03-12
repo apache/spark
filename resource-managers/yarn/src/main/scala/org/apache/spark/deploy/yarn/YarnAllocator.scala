@@ -81,7 +81,8 @@ private[yarn] class YarnAllocator(
   private val releasedContainers = Collections.newSetFromMap[ContainerId](
     new ConcurrentHashMap[ContainerId, java.lang.Boolean])
 
-  private val runningExecutors = new java.util.concurrent.ConcurrentHashMap[String, Unit]()
+  private val runningExecutors = Collections.newSetFromMap[String](
+    new ConcurrentHashMap[String, java.lang.Boolean]())
 
   private val numExecutorsStarting = new AtomicInteger(0)
 
@@ -501,7 +502,7 @@ private[yarn] class YarnAllocator(
         s"for executor with ID $executorId")
 
       def updateInternalState(): Unit = synchronized {
-        runningExecutors.put(executorId, Unit)
+        runningExecutors.add(executorId)
         numExecutorsStarting.decrementAndGet()
         executorIdToContainer(executorId) = container
         containerIdToExecutorId(container.getId) = executorId
