@@ -53,3 +53,6 @@ RUN $CONDA_BIN install -y -n python2 -c anaconda -c conda-forge xmlrunner \
 
 # Expose pyenv globally
 ENV PATH=$CIRCLE_HOME/.pyenv/shims:$PATH
+
+RUN PYENV_VERSION=our-miniconda/envs/python2 $CIRCLE_HOME/.pyenv/shims/pip install unishark \
+ && PYENV_VERSION=our-miniconda/envs/python3 $CIRCLE_HOME/.pyenv/shims/pip install unishark
