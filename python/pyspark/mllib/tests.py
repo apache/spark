@@ -1767,7 +1767,8 @@ if __name__ == "__main__":
     if not _have_scipy:
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
+        unittest.main(testRunner=xmlrunner.XMLTestRunner(
+            output='target/test-reports/pyspark.mllib'))
     else:
         unittest.main()
     if not _have_scipy:
