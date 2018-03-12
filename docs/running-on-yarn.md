@@ -268,19 +268,6 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.access.hadoopFileSystems</code></td>
-  <td>(none)</td>
-  <td>
-    A comma-separated list of secure Hadoop filesystems your Spark application is going to access. For
-    example, <code>spark.yarn.access.hadoopFileSystems=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
-    webhdfs://nn3.com:50070</code>. The Spark application must have access to the filesystems listed
-    and Kerberos must be properly configured to be able to access them (either in the same realm
-    or in a trusted realm). Spark acquires security tokens for each of the filesystems so that
-    the Spark application can access those remote Hadoop filesystems. <code>spark.yarn.access.namenodes</code>
-    is deprecated, please use this instead.
-  </td>
-</tr>
-<tr>
   <td><code>spark.yarn.appMasterEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
@@ -376,31 +363,6 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.keytab</code></td>
-  <td>(none)</td>
-  <td>
-  The full path to the file that contains the keytab for the principal specified above.
-  This keytab will be copied to the node running the YARN Application Master via the Secure Distributed Cache,
-  for renewing the login tickets and the delegation tokens periodically. (Works also with the "local" master)
-  </td>
-</tr>
-<tr>
-  <td><code>spark.yarn.principal</code></td>
-  <td>(none)</td>
-  <td>
-  Principal to be used to login to KDC, while running on secure HDFS. (Works also with the "local" master)
-  </td>
-</tr>
-<tr>
-  <td><code>spark.yarn.kerberos.relogin.period</code></td>
-  <td>1m</td>
-  <td>
-  How often to check whether the kerberos TGT should be renewed. This should be set to a value
-  that is shorter than the TGT renewal period (or the TGT lifetime if TGT renewal is not enabled).
-  The default value should be enough for most deployments.
-  </td>
-</tr>
-<tr>
   <td><code>spark.yarn.config.gatewayPath</code></td>
   <td>(none)</td>
   <td>
@@ -469,11 +431,7 @@ staging directory of the Spark application.
 
 If an application needs to interact with other secure Hadoop filesystems, their URIs need to be
 explicitly provided to Spark at launch time. This is done by listing them in the
-`spark.yarn.access.hadoopFileSystems` property, for example:
-
-```
-spark.yarn.access.hadoopFileSystems hdfs://ireland.example.org:8020/,webhdfs://frankfurt.example.org:50070/
-```
+`spark.yarn.access.hadoopFileSystems` property, described in the configuration section below.
 
 The YARN integration also supports custom delegation token providers using the Java Services
 mechanism (see `java.util.ServiceLoader`). Implementations of
@@ -481,6 +439,55 @@ mechanism (see `java.util.ServiceLoader`). Implementations of
 by listing their names in the corresponding file in the jar's `META-INF/services` directory. These
 providers can be disabled individually by setting `spark.security.credentials.{service}.enabled` to
 `false`, where `{service}` is the name of the credential provider.
+
+## YARN-specific Kerberos Configuration
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.yarn.keytab</code></td>
+  <td>(none)</td>
+  <td>
+  The full path to the file that contains the keytab for the principal specified above. This keytab
+  will be copied to the node running the YARN Application Master via the YARN Distributed Cache, and
+  will be used for renewing the login tickets and the delegation tokens periodically. Equivalent to
+  the <code>--keytab</code> command line argument.
+
+  <br /> (Works also with the "local" master.)
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.principal</code></td>
+  <td>(none)</td>
+  <td>
+  Principal to be used to login to KDC, while running on secure clusters. Equivalent to the
+  <code>--principal</code> command line argument.
+
+  <br /> (Works also with the "local" master.)
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.access.hadoopFileSystems</code></td>
+  <td>(none)</td>
+  <td>
+    A comma-separated list of secure Hadoop filesystems your Spark application is going to access. For
+    example, <code>spark.yarn.access.hadoopFileSystems=hdfs://nn1.com:8032,hdfs://nn2.com:8032,
+    webhdfs://nn3.com:50070</code>. The Spark application must have access to the filesystems listed
+    and Kerberos must be properly configured to be able to access them (either in the same realm
+    or in a trusted realm). Spark acquires security tokens for each of the filesystems so that
+    the Spark application can access those remote Hadoop filesystems.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.kerberos.relogin.period</code></td>
+  <td>1m</td>
+  <td>
+  How often to check whether the kerberos TGT should be renewed. This should be set to a value
+  that is shorter than the TGT renewal period (or the TGT lifetime if TGT renewal is not enabled).
+  The default value should be enough for most deployments.
+  </td>
+</tr>
+</table>
 
 ## Troubleshooting Kerberos
 

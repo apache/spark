@@ -21,7 +21,8 @@ the case of YARN, this feature relies on YARN RPC encryption being enabled for t
 secrets to be secure.
 
 For other resource managers, `spark.authenticate.secret` must be configured on each of the nodes.
-This secret will be used by all the daemons and applications.
+This secret will be shared by all the daemons and applications, so this deployment configuration is
+not as secure as the above, especially when considering multi-tenant clusters.
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -419,8 +420,9 @@ distributed with the application using the `--files` command line argument (or t
 `spark.files` configuration). The files will be placed on the driver's working directory, so the TLS
 configuration should just reference the file name with no absolute path.
 
-When distributing local key stores this way, make sure to configure the underlying distributed
-storage service (e.g. HDFS) so that wire encryption is enabled.
+Distributing local key stores this way may require the files to be staged in HDFS (or other similar
+distributed file system used by the cluster), so it's recommended that the undelying file system be
+configured with security in mind (e.g. by enabling authentication and wire encryption).
 
 ### Standalone mode
 
@@ -630,8 +632,8 @@ Kerberos credentials need to be provided to the Spark application via the `spark
 using the `--principal` and `--keytab` parameters.
 
 The provided keytab will be copied over to the machine running the Application Master via the Hadoop
-Distributed Cache. For this reason, it's strongly recommended that both YARN and HDFS encryption are
-enabled.
+Distributed Cache. For this reason, it's strongly recommended that both YARN and HDFS be secured
+with encryption, at least.
 
 The Kerberos login will be periodically renewed using the provided credentials, and new delegation
 tokens for supported will be created.
