@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-import scala.annotation.tailrec
+import java.io.PrintWriter
+
+import scala.collection.mutable
 
 import sbt._
 import sbt.Keys._
@@ -42,38 +44,45 @@ object CirclePlugin extends AutoPlugin {
     ProjectTests(thisProjectRef.value, Defaults.detectTests.value)
   }
 
+  private[CirclePlugin] case class ProjectAndTest(project: ProjectRef, test: TestDefinition)
+
   override def globalSettings: Seq[Def.Setting[_]] = List(
     circleTestsByProject := {
       if (sys.env contains "CIRCLE_NODE_INDEX") {
-        val index = sys.env("CIRCLE_NODE_INDEX").toInt
-        val total = sys.env("CIRCLE_NODE_TOTAL").toInt
         val byProject: Seq[ProjectTests] = testsByProject.all(ScopeFilter(inAnyProject, inConfigurations(Test))).value
 
-        // need a stable sort of projects
-        val sortedProjects = byProject.sortBy(_.project.project).toList
+        val allTestsByName = byProject
+          .flatMap(pt => pt.tests.iterator.map(ProjectAndTest(pt.project, _)))
+          .groupBy(_.test.name)
 
-        val totalTests = sortedProjects.iterator.map(_.tests.size).sum
-        val from = index * totalTests / total
-        val to = (index + 1) * totalTests / total
-
-        // We allow a slice of [from, to) from all tests across all projects (in the order of sortedProjects)
-        // We then filter out every other
-
-        @tailrec
-        def process(projectsLeft: List[ProjectTests], testsSoFar: Int, acc: List[ProjectTests]): List[ProjectTests] = {
-          val from1 = from - testsSoFar
-          val to1 = to - testsSoFar
-          projectsLeft match {
-            case ProjectTests(proj, tests) :: rest =>
-              val out = ProjectTests(proj, tests.iterator.zipWithIndex.collect {
-                case (td, idx) if idx >= from1 && idx < to1 => td
-              }.toList)
-              process(rest, testsSoFar + tests.size, out :: acc)
-            case _ =>
-              acc
+        // Don't want to use SBT's process class
+        import sys.process._
+        val lines = new mutable.ArrayBuffer[String]
+        val processIO = new ProcessIO(out => {
+          val pw = new PrintWriter(out)
+          try {
+            // Might these to be sorted stably, so sort by class name
+            allTestsByName.keys.toSeq.sorted.foreach(pw.println)
+          } finally {
+            pw.close()
           }
-        }
-        Some(process(sortedProjects, 0, Nil))
+        }, BasicIO.processFully(lines += _), BasicIO.toStdErr)
+        val builder = Process(List("circleci", "tests", "split", "--split-by=timings",
+          "--timings-type=classname"))
+        val exitCode = builder.run(processIO).exitValue()
+        require(exitCode == 0, s"circleci process failed: $builder")
+
+        // Read out all the class names that it generated
+        val out = lines.iterator
+          .flatMap(className => allTestsByName.getOrElse(
+            className, sys.error(s"Could not find class name in allTestsByName: $className")))
+          .toSeq
+          .groupBy(_.project)
+          .iterator
+          .map { case (project, projectAndTests) => ProjectTests(project, projectAndTests.map(_.test)) }
+          .toSeq
+
+        Some(out)
       } else {
         None
       }
@@ -89,7 +98,7 @@ object CirclePlugin extends AutoPlugin {
     // NOTE: this is because of dependencies like:
     //   org.apache.spark:spark-tags:2.3.0-SNAPSHOT:test->test
     // That somehow don't get resolved properly in the 'circle' ivy configuration even though it extends test
-    // To test, copare:
+    // To test, compare:
     // > show unsafe/test:fullClasspath
     // > show unsafe/circle:fullClasspath
     fullClasspath := (fullClasspath in Test).value,
