@@ -155,20 +155,20 @@ repl = Module(
 )
 
 
-hive_thriftserver = Module(
-    name="hive-thriftserver",
-    dependencies=[hive],
-    source_file_regexes=[
-        "sql/hive-thriftserver",
-        "sbin/start-thriftserver.sh",
-    ],
-    build_profile_flags=[
-        "-Phive-thriftserver",
-    ],
-    sbt_test_goals=[
-        "hive-thriftserver/test",
-    ]
-)
+# hive_thriftserver = Module(
+#     name="hive-thriftserver",
+#     dependencies=[hive],
+#     source_file_regexes=[
+#         "sql/hive-thriftserver",
+#         "sbin/start-thriftserver.sh",
+#     ],
+#     build_profile_flags=[
+#         "-Phive-thriftserver",
+#     ],
+#     sbt_test_goals=[
+#         "hive-thriftserver/test",
+#     ]
+# )
 
 
 sql_kafka = Module(
