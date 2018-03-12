@@ -274,7 +274,6 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(createExternalRow, Row.fromSeq(Seq(1, "x")), InternalRow.fromSeq(Seq()))
   }
 
-  // This is an alternative version of `checkEvaluation` to compare results
   // by scala values instead of catalyst values.
   private def checkObjectExprEvaluation(
       expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {

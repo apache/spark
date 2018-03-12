@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 /**
@@ -1674,6 +1675,27 @@ case class ValidateExternalType(child: Expression, expected: DataType)
 
   private val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
 
+  // This function is corresponding to `CodeGenerator.boxedType`
+  private def getClassFromDataType(dataType: DataType): Class[_] = dataType match {
+    case BooleanType => classOf[java.lang.Boolean]
+    case ByteType => classOf[java.lang.Byte]
+    case ShortType => classOf[java.lang.Short]
+    case IntegerType | DateType => classOf[java.lang.Integer]
+    case LongType | TimestampType => classOf[java.lang.Long]
+    case FloatType => classOf[java.lang.Float]
+    case DoubleType => classOf[java.lang.Double]
+    case _: DecimalType => classOf[Decimal]
+    case BinaryType => classOf[Array[Byte]]
+    case StringType => classOf[UTF8String]
+    case CalendarIntervalType => classOf[CalendarInterval]
+    case _: StructType => classOf[InternalRow]
+    case _: ArrayType => classOf[ArrayType]
+    case _: MapType => classOf[MapType]
+    case udt: UserDefinedType[_] => getClassFromDataType(udt.sqlType)
+    case ObjectType(cls) => cls
+    case _ => classOf[Object]
+  }
+
   private lazy val checkType: (Any) => Boolean = expected match {
     case _: DecimalType =>
       (value: Any) => {
@@ -1685,7 +1707,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
         value.getClass.isArray || value.isInstanceOf[Seq[_]]
       }
     case _ =>
-      val dataTypeClazz = RowEncoder.getClassFromExternalType(dataType)
+      val dataTypeClazz = getClassFromDataType(dataType)
       (value: Any) => {
         dataTypeClazz.isInstance(value)
       }
