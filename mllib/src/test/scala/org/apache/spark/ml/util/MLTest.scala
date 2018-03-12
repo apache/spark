@@ -22,8 +22,9 @@ import java.io.File
 import org.scalatest.Suite
 
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.{PipelineModel, Transformer}
-import org.apache.spark.sql.{DataFrame, Encoder, Row}
+import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.{PredictionModel, Transformer}
+import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.TestSparkSession
@@ -108,5 +109,15 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       otherResultCols: _*)(globalCheckFunction)
     testTransformerOnDF(dataframe, transformer, firstResultCol,
       otherResultCols: _*)(globalCheckFunction)
+  }
+
+  def testPredictorModelSinglePrediction(model: PredictionModel[Vector, _],
+      dataset: Dataset[_]): Unit = {
+
+    model.transform(dataset).select(model.getFeaturesCol, model.getPredictionCol)
+      .collect().foreach {
+      case Row(features: Vector, prediction: Double) =>
+        assert(prediction === model.predict(features))
+    }
   }
 }

@@ -502,16 +502,10 @@ class LogisticRegressionSuite extends MLTest with DefaultReadWriteTest {
   test("prediction on single instance") {
     val blor = new LogisticRegression().setFamily("binomial")
     val blorModel = blor.fit(smallBinaryDataset)
-    blorModel.transform(smallBinaryDataset).select("features", "prediction").collect().foreach {
-      case Row(features: Vector, prediction: Double) =>
-        assert(prediction === blorModel.predict(features))
-    }
+    testPredictorModelSinglePrediction(blorModel, smallBinaryDataset)
     val mlor = new LogisticRegression().setFamily("multinomial")
     val mlorModel = mlor.fit(smallMultinomialDataset)
-    mlorModel.transform(smallMultinomialDataset).select("features", "prediction").collect()
-      .foreach { case Row(features: Vector, prediction: Double) =>
-        assert(prediction === mlorModel.predict(features))
-    }
+    testPredictorModelSinglePrediction(mlorModel, smallMultinomialDataset)
   }
 
   test("coefficients and intercept methods") {

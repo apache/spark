@@ -203,10 +203,7 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val trainingDataset = trainData.toDF("label", "features")
     val gbtModel = gbt.fit(trainingDataset)
 
-    gbtModel.transform(trainingDataset).select("features", "prediction").collect().foreach {
-      case Row(features: Vector, prediction: Double) =>
-        assert(prediction === gbtModel.predict(features))
-    }
+    testPredictorModelSinglePrediction(gbtModel, trainingDataset)
   }
 
   test("GBT parameter stepSize should be in interval (0, 1]") {

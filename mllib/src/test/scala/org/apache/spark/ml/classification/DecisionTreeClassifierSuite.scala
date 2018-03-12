@@ -276,10 +276,7 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
     val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val newTree = dt.fit(newData)
 
-    newTree.transform(newData).select(dt.getFeaturesCol, dt.getPredictionCol).collect().foreach {
-      case Row(features: Vector, prediction: Double) =>
-        assert(prediction === newTree.predict(features))
-    }
+    testPredictorModelSinglePrediction(newTree, newData)
   }
 
   test("training with 1-category categorical feature") {

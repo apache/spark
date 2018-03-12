@@ -104,10 +104,7 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setMaxDepth(2)
       .setMaxIter(2)
     val model = gbt.fit(trainData.toDF())
-    model.transform(validationData.toDF).select("features", "prediction").collect().foreach {
-      case Row(features: Vector, prediction: Double) =>
-        assert(prediction === model.predict(features))
-    }
+    testPredictorModelSinglePrediction(model, validationData.toDF)
   }
 
   test("Checkpointing") {

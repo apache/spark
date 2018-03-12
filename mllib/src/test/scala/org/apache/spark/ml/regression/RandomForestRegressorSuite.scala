@@ -21,19 +21,17 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
 /**
  * Test suite for [[RandomForestRegressor]].
  */
-class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
-  with DefaultReadWriteTest{
+class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
 
   import RandomForestRegressorSuite.compareAPIs
   import testImplicits._
@@ -87,10 +85,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
 
     val df = orderedLabeledPoints50_1000.toDF()
     val model = rf.fit(df)
-    model.transform(df).select("features", "prediction").collect()
-      .foreach { case Row(features: Vector, prediction: Double) =>
-        assert(prediction === model.predict(features))
-      }
+    testPredictorModelSinglePrediction(model, df)
   }
 
   test("Feature importance with toy data") {

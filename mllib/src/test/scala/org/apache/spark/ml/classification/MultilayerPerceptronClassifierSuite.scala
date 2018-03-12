@@ -85,10 +85,7 @@ class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTe
       .setMaxIter(100)
       .setSolver("l-bfgs")
     val model = trainer.fit(dataset)
-    model.transform(dataset).select(trainer.getFeaturesCol, trainer.getPredictionCol).collect()
-      .foreach { case Row(features: Vector, prediction: Double) =>
-        assert(prediction === model.predict(features))
-      }
+    testPredictorModelSinglePrediction(model, dataset)
   }
 
   test("Predicted class probabilities: calibration on toy dataset") {
