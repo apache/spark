@@ -455,12 +455,14 @@ def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
         run_scala_tests_sbt(test_modules, test_profiles)
 
 
-def run_python_tests(test_modules, parallelism):
+def run_python_tests(test_modules, parallelism, python_executables = None):
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
     command = [os.path.join(SPARK_HOME, "python", "run-tests")]
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
+    if python_executables is not None:
+        command.append("--python-executables={}".format(",".join(python_executables)))
     command.append("--parallelism=%i" % parallelism)
     run_cmd(command)
 

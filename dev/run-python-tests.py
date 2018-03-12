@@ -33,5 +33,5 @@ if __name__ == '__main__':
 
     modules_with_python_tests = [m for m in mtt.test_modules if m.python_test_goals]
     if modules_with_python_tests:
-        run_python_tests(modules_with_python_tests, opts.parallelism)
+        run_python_tests(modules_with_python_tests, opts.parallelism, ["python2.7", "python3.6"])
         run_python_packaging_tests()
