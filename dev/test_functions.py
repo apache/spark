@@ -464,6 +464,7 @@ def run_python_tests(test_modules, parallelism, python_executables=None):
     if python_executables is not None:
         command.append("--python-executables={}".format(",".join(python_executables)))
     command.append("--parallelism=%i" % parallelism)
+    command.append("--verbose")
     run_cmd(command)
 
 
