@@ -117,8 +117,6 @@ jobs:
           keys:
             - v3-ivy-dependency-cache-{{ checksum "pom.xml" }}
             - v3-ivy-dependency-cache-
-            # TODO(dsanduleac): remove after 1 run
-            - v2-ivy-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
