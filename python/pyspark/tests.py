@@ -2181,11 +2181,8 @@ class SparkSubmitTests(unittest.TestCase):
                                 stdout=subprocess.PIPE,
                                 env=env)
         out, err = proc.communicate()
-        try:
-            self.assertEqual(0, proc.returncode)
-            self.assertIn("[2, 4, 6]", out.decode('utf-8'))
-        except ex:
-            print("Stderr was:")
+        self.assertEqual(0, proc.returncode)
+        self.assertIn("[2, 4, 6]", out.decode('utf-8'))
 
 
 class ContextTests(unittest.TestCase):
