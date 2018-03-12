@@ -131,11 +131,14 @@ object CirclePlugin extends AutoPlugin {
       val testsByProject = (circleTestsByProject in Global).value
                            .getOrElse(sys.error("We are not running in circle."))
       val thisProj = thisProjectRef.value
+      val log = streams.value.log
 
       testsByProject.collectFirst {
         case ProjectTests(`thisProj`, tests) => tests
-      }.getOrElse(sys.error(s"Didn't find any tests for $thisProj in the global circleTestsByProject. " +
-        s"Only projects found: ${testsByProject.map(_.project)}"))
+      }.getOrElse {
+        log.info(s"Didn't find any tests for $thisProj in the global circleTestsByProject. Skipping")
+        List()
+      }
     },
 
     test := (test, copyTestReportsToCircle) { (test, copy) =>
