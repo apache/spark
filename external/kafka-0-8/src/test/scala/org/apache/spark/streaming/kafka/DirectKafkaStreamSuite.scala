@@ -455,11 +455,11 @@ class DirectKafkaStreamSuite
     ssc.stop()
   }
 
-  test("backpressure.initialRate should honor maxRatePerPartition") {
+  test("use backpressure.initialRate with backpressure") {
     backpressureTest(maxRatePerPartition = 1000, initialRate = 500, maxMessagesPerPartition = 250)
   }
 
-  test("use backpressure.initialRate with backpressure") {
+  test("backpressure.initialRate should honor maxRatePerPartition") {
     backpressureTest(maxRatePerPartition = 300, initialRate = 1000, maxMessagesPerPartition = 150)
   }
 
