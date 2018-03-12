@@ -196,6 +196,8 @@ jobs:
       - restore_cache:
           key: v1-home-sbt-{{ checksum "build/sbt" }}
       - run: dev/run-python-tests.py
+      - store_test_results:
+          path: target/test-reports
 
 
   run-r-tests:
