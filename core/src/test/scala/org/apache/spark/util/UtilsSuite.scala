@@ -1168,6 +1168,19 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       Utils.checkAndGetK8sMasterUrl("k8s://foo://host:port")
     }
   }
+
+  test("check host name") {
+    intercept[AssertionError] {
+      Utils.checkHost("name_164")
+    }
+    intercept[AssertionError] {
+      Utils.checkHost("name-164#")
+    }
+    Utils.checkHost("name-164")
+    Utils.checkHost("Name")
+    Utils.checkHost("Name164.com")
+    Utils.checkHost("950")
+  }
 }
 
 private class SimpleExtension

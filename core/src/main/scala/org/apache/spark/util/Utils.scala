@@ -975,6 +975,8 @@ private[spark] object Utils extends Logging {
 
   def checkHost(host: String) {
     assert(host != null && host.indexOf(':') == -1, s"Expected hostname (not IP) but got $host")
+    assert(host.matches("^[a-zA-Z0-9-.]+$"),
+      s"Hostname is only allowed to include 0-9, a-z, A-Z, - and ., but got $host")
   }
 
   def checkHostPort(hostPort: String) {
