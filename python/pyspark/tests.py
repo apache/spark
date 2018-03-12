@@ -2172,12 +2172,21 @@ class SparkSubmitTests(unittest.TestCase):
             |spark.conda.channelUrls       https://repo.continuum.io/pkgs/free
             |spark.conda.bootstrapPackages python=3.5
         """.format(os.environ["CONDA_BIN"]))
+        env = dict(os.environ)
+        del env['PYSPARK_PYTHON']
+        del env['PYSPARK_DRIVER_PYTHON']
         proc = subprocess.Popen([self.sparkSubmit,
                                  "--properties-file", props,
-                                 script], stdout=subprocess.PIPE)
+                                 script],
+                                 stdout=subprocess.PIPE,
+                                 env=env)
         out, err = proc.communicate()
-        self.assertEqual(0, proc.returncode)
-        self.assertIn("[2, 4, 6]", out.decode('utf-8'))
+        try:
+            self.assertEqual(0, proc.returncode)
+            self.assertIn("[2, 4, 6]", out.decode('utf-8'))
+        except ex:
+            print("Stderr was:")
+
 
 
 class ContextTests(unittest.TestCase):
