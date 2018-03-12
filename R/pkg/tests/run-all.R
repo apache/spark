@@ -56,7 +56,7 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
 
 if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   if (identical(Sys.getenv("CONDA_TESTS"), "true")) {
-      options(testthat.output_file = "target/R/conda/r-tests.xml")
+      options(testthat.output_file = "target/R/R/conda/r-tests.xml")
       # set random seed for predictable results. mostly for base's sample() in tree and classification
       set.seed(42)
       testthat:::test_package_dir("SparkR",
@@ -64,7 +64,7 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
       NULL,
       default_reporter())
   } else {
-      options(testthat.output_file = "target/R/r-tests.xml")
+      options(testthat.output_file = "target/R/R/r-tests.xml")
       # set random seed for predictable results. mostly for base's sample() in tree and classification
       test_package("SparkR", reporter = default_reporter())
       set.seed(42)
