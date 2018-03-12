@@ -166,7 +166,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      "select 1 as a"))
 
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
@@ -298,7 +299,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      "select 1 as a"))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -327,7 +329,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      "select 1 as a"))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -367,7 +370,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      "select 1 as a"))
     listener.onJobStart(SparkListenerJobStart(
       jobId = 0,
       time = System.currentTimeMillis(),
@@ -396,7 +400,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      System.currentTimeMillis()))
+      System.currentTimeMillis(),
+      "select 1 as a"))
 
     var stageId = 0
     def twoStageJob(jobId: Int): Unit = {
@@ -521,13 +526,15 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     val df = createTestDataFrame
     // Start execution 1 and execution 2
     time += 1
+    val sqlText = "select 1 as a"
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       1,
       "test",
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      time))
+      time,
+      sqlText))
     time += 1
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
       2,
@@ -535,7 +542,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      time))
+      time,
+      sqlText))
 
     // Stop execution 2 before execution 1
     time += 1
@@ -551,7 +559,8 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
       "test",
       df.queryExecution.toString,
       SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
-      time))
+      time,
+      sqlText))
     assert(statusStore.executionsCount === 2)
     assert(statusStore.execution(2) === None)
   }

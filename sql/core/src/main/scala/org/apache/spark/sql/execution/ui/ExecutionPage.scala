@@ -78,6 +78,7 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
       summary ++
         planVisualization(metrics, graph) ++
+        showSQLText(executionUIData.sqlText) ++
         physicalPlanDescription(executionUIData.physicalPlanDescription)
     }.getOrElse {
       <div>No information to display for query {executionId}</div>
@@ -119,6 +120,25 @@ class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") with Logging 
 
   private def jobURL(jobId: Long): String =
     "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), jobId)
+
+  private def showSQLText(sqlText: String): Seq[Node] = {
+    <div>
+      <span style="cursor: pointer;" onclick="clickShowSQLText();">
+        <span id="sql-text-arrow" class="arrow-closed"></span>
+        <a>SQL text</a>
+      </span>
+    </div>
+      <div id="sql-text-details" style="display: none;">
+        <pre>{sqlText}</pre>
+      </div>
+      <script>
+        function clickShowSQLText() {{
+        $('#sql-text-details').toggle();
+        $('#sql-text-arrow').toggleClass('arrow-open').toggleClass('arrow-closed');
+        }}
+      </script>
+        <br/>
+  }
 
   private def physicalPlanDescription(physicalPlanDescription: String): Seq[Node] = {
     <div>

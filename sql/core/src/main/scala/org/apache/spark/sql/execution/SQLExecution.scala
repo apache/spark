@@ -34,6 +34,16 @@ object SQLExecution {
 
   private val executionIdToQueryExecution = new ConcurrentHashMap[Long, QueryExecution]()
 
+  private val executionIdToSqlText = new ConcurrentHashMap[Long, String]()
+
+  def setSqlText(sqlText: String): Unit = {
+    executionIdToSqlText.putIfAbsent(_nextExecutionId.get(), sqlText)
+  }
+
+  def getSqlText(executionId: Long): String = {
+    executionIdToSqlText.get(executionId)
+  }
+
   def getQueryExecution(executionId: Long): QueryExecution = {
     executionIdToQueryExecution.get(executionId)
   }
@@ -63,16 +73,17 @@ object SQLExecution {
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
     sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
+    val sqlText = getSqlText(executionId)
     executionIdToQueryExecution.put(executionId, queryExecution)
     try {
       // sparkContext.getCallSite() would first try to pick up any call site that was previously
       // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
       // streaming queries would give us call site like "run at <unknown>:0"
       val callSite = sparkSession.sparkContext.getCallSite()
-
       sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
         executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
-        SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
+        SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
+        System.currentTimeMillis(), sqlText))
       try {
         body
       } finally {

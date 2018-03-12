@@ -635,6 +635,7 @@ class SparkSession private(
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = {
+    SQLExecution.setSqlText(sqlText)
     Dataset.ofRows(self, sessionState.sqlParser.parsePlan(sqlText))
   }
 

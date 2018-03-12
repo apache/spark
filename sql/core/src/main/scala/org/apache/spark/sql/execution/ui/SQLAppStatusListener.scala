@@ -230,7 +230,7 @@ class SQLAppStatusListener(
 
   private def onExecutionStart(event: SparkListenerSQLExecutionStart): Unit = {
     val SparkListenerSQLExecutionStart(executionId, description, details,
-      physicalPlanDescription, sparkPlanInfo, time) = event
+      physicalPlanDescription, sparkPlanInfo, time, sqlText) = event
 
     def toStoredNodes(nodes: Seq[SparkPlanGraphNode]): Seq[SparkPlanGraphNodeWrapper] = {
       nodes.map {
@@ -265,6 +265,7 @@ class SQLAppStatusListener(
     exec.physicalPlanDescription = physicalPlanDescription
     exec.metrics = sqlPlanMetrics
     exec.submissionTime = time
+    exec.sqlText = sqlText
     update(exec)
   }
 
@@ -351,6 +352,7 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
   var jobs = Map[Int, JobExecutionStatus]()
   var stages = Set[Int]()
   var driverAccumUpdates = Map[Long, Long]()
+  var sqlText: String = null
 
   @volatile var metricsValues: Map[Long, String] = null
 
@@ -369,7 +371,8 @@ private class LiveExecutionData(val executionId: Long) extends LiveEntity {
       completionTime,
       jobs,
       stages,
-      metricsValues)
+      metricsValues,
+      sqlText)
   }
 
 }
