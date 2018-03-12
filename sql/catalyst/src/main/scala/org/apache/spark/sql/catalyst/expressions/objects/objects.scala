@@ -269,21 +269,26 @@ case class Invoke(
 
   override def eval(input: InternalRow): Any = {
     val obj = targetObject.eval(input)
-    val args = arguments.map(e => e.eval(input).asInstanceOf[Object])
-    val argClasses = CallMethodViaReflection.expressionJavaClasses(arguments)
-    val method = obj.getClass.getDeclaredMethod(functionName, argClasses : _*)
-    if (needNullCheck && args.exists(_ == null)) {
-      // return null if one of arguments is null
+    if (obj == null) {
+      // return null if obj is null
       null
     } else {
-      val ret = method.invoke(obj, args: _*)
-
-      if (CodeGenerator.defaultValue(dataType) == "null") {
-        ret
+      val args = arguments.map(e => e.eval(input).asInstanceOf[Object])
+      val argClasses = CallMethodViaReflection.expressionJavaClasses(arguments)
+      val method = obj.getClass.getDeclaredMethod(functionName, argClasses : _*)
+      if (needNullCheck && args.exists(_ == null)) {
+        // return null if one of arguments is null
+        null
       } else {
-        // cast a primitive value using Boxed class
-        val boxedClass = CallMethodViaReflection.typeBoxedJavaMapping(dataType)
-        boxedClass.cast(ret)
+        val ret = method.invoke(obj, args: _*)
+
+        if (CodeGenerator.defaultValue(dataType) == "null") {
+          ret
+        } else {
+          // cast a primitive value using Boxed class
+          val boxedClass = CallMethodViaReflection.typeBoxedJavaMapping(dataType)
+          boxedClass.cast(ret)
+        }
       }
     }
   }
