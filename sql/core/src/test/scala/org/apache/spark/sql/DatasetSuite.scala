@@ -1425,6 +1425,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-23627: provide isEmpty in DataSet") {
+    val ds1 = spark.emptyDataset[Int]
+    val ds2 = Seq(1, 2, 3).toDS()
+
+    assert(ds1.isEmpty == true)
+    assert(ds2.isEmpty == false)
+  }
+
   test("SPARK-22472: add null check for top-level primitive values") {
     // If the primitive values are from Option, we need to do runtime null check.
     val ds = Seq(Some(1), None).toDS().as[Int]

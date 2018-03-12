@@ -512,6 +512,12 @@ class Dataset[T] private[sql](
   def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
 
   /**
+   * Returns true if the `DataSet` is empty
+   *
+   */
+  def isEmpty: Boolean = rdd.isEmpty()
+
+  /**
    * Returns true if this Dataset contains one or more sources that continuously
    * return data as it arrives. A Dataset that reads data from a streaming source
    * must be executed as a `StreamingQuery` using the `start()` method in
