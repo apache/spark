@@ -28,12 +28,12 @@ import scala.util.Try
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -1009,8 +1009,20 @@ case class CatalystToExternalMap private(
   override def children: Seq[Expression] =
     keyLambdaFunction :: valueLambdaFunction :: inputData :: Nil
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  private lazy val toScalaValue: Any => Any = {
+    assert(inputData.dataType.isInstanceOf[MapType])
+    val mapType = inputData.dataType.asInstanceOf[MapType]
+    CatalystTypeConverters.createToScalaConverter(mapType)
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val result = inputData.eval(input).asInstanceOf[MapData]
+    if (result != null) {
+      toScalaValue(result)
+    } else {
+      null
+    }
+  }
 
   override def dataType: DataType = ObjectType(collClass)
 
