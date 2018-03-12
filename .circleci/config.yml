@@ -275,6 +275,8 @@ jobs:
           name: Install SparkR
           command: R/install-dev.sh
       - run: dev/run-r-tests.py
+      - store_test_results:
+          path: target/R
 
 
   run-scala-tests:
