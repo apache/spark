@@ -2179,9 +2179,12 @@ class SparkSubmitTests(unittest.TestCase):
                                  "--properties-file", props,
                                  script],
                                 stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
                                 env=env)
         out, err = proc.communicate()
-        self.assertEqual(0, proc.returncode)
+        if 0 != proc.returncode:
+            self.fail(("spark-submit was unsuccessful with error code {}\n\n" +
+                       "stdout:\n{}\n\nstderr:\n{}").format(proc.returncode, out, err))
         self.assertIn("[2, 4, 6]", out.decode('utf-8'))
 
 
