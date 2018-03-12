@@ -53,20 +53,20 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
                            spark.executor.extraJavaOptions = tmpArg)
 }
 
-test_package("SparkR")
 
 if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   if (identical(Sys.getenv("CONDA_TESTS"), "true")) {
       # set random seed for predictable results. mostly for base's sample() in tree and classification
       set.seed(42)
-      testthat:::run_tests("SparkR",
+      testthat:::test_package_dir("SparkR",
       file.path(sparkRDir, "pkg", "tests", "condatests"),
       NULL,
       default_reporter())
   } else {
       # set random seed for predictable results. mostly for base's sample() in tree and classification
+      test_package("SparkR", reporter = default_reporter())
       set.seed(42)
-      testthat:::run_tests("SparkR",
+      testthat:::test_package_dir("SparkR",
       file.path(sparkRDir, "pkg", "tests", "fulltests"),
       NULL,
       default_reporter())
