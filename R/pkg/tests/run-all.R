@@ -59,11 +59,17 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   if (identical(Sys.getenv("CONDA_TESTS"), "true")) {
       # set random seed for predictable results. mostly for base's sample() in tree and classification
       set.seed(42)
-      test_dir(file.path(sparkRDir, "pkg", "tests", "condatests"))
+      testthat:::run_tests("SparkR",
+      file.path(sparkRDir, "pkg", "tests", "condatests"),
+      NULL,
+      default_reporter())
   } else {
       # set random seed for predictable results. mostly for base's sample() in tree and classification
       set.seed(42)
-      test_dir(file.path(sparkRDir, "pkg", "tests", "fulltests"))
+      testthat:::run_tests("SparkR",
+      file.path(sparkRDir, "pkg", "tests", "fulltests"),
+      NULL,
+      default_reporter())
   }
 }
 
