@@ -33,11 +33,7 @@ import datetime
 import array
 import ctypes
 import py4j
-
-try:
-    import xmlrunner
-except ImportError:
-    xmlrunner = None
+import unishark
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -5025,7 +5021,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *
-    if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports/pyspark.sql'))
-    else:
-        unittest.main()
+
+    runner = unishark.BufferedTestRunner(
+        reporters=[unishark.XUnitReporter('target/test-reports/pyspark.sql')])
+    unittest.main(testRunner=runner)

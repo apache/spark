@@ -20,14 +20,12 @@
 Unit tests for MLlib Python DataFrame-based APIs.
 """
 import sys
+
+import unishark
+
 if sys.version > '3':
     xrange = range
     basestring = str
-
-try:
-    import xmlrunner
-except ImportError:
-    xmlrunner = None
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -2416,7 +2414,7 @@ class EstimatorTest(unittest.TestCase):
 
 if __name__ == "__main__":
     from pyspark.ml.tests import *
-    if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports/pyspark.ml'))
-    else:
-        unittest.main()
+
+    runner = unishark.BufferedTestRunner(
+        reporters=[unishark.XUnitReporter('target/test-reports/pyspark.ml')])
+    unittest.main(testRunner=runner)
