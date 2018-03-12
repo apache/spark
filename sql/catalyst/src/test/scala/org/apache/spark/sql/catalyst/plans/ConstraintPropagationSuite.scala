@@ -242,6 +242,8 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
       .join(tr2.where('d.attr < 100), LeftOuter, Some("tr1.a".attr === "tr2.a".attr))
       .analyze.constraints,
       ExpressionSet(Seq(tr1.resolveQuoted("a", caseInsensitiveResolution).get > 10,
+        tr2.resolveQuoted("a", caseInsensitiveResolution).get > 10,
+        IsNotNull(tr2.resolveQuoted("a", caseInsensitiveResolution).get),
         IsNotNull(tr1.resolveQuoted("a", caseInsensitiveResolution).get))))
   }
 
