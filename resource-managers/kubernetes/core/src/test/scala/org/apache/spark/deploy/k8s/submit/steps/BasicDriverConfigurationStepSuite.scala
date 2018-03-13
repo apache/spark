@@ -17,9 +17,7 @@
 package org.apache.spark.deploy.k8s.submit.steps
 
 import scala.collection.JavaConverters._
-
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder}
-
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, LocalObjectReference, PodBuilder}
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
@@ -51,6 +49,7 @@ class BasicDriverConfigurationStepSuite extends SparkFunSuite {
       .set(s"$KUBERNETES_DRIVER_ANNOTATION_PREFIX$CUSTOM_ANNOTATION_KEY", CUSTOM_ANNOTATION_VALUE)
       .set(s"$KUBERNETES_DRIVER_ENV_KEY$DRIVER_CUSTOM_ENV_KEY1", "customDriverEnv1")
       .set(s"$KUBERNETES_DRIVER_ENV_KEY$DRIVER_CUSTOM_ENV_KEY2", "customDriverEnv2")
+      .set(IMAGE_PULL_SECRET, "imagePullSecret")
 
     val submissionStep = new BasicDriverConfigurationStep(
       APP_ID,
@@ -103,7 +102,11 @@ class BasicDriverConfigurationStepSuite extends SparkFunSuite {
       CUSTOM_ANNOTATION_KEY -> CUSTOM_ANNOTATION_VALUE,
       SPARK_APP_NAME_ANNOTATION -> APP_NAME)
     assert(driverPodMetadata.getAnnotations.asScala === expectedAnnotations)
-    assert(preparedDriverSpec.driverPod.getSpec.getRestartPolicy === "Never")
+
+    val driverPodSpec = preparedDriverSpec.driverPod.getSpec
+    assert(driverPodSpec.getRestartPolicy === "Never")
+    assert(driverPodSpec.getImagePullSecrets.size() === 1)
+    assert(driverPodSpec.getImagePullSecrets.get(0).getName === "imagePullSecret")
 
     val resolvedSparkConf = preparedDriverSpec.driverSparkConf.getAll.toMap
     val expectedSparkConf = Map(

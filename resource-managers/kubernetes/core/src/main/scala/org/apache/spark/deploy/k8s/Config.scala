@@ -54,6 +54,12 @@ private[spark] object Config extends Logging {
       .checkValues(Set("Always", "Never", "IfNotPresent"))
       .createWithDefault("IfNotPresent")
 
+  val IMAGE_PULL_SECRET =
+    ConfigBuilder("spark.kubernetes.imagePullSecret")
+      .doc("Specifies the Kubernetes image secret used to access private image registry.")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX =

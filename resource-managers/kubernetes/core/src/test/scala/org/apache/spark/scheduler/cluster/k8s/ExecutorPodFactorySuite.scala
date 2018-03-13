@@ -33,6 +33,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
   private val driverPodUid: String = "driver-uid"
   private val executorPrefix: String = "base"
   private val executorImage: String = "executor-image"
+  private val imagePullSecret: String = "imagePullSecret"
   private val driverPod = new PodBuilder()
     .withNewMetadata()
     .withName(driverPodName)
@@ -54,6 +55,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, executorPrefix)
       .set(CONTAINER_IMAGE, executorImage)
       .set(KUBERNETES_DRIVER_SUBMIT_CHECK, true)
+      .set(IMAGE_PULL_SECRET, imagePullSecret)
   }
 
   test("basic executor pod has reasonable defaults") {
@@ -74,6 +76,8 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     assert(executor.getSpec.getContainers.get(0).getResources.getLimits.size() === 1)
     assert(executor.getSpec.getContainers.get(0).getResources
       .getLimits.get("memory").getAmount === "1408Mi")
+    assert(executor.getSpec.getImagePullSecrets.size() === 1)
+    assert(executor.getSpec.getImagePullSecrets.get(0).getName === imagePullSecret)
 
     // The pod has no node selector, volumes.
     assert(executor.getSpec.getNodeSelector.isEmpty)
