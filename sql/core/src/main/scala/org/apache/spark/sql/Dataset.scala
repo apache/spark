@@ -512,7 +512,7 @@ class Dataset[T] private[sql](
   def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
 
   /**
-   * Returns true if the `DataSet` is empty
+   * Returns true if the `Dataset` is empty
    *
    * @group basic
    * @since 2.4.0
