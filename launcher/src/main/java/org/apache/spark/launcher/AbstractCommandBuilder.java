@@ -17,11 +17,7 @@
 
 package org.apache.spark.launcher;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.InputStreamReader;
-import java.io.IOException;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -233,13 +229,28 @@ abstract class AbstractCommandBuilder {
     String sparkHome = getSparkHome();
     File scala212 = new File(sparkHome, "launcher/target/scala-2.12");
     File scala211 = new File(sparkHome, "launcher/target/scala-2.11");
-    checkState(!scala212.isDirectory() || !scala211.isDirectory(),
+    File dir = new File(sparkHome, "jars");
+    String[] jar212Files = dir.list(new FilenameFilter() {
+      @Override
+      public boolean accept(File dir, String name) {
+        return name.startsWith("spark-launcher_2.12");
+      }
+    });
+    boolean isScala212 = scala212.isDirectory() || jar212Files != null;
+    String[] jar211Files = dir.list(new FilenameFilter() {
+      @Override
+      public boolean accept(File dir, String name) {
+        return name.startsWith("spark-launcher_2.11");
+      }
+    });
+    boolean isScala211 = scala211.isDirectory() || jar211Files != null;
+    checkState(!isScala212 || !isScala211,
       "Presence of build for multiple Scala versions detected.\n" +
       "Either clean one of them or set SPARK_SCALA_VERSION in your environment.");
-    if (scala212.isDirectory()) {
+    if (isScala212) {
       return "2.12";
     } else {
-      checkState(scala211.isDirectory(), "Cannot find any build directories.");
+      checkState(isScala211, "Cannot find any build directories.");
       return "2.11";
     }
   }
