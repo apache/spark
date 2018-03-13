@@ -3453,7 +3453,6 @@ class ArrowTests(ReusedSQLTestCase):
         time.tzset()
 
         cls.spark.conf.set("spark.sql.session.timeZone", tz)
-        cls.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "true")
         cls.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
         cls.schema = StructType([
             StructField("1_str_t", StringType(), True),
@@ -3861,8 +3860,6 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         cls.sc.environment["TZ"] = tz
         cls.spark.conf.set("spark.sql.session.timeZone", tz)
-        cls.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "true")
-
 
     @classmethod
     def tearDownClass(cls):
