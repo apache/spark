@@ -29,7 +29,7 @@ trait QueryPlanConstraints { self: LogicalPlan =>
   lazy val allConstraints: ExpressionSet = {
     if (conf.constraintPropagationEnabled) {
       ExpressionSet(validConstraints
-        .union(inferAdditionalConstraints(validConstraints))
+        .union(QueryPlanConstraints.inferAdditionalConstraints(validConstraints))
         .union(constructIsNotNullConstraints(validConstraints)))
     } else {
       ExpressionSet(Set.empty)
@@ -96,13 +96,16 @@ trait QueryPlanConstraints { self: LogicalPlan =>
     case _: NullIntolerant => expr.children.flatMap(scanNullIntolerantAttribute)
     case _ => Seq.empty[Attribute]
   }
+}
+
+object QueryPlanConstraints {
 
   /**
    * Infers an additional set of constraints from a given set of equality constraints.
    * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
    * additional constraint of the form `b = 5`.
    */
-  private def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
+  def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
     var inferredConstraints = Set.empty[Expression]
     constraints.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
