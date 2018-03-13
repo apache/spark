@@ -323,6 +323,20 @@ case class Join(
     }
   }
 
+  // For left or right outer joins, constraits coming from the preserved side should be
+  // propagated to the null-supplying side, but cannot be included in the validConstraints
+  // set.
+  override protected def additionalValidConstraintsForInference: Set[Expression] = {
+    joinType match {
+      case LeftOuter if condition.isDefined =>
+        splitConjunctivePredicates(condition.get).toSet
+      case RightOuter if condition.isDefined =>
+        splitConjunctivePredicates(condition.get).toSet
+      case _ =>
+        Set.empty[Expression]
+    }
+  }
+
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
   // Joins are only resolved if they don't introduce ambiguous expression ids.

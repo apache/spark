@@ -29,7 +29,8 @@ trait QueryPlanConstraints { self: LogicalPlan =>
   lazy val allConstraints: ExpressionSet = {
     if (conf.constraintPropagationEnabled) {
       ExpressionSet(validConstraints
-        .union(inferAdditionalConstraints(validConstraints))
+        .union(inferAdditionalConstraints(
+          validConstraints.union(additionalValidConstraintsForInference)))
         .union(constructIsNotNullConstraints(validConstraints)))
     } else {
       ExpressionSet(Set.empty)
@@ -54,6 +55,16 @@ trait QueryPlanConstraints { self: LogicalPlan =>
    * See [[Canonicalize]] for more details.
    */
   protected def validConstraints: Set[Expression] = Set.empty
+
+  /**
+   * This method can be overridden by any child class of QueryPlan to specify a set of additional
+   * constraints used for constraint inference only based on the given operator's constraint
+   * propagation logic. These constraints are then canonicalized and filtered automatically to
+   * contain only those attributes that appear in the [[outputSet]].
+   *
+   * See [[Canonicalize]] for more details.
+   */
+  protected def additionalValidConstraintsForInference: Set[Expression] = Set.empty
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
