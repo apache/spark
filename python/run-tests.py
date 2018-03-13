@@ -77,17 +77,30 @@ def run_individual_python_test(test_name, pyspark_python):
     })
     LOGGER.info("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
+    # This line must come before the try block, file shouldn't be closed before 'worker' is done
+    per_test_output = tempfile.TemporaryFile()
     try:
-        per_test_output = tempfile.TemporaryFile()
-        retcode = subprocess.Popen(
+        process = subprocess.Popen(
             [os.path.join(SPARK_HOME, "bin/pyspark"), test_name],
-            stderr=per_test_output, stdout=per_test_output, env=env).wait()
+            # bufsize must be 0 (unbuffered), 1 (line buffered) doesn't seem to work
+            stderr=subprocess.STDOUT, stdout=subprocess.PIPE, env=env, bufsize=0,
+            universal_newlines=True)
+
+        def consume_log(output):
+            for line in process.stdout:
+                print("({}) {} - {}".format(pyspark_python, test_name, line), end=b'')
+                print(line, file=output, end=b'')
+
+        worker = Thread(target=consume_log, args=(per_test_output,))
+        worker.start()  # This is essential as we need to consume the stdout pipe
+        retcode = process.wait()
     except:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
         # this code is invoked from a thread other than the main thread.
         os._exit(1)
     duration = time.time() - start_time
+    worker.join()  # Wait on the thread that consumed the output
     # Exit on the first failure.
     if retcode != 0:
         try:

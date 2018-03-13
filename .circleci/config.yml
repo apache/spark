@@ -203,6 +203,8 @@ jobs:
       - run: dev/run-python-tests.py
       - store_test_results:
           path: target/test-reports
+      - store_artifacts:
+          path: python/unit-tests.log
 
 
   run-r-tests:
