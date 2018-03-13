@@ -362,15 +362,6 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
       "result3") { rows =>
         assert(rows === expected)
       }
-
-    testTransformerByGlobalCheckFunc[(Double, Double, Double)](
-      df,
-      plForSingleCol,
-      "result1",
-      "result2",
-      "result3") { rows =>
-      assert(rows === expected)
-    }
   }
 
   test("Multiple Columns: Comparing setting numBuckets with setting numBucketsArray " +
@@ -400,19 +391,9 @@ class QuantileDiscretizerSuite extends MLTest with DefaultReadWriteTest {
     val model = discretizerSingleNumBuckets.fit(df)
     val expected = model.transform(df).select("result1", "result2", "result3").collect()
 
-
     testTransformerByGlobalCheckFunc[(Double, Double, Double)](
       df,
-      model,
-      "result1",
-      "result2",
-      "result3") { rows =>
-      assert(rows === expected)
-    }
-
-    testTransformerByGlobalCheckFunc[(Double, Double, Double)](
-      df,
-      model,
+      discretizerNumBucketsArray.fit(df),
       "result1",
       "result2",
       "result3") { rows =>

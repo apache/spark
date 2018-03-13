@@ -126,14 +126,12 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
 
     MLTestingUtils.checkCopyAndUids(vectorIndexer, model)
 
-    // should work
     testTransformer[FeatureData](densePoints1, model, "indexed") { _ => }
-    // should work
     testTransformer[FeatureData](sparsePoints1, model, "indexed") { _ => }
 
     // If the data is local Dataset, it throws AssertionError directly.
-    withClue("Did not found expected error message when fit, " +
-      "transform were called on vectors of different lengths") {
+    withClue("Did not throw error when fit, transform were called on " +
+      "vectors of different lengths") {
       testTransformerByInterceptingException[FeatureData](
         densePoints2,
         model,
@@ -142,8 +140,8 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
     }
     // If the data is distributed Dataset, it throws SparkException
     // which is the wrapper of AssertionError.
-    withClue("Did not found expected error message when fit, " +
-      "transform were called on vectors of different lengths") {
+    withClue("Did not throw error when fit, transform were called " +
+      "on vectors of different lengths") {
       testTransformerByInterceptingException[FeatureData](
         densePoints2.repartition(2),
         model,

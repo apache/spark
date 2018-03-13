@@ -79,27 +79,28 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
       "Unseen label:",
       "labelIndex")
 
+    // Verify that we skip the c record
+    // a -> 1, b -> 0
     indexer.setHandleInvalid("skip")
 
+    val expectedSkip = Seq((0, 1.0), (1, 0.0)).toDF()
     testTransformerByGlobalCheckFunc[(Int, String)](df2, indexer, "id", "labelIndex") { rows =>
       val attrSkip = Attribute.fromStructField(rows.head.schema("labelIndex"))
         .asInstanceOf[NominalAttribute]
       assert(attrSkip.values.get === Array("b", "a"))
-      // Verify that we skip the c record
-      // a -> 1, b -> 0
-      val expectedSkip = Seq((0, 1.0), (1, 0.0)).toDF()
       assert(rows.seq === expectedSkip.collect().toSeq)
     }
 
     indexer.setHandleInvalid("keep")
+
+    // a -> 1, b -> 0, c -> 2, d -> 3
+    val expectedKeep = Seq((0, 1.0), (1, 0.0), (2, 2.0), (3, 2.0)).toDF()
 
     // Verify that we keep the unseen records
     testTransformerByGlobalCheckFunc[(Int, String)](df2, indexer, "id", "labelIndex") { rows =>
       val attrKeep = Attribute.fromStructField(rows.head.schema("labelIndex"))
         .asInstanceOf[NominalAttribute]
       assert(attrKeep.values.get === Array("b", "a", "__unknown"))
-      // a -> 1, b -> 0, c -> 2, d -> 3
-      val expectedKeep = Seq((0, 1.0), (1, 0.0), (2, 2.0), (3, 2.0)).toDF()
       assert(rows === expectedKeep.collect().toSeq)
     }
   }
@@ -111,12 +112,12 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
       .setInputCol("label")
       .setOutputCol("labelIndex")
       .fit(df)
+    // 100 -> 0, 200 -> 2, 300 -> 1
+    val expected = Seq((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)).toDF()
     testTransformerByGlobalCheckFunc[(Int, String)](df, indexer, "id", "labelIndex") { rows =>
       val attr = Attribute.fromStructField(rows.head.schema("labelIndex"))
         .asInstanceOf[NominalAttribute]
       assert(attr.values.get === Array("100", "300", "200"))
-      // 100 -> 0, 200 -> 2, 300 -> 1
-      val expected = Seq((0, 0.0), (1, 2.0), (2, 1.0), (3, 0.0), (4, 0.0), (5, 1.0)).toDF()
       assert(rows === expected.collect().toSeq)
     }
   }
@@ -143,24 +144,24 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
 
     indexer.setHandleInvalid("skip")
     val modelSkip = indexer.fit(df)
+    // a -> 1, b -> 0
+    val expectedSkip = Seq((0, 1.0), (1, 0.0)).toDF()
     testTransformerByGlobalCheckFunc[(Int, String)](df2, modelSkip, "id", "labelIndex") { rows =>
       val attrSkip =
         Attribute.fromStructField(rows.head.schema("labelIndex")).asInstanceOf[NominalAttribute]
       assert(attrSkip.values.get === Array("b", "a"))
-      // a -> 1, b -> 0
-      val expectedSkip = Seq((0, 1.0), (1, 0.0)).toDF()
       assert(rows === expectedSkip.collect().toSeq)
     }
 
     indexer.setHandleInvalid("keep")
+    // a -> 1, b -> 0, null -> 2
+    val expectedKeep = Seq((0, 1.0), (1, 0.0), (3, 2.0)).toDF()
     val modelKeep = indexer.fit(df)
     testTransformerByGlobalCheckFunc[(Int, String)](df2, modelKeep, "id", "labelIndex") { rows =>
       val attrKeep = Attribute
         .fromStructField(rows.head.schema("labelIndex"))
         .asInstanceOf[NominalAttribute]
       assert(attrKeep.values.get === Array("b", "a", "__unknown"))
-      // a -> 1, b -> 0, null -> 2
-      val expectedKeep = Seq((0, 1.0), (1, 0.0), (3, 2.0)).toDF()
       assert(rows === expectedKeep.collect().toSeq)
     }
   }
@@ -253,18 +254,15 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
       .setInputCol("label")
       .setOutputCol("labelIndex")
       .fit(df)
-    val expected1 = Seq(0.0, 2.0, 1.0, 0.0, 0.0, 1.0).map(Tuple1(_)).toDF("labelIndex")
-    testTransformerByGlobalCheckFunc[(Int, String)](df, indexer, "labelIndex") { rows =>
-      assert(rows == expected1.collect().seq)
-    }
-
+    val transformed = indexer.transform(df)
     val idx2str = new IndexToString()
       .setInputCol("labelIndex")
       .setOutputCol("sameLabel")
       .setLabels(indexer.labels)
 
-    testTransformerByGlobalCheckFunc[(Double)](expected1, idx2str, "sameLabel") { rows =>
-      assert(rows == df.select("label").collect().seq)
+    testTransformer[(Int, String, Double)](transformed, idx2str, "sameLabel", "label") {
+      case Row(sameLabel, label) =>
+        assert(sameLabel === label)
     }
   }
 
@@ -342,8 +340,7 @@ class StringIndexerSuite extends MLTest with DefaultReadWriteTest {
       dfNoBristol,
       model,
       "CITYIndexed") { rows =>
-      val transformed = rows.map { r => r.getDouble(0) }.toDF("CITYIndexed")
-      assert(transformed.filter($"CITYIndexed" === 1.0).count == 1)
+      assert(rows.toList.count(_.getDouble(0) == 1.0) === 1)
     }
   }
 }

@@ -94,15 +94,14 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
-  ignore("label column already exists but is not numeric type") {
-    // ignored as no exception thrown during streaming
+  test("label column already exists but is not numeric type") {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("y")
     val original = Seq((0, true), (2, false)).toDF("x", "y")
     val model = formula.fit(original)
     intercept[IllegalArgumentException] {
       model.transformSchema(original.schema)
     }
-    testTransformerByInterceptingException[(Int, Double)](
+    testTransformerByInterceptingException[(Int, Boolean)](
       original,
       model,
       "Label column already exists and is not of type NumericType.",
