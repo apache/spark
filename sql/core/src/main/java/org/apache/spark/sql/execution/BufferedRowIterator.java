@@ -62,6 +62,10 @@ public abstract class BufferedRowIterator {
    */
   public abstract void init(int index, Iterator<InternalRow>[] iters);
 
+  /*
+   * Attributes of the following four methods are public. Thus, they can be also accessed from
+   * methods in inner classes. See SPARK-23598
+   */
   /**
    * Append a row to currentRows.
    */
