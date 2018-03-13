@@ -115,8 +115,8 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v3-ivy-dependency-cache-{{ checksum "pom.xml" }}
-            - v3-ivy-dependency-cache-
+            - v4-ivy-dependency-cache-{{ checksum "pom.xml" }}
+            - v4-ivy-dependency-cache-
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
@@ -126,8 +126,11 @@ jobs:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
       - run: |
           dev/build-apache-spark.py | tee /tmp/build-apache-spark.log
+      - run:
+          name: "Resolve the externalDependencyClasspath for the 'oldDeps' project"
+          command: ./dev/sbt oldDeps/externalDependencyClasspath oldDeps/test:externalDependencyClasspath
       - save_cache:
-          key: v3-ivy-dependency-cache-{{ checksum "pom.xml" }}
+          key: v4-ivy-dependency-cache-{{ checksum "pom.xml" }}
           paths:
             - "~/.ivy2"
       - store_artifacts:
@@ -165,7 +168,7 @@ jobs:
       - attach_workspace:
           at: .
       - restore_cache:
-          key: v3-ivy-dependency-cache-{{ checksum "pom.xml" }}
+          key: v4-ivy-dependency-cache-{{ checksum "pom.xml" }}
       # TODO(dsanduleac): do we need the maven cache?
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
@@ -249,7 +252,7 @@ jobs:
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
-          key: v3-ivy-dependency-cache-{{ checksum "pom.xml" }}
+          key: v4-ivy-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
       - restore_cache:
