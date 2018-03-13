@@ -1577,8 +1577,8 @@ if __name__ == "__main__":
         tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
         runner = unishark.BufferedTestRunner(
             verbosity=3,
-            reporters=[unishark.XUnitReporter('target/test-reports/pyspark.streaming/{}'
-                                              .format(os.environ.get("PYSPARK_PYTHON", "")))])
+            reporters=[unishark.XUnitReporter('target/test-reports/pyspark.streaming/{}'.format(
+                os.path.basename(os.environ.get("PYSPARK_PYTHON", ""))))])
 
         result = runner.run(tests)
         if not result.wasSuccessful():

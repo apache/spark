@@ -2383,8 +2383,8 @@ if __name__ == "__main__":
     if not _have_numpy:
         print("NOTE: Skipping NumPy tests as it does not seem to be installed")
     runner = unishark.BufferedTestRunner(
-        reporters=[unishark.XUnitReporter('target/test-reports/pyspark/{}'
-                                          .format(os.environ.get("PYSPARK_PYTHON", "")))])
+        reporters=[unishark.XUnitReporter('target/test-reports/pyspark/{}'.format(
+            os.path.basename(os.environ.get("PYSPARK_PYTHON", ""))))])
     unittest.main(testRunner=runner)
     if not _have_scipy:
         print("NOTE: SciPy tests were skipped as it does not seem to be installed")

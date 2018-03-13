@@ -2416,7 +2416,6 @@ if __name__ == "__main__":
     from pyspark.ml.tests import *
 
     runner = unishark.BufferedTestRunner(
-        reporters=[unishark.XUnitReporter('target/test-reports/pyspark.ml/{}'
-                                          .format(os.environ.get("PYSPARK_PYTHON", "")))])
-
+        reporters=[unishark.XUnitReporter('target/test-reports/pyspark.ml/{}'.format(
+            os.path.basename(os.environ.get("PYSPARK_PYTHON", ""))))])
     unittest.main(testRunner=runner)

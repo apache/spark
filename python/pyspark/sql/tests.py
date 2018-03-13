@@ -5030,6 +5030,6 @@ if __name__ == "__main__":
     from pyspark.sql.tests import *
 
     runner = unishark.BufferedTestRunner(
-        reporters=[unishark.XUnitReporter('target/test-reports/pyspark.sql/{}'
-                                          .format(os.environ.get("PYSPARK_PYTHON", "")))])
+        reporters=[unishark.XUnitReporter('target/test-reports/pyspark.sql/{}'.format(
+            os.path.basename(os.environ.get("PYSPARK_PYTHON", ""))))])
     unittest.main(testRunner=runner)
