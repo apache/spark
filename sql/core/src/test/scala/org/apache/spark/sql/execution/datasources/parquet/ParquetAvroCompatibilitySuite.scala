@@ -47,6 +47,14 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
     try f(writer) finally writer.close()
   }
 
+  private def generateFixedLengthByteArray(i : Int): Array[Byte] = {
+    val fixedLengthByteArray = Array[Byte](0, 0, 0, 0, 0, 0, 0, 0)
+    val fixedLengthByteArrayComponent = s"val_$i".getBytes(StandardCharsets.UTF_8)
+    Array.copy(fixedLengthByteArrayComponent, 0, fixedLengthByteArray, 0,
+      Math.min(fixedLengthByteArrayComponent.length, fixedLengthByteArray.length))
+    fixedLengthByteArray
+  }
+
   test("required primitives") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
@@ -62,12 +70,13 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
               .setDoubleColumn(i.toDouble + 0.2d)
               .setBinaryColumn(ByteBuffer.wrap(s"val_$i".getBytes(StandardCharsets.UTF_8)))
               .setStringColumn(s"val_$i")
+              .setFixedColumn(new FixedType(generateFixedLengthByteArray(i)))
               .build())
         }
       }
 
       logParquetSchema(path)
-
+      // spark.conf.set("spark.sql.parquet.enableVectorizedReader", "false")
       checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
         Row(
           i % 2 == 0,
@@ -76,7 +85,8 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
           i.toFloat + 0.1f,
           i.toDouble + 0.2d,
           s"val_$i".getBytes(StandardCharsets.UTF_8),
-          s"val_$i")
+          s"val_$i",
+          generateFixedLengthByteArray(i))
       })
     }
   }
@@ -96,6 +106,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
               .setMaybeDoubleColumn(null)
               .setMaybeBinaryColumn(null)
               .setMaybeStringColumn(null)
+              .setMaybeFixedColumn(null)
               .build()
           } else {
             AvroOptionalPrimitives.newBuilder()
@@ -106,6 +117,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
               .setMaybeDoubleColumn(i.toDouble + 0.2d)
               .setMaybeBinaryColumn(ByteBuffer.wrap(s"val_$i".getBytes(StandardCharsets.UTF_8)))
               .setMaybeStringColumn(s"val_$i")
+              .setMaybeFixedColumn(new FixedType(generateFixedLengthByteArray(i)))
               .build()
           }
 
@@ -117,7 +129,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
 
       checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
         if (i % 3 == 0) {
-          Row.apply(Seq.fill(7)(null): _*)
+          Row.apply(Seq.fill(8)(null): _*)
         } else {
           Row(
             i % 2 == 0,
@@ -126,7 +138,8 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
             i.toFloat + 0.1f,
             i.toDouble + 0.2d,
             s"val_$i".getBytes(StandardCharsets.UTF_8),
-            s"val_$i")
+            s"val_$i",
+            generateFixedLengthByteArray(i))
         }
       })
     }

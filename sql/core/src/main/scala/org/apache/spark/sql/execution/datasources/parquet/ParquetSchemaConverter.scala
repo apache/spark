@@ -81,7 +81,7 @@ class ParquetToSparkSchemaConverter(
     }
 
     StructType(fields)
-  }
+  };
 
   /**
    * Converts a Parquet [[Type]] to a Spark SQL [[DataType]].
@@ -173,6 +173,7 @@ class ParquetToSparkSchemaConverter(
         originalType match {
           case DECIMAL => makeDecimalType(maxPrecisionForBytes(field.getTypeLength))
           case INTERVAL => typeNotImplemented()
+          case null => BinaryType
           case _ => illegalType()
         }
 

@@ -32,6 +32,7 @@ import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.types.BinaryType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
 
@@ -502,6 +503,14 @@ public class VectorizedColumnReader {
         }
       }
     } else if (DecimalType.isByteArrayDecimalType(column.dataType())) {
+      for (int i = 0; i < num; i++) {
+        if (defColumn.readInteger() == maxDefLevel) {
+          column.putByteArray(rowId + i, data.readBinary(arrayLen).getBytes());
+        } else {
+          column.putNull(rowId + i);
+        }
+      }
+    } else if (column.dataType() == DataTypes.BinaryType) {
       for (int i = 0; i < num; i++) {
         if (defColumn.readInteger() == maxDefLevel) {
           column.putByteArray(rowId + i, data.readBinary(arrayLen).getBytes());
