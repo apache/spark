@@ -514,6 +514,8 @@ class Dataset[T] private[sql](
   /**
    * Returns true if the `DataSet` is empty
    *
+   * @group basic
+   * @since 2.4.0
    */
   def isEmpty: Boolean = rdd.isEmpty()
 
