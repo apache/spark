@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.Locale
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
@@ -1212,17 +1214,21 @@ class Analyzer(
   object LookupFunctions extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val catalogFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
-        plan.transformAllExpressions {
-          case f: UnresolvedFunction if catalogFunctionNameSet.contains(f.name) => f
-          case f: UnresolvedFunction if catalog.functionExists(f.name) =>
-            catalogFunctionNameSet.add(f.name)
-            f
-          case f: UnresolvedFunction =>
-            withPosition(f) {
-              throw new NoSuchFunctionException(f.name.database.getOrElse("default"),
-                f.name.funcName)
-            }
-        }
+      plan.transformAllExpressions {
+        case f: UnresolvedFunction if catalogFunctionNameSet.contains(f.name) => f
+        case f: UnresolvedFunction if catalog.functionExists(f.name) =>
+          catalogFunctionNameSet.add(normalizeFuncName(f.name))
+          f
+        case f: UnresolvedFunction =>
+          withPosition(f) {
+            throw new NoSuchFunctionException(f.name.database.getOrElse("default"),
+              f.name.funcName)
+          }
+      }
+    }
+
+    private def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
+      FunctionIdentifier(name.funcName.toLowerCase(Locale.ROOT), name.database)
     }
   }
 
