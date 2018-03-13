@@ -25,7 +25,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
   private val DRIVER_IMAGE = "driver-image"
   private val IC_IMAGE = "init-container-image"
   private val APP_ID = "spark-app-id"
-  private val LAUNCH_TIME = 975256L
+  private val KUBERNETES_RESOURCE_PREFIX = "example-prefix"
   private val APP_NAME = "spark"
   private val MAIN_CLASS = "org.apache.spark.examples.SparkPi"
   private val APP_ARGS = Array("arg1", "arg2")
@@ -38,7 +38,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
     val orchestrator = new DriverConfigOrchestrator(
       APP_ID,
-      LAUNCH_TIME,
+      KUBERNETES_RESOURCE_PREFIX,
       Some(mainAppResource),
       APP_NAME,
       MAIN_CLASS,
@@ -49,15 +49,14 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       classOf[BasicDriverConfigurationStep],
       classOf[DriverServiceBootstrapStep],
       classOf[DriverKubernetesCredentialsStep],
-      classOf[DependencyResolutionStep],
-      classOf[DriverConfigPropertiesStep])
+      classOf[DependencyResolutionStep])
   }
 
   test("Base submission steps without a main app resource.") {
     val sparkConf = new SparkConf(false).set(CONTAINER_IMAGE, DRIVER_IMAGE)
     val orchestrator = new DriverConfigOrchestrator(
       APP_ID,
-      LAUNCH_TIME,
+      KUBERNETES_RESOURCE_PREFIX,
       Option.empty,
       APP_NAME,
       MAIN_CLASS,
@@ -67,8 +66,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       orchestrator,
       classOf[BasicDriverConfigurationStep],
       classOf[DriverServiceBootstrapStep],
-      classOf[DriverKubernetesCredentialsStep],
-      classOf[DriverConfigPropertiesStep])
+      classOf[DriverKubernetesCredentialsStep])
   }
 
   test("Submission steps with driver secrets to mount") {
@@ -79,7 +77,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
     val orchestrator = new DriverConfigOrchestrator(
       APP_ID,
-      LAUNCH_TIME,
+      KUBERNETES_RESOURCE_PREFIX,
       Some(mainAppResource),
       APP_NAME,
       MAIN_CLASS,
@@ -91,8 +89,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       classOf[DriverServiceBootstrapStep],
       classOf[DriverKubernetesCredentialsStep],
       classOf[DependencyResolutionStep],
-      classOf[DriverMountSecretsStep],
-      classOf[DriverConfigPropertiesStep])
+      classOf[DriverMountSecretsStep])
   }
 
   test("Submission using client local dependencies") {
@@ -100,7 +97,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       .set(CONTAINER_IMAGE, DRIVER_IMAGE)
     var orchestrator = new DriverConfigOrchestrator(
       APP_ID,
-      LAUNCH_TIME,
+      KUBERNETES_RESOURCE_PREFIX,
       Some(JavaMainAppResource("file:///var/apps/jars/main.jar")),
       APP_NAME,
       MAIN_CLASS,
@@ -113,7 +110,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
     sparkConf.set("spark.files", "/path/to/file1,/path/to/file2")
     orchestrator = new DriverConfigOrchestrator(
       APP_ID,
-      LAUNCH_TIME,
+      KUBERNETES_RESOURCE_PREFIX,
       Some(JavaMainAppResource("local:///var/apps/jars/main.jar")),
       APP_NAME,
       MAIN_CLASS,

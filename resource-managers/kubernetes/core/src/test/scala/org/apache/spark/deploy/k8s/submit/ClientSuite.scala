@@ -38,6 +38,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private val DRIVER_POD_UID = "pod-id"
   private val DRIVER_POD_API_VERSION = "v1"
   private val DRIVER_POD_KIND = "pod"
+  private val KUBERNETES_RESOURCE_PREFIX = "resource-example"
 
   private type ResourceList = NamespaceListVisitFromServerGetDeleteRecreateWaitApplicable[
       HasMetadata, Boolean]
@@ -61,6 +62,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private val submissionSteps = Seq(FirstTestConfigurationStep, SecondTestConfigurationStep)
   private var createdPodArgumentCaptor: ArgumentCaptor[Pod] = _
   private var createdResourcesArgumentCaptor: ArgumentCaptor[HasMetadata] = _
+  private var createdContainerArgumentCaptor: ArgumentCaptor[Container] = _
 
   before {
     MockitoAnnotations.initMocks(this)
@@ -94,7 +96,8 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       false,
       "spark",
-      loggingPodStatusWatcher)
+      loggingPodStatusWatcher,
+      KUBERNETES_RESOURCE_PREFIX)
     submissionClient.run()
     val createdPod = createdPodArgumentCaptor.getValue
     assert(createdPod.getMetadata.getName === FirstTestConfigurationStep.podName)
@@ -108,61 +111,42 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       SecondTestConfigurationStep.containerName)
   }
 
-  test("The client should create the secondary Kubernetes resources.") {
+  test("The client should create Kubernetes resources") {
     val submissionClient = new Client(
       submissionSteps,
       new SparkConf(false),
       kubernetesClient,
       false,
       "spark",
-      loggingPodStatusWatcher)
+      loggingPodStatusWatcher,
+      KUBERNETES_RESOURCE_PREFIX)
     submissionClient.run()
     val createdPod = createdPodArgumentCaptor.getValue
     val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues
-    assert(otherCreatedResources.size === 1)
-    val createdResource = Iterables.getOnlyElement(otherCreatedResources).asInstanceOf[Secret]
-    assert(createdResource.getMetadata.getName === FirstTestConfigurationStep.secretName)
-    assert(createdResource.getData.asScala ===
-      Map(FirstTestConfigurationStep.secretKey -> FirstTestConfigurationStep.secretData))
-    val ownerReference = Iterables.getOnlyElement(createdResource.getMetadata.getOwnerReferences)
-    assert(ownerReference.getName === createdPod.getMetadata.getName)
-    assert(ownerReference.getKind === DRIVER_POD_KIND)
-    assert(ownerReference.getUid === DRIVER_POD_UID)
-    assert(ownerReference.getApiVersion === DRIVER_POD_API_VERSION)
-  }
-
-  test("The client should attach the driver container with the appropriate JVM options.") {
-    val sparkConf = new SparkConf(false)
-      .set("spark.logConf", "true")
-      .set(
-        org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS,
-          "-XX:+HeapDumpOnOutOfMemoryError -XX:+PrintGCDetails")
-    val submissionClient = new Client(
-      submissionSteps,
-      sparkConf,
-      kubernetesClient,
-      false,
-      "spark",
-      loggingPodStatusWatcher)
-    submissionClient.run()
-    val createdPod = createdPodArgumentCaptor.getValue
+    assert(otherCreatedResources.size === 2)
+    otherCreatedResources.toArray.foreach{
+      case secret: Secret =>
+        assert(secret.getMetadata.getName === FirstTestConfigurationStep.secretName)
+        assert(secret.getData.asScala ===
+          Map(FirstTestConfigurationStep.secretKey -> FirstTestConfigurationStep.secretData))
+        val ownerReference = Iterables.getOnlyElement(secret.getMetadata.getOwnerReferences)
+        assert(ownerReference.getName === createdPod.getMetadata.getName)
+        assert(ownerReference.getKind === DRIVER_POD_KIND)
+        assert(ownerReference.getUid === DRIVER_POD_UID)
+        assert(ownerReference.getApiVersion === DRIVER_POD_API_VERSION)
+      case configMap: ConfigMap =>
+        assert(configMap.getMetadata.getName ===
+          s"$KUBERNETES_RESOURCE_PREFIX-driver-conf-map")
+        assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
+    }
     val driverContainer = Iterables.getOnlyElement(createdPod.getSpec.getContainers)
     assert(driverContainer.getName === SecondTestConfigurationStep.containerName)
-    val driverJvmOptsEnvs = driverContainer.getEnv.asScala.filter { env =>
-      env.getName.startsWith(ENV_JAVA_OPT_PREFIX)
-    }.sortBy(_.getName)
-    assert(driverJvmOptsEnvs.size === 4)
-    val expectedJvmOptsValues = Seq(
-      "-Dspark.logConf=true",
-      s"-D${SecondTestConfigurationStep.sparkConfKey}=" +
-        s"${SecondTestConfigurationStep.sparkConfValue}",
-      "-XX:+HeapDumpOnOutOfMemoryError",
-      "-XX:+PrintGCDetails")
-    driverJvmOptsEnvs.zip(expectedJvmOptsValues).zipWithIndex.foreach {
-      case ((resolvedEnv, expectedJvmOpt), index) =>
-        assert(resolvedEnv.getName === s"$ENV_JAVA_OPT_PREFIX$index")
-        assert(resolvedEnv.getValue === expectedJvmOpt)
-    }
+    val driverEnv = driverContainer.getEnv.asScala.head
+    assert(driverEnv.getName === SPARK_CONF_DIR_ENV)
+    assert(driverEnv.getValue === SPARK_CONF_PATH)
+    val driverMount = driverContainer.getVolumeMounts.asScala.head
+    assert(driverMount.getName === SPARK_CONF_VOLUME)
+    assert(driverMount.getMountPath === SPARK_CONF_DIR)
   }
 
   test("Waiting for app completion should stall on the watcher") {
@@ -172,7 +156,8 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       true,
       "spark",
-      loggingPodStatusWatcher)
+      loggingPodStatusWatcher,
+      KUBERNETES_RESOURCE_PREFIX)
     submissionClient.run()
     verify(loggingPodStatusWatcher).awaitCompletion()
   }

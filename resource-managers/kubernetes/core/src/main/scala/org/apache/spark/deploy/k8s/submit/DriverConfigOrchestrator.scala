@@ -16,10 +16,6 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import java.util.UUID
-
-import com.google.common.primitives.Longs
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap}
 import org.apache.spark.deploy.k8s.Config._
@@ -37,7 +33,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] class DriverConfigOrchestrator(
     kubernetesAppId: String,
-    launchTime: Long,
+    kubernetesResourceNamePrefix: String,
     mainAppResource: Option[MainAppResource],
     appName: String,
     mainClass: String,
@@ -47,10 +43,6 @@ private[spark] class DriverConfigOrchestrator(
   // The resource name prefix is derived from the Spark application name, making it easy to connect
   // the names of the Kubernetes resources from e.g. kubectl or the Kubernetes dashboard to the
   // application the user submitted.
-  private val kubernetesResourceNamePrefix = {
-    val uuid = UUID.nameUUIDFromBytes(Longs.toByteArray(launchTime)).toString.replaceAll("-", "")
-    s"$appName-$uuid".toLowerCase.replaceAll("\\.", "-")
-  }
 
   private val imagePullPolicy = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
 
@@ -136,8 +128,7 @@ private[spark] class DriverConfigOrchestrator(
       serviceBootstrapStep,
       kubernetesCredentialsStep) ++
       dependencyResolutionStep ++
-      mountSecretsStep ++
-      Seq(new DriverConfigPropertiesStep(kubernetesResourceNamePrefix))
+      mountSecretsStep
   }
 
   private def existSubmissionLocalFiles(files: Seq[String]): Boolean = {

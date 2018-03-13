@@ -67,6 +67,7 @@ private[spark] object Constants {
   // Spark app configs for containers
   val SPARK_CONF_VOLUME = "spark-conf-volume"
   val SPARK_CONF_DIR = "/etc/spark/conf"
+  val SPARK_CONF_DIR_ENV = "SPARK_CONF_DIR"
   val SPARK_CONF_FILE_NAME = "spark.properties"
   val SPARK_CONF_PATH = s"$SPARK_CONF_DIR/$SPARK_CONF_FILE_NAME"
 
