@@ -417,8 +417,11 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
     }
   }
 
-  private def sparkContextInitialized(sc: SparkContext) = {
+  private def sparkContextInitialized(sc: SparkContext) = synchronized {
+    // Notify runDriver function that SparkContext is available
     sparkContextPromise.success(sc)
+    // Pause the user class thread in order to make proper initialisation in runDriver function
+    wait()
   }
 
   private def registerAM(
@@ -497,6 +500,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         // if the user app did not create a SparkContext.
         throw new IllegalStateException("User did not initialize spark context!")
       }
+      // After initialisation notify user class thread to continue
+      synchronized { notify() }
       userClassThread.join()
     } catch {
       case e: SparkException if e.getCause().isInstanceOf[TimeoutException] =>
@@ -506,6 +511,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_SC_NOT_INITED,
           "Timed out waiting for SparkContext.")
+    } finally {
+      synchronized { notify() }
     }
   }
 

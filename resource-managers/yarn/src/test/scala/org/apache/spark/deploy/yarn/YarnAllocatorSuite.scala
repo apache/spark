@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.util.concurrent.RejectedExecutionException
-
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
@@ -35,7 +33,6 @@ import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveLastAllocatedExecutorId
 import org.apache.spark.util.ManualClock
 
 class MockResolver extends SparkRackResolver {
@@ -86,7 +83,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   def createAllocator(
       maxExecutors: Int = 5,
-      driverRef: RpcEndpointRef = mock(classOf[RpcEndpointRef]),
       rmClient: AMRMClient[ContainerRequest] = rmClient): YarnAllocator = {
     val args = Array(
       "--jar", "somejar.jar",
@@ -98,7 +94,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       .set("spark.executor.memory", "2048")
     new YarnAllocator(
       "not used",
-      driverRef,
+      mock(classOf[RpcEndpointRef]),
       conf,
       sparkConfClone,
       rmClient,
@@ -288,8 +284,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     // Internally we track the set of blacklisted nodes, but yarn wants us to send *changes*
     // to the blacklist.  This makes sure we are sending the right updates.
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
-    val driverRef = mock(classOf[RpcEndpointRef])
-    val handler = createAllocator(4, driverRef, mockAmClient)
+    val handler = createAllocator(4, mockAmClient)
     handler.requestTotalExecutorsWithPreferredLocalities(1, 0, Map(), Set("hostA"))
     verify(mockAmClient).updateBlacklist(Seq("hostA").asJava, Seq[String]().asJava)
 
@@ -354,12 +349,5 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     clock.advance(50 * 1000L)
     handler.getNumExecutorsFailed should be (0)
-  }
-
-  test("SPARK-23660: allocator should be created even if the driver not reachable") {
-    val driverRef = mock(classOf[RpcEndpointRef])
-    when(driverRef.askSync[Int](RetrieveLastAllocatedExecutorId))
-      .thenThrow(new RejectedExecutionException)
-    createAllocator(4, driverRef)
   }
 }
