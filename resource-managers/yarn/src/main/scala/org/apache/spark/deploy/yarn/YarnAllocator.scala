@@ -98,8 +98,9 @@ private[yarn] class YarnAllocator(
    *
    * @see SPARK-12864
    */
-  private var executorIdCounter: Int =
+  private lazy val initialExecutorIdCounter: Int =
     driverRef.askSync[Int](RetrieveLastAllocatedExecutorId)
+  private var executorIdCounter: Int = 0
 
   // Queue to store the timestamp of failed executors
   private val failedExecutorsTimeStamps = new Queue[Long]()
@@ -496,7 +497,7 @@ private[yarn] class YarnAllocator(
       executorIdCounter += 1
       val executorHostname = container.getNodeId.getHost
       val containerId = container.getId
-      val executorId = executorIdCounter.toString
+      val executorId = (initialExecutorIdCounter + executorIdCounter).toString
       assert(container.getResource.getMemory >= resource.getMemory)
       logInfo(s"Launching container $containerId on host $executorHostname " +
         s"for executor with ID $executorId")
