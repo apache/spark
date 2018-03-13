@@ -1834,6 +1834,25 @@ def array_contains(col, value):
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
 
 
+@since(2.4)
+def concat_arrays(*cols):
+    """
+    Collection function: Concatenates multiple arrays into one.
+
+    :param cols: list of column names (string) or list of :class:`Column` expressions that have
+        the same data type.
+
+    >>> df = spark.createDataFrame([([1, 2], [3, 4], [5]), ([1, 2], None, [3])], ['a', 'b', 'c'])
+    >>> df.select(concat_arrays(df.a, df.b, df.c).alias("arr")).collect()
+    [Row(arr=[1, 2, 3, 4, 5]), Row(arr=None)]
+    """
+    sc = SparkContext._active_spark_context
+    if len(cols) == 1 and isinstance(cols[0], (list, set)):
+        cols = cols[0]
+    args = _to_seq(sc, cols, _to_java_column)
+    return Column(sc._jvm.functions.concat_arrays(args))
+
+
 @since(1.4)
 def explode(col):
     """Returns a new row for each element in the given array or map.

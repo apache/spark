@@ -3047,6 +3047,14 @@ object functions {
   }
 
   /**
+   * Merges multiple arrays into one by putting elements from the specific array after elements
+   * from the previous array. If any of the arrays is null, null is returned.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def concat_arrays(columns: Column*): Column = withExpr { ConcatArrays(columns.map(_.expr)) }
+
+  /**
    * Creates a new row for each element in the given array or map column.
    *
    * @group collection_funcs

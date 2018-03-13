@@ -413,6 +413,63 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("concat arrays function") {
+    val nint : Int = null.asInstanceOf[Int]
+    val nseqi : Seq[Int] = null
+    val nseqs : Seq[String] = null
+    val df = Seq(
+      (Seq(1), Seq(2, 3, 4), Seq(5, 6), nseqi, Seq("a", "b", "c"), Seq("d", "e"), Seq("f"), nseqs),
+      (Seq(1, nint), Seq.empty[Int], Seq(2), nseqi, Seq("a"), Seq.empty[String], Seq(null), nseqs)
+    ).toDF("i1", "i2", "i3", "in", "s1", "s2", "s3", "sn")
+
+    // Simple test cases
+    checkAnswer(
+      df.select(concat_arrays($"i1", $"i2", $"i3")),
+      Seq(Row(Seq(1, 2, 3, 4, 5, 6)), Row(Seq(1, nint, 2)))
+    )
+    checkAnswer(
+      df.selectExpr("concat_arrays(i1, i2, i3)"),
+      Seq(Row(Seq(1, 2, 3, 4, 5, 6)), Row(Seq(1, nint, 2)))
+    )
+    checkAnswer(
+      df.select(concat_arrays($"s1", $"s2", $"s3")),
+      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+    )
+    checkAnswer(
+      df.selectExpr("concat_arrays(s1, s2, s3)"),
+      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+    )
+
+    // Null test cases
+    checkAnswer(
+      df.select(concat_arrays($"i1", $"in")),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(concat_arrays($"in", $"i1")),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(concat_arrays($"s1", $"sn")),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(concat_arrays($"sn", $"s1")),
+      Seq(Row(null), Row(null))
+    )
+
+    // Type error test cases
+    intercept[AnalysisException] {
+      df.select(concat_arrays($"i1", $"s1"))
+    }
+    intercept[AnalysisException] {
+      df.select(concat_arrays(lit("a"), lit("b")))
+    }
+    intercept[AnalysisException] {
+      df.selectExpr("concat_arrays(i1, i2, null)")
+    }
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {
