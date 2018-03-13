@@ -51,6 +51,11 @@ import org.apache.spark.sql.types.StructType
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
  * }}}
  *
+ * For selective tests, run:
+ * {{{
+ *   SPARK_SQL_QUERY_TEST_FILTER=limit.sql,random.sql build/sbt "sql/test-only *SQLQueryTestSuite"
+ * }}}
+ *
  * The format for input files is simple:
  *  1. A list of SQL queries separated by semicolon.
  *  2. Lines starting with -- are treated as comments and ignored.
@@ -82,6 +87,15 @@ import org.apache.spark.sql.types.StructType
 class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
 
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
+
+  private val testFilter: Option[Set[String]] = {
+    val testFilter = System.getenv("SPARK_SQL_QUERY_TEST_FILTER")
+    if (testFilter != null && !testFilter.isEmpty) {
+      Some(testFilter.toLowerCase(Locale.ROOT).split(",").map(_.trim).toSet)
+    } else {
+      None
+    }
+  }
 
   private val baseResourcePath = {
     // If regenerateGoldenFiles is true, we must be running this in SBT and we use hard-coded
@@ -124,13 +138,18 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
   }
 
   private def createScalaTestCase(testCase: TestCase): Unit = {
-    if (blackList.exists(t =>
-        testCase.name.toLowerCase(Locale.ROOT).contains(t.toLowerCase(Locale.ROOT)))) {
+    val testName = testCase.name.toLowerCase(Locale.ROOT)
+    if (blackList.exists(t => testName.contains(t.toLowerCase(Locale.ROOT)))) {
       // Create a test case to ignore this case.
       ignore(testCase.name) { /* Do nothing */ }
     } else {
-      // Create a test case to run this case.
-      test(testCase.name) { runTest(testCase) }
+      testFilter match {
+        case Some(filter) if !filter.exists { _.contains(testName) } =>
+          ignore(testCase.name) { /* Do nothing */ }
+        case _ =>
+          // Create a test case to run this case.
+          test(testCase.name) { runTest(testCase) }
+      }
     }
   }
 
