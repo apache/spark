@@ -53,6 +53,9 @@ class SQLAppStatusStore(
   def executionsCount(): Long = {
     store.count(classOf[SQLExecutionUIData])
   }
+  def planGraphCount(): Long = {
+    store.count(classOf[SparkPlanGraphWrapper])
+  }
 
   def executionMetrics(executionId: Long): Map[Long, String] = {
     def metricsFromStore(): Option[Map[Long, String]] = {
