@@ -58,7 +58,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         LimitPushDown,
         ColumnPruning,
         InferFiltersFromConstraints,
-        TransitPredicateInOuterJoin,
         // Operator combine
         CollapseRepartition,
         CollapseProject,
@@ -636,8 +635,11 @@ object CollapseWindow extends Rule[LogicalPlan] {
  * constraints. These filters are currently inserted to the existing conditions in the Filter
  * operators and on either side of Join operators.
  *
- * Note: While this optimization is applicable to all types of join, it primarily benefits Inner and
- * LeftSemi joins.
+ * In addition, for left/right outer joins, infer predicate from the preserved side of the Join
+ * operator and push the inferred filter over to the null-supplying side. For example, if the
+ * preserved side has constraints of the form 'a > 5' and the join condition is 'a = b', in
+ * which 'b' is an attribute from the null-supplying side, a [[Filter]] operator of 'b > 5' will
+ * be applied to the null-supplying side.
  */
 object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelper {
 
@@ -674,7 +676,48 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
         case None =>
           additionalConstraints.reduceOption(And)
       }
-      if (newConditionOpt.isDefined) Join(left, right, joinType, newConditionOpt) else join
+      val j = if (newConditionOpt.isDefined) Join(left, right, joinType, newConditionOpt) else join
+
+      // Infer filter for left/right outer joins
+      joinType match {
+        case RightOuter if j.condition.isDefined =>
+          val rightConstraints = right.constraints.union(
+            splitConjunctivePredicates(j.condition.get).toSet)
+          val inferredConstraints = ExpressionSet(
+            QueryPlanConstraints.inferAdditionalConstraints(rightConstraints))
+          val leftConditions = inferredConstraints
+            .filter(_.deterministic)
+            .filter(_.references.subsetOf(left.outputSet))
+          if (leftConditions.isEmpty) {
+            j
+          } else {
+            // push the predicate down to left side sub query.
+            val newLeft = leftConditions.
+              reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
+            val newRight = right
+
+            Join(newLeft, newRight, RightOuter, j.condition)
+          }
+        case LeftOuter if j.condition.isDefined =>
+          val leftConstraints = left.constraints.union(
+            splitConjunctivePredicates(j.condition.get).toSet)
+          val inferredConstraints = ExpressionSet(
+            QueryPlanConstraints.inferAdditionalConstraints(leftConstraints))
+          val rightConditions = inferredConstraints
+            .filter(_.deterministic)
+            .filter(_.references.subsetOf(right.outputSet))
+          if (rightConditions.isEmpty) {
+            j
+          } else {
+            // push the predicate down to right side sub query.
+            val newRight = rightConditions.
+              reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+            val newLeft = left
+
+            Join(newLeft, newRight, LeftOuter, j.condition)
+          }
+        case _ => j
+      }
   }
 }
 
@@ -1070,66 +1113,6 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         case UsingJoin(_, _) => sys.error("Untransformed Using join node")
       }
   }
-}
-
-/**
- * Infer and transit predicate from the preserved side to the null-supplying side
- * of an outer join. The predicate is inferred from the preserved side based on the
- * join condition and will be pushed over to the null-supplying side. For example,
- * if the preserved side has constraints of the form 'a > 5' and the join condition
- * is 'a = b', in which 'b' is an attribute from the null-supplying side, a [[Filter]]
- * operator of 'b > 5' will be applied to the null-supplying side.
- *
- * Applying this rule will not change the constraints of the [[Join]] operator, so
- * aside from its child being transformed, there is no side-effect to the [[Join]]
- * operator itself.
- */
-object TransitPredicateInOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
-  def apply(plan: LogicalPlan): LogicalPlan =
-    if (!plan.conf.constraintPropagationEnabled) {
-      plan
-    } else plan transform {
-      case j@Join(left, right, joinType, joinCondition) =>
-        joinType match {
-          case RightOuter if joinCondition.isDefined =>
-            val rightConstraints = right.constraints.union(
-              splitConjunctivePredicates(joinCondition.get).toSet)
-            val inferredConstraints = ExpressionSet(
-              QueryPlanConstraints.inferAdditionalConstraints(rightConstraints))
-            val leftConditions = inferredConstraints
-              .filter(_.deterministic)
-              .filter(_.references.subsetOf(left.outputSet))
-            if (leftConditions.isEmpty) {
-              j
-            } else {
-              // push the predicate down to left side sub query.
-              val newLeft = leftConditions.
-                reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
-              val newRight = right
-
-              Join(newLeft, newRight, RightOuter, joinCondition)
-            }
-          case LeftOuter if joinCondition.isDefined =>
-            val leftConstraints = left.constraints.union(
-              splitConjunctivePredicates(joinCondition.get).toSet)
-            val inferredConstraints = ExpressionSet(
-              QueryPlanConstraints.inferAdditionalConstraints(leftConstraints))
-            val rightConditions = inferredConstraints
-              .filter(_.deterministic)
-              .filter(_.references.subsetOf(right.outputSet))
-            if (rightConditions.isEmpty) {
-              j
-            } else {
-              // push the predicate down to right side sub query.
-              val newRight = rightConditions.
-                reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
-              val newLeft = left
-
-              Join(newLeft, newRight, LeftOuter, joinCondition)
-            }
-          case _ => j
-        }
-    }
 }
 
 /**

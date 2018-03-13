@@ -33,7 +33,6 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         PushPredicateThroughJoin,
         PushDownPredicate,
         InferFiltersFromConstraints,
-        TransitPredicateInOuterJoin,
         CombineFilters,
         SimplifyBinaryComparison,
         BooleanSimplification) :: Nil
