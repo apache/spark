@@ -115,7 +115,10 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
           case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, isStreaming) =>
             val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
             val partitionData = fsRelation.location.listFiles(relFilters, Nil)
-            LocalRelation(partAttrs, partitionData.map(_.values), isStreaming)
+            // partition data may be a stream, which can cause serialization to hit stack level too
+            // deep exceptions because it is a recursive structure in memory. converting to array
+            // avoids the problem.
+            LocalRelation(partAttrs, partitionData.map(_.values).toArray, isStreaming)
 
           case relation: HiveTableRelation =>
             val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
@@ -134,7 +137,10 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
                 Cast(Literal(p.spec(attr.name)), attr.dataType, Option(timeZoneId)).eval()
               })
             }
-            LocalRelation(partAttrs, partitionData)
+            // partition data may be a stream, which can cause serialization to hit stack level too
+            // deep exceptions because it is a recursive structure in memory. converting to array
+            // avoids the problem.
+            LocalRelation(partAttrs, partitionData.toArray)
 
           case _ =>
             throw new IllegalStateException(s"unrecognized table scan node: $relation, " +
