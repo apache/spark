@@ -70,7 +70,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   protected var currentOffset: LongOffset = new LongOffset(-1)
 
   @GuardedBy("this")
-  private var startOffset = new LongOffset(-1)
+  protected var startOffset = new LongOffset(-1)
 
   @GuardedBy("this")
   private var endOffset = new LongOffset(-1)
@@ -148,7 +148,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     }
   }
 
-  private def generateDebugString(
+  protected def generateDebugString(
       rows: Seq[UnsafeRow],
       startOrdinal: Int,
       endOrdinal: Int): String = {
