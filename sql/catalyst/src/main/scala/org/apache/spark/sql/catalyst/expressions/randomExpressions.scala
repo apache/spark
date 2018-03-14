@@ -31,7 +31,7 @@ import org.apache.spark.util.random.XORShiftRandom
  *
  * Since this expression is stateful, it cannot be a case object.
  */
-abstract class RDG extends UnaryExpression with ExpectsInputTypes with StatefulNondeterministic {
+abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful {
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is
    * reset every time we serialize and deserialize and initialize it.
@@ -86,7 +86,7 @@ case class Rand(child: Expression) extends RDG {
       isNull = "false")
   }
 
-  override def freshCopy(): Nondeterministic = Rand(child)
+  override def freshCopy(): Rand = Rand(child)
 }
 
 object Rand {
@@ -123,7 +123,7 @@ case class Randn(child: Expression) extends RDG {
       isNull = "false")
   }
 
-  override def freshCopy(): Nondeterministic = Randn(child)
+  override def freshCopy(): Randn = Randn(child)
 }
 
 object Randn {

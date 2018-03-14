@@ -94,22 +94,22 @@ public final class UnsafeRowWriter extends UnsafeWriter {
   }
 
   @Override
-  public void setNullByte(int ordinal) {
+  public void setNull1Bytes(int ordinal) {
     setNullAt(ordinal);
   }
 
   @Override
-  public void setNullShort(int ordinal) {
+  public void setNull2Bytes(int ordinal) {
     setNullAt(ordinal);
   }
 
   @Override
-  public void setNullInt(int ordinal) {
+  public void setNull4Bytes(int ordinal) {
     setNullAt(ordinal);
   }
 
   @Override
-  public void setNullLong(int ordinal) {
+  public void setNull8Bytes(int ordinal) {
     setNullAt(ordinal);
   }
 
@@ -117,14 +117,14 @@ public final class UnsafeRowWriter extends UnsafeWriter {
     return startingOffset + nullBitsSize + 8 * ordinal;
   }
 
-  public void setOffsetAndSize(int ordinal, long size) {
+  public void setOffsetAndSize(int ordinal, int size) {
     setOffsetAndSize(ordinal, holder.cursor, size);
   }
 
-  public void setOffsetAndSize(int ordinal, long currentCursor, long size) {
+  public void setOffsetAndSize(int ordinal, int currentCursor, int size) {
     final long relativeOffset = currentCursor - startingOffset;
     final long fieldOffset = getFieldOffset(ordinal);
-    final long offsetAndSize = (relativeOffset << 32) | size;
+    final long offsetAndSize = (relativeOffset << 32) | (long) size;
 
     Platform.putLong(holder.buffer, fieldOffset, offsetAndSize);
   }
@@ -194,7 +194,7 @@ public final class UnsafeRowWriter extends UnsafeWriter {
       if (input == null || !input.changePrecision(precision, scale)) {
         BitSetMethods.set(holder.buffer, startingOffset, ordinal);
         // keep the offset for future update
-        setOffsetAndSize(ordinal, 0L);
+        setOffsetAndSize(ordinal, 0);
       } else {
         final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
         assert bytes.length <= 16;

@@ -83,10 +83,10 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     return startingOffset + headerInBytes + ordinal * elementSize;
   }
 
-  public void setOffsetAndSize(int ordinal, long currentCursor, long size) {
+  public void setOffsetAndSize(int ordinal, int currentCursor, int size) {
     assertIndexIsValid(ordinal);
     final long relativeOffset = currentCursor - startingOffset;
-    final long offsetAndSize = (relativeOffset << 32) | size;
+    final long offsetAndSize = (relativeOffset << 32) | (long)size;
 
     write(ordinal, offsetAndSize);
   }
@@ -96,49 +96,31 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     BitSetMethods.set(holder.buffer, startingOffset + 8, ordinal);
   }
 
-  public void setNullBoolean(int ordinal) {
-    setNullBit(ordinal);
-    // put zero into the corresponding field when set null
-    Platform.putBoolean(holder.buffer, getElementOffset(ordinal, 1), false);
-  }
-
-  public void setNullByte(int ordinal) {
+  public void setNull1Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
     Platform.putByte(holder.buffer, getElementOffset(ordinal, 1), (byte)0);
   }
 
-  public void setNullShort(int ordinal) {
+  public void setNull2Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
     Platform.putShort(holder.buffer, getElementOffset(ordinal, 2), (short)0);
   }
 
-  public void setNullInt(int ordinal) {
+  public void setNull4Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
     Platform.putInt(holder.buffer, getElementOffset(ordinal, 4), 0);
   }
 
-  public void setNullLong(int ordinal) {
+  public void setNull8Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
     Platform.putLong(holder.buffer, getElementOffset(ordinal, 8), (long)0);
   }
 
-  public void setNullFloat(int ordinal) {
-    setNullBit(ordinal);
-    // put zero into the corresponding field when set null
-    Platform.putFloat(holder.buffer, getElementOffset(ordinal, 4), (float)0);
-  }
-
-  public void setNullDouble(int ordinal) {
-    setNullBit(ordinal);
-    // put zero into the corresponding field when set null
-    Platform.putDouble(holder.buffer, getElementOffset(ordinal, 8), (double)0);
-  }
-
-  public void setNull(int ordinal) { setNullLong(ordinal); }
+  public void setNull(int ordinal) { setNull8Bytes(ordinal); }
 
   public void write(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);

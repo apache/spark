@@ -99,9 +99,9 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
    * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
    */
   override protected def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
-    // We need to make sure that we do not reuse stateful non deterministic expressions.
+    // We need to make sure that we do not reuse stateful expressions.
     val cleanedExpressions = exprs.map(_.transform {
-      case s: StatefulNondeterministic => s.freshCopy()
+      case s: Stateful => s.freshCopy()
     })
     new InterpretedUnsafeProjection(cleanedExpressions.toArray)
   }
@@ -280,7 +280,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)
           } else {
-            writer.setNullByte(i)
+            writer.setNull1Bytes(i)
           }
         }
       case (ShortType, true) =>
@@ -288,7 +288,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)
           } else {
-            writer.setNullShort(i)
+            writer.setNull2Bytes(i)
           }
         }
       case (IntegerType | DateType | FloatType, true) =>
@@ -296,7 +296,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)
           } else {
-            writer.setNullInt(i)
+            writer.setNull4Bytes(i)
           }
         }
       case (_, true) =>
@@ -304,7 +304,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)
           } else {
-            writer.setNullLong(i)
+            writer.setNull8Bytes(i)
           }
         }
       case _ => unsafeWriter
