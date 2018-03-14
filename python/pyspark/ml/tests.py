@@ -664,7 +664,8 @@ class FeatureTests(SparkSessionTestCase):
 
         # Test model with default settings can transform
         model_default = CountVectorizerModel.from_vocabulary(["a", "b", "c"], inputCol="words")
-        transformed_list = model_default.transform(dataset).collect()
+        transformed_list = model_default.transform(dataset)\
+            .select(model_default.getOrDefault(model_default.outputCol)).collect()
         self.assertEqual(len(transformed_list), 3)
 
     def test_rformula_force_index_label(self):
