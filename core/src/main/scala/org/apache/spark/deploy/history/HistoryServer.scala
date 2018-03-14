@@ -152,8 +152,8 @@ class HistoryServer(
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     handlers.synchronized {
       ui.getHandlers.foreach(attachHandler)
+      addFilters(ui.getHandlers, conf)
     }
-    addFilters(ui.getHandlers, conf)
   }
 
   /** Detach a reconstructed UI from this server. Only valid after bind(). */
