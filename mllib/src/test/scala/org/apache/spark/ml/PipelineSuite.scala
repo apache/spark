@@ -190,6 +190,38 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       "copy should create an instance with the same parent")
   }
 
+  def testWithPipelineModel(name: String)(f: (
+    DataFrame, PipelineModel, Seq[MLListenEvent] => Unit) => Unit): Unit = test(name) {
+    val dataset0 = mock[DataFrame]
+
+    when(dataset0.toDF).thenReturn(dataset0)
+    val transform0 = mock[Transformer]
+    val model1 = mock[MyModel]
+    val transform1 = mock[Transformer]
+
+    val stages = Array(transform0, model1, transform1)
+    val newPipelineModel = new PipelineModel("pipeline0", stages)
+    val recorder = mutable.Buffer.empty[MLListenEvent]
+
+    newPipelineModel.addListener(new MLListener {
+      override def onEvent(event: MLListenEvent): Unit = {
+        recorder += event
+      }
+    })
+
+    f(dataset0, newPipelineModel, (expected: Seq[MLListenEvent]) => {
+      val actual = recorder.clone()
+      recorder.clear()
+      assert(expected === actual)
+    })
+  }
+
+  testWithPipelineModel(
+    "pipeline model transform tracker") { (df, newPipelineModel, checkEvents) =>
+    val output = newPipelineModel.transform(df)
+    checkEvents(TransformEvent(newPipelineModel, df) :: Nil)
+  }
+
   test("pipeline model constructors") {
     val transform0 = mock[Transformer]
     val model1 = mock[MyModel]
@@ -216,6 +248,36 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(writableStage.getIntParam === writableStage2.getIntParam)
   }
 
+  def testWithPipelineReadWrite(name: String)(f: (
+    MLWriter, String, String, Seq[MLListenEvent] => Unit) => Unit): Unit = test(name) {
+    val path = Math.random().toString
+    val writableStage = new WritableStage("writableStage")
+    val newPipeline = new Pipeline().setStages(Array(writableStage))
+    val uid = newPipeline.uid
+    val pipelineWritter = newPipeline.write
+    val recorder = mutable.Buffer.empty[MLListenEvent]
+
+    pipelineWritter.addListener(new MLListener {
+      override def onEvent(event: MLListenEvent): Unit = {
+        recorder += event
+      }
+    })
+
+    f(pipelineWritter, uid, path, (expected: Seq[MLListenEvent]) => {
+      val actual = recorder.clone()
+      recorder.clear()
+      assert(expected === actual)
+    })
+  }
+
+  testWithPipelineReadWrite(
+    "Pipeline read/write tracker") { (pipelineWritter, uid, path, checkEvents) =>
+
+    pipelineWritter.save(path)
+
+    checkEvents(SavePipelineEvent(uid, path) :: Nil)
+  }
+
   test("Pipeline read/write with non-Writable stage") {
     val unWritableStage = new UnWritableStage("unwritableStage")
     val unWritablePipeline = new Pipeline().setStages(Array(unWritableStage))
@@ -236,6 +298,37 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(pipeline2.stages(0).isInstanceOf[WritableStage])
     val writableStage2 = pipeline2.stages(0).asInstanceOf[WritableStage]
     assert(writableStage.getIntParam === writableStage2.getIntParam)
+  }
+
+  def testWithPipelineModelReadWrite(name: String)(f: (
+    MLWriter, String, String, Seq[MLListenEvent] => Unit) => Unit): Unit = test(name) {
+    val path = Math.random().toString
+    val writableStage = new WritableStage("writableStage")
+    val pipelineModel =
+      new PipelineModel("pipeline_89329329", Array(writableStage.asInstanceOf[Transformer]))
+    val uid = pipelineModel.uid
+    val pipelineModelWritter = pipelineModel.write
+    val recorder = mutable.Buffer.empty[MLListenEvent]
+
+    pipelineModelWritter.addListener(new MLListener {
+      override def onEvent(event: MLListenEvent): Unit = {
+        recorder += event
+      }
+    })
+
+    f(pipelineModelWritter, uid, path, (expected: Seq[MLListenEvent]) => {
+      val actual = recorder.clone()
+      recorder.clear()
+      assert(expected === actual)
+    })
+  }
+
+  testWithPipelineModelReadWrite(
+    "PipelineModel read/write tracker") { (pipelineModelWritter, uid, path, checkEvents) =>
+
+    pipelineModelWritter.save(path)
+
+    checkEvents(SaveModelEvent(uid, path) :: Nil)
   }
 
   test("PipelineModel read/write: getStagePath") {
