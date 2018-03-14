@@ -629,8 +629,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             def findSourceIndex(plan: LogicalPlan): Option[Int] = {
               plan
                 .collect {
-                  case StreamingExecutionRelation(s, _) => s
-                  case StreamingDataSourceV2Relation(_, r) => r
+                  case r: StreamingExecutionRelation => r.source
+                  case r: StreamingDataSourceV2Relation => r.reader
                 }
                 .zipWithIndex
                 .find(_._1 == source)

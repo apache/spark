@@ -15,9 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+import sys
+import inspect
 from py4j.protocol import Py4JJavaError
 
 __all__ = []
+
+import sys
 
 
 def _exception_message(excp):
@@ -45,8 +50,21 @@ def _exception_message(excp):
     return str(excp)
 
 
+def _get_argspec(f):
+    """
+    Get argspec of a function. Supports both Python 2 and Python 3.
+    """
+    # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
+    # See SPARK-23569.
+    if sys.version_info[0] < 3:
+        argspec = inspect.getargspec(f)
+    else:
+        argspec = inspect.getfullargspec(f)
+    return argspec
+
+
 if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
