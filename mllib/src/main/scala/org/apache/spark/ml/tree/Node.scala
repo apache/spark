@@ -122,7 +122,7 @@ class LeafNode private[ml] (
   override private[tree] def numDescendants: Int = 0
 
   override private[tree] def subtreeToString(indentFactor: Int = 0): String = {
-    val stats: Vector = Vectors.dense(impurityStats.stats)
+    val stats: String = Vectors.dense(impurityStats.stats).toString
     val prefix: String = " " * indentFactor
     prefix + s"Predict: $prediction, Stats: $stats \n"
   }
