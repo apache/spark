@@ -77,48 +77,43 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     transformSchema(dataset.schema, logging = true)
     // Schema transformation.
     val schema = dataset.schema
-    lazy val colsMissingNumAttrs = $(inputCols).filter { c =>
+    val colsMissingNumAttrs = $(inputCols).filter { c =>
       val field = schema(c)
       field.dataType match {
         case _: VectorUDT => AttributeGroup.fromStructField(field).numAttributes.isDefined
         case _ => false
       }
     }
-    lazy val examples = {
-      if (dataset.isStreaming) {
+    // A non-null example from each vector column without size metadata.
+    val missingVectorSizes = {
+      if (dataset.isStreaming && colsMissingNumAttrs.nonEmpty) {
         throw new RuntimeException(
           s"""
              |VectorAssembler cannot dynamically determine the size of vectors for streaming data.
              |Consider applying VectorSizeHint to ${colsMissingNumAttrs.mkString("[", ", ", "]")}
-              so that this transformer can be used to transform streaming inputs.
+             |so that this transformer can be used to transform streaming inputs.
            """.stripMargin)
       } else {
-        // if handle invalid is set to error we can just call "first' once and raise if we see
+        // if handle invalid is set to error we can just call "first" once and throw if we see
         // any nulls.
-        $(inputCols).map { c =>
+        colsMissingNumAttrs.map{ c =>
           try {
-            c -> dataset.select(c).na.drop().first.getAs[Vector](0)
+            c -> dataset.select(c).na.drop().first.getAs[Vector](0).size
           } catch {
             case NoSuchElementException =>
               // I'm not sure about the best exception here
               throw new RuntimeException("better exception here.")
           }
         }.toMap
-
+      }
+    }
 
     val lengths = $(inputCols).map { c =>
       val field = schema(c)
-      val index = schema.fieldIndex(c)
       field.dataType match {
         case _: NumericType | BooleanType => 1  // DoubleType is also NumericType
         case _: VectorUDT =>
-          val group = AttributeGroup.fromStructField(field)
-          val first_not_null_row = dataset.na.drop(Seq(c)).first()
-          val first_size = first_not_null_row.getAs[Vector](index).size
-          //scalastyle:off println
-          println(first_size)
-          //scalastyle:on println
-          group.numAttributes.getOrElse(first_size)
+          AttributeGroup.fromStructField(field).numAttributes.getOrElse(missingVectorSizes(c))
       }
     }
     val attrs = $(inputCols).flatMap { c =>
@@ -132,12 +127,11 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           } else {
             Some(attr.withName(c))
           }
-        case _: NumericType | BooleanType =>
+        case x: NumericType | BooleanType =>
           // If the input column type is a compatible scalar type, assume numeric.
           Some(NumericAttribute.defaultAttr.withName(c))
         case _: VectorUDT =>
           val group = AttributeGroup.fromStructField(field)
-          val numAttrs = group.numAttributes.getOrElse(first.getAs[Vector](index).size)
           if (group.attributes.isDefined) {
             // If attributes are defined, copy them with updated names.
             group.attributes.get.zipWithIndex.map { case (attr, i) =>
@@ -151,7 +145,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           } else {
             // Otherwise, treat all attributes as numeric. If we cannot get the number of attributes
             // from metadata, check the first row.
-            val numAttrs = group.numAttributes.getOrElse(examples(c).size)
+            val numAttrs = group.numAttributes.getOrElse(missingVectorSizes(c))
             Array.tabulate(numAttrs)(i => NumericAttribute.defaultAttr.withName(c + "_" + i))
           }
         case otherType =>
