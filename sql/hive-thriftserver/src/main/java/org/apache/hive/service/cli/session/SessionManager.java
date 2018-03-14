@@ -41,7 +41,6 @@ import org.apache.hive.service.cli.operation.Operation;
 import org.apache.hive.service.cli.operation.OperationManager;
 import org.apache.hive.service.rpc.thrift.TOpenSessionReq;
 import org.apache.hive.service.rpc.thrift.TProtocolVersion;
-import org.apache.hive.service.cli.thrift.ThriftCLIService;
 import org.apache.hive.service.server.HiveServer2;
 import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
 import org.slf4j.Logger;
@@ -54,7 +53,7 @@ import org.slf4j.LoggerFactory;
 public class SessionManager extends CompositeService {
 
   public static final String HIVERCFILE = ".hiverc";
-  private static final Logger LOG = LoggerFactory.getLogger(CompositeService.class);
+  private static final Logger LOG = LoggerFactory.getLogger(SessionManager.class);
   private HiveConf hiveConf;
   private final Map<SessionHandle, HiveSession> handleToSession =
       new ConcurrentHashMap<SessionHandle, HiveSession>();
@@ -169,7 +168,7 @@ public class SessionManager extends CompositeService {
     // Threads terminate when they are idle for more than the keepAliveTime
     // A bounded blocking queue is used to queue incoming operations, if #operations > poolSize
     String threadPoolName = "HiveServer2-Background-Pool";
-    final BlockingQueue queue = new LinkedBlockingQueue<Runnable>(poolQueueSize);
+    final BlockingQueue<Runnable> queue = new LinkedBlockingQueue<>(poolQueueSize);
     backgroundOperationPool = new ThreadPoolExecutor(poolSize, poolSize,
         keepAliveTime, TimeUnit.SECONDS, queue,
         new ThreadFactoryWithGarbageCleanup(threadPoolName));
@@ -240,7 +239,7 @@ public class SessionManager extends CompositeService {
   private final Object timeoutCheckerLock = new Object();
 
   private void startTimeoutChecker() {
-    final long interval = Math.max(checkInterval, 3000l);  // minimum 3 seconds
+    final long interval = Math.max(checkInterval, 3000L);  // minimum 3 seconds
     final Runnable timeoutChecker = new Runnable() {
       @Override
       public void run() {
