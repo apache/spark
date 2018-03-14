@@ -49,7 +49,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
     }
 
     plan.transform {
-      case a @ Aggregate(_, aggExprs, child @ PartitionedRelation(partAttrs, relation)) =>
+      case a @ Aggregate(_, aggExprs, child @ PartitionedRelation(partAttrs, filters, relation)) =>
         // We only apply this optimization when only partitioned attributes are scanned.
         if (a.references.subsetOf(partAttrs)) {
           val aggFunctions = aggExprs.flatMap(_.collect {
@@ -67,7 +67,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
             })
           }
           if (isAllDistinctAgg) {
-            a.withNewChildren(Seq(replaceTableScanWithPartitionMetadata(child, relation)))
+            a.withNewChildren(Seq(replaceTableScanWithPartitionMetadata(child, relation, filters)))
           } else {
             a
           }
@@ -98,13 +98,23 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
    */
   private def replaceTableScanWithPartitionMetadata(
       child: LogicalPlan,
-      relation: LogicalPlan): LogicalPlan = {
+      relation: LogicalPlan,
+      partFilters: Seq[Expression]): LogicalPlan = {
+    // this logic comes from PruneFileSourcePartitions. it ensures that the filter names match the
+    // relation's schema. PartitionedRelation ensures that the filters only reference partition cols
+    val relFilters = partFilters.map { e =>
+      e transform {
+        case a: AttributeReference =>
+          a.withName(relation.output.find(_.semanticEquals(a)).get.name)
+      }
+    }
+
     child transform {
       case plan if plan eq relation =>
         relation match {
           case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, isStreaming) =>
             val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
-            val partitionData = fsRelation.location.listFiles(Nil, Nil)
+            val partitionData = fsRelation.location.listFiles(relFilters, Nil)
             LocalRelation(partAttrs, partitionData.map(_.values), isStreaming)
 
           case relation: HiveTableRelation =>
@@ -113,7 +123,13 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
               CaseInsensitiveMap(relation.tableMeta.storage.properties)
             val timeZoneId = caseInsensitiveProperties.get(DateTimeUtils.TIMEZONE_OPTION)
               .getOrElse(SQLConf.get.sessionLocalTimeZone)
-            val partitionData = catalog.listPartitions(relation.tableMeta.identifier).map { p =>
+            val partitions = if (partFilters.nonEmpty) {
+              catalog.listPartitionsByFilter(relation.tableMeta.identifier, relFilters)
+            } else {
+              catalog.listPartitions(relation.tableMeta.identifier)
+            }
+
+            val partitionData = partitions.map { p =>
               InternalRow.fromSeq(partAttrs.map { attr =>
                 Cast(Literal(p.spec(attr.name)), attr.dataType, Option(timeZoneId)).eval()
               })
@@ -129,35 +145,41 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
 
   /**
    * A pattern that finds the partitioned table relation node inside the given plan, and returns a
-   * pair of the partition attributes and the table relation node.
+   * pair of the partition attributes, partition filters, and the table relation node.
    *
    * It keeps traversing down the given plan tree if there is a [[Project]] or [[Filter]] with
    * deterministic expressions, and returns result after reaching the partitioned table relation
    * node.
    */
-  object PartitionedRelation {
+  object PartitionedRelation extends PredicateHelper {
 
-    def unapply(plan: LogicalPlan): Option[(AttributeSet, LogicalPlan)] = plan match {
-      case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _)
-        if fsRelation.partitionSchema.nonEmpty =>
-        val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
-        Some((AttributeSet(partAttrs), l))
+    def unapply(plan: LogicalPlan): Option[(AttributeSet, Seq[Expression], LogicalPlan)] = {
+      plan match {
+        case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _)
+          if fsRelation.partitionSchema.nonEmpty =>
+          val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
+          Some((AttributeSet(partAttrs), Nil, l))
 
-      case relation: HiveTableRelation if relation.tableMeta.partitionColumnNames.nonEmpty =>
-        val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
-        Some((AttributeSet(partAttrs), relation))
+        case relation: HiveTableRelation if relation.tableMeta.partitionColumnNames.nonEmpty =>
+          val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
+          Some((AttributeSet(partAttrs), Nil, relation))
 
-      case p @ Project(projectList, child) if projectList.forall(_.deterministic) =>
-        unapply(child).flatMap { case (partAttrs, relation) =>
-          if (p.references.subsetOf(partAttrs)) Some((p.outputSet, relation)) else None
-        }
+        case p @ Project(projectList, child) if projectList.forall(_.deterministic) =>
+          unapply(child).flatMap { case (partAttrs, filters, relation) =>
+            if (p.references.subsetOf(partAttrs)) Some((p.outputSet, filters, relation)) else None
+          }
 
-      case f @ Filter(condition, child) if condition.deterministic =>
-        unapply(child).flatMap { case (partAttrs, relation) =>
-          if (f.references.subsetOf(partAttrs)) Some((partAttrs, relation)) else None
-        }
+        case f @ Filter(condition, child) if condition.deterministic =>
+          unapply(child).flatMap { case (partAttrs, filters, relation) =>
+            if (f.references.subsetOf(partAttrs)) {
+              Some((partAttrs, splitConjunctivePredicates(condition) ++ filters, relation))
+            } else {
+              None
+            }
+          }
 
-      case _ => None
+        case _ => None
+      }
     }
   }
 }
