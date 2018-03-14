@@ -116,6 +116,8 @@ jobs:
       - restore_cache:
           keys:
             - v5-ivy-dependency-cache-{{ checksum "pom.xml" }}
+            # if cache for exact version of `pom.xml` is not present then load any most recent one
+            - v5-ivy-dependency-cache-
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
