@@ -33,7 +33,7 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
     }
     // check the contents of the message and rethrow if unexpected
     if (!ex.toString.contains("Dynamic Partition Overwrite")) {
-      throw ex
+      fail("Wrong text in caught exception", ex)
     }
   }
 
@@ -121,7 +121,7 @@ private class FullConstructorCommitProtocol(
   val argCount: Int)
   extends HadoopMapReduceCommitProtocol(arg1, arg2, b) {
 
-  def this(arg1: String, arg2: String)=  {
+  def this(arg1: String, arg2: String) = {
     this(arg1, arg2, false, 2)
   }
 
