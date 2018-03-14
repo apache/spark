@@ -178,6 +178,7 @@ object PartitionStrategy {
     case "EdgePartition1D" => EdgePartition1D
     case "EdgePartition2D" => EdgePartition2D
     case "CanonicalRandomVertexCut" => CanonicalRandomVertexCut
+    case "EdgePartitionTriangle" => EdgePartitionTriangle
     case _ => throw new IllegalArgumentException("Invalid PartitionStrategy: " + s)
   }
 }
