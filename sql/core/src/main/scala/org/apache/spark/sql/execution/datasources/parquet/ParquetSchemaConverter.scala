@@ -81,7 +81,7 @@ class ParquetToSparkSchemaConverter(
     }
 
     StructType(fields)
-  };
+  }
 
   /**
    * Converts a Parquet [[Type]] to a Spark SQL [[DataType]].
