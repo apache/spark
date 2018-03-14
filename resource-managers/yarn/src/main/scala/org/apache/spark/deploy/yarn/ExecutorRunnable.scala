@@ -227,18 +227,6 @@ private[yarn] class ExecutorRunnable(
     )
     val httpScheme = if (yarnHttpPolicy == "HTTPS_ONLY") "https://" else "http://"
 
-    // Add log urls
-    container.foreach { c =>
-      sys.env.get("SPARK_USER").foreach { user =>
-        val containerId = ConverterUtils.toString(c.getId)
-        val address = c.getNodeHttpAddress
-        val baseUrl = s"$httpScheme$address/node/containerlogs/$containerId/$user"
-
-        env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=-4096"
-        env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=-4096"
-      }
-    }
-
     System.getenv().asScala.filterKeys(_.startsWith("SPARK"))
       .foreach { case (k, v) => env(k) = v }
 
@@ -250,6 +238,18 @@ private[yarn] class ExecutorRunnable(
       } else {
         // For other env variables, simply overwrite the value.
         env(key) = value
+      }
+    }
+
+    // Add log urls
+    container.foreach { c =>
+      sys.env.get("SPARK_USER").foreach { user =>
+        val containerId = ConverterUtils.toString(c.getId)
+        val address = c.getNodeHttpAddress
+        val baseUrl = s"$httpScheme$address/node/containerlogs/$containerId/$user"
+
+        env("SPARK_LOG_URL_STDERR") = s"$baseUrl/stderr?start=-4096"
+        env("SPARK_LOG_URL_STDOUT") = s"$baseUrl/stdout?start=-4096"
       }
     }
 
