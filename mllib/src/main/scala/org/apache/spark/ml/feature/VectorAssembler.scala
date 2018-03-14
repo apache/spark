@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.NoSuchElementException
+
 import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
@@ -54,10 +56,37 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     transformSchema(dataset.schema, logging = true)
     // Schema transformation.
     val schema = dataset.schema
-    lazy val first = dataset.toDF.first()
+    lazy val colsMissingNumAttrs = $(inputCols).filter { c =>
+      val field = schema(c)
+      field.dataType match {
+        case _: VectorUDT => AttributeGroup.fromStructField(field).numAttributes.isDefined
+        case _ => false
+      }
+    }
+    lazy val examples = {
+      if (dataset.isStreaming) {
+        throw new RuntimeException(
+          s"""
+             |VectorAssembler cannot dynamically determine the size of vectors for streaming data.
+             |Consider applying VectorSizeHint to ${colsMissingNumAttrs.mkString("[", ", ", "]")}
+              so that this transformer can be used to transform streaming inputs.
+           """.stripMargin)
+      } else {
+        // if handle invalid is set to error we can just call "first' once and raise if we see
+        // any nulls.
+        $(inputCols).map { c =>
+          try {
+            c -> dataset.select(c).na.drop().first.getAs[Vector](0)
+          } catch {
+            case NoSuchElementException =>
+              // I'm not sure about the best exception here
+              throw new RuntimeException("better exception here.")
+          }
+        }.toMap
+      }
+    }
     val attrs = $(inputCols).flatMap { c =>
       val field = schema(c)
-      val index = schema.fieldIndex(c)
       field.dataType match {
         case DoubleType =>
           val attr = Attribute.fromStructField(field)
@@ -85,7 +114,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           } else {
             // Otherwise, treat all attributes as numeric. If we cannot get the number of attributes
             // from metadata, check the first row.
-            val numAttrs = group.numAttributes.getOrElse(first.getAs[Vector](index).size)
+            val numAttrs = group.numAttributes.getOrElse(examples(c).size)
             Array.tabulate(numAttrs)(i => NumericAttribute.defaultAttr.withName(c + "_" + i))
           }
         case otherType =>
