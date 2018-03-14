@@ -319,4 +319,17 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
       assert(df.limit(1).collect() === Array(Row("bat", 8.0)))
     }
   }
+
+  test("SPARK-23676: Left Join in SortMergeJoin should be included in WholeStageCodegen") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
+      val df1 = spark.range(3).selectExpr(s"id * 2 as k1")
+      val df2 = spark.range(2).selectExpr(s"id * 3 as k2")
+      val df = df1.join(df2, col("k1") === col("k2"), "left")
+      assert(df.queryExecution.executedPlan.find(p =>
+        p.isInstanceOf[WholeStageCodegenExec] &&
+          p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SortMergeJoinExec]).isDefined)
+      assert(df.collect() === Array(Row(0, 0), Row(2, null), Row(4, null)))
+    }
+  }
 }

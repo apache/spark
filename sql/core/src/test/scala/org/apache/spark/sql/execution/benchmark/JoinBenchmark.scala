@@ -222,6 +222,48 @@ class JoinBenchmark extends BenchmarkBase {
      */
   }
 
+  ignore("left sort merge join") {
+    val N = 2 << 20
+    runBenchmark("left merge join", N) {
+      val df1 = sparkSession.range(N).selectExpr(s"id * 2 as k1")
+      val df2 = sparkSession.range(N).selectExpr(s"id * 3 as k2")
+      val df = df1.join(df2, col("k1") === col("k2"), "left")
+      assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[SortMergeJoinExec]).isDefined)
+      df.count()
+    }
+
+    /*
+     *Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Windows 7 6.1
+     *Intel(R) Core(TM) i5-6500 CPU @ 3.20GHz
+     *left merge join:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+     *------------------------------------------------------------------------------------------
+     *left merge join wholestage=off          1809 / 2036          1.2         862.6       1.0X
+     *left merge join wholestage=on           1439 / 1461          1.5         686.3       1.3X
+     */
+  }
+
+  ignore("left sort merge join with duplicates") {
+    val N = 2 << 20
+    runBenchmark("left sort merge join", N) {
+      val df1 = sparkSession.range(N)
+        .selectExpr(s"(id * 15485863) % ${N*10} as k1")
+      val df2 = sparkSession.range(N)
+        .selectExpr(s"(id * 15485867) % ${N*10} as k2")
+      val df = df1.join(df2, col("k1") === col("k2"), "left")
+      assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[SortMergeJoinExec]).isDefined)
+      df.count()
+    }
+
+    /*
+     *Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Windows 7 6.1
+     *Intel(R) Core(TM) i5-6500 CPU @ 3.20GHz
+     *left sort merge join:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+     *------------------------------------------------------------------------------------------
+     *left merge join wholestage=off          2439 / 2575          0.9        1163.0       1.0X
+     *left merge join wholestage=on           1890 / 1904          1.1         901.1       1.3X
+     */
+  }
+
   ignore("shuffle hash join") {
     val N = 4 << 20
     sparkSession.conf.set("spark.sql.shuffle.partitions", "2")

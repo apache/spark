@@ -379,7 +379,11 @@ case class SortMergeJoinExec(
   }
 
   override def supportCodegen: Boolean = {
-    joinType.isInstanceOf[InnerLike]
+    joinType match {
+      case _: InnerLike => true
+      case LeftOuter => true
+      case _ => false
+    }
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -445,10 +449,54 @@ case class SortMergeJoinExec(
       v => s"$v = new $clsName($inMemoryThreshold, $spillThreshold);", forceInline = true)
     // Copy the left keys as class members so they could be used in next function call.
     val matchedKeyVars = copyKeys(ctx, leftKeyVars)
+    val (code1, code2, code3) = if (joinType == LeftOuter) {
+      val leftAnyNull1 =
+        s"""
+           |if ($leftAnyNull) {
+           |  if (!$matches.isEmpty()) {
+           |    $matches.clear();
+           |  }
+           |  return true;
+           |}
+         """.stripMargin
 
-    ctx.addNewFunction("findNextInnerJoinRows",
+      val isRightIterNull1 = "return true;"
+
+      val lessthan1 =
+        s"""
+           |if (!$matches.isEmpty()) {
+           |  ${matchedKeyVars.map(_.code).mkString("\n")}
+           |}
+           |return true;
+         """.stripMargin
+
+      (leftAnyNull1, isRightIterNull1, lessthan1)
+    } else {
+      val leftAnyNull2 =
+        s"""
+           |if ($leftAnyNull) {
+           |  $leftRow = null;
+           |  continue;
+           |}
+         """.stripMargin
+
+      val isRightIterNull2 = s"return !$matches.isEmpty();"
+
+      val lessthan2 =
+        s"""
+           |if (!$matches.isEmpty()) {
+           |  ${matchedKeyVars.map(_.code).mkString("\n")}
+           |  return true;
+           |}
+           |$leftRow = null;
+        """.stripMargin
+
+      (leftAnyNull2, isRightIterNull2, lessthan2)
+    }
+
+    ctx.addNewFunction("findNextJoinRows",
       s"""
-         |private boolean findNextInnerJoinRows(
+         |private boolean findNextJoinRows(
          |    scala.collection.Iterator leftIter,
          |    scala.collection.Iterator rightIter) {
          |  $leftRow = null;
@@ -457,10 +505,7 @@ case class SortMergeJoinExec(
          |    if (!leftIter.hasNext()) return false;
          |    $leftRow = (InternalRow) leftIter.next();
          |    ${leftKeyVars.map(_.code).mkString("\n")}
-         |    if ($leftAnyNull) {
-         |      $leftRow = null;
-         |      continue;
-         |    }
+         |    ${code1.trim}
          |    if (!$matches.isEmpty()) {
          |      ${genComparison(ctx, leftKeyVars, matchedKeyVars)}
          |      if (comp == 0) {
@@ -473,7 +518,7 @@ case class SortMergeJoinExec(
          |      if ($rightRow == null) {
          |        if (!rightIter.hasNext()) {
          |          ${matchedKeyVars.map(_.code).mkString("\n")}
-         |          return !$matches.isEmpty();
+         |          $code2
          |        }
          |        $rightRow = (InternalRow) rightIter.next();
          |        ${rightKeyTmpVars.map(_.code).mkString("\n")}
@@ -487,14 +532,10 @@ case class SortMergeJoinExec(
          |      if (comp > 0) {
          |        $rightRow = null;
          |      } else if (comp < 0) {
-         |        if (!$matches.isEmpty()) {
-         |          ${matchedKeyVars.map(_.code).mkString("\n")}
-         |          return true;
-         |        }
-         |        $leftRow = null;
+         |        ${code3.trim}
          |      } else {
          |        $matches.add((UnsafeRow) $rightRow);
-         |        $rightRow = null;;
+         |        $rightRow = null;
          |      }
          |    } while ($leftRow != null);
          |  }
@@ -541,6 +582,34 @@ case class SortMergeJoinExec(
   }
 
   /**
+   * Creates variables and declarations for left part of result row.
+   *
+   * In order to defer the access after condition and also only access once in the loop,
+   * the variables should be declared separately from accessing the columns, we can't use the
+   * codegen of BoundReference here.
+   */
+  private def createLeftVarsWithoutDefValue(ctx: CodegenContext, leftRow: String): Seq[ExprCode] = {
+    ctx.INPUT_ROW = leftRow
+    left.output.zipWithIndex.map { case (a, i) =>
+      val value = ctx.addMutableState(CodeGenerator.javaType(a.dataType), "value")
+      val valueCode = CodeGenerator.getValue(leftRow, a.dataType, i.toString)
+      val defaultValue = CodeGenerator.defaultValue(a.dataType)
+      if (a.nullable) {
+        val isNull = ctx.addMutableState("boolean", "isNull")
+        val code =
+          s"""
+             |$isNull = $leftRow.isNullAt($i);
+             |$value = $isNull ? $defaultValue : ($valueCode);
+           """.stripMargin
+        ExprCode(code, isNull, value)
+      } else {
+        val code = s"$value = $valueCode;"
+        ExprCode(code, "false", value)
+      }
+    }
+  }
+
+  /**
    * Creates the variables for right part of result row, using BoundReference, since the right
    * part are accessed inside the loop.
    */
@@ -549,6 +618,32 @@ case class SortMergeJoinExec(
     right.output.zipWithIndex.map { case (a, i) =>
       BoundReference(i, a.dataType, a.nullable).genCode(ctx)
     }
+  }
+
+  /**
+   * Creates the variables with default value code for right part of result row.
+   */
+  private def createVarWithNullValue(ctx: CodegenContext,
+    rightRow: String): (Seq[ExprCode], Seq[String]) = {
+    ctx.INPUT_ROW = rightRow
+    right.output.zipWithIndex.map { case (a, i) =>
+      val valueCode = CodeGenerator.getValue(rightRow, a.dataType, i.toString)
+      val value = ctx.addMutableState(CodeGenerator.javaType(a.dataType), "value")
+      // declare it as class member, so we can access the column before or in the loop.
+      val isNull = ctx.addMutableState("boolean", "isNull")
+      val code = if (a.nullable) {
+        s"""
+           |$isNull = $rightRow.isNullAt($i);
+           |$value = $isNull ? ${CodeGenerator.defaultValue(a.dataType)} : ($valueCode);
+         """.stripMargin
+      } else {
+        s"""
+           |$isNull = $rightRow.isNullAt($i);
+           |$value = $valueCode;
+         """.stripMargin
+      }
+      (ExprCode(code, isNull, value), s"$isNull = true;")
+    }.unzip
   }
 
   /**
@@ -576,7 +671,7 @@ case class SortMergeJoinExec(
 
   override def needCopyResult: Boolean = true
 
-  override def doProduce(ctx: CodegenContext): String = {
+  def doCodegenInnerLike(ctx: CodegenContext): String = {
     // Inline mutable state since not many join operations in a task
     val leftInput = ctx.addMutableState("scala.collection.Iterator", "leftInput",
       v => s"$v = inputs[0];", forceInline = true)
@@ -622,7 +717,7 @@ case class SortMergeJoinExec(
     }
 
     s"""
-       |while (findNextInnerJoinRows($leftInput, $rightInput)) {
+       |while (findNextJoinRows($leftInput, $rightInput)) {
        |  ${leftVarDecl.mkString("\n")}
        |  ${beforeLoop.trim}
        |  scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
@@ -635,6 +730,82 @@ case class SortMergeJoinExec(
        |  if (shouldStop()) return;
        |}
      """.stripMargin
+  }
+
+  def doCodegenLeftOuter(ctx: CodegenContext): String = {
+    // Inline mutable state since not many join operations in a task
+    val leftInput = ctx.addMutableState("scala.collection.Iterator", "leftInput",
+      v => s"$v = inputs[0];", forceInline = true)
+    val rightInput = ctx.addMutableState("scala.collection.Iterator", "rightInput",
+      v => s"$v = inputs[1];", forceInline = true)
+
+    val (leftRow, matches) = genScanner(ctx)
+
+    // Create variables for row from both sides.
+    val leftVars = createLeftVarsWithoutDefValue(ctx, leftRow)
+    val rightRow = ctx.freshName("rightRow")
+    val (rightVars, rightNullValue)  = createVarWithNullValue(ctx, rightRow)
+
+    val iterator = ctx.freshName("iterator")
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    val loaded = ctx.freshName("loaded")
+    val leftValueCode = evaluateVariables(leftVars)
+
+    // Split the code of creating variables based on whether it's used by condition or not.
+    val (rightBefore, rightAfter) = splitVarsByCondition(right.output, rightVars)
+    // Generate code for condition
+    ctx.currentVars = leftVars ++ rightVars
+    // evaluate the columns those used by condition before loop
+    val condCheck = if (condition.isDefined) {
+      val cond = BindReferences.bindReference(condition.get, output).genCode(ctx)
+
+      s"""
+         |${cond.code}
+         |if (${cond.isNull} || !${cond.value}) continue;
+     """.stripMargin
+    } else {
+      ""
+    }
+
+    ctx.addNewFunction("writeJoinRows",
+      s"""
+         |private void writeJoinRows() throws java.io.IOException {
+         |  ${consume(ctx, leftVars ++ rightVars)}
+         |}
+       """.stripMargin)
+
+    s"""
+       |while (findNextJoinRows($leftInput, $rightInput)) {
+       |  boolean $loaded = false;
+       |  ${leftValueCode.trim}
+       |  scala.collection.Iterator<UnsafeRow> $iterator = $matches.generateIterator();
+       |  while ($iterator.hasNext()) {
+       |    InternalRow $rightRow = (InternalRow) $iterator.next();
+       |    ${rightBefore.trim}
+       |    ${condCheck.trim}
+       |    ${rightAfter.trim}
+       |    $numOutput.add(1);
+       |    $loaded = true;
+       |    writeJoinRows();
+       |  }
+       |  if (!$loaded) {
+       |    ${rightNullValue.mkString("\n").trim}
+       |    $numOutput.add(1);
+       |    writeJoinRows();
+       |  }
+       |  if (shouldStop()) return;
+       |}
+     """.stripMargin
+  }
+
+  override def doProduce(ctx: CodegenContext): String = {
+    joinType match {
+      case Inner => doCodegenInnerLike(ctx)
+      case LeftOuter => doCodegenLeftOuter(ctx)
+      case x =>
+        throw new IllegalArgumentException(
+          s"SortMergeJoinExec should not take $x as the JoinType")
+    }
   }
 }
 
