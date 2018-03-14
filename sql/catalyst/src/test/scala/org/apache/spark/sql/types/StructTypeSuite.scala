@@ -15,23 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.types
 
-import org.apache.spark.sql.Strategy
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.SparkFunSuite
 
-object DataSourceV2Strategy extends Strategy {
-  override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case r: DataSourceV2Relation =>
-      DataSourceV2ScanExec(r.output, r.source, r.options, r.reader) :: Nil
+class StructTypeSuite extends SparkFunSuite {
 
-    case r: StreamingDataSourceV2Relation =>
-      DataSourceV2ScanExec(r.output, r.source, r.options, r.reader) :: Nil
+  val s = StructType.fromDDL("a INT, b STRING")
 
-    case WriteToDataSourceV2(writer, query) =>
-      WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
+  test("lookup a single missing field should output existing fields") {
+    val e = intercept[IllegalArgumentException](s("c")).getMessage
+    assert(e.contains("Available fields: a, b"))
+  }
 
-    case _ => Nil
+  test("lookup a set of missing fields should output existing fields") {
+    val e = intercept[IllegalArgumentException](s(Set("a", "c"))).getMessage
+    assert(e.contains("Available fields: a, b"))
+  }
+
+  test("lookup fieldIndex for missing field should output existing fields") {
+    val e = intercept[IllegalArgumentException](s.fieldIndex("c")).getMessage
+    assert(e.contains("Available fields: a, b"))
   }
 }
