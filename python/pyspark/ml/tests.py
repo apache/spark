@@ -657,6 +657,16 @@ class FeatureTests(SparkSessionTestCase):
             feature, expected = r
             self.assertEqual(feature, expected)
 
+        # Test an empty vocabulary
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, "vocabSize.*invalid.*0"):
+                CountVectorizerModel.from_vocabulary([], inputCol="words")
+
+        # Test model with default settings can transform
+        model_default = CountVectorizerModel.from_vocabulary(["a", "b", "c"], inputCol="words")
+        transformed_list = model_default.transform(dataset).collect()
+        self.assertEqual(len(transformed_list), 3)
+
     def test_rformula_force_index_label(self):
         df = self.spark.createDataFrame([
             (1.0, 1.0, "a"),

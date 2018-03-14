@@ -498,7 +498,7 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
     >>> loadedModel = CountVectorizerModel.load(modelPath)
     >>> loadedModel.vocabulary == model.vocabulary
     True
-    >>> fromVocabModel = CountVectorizerModel.from_vocabulary(model.vocabulary,
+    >>> fromVocabModel = CountVectorizerModel.from_vocabulary(["a", "b", "c"],
     ...     inputCol="raw", outputCol="vectors")
     >>> fromVocabModel.transform(df).show(truncate=False)
     +-----+---------------+-------------------------+
