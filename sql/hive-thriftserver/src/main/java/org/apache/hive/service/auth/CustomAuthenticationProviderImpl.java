@@ -17,6 +17,7 @@
  */
 package org.apache.hive.service.auth;
 
+import java.lang.reflect.InvocationTargetException;
 import javax.security.sasl.AuthenticationException;
 
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -33,13 +34,18 @@ public class CustomAuthenticationProviderImpl implements PasswdAuthenticationPro
   private final PasswdAuthenticationProvider customProvider;
 
   @SuppressWarnings("unchecked")
-  CustomAuthenticationProviderImpl() {
-    HiveConf conf = new HiveConf();
+  CustomAuthenticationProviderImpl(HiveConf conf) {
     Class<? extends PasswdAuthenticationProvider> customHandlerClass =
       (Class<? extends PasswdAuthenticationProvider>) conf.getClass(
         HiveConf.ConfVars.HIVE_SERVER2_CUSTOM_AUTHENTICATION_CLASS.varname,
         PasswdAuthenticationProvider.class);
-    customProvider = ReflectionUtils.newInstance(customHandlerClass, conf);
+    PasswdAuthenticationProvider customProvider;
+    try {
+      customProvider = customHandlerClass.getConstructor(HiveConf.class).newInstance(conf);
+    } catch (NoSuchMethodException | InstantiationException | IllegalAccessException | InvocationTargetException e) {
+      customProvider = ReflectionUtils.newInstance(customHandlerClass, conf);
+    }
+    this.customProvider = customProvider;
   }
 
   @Override

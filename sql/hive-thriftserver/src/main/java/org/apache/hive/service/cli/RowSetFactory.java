@@ -18,24 +18,27 @@
 
 package org.apache.hive.service.cli;
 
-import org.apache.hive.service.cli.thrift.TProtocolVersion;
-import org.apache.hive.service.cli.thrift.TRowSet;
+import org.apache.hive.service.rpc.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TRowSet;
+import org.apache.thrift.TException;
 
-import static org.apache.hive.service.cli.thrift.TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V6;
+import static org.apache.hive.service.rpc.thrift.TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V6;
 
 public class RowSetFactory {
 
-  public static RowSet create(TableSchema schema, TProtocolVersion version) {
+  // This call is accessed from server side
+  public static RowSet create(TableSchema schema, TProtocolVersion version, boolean isBlobBased) {
     if (version.getValue() >= HIVE_CLI_SERVICE_PROTOCOL_V6.getValue()) {
-      return new ColumnBasedSet(schema);
+      return new ColumnBasedSet(schema, isBlobBased);
     }
     return new RowBasedSet(schema);
   }
 
-  public static RowSet create(TRowSet results, TProtocolVersion version) {
-    if (version.getValue() >= HIVE_CLI_SERVICE_PROTOCOL_V6.getValue()) {
-      return new ColumnBasedSet(results);
-    }
-    return new RowBasedSet(results);
+  // This call is accessed from client (jdbc) side
+  public static RowSet create(TRowSet results, TProtocolVersion version) throws TException {
+	  if (version.getValue() >= HIVE_CLI_SERVICE_PROTOCOL_V6.getValue()) {
+          return new ColumnBasedSet(results);
+       }
+      return new RowBasedSet(results);
   }
 }

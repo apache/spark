@@ -17,23 +17,18 @@
  */
 package org.apache.hive.service.cli;
 
+import org.apache.hive.service.auth.HiveAuthFactory;
+
 import java.util.List;
 import java.util.Map;
 
-
-
-
-import org.apache.hive.service.auth.HiveAuthFactory;
-
 public interface ICLIService {
 
-  SessionHandle openSession(String username, String password,
-      Map<String, String> configuration)
-          throws HiveSQLException;
+  SessionHandle openSession(String username, String password, Map<String, String> configuration)
+      throws HiveSQLException;
 
   SessionHandle openSessionWithImpersonation(String username, String password,
-      Map<String, String> configuration, String delegationToken)
-          throws HiveSQLException;
+      Map<String, String> configuration, String delegationToken) throws HiveSQLException;
 
   void closeSession(SessionHandle sessionHandle)
       throws HiveSQLException;
@@ -42,12 +37,16 @@ public interface ICLIService {
       throws HiveSQLException;
 
   OperationHandle executeStatement(SessionHandle sessionHandle, String statement,
-      Map<String, String> confOverlay)
-          throws HiveSQLException;
+      Map<String, String> confOverlay) throws HiveSQLException;
 
-  OperationHandle executeStatementAsync(SessionHandle sessionHandle,
-      String statement, Map<String, String> confOverlay)
-          throws HiveSQLException;
+  OperationHandle executeStatement(SessionHandle sessionHandle, String statement,
+      Map<String, String> confOverlay, long queryTimeout) throws HiveSQLException;
+
+  OperationHandle executeStatementAsync(SessionHandle sessionHandle, String statement,
+      Map<String, String> confOverlay) throws HiveSQLException;
+
+  OperationHandle executeStatementAsync(SessionHandle sessionHandle, String statement,
+      Map<String, String> confOverlay, long queryTimeout) throws HiveSQLException;
 
   OperationHandle getTypeInfo(SessionHandle sessionHandle)
       throws HiveSQLException;
@@ -56,25 +55,24 @@ public interface ICLIService {
       throws HiveSQLException;
 
   OperationHandle getSchemas(SessionHandle sessionHandle,
-      String catalogName, String schemaName)
-          throws HiveSQLException;
+      String catalogName, String schemaName) throws HiveSQLException;
 
   OperationHandle getTables(SessionHandle sessionHandle,
       String catalogName, String schemaName, String tableName, List<String> tableTypes)
-          throws HiveSQLException;
+      throws HiveSQLException;
 
   OperationHandle getTableTypes(SessionHandle sessionHandle)
       throws HiveSQLException;
 
   OperationHandle getColumns(SessionHandle sessionHandle,
       String catalogName, String schemaName, String tableName, String columnName)
-          throws HiveSQLException;
+      throws HiveSQLException;
 
   OperationHandle getFunctions(SessionHandle sessionHandle,
       String catalogName, String schemaName, String functionName)
-          throws HiveSQLException;
+      throws HiveSQLException;
 
-  OperationStatus getOperationStatus(OperationHandle opHandle)
+  OperationStatus getOperationStatus(OperationHandle opHandle, boolean getProgressUpdate)
       throws HiveSQLException;
 
   void cancelOperation(OperationHandle opHandle)
@@ -101,5 +99,10 @@ public interface ICLIService {
   void renewDelegationToken(SessionHandle sessionHandle, HiveAuthFactory authFactory,
       String tokenStr) throws HiveSQLException;
 
+  OperationHandle getPrimaryKeys(SessionHandle sessionHandle, String catalog,
+      String schema, String table) throws HiveSQLException;
 
+  OperationHandle getCrossReference(SessionHandle sessionHandle,
+      String primaryCatalog, String primarySchema, String primaryTable,
+      String foreignCatalog, String foreignSchema, String foreignTable) throws HiveSQLException;
 }

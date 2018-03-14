@@ -645,8 +645,10 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       assert(oldPart2.storage.locationUri != Some(newLocation))
       // alter other storage information
       catalog.alterPartitions("db2", "tbl2", Seq(
-        oldPart1.copy(storage = storageFormat.copy(serde = Some(newSerde))),
-        oldPart2.copy(storage = storageFormat.copy(properties = newSerdeProps))))
+        oldPart1.copy(parameters = newPart1.parameters,
+          storage = storageFormat.copy(serde = Some(newSerde))),
+        oldPart2.copy(parameters = newPart1.parameters,
+          storage = storageFormat.copy(properties = newSerdeProps))))
       val newPart1b = catalog.getPartition("db2", "tbl2", part1.spec)
       val newPart2b = catalog.getPartition("db2", "tbl2", part2.spec)
       assert(newPart1b.storage.serde == Some(newSerde))

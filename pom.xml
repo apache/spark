@@ -123,15 +123,16 @@
     <flume.version>1.6.0</flume.version>
     <zookeeper.version>3.4.6</zookeeper.version>
     <curator.version>2.6.0</curator.version>
-    <hive.group>org.spark-project.hive</hive.group>
+    <hive.group>org.apache.hive</hive.group>
     <!-- Version used in Maven Hive dependency -->
-    <hive.version>1.2.1.spark2</hive.version>
+    <hive.version>2.3.2</hive.version>
     <!-- Version used for internal directory structure -->
-    <hive.version.short>1.2.1</hive.version.short>
-    <derby.version>10.12.1.1</derby.version>
+    <hive.version.short>${hive.version}</hive.version.short>
+    <hive.classifier>core</hive.classifier>
+    <derby.version>10.10.2.0</derby.version>
     <parquet.version>1.8.2</parquet.version>
     <orc.version>1.4.3</orc.version>
-    <orc.classifier>nohive</orc.classifier>
+    <hive.storage.api.version>2.4.0</hive.storage.api.version>
     <hive.parquet.version>1.6.0</hive.parquet.version>
     <jetty.version>9.3.20.v20170531</jetty.version>
     <javaxservlet.version>3.1.0</javaxservlet.version>
@@ -162,14 +163,15 @@
     <fasterxml.jackson.databind.version>2.6.7.1</fasterxml.jackson.databind.version>
     <snappy.version>1.1.7.1</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
-    <calcite.version>1.2.0-incubating</calcite.version>
+    <calcite.version>1.10.0</calcite.version>
+    <avatica.version>1.8.0</avatica.version>
     <commons-codec.version>1.10</commons-codec.version>
     <commons-io.version>2.4</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
     <commons-lang3.version>3.5</commons-lang3.version>
-    <datanucleus-core.version>3.2.10</datanucleus-core.version>
+    <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <janino.version>3.0.8</janino.version>
     <jersey.version>2.22.2</jersey.version>
     <joda.version>2.9.3</joda.version>
@@ -448,6 +450,12 @@
         <groupId>commons-httpclient</groupId>
         <artifactId>commons-httpclient</artifactId>
         <version>${httpclient.classic.version}</version>
+          <exclusions>
+            <exclusion>
+              <groupId>commons-logging</groupId>
+              <artifactId>commons-logging</artifactId>
+            </exclusion>
+          </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.httpcomponents</groupId>
@@ -536,7 +544,6 @@
         <groupId>org.xerial.snappy</groupId>
         <artifactId>snappy-java</artifactId>
         <version>${snappy.version}</version>
-        <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
         <groupId>org.lz4</groupId>
@@ -1354,6 +1361,22 @@
             <artifactId>hive-shims</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-storage-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.eclipse.jetty.aggregate</groupId>
+            <artifactId>jetty-all</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.eclipse.jetty.orbit</groupId>
+            <artifactId>javax.servlet</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.github.joshelser</groupId>
+            <artifactId>dropwizard-metrics-hadoop-metrics2-reporter</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.apache.ant</groupId>
             <artifactId>ant</artifactId>
           </exclusion>
@@ -1366,12 +1389,16 @@
             <artifactId>slf4j-api</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-log4j12</artifactId>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-web</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>log4j</groupId>
-            <artifactId>log4j</artifactId>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-1.2-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -1383,10 +1410,8 @@
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-exec</artifactId>
-<!--
-        <classifier>core</classifier>
--->
         <version>${hive.version}</version>
+        <classifier>core</classifier>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
 
@@ -1397,16 +1422,36 @@
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
+            <artifactId>hive-vector-code-gen</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
+            <artifactId>hive-llap-tez</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>${hive.group}</groupId>
             <artifactId>hive-shims</artifactId>
           </exclusion>
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-ant</artifactId>
           </exclusion>
+          <exclusion>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-hadoop-bundle</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.orc</groupId>
+            <artifactId>orc-tools</artifactId>
+          </exclusion>
           <!-- break the loop -->
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>spark-client</artifactId>
+          </exclusion>
+          <exclusion>
+            <artifactId>calcite-druid</artifactId>
+            <groupId>org.apache.calcite</groupId>
           </exclusion>
 
           <!-- excluded dependencies & transitive.
@@ -1434,6 +1479,10 @@
           <exclusion>
             <groupId>org.apache.avro</groupId>
             <artifactId>avro-mapred</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.calcite.avatica</groupId>
+            <artifactId>avatica</artifactId>
           </exclusion>
           <!--  this is needed and must be explicitly included later-->
           <exclusion>
@@ -1465,16 +1514,24 @@
             <artifactId>zookeeper</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-1.2-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-log4j12</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>log4j</groupId>
-            <artifactId>log4j</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-logging</groupId>
@@ -1578,6 +1635,14 @@
             <artifactId>hive-shims</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-client</artifactId>
+          </exclusion>
+          <exclusion>
+            <artifactId>HikariCP</artifactId>
+            <groupId>com.zaxxer</groupId>
+          </exclusion>
+          <exclusion>
             <groupId>org.apache.thrift</groupId>
             <artifactId>libfb303</artifactId>
           </exclusion>
@@ -1592,6 +1657,18 @@
           <exclusion>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>co.cask.tephra</groupId>
+            <artifactId>tephra-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>co.cask.tephra</groupId>
+            <artifactId>tephra-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>co.cask.tephra</groupId>
+            <artifactId>tephra-hbase-compat-1.0</artifactId>
           </exclusion>
           <exclusion>
             <groupId>org.slf4j</groupId>
@@ -1617,6 +1694,18 @@
           <exclusion>
             <groupId>${hive.group}</groupId>
             <artifactId>hive-shims</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-hadoop-bundle</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>tomcat</groupId>
+            <artifactId>jasper-compiler</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>tomcat</groupId>
+            <artifactId>jasper-runtime</artifactId>
           </exclusion>
           <exclusion>
             <groupId>commons-codec</groupId>
@@ -1662,6 +1751,49 @@
       </dependency>
 
       <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-llap-common</artifactId>
+        <version>${hive.version}</version>
+        <scope>${hive.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>${hive.group}</groupId>
+        <artifactId>hive-llap-client</artifactId>
+        <version>${hive.version}</version>
+        <scope>${hive.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>curator-framework</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>apache-curator</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+
+      <dependency>
+        <groupId>org.apache.hive</groupId>
+        <artifactId>hive-storage-api</artifactId>
+        <version>${hive.storage.api.version}</version>
+      </dependency>
+
+      <dependency>
         <groupId>net.sf.jpam</groupId>
         <artifactId>jpam</artifactId>
         <scope>${hive.deps.scope}</scope>
@@ -1677,6 +1809,55 @@
       <!-- hive shims pulls in hive 0.23 and a transitive dependency of the Hadoop version
         Hive was built against. This dependency cuts out the YARN/hadoop dependency, which
         is needed by Hive to submit work to a YARN cluster.-->
+      <dependency>
+        <groupId>org.apache.hive.shims</groupId>
+        <artifactId>hive-shims-common</artifactId>
+        <version>${hive.version}</version>
+        <scope>${hive.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.thrift</groupId>
+            <artifactId>libthrift</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>curator-framework</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hive.shims</groupId>
+        <artifactId>hive-shims-0.23</artifactId>
+        <version>${hive.version}</version>
+        <scope>${hive.deps.scope}</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.hive.shims</groupId>
+            <artifactId>hive-shims-common</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-yarn-server-resourcemanager</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-shims</artifactId>
@@ -1729,7 +1910,6 @@
         <groupId>org.apache.orc</groupId>
         <artifactId>orc-core</artifactId>
         <version>${orc.version}</version>
-        <classifier>${orc.classifier}</classifier>
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
@@ -1746,7 +1926,6 @@
         <groupId>org.apache.orc</groupId>
         <artifactId>orc-mapreduce</artifactId>
         <version>${orc.version}</version>
-        <classifier>${orc.classifier}</classifier>
         <scope>${orc.deps.scope}</scope>
         <exclusions>
           <exclusion>
@@ -1849,6 +2028,10 @@
             <artifactId>jackson-databind</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.apache.calcite.avatica</groupId>
+            <artifactId>avatica</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
           </exclusion>
@@ -1879,9 +2062,36 @@
       </dependency>
       <dependency>
         <groupId>org.apache.calcite</groupId>
-        <artifactId>calcite-avatica</artifactId>
+        <artifactId>calcite-druid</artifactId>
         <version>${calcite.version}</version>
         <exclusions>
+          <exclusion>
+            <groupId>org.apache.calcite</groupId>
+            <artifactId>calcite-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.calcite</groupId>
+            <artifactId>calcite-linq4j</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.apache.calcite.avatica</groupId>
+            <artifactId>avatica</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.calcite.avatica</groupId>
+        <artifactId>avatica</artifactId>
+        <version>${avatica.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.calcite.avatica</groupId>
+            <artifactId>avatica-metrics</artifactId>
+          </exclusion>
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
@@ -1893,6 +2103,10 @@
           <exclusion>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
           </exclusion>
         </exclusions>
       </dependency>

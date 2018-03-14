@@ -179,7 +179,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     tempPyFile.delete()
   }
 
-  test("backward compatibility") {
+  ignore("backward compatibility") {
     val args = Seq(
       "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
       "--name", "HiveExternalCatalog backward compatibility test",

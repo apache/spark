@@ -228,7 +228,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     // SPARK-20594: This is a walk-around fix to resolve a Hive bug. Hive requires that the
     // staging directory needs to avoid being deleted when users set hive.exec.stagingdir
     // under the table directory.
-    if (FileUtils.isSubDir(new Path(stagingPathName), inputPath, fs) &&
+    if (isSubDir(new Path(stagingPathName), inputPath, fs) &&
       !stagingPathName.stripPrefix(inputPathName).stripPrefix(File.separator).startsWith(".")) {
       logDebug(s"The staging dir '$stagingPathName' should be a child directory starts " +
         "with '.' to avoid being deleted if we set hive.exec.stagingdir under the table " +
@@ -254,8 +254,14 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     dir
   }
 
-  private def executionId: String = {
-    val rand: Random = new Random
+  private def isSubDir(p1: Path, p2: Path, fs: FileSystem): Boolean = {
+    val path1 = fs.makeQualified(p1).toString
+    val path2 = fs.makeQualified(p2).toString
+    if (path1.startsWith(path2)) true else false
+  }
+
+  private def executionId = {
+    val rand = new Random
     val format = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss_SSS", Locale.US)
     "hive_" + format.format(new Date) + "_" + Math.abs(rand.nextLong)
   }

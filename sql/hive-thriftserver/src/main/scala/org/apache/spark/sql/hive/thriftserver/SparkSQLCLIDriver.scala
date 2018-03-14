@@ -25,7 +25,6 @@ import scala.collection.JavaConverters._
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
-import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
@@ -34,8 +33,9 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.log4j.{Level, Logger}
+import org.apache.log4j.Level
 import org.apache.thrift.transport.TSocket
+import org.slf4j.LoggerFactory
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -287,25 +287,24 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private val sessionState = SessionState.get().asInstanceOf[CliSessionState]
 
-  private val LOG = LogFactory.getLog(classOf[SparkSQLCLIDriver])
+  private val LOG = LoggerFactory.getLogger(classOf[SparkSQLCLIDriver])
 
   private val console = new SessionState.LogHelper(LOG)
-
-  if (sessionState.getIsSilent) {
-    Logger.getRootLogger.setLevel(Level.WARN)
-  }
 
   private val isRemoteMode = {
     SparkSQLCLIDriver.isRemoteMode(sessionState)
   }
 
   private val conf: Configuration =
-    if (sessionState != null) sessionState.getConf else new Configuration()
+    if (sessionState != null) sessionState.getConf else SparkHadoopUtil.get.conf
 
   // Force initializing SparkSQLEnv. This is put here but not object SparkSQLCliDriver
   // because the Hive unit tests do not go through the main() code path.
   if (!isRemoteMode) {
     SparkSQLEnv.init()
+    if (sessionState.getIsSilent) {
+      SparkSQLEnv.sparkContext.setLogLevel(Level.WARN.toString)
+    }
   } else {
     // Hive 1.2 + not supported in CLI
     throw new RuntimeException("Remote operations not supported")

@@ -20,15 +20,23 @@ package org.apache.hive.service.cli;
 
 import java.util.Collections;
 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hive.service.auth.HiveAuthFactory;
-
 
 /**
  * CLIServiceClient.
  *
  */
 public abstract class CLIServiceClient implements ICLIService {
-  private static final long DEFAULT_MAX_ROWS = 1000;
+  protected int defaultFetchRows =
+          ConfVars.HIVE_SERVER2_THRIFT_RESULTSET_DEFAULT_FETCH_SIZE.defaultIntVal;
+
+  public CLIServiceClient(Configuration conf) {
+    defaultFetchRows = HiveConf.getIntVar(conf,
+            ConfVars.HIVE_SERVER2_THRIFT_RESULTSET_DEFAULT_FETCH_SIZE);
+  }
 
   public SessionHandle openSession(String username, String password)
       throws HiveSQLException {
@@ -37,8 +45,8 @@ public abstract class CLIServiceClient implements ICLIService {
 
   @Override
   public RowSet fetchResults(OperationHandle opHandle) throws HiveSQLException {
-    // TODO: provide STATIC default value
-    return fetchResults(opHandle, FetchOrientation.FETCH_NEXT, DEFAULT_MAX_ROWS, FetchType.QUERY_OUTPUT);
+    return fetchResults(opHandle, FetchOrientation.FETCH_NEXT,
+        defaultFetchRows, FetchType.QUERY_OUTPUT);
   }
 
   @Override

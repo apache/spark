@@ -24,9 +24,9 @@ import javax.security.sasl.SaslException;
 import org.apache.hadoop.hive.shims.ShimLoader;
 import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge;
 import org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge.Server;
-import org.apache.hive.service.cli.thrift.TCLIService;
-import org.apache.hive.service.cli.thrift.TCLIService.Iface;
 import org.apache.hive.service.cli.thrift.ThriftCLIService;
+import org.apache.hive.service.rpc.thrift.TCLIService;
+import org.apache.hive.service.rpc.thrift.TCLIService.Iface;
 import org.apache.thrift.TProcessor;
 import org.apache.thrift.TProcessorFactory;
 import org.apache.thrift.transport.TSaslClientTransport;
@@ -96,7 +96,7 @@ public final class KerberosSaslHelper {
     private final ThriftCLIService service;
     private final Server saslServer;
 
-    CLIServiceProcessorFactory(Server saslServer, ThriftCLIService service) {
+    public CLIServiceProcessorFactory(Server saslServer, ThriftCLIService service) {
       super(null);
       this.service = service;
       this.saslServer = saslServer;

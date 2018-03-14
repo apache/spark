@@ -22,8 +22,8 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.hive.service.cli.thrift.TStatus;
-import org.apache.hive.service.cli.thrift.TStatusCode;
+import org.apache.hive.service.rpc.thrift.TStatus;
+import org.apache.hive.service.rpc.thrift.TStatusCode;
 
 /**
  * HiveSQLException.
@@ -109,9 +109,11 @@ public class HiveSQLException extends SQLException {
     }
   }
 
-  /**
+
+
+/**
    * Converts current object to a {@link TStatus} object
-   * @return a {@link TStatus} object
+   * @return	a {@link TStatus} object
    */
   public TStatus toTStatus() {
     // TODO: convert sqlState, etc.
@@ -125,8 +127,8 @@ public class HiveSQLException extends SQLException {
 
   /**
    * Converts the specified {@link Exception} object into a {@link TStatus} object
-   * @param e a {@link Exception} object
-   * @return a {@link TStatus} object
+   * @param e	a {@link Exception} object
+   * @return	a {@link TStatus} object
    */
   public static TStatus toTStatus(Exception e) {
     if (e instanceof HiveSQLException) {
@@ -155,8 +157,7 @@ public class HiveSQLException extends SQLException {
     if (parent != null) {
       int n = parent.length - 1;
       while (m >= 0 && n >= 0 && trace[m].equals(parent[n])) {
-        m--;
-        n--;
+        m--; n--;
       }
     }
     List<String> detail = enroll(cause, trace, m);
@@ -209,8 +210,8 @@ public class HiveSQLException extends SQLException {
     String exceptionMessage = detail.substring(i1 + 1, i2);
     Throwable ex = newInstance(exceptionClass, exceptionMessage);
 
-    Integer length = Integer.valueOf(detail.substring(i2 + 1, i3));
-    Integer unique = Integer.valueOf(detail.substring(i3 + 1));
+    int length = Integer.parseInt(detail.substring(i2 + 1, i3));
+    int unique = Integer.parseInt(detail.substring(i3 + 1));
 
     int i = 0;
     StackTraceElement[] trace = new StackTraceElement[length];
@@ -225,7 +226,7 @@ public class HiveSQLException extends SQLException {
       if (fileName.isEmpty()) {
         fileName = null;
       }
-      int lineNumber = Integer.valueOf(detail.substring(j3 + 1));
+      int lineNumber = Integer.parseInt(detail.substring(j3 + 1));
       trace[i] = new StackTraceElement(className, methodName, fileName, lineNumber);
     }
     int common = trace.length - i;

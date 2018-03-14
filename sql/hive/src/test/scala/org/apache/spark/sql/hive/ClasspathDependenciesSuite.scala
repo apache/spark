@@ -58,11 +58,11 @@ class ClasspathDependenciesSuite extends SparkFunSuite {
   }
 
   test("shaded Protobuf") {
-    assertLoads("org.apache.hive.com.google.protobuf.ServiceException")
+    assertLoads("com.google.protobuf.ServiceException")
   }
 
   test("shaded Kryo") {
-    assertLoads("org.apache.hive.com.esotericsoftware.kryo.Kryo")
+    assertLoads("com.esotericsoftware.kryo.Kryo")
   }
 
   test("hive-common") {

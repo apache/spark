@@ -1266,7 +1266,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       // if (isUsingHiveMetastore) {
       //  assert(storageFormat.properties.get("path") === expected)
       // }
-      assert(storageFormat.locationUri === Some(expected))
+      assert(Some(storageFormat.locationUri.get.getPath) === Some(expected.getPath))
     }
     // set table location
     sql("ALTER TABLE dbx.tab1 SET LOCATION '/path/to/your/lovely/heart'")
@@ -2514,9 +2514,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             }.getMessage
             assert(e.contains("Found duplicate column(s)"))
           } else {
-            sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            sql("ALTER TABLE t1 ADD COLUMNS (C2 string)")
             assert(spark.table("t1").schema ==
-              new StructType().add("c1", IntegerType).add("C1", StringType))
+              new StructType().add("c1", IntegerType).add("C2", StringType))
           }
         }
       }

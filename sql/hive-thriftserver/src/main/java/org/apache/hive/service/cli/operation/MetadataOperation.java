@@ -44,7 +44,7 @@ public abstract class MetadataOperation extends Operation {
   private static final char SEARCH_STRING_ESCAPE = '\\';
 
   protected MetadataOperation(HiveSession parentSession, OperationType opType) {
-    super(parentSession, opType, false);
+    super(parentSession, opType);
     setHasResultSet(true);
   }
 
@@ -94,16 +94,30 @@ public abstract class MetadataOperation extends Operation {
    * other hand is done locally inside the hive code and that requires the regex wildchar
    * format '.*'  This is driven by the datanucleusFormat flag.
    */
-  private String convertPattern(final String pattern, boolean datanucleusFormat) {
+  private String convertPattern(String pattern, boolean datanucleusFormat) {
     String wStr;
     if (datanucleusFormat) {
       wStr = "*";
     } else {
       wStr = ".*";
     }
-    return pattern
-        .replaceAll("([^\\\\])%", "$1" + wStr).replaceAll("\\\\%", "%").replaceAll("^%", wStr)
-        .replaceAll("([^\\\\])_", "$1.").replaceAll("\\\\_", "_").replaceAll("^_", ".");
+    pattern = replaceAll(pattern, "([^\\\\])%", "$1" + wStr);
+    pattern = replaceAll(pattern, "\\\\%", "%");
+    pattern = replaceAll(pattern, "^%", wStr);
+    pattern = replaceAll(pattern, "([^\\\\])_", "$1.");
+    pattern = replaceAll(pattern, "\\\\_", "_");
+    pattern = replaceAll(pattern, "^_", ".");
+    return pattern;
+  }
+
+  private String replaceAll(String input, final String pattern, final String replace) {
+    while (true) {
+      String replaced = input.replaceAll(pattern, replace);
+      if (replaced.equals(input)) {
+        return replaced;
+      }
+      input = replaced;
+    }
   }
 
   protected boolean isAuthV2Enabled(){
@@ -122,6 +136,7 @@ public abstract class MetadataOperation extends Operation {
     SessionState ss = SessionState.get();
     HiveAuthzContext.Builder ctxBuilder = new HiveAuthzContext.Builder();
     ctxBuilder.setUserIpAddress(ss.getUserIpAddress());
+    ctxBuilder.setForwardedAddresses(ss.getForwardedAddresses());
     ctxBuilder.setCommandString(cmdString);
     try {
       ss.getAuthorizerV2().checkPrivileges(opType, inpObjs, null,
@@ -129,6 +144,11 @@ public abstract class MetadataOperation extends Operation {
     } catch (HiveAuthzPluginException | HiveAccessControlException e) {
       throw new HiveSQLException(e.getMessage(), e);
     }
+  }
+
+  @Override
+  public void cancel(OperationState stateAfterCancel) throws HiveSQLException {
+    throw new UnsupportedOperationException("MetadataOperation.cancel()");
   }
 
 }

@@ -110,9 +110,9 @@ private[hive] class SparkExecuteStatementOperation(
 
   def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = {
     validateDefaultFetchOrientation(order)
-    assertState(OperationState.FINISHED)
+    assertState(Arrays.asList(OperationState.FINISHED))
     setHasResultSet(true)
-    val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion)
+    val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion, false)
 
     // Reset iter to header when fetching start from first row
     if (order.equals(FetchOrientation.FETCH_FIRST)) {
@@ -222,7 +222,7 @@ private[hive] class SparkExecuteStatementOperation(
       parentSession.getSessionHandle.getSessionId.toString,
       statement,
       statementId,
-      parentSession.getUsername)
+      parentSession.getUserName)
     sqlContext.sparkContext.setJobGroup(statementId, statement)
     val pool = sessionToActivePool.get(parentSession.getSessionHandle)
     if (pool != null) {
@@ -272,7 +272,7 @@ private[hive] class SparkExecuteStatementOperation(
     HiveThriftServer2.listener.onStatementFinish(statementId)
   }
 
-  override def cancel(): Unit = {
+  override def cancel(stateAfterCancel: OperationState): Unit = {
     logInfo(s"Cancel '$statement' with $statementId")
     cleanup(OperationState.CANCELED)
   }

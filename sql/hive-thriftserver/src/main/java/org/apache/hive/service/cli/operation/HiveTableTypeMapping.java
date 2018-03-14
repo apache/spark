@@ -22,6 +22,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.apache.hadoop.hive.metastore.TableType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * HiveTableTypeMapping.
@@ -30,21 +32,29 @@ import org.apache.hadoop.hive.metastore.TableType;
  */
 public class HiveTableTypeMapping implements TableTypeMapping {
 
+  private static final Logger LOG = LoggerFactory.getLogger(HiveTableTypeMapping.class);
+
   @Override
-  public String mapToHiveType(String clientTypeName) {
-    return clientTypeName;
+  public String[] mapToHiveType(String clientTypeName) {
+    return new String[] {mapToClientType(clientTypeName)};
   }
 
   @Override
   public String mapToClientType(String hiveTypeName) {
-    return hiveTypeName;
+    try {
+      TableType hiveType = TableType.valueOf(hiveTypeName.toUpperCase());
+      return hiveType.name();
+    } catch (IllegalArgumentException e) {
+      LOG.warn("Invalid hive table type " + hiveTypeName);
+      return hiveTypeName;
+    }
   }
 
   @Override
   public Set<String> getTableTypeNames() {
     Set<String> typeNameSet = new HashSet<String>();
     for (TableType typeNames : TableType.values()) {
-      typeNameSet.add(typeNames.toString());
+      typeNameSet.add(typeNames.name());
     }
     return typeNameSet;
   }
