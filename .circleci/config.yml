@@ -264,6 +264,7 @@ jobs:
           name: Run all tests
           command: ./dev/run-scala-tests.py \
               | tee -a "/tmp/run-scala-tests.log"
+          no_output_timeout: 15m
       - store_artifacts:
           path: /tmp/run-scala-tests.log
           destination: run-scala-tests.log
