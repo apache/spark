@@ -110,7 +110,12 @@ private[spark] class Client(
       currentDriverSpec = nextStep.configureDriver(currentDriverSpec)
     }
     val configMapName = s"$kubernetesResourceNamePrefix-driver-conf-map"
-    val configMap = buildConfigMap(configMapName, currentDriverSpec.driverSparkConf)
+    val driverExtraJavaOpts =
+      sparkConf.get(org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS).getOrElse("")
+    val configMap = buildConfigMap(
+      configMapName,
+      currentDriverSpec.driverSparkConf,
+      driverExtraJavaOpts)
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
     // Spark command builder to pickup on the Java Options present in the ConfigMap
     val resolvedDriverContainer = new ContainerBuilder(currentDriverSpec.driverContainer)
@@ -180,10 +185,15 @@ private[spark] class Client(
     }
   }
 
-  // Build a Config Map that will house both the properties file and the java options file
-  private def buildConfigMap(configMapName: String, conf: SparkConf): ConfigMap = {
+  // Build a Config Map that will house both the properties and the java options in a single file
+  private def buildConfigMap(
+    configMapName: String,
+    conf: SparkConf,
+    driverJavaOps: String): ConfigMap = {
     val properties = new Properties()
-    conf.getAll.foreach { case (k, v) =>
+    conf
+      .remove(org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS)
+      .getAll.foreach { case (k, v) =>
       properties.setProperty(k, v)
     }
     val propertiesWriter = new StringWriter()
@@ -196,7 +206,7 @@ private[spark] class Client(
         .withName(configMapName)
         .withNamespace(namespace)
         .endMetadata()
-      .addToData(SPARK_CONF_FILE_NAME, propertiesWriter.toString)
+      .addToData(SPARK_CONF_FILE_NAME, propertiesWriter.toString + driverJavaOps)
       .build()
   }
 }
@@ -222,8 +232,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     val waitForAppCompletion = sparkConf.get(WAIT_FOR_APP_COMPLETION)
     val appName = sparkConf.getOption("spark.app.name").getOrElse("spark")
     val kubernetesResourceNamePrefix = {
-      val uuid = UUID.nameUUIDFromBytes(Longs.toByteArray(launchTime)).toString.replaceAll("-", "")
-      s"$appName-$uuid".toLowerCase.replaceAll("\\.", "-")
+      s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
     }
     // The master URL has been checked for validity already in SparkSubmit.
     // We just need to get rid of the "k8s://" prefix here.

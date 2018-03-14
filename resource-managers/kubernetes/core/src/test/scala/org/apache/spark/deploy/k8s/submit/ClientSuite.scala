@@ -112,9 +112,11 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("The client should create Kubernetes resources") {
+    val EXAMPLE_JAVA_OPTS = "-XX:+HeapDumpOnOutOfMemoryError -XX:+PrintGCDetails"
     val submissionClient = new Client(
       submissionSteps,
-      new SparkConf(false),
+      new SparkConf(false)
+        .set(org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS, EXAMPLE_JAVA_OPTS),
       kubernetesClient,
       false,
       "spark",
@@ -138,6 +140,9 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
         assert(configMap.getMetadata.getName ===
           s"$KUBERNETES_RESOURCE_PREFIX-driver-conf-map")
         assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
+        assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains(EXAMPLE_JAVA_OPTS))
+        assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains(
+          "spark.custom-conf=custom-conf-value"))
     }
     val driverContainer = Iterables.getOnlyElement(createdPod.getSpec.getContainers)
     assert(driverContainer.getName === SecondTestConfigurationStep.containerName)
@@ -193,13 +198,11 @@ private object FirstTestConfigurationStep extends DriverConfigurationStep {
 }
 
 private object SecondTestConfigurationStep extends DriverConfigurationStep {
-
   val annotationKey = "second-submit"
   val annotationValue = "submitted"
   val sparkConfKey = "spark.custom-conf"
   val sparkConfValue = "custom-conf-value"
   val containerName = "driverContainer"
-
   override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
     val modifiedPod = new PodBuilder(driverSpec.driverPod)
       .editMetadata()
