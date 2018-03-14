@@ -672,51 +672,41 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
       val newConditionOpt = conditionOpt match {
         case Some(condition) =>
           val newFilters = additionalConstraints -- splitConjunctivePredicates(condition)
-          if (newFilters.nonEmpty) Option(And(newFilters.reduce(And), condition)) else None
+          if (newFilters.nonEmpty) Option(And(newFilters.reduce(And), condition)) else conditionOpt
         case None =>
           additionalConstraints.reduceOption(And)
       }
-      val j = if (newConditionOpt.isDefined) Join(left, right, joinType, newConditionOpt) else join
-
       // Infer filter for left/right outer joins
-      joinType match {
-        case RightOuter if j.condition.isDefined =>
+      val newLeftOpt = joinType match {
+        case RightOuter if newConditionOpt.isDefined =>
           val rightConstraints = right.constraints.union(
-            splitConjunctivePredicates(j.condition.get).toSet)
+            splitConjunctivePredicates(newConditionOpt.get).toSet)
           val inferredConstraints = ExpressionSet(
             QueryPlanConstraints.inferAdditionalConstraints(rightConstraints))
           val leftConditions = inferredConstraints
             .filter(_.deterministic)
             .filter(_.references.subsetOf(left.outputSet))
-          if (leftConditions.isEmpty) {
-            j
-          } else {
-            // push the predicate down to left side sub query.
-            val newLeft = leftConditions.
-              reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
-            val newRight = right
-
-            Join(newLeft, newRight, RightOuter, j.condition)
-          }
-        case LeftOuter if j.condition.isDefined =>
+          leftConditions.reduceLeftOption(And).map(Filter(_, left))
+        case _ => None
+      }
+      val newRightOpt = joinType match {
+        case LeftOuter if newConditionOpt.isDefined =>
           val leftConstraints = left.constraints.union(
-            splitConjunctivePredicates(j.condition.get).toSet)
+            splitConjunctivePredicates(newConditionOpt.get).toSet)
           val inferredConstraints = ExpressionSet(
             QueryPlanConstraints.inferAdditionalConstraints(leftConstraints))
           val rightConditions = inferredConstraints
             .filter(_.deterministic)
             .filter(_.references.subsetOf(right.outputSet))
-          if (rightConditions.isEmpty) {
-            j
-          } else {
-            // push the predicate down to right side sub query.
-            val newRight = rightConditions.
-              reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
-            val newLeft = left
+          rightConditions.reduceLeftOption(And).map(Filter(_, right))
+        case _ => None
+      }
 
-            Join(newLeft, newRight, LeftOuter, j.condition)
-          }
-        case _ => j
+      if ((newConditionOpt.isDefined && (newConditionOpt ne conditionOpt))
+        || newLeftOpt.isDefined || newRightOpt.isDefined) {
+        Join(newLeftOpt.getOrElse(left), newRightOpt.getOrElse(right), joinType, newConditionOpt)
+      } else {
+        join
       }
   }
 }
