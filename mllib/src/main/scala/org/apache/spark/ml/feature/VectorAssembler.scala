@@ -81,8 +81,12 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       val index = schema.fieldIndex(c)
       field.dataType match {
         case _: NumericType | BooleanType => 1  // DoubleType is also NumericType
-        case _: VectorUDT => AttributeGroup.fromStructField(field).
-          numAttributes.getOrElse(first.getAs[Vector](index).size)
+        case _: VectorUDT =>
+          val group = AttributeGroup.fromStructField(field)
+          val first_not_null_row = dataset.na.drop(Seq(c)).first()
+          val first_size = first_not_null_row.getAs[Vector](index).size
+          println(first_size)
+          group.numAttributes.getOrElse(first_size)
       }
     }
     val attrs = $(inputCols).flatMap { c =>
