@@ -86,8 +86,6 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
     Seq("tar", "-xzf", downloaded, "-C", targetDir, "--strip-components=1").!
 
-    Seq("bash", "-c", s"rm -f $targetDir/jars/datanucleus-*.jar").!
-
     Seq("rm", downloaded).!
   }
 
@@ -181,7 +179,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     tempPyFile.delete()
   }
 
-  test("backward compatibility") {
+  ignore("backward compatibility") {
     val args = Seq(
       "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
       "--name", "HiveExternalCatalog backward compatibility test",
