@@ -94,6 +94,46 @@ object PartitionStrategy {
     }
   }
 
+
+  /**
+   * Assigns edges to partitions using a triangle partitioning of the sparse edge adjacency matrix,
+   * guaranteeing a `sqrt(2 * numParts)` bound on vertex replication.
+   *
+   * This strategy is mostly inspired by the attempting to combine the partition strategy
+   * EdgePartition2D with the partition strategy CanonicalRandomVertexCut. The basic idea is to fold
+   * the partitions obtained by EdgePartition2D diagonally to colocate all edges between two
+   * vertices regardless of direction.
+   *
+   * Edges in diagonal partitions are relocated by more complex strategy to achieve better work
+   * balance, and when the number of partitions requested is not a triangle number, we use a
+   * slightly different method while still maintaining the almost same size per block.
+   */
+  case object EdgePartitionTriangle extends PartitionStrategy {
+    override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
+      val mixingPrime: VertexId = 1125899906842597L
+      val numRowTriParts = ((math.sqrt(1 + 8 * numParts) - 1) / 2).toInt
+      val numTriParts = numRowTriParts * (numRowTriParts + 1) / 2
+      val segmentFactor = 100
+      val numSegments = (segmentFactor * math.sqrt(4 * numParts * numTriParts)).toInt
+      val segRow = (math.abs(src * mixingPrime) % numSegments).toInt
+      val segCol = (math.abs(dst * mixingPrime) % numSegments).toInt
+      var row = segRow / (segmentFactor * numRowTriParts)
+      var col = segCol / (segmentFactor * numRowTriParts)
+      if (math.max(segRow, segCol) >= 2 * segmentFactor * numTriParts) {
+        // non triangle parts
+        row = numRowTriParts + 1
+        col = math.min(segRow, segCol) % (numParts - numTriParts)
+      }
+      else if (row == col) {
+        // diagonal parts
+        val ind = math.min(segRow % numRowTriParts, segCol % numRowTriParts)
+        col = (math.min(2 * numRowTriParts - ind - 1, ind) + row + 1) % (numRowTriParts + 1)
+      }
+      if (row > col) row * (row - 1) / 2 + col else col * (col - 1) / 2 + row
+    }
+  }
+
+
   /**
    * Assigns edges to partitions using only the source vertex ID, colocating edges with the same
    * source.
