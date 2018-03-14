@@ -822,8 +822,8 @@ public class HiveSessionImpl implements HiveSession {
   }
 
   private void cleanupPipeoutFile() {
-    String lScratchDir = hiveConf.getVar(ConfVars.LOCALSCRATCHDIR);
-    String sessionID = hiveConf.getVar(ConfVars.HIVESESSIONID);
+    String lScratchDir = sessionConf.getVar(ConfVars.LOCALSCRATCHDIR);
+    String sessionID = sessionConf.getVar(ConfVars.HIVESESSIONID);
 
     File[] fileAry = new File(lScratchDir).listFiles(
             (dir, name) -> name.startsWith(sessionID) && name.endsWith(".pipeout"));
