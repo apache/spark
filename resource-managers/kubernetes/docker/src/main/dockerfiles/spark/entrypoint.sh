@@ -17,12 +17,14 @@
 #
 
 # echo commands to the terminal output
-set -ex
+set -x
 
 # Check whether there is a passwd entry for the container UID
 myuid=$(id -u)
 mygid=$(id -g)
 uidentry=$(getent passwd $myuid)
+
+set -e
 
 # If there is no passwd entry for the container UID, attempt to create one
 if [ -z "$uidentry" ] ; then
