@@ -64,7 +64,8 @@ object BuildCommons {
       "docker-integration-tests", "hadoop-cloud",
       "kubernetes-integration-tests",
       "kubernetes-integration-tests-spark-jobs", "kubernetes-integration-tests-spark-jobs-helpers",
-      "kubernetes-docker-minimal-bundle"
+      "kubernetes-docker-minimal-bundle",
+      "spark-dist-hadoop-palantir"
     ).map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =
