@@ -85,7 +85,9 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           val group = AttributeGroup.fromStructField(field)
           val first_not_null_row = dataset.na.drop(Seq(c)).first()
           val first_size = first_not_null_row.getAs[Vector](index).size
+          //scalastyle:off println
           println(first_size)
+          //scalastyle:on println
           group.numAttributes.getOrElse(first_size)
       }
     }
