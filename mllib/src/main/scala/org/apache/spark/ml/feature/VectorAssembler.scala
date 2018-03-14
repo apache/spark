@@ -20,13 +20,14 @@ package org.apache.spark.ml.feature
 import java.util.NoSuchElementException
 
 import scala.collection.mutable.ArrayBuilder
+import scala.language.existentials
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
@@ -38,7 +39,8 @@ import org.apache.spark.sql.types._
  */
 @Since("1.4.0")
 class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Transformer with HasInputCols with HasOutputCol with DefaultParamsWritable {
+  extends Transformer with HasInputCols with HasOutputCol with HasHandleInvalid
+    with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("vecAssembler"))
@@ -50,6 +52,25 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   /** @group setParam */
   @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
+
+  /** @group setParam */
+  @Since("1.6.0")
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
+
+  /**
+   * Param for how to handle invalid data (NULL values). Options are 'skip' (filter out rows with
+   * invalid data), 'error' (throw an error), or 'keep' (return relevant number of NaN in the
+   * output).
+   * Default: "error"
+   * @group param
+   */
+  @Since("1.6.0")
+  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+    "Hhow to handle invalid data (NULL values). Options are 'skip' (filter out rows with " +
+      "invalid data), 'error' (throw an error), or 'keep' (return relevant number of NaN " +
+      "in the * output).", ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
+
+  setDefault(handleInvalid, StringIndexer.ERROR_INVALID)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -83,6 +104,21 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
               throw new RuntimeException("better exception here.")
           }
         }.toMap
+
+
+    val lengths = $(inputCols).map { c =>
+      val field = schema(c)
+      val index = schema.fieldIndex(c)
+      field.dataType match {
+        case _: NumericType | BooleanType => 1  // DoubleType is also NumericType
+        case _: VectorUDT =>
+          val group = AttributeGroup.fromStructField(field)
+          val first_not_null_row = dataset.na.drop(Seq(c)).first()
+          val first_size = first_not_null_row.getAs[Vector](index).size
+          //scalastyle:off println
+          println(first_size)
+          //scalastyle:on println
+          group.numAttributes.getOrElse(first_size)
       }
     }
     val attrs = $(inputCols).flatMap { c =>
@@ -101,6 +137,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           Some(NumericAttribute.defaultAttr.withName(c))
         case _: VectorUDT =>
           val group = AttributeGroup.fromStructField(field)
+          val numAttrs = group.numAttributes.getOrElse(first.getAs[Vector](index).size)
           if (group.attributes.isDefined) {
             // If attributes are defined, copy them with updated names.
             group.attributes.get.zipWithIndex.map { case (attr, i) =>
@@ -122,10 +159,14 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       }
     }
     val metadata = new AttributeGroup($(outputCol), attrs).toMetadata()
-
+    val (filteredDataset, keepInvalid) = $(handleInvalid) match {
+      case StringIndexer.SKIP_INVALID => (dataset.na.drop("any", $(inputCols)), false)
+      case StringIndexer.KEEP_INVALID => (dataset, true)
+      case StringIndexer.ERROR_INVALID => (dataset, false)
+    }
     // Data transformation.
     val assembleFunc = udf { r: Row =>
-      VectorAssembler.assemble(r.toSeq: _*)
+      VectorAssembler.assemble(lengths, keepInvalid)(r.toSeq: _*)
     }.asNondeterministic()
     val args = $(inputCols).map { c =>
       schema(c).dataType match {
@@ -135,7 +176,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       }
     }
 
-    dataset.select(col("*"), assembleFunc(struct(args: _*)).as($(outputCol), metadata))
+    filteredDataset.select(col("*"), assembleFunc(struct(args: _*)).as($(outputCol), metadata))
   }
 
   @Since("1.4.0")
@@ -165,34 +206,54 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 @Since("1.6.0")
 object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
 
+  private[feature] val SKIP_INVALID: String = "skip"
+  private[feature] val ERROR_INVALID: String = "error"
+  private[feature] val KEEP_INVALID: String = "keep"
+  private[feature] val supportedHandleInvalids: Array[String] =
+    Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
+
   @Since("1.6.0")
   override def load(path: String): VectorAssembler = super.load(path)
 
-  private[feature] def assemble(vv: Any*): Vector = {
+  private[feature] def assemble(lengths: Array[Int], keepInvalid: Boolean)(vv: Any*): Vector = {
     val indices = ArrayBuilder.make[Int]
     val values = ArrayBuilder.make[Double]
-    var cur = 0
+    var featureIndex = 0
+
+    var inputColumnIndex = 0
+
     vv.foreach {
       case v: Double =>
         if (v != 0.0) {
-          indices += cur
+          indices += featureIndex
           values += v
         }
-        cur += 1
+        inputColumnIndex += 1
+        featureIndex += 1
       case vec: Vector =>
         vec.foreachActive { case (i, v) =>
           if (v != 0.0) {
-            indices += cur + i
+            indices += featureIndex + i
             values += v
           }
         }
-        cur += vec.size
+        inputColumnIndex += 1
+        featureIndex += vec.size
       case null =>
-        // TODO: output Double.NaN?
-        throw new SparkException("Values to assemble cannot be null.")
+        keepInvalid match {
+          case false => throw new SparkException("Values to assemble cannot be null.")
+          case true =>
+            val length: Int = lengths(inputColumnIndex)
+            Array.range(0, length).foreach { case (i) =>
+              indices += featureIndex + i
+              values += Double.NaN
+            }
+            inputColumnIndex += 1
+            featureIndex += length
+        }
       case o =>
         throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
     }
-    Vectors.sparse(cur, indices.result(), values.result()).compressed
+    Vectors.sparse(featureIndex, indices.result(), values.result()).compressed
   }
 }

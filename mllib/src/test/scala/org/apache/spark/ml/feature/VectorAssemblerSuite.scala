@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.feature
 
+import org.dmg.pmml.False
+
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
@@ -37,24 +39,45 @@ class VectorAssemblerSuite
 
   test("assemble") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
-    assert(assemble(0.0) === Vectors.sparse(1, Array.empty, Array.empty))
-    assert(assemble(0.0, 1.0) === Vectors.sparse(2, Array(1), Array(1.0)))
+    assert(assemble(Array(1), true)(0.0) === Vectors.sparse(1, Array.empty, Array.empty))
+    assert(assemble(Array(1, 1), true)(0.0, 1.0) === Vectors.sparse(2, Array(1), Array(1.0)))
     val dv = Vectors.dense(2.0, 0.0)
-    assert(assemble(0.0, dv, 1.0) === Vectors.sparse(4, Array(1, 3), Array(2.0, 1.0)))
+    assert(assemble(Array(1, 2, 1), true)(0.0, dv, 1.0) ===
+      Vectors.sparse(4, Array(1, 3), Array(2.0, 1.0)))
     val sv = Vectors.sparse(2, Array(0, 1), Array(3.0, 4.0))
-    assert(assemble(0.0, dv, 1.0, sv) ===
+    assert(assemble(Array(1, 2, 1, 2), true)(0.0, dv, 1.0, sv) ===
       Vectors.sparse(6, Array(1, 3, 4, 5), Array(2.0, 1.0, 3.0, 4.0)))
-    for (v <- Seq(1, "a", null)) {
-      intercept[SparkException](assemble(v))
-      intercept[SparkException](assemble(1.0, v))
+    for (v <- Seq(1, "a")) {
+      intercept[SparkException](assemble(Array(1), true)(v))
+      intercept[SparkException](assemble(Array(1, 1), true)(1.0, v))
     }
+  }
+
+  test("keep invalid should keep nulls") {
+    import org.apache.spark.ml.feature.VectorAssembler.assemble
+    assert(assemble(Array(1, 1), true)(1.0, null) === Vectors.dense(1.0, Double.NaN))
+    assert(assemble(Array(1, 2), true)(1.0, null) === Vectors.dense(1.0, Double.NaN, Double.NaN))
+    assert(assemble(Array(1), true)(null) === Vectors.dense(Double.NaN))
+    assert(assemble(Array(2), true)(null) === Vectors.dense(Double.NaN, Double.NaN))
+  }
+
+  test("error invalid should throw errors") {
+    import org.apache.spark.ml.feature.VectorAssembler.assemble
+    intercept[SparkException](assemble(Array(1, 1), false)(1.0, null) ===
+      Vectors.dense(1.0, Double.NaN))
+    intercept[SparkException](assemble(Array(1, 2), false)(1.0, null) ===
+      Vectors.dense(1.0, Double.NaN, Double.NaN))
+    intercept[SparkException](assemble(Array(1), false)(null) === Vectors.dense(Double.NaN))
+    intercept[SparkException](assemble(Array(2), false)(null) ===
+      Vectors.dense(Double.NaN, Double.NaN))
   }
 
   test("assemble should compress vectors") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
-    val v1 = assemble(0.0, 0.0, 0.0, Vectors.dense(4.0))
+    val v1 = assemble(Array(1, 1, 1, 4), true)(0.0, 0.0, 0.0, Vectors.dense(4.0))
     assert(v1.isInstanceOf[SparseVector])
-    val v2 = assemble(1.0, 2.0, 3.0, Vectors.sparse(1, Array(0), Array(4.0)))
+    val sv = Vectors.sparse(1, Array(0), Array(4.0))
+    val v2 = assemble(Array(1, 1, 1, 1), true)(1.0, 2.0, 3.0, sv)
     assert(v2.isInstanceOf[DenseVector])
   }
 
@@ -147,4 +170,25 @@ class VectorAssemblerSuite
       .filter(vectorUDF($"features") > 1)
       .count() == 1)
   }
+
+  test("Handle Invalid should behave properly") {
+    val df = Seq[(Long, java.lang.Double, Vector, String, Vector, Long)](
+      (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L),
+      (0, 0.0, null, "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L),
+      (0, null, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L),
+      (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L)
+    ).toDF("id", "x", "y", "name", "z", "n")
+
+    val assembler = new VectorAssembler()
+      .setInputCols(Array("x", "y", "z", "n"))
+      .setOutputCol("features")
+
+    assembler.setHandleInvalid("skip").transform(df).select("features").show(truncate = false)
+    assembler.setHandleInvalid("keep").transform(df).select("features").show(truncate = false)
+//    assembler.transform(df).select("features").collect().foreach {
+//      case Row(v: Vector) =>
+//        assert(v === Vectors.sparse(6, Array(1, 2, 4, 5), Array(1.0, 2.0, 3.0, 10.0)))
+//    }
+  }
+
 }
