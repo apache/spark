@@ -15,8 +15,10 @@
 # limitations under the License.
 #
 import itertools
-import numpy as np
+import sys
 from multiprocessing.pool import ThreadPool
+
+import numpy as np
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
@@ -727,4 +729,4 @@ if __name__ == "__main__":
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

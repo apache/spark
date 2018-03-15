@@ -18,28 +18,18 @@
 package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.Filter;
+import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset;
 
 /**
- * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this
- * interface to push down filters to the data source and reduce the size of the data to be read.
- *
- * Note that, if data source readers implement both this interface and
- * {@link SupportsPushDownCatalystFilters}, Spark will ignore this interface and only process
- * {@link SupportsPushDownCatalystFilters}.
+ * A mix-in interface for {@link DataReaderFactory}. Continuous data reader factories can
+ * implement this interface to provide creating {@link DataReader} with particular offset.
  */
 @InterfaceStability.Evolving
-public interface SupportsPushDownFilters extends DataSourceReader {
-
+public interface ContinuousDataReaderFactory<T> extends DataReaderFactory<T> {
   /**
-   * Pushes down filters, and returns filters that need to be evaluated after scanning.
+   * Create a DataReader with particular offset as its startOffset.
+   *
+   * @param offset offset want to set as the DataReader's startOffset.
    */
-  Filter[] pushFilters(Filter[] filters);
-
-  /**
-   * Returns the filters that are pushed in {@link #pushFilters(Filter[])}.
-   * It's possible that there is no filters in the query and {@link #pushFilters(Filter[])}
-   * is never called, empty array should be returned for this case.
-   */
-  Filter[] pushedFilters();
+  DataReader<T> createDataReaderWithOffset(PartitionOffset offset);
 }
