@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeArrayWriter, UnsafeRowWriter, UnsafeWriter}
-import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types.{UserDefinedType, _}
 import org.apache.spark.unsafe.Platform
 
@@ -261,21 +261,16 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
         throw new SparkException(s"Unsupported data type $dt")
     }
 
-    // Wrap the writer with a null safe version if the field is nullable.
-    (dt, nullable) match {
-      case (_: UserDefinedType[_], _) =>
+    // Always wrap the writer with a null safe version.
+    dt match {
+      case _: UserDefinedType[_] =>
         // The null wrapper depends on the sql type and not on the UDT.
         unsafeWriter
-      case (DecimalType.Fixed(precision, scale), true) if precision > Decimal.MAX_LONG_DIGITS =>
-        (v, i) => {
-          // We can't call setNullAt() for DecimalType with precision larger than 18.
-          if (!v.isNullAt(i)) {
-            unsafeWriter(v, i)
-          } else {
-            writer.write(i, null.asInstanceOf[Decimal], precision, scale)
-          }
-        }
-      case (BooleanType | ByteType, true) =>
+      case DecimalType.Fixed(precision, _) if precision > Decimal.MAX_LONG_DIGITS =>
+        // We can't call setNullAt() for DecimalType with precision larger than 18, we call write
+        // directly. We can use the unwrapped writer directly.
+        unsafeWriter
+      case BooleanType | ByteType =>
         (v, i) => {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)
@@ -283,7 +278,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
             writer.setNull1Bytes(i)
           }
         }
-      case (ShortType, true) =>
+      case ShortType =>
         (v, i) => {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)
@@ -291,7 +286,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
             writer.setNull2Bytes(i)
           }
         }
-      case (IntegerType | DateType | FloatType, true) =>
+      case IntegerType | DateType | FloatType =>
         (v, i) => {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)
@@ -299,7 +294,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
             writer.setNull4Bytes(i)
           }
         }
-      case (_, true) =>
+      case _ =>
         (v, i) => {
           if (!v.isNullAt(i)) {
             unsafeWriter(v, i)
@@ -307,7 +302,6 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
             writer.setNull8Bytes(i)
           }
         }
-      case _ => unsafeWriter
     }
   }
 
