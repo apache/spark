@@ -174,7 +174,10 @@ case class InMemoryTableScanExec(
   override def outputOrdering: Seq[SortOrder] =
     relation.child.outputOrdering.map(updateAttribute(_).asInstanceOf[SortOrder])
 
-  private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute(a)
+  // When we make canonicalized plan, we can't find a normalized attribute in this map.
+  // We return a `ColumnStatisticsSchema` for normalized attribute in this case.
+  private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute.get(a).
+    getOrElse(new ColumnStatisticsSchema(a))
 
   // Returned filter predicate should return false iff it is impossible for the input expression
   // to evaluate to `true' based on statistics collected about this partition batch.
