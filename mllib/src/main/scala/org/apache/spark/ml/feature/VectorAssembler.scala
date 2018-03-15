@@ -93,18 +93,24 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
            |so that this transformer can be used to transform streaming inputs.
            """.stripMargin)
     }
-    // A non-null example from each vector column without size metadata.
-    // if handle invalid is set to error we can just call "first" once and throw if we see any
-    // nulls.
     val missingVectorSizes = colsMissingNumAttrs.map { c =>
-//          try {
-            c -> dataset.select(c).na.drop().first.getAs[Vector](0).size
-//          } catch {
-//            case NoSuchElementException =>
-//              // I'm not sure about the best exception here
-//              throw new RuntimeException("better exception here.")
-//          }
-        }.toMap
+        $(handleInvalid) match {
+          case StringIndexer.ERROR_INVALID => c -> 0
+          case StringIndexer.SKIP_INVALID => c -> 0
+          case StringIndexer.KEEP_INVALID =>
+            try {
+              c -> dataset.select(c).na.drop().first.getAs[Vector](0).size
+            } catch {
+              case _: NoSuchElementException =>
+                throw new RuntimeException(
+                  s"""
+                     |VectorAssembler cannot determine the size of empty vectors. Consider applying
+                     |VectorSizeHint to ${colsMissingNumAttrs.mkString("[", ", ", "]")} so that this
+                     |transformer can be used to transform empty columns.
+                   """.stripMargin)
+            }
+        }
+    }.toMap
     val lengths = $(inputCols).map { c =>
       val field = schema(c)
       field.dataType match {

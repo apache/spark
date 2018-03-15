@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import org.dmg.pmml.False
-
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
@@ -172,23 +170,30 @@ class VectorAssemblerSuite
   }
 
   test("Handle Invalid should behave properly") {
-    val df = Seq[(Long, java.lang.Double, Vector, String, Vector, Long)](
-      (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L),
-      (0, 0.0, null, "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L),
-      (0, null, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L),
-      (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L)
-    ).toDF("id", "x", "y", "name", "z", "n")
+    val df = Seq[(Long, Long, java.lang.Double, Vector, String, Vector, Long)](
+      (1, 2, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 7L),
+      (2, 1, 0.0, null, "a", Vectors.sparse(2, Array(1), Array(3.0)), 6L),
+      (3, 3, null, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 8L),
+      (4, 4, null, null, "a", Vectors.sparse(2, Array(1), Array(3.0)), 9L)
+    ).toDF("id1", "id2", "x", "y", "name", "z", "n")
 
     val assembler = new VectorAssembler()
       .setInputCols(Array("x", "y", "z", "n"))
       .setOutputCol("features")
 
-    assembler.setHandleInvalid("skip").transform(df).select("features").show(truncate = false)
-    assembler.setHandleInvalid("keep").transform(df).select("features").show(truncate = false)
-//    assembler.transform(df).select("features").collect().foreach {
-//      case Row(v: Vector) =>
-//        assert(v === Vectors.sparse(6, Array(1, 2, 4, 5), Array(1.0, 2.0, 3.0, 10.0)))
-//    }
+    assert(assembler.setHandleInvalid("skip").transform(df).count() == 1)
+    assert(assembler.setHandleInvalid("keep").transform(df).count() == 4)
+    assert(assembler.setHandleInvalid("keep").transform(df.sort("id2")).count() == 4)
+    intercept[SparkException](assembler.setHandleInvalid("error").transform(df).cache())
+
+    // all numeric columns are null
+    assert(assembler.setHandleInvalid("keep").transform(df.filter("id1==3")).count() == 1)
+
+    // all vector columns are null
+    val df2 = df.filter("0 == id1 % 2")
+    assert(assembler.setHandleInvalid("skip").transform(df2).count() == 0)
+    intercept[RuntimeException](assembler.setHandleInvalid("keep").transform(df2))
+    intercept[SparkException](assembler.setHandleInvalid("error").transform(df2).collect())
   }
 
 }
