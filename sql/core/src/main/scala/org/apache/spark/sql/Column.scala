@@ -1210,7 +1210,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type boolean.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def boolean(nullable: Boolean): StructField = StructField(name, BooleanType, nullable)
 
@@ -1222,7 +1222,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type byte.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def byte(nullable: Boolean): StructField = StructField(name, ByteType, nullable)
 
@@ -1234,7 +1234,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type short.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def short(nullable: Boolean): StructField = StructField(name, ShortType, nullable)
 
@@ -1246,7 +1246,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type int.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def int(nullable: Boolean): StructField = StructField(name, IntegerType, nullable)
 
@@ -1258,7 +1258,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type long.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def long(nullable: Boolean): StructField = StructField(name, LongType, nullable)
 
@@ -1270,7 +1270,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type float.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def float(nullable: Boolean): StructField = StructField(name, FloatType, nullable)
 
@@ -1282,7 +1282,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type double.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def double(nullable: Boolean): StructField = StructField(name, DoubleType, nullable)
 
@@ -1294,7 +1294,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type string.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def string(nullable: Boolean): StructField = StructField(name, StringType, nullable)
 
@@ -1306,7 +1306,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type date.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def date(nullable: Boolean): StructField = StructField(name, DateType, nullable)
 
@@ -1318,7 +1318,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type decimal.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def decimal(nullable: Boolean): StructField =
     StructField(name, DecimalType.USER_DEFAULT, nullable)
@@ -1332,7 +1332,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type decimal.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def decimal(precision: Int, scale: Int, nullable: Boolean): StructField =
     StructField(name, DecimalType(precision, scale), nullable)
@@ -1345,7 +1345,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type timestamp.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def timestamp(nullable: Boolean): StructField = StructField(name, TimestampType, nullable)
 
@@ -1357,7 +1357,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type binary.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def binary(nullable: Boolean): StructField = StructField(name, BinaryType, nullable)
 
@@ -1369,7 +1369,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type array.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def array(dataType: DataType, nullable: Boolean): StructField =
     StructField(name, ArrayType(dataType), nullable)
@@ -1385,7 +1385,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type map.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def map(mapType: MapType, nullable: Boolean): StructField = StructField(name, mapType, nullable)
 
@@ -1403,7 +1403,7 @@ class ColumnName(name: String) extends Column(name) {
 
   /**
    * Creates a new `StructField` of type struct.
-   * @since 2.3.0
+   * @since 2.4.0
    */
   def struct(structType: StructType, nullable: Boolean): StructField =
     StructField(name, structType, nullable)
