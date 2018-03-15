@@ -42,31 +42,25 @@ import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, C
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.RpcUtils
 
-case class GetNewRecords(partition: Int, offset: Int)
-
 /**
- * We track the number of records processed for each partition ID.
+ * The overall strategy here is:
+ *  * ContinuousMemoryStream maintains a list of records for each partition. addData() will
+ *    distribute records evenly-ish across partitions.
+ *  * ContinuousMemoryStreamRecordBuffer is set up as an endpoint for partition-level
+ *    ContinuousMemoryStreamDataReader instances to poll. It returns the record at the specified
+ *    offset within the list, or null if that offset doesn't yet have a record.
  */
-case class ContinuousMemoryStreamOffset(partitionNums: Map[Int, Int])
-    extends Offset {
-  private implicit val formats = Serialization.formats(NoTypeHints)
-  override def json(): String = Serialization.write(partitionNums)
-}
 
-case class ContinuousMemoryStreamPartitionOffset(partition: Int, numProcessed: Int)
-  extends PartitionOffset
+private case class GetRecord(offset: ContinuousMemoryStreamPartitionOffset)
 
-
-private case class GetNewRecord(offset: ContinuousMemoryStreamPartitionOffset)
-
-class ContinuousMemoryStreamRecordBuffer[A](
+private class ContinuousMemoryStreamRecordBuffer[A](
     stream: ContinuousMemoryStream[A],
-    partitionToBuffer: Seq[ListBuffer[A]]) extends ThreadSafeRpcEndpoint {
+    partitionBuffers: Seq[ListBuffer[A]]) extends ThreadSafeRpcEndpoint {
   override val rpcEnv: RpcEnv = SparkEnv.get.rpcEnv
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case GetNewRecord(ContinuousMemoryStreamPartitionOffset(part, index)) => stream.synchronized {
-      val buf = partitionToBuffer(part)
+    case GetRecord(ContinuousMemoryStreamPartitionOffset(part, index)) => stream.synchronized {
+      val buf = partitionBuffers(part)
 
       val record =
         if (buf.size <= index) {
@@ -84,33 +78,27 @@ class ContinuousMemoryStream[A : ClassTag : Encoder](id: Int, sqlContext: SQLCon
   private implicit val formats = Serialization.formats(NoTypeHints)
   val NUM_PARTITIONS = 2
 
-  def createContinuousReader(
-      schema: Optional[StructType],
-      checkpointLocation: String,
-      options: DataSourceOptions): ContinuousReader = {
-    this
-  }
-  override protected val logicalPlan =
-    StreamingRelationV2(this, "memory", Map(), attributes, None)(sqlContext.sparkSession)
+  // ContinuousReader implementation
 
   @GuardedBy("this")
-  private val inputs = Seq.fill(NUM_PARTITIONS)(new ListBuffer[A])
+  private val records = Seq.fill(NUM_PARTITIONS)(new ListBuffer[A])
 
-  private val recordBuffer = new ContinuousMemoryStreamRecordBuffer(this, inputs)
+  private val recordBuffer = new ContinuousMemoryStreamRecordBuffer(this, records)
 
   def addData(data: TraversableOnce[A]): Offset = synchronized {
     // Distribute data evenly among partition lists.
     data.toSeq.zipWithIndex.map {
-      case (item, index) => inputs(index % NUM_PARTITIONS) += item
+      case (item, index) => records(index % NUM_PARTITIONS) += item
     }
 
-    ContinuousMemoryStreamOffset((0 until NUM_PARTITIONS).map(i => (i, inputs(i).size)).toMap)
+    // The new target offset is the offset where all records in all partitions have been processed.
+    ContinuousMemoryStreamOffset((0 until NUM_PARTITIONS).map(i => (i, records(i).size)).toMap)
   }
 
   private var startOffset: ContinuousMemoryStreamOffset = _
-  private var partitionsInitialized = false
 
   override def setStartOffset(start: Optional[Offset]): Unit = synchronized {
+    // Inferred initial offset is position 0 in each partition.
     startOffset = start.orElse {
       ContinuousMemoryStreamOffset((0 until NUM_PARTITIONS).map(i => (i, 0)).toMap)
     }.asInstanceOf[ContinuousMemoryStreamOffset]
@@ -143,19 +131,29 @@ class ContinuousMemoryStream[A : ClassTag : Encoder](id: Int, sqlContext: SQLCon
     }
   }
 
-  override def commit(end: Offset): Unit = {
-    partitionsInitialized = true
-  }
-
-  override def readSchema(): StructType = encoderFor[A].schema
-
   override def stop(): Unit = {
-    recordBuffer.rpcEnv.stop(endpointRef)
-    partitionsInitialized = false
+    if (endpointRef != null) recordBuffer.rpcEnv.stop(endpointRef)
   }
+
+  override def commit(end: Offset): Unit = {}
+
+  // ContinuousReadSupport implementation
+  // This is necessary because of how StreamTest finds the source for AddDataMemory steps.
+
+  def createContinuousReader(
+      schema: Optional[StructType],
+      checkpointLocation: String,
+      options: DataSourceOptions): ContinuousReader = {
+    this
+  }
+
+  // MemoryStreamBase implementation
+
+  protected val logicalPlan =
+    StreamingRelationV2(this, "memory", Map(), attributes, None)(sqlContext.sparkSession)
 
   override def reset(): Unit = synchronized {
-    inputs.foreach(_.clear())
+    records.foreach(_.clear())
     startOffset = ContinuousMemoryStreamOffset((0 until NUM_PARTITIONS).map(i => (i, 0)).toMap)
   }
 }
@@ -186,7 +184,7 @@ class ContinuousMemoryStreamDataReader[A : ClassTag](
       Thread.sleep(100)
       current = Option(
         endpoint.askSync[A](
-          GetNewRecord(ContinuousMemoryStreamPartitionOffset(partition, currentOffset))))
+          GetRecord(ContinuousMemoryStreamPartitionOffset(partition, currentOffset))))
     }
     currentOffset += 1
     true
@@ -199,6 +197,15 @@ class ContinuousMemoryStreamDataReader[A : ClassTag](
   override def getOffset: ContinuousMemoryStreamPartitionOffset =
     ContinuousMemoryStreamPartitionOffset(partition, currentOffset)
 }
+
+case class ContinuousMemoryStreamOffset(partitionNums: Map[Int, Int])
+  extends Offset {
+  private implicit val formats = Serialization.formats(NoTypeHints)
+  override def json(): String = Serialization.write(partitionNums)
+}
+
+case class ContinuousMemoryStreamPartitionOffset(partition: Int, numProcessed: Int)
+  extends PartitionOffset
 
 object ContinuousMemoryStream {
   def recordBufferName(memoryStreamId: Int): String =

@@ -58,8 +58,6 @@ object MemoryStream {
 abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends BaseStreamingSource {
   protected val encoder = encoderFor[A]
   protected val attributes = encoder.schema.toAttributes
-  protected val logicalPlan: LogicalPlan =
-    StreamingExecutionRelation(this, attributes)(sqlContext.sparkSession)
 
   def toDS(): Dataset[A] = {
     Dataset[A](sqlContext.sparkSession, logicalPlan)
@@ -72,6 +70,10 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
   def addData(data: A*): Offset = {
     addData(data.toTraversable)
   }
+
+  def readSchema(): StructType = encoder.schema
+
+  protected def logicalPlan: LogicalPlan
 
   def addData(data: TraversableOnce[A]): Offset
 
@@ -86,6 +88,9 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     extends MemoryStreamBase[A](sqlContext)
       with MicroBatchReader with SupportsScanUnsafeRow with Logging {
+
+  protected val logicalPlan: LogicalPlan =
+    StreamingExecutionRelation(this, attributes)(sqlContext.sparkSession)
   protected val output = logicalPlan.output
 
   /**
@@ -130,8 +135,6 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       endOffset = end.orElse(currentOffset).asInstanceOf[LongOffset]
     }
   }
-
-  override def readSchema(): StructType = encoder.schema
 
   override def deserializeOffset(json: String): OffsetV2 = LongOffset(json.toLong)
 

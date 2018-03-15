@@ -53,32 +53,24 @@ class ContinuousSuiteBase extends StreamTest {
   // A continuous trigger that will only fire the initial time for the duration of a test.
   // This allows clean testing with manual epoch advancement.
   protected val longContinuousTrigger = Trigger.Continuous("1 hour")
+
+  override protected implicit val defaultTrigger = Trigger.Continuous(100)
+  override protected val defaultUseV2Sink = true
 }
 
 class ContinuousSuite extends ContinuousSuiteBase {
   import testImplicits._
 
   test("basic rate source") {
-    val df = spark.readStream
-      .format("rate")
-      .option("numPartitions", "5")
-      .option("rowsPerSecond", "5")
-      .load()
-      .select('value)
+    val input = MemoryStream[Int]
 
-    testStream(df, useV2Sink = true)(
-      StartStream(longContinuousTrigger),
-      AwaitEpoch(0),
-      Execute(waitForRateSourceTriggers(_, 2)),
-      IncrementEpoch(),
-      CheckAnswerRowsContains(scala.Range(0, 10).map(Row(_))),
+    testStream(input.toDF())(
+      AddData(input, 0, 1, 2),
+      CheckAnswer(0, 1, 2),
       StopStream,
-      StartStream(longContinuousTrigger),
-      AwaitEpoch(2),
-      Execute(waitForRateSourceTriggers(_, 2)),
-      IncrementEpoch(),
-      CheckAnswerRowsContains(scala.Range(0, 20).map(Row(_))),
-      StopStream)
+      AddData(input, 3, 4, 5),
+      StartStream(),
+      CheckAnswer(0, 1, 2, 3, 4, 5))
   }
 
   test("map") {

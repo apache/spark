@@ -48,10 +48,6 @@ class StreamSuite extends StreamTest {
 
   import testImplicits._
 
-
-  override implicit val defaultTrigger = Trigger.Continuous(100)
-  override val defaultUseV2Sink = true
-
   test("map with recovery") {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map(_ + 1)
