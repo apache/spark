@@ -862,15 +862,15 @@ object DateTimeUtils {
       daysToMillis(newDays, timeZone) * 1000L - daysToMillis(days, timeZone) * 1000L +
       microseconds
   }
-
+   
   /**
    * Returns number of months between time1 and time2. time1 and time2 are expressed in
    * microseconds since 1.1.1970.
    *
-   * If time1 and time2 having the same day of month, or both are the last day of month,
-   * it returns an integer (time under a day will be ignored).
+   * If time1 and time2 are on the same day of month, or both are the last day of month,
+   * returns an integer (time under a day will be ignored).
    *
-   * Otherwise, the difference is calculated based on 31 days per month, and rounding to
+   * Otherwise, the difference is calculated based on 31 days per month, and rounded to
    * 8 digits.
    */
   def monthsBetween(time1: SQLTimestamp, time2: SQLTimestamp): Double = {
@@ -881,10 +881,10 @@ object DateTimeUtils {
    * Returns number of months between time1 and time2. time1 and time2 are expressed in
    * microseconds since 1.1.1970.
    *
-   * If time1 and time2 having the same day of month, or both are the last day of month,
-   * it returns an integer (time under a day will be ignored).
+   * If time1 and time2 are on the same day of month, or both are the last day of month,
+   * returns an integer (time under a day will be ignored).
    *
-   * Otherwise, the difference is calculated based on 31 days per month, and rounding to
+   * Otherwise, the difference is calculated based on 31 days per month, and rounded to
    * 8 digits.
    */
   def monthsBetween(time1: SQLTimestamp, time2: SQLTimestamp, timeZone: TimeZone): Double = {
