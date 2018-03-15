@@ -112,6 +112,7 @@ private[spark] object Instrumentation {
   object loggerTags {
     val numFeatures = "numFeatures"
     val numClasses = "numClasses"
+    val numExamples = "numExamples"
   }
 
   /**

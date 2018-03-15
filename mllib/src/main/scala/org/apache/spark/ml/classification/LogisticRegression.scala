@@ -517,6 +517,12 @@ class LogisticRegression @Since("1.2.0") (
         (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
       )(seqOp, combOp, $(aggregationDepth))
     }
+    instr.logNamedValue(Instrumentation.loggerTags.numExamples, summarizer.count)
+    if (labelSummarizer.numClasses == 2) {
+      val b = labelSummarizer.histogram(0) / summarizer.count
+      instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
+      instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.min.toString)
+    }
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
