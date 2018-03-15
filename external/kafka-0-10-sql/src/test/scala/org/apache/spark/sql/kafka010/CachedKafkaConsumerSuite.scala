@@ -36,7 +36,8 @@ class CachedKafkaConsumerSuite extends SharedSQLContext with PrivateMethodTester
     assert(e.getCause === cause)
   }
 
-  test("SPARK: Report error cause correctly in ") {
+  test("SPARK-23685: returning record and not throwing exception in fetchData when a " +
+    "specific offset in the user request range is not found ") {
     val topicPartition = new TopicPartition("testTopic", 0)
     val data = new util.ArrayList[ConsumerRecord[String, String]]
     data.add(new ConsumerRecord("testTopic", 0, 1L, "mykey", "myvalue1"))
