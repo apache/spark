@@ -304,4 +304,14 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(explainStr(spark.range(1).select(udf1(udf2(functions.lit(1)))))
       .contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
   }
+
+  test("SPARK-23666 Do not display exprId in argument names") {
+    Seq(((1, 2), 3)).toDF("a", "b").createOrReplaceTempView("x")
+    spark.udf.register("f", (a: Int) => a)
+    val outputStream = new java.io.ByteArrayOutputStream()
+    Console.withOut(outputStream) {
+      spark.sql("SELECT f(a._1) FROM x").show
+    }
+    assert(outputStream.toString.contains("UDF:f(a._1 AS `_1`)"))
+  }
 }

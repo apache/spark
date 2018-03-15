@@ -324,14 +324,14 @@ case class AttributeReference(
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
  */
-case class PrettyAttribute(
+case class PrettyNamedExpression(
     name: String,
     dataType: DataType = NullType)
   extends Attribute with Unevaluable {
 
   def this(attribute: Attribute) = this(attribute.name, attribute match {
     case a: AttributeReference => a.dataType
-    case a: PrettyAttribute => a.dataType
+    case a: PrettyNamedExpression => a.dataType
     case _ => NullType
   })
 
