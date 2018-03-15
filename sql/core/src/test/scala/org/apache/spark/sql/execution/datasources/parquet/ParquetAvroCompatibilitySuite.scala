@@ -76,7 +76,6 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
       }
 
       logParquetSchema(path)
-      // spark.conf.set("spark.sql.parquet.enableVectorizedReader", "false")
       checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
         Row(
           i % 2 == 0,
