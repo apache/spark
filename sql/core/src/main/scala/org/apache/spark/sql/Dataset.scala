@@ -182,6 +182,15 @@ class Dataset[T] private[sql](
     this(sqlContext.sparkSession, logicalPlan, encoder)
   }
 
+  private var _sqlText: String = _
+
+  def setSqlText(sqlText: String): Dataset[T] = {
+    _sqlText = sqlText
+    this
+  }
+
+  def sqlText: String = _sqlText
+
   @transient private[sql] val logicalPlan: LogicalPlan = {
     // For various commands (like DDL) and queries with side effects, we force query execution
     // to happen right away to let these side effects take place eagerly.
@@ -251,7 +260,7 @@ class Dataset[T] private[sql](
         Column(col).cast(StringType)
       }
     }
-    val takeResult = newDf.select(castCols: _*).take(numRows + 1)
+    val takeResult = newDf.select(castCols: _*).setSqlText(sqlText).take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
 
@@ -1457,7 +1466,7 @@ class Dataset[T] private[sql](
    */
   def filter(condition: Column): Dataset[T] = withTypedPlan {
     Filter(condition.expr, planWithBarrier)
-  }
+  }.setSqlText(sqlText)
 
   /**
    * Filters rows using the given SQL expression.
@@ -3222,7 +3231,7 @@ class Dataset[T] private[sql](
    * an execution.
    */
   private def withNewExecutionId[U](body: => U): U = {
-    SQLExecution.withNewExecutionId(sparkSession, queryExecution)(body)
+    SQLExecution.withNewExecutionId(sparkSession, queryExecution, sqlText)(body)
   }
 
   /**
@@ -3231,7 +3240,7 @@ class Dataset[T] private[sql](
    * reset.
    */
   private def withNewRDDExecutionId[U](body: => U): U = {
-    SQLExecution.withNewExecutionId(sparkSession, rddQueryExecution) {
+    SQLExecution.withNewExecutionId(sparkSession, rddQueryExecution, sqlText) {
       rddQueryExecution.executedPlan.foreach { plan =>
         plan.resetMetrics()
       }
@@ -3249,7 +3258,7 @@ class Dataset[T] private[sql](
         plan.resetMetrics()
       }
       val start = System.nanoTime()
-      val result = SQLExecution.withNewExecutionId(sparkSession, qe) {
+      val result = SQLExecution.withNewExecutionId(sparkSession, qe, sqlText) {
         action(qe.executedPlan)
       }
       val end = System.nanoTime()

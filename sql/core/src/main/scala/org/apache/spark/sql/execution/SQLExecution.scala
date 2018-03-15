@@ -34,16 +34,6 @@ object SQLExecution {
 
   private val executionIdToQueryExecution = new ConcurrentHashMap[Long, QueryExecution]()
 
-  private val executionIdToSqlText = new ConcurrentHashMap[Long, String]()
-
-  def setSqlText(sqlText: String): Unit = {
-    executionIdToSqlText.putIfAbsent(_nextExecutionId.get(), sqlText)
-  }
-
-  def getSqlText(executionId: Long): String = {
-    executionIdToSqlText.get(executionId)
-  }
-
   def getQueryExecution(executionId: Long): QueryExecution = {
     executionIdToQueryExecution.get(executionId)
   }
@@ -68,12 +58,12 @@ object SQLExecution {
    */
   def withNewExecutionId[T](
       sparkSession: SparkSession,
-      queryExecution: QueryExecution)(body: => T): T = {
+      queryExecution: QueryExecution,
+      sqlText: String = "")(body: => T): T = {
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
     sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
-    val sqlText = getSqlText(executionId)
     executionIdToQueryExecution.put(executionId, queryExecution)
     try {
       // sparkContext.getCallSite() would first try to pick up any call site that was previously
