@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
 import java.nio.charset.UnsupportedCharsetException
+import java.nio.file.{Files, Paths}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -1280,21 +1281,53 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     )
   }
 
-  test("skip the first byte of a char if it is disallowed in UTF-8") {
-    val df = spark.read
-      .format("csv")
-      .option("header", "true")
-      .load(testFile("test-data/utf8xFF.csv"))
-    val expectedSchema = new StructType()
-      .add("channel", StringType)
-      .add("code", StringType)
+  def testHandlingUTF8Char(utf8char: Array[Byte]): Unit = {
+    val inHex = utf8char.map("%02x".format(_)).mkString("_")
+    test(s"SPARK-23649: handle the first byte of the char: $inHex") {
+      withTempPath { path =>
+        val filename = s"${path.getAbsolutePath}.csv"
+        val header = "code,channel\n".getBytes
+        val row = "ABGUN".getBytes ++ utf8char ++ ",United".getBytes
+        val content = header ++ row
+        Files.write(Paths.get(filename), content)
 
-    assert(df.schema == expectedSchema)
+        val df = spark.read
+          .format("csv")
+          .option("header", "true")
+          .load(filename)
+        val expectedSchema = new StructType()
+          .add("code", StringType)
+          .add("channel", StringType)
 
-    val badStr = new String("ABGUN".getBytes :+ 0xff.toByte)
-    checkAnswer(
-      df.select("channel"),
-      Row("United") :: Row(badStr) :: Nil
-    )
+        assert(df.schema == expectedSchema)
+
+        val badStr = new String("ABGUN".getBytes ++ utf8char)
+        checkAnswer(
+          df,
+          Row(badStr, "United") :: Nil
+        )
+      }
+    }
   }
+
+  Seq(
+    // Binary    Hex          Comments
+    // 0xxxxxxx  0x00..0x7F   Only byte of a 1-byte character encoding
+    Array(0x00), Array(0x7F),
+    // 10xxxxxx  0x80..0xBF   Continuation bytes (1-3 continuation bytes)
+    // The byte should be skipped because it cannot be the first byte
+    Array(0x80), Array(0xBF),
+    // 0xC0..0xC1 - disallowed in UTF-8
+    // The byte should be skipped because it cannot be the first byte
+    Array(0xC0), Array(0xC1),
+    // 110xxxxx  0xC0..0xDF   First byte of a 2-byte character encoding
+    Array(0xc2, 0x80), Array(0xdf, 0xbf),
+    // 1110xxxx  0xE0..0xEF   First byte of a 3-byte character encoding
+    Array(0xe0, 0xa0, 0x80), Array(0xef, 0xbf, 0xbf),
+    // 11110xxx  0xF0..0xF4   First byte of a 4-byte character encoding
+    Array(0xf0, 0x9f, 0x9c, 0x80), Array(0xf4, 0x80, 0x83, 0xbf),
+    // 0xF5..0xFF - disallowed in UTF-8
+    // The byte should be skipped because it cannot be the first byte
+    Array(0xF5), Array(0xFF)
+  ).map(a => a.map(_.toByte)).foreach(testHandlingUTF8Char(_))
 }
