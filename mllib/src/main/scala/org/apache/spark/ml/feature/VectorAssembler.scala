@@ -84,7 +84,6 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         case _ => false
       }
     }
-    print("colsMissingNumAttrs: " + colsMissingNumAttrs.mkString(",") + "\n")
     if (dataset.isStreaming && colsMissingNumAttrs.nonEmpty) {
       throw new RuntimeException(
         s"""
@@ -149,7 +148,6 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
             // Otherwise, treat all attributes as numeric. If we cannot get the number of attributes
             // from metadata, check the first row.
             val numAttrs = lengths(c)
-            // group.numAttributes.getOrElse(missingVectorSizes(c))
             Array.tabulate(numAttrs)(i => NumericAttribute.defaultAttr.withName(c + "_" + i))
           }
         case otherType =>

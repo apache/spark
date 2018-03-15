@@ -51,25 +51,6 @@ class VectorAssemblerSuite
     }
   }
 
-  test("keep invalid should keep nulls") {
-    import org.apache.spark.ml.feature.VectorAssembler.assemble
-    assert(assemble(Array(1, 1), true)(1.0, null) === Vectors.dense(1.0, Double.NaN))
-    assert(assemble(Array(1, 2), true)(1.0, null) === Vectors.dense(1.0, Double.NaN, Double.NaN))
-    assert(assemble(Array(1), true)(null) === Vectors.dense(Double.NaN))
-    assert(assemble(Array(2), true)(null) === Vectors.dense(Double.NaN, Double.NaN))
-  }
-
-  test("error invalid should throw errors") {
-    import org.apache.spark.ml.feature.VectorAssembler.assemble
-    intercept[SparkException](assemble(Array(1, 1), false)(1.0, null) ===
-      Vectors.dense(1.0, Double.NaN))
-    intercept[SparkException](assemble(Array(1, 2), false)(1.0, null) ===
-      Vectors.dense(1.0, Double.NaN, Double.NaN))
-    intercept[SparkException](assemble(Array(1), false)(null) === Vectors.dense(Double.NaN))
-    intercept[SparkException](assemble(Array(2), false)(null) ===
-      Vectors.dense(Double.NaN, Double.NaN))
-  }
-
   test("assemble should compress vectors") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
     val v1 = assemble(Array(1, 1, 1, 4), true)(0.0, 0.0, 0.0, Vectors.dense(4.0))
@@ -167,6 +148,25 @@ class VectorAssemblerSuite
     assert(assembler.transform(filteredDF).select("features")
       .filter(vectorUDF($"features") > 1)
       .count() == 1)
+  }
+
+  test("assemble should keep nulls") {
+    import org.apache.spark.ml.feature.VectorAssembler.assemble
+    assert(assemble(Array(1, 1), true)(1.0, null) === Vectors.dense(1.0, Double.NaN))
+    assert(assemble(Array(1, 2), true)(1.0, null) === Vectors.dense(1.0, Double.NaN, Double.NaN))
+    assert(assemble(Array(1), true)(null) === Vectors.dense(Double.NaN))
+    assert(assemble(Array(2), true)(null) === Vectors.dense(Double.NaN, Double.NaN))
+  }
+
+  test("assemble should throw errors") {
+    import org.apache.spark.ml.feature.VectorAssembler.assemble
+    intercept[SparkException](assemble(Array(1, 1), false)(1.0, null) ===
+      Vectors.dense(1.0, Double.NaN))
+    intercept[SparkException](assemble(Array(1, 2), false)(1.0, null) ===
+      Vectors.dense(1.0, Double.NaN, Double.NaN))
+    intercept[SparkException](assemble(Array(1), false)(null) === Vectors.dense(Double.NaN))
+    intercept[SparkException](assemble(Array(2), false)(null) ===
+      Vectors.dense(Double.NaN, Double.NaN))
   }
 
   test("Handle Invalid should behave properly") {

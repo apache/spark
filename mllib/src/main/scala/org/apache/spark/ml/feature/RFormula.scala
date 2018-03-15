@@ -339,7 +339,6 @@ class RFormulaModel private[feature](
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     checkCanTransform(dataset.schema)
-    // dataset.filter(....)
     transformLabel(pipelineModel.transform(dataset))
   }
 
