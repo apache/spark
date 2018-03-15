@@ -64,16 +64,16 @@ private class ContinuousMemoryStreamRecordBuffer[A](
 
       val record =
         if (buf.size <= index) {
-          null
+          None
         } else {
-          buf(index)
+          Some(buf(index))
         }
-      context.reply(record)
+      context.reply(record.map(Row(_)))
     }
   }
 }
 
-class ContinuousMemoryStream[A : ClassTag : Encoder](id: Int, sqlContext: SQLContext)
+class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     extends MemoryStreamBase[A](sqlContext) with ContinuousReader with ContinuousReadSupport {
   private implicit val formats = Serialization.formats(NoTypeHints)
   val NUM_PARTITIONS = 2
@@ -126,7 +126,7 @@ class ContinuousMemoryStream[A : ClassTag : Encoder](id: Int, sqlContext: SQLCon
 
       startOffset.partitionNums.map {
         case (part, index) =>
-          new ContinuousMemoryStreamDataReaderFactory[A](id, part, index): DataReaderFactory[Row]
+          new ContinuousMemoryStreamDataReaderFactory(id, part, index): DataReaderFactory[Row]
       }.toList.asJava
     }
   }
@@ -158,15 +158,15 @@ class ContinuousMemoryStream[A : ClassTag : Encoder](id: Int, sqlContext: SQLCon
   }
 }
 
-class ContinuousMemoryStreamDataReaderFactory[A : ClassTag](
+class ContinuousMemoryStreamDataReaderFactory(
     memoryStreamId: Int,
     partition: Int,
     startOffset: Int) extends DataReaderFactory[Row] {
-  override def createDataReader: ContinuousMemoryStreamDataReader[A] =
-    new ContinuousMemoryStreamDataReader[A](memoryStreamId, partition, startOffset)
+  override def createDataReader: ContinuousMemoryStreamDataReader =
+    new ContinuousMemoryStreamDataReader(memoryStreamId, partition, startOffset)
 }
 
-class ContinuousMemoryStreamDataReader[A : ClassTag](
+class ContinuousMemoryStreamDataReader(
     memoryStreamId: Int,
     partition: Int,
     startOffset: Int) extends ContinuousDataReader[Row] {
@@ -176,21 +176,20 @@ class ContinuousMemoryStreamDataReader[A : ClassTag](
     SparkEnv.get.rpcEnv)
 
   private var currentOffset = startOffset
-  private var current: Option[A] = None
+  private var current: Option[Row] = None
 
   override def next(): Boolean = {
     current = None
     while (current.isEmpty) {
       Thread.sleep(100)
-      current = Option(
-        endpoint.askSync[A](
-          GetRecord(ContinuousMemoryStreamPartitionOffset(partition, currentOffset))))
+      current = endpoint.askSync[Option[Row]](
+          GetRecord(ContinuousMemoryStreamPartitionOffset(partition, currentOffset)))
     }
     currentOffset += 1
     true
   }
 
-  override def get(): Row = Row(current.get)
+  override def get(): Row = current.get
 
   override def close(): Unit = {}
 

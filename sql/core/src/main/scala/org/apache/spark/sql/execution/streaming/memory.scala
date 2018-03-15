@@ -45,7 +45,7 @@ object MemoryStream {
   protected val currentBlockId = new AtomicInteger(0)
   protected val memoryStreamId = new AtomicInteger(0)
 
-  def apply[A : ClassTag : Encoder](
+  def apply[A : Encoder](
       implicit sqlContext: SQLContext,
       trigger: Trigger = Trigger.ProcessingTime(0)): MemoryStreamBase[A] = trigger match {
     case _: ContinuousTrigger =>
