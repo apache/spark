@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 
 class RandomUUIDGeneratorSuite extends SparkFunSuite {
   test("RandomUUIDGenerator should generate version 4, variant 2 UUIDs") {
-    val generator = RandomUUIDGenerator(new Random())
+    val generator = RandomUUIDGenerator(new Random().nextLong())
     for (_ <- 0 to 100) {
       val uuid = generator.getNextUUID()
       assert(uuid.version() == 4)
@@ -33,11 +33,11 @@ class RandomUUIDGeneratorSuite extends SparkFunSuite {
 
  test("UUID from RandomUUIDGenerator should be deterministic") {
    val r1 = new Random(100)
-   val generator1 = RandomUUIDGenerator(r1)
+   val generator1 = RandomUUIDGenerator(r1.nextLong())
    val r2 = new Random(100)
-   val generator2 = RandomUUIDGenerator(r2)
+   val generator2 = RandomUUIDGenerator(r2.nextLong())
    val r3 = new Random(101)
-   val generator3 = RandomUUIDGenerator(r3)
+   val generator3 = RandomUUIDGenerator(r3.nextLong())
 
    for (_ <- 0 to 100) {
       val uuid1 = generator1.getNextUUID()

@@ -19,16 +19,17 @@ package org.apache.spark.sql.catalyst.util
 
 import java.util.UUID
 
-import scala.util.Random
+import org.apache.commons.math3.random.MersenneTwister
 
 /**
- * This class is used to generate a UUID from Pseudo-Random Numbers produced by
- * Scala Random.
+ * This class is used to generate a UUID from Pseudo-Random Numbers.
  *
  * For the algorithm, see RFC 4122: A Universally Unique IDentifier (UUID) URN Namespace,
  * section 4.4 "Algorithms for Creating a UUID from Truly Random or Pseudo-Random Numbers".
  */
-case class RandomUUIDGenerator(random: Random) {
+case class RandomUUIDGenerator(randomSeed: Long) {
+  private val random = new MersenneTwister(randomSeed)
+
   def getNextUUID(): UUID = {
     val mostSigBits = (random.nextLong() & 0xFFFFFFFFFFFF0FFFL) | 0x0000000000004000L
     val leastSigBits = (random.nextLong() | 0x8000000000000000L) & 0xBFFFFFFFFFFFFFFFL
