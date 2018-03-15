@@ -50,7 +50,7 @@ private[kafka010] case class CachedKafkaConsumer private(
 
   /** Iterator to the already fetch data */
   private var fetchedData = ju.Collections.emptyIterator[ConsumerRecord[Array[Byte], Array[Byte]]]
-  private var nextOffsetInFetchedData = UNKNOWN_OFFSET
+  private[kafka010] var nextOffsetInFetchedData = UNKNOWN_OFFSET
 
   /** Create a KafkaConsumer to fetch records for `topicPartition` */
   private def createConsumer: KafkaConsumer[Array[Byte], Array[Byte]] = {
@@ -238,9 +238,8 @@ private[kafka010] case class CachedKafkaConsumer private(
       if (record.offset > offset) {
         // This may happen when some records aged out but their offsets already got verified
         if (failOnDataLoss) {
-          reportDataLoss(true, s"Cannot fetch records in [$offset, ${record.offset})")
-          // Never happen as "reportDataLoss" will throw an exception
-          null
+          reportDataLoss(false, s"Cannot fetch records in [$offset, ${record.offset})")
+          record
         } else {
           if (record.offset >= untilOffset) {
             reportDataLoss(false, s"Skip missing records in [$offset, $untilOffset)")

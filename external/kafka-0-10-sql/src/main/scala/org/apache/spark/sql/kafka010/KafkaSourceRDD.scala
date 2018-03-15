@@ -160,8 +160,14 @@ private[kafka010] class KafkaSourceRDD(
               finished = true
               null
             } else {
-              requestOffset = r.offset + 1
-              r
+              if ( r.offset >= range.untilOffset ) {
+                finished = true
+                null
+              }
+              else {
+                requestOffset = r.offset + 1
+                r
+              }
             }
           }
         }
