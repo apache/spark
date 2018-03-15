@@ -542,6 +542,11 @@ case class DataSource(
       throw new AnalysisException("Cannot save interval data type into external storage.")
     }
 
+    if (data.schema.size == 0) {
+      throw new AnalysisException("Datasource does not support writing empty schema. Please " +
+        "make sure the data schema has at least one or more column(s).")
+    }
+
     providingClass.newInstance() match {
       case dataSource: CreatableRelationProvider =>
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
