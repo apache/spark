@@ -637,8 +637,8 @@ class SparkSession private(
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = {
-    val df = Dataset.ofRows(self, sessionState.sqlParser.parsePlan(sqlText))
-    df.setSqlText(substitutor.substitute(sqlText))
+    Dataset.ofRows(self, sessionState.sqlParser.parsePlan(sqlText),
+      substitutor.substitute(sqlText))
   }
 
   /**

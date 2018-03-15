@@ -61,18 +61,20 @@ import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
-  def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
-    val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
+  def apply[T: Encoder](sparkSession: SparkSession,
+      logicalPlan: LogicalPlan, sqlText: String = ""): Dataset[T] = {
+    val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]], sqlText)
     // Eagerly bind the encoder so we verify that the encoder matches the underlying
     // schema. The user will get an error if this is not the case.
     dataset.deserializer
     dataset
   }
 
-  def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame = {
+  def ofRows(sparkSession: SparkSession,
+      logicalPlan: LogicalPlan, sqlText: String = ""): DataFrame = {
     val qe = sparkSession.sessionState.executePlan(logicalPlan)
     qe.assertAnalyzed()
-    new Dataset[Row](sparkSession, qe, RowEncoder(qe.analyzed.schema))
+    new Dataset[Row](sparkSession, qe, RowEncoder(qe.analyzed.schema), sqlText)
   }
 }
 
@@ -166,7 +168,8 @@ private[sql] object Dataset {
 class Dataset[T] private[sql](
     @transient val sparkSession: SparkSession,
     @DeveloperApi @InterfaceStability.Unstable @transient val queryExecution: QueryExecution,
-    encoder: Encoder[T])
+    encoder: Encoder[T],
+    val sqlText: String = "")
   extends Serializable {
 
   queryExecution.assertAnalyzed()
@@ -174,22 +177,15 @@ class Dataset[T] private[sql](
   // Note for Spark contributors: if adding or updating any action in `Dataset`, please make sure
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
 
-  def this(sparkSession: SparkSession, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
-    this(sparkSession, sparkSession.sessionState.executePlan(logicalPlan), encoder)
+  def this(sparkSession: SparkSession, logicalPlan: LogicalPlan,
+      encoder: Encoder[T], sqlText: String = "") = {
+    this(sparkSession, sparkSession.sessionState.executePlan(logicalPlan), encoder, sqlText)
   }
 
-  def this(sqlContext: SQLContext, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
-    this(sqlContext.sparkSession, logicalPlan, encoder)
+  def this(sqlContext: SQLContext, logicalPlan: LogicalPlan,
+      encoder: Encoder[T], sqlText: String = "") = {
+    this(sqlContext.sparkSession, logicalPlan, encoder, sqlText)
   }
-
-  private var _sqlText: String = _
-
-  def setSqlText(sqlText: String): Dataset[T] = {
-    _sqlText = sqlText
-    this
-  }
-
-  def sqlText: String = _sqlText
 
   @transient private[sql] val logicalPlan: LogicalPlan = {
     // For various commands (like DDL) and queries with side effects, we force query execution
@@ -260,7 +256,7 @@ class Dataset[T] private[sql](
         Column(col).cast(StringType)
       }
     }
-    val takeResult = newDf.select(castCols: _*).setSqlText(sqlText).take(numRows + 1)
+    val takeResult = newDf.select(castCols: _*).take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
 
@@ -399,7 +395,8 @@ class Dataset[T] private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = new Dataset[Row](sparkSession, queryExecution, RowEncoder(schema))
+  def toDF(): DataFrame =
+    new Dataset[Row](sparkSession, queryExecution, RowEncoder(schema), sqlText)
 
   /**
    * :: Experimental ::
@@ -631,7 +628,8 @@ class Dataset[T] private[sql](
         outputPartitioning,
         physicalPlan.outputOrdering,
         isStreaming
-      )(sparkSession)).as[T]
+      )(sparkSession),
+      sqlText).as[T]
   }
 
   /**
@@ -1373,10 +1371,11 @@ class Dataset[T] private[sql](
       planWithBarrier)
 
     if (encoder.flat) {
-      new Dataset[U1](sparkSession, project, encoder)
+      new Dataset[U1](sparkSession, project, encoder, sqlText)
     } else {
       // Flattens inner fields of U1
-      new Dataset[Tuple1[U1]](sparkSession, project, ExpressionEncoder.tuple(encoder)).map(_._1)
+      new Dataset[Tuple1[U1]](sparkSession, project, ExpressionEncoder.tuple(encoder), sqlText)
+        .map(_._1)
     }
   }
 
@@ -1390,7 +1389,7 @@ class Dataset[T] private[sql](
     val namedColumns =
       columns.map(_.withInputType(exprEnc, planWithBarrier.output).named)
     val execution = new QueryExecution(sparkSession, Project(namedColumns, planWithBarrier))
-    new Dataset(sparkSession, execution, ExpressionEncoder.tuple(encoders))
+    new Dataset(sparkSession, execution, ExpressionEncoder.tuple(encoders), sqlText)
   }
 
   /**
@@ -1466,7 +1465,7 @@ class Dataset[T] private[sql](
    */
   def filter(condition: Column): Dataset[T] = withTypedPlan {
     Filter(condition.expr, planWithBarrier)
-  }.setSqlText(sqlText)
+  }
 
   /**
    * Filters rows using the given SQL expression.
@@ -2032,7 +2031,7 @@ class Dataset[T] private[sql](
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
       new Dataset[T](
-        sparkSession, Sample(x(0), x(1), withReplacement = false, seed, plan), encoder)
+        sparkSession, Sample(x(0), x(1), withReplacement = false, seed, plan), encoder, sqlText)
     }.toArray
   }
 
@@ -2592,7 +2591,7 @@ class Dataset[T] private[sql](
     new Dataset[U](
       sparkSession,
       MapPartitions[T, U](func, planWithBarrier),
-      implicitly[Encoder[U]])
+      implicitly[Encoder[U]], sqlText)
   }
 
   /**
@@ -2622,7 +2621,8 @@ class Dataset[T] private[sql](
     val rowEncoder = encoder.asInstanceOf[ExpressionEncoder[Row]]
     Dataset.ofRows(
       sparkSession,
-      MapPartitionsInR(func, packageNames, broadcastVars, schema, rowEncoder, planWithBarrier))
+      MapPartitionsInR(func, packageNames, broadcastVars, schema, rowEncoder, planWithBarrier),
+      sqlText)
   }
 
   /**
@@ -3301,21 +3301,21 @@ class Dataset[T] private[sql](
 
   /** A convenient function to wrap a logical plan and produce a DataFrame. */
   @inline private def withPlan(logicalPlan: LogicalPlan): DataFrame = {
-    Dataset.ofRows(sparkSession, logicalPlan)
+    Dataset.ofRows(sparkSession, logicalPlan, sqlText)
   }
 
   /** A convenient function to wrap a logical plan and produce a Dataset. */
   @inline private def withTypedPlan[U : Encoder](logicalPlan: LogicalPlan): Dataset[U] = {
-    Dataset(sparkSession, logicalPlan)
+    Dataset(sparkSession, logicalPlan, sqlText)
   }
 
   /** A convenient function to wrap a set based logical plan and produce a Dataset. */
   @inline private def withSetOperator[U : Encoder](logicalPlan: LogicalPlan): Dataset[U] = {
     if (classTag.runtimeClass.isAssignableFrom(classOf[Row])) {
       // Set operators widen types (change the schema), so we cannot reuse the row encoder.
-      Dataset.ofRows(sparkSession, logicalPlan).asInstanceOf[Dataset[U]]
+      Dataset.ofRows(sparkSession, logicalPlan, sqlText).asInstanceOf[Dataset[U]]
     } else {
-      Dataset(sparkSession, logicalPlan)
+      Dataset(sparkSession, logicalPlan, sqlText)
     }
   }
 
