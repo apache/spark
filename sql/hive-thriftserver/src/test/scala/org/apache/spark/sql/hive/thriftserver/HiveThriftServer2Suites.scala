@@ -57,6 +57,14 @@ object TestData {
 }
 
 class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
+
+  Utils.classForName(classOf[HiveDriver].getCanonicalName)
+
+  val drivers = DriverManager.getDrivers
+  while (drivers.hasMoreElements) {
+    logWarning(drivers.nextElement().toString)
+  }
+
   override def mode: ServerMode.Value = ServerMode.binary
 
   private def withCLIServiceClient(f: ThriftCLIServiceClient => Unit): Unit = {
@@ -92,7 +100,7 @@ class HiveThriftBinaryServerSuite extends HiveThriftJdbcTest {
     }
   }
 
-  ignore("SPARK-16563 ThriftCLIService FetchResults repeat fetching result") {
+  test("SPARK-16563 ThriftCLIService FetchResults repeat fetching result") {
     withCLIServiceClient { client =>
       val user = System.getProperty("user.name")
       val sessionHandle = client.openSession(user, "")
