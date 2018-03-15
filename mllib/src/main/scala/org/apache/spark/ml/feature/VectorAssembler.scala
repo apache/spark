@@ -68,9 +68,9 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
     "Hhow to handle invalid data (NULL values). Options are 'skip' (filter out rows with " +
       "invalid data), 'error' (throw an error), or 'keep' (return relevant number of NaN " +
-      "in the * output).", ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
+      "in the * output).", ParamValidators.inArray(VectorAssembler.supportedHandleInvalids))
 
-  setDefault(handleInvalid, StringIndexer.ERROR_INVALID)
+  setDefault(handleInvalid, VectorAssembler.ERROR_INVALID)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -90,25 +90,21 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
            |VectorAssembler cannot dynamically determine the size of vectors for streaming data.
            |Consider applying VectorSizeHint to ${colsMissingNumAttrs.mkString("[", ", ", "]")}
            |so that this transformer can be used to transform streaming inputs.
-           """.stripMargin)
+           """.stripMargin.replaceAll("\n", " "))
     }
     val missingVectorSizes = colsMissingNumAttrs.map { c =>
-        $(handleInvalid) match {
-          case StringIndexer.ERROR_INVALID => c -> 0
-          case StringIndexer.SKIP_INVALID => c -> 0
-          case StringIndexer.KEEP_INVALID =>
-            try {
-              c -> dataset.select(c).na.drop().first.getAs[Vector](0).size
-            } catch {
-              case _: NoSuchElementException =>
-                throw new RuntimeException(
-                  s"""
-                     |VectorAssembler cannot determine the size of empty vectors. Consider applying
-                     |VectorSizeHint to ${colsMissingNumAttrs.mkString("[", ", ", "]")} so that this
-                     |transformer can be used to transform empty columns.
-                   """.stripMargin)
-            }
-        }
+      val column = dataset.select(c).na.drop()
+      (column.count() > 0, $(handleInvalid)) match {
+        case (true, _) => c -> column.first.getAs[Vector](0).size
+        case (false, VectorAssembler.SKIP_INVALID | VectorAssembler.ERROR_INVALID) => c -> 0
+        case (false, _) =>
+          throw new RuntimeException(
+            s"""
+               |VectorAssembler cannot determine the size of empty vectors. Consider applying
+               |VectorSizeHint to ${colsMissingNumAttrs.mkString("[", ", ", "]")} so that this
+               |transformer can be used to transform empty columns.
+                   """.stripMargin.replaceAll("\n", " "))
+      }
     }.toMap
     val lengths = $(inputCols).map { c =>
       val field = schema(c)
@@ -147,8 +143,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           } else {
             // Otherwise, treat all attributes as numeric. If we cannot get the number of attributes
             // from metadata, check the first row.
-            val numAttrs = lengths(c)
-            Array.tabulate(numAttrs)(i => NumericAttribute.defaultAttr.withName(c + "_" + i))
+            Array.tabulate(lengths(c))(i => NumericAttribute.defaultAttr.withName(c + "_" + i))
           }
         case otherType =>
           throw new SparkException(s"VectorAssembler does not support the $otherType type")
