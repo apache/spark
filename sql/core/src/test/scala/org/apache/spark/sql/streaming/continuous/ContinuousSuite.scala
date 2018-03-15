@@ -61,7 +61,7 @@ class ContinuousSuiteBase extends StreamTest {
 class ContinuousSuite extends ContinuousSuiteBase {
   import testImplicits._
 
-  test("basic rate source") {
+  test("basic") {
     val input = MemoryStream[Int]
 
     testStream(input.toDF())(
