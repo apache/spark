@@ -404,7 +404,7 @@ abstract class StreamExecution(
     assertAwaitThread()
     def notDone = {
       val localCommittedOffsets = committedOffsets
-      if (sources == null) {
+      if (sources == null || sources == Seq()) {
         // sources might not be initialized yet
         false
       } else {

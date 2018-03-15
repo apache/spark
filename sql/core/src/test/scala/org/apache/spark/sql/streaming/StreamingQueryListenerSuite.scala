@@ -339,7 +339,8 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     def runQuery(session: SparkSession): Unit = {
       collector1.reset()
       collector2.reset()
-      val mem = MemoryStream[Int](implicitly[Encoder[Int]], session.sqlContext)
+      implicit val sqlContext = session.sqlContext
+      val mem = MemoryStream[Int]
       testStream(mem.toDS)(
         AddData(mem, 1, 2, 3),
         CheckAnswer(1, 2, 3)

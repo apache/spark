@@ -24,17 +24,19 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.execution.streaming.continuous.{ContinuousMemoryStream, ContinuousTrigger}
 import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory, SupportsScanUnsafeRow}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset => OffsetV2}
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -43,8 +45,37 @@ object MemoryStream {
   protected val currentBlockId = new AtomicInteger(0)
   protected val memoryStreamId = new AtomicInteger(0)
 
-  def apply[A : Encoder](implicit sqlContext: SQLContext): MemoryStream[A] =
-    new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
+  def apply[A : ClassTag : Encoder](
+      implicit sqlContext: SQLContext,
+      trigger: Trigger = Trigger.ProcessingTime(0)): MemoryStreamBase[A] = trigger match {
+    case _: ContinuousTrigger =>
+      new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
+    case _ =>
+      new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
+  }
+}
+
+abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends BaseStreamingSource {
+  protected val encoder = encoderFor[A]
+  protected val attributes = encoder.schema.toAttributes
+  protected val logicalPlan: LogicalPlan =
+    StreamingExecutionRelation(this, attributes)(sqlContext.sparkSession)
+
+  def toDS(): Dataset[A] = {
+    Dataset[A](sqlContext.sparkSession, logicalPlan)
+  }
+
+  def toDF(): DataFrame = {
+    Dataset.ofRows(sqlContext.sparkSession, logicalPlan)
+  }
+
+  def addData(data: A*): Offset = {
+    addData(data.toTraversable)
+  }
+
+  def addData(data: TraversableOnce[A]): Offset
+
+  def reset(): Unit
 }
 
 /**
@@ -53,10 +84,8 @@ object MemoryStream {
  * available.
  */
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
-    extends MicroBatchReader with SupportsScanUnsafeRow with Logging {
-  protected val encoder = encoderFor[A]
-  private val attributes = encoder.schema.toAttributes
-  protected val logicalPlan = StreamingExecutionRelation(this, attributes)(sqlContext.sparkSession)
+    extends MemoryStreamBase[A](sqlContext)
+      with MicroBatchReader with SupportsScanUnsafeRow with Logging {
   protected val output = logicalPlan.output
 
   /**
@@ -81,18 +110,6 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
    */
   @GuardedBy("this")
   protected var lastOffsetCommitted : LongOffset = new LongOffset(-1)
-
-  def toDS(): Dataset[A] = {
-    Dataset(sqlContext.sparkSession, logicalPlan)
-  }
-
-  def toDF(): DataFrame = {
-    Dataset.ofRows(sqlContext.sparkSession, logicalPlan)
-  }
-
-  def addData(data: A*): Offset = {
-    addData(data.toTraversable)
-  }
 
   def addData(data: TraversableOnce[A]): Offset = {
     val objects = data.toSeq
@@ -178,7 +195,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   override def stop() {}
 
-  def reset(): Unit = synchronized {
+  override def reset(): Unit = synchronized {
     batches.clear()
     startOffset = LongOffset(-1)
     endOffset = LongOffset(-1)

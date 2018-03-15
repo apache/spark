@@ -315,7 +315,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
     queryToStop
   }
 
-  private def makeDataset: (MemoryStream[Int], Dataset[Int]) = {
+  private def makeDataset: (MemoryStreamBase[Int], Dataset[Int]) = {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS.map(6 / _)
     (inputData, mapped)

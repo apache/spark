@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous.ContinuousMemoryStream
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -46,6 +47,10 @@ import org.apache.spark.util.Utils
 class StreamSuite extends StreamTest {
 
   import testImplicits._
+
+
+  override implicit val defaultTrigger = Trigger.Continuous(100)
+  override val defaultUseV2Sink = true
 
   test("map with recovery") {
     val inputData = MemoryStream[Int]
@@ -594,7 +599,7 @@ class StreamSuite extends StreamTest {
   }
 
   testQuietly("recover from a Spark v2.1 checkpoint") {
-    var inputData: MemoryStream[Int] = null
+    var inputData: MemoryStreamBase[Int] = null
     var query: DataStreamWriter[Row] = null
 
     def prepareMemoryStream(): Unit = {
