@@ -507,7 +507,7 @@ object OldDeps {
       .join
   }
 
-  def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
+  def oldDepsSettings() = Seq(
     name := "old-deps",
     libraryDependencies := allPreviousArtifactKeys.value.flatten
   )
