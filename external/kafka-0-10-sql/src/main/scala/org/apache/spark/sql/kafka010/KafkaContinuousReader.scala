@@ -168,7 +168,8 @@ case class KafkaContinuousDataReaderFactory(
 
   override def createDataReaderWithOffset(offset: PartitionOffset): DataReader[UnsafeRow] = {
     val kafkaOffset = offset.asInstanceOf[KafkaSourcePartitionOffset]
-    assert(kafkaOffset.topicPartition == topicPartition)
+    require(kafkaOffset.topicPartition == topicPartition,
+      s"Expected topicPartition: $topicPartition, but got: ${kafkaOffset.topicPartition}")
     new KafkaContinuousDataReader(
       topicPartition, kafkaOffset.partitionOffset, kafkaParams, pollTimeoutMs, failOnDataLoss)
   }

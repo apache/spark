@@ -31,8 +31,5 @@ public interface ContinuousDataReaderFactory<T> extends DataReaderFactory<T> {
    *
    * @param offset offset want to set as the DataReader's startOffset.
    */
-  default DataReader<T> createDataReaderWithOffset(PartitionOffset offset) {
-    throw new IllegalStateException(
-      "createDataReaderWithOffset not supported by default within ContinuousDataReaderFactory");
-  }
+  DataReader<T> createDataReaderWithOffset(PartitionOffset offset);
 }

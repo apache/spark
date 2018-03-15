@@ -110,7 +110,8 @@ case class RateStreamContinuousDataReaderFactory(
 
   override def createDataReaderWithOffset(offset: PartitionOffset): DataReader[Row] = {
     val rateStreamOffset = offset.asInstanceOf[RateStreamPartitionOffset]
-    assert(rateStreamOffset.partition == partitionIndex)
+    require(rateStreamOffset.partition == partitionIndex,
+      s"Expected partitionIndex: $partitionIndex, but got: ${rateStreamOffset.partition}")
     new RateStreamContinuousDataReader(
       rateStreamOffset.currentValue,
       rateStreamOffset.currentTimeMs,
