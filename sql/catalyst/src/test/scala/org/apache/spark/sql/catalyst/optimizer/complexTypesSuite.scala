@@ -362,5 +362,15 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       .select('nullable_id as "m1")
       .groupBy($"m1")("1").analyze
     comparePlans(Optimizer execute mapRel, mapExpected)
+
+    // Make sure that aggregation exprs are correctly ignored. Maps can't be used in grouping exprs.
+    val structAggRel = relation.groupBy(
+      CreateNamedStruct(Seq("att1", 'nullable_id)))(
+      GetStructField(CreateNamedStruct(Seq("att1", 'nullable_id)), 0, None)).analyze
+    comparePlans(Optimizer execute structAggRel, structAggRel)
+
+    val arrayAggRel = relation.groupBy(
+      CreateArray(Seq('nullable_id)))(GetArrayItem(CreateArray(Seq('nullable_id)), 0)).analyze
+    comparePlans(Optimizer execute arrayAggRel, arrayAggRel)
   }
 }
