@@ -71,7 +71,7 @@ case class InMemoryRelation(
 
   override def doCanonicalize(): logical.LogicalPlan =
     copy(output = output.map(QueryPlan.normalizeExprId(_, child.output)),
-      storageLevel = new StorageLevel(),
+      storageLevel = StorageLevel.NONE,
       child = child.canonicalized,
       tableName = None)(
       _cachedColumnBuffers,
