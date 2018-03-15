@@ -31,9 +31,11 @@ class FileCommitProtocolInstantiationSuite extends SparkFunSuite {
     val ex = intercept[IllegalArgumentException] {
       instantiateClassic(true)
     }
-    // check the contents of the message and rethrow if unexpected
+    // check the contents of the message and rethrow if unexpected.
+    // this preserves the stack trace of the unexpected
+    // exception.
     if (!ex.toString.contains("Dynamic Partition Overwrite")) {
-      fail("Wrong text in caught exception", ex)
+      fail(s"Wrong text in caught exception $ex", ex)
     }
   }
 
@@ -138,7 +140,7 @@ private class Other(arg1: String, arg2: String) {
 }
 
 /**
- * This has no matching arguments
+ * This has no matching arguments as well as being the wrong class.
  */
 private class NoMatchingArgs() {
 
