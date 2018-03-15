@@ -19,8 +19,6 @@ package org.apache.spark.ml.util
 
 import java.io.File
 
-import scala.reflect.ClassTag
-
 import org.scalatest.Suite
 
 import org.apache.spark.SparkContext
@@ -55,7 +53,7 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     }
   }
 
-  private[util] def testTransformerOnStreamData[A : ClassTag : Encoder](
+  private[util] def testTransformerOnStreamData[A : Encoder](
       dataframe: DataFrame,
       transformer: Transformer,
       firstResultCol: String,
@@ -100,7 +98,7 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       otherResultCols: _*) { rows: Seq[Row] => rows.foreach(checkFunction(_)) }
   }
 
-  def testTransformerByGlobalCheckFunc[A : ClassTag : Encoder](
+  def testTransformerByGlobalCheckFunc[A : Encoder](
       dataframe: DataFrame,
       transformer: Transformer,
       firstResultCol: String,
