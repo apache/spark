@@ -80,7 +80,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val colsMissingNumAttrs = $(inputCols).filter { c =>
       val field = schema(c)
       field.dataType match {
-        case _: VectorUDT => AttributeGroup.fromStructField(field).numAttributes.isEmpty
+        case _: VectorUDT => -1 == AttributeGroup.fromStructField(field).size
         case _ => false
       }
     }
@@ -111,7 +111,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
       field.dataType match {
         case _: NumericType | BooleanType => c -> 1  // DoubleType is also NumericType
         case _: VectorUDT =>
-          c -> AttributeGroup.fromStructField(field).numAttributes.getOrElse(missingVectorSizes(c))
+          c -> missingVectorSizes.getOrElse(c, AttributeGroup.fromStructField(field).size)
       }
     }.toMap
     val attrs = $(inputCols).flatMap { c =>
