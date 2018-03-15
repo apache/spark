@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
-import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.vectorized._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
@@ -37,6 +37,11 @@ case class InMemoryTableScanExec(
   extends LeafExecNode with ColumnarBatchScan {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
+
+  override def doCanonicalize(): SparkPlan =
+    copy(attributes = attributes.map(QueryPlan.normalizeExprId(_, relation.output)),
+      predicates = predicates.map(QueryPlan.normalizeExprId(_, relation.output)),
+      relation = relation.canonicalized.asInstanceOf[InMemoryRelation])
 
   override def vectorTypes: Option[Seq[String]] =
     Option(Seq.fill(attributes.length)(
