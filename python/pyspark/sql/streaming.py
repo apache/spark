@@ -19,10 +19,7 @@ import sys
 import json
 
 if sys.version >= '3':
-    intlike = int
-    basestring = unicode = str
-else:
-    intlike = (int, long)
+    basestring = str
 
 from py4j.java_gateway import java_import
 
