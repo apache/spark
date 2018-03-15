@@ -2013,13 +2013,13 @@ class DataFrame(object):
                     warnings.warn(msg)
                     use_arrow = False
                 else:
-                    msg = (
+                    e.message = (
                         "toPandas attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.enabled' is set to true; however, "
                         "failed by the reason below:\n  %s\n"
                         "For fallback to non-optimization automatically, please set true to "
                         "'spark.sql.execution.arrow.fallback.enabled'." % _exception_message(e))
-                    raise RuntimeError(msg)
+                    raise
 
             # Try to use Arrow optimization when the schema is supported and the required version
             # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
@@ -2040,14 +2040,14 @@ class DataFrame(object):
                 except Exception as e:
                     # We might have to allow fallback here as well but multiple Spark jobs can
                     # be executed. So, simply fail in this case for now.
-                    msg = (
+                    e.message = (
                         "toPandas attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.enabled' is set to true; however, "
                         "failed unexpectedly:\n  %s\n"
                         "Note that 'spark.sql.execution.arrow.fallback.enabled' does "
                         "not have an effect in such failure in the middle of "
                         "computation." % _exception_message(e))
-                    raise RuntimeError(msg)
+                    raise
 
         # Below is toPandas without Arrow optimization.
         pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
