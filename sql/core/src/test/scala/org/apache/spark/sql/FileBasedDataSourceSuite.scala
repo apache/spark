@@ -26,6 +26,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 
 
 class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
@@ -107,26 +108,30 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     }
   }
 
-  // Text and Parquet format does not allow wrting data frame with empty schema.
-  Seq("parquet", "text").foreach { format =>
-    test(s"SPARK-23372 writing empty dataframe should produce AnalysisException - $format") {
-      withTempPath { outputPath =>
-        intercept[AnalysisException] {
-          spark.emptyDataFrame.write.format(format).save(outputPath.toString)
-        }
+  test("SPARK-23372 Verify that Parquet does not support writing empty schema") {
+    // Empty schema
+    withTempPath { outputPath =>
+      val df = spark.createDataFrame(sparkContext.emptyRDD[Row], StructType(Nil))
+      val errMsg = intercept[AnalysisException] {
+        df.write.format("parquet").save(outputPath.toString)
       }
+      assert(errMsg.getMessage.contains(
+        "Parquet data source does not support writing empty or nested empty schemas"))
     }
-  }
 
-  // Formats excluding text and parquet allow writing empty data frames to files.
-  allFileBasedDataSources.filterNot(p => p == "text" || p == "parquet").foreach { format =>
-    test(s"SPARK-23372 writing empty dataframe and reading from it - $format") {
-      withTempPath { outputPath =>
-          spark.emptyDataFrame.write.format(format).save(outputPath.toString)
-          intercept[AnalysisException] {
-            val df = spark.read.format(format).load(outputPath.toString)
-          }
+    // Nested empty schema.
+    withTempPath { outputPath =>
+      val schema = StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", StructType(Nil)),
+        StructField("c", IntegerType)
+      ))
+      val df = spark.createDataFrame(sparkContext.emptyRDD[Row], schema)
+      val errMsg = intercept[AnalysisException] {
+        df.write.format("parquet").save(outputPath.toString)
       }
+      assert(errMsg.getMessage.contains(
+        "Parquet data source does not support writing empty or nested empty schemas"))
     }
   }
 
