@@ -206,7 +206,8 @@ case class DataSource(
         tempFileIndex.allFiles())
     }.getOrElse {
       throw new AnalysisException(
-        s"Unable to infer schema for $format. It must be specified manually.")
+        s"Unable to infer schema for $format at ${tempFileIndex.allFiles().mkString(",")}. " +
+          s"It must be specified manually.")
     }
 
     // We just print a waring message if the data schema and partition schema have the duplicate
