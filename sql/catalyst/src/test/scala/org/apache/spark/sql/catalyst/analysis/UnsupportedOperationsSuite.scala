@@ -384,6 +384,16 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Append
   )
 
+  assertNotSupportedInStreamingPlan(
+    "Watermark both before and after streaming aggregation",
+    EventTimeWatermark(att, CalendarInterval.fromString("interval 1 minute"),
+      Aggregate(
+        Seq(attributeWithWatermark),
+        aggExprs("c"),
+        EventTimeWatermark(att, CalendarInterval.fromString("interval 1 minute"), streamRelation))),
+    outputMode = Append,
+    expectedMsgs = Seq("Watermarks both before and after"))
+
   // Inner joins: Multiple stream-stream joins supported only in append mode
   testBinaryOperationInStreamingPlan(
     "single inner join in append mode",

@@ -160,6 +160,16 @@ object UnsupportedOperationChecker {
         case _: InsertIntoDir =>
           throwError("InsertIntoDir is not supported with streaming DataFrames/Datasets")
 
+        case e: EventTimeWatermark =>
+          val childAggregates = collectStreamingAggregates(e)
+          val childWatermarks = childAggregates.flatMap { agg: Aggregate =>
+            agg.collectFirst { case e: EventTimeWatermark => e }
+          }
+          if (childWatermarks.nonEmpty) {
+            throwError("Watermarks both before and after a streaming aggregate are not supported " +
+              "in a streaming DataFrame/Dataset.")
+          }
+
         // mapGroupsWithState and flatMapGroupsWithState
         case m: FlatMapGroupsWithState if m.isStreaming =>
 
