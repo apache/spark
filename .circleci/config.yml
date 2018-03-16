@@ -154,7 +154,7 @@ jobs:
           paths: ~/.sbt
       # Also hard link all the things so we can save it as a cache and restore it in future builds
       - run:
-          name: "Hard link all the files under ***/target/scala-* directories to $BUILD_SBT_CACHE, excluding jars"
+          name: "Hard link all the files under ***/target directories to $BUILD_SBT_CACHE, excluding jars"
           command: >
             rsync --info=stats2,misc1,flist0 -a --link-dest=$PWD --delete-excluded --prune-empty-dirs
             --exclude '***/*.jar' --include 'target/***'
