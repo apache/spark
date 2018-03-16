@@ -1695,6 +1695,19 @@ def from_arrow_schema(arrow_schema):
          for field in arrow_schema])
 
 
+def _check_series_convert_date(series, data_type):
+    """
+    Cast the series to datetime.date if it's a date type, otherwise returns the original series.
+
+    :param series: pandas.Series
+    :param data_type: a Spark data type for the series
+    """
+    if type(data_type) == DateType:
+        return series.dt.date
+    else:
+        return series
+
+
 def _check_dataframe_convert_date(pdf, schema):
     """ Correct date type value to use datetime.date.
 
@@ -1705,8 +1718,7 @@ def _check_dataframe_convert_date(pdf, schema):
     :param schema: a Spark schema of the pandas.DataFrame
     """
     for field in schema:
-        if type(field.dataType) == DateType:
-            pdf[field.name] = pdf[field.name].dt.date
+        pdf[field.name] = _check_series_convert_date(pdf[field.name], field.dataType)
     return pdf
 
 
@@ -1725,6 +1737,29 @@ def _get_local_timezone():
     return os.environ.get('TZ', 'dateutil/:')
 
 
+def _check_series_localize_timestamps(s, timezone):
+    """
+    Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone.
+
+    If the input series is not a timestamp series, then the same series is returned. If the input
+    series is a timestamp series, then a converted series is returned.
+
+    :param s: pandas.Series
+    :param timezone: the timezone to convert. if None then use local timezone
+    :return pandas.Series that have been converted to tz-naive
+    """
+    from pyspark.sql.utils import require_minimum_pandas_version
+    require_minimum_pandas_version()
+
+    from pandas.api.types import is_datetime64tz_dtype
+    tz = timezone or _get_local_timezone()
+    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    if is_datetime64tz_dtype(s.dtype):
+        return s.dt.tz_convert(tz).dt.tz_localize(None)
+    else:
+        return s
+
+
 def _check_dataframe_localize_timestamps(pdf, timezone):
     """
     Convert timezone aware timestamps to timezone-naive in the specified timezone or local timezone
@@ -1736,12 +1771,8 @@ def _check_dataframe_localize_timestamps(pdf, timezone):
     from pyspark.sql.utils import require_minimum_pandas_version
     require_minimum_pandas_version()
 
-    from pandas.api.types import is_datetime64tz_dtype
-    tz = timezone or _get_local_timezone()
     for column, series in pdf.iteritems():
-        # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-        if is_datetime64tz_dtype(series.dtype):
-            pdf[column] = series.dt.tz_convert(tz).dt.tz_localize(None)
+        pdf[column] = _check_series_localize_timestamps(series, timezone)
     return pdf
 
 
@@ -1859,7 +1890,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

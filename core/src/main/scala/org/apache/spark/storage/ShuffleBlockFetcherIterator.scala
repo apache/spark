@@ -90,7 +90,7 @@ final class ShuffleBlockFetcherIterator(
   private[this] val startTime = System.currentTimeMillis
 
   /** Local blocks to fetch, excluding zero-sized blocks. */
-  private[this] val localBlocks = new ArrayBuffer[BlockId]()
+  private[this] val localBlocks = scala.collection.mutable.LinkedHashSet[BlockId]()
 
   /** Remote blocks to fetch, excluding zero-sized blocks. */
   private[this] val remoteBlocks = new HashSet[BlockId]()
@@ -316,6 +316,7 @@ final class ShuffleBlockFetcherIterator(
    * track in-memory are the ManagedBuffer references themselves.
    */
   private[this] def fetchLocalBlocks() {
+    logDebug(s"Start fetching local blocks: ${localBlocks.mkString(", ")}")
     val iter = localBlocks.iterator
     while (iter.hasNext) {
       val blockId = iter.next()
@@ -324,7 +325,8 @@ final class ShuffleBlockFetcherIterator(
         shuffleMetrics.incLocalBlocksFetched(1)
         shuffleMetrics.incLocalBytesRead(buf.size)
         buf.retain()
-        results.put(new SuccessFetchResult(blockId, blockManager.blockManagerId, 0, buf, false))
+        results.put(new SuccessFetchResult(blockId, blockManager.blockManagerId,
+          buf.size(), buf, false))
       } catch {
         case e: Exception =>
           // If we see an exception, stop immediately.
@@ -397,7 +399,9 @@ final class ShuffleBlockFetcherIterator(
             }
             shuffleMetrics.incRemoteBlocksFetched(1)
           }
-          bytesInFlight -= size
+          if (!localBlocks.contains(blockId)) {
+            bytesInFlight -= size
+          }
           if (isNetworkReqDone) {
             reqsInFlight -= 1
             logDebug("Number of requests in flight " + reqsInFlight)
@@ -583,8 +587,8 @@ object ShuffleBlockFetcherIterator {
    * Result of a fetch from a remote block successfully.
    * @param blockId block id
    * @param address BlockManager that the block was fetched from.
-   * @param size estimated size of the block, used to calculate bytesInFlight.
-   *             Note that this is NOT the exact bytes.
+   * @param size estimated size of the block. Note that this is NOT the exact bytes.
+   *             Size of remote block is used to calculate bytesInFlight.
    * @param buf `ManagedBuffer` for the content.
    * @param isNetworkReqDone Is this the last network request for this host in this fetch request.
    */

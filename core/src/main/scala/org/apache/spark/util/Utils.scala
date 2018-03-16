@@ -25,7 +25,7 @@ import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.{Channels, FileChannel}
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths}
+import java.nio.file.Files
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
@@ -51,9 +51,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
-import org.json4s._
 import org.slf4j.Logger
 
 import org.apache.spark._
@@ -63,7 +61,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
-import org.apache.spark.status.api.v1.ThreadStackTrace
+import org.apache.spark.status.api.v1.{StackTrace, ThreadStackTrace}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
 private[spark] case class CallSite(shortForm: String, longForm: String)
@@ -1017,68 +1015,16 @@ private[spark] object Utils extends Logging {
     " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
-  private def listFilesSafely(file: File): Seq[File] = {
-    if (file.exists()) {
-      val files = file.listFiles()
-      if (files == null) {
-        throw new IOException("Failed to list files for dir: " + file)
-      }
-      files
-    } else {
-      List()
-    }
-  }
-
-  /**
-   * Lists files recursively.
-   */
-  def recursiveList(f: File): Array[File] = {
-    require(f.isDirectory)
-    val current = f.listFiles
-    current ++ current.filter(_.isDirectory).flatMap(recursiveList)
-  }
-
   /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
    * Throws an exception if deletion is unsuccessful.
    */
-  def deleteRecursively(file: File) {
+  def deleteRecursively(file: File): Unit = {
     if (file != null) {
-      try {
-        if (file.isDirectory && !isSymlink(file)) {
-          var savedIOException: IOException = null
-          for (child <- listFilesSafely(file)) {
-            try {
-              deleteRecursively(child)
-            } catch {
-              // In case of multiple exceptions, only last one will be thrown
-              case ioe: IOException => savedIOException = ioe
-            }
-          }
-          if (savedIOException != null) {
-            throw savedIOException
-          }
-          ShutdownHookManager.removeShutdownDeleteDir(file)
-        }
-      } finally {
-        if (file.delete()) {
-          logTrace(s"${file.getAbsolutePath} has been deleted")
-        } else {
-          // Delete can also fail if the file simply did not exist
-          if (file.exists()) {
-            throw new IOException("Failed to delete: " + file.getAbsolutePath)
-          }
-        }
-      }
+      JavaUtils.deleteRecursively(file)
+      ShutdownHookManager.removeShutdownDeleteDir(file)
     }
-  }
-
-  /**
-   * Check to see if file is a symbolic link.
-   */
-  def isSymlink(file: File): Boolean = {
-    return Files.isSymbolicLink(Paths.get(file.toURI))
   }
 
   /**
@@ -1828,7 +1774,7 @@ private[spark] object Utils extends Logging {
    * [[scala.collection.Iterator#size]] because it uses a for loop, which is slightly slower
    * in the current version of Scala.
    */
-  def getIteratorSize[T](iterator: Iterator[T]): Long = {
+  def getIteratorSize(iterator: Iterator[_]): Long = {
     var count = 0L
     while (iterator.hasNext) {
       count += 1L
@@ -1875,17 +1821,6 @@ private[spark] object Utils extends Logging {
     obj.getClass.getSimpleName.replace("$", "")
   }
 
-  /** Return an option that translates JNothing to None */
-  def jsonOption(json: JValue): Option[JValue] = {
-    json match {
-      case JNothing => None
-      case value: JValue => Some(value)
-    }
-  }
-
-  /** Return an empty JSON object */
-  def emptyJson: JsonAST.JObject = JObject(List[JField]())
-
   /**
    * Return a Hadoop FileSystem with the scheme encoded in the given path.
    */
@@ -1898,15 +1833,6 @@ private[spark] object Utils extends Logging {
    */
   def getHadoopFileSystem(path: String, conf: Configuration): FileSystem = {
     getHadoopFileSystem(new URI(path), conf)
-  }
-
-  /**
-   * Return the absolute path of a file in the given directory.
-   */
-  def getFilePath(dir: File, fileName: String): Path = {
-    assert(dir.isDirectory)
-    val path = new File(dir, fileName).getAbsolutePath
-    new Path(path)
   }
 
   /**
@@ -1929,13 +1855,6 @@ private[spark] object Utils extends Logging {
    */
   def isTesting: Boolean = {
     sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
-  }
-
-  /**
-   * Strip the directory from a path name
-   */
-  def stripDirectory(path: String): String = {
-    new File(path).getName
   }
 
   /**
@@ -2199,14 +2118,14 @@ private[spark] object Utils extends Logging {
 
   private def threadInfoToThreadStackTrace(threadInfo: ThreadInfo): ThreadStackTrace = {
     val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackFrame -> m).toMap
-    val stackTrace = threadInfo.getStackTrace.map { frame =>
+    val stackTrace = StackTrace(threadInfo.getStackTrace.map { frame =>
       monitors.get(frame) match {
         case Some(monitor) =>
           monitor.getLockedStackFrame.toString + s" => holding ${monitor.lockString}"
         case None =>
           frame.toString
       }
-    }.mkString("\n")
+    })
 
     // use a set to dedup re-entrant locks that are held at multiple places
     val heldLocks =
@@ -2346,36 +2265,6 @@ private[spark] object Utils extends Logging {
    */
   def setLogLevel(l: org.apache.log4j.Level) {
     org.apache.log4j.Logger.getRootLogger().setLevel(l)
-  }
-
-  /**
-   * config a log4j properties used for testsuite
-   */
-  def configTestLog4j(level: String): Unit = {
-    val pro = new Properties()
-    pro.put("log4j.rootLogger", s"$level, console")
-    pro.put("log4j.appender.console", "org.apache.log4j.ConsoleAppender")
-    pro.put("log4j.appender.console.target", "System.err")
-    pro.put("log4j.appender.console.layout", "org.apache.log4j.PatternLayout")
-    pro.put("log4j.appender.console.layout.ConversionPattern",
-      "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
-    PropertyConfigurator.configure(pro)
-  }
-
-  def invoke(
-      clazz: Class[_],
-      obj: AnyRef,
-      methodName: String,
-      args: (Class[_], AnyRef)*): AnyRef = {
-    val (types, values) = args.unzip
-    val method = clazz.getDeclaredMethod(methodName, types: _*)
-    method.setAccessible(true)
-    method.invoke(obj, values.toSeq: _*)
-  }
-
-  // Limit of bytes for total size of results (default is 1GB)
-  def getMaxResultSize(conf: SparkConf): Long = {
-    memoryStringToMb(conf.get("spark.driver.maxResultSize", "1g")).toLong << 20
   }
 
   /**
@@ -2608,16 +2497,6 @@ private[spark] object Utils extends Logging {
   def initDaemon(log: Logger): Unit = {
     log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
     SignalUtils.registerLogger(log)
-  }
-
-  /**
-   * Unions two comma-separated lists of files and filters out empty strings.
-   */
-  def unionFileLists(leftList: Option[String], rightList: Option[String]): Set[String] = {
-    var allFiles = Set.empty[String]
-    leftList.foreach { value => allFiles ++= value.split(",") }
-    rightList.foreach { value => allFiles ++= value.split(",") }
-    allFiles.filter { _.nonEmpty }
   }
 
   /**

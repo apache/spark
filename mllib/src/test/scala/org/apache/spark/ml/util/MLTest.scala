@@ -26,6 +26,7 @@ import org.apache.spark.ml.{PredictionModel, Transformer}
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.sql.{DataFrame, Dataset, Encoder, Row}
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.util.Utils
@@ -63,8 +64,10 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
 
     val columnNames = dataframe.schema.fieldNames
     val stream = MemoryStream[A]
-    val streamDF = stream.toDS().toDF(columnNames: _*)
-
+    val columnsWithMetadata = dataframe.schema.map { structField =>
+      col(structField.name).as(structField.name, structField.metadata)
+    }
+    val streamDF = stream.toDS().toDF(columnNames: _*).select(columnsWithMetadata: _*)
     val data = dataframe.as[A].collect()
 
     val streamOutput = transformer.transform(streamDF)
@@ -109,6 +112,30 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
       otherResultCols: _*)(globalCheckFunction)
     testTransformerOnDF(dataframe, transformer, firstResultCol,
       otherResultCols: _*)(globalCheckFunction)
+    }
+
+  def testTransformerByInterceptingException[A : Encoder](
+    dataframe: DataFrame,
+    transformer: Transformer,
+    expectedMessagePart : String,
+    firstResultCol: String) {
+
+    def hasExpectedMessage(exception: Throwable): Boolean =
+      exception.getMessage.contains(expectedMessagePart) ||
+        (exception.getCause != null && exception.getCause.getMessage.contains(expectedMessagePart))
+
+    withClue(s"""Expected message part "${expectedMessagePart}" is not found in DF test.""") {
+      val exceptionOnDf = intercept[Throwable] {
+        testTransformerOnDF(dataframe, transformer, firstResultCol)(_ => Unit)
+      }
+      assert(hasExpectedMessage(exceptionOnDf))
+    }
+    withClue(s"""Expected message part "${expectedMessagePart}" is not found in stream test.""") {
+      val exceptionOnStreamData = intercept[Throwable] {
+        testTransformerOnStreamData(dataframe, transformer, firstResultCol)(_ => Unit)
+      }
+      assert(hasExpectedMessage(exceptionOnStreamData))
+    }
   }
 
   def testPredictorModelSinglePrediction(model: PredictionModel[Vector, _],
