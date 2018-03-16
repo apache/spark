@@ -114,13 +114,13 @@ jobs:
             - build-sbt-{{ .Branch }}-{{ .BuildNum }}
             - build-sbt-{{ .Branch }}-
             - build-sbt-master-
+      - checkout
       - run:
           name: Hard link cache contents into current build directory
           command: |
             if [[ -d "$BUILD_SBT_CACHE" ]]; then
               rsync --info=stats2,misc1,flist0 -a --link-dest="$BUILD_SBT_CACHE" "$BUILD_SBT_CACHE/" .
             fi
-      - checkout
       - restore_cache:
           keys:
             - v5-ivy-dependency-cache-{{ checksum "pom.xml" }}
