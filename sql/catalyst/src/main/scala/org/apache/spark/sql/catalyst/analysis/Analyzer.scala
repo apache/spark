@@ -1215,7 +1215,8 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = {
       val catalogFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
       plan.transformAllExpressions {
-        case f: UnresolvedFunction if catalogFunctionNameSet.contains(f.name) => f
+        case f: UnresolvedFunction
+          if catalogFunctionNameSet.contains(normalizeFuncName(f.name)) => f
         case f: UnresolvedFunction if catalog.functionExists(f.name) =>
           catalogFunctionNameSet.add(normalizeFuncName(f.name))
           f
