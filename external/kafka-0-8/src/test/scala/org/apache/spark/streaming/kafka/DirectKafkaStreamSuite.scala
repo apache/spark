@@ -456,6 +456,57 @@ class DirectKafkaStreamSuite
     ssc.stop()
   }
 
+  test("maxMessagesPerPartition with zero offset and rate equal to one") {
+    val topic = "backpressure"
+    val kafkaParams = Map(
+      "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
+      "auto.offset.reset" -> "smallest"
+    )
+
+    val batchIntervalMilliseconds = 60000
+    val sparkConf = new SparkConf()
+      // Safe, even with streaming, because we're using the direct API.
+      // Using 1 core is useful to make the test more predictable.
+      .setMaster("local[1]")
+      .setAppName(this.getClass.getSimpleName)
+      .set("spark.streaming.kafka.maxRatePerPartition", "100")
+
+    // Setup the streaming context
+    ssc = new StreamingContext(sparkConf, Milliseconds(batchIntervalMilliseconds))
+    val estimatedRate = 1L
+    val kafkaStream = withClue("Error creating direct stream") {
+      val messageHandler = (mmd: MessageAndMetadata[String, String]) => (mmd.key, mmd.message)
+      val fromOffsets = Map(
+        TopicAndPartition(topic, 0) -> 0L,
+        TopicAndPartition(topic, 1) -> 0L,
+        TopicAndPartition(topic, 2) -> 0L,
+        TopicAndPartition(topic, 3) -> 0L
+      )
+      new DirectKafkaInputDStream[String, String, StringDecoder, StringDecoder, (String, String)](
+        ssc, kafkaParams, fromOffsets, messageHandler) {
+        override protected[streaming] val rateController =
+          Some(new DirectKafkaRateController(id, null) {
+            override def getLatestRate() = estimatedRate
+          })
+      }
+    }
+
+    val offsets = Map(
+      TopicAndPartition(topic, 0) -> 0L,
+      TopicAndPartition(topic, 1) -> 100L,
+      TopicAndPartition(topic, 2) -> 200L,
+      TopicAndPartition(topic, 3) -> 300L
+    )
+    val result = kafkaStream.maxMessagesPerPartition(offsets)
+    val expected = Map(
+      TopicAndPartition(topic, 0) -> 1L,
+      TopicAndPartition(topic, 1) -> 10L,
+      TopicAndPartition(topic, 2) -> 20L,
+      TopicAndPartition(topic, 3) -> 30L
+    )
+    assert(result.contains(expected), s"Number of messages per partition must be at least 1")
+  }
+
   /** Get the generated offset ranges from the DirectKafkaStream */
   private def getOffsetRanges[K, V](
       kafkaStream: DStream[(K, V)]): Seq[(Time, Array[OffsetRange])] = {
