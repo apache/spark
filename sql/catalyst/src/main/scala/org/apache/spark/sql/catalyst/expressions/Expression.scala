@@ -347,7 +347,7 @@ trait Stateful extends Nondeterministic {
   /**
    * Return a fresh uninitialized copy of the stateful expression.
    */
-  def freshCopy(): Stateful = this
+  def freshCopy(): Stateful
 
   /**
    * Only the same reference is considered equal.
