@@ -754,7 +754,7 @@ private[spark] class Executor(
           // Fetch file with useCache mode, close cache for local mode.
           val url = Utils.fetchFile(name, new File(SparkFiles.getRootDirectory()), conf,
             env.securityManager, hadoopConf, timestamp, useCache = !isLocal,
-            conf.getBoolean("spark.jars.withDecoratedName", false)).toURI.toURL
+            conf.get(SPARK_JARS_DECORATE_NAME)).toURI.toURL
           currentJars(name) = timestamp
           if (!urlClassLoader.getURLs().contains(url)) {
             logInfo("Adding " + url + " to class loader")

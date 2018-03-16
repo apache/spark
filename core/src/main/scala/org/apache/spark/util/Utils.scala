@@ -455,7 +455,7 @@ private[spark] object Utils extends Logging {
       useCache: Boolean,
       withMD5Prefix: Boolean = false): File = {
     val fileName = if (withMD5Prefix) {
-      DigestUtils.md5Hex(url) + "-" + decodeFileNameInURI(new URI(url))
+      s"${DigestUtils.md5Hex(url)}-${decodeFileNameInURI(new URI(url))}"
     } else {
       decodeFileNameInURI(new URI(url))
     }
