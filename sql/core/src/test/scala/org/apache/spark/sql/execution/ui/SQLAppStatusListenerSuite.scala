@@ -611,6 +611,7 @@ class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
         sc.listenerBus.waitUntilEmpty(10000)
         val statusStore = spark.sharedState.statusStore
         assert(statusStore.executionsCount() <= 50)
+        assert(statusStore.planGraphCount() <= 50)
         // No live data should be left behind after all executions end.
         assert(statusStore.listener.get.noLiveData())
       }
