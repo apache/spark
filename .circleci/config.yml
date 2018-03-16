@@ -161,13 +161,13 @@ jobs:
             --include '**/' --exclude '*' . "$BUILD_SBT_CACHE/"
       # Also save all the target files to the workspace, as we will need them in the future
       - persist_to_workspace:
-          root: "$BUILD_SBT_CACHE"
+          root: "~/build-sbt-cache"
           paths:
             - .
       - save_cache:
           key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
           paths:
-            - "$BUILD_SBT_CACHE"
+            - "~/build-sbt-cache"
 
 
 
