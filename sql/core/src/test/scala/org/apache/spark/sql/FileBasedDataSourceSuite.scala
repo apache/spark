@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -89,6 +90,23 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
     }
   }
 
+  Seq("orc", "parquet").foreach { format =>
+    test(s"SPARK-23271 empty RDD when saved should write a metadata only file - $format") {
+      withTempPath { outputPath =>
+        val df = spark.emptyDataFrame.select(lit(1).as("i"))
+        df.write.format(format).save(outputPath.toString)
+        val partFiles = outputPath.listFiles()
+          .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+        assert(partFiles.length === 1)
+
+        // Now read the file.
+        val df1 = spark.read.format(format).load(outputPath.toString)
+        checkAnswer(df1, Seq.empty[Row])
+        assert(df1.schema.equals(df.schema.asNullable))
+      }
+    }
+  }
+
   allFileBasedDataSources.foreach { format =>
     test(s"SPARK-22146 read files containing special characters using $format") {
       withTempDir { dir =>
@@ -124,7 +142,7 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
           Seq("1").toDF("a").write.format(format).save(new Path(basePath, "second").toString)
 
           val thirdPath = new Path(basePath, "third")
-          val fs = thirdPath.getFileSystem(spark.sparkContext.hadoopConfiguration)
+          val fs = thirdPath.getFileSystem(spark.sessionState.newHadoopConf())
           Seq("2").toDF("a").write.format(format).save(thirdPath.toString)
           val files = fs.listStatus(thirdPath).filter(_.isFile).map(_.getPath)
 

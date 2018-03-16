@@ -348,6 +348,12 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
         throw new IllegalArgumentException("Unknown option")
     }
 
+    // Validate minPartitions value if present
+    if (caseInsensitiveParams.contains(MIN_PARTITIONS_OPTION_KEY)) {
+      val p = caseInsensitiveParams(MIN_PARTITIONS_OPTION_KEY).toInt
+      if (p <= 0) throw new IllegalArgumentException("minPartitions must be positive")
+    }
+
     // Validate user-specified Kafka options
 
     if (caseInsensitiveParams.contains(s"kafka.${ConsumerConfig.GROUP_ID_CONFIG}")) {
@@ -455,6 +461,7 @@ private[kafka010] object KafkaSourceProvider extends Logging {
   private[kafka010] val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
   private[kafka010] val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
   private val FAIL_ON_DATA_LOSS_OPTION_KEY = "failondataloss"
+  private val MIN_PARTITIONS_OPTION_KEY = "minpartitions"
 
   val TOPIC_OPTION_KEY = "topic"
 

@@ -111,7 +111,9 @@ class SparkHadoopUtil extends Logging {
    * subsystems.
    */
   def newConfiguration(conf: SparkConf): Configuration = {
-    SparkHadoopUtil.newConfiguration(conf)
+    val hadoopConf = SparkHadoopUtil.newConfiguration(conf)
+    hadoopConf.addResource(SparkHadoopUtil.SPARK_HADOOP_CONF_FILE)
+    hadoopConf
   }
 
   /**
@@ -434,6 +436,13 @@ object SparkHadoopUtil {
    * Hadoop FileSystem API of interest (only available in 2.5), so we should do this sparingly.
    */
   private[spark] val UPDATE_INPUT_METRICS_INTERVAL_RECORDS = 1000
+
+  /**
+   * Name of the file containing the gateway's Hadoop configuration, to be overlayed on top of the
+   * cluster's Hadoop config. It is up to the Spark code launching the application to create
+   * this file if it's desired. If the file doesn't exist, it will just be ignored.
+   */
+  private[spark] val SPARK_HADOOP_CONF_FILE = "__spark_hadoop_conf__.xml"
 
   def get: SparkHadoopUtil = instance
 
