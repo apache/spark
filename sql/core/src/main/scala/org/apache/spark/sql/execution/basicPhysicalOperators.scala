@@ -396,9 +396,11 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     // The default size of a batch, which must be positive integer
     val batchSize = 1000
 
-    val initRangeFuncName = ctx.addNewFunction("initRange",
+    val initRange = ctx.freshName("initRange")
+
+    val initRangeFuncName = ctx.addNewFunction(initRange,
       s"""
-        | private void initRange(int idx) {
+        | private void ${initRange}(int idx) {
         |   $BigInt index = $BigInt.valueOf(idx);
         |   $BigInt numSlice = $BigInt.valueOf(${numSlices}L);
         |   $BigInt numElement = $BigInt.valueOf(${numElements.toLong}L);
