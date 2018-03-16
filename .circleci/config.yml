@@ -157,7 +157,7 @@ jobs:
           name: "Hard link all the files under ***/target/scala-* directories to $BUILD_SBT_CACHE, excluding jars"
           command: >
             rsync --info=stats2,misc1,flist0 -a --link-dest=$PWD --delete-excluded --prune-empty-dirs
-            --exclude 'target/streams' --exclude '***/*.jar' --include 'target/scala-*/***'
+            --exclude '***/*.jar' --include 'target/***'
             --include '**/' --exclude '*' . "$BUILD_SBT_CACHE/"
       # Also save all the target files to the workspace, as we will need them in the future
       - persist_to_workspace:
@@ -168,8 +168,6 @@ jobs:
           key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
           paths:
             - "~/build-sbt-cache"
-
-
 
   run-backcompat-tests:
     # depends on build-sbt
