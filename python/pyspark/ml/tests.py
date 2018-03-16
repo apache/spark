@@ -679,6 +679,34 @@ class FeatureTests(SparkSessionTestCase):
             feature, expected = r
             self.assertEqual(feature, expected)
 
+    def test_count_vectorizer_from_vocab(self):
+        model = CountVectorizerModel.from_vocabulary(["a", "b", "c"], inputCol="words",
+                                                     outputCol="features", minTF=2)
+        self.assertEqual(model.vocabulary, ["a", "b", "c"])
+        self.assertEqual(model.getMinTF(), 2)
+
+        dataset = self.spark.createDataFrame([
+            (0, "a a a b b c".split(' '), SparseVector(3, {0: 3.0, 1: 2.0}),),
+            (1, "a a".split(' '), SparseVector(3, {0: 2.0}),),
+            (2, "a b".split(' '), SparseVector(3, {}),)], ["id", "words", "expected"])
+
+        transformed_list = model.transform(dataset).select("features", "expected").collect()
+
+        for r in transformed_list:
+            feature, expected = r
+            self.assertEqual(feature, expected)
+
+        # Test an empty vocabulary
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, "vocabSize.*invalid.*0"):
+                CountVectorizerModel.from_vocabulary([], inputCol="words")
+
+        # Test model with default settings can transform
+        model_default = CountVectorizerModel.from_vocabulary(["a", "b", "c"], inputCol="words")
+        transformed_list = model_default.transform(dataset)\
+            .select(model_default.getOrDefault(model_default.outputCol)).collect()
+        self.assertEqual(len(transformed_list), 3)
+
     def test_rformula_force_index_label(self):
         df = self.spark.createDataFrame([
             (1.0, 1.0, "a"),
@@ -2019,8 +2047,8 @@ class DefaultValuesTests(PySparkTestCase):
                    pyspark.ml.regression]
         for module in modules:
             for name, cls in inspect.getmembers(module, inspect.isclass):
-                if not name.endswith('Model') and issubclass(cls, JavaParams)\
-                        and not inspect.isabstract(cls):
+                if not name.endswith('Model') and not name.endswith('Params')\
+                        and issubclass(cls, JavaParams) and not inspect.isabstract(cls):
                     # NOTE: disable check_params_exist until there is parity with Scala API
                     ParamTests.check_params(self, cls(), check_params_exist=False)
 
