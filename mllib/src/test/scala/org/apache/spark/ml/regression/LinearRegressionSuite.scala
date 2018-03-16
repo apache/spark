@@ -640,7 +640,7 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest {
     val trainer = new LinearRegression
     val model = trainer.fit(datasetWithDenseFeature)
 
-    testPredictorModelSinglePrediction(model, datasetWithDenseFeature)
+    testPredictionModelSinglePrediction(model, datasetWithDenseFeature)
   }
 
   test("linear regression model with constant label") {

@@ -85,7 +85,7 @@ class RandomForestRegressorSuite extends MLTest with DefaultReadWriteTest{
 
     val df = orderedLabeledPoints50_1000.toDF()
     val model = rf.fit(df)
-    testPredictorModelSinglePrediction(model, df)
+    testPredictionModelSinglePrediction(model, df)
   }
 
   test("Feature importance with toy data") {

@@ -216,7 +216,7 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
     val model = glr.setFamily("gaussian").setLink("identity")
       .fit(datasetGaussianIdentity)
 
-    testPredictorModelSinglePrediction(model, datasetGaussianIdentity)
+    testPredictionModelSinglePrediction(model, datasetGaussianIdentity)
   }
 
   test("generalized linear regression: gaussian family against glm") {

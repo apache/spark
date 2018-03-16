@@ -138,8 +138,8 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     }
   }
 
-  def testPredictorModelSinglePrediction(model: PredictionModel[Vector, _],
-      dataset: Dataset[_]): Unit = {
+  def testPredictionModelSinglePrediction(model: PredictionModel[Vector, _],
+    dataset: Dataset[_]): Unit = {
 
     model.transform(dataset).select(model.getFeaturesCol, model.getPredictionCol)
       .collect().foreach {

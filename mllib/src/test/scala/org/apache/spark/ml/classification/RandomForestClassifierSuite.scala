@@ -168,7 +168,7 @@ class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
     val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
     val model = rf.fit(df)
 
-    testPredictorModelSinglePrediction(model, df)
+    testPredictionModelSinglePrediction(model, df)
   }
 
   test("Fitting without numClasses in metadata") {

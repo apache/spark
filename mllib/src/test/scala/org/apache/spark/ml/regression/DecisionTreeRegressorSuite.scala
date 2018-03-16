@@ -148,7 +148,7 @@ class DecisionTreeRegressorSuite extends MLTest with DefaultReadWriteTest {
     val df: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0)
 
     val model = dt.fit(df)
-    testPredictorModelSinglePrediction(model, df)
+    testPredictionModelSinglePrediction(model, df)
   }
 
   test("should support all NumericType labels and not support other types") {

@@ -186,7 +186,7 @@ class NaiveBayesSuite extends MLTest with DefaultReadWriteTest {
     val validationDataset =
       generateNaiveBayesInput(piArray, thetaArray, nPoints, 17, "multinomial").toDF()
 
-    testPredictorModelSinglePrediction(model, validationDataset)
+    testPredictionModelSinglePrediction(model, validationDataset)
   }
 
   test("Naive Bayes with weighted samples") {

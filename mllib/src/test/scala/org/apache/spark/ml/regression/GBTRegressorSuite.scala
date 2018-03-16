@@ -104,7 +104,7 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
       .setMaxDepth(2)
       .setMaxIter(2)
     val model = gbt.fit(trainData.toDF())
-    testPredictorModelSinglePrediction(model, validationData.toDF)
+    testPredictionModelSinglePrediction(model, validationData.toDF)
   }
 
   test("Checkpointing") {

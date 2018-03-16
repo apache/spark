@@ -204,7 +204,7 @@ class LinearSVCSuite extends MLTest with DefaultReadWriteTest {
   test("prediction on single instance") {
     val trainer = new LinearSVC()
     val model = trainer.fit(smallBinaryDataset)
-    testPredictorModelSinglePrediction(model, smallBinaryDataset)
+    testPredictionModelSinglePrediction(model, smallBinaryDataset)
   }
 
   test("linearSVC comparison with R e1071 and scikit-learn") {
