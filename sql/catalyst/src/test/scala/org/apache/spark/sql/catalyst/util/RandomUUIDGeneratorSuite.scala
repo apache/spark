@@ -47,4 +47,11 @@ class RandomUUIDGeneratorSuite extends SparkFunSuite {
       assert(uuid1 != uuid3)
    }
  }
+
+ test("Get UTF8String UUID") {
+   val generator = RandomUUIDGenerator(new Random().nextLong())
+   val utf8StringUUID = generator.getNextUUIDUTF8String()
+   val uuid = java.util.UUID.fromString(utf8StringUUID.toString)
+   assert(uuid.version() == 4 && uuid.variant() == 2 && utf8StringUUID.toString == uuid.toString)
+ }
 }

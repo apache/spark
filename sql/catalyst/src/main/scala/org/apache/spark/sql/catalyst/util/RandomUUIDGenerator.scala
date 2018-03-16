@@ -21,6 +21,8 @@ import java.util.UUID
 
 import org.apache.commons.math3.random.MersenneTwister
 
+import org.apache.spark.unsafe.types.UTF8String
+
 /**
  * This class is used to generate a UUID from Pseudo-Random Numbers.
  *
@@ -36,4 +38,6 @@ case class RandomUUIDGenerator(randomSeed: Long) {
 
     new UUID(mostSigBits, leastSigBits)
   }
+
+  def getNextUUIDUTF8String(): UTF8String = UTF8String.fromString(getNextUUID().toString())
 }
