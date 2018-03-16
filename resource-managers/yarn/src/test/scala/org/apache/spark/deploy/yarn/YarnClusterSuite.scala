@@ -225,6 +225,14 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     finalState should be (SparkAppHandle.State.FAILED)
   }
 
+  test("executor env overwrite AM env in client mode") {
+    testExecutorEnv(true)
+  }
+
+  test("executor env overwrite AM env in cluster mode") {
+    testExecutorEnv(false)
+  }
+
   private def testBasicYarnApp(clientMode: Boolean, conf: Map[String, String] = Map()): Unit = {
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
@@ -305,6 +313,17 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, executorResult, "OVERRIDDEN")
   }
 
+  private def testExecutorEnv(clientMode: Boolean): Unit = {
+    val result = File.createTempFile("result", null, tempDir)
+    val finalState = runSpark(clientMode, mainClassName(ExecutorEnvTestApp.getClass),
+      appArgs = Seq(result.getAbsolutePath),
+      extraConf = Map(
+        "spark.yarn.appMasterEnv.TEST_ENV" -> "am_val",
+        "spark.executorEnv.TEST_ENV" -> "executor_val"
+      )
+    )
+    checkResult(finalState, result, "true")
+  }
 }
 
 private[spark] class SaveExecutorInfo extends SparkListener {
@@ -523,6 +542,23 @@ private object SparkContextTimeoutApp {
   def main(args: Array[String]): Unit = {
     val Array(sleepTime) = args
     Thread.sleep(java.lang.Long.parseLong(sleepTime))
+  }
+
+}
+
+private object ExecutorEnvTestApp {
+
+  def main(args: Array[String]): Unit = {
+    val status = args(0)
+    val sparkConf = new SparkConf()
+    val sc = new SparkContext(sparkConf)
+    val executorEnvs = sc.parallelize(Seq(1)).flatMap { _ => sys.env }.collect().toMap
+    val result = sparkConf.getExecutorEnv.forall { case (k, v) =>
+      executorEnvs.get(k).contains(v)
+    }
+
+    Files.write(result.toString, new File(status), StandardCharsets.UTF_8)
+    sc.stop()
   }
 
 }
