@@ -178,12 +178,17 @@ class Dataset[T] private[sql](
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
 
   def this(sparkSession: SparkSession, logicalPlan: LogicalPlan,
-      encoder: Encoder[T], sqlText: String = "") = {
+      encoder: Encoder[T]) = {
+    this(sparkSession, sparkSession.sessionState.executePlan(logicalPlan), encoder, "")
+  }
+
+  def this(sparkSession: SparkSession, logicalPlan: LogicalPlan,
+           encoder: Encoder[T], sqlText: String) = {
     this(sparkSession, sparkSession.sessionState.executePlan(logicalPlan), encoder, sqlText)
   }
 
   def this(sqlContext: SQLContext, logicalPlan: LogicalPlan,
-      encoder: Encoder[T], sqlText: String = "") = {
+      encoder: Encoder[T], sqlText: String) = {
     this(sqlContext.sparkSession, logicalPlan, encoder, sqlText)
   }
 
