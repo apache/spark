@@ -617,6 +617,54 @@ class DirectKafkaStreamSuite
     ssc.stop()
   }
 
+  test("maxMessagesPerPartition with zero offset and rate equal to one") {
+    val topic = "backpressure"
+    val kafkaParams = getKafkaParams()
+    val batchIntervalMilliseconds = 60000
+    val sparkConf = new SparkConf()
+      // Safe, even with streaming, because we're using the direct API.
+      // Using 1 core is useful to make the test more predictable.
+      .setMaster("local[1]")
+      .setAppName(this.getClass.getSimpleName)
+      .set("spark.streaming.kafka.maxRatePerPartition", "100")
+
+    // Setup the streaming context
+    ssc = new StreamingContext(sparkConf, Milliseconds(batchIntervalMilliseconds))
+    val estimateRate = 1L
+    val fromOffsets = Map(
+      new TopicPartition(topic, 0) -> 0L,
+      new TopicPartition(topic, 1) -> 0L,
+      new TopicPartition(topic, 2) -> 0L,
+      new TopicPartition(topic, 3) -> 0L
+    )
+    val kafkaStream = withClue("Error creating direct stream") {
+      new DirectKafkaInputDStream[String, String](
+        ssc,
+        preferredHosts,
+        ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala),
+        new DefaultPerPartitionConfig(sparkConf)
+      ) {
+        currentOffsets = fromOffsets
+        override val rateController = Some(new ConstantRateController(id, null, estimateRate))
+      }
+    }
+
+    val offsets = Map[TopicPartition, Long](
+      new TopicPartition(topic, 0) -> 0,
+      new TopicPartition(topic, 1) -> 100L,
+      new TopicPartition(topic, 2) -> 200L,
+      new TopicPartition(topic, 3) -> 300L
+    )
+    val result = kafkaStream.maxMessagesPerPartition(offsets)
+    val expected = Map(
+      new TopicPartition(topic, 0) -> 1L,
+      new TopicPartition(topic, 1) -> 10L,
+      new TopicPartition(topic, 2) -> 20L,
+      new TopicPartition(topic, 3) -> 30L
+    )
+    assert(result.contains(expected), s"Number of messages per partition must be at least 1")
+  }
+
   /** Get the generated offset ranges from the DirectKafkaStream */
   private def getOffsetRanges[K, V](
       kafkaStream: DStream[ConsumerRecord[K, V]]): Seq[(Time, Array[OffsetRange])] = {
