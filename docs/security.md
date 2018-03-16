@@ -162,7 +162,7 @@ The following settings cover enabling encryption for data written to disk:
 
 # Web UI
 
-## Authentication
+## Authentication and Authorization
 
 Enabling authentication for the Web UIs is done using [javax servlet filters](http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html).
 You will need a filter that implements the authentication method you want to deploy. Spark does not
@@ -267,6 +267,51 @@ The following options control the authentication of Web UIs:
 
 On YARN, the view and modify ACLs are provided to the YARN service when submitting applications, and
 control who has the respective privileges via YARN interfaces.
+
+## Spark History Server ACLs
+
+Authentication for the SHS Web UI is enabled the same way as for regular applications, using
+servlet filters.
+
+To enable authorization in the SHS, a few extra options are used:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.history.ui.acls.enable</td>
+  <td>false</td>
+  <td>
+    Specifies whether ACLs should be checked to authorize users viewing the applications in
+    the history server. If enabled, access control checks are performed regardless of what the
+    individual applications had set for <code>spark.ui.acls.enable</code>. The application owner
+    will always have authorization to view their own application and any users specified via
+    <code>spark.ui.view.acls</code> and groups specified via <code>spark.ui.view.acls.groups</code>
+    when the application was run will also have authorization to view that application.
+    If disabled, no access control checks are made for any application UIs available through
+    the history server.
+  </td>
+</tr>
+<tr>
+  <td>spark.history.ui.admin.acls</td>
+  <td>None</td>
+  <td>
+    Comma separated list of users that have view access to all the Spark applications in history
+    server.
+  </td>
+</tr>
+<tr>
+  <td>spark.history.ui.admin.acls.groups</td>
+  <td>None</td>
+  <td>
+    Comma separated list of groups that have view access to all the Spark applications in history
+    server.
+  </td>
+</tr>
+</table>
+
+The SHS uses the same options to configure the group mapping provider as regular applications.
+In this case, the group mapping provider will apply to all UIs server by the SHS, and individual
+application configurations will be ignored.
 
 ## SSL Configuration
 
