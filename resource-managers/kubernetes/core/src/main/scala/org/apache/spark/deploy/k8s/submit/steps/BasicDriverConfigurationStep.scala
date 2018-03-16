@@ -148,6 +148,8 @@ private[spark] class BasicDriverConfigurationStep(
       .setIfMissing(KUBERNETES_DRIVER_POD_NAME, driverPodName)
       .set("spark.app.id", kubernetesAppId)
       .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, resourceNamePrefix)
+      // to set the config variables to allow client-mode spark-submit from driver
+      .set(KUBERNETES_DRIVER_SUBMIT_CHECK, true)
 
     driverSpec.copy(
       driverPod = baseDriverPod,

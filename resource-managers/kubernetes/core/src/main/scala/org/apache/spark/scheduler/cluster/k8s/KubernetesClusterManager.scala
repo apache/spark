@@ -35,7 +35,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
   override def createTaskScheduler(sc: SparkContext, masterURL: String): TaskScheduler = {
     if (masterURL.startsWith("k8s") &&
       sc.deployMode == "client" &&
-      !sc.conf.contains(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)) {
+      !sc.conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK).getOrElse(false)) {
       throw new SparkException("Client mode is currently not supported for Kubernetes.")
     }
 

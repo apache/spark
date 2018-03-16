@@ -113,6 +113,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("The client should create Kubernetes resources") {
     val EXAMPLE_JAVA_OPTS = "-XX:+HeapDumpOnOutOfMemoryError -XX:+PrintGCDetails"
+    val EXPECTED_JAVA_OPTS = "-XX\\:+HeapDumpOnOutOfMemoryError -XX\\:+PrintGCDetails"
     val submissionClient = new Client(
       submissionSteps,
       new SparkConf(false)
@@ -126,32 +127,36 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val createdPod = createdPodArgumentCaptor.getValue
     val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues
     assert(otherCreatedResources.size === 2)
-    otherCreatedResources.toArray.foreach{
-      case secret: Secret =>
-        assert(secret.getMetadata.getName === FirstTestConfigurationStep.secretName)
-        assert(secret.getData.asScala ===
-          Map(FirstTestConfigurationStep.secretKey -> FirstTestConfigurationStep.secretData))
-        val ownerReference = Iterables.getOnlyElement(secret.getMetadata.getOwnerReferences)
-        assert(ownerReference.getName === createdPod.getMetadata.getName)
-        assert(ownerReference.getKind === DRIVER_POD_KIND)
-        assert(ownerReference.getUid === DRIVER_POD_UID)
-        assert(ownerReference.getApiVersion === DRIVER_POD_API_VERSION)
-      case configMap: ConfigMap =>
-        assert(configMap.getMetadata.getName ===
-          s"$KUBERNETES_RESOURCE_PREFIX-driver-conf-map")
-        assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
-        assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains(EXAMPLE_JAVA_OPTS))
-        assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains(
-          "spark.custom-conf=custom-conf-value"))
-    }
+    val secrets = otherCreatedResources.toArray
+      .filter(_.isInstanceOf[Secret]).map(_.asInstanceOf[Secret])
+    val configMaps = otherCreatedResources.toArray
+      .filter(_.isInstanceOf[ConfigMap]).map(_.asInstanceOf[ConfigMap])
+    assert(secrets.nonEmpty)
+    val secret = secrets.head
+    assert(secret.getMetadata.getName === FirstTestConfigurationStep.secretName)
+    assert(secret.getData.asScala ===
+      Map(FirstTestConfigurationStep.secretKey -> FirstTestConfigurationStep.secretData))
+    val ownerReference = Iterables.getOnlyElement(secret.getMetadata.getOwnerReferences)
+    assert(ownerReference.getName === createdPod.getMetadata.getName)
+    assert(ownerReference.getKind === DRIVER_POD_KIND)
+    assert(ownerReference.getUid === DRIVER_POD_UID)
+    assert(ownerReference.getApiVersion === DRIVER_POD_API_VERSION)
+    assert(configMaps.nonEmpty)
+    val configMap = configMaps.head
+    assert(configMap.getMetadata.getName ===
+      s"$KUBERNETES_RESOURCE_PREFIX-driver-conf-map")
+    assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
+    assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains(EXPECTED_JAVA_OPTS))
+    assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains(
+      "spark.custom-conf=custom-conf-value"))
     val driverContainer = Iterables.getOnlyElement(createdPod.getSpec.getContainers)
     assert(driverContainer.getName === SecondTestConfigurationStep.containerName)
     val driverEnv = driverContainer.getEnv.asScala.head
-    assert(driverEnv.getName === SPARK_CONF_DIR_ENV)
-    assert(driverEnv.getValue === SPARK_CONF_PATH)
+    assert(driverEnv.getName === ENV_SPARK_CONF_DIR)
+    assert(driverEnv.getValue === SPARK_CONF_DIR_INTERNAL)
     val driverMount = driverContainer.getVolumeMounts.asScala.head
     assert(driverMount.getName === SPARK_CONF_VOLUME)
-    assert(driverMount.getMountPath === SPARK_CONF_DIR)
+    assert(driverMount.getMountPath === SPARK_CONF_DIR_INTERNAL)
   }
 
   test("Waiting for app completion should stall on the watcher") {

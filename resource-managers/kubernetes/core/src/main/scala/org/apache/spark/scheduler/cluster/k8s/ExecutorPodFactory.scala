@@ -137,6 +137,8 @@ private[spark] class ExecutorPodFactory(
       (ENV_EXECUTOR_CORES, math.ceil(executorCores).toInt.toString),
       (ENV_EXECUTOR_MEMORY, executorMemoryString),
       (ENV_APPLICATION_ID, applicationId),
+      // This is to set the SPARK_CONF_DIR to be /opt/spark/conf
+      (ENV_SPARK_CONF_DIR, SPARK_CONF_DIR_INTERNAL),
       (ENV_EXECUTOR_ID, executorId)) ++ executorEnvs)
       .map(env => new EnvVarBuilder()
         .withName(env._1)

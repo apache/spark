@@ -19,15 +19,13 @@ package org.apache.spark.scheduler.cluster.k8s
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model._
-import org.mockito.{AdditionalAnswers, MockitoAnnotations}
-import org.mockito.Matchers.any
-import org.mockito.Mockito._
+import org.mockito.MockitoAnnotations
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{MountSecretsBootstrap, SecretVolumeUtils}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.MountSecretsBootstrap
 
 class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterEach {
 
@@ -55,6 +53,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       .set(KUBERNETES_DRIVER_POD_NAME, driverPodName)
       .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, executorPrefix)
       .set(CONTAINER_IMAGE, executorImage)
+      .set(KUBERNETES_DRIVER_SUBMIT_CHECK, true)
   }
 
   test("basic executor pod has reasonable defaults") {
@@ -149,6 +148,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       ENV_EXECUTOR_CORES -> "1",
       ENV_EXECUTOR_MEMORY -> "1g",
       ENV_APPLICATION_ID -> "dummy",
+      ENV_SPARK_CONF_DIR -> SPARK_CONF_DIR_INTERNAL,
       ENV_EXECUTOR_POD_IP -> null) ++ additionalEnvVars
 
     assert(executor.getSpec.getContainers.size() === 1)

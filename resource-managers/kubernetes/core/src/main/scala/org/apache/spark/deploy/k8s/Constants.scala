@@ -64,12 +64,12 @@ private[spark] object Constants {
   val ENV_JAVA_OPT_PREFIX = "SPARK_JAVA_OPT_"
   val ENV_CLASSPATH = "SPARK_CLASSPATH"
   val ENV_DRIVER_BIND_ADDRESS = "SPARK_DRIVER_BIND_ADDRESS"
+  val ENV_SPARK_CONF_DIR = "SPARK_CONF_DIR"
   // Spark app configs for containers
   val SPARK_CONF_VOLUME = "spark-conf-volume"
-  val SPARK_CONF_DIR = "/etc/spark/conf"
-  val SPARK_CONF_DIR_ENV = "SPARK_CONF_DIR"
+  val SPARK_CONF_DIR_INTERNAL = "/opt/spark/conf"
   val SPARK_CONF_FILE_NAME = "spark.properties"
-  val SPARK_CONF_PATH = s"$SPARK_CONF_DIR/$SPARK_CONF_FILE_NAME"
+  val SPARK_CONF_PATH = s"$SPARK_CONF_DIR_INTERNAL/$SPARK_CONF_FILE_NAME"
 
   // Miscellaneous
   val KUBERNETES_MASTER_INTERNAL_URL = "https://kubernetes.default.svc"

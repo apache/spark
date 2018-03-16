@@ -20,7 +20,6 @@ import java.io.StringWriter
 import java.util.{Collections, UUID}
 import java.util.Properties
 
-import com.google.common.primitives.Longs
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.mutable
@@ -33,6 +32,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory
 import org.apache.spark.deploy.k8s.submit.steps.DriverConfigurationStep
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.util.Utils
 
 /**
@@ -110,22 +110,17 @@ private[spark] class Client(
       currentDriverSpec = nextStep.configureDriver(currentDriverSpec)
     }
     val configMapName = s"$kubernetesResourceNamePrefix-driver-conf-map"
-    val driverExtraJavaOpts =
-      sparkConf.get(org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS).getOrElse("")
-    val configMap = buildConfigMap(
-      configMapName,
-      currentDriverSpec.driverSparkConf,
-      driverExtraJavaOpts)
+    val configMap = buildConfigMap(configMapName, currentDriverSpec.driverSparkConf)
     // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
     // Spark command builder to pickup on the Java Options present in the ConfigMap
     val resolvedDriverContainer = new ContainerBuilder(currentDriverSpec.driverContainer)
       .addNewEnv()
-        .withName(SPARK_CONF_DIR_ENV)
-        .withValue(SPARK_CONF_PATH)
+        .withName(ENV_SPARK_CONF_DIR)
+        .withValue(SPARK_CONF_DIR_INTERNAL)
         .endEnv()
       .addNewVolumeMount()
         .withName(SPARK_CONF_VOLUME)
-        .withMountPath(SPARK_CONF_DIR)
+        .withMountPath(SPARK_CONF_DIR_INTERNAL)
         .endVolumeMount()
       .build()
     val resolvedDriverPod = new PodBuilder(currentDriverSpec.driverPod)
@@ -139,7 +134,6 @@ private[spark] class Client(
           .endVolume()
         .endSpec()
       .build()
-
     Utils.tryWithResource(
       kubernetesClient
         .pods()
@@ -185,15 +179,10 @@ private[spark] class Client(
     }
   }
 
-  // Build a Config Map that will house both the properties and the java options in a single file
-  private def buildConfigMap(
-    configMapName: String,
-    conf: SparkConf,
-    driverJavaOps: String): ConfigMap = {
+  // Build a Config Map that will house spark conf properties in a single file for spark-submit
+  private def buildConfigMap(configMapName: String, conf: SparkConf): ConfigMap = {
     val properties = new Properties()
-    conf
-      .remove(org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS)
-      .getAll.foreach { case (k, v) =>
+    conf.getAll.foreach { case (k, v) =>
       properties.setProperty(k, v)
     }
     val propertiesWriter = new StringWriter()
@@ -206,7 +195,7 @@ private[spark] class Client(
         .withName(configMapName)
         .withNamespace(namespace)
         .endMetadata()
-      .addToData(SPARK_CONF_FILE_NAME, propertiesWriter.toString + driverJavaOps)
+      .addToData(SPARK_CONF_FILE_NAME, propertiesWriter.toString)
       .build()
   }
 }

@@ -50,19 +50,9 @@ private[spark] object KubernetesUtils {
     }
   }
 
-  /**
-   * Get from a given collection of file URIs the ones that represent remote files.
-   */
-  def getOnlyRemoteFiles(uris: Iterable[String]): Iterable[String] = {
-    uris.filter { uri =>
-      val scheme = Utils.resolveURI(uri).getScheme
-      scheme != "local"
-    }
-  }
-
   private def resolveFileUri(uri: String): String = {
     val fileUri = Utils.resolveURI(uri)
-    val fileScheme = Option(fileUri.getScheme).getOrElse("non-local")
+    val fileScheme = Option(fileUri.getScheme).getOrElse("file")
     fileScheme match {
       case "local" => fileUri.getPath
       case _ => uri

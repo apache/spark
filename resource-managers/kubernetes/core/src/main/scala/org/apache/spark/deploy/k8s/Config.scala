@@ -79,6 +79,12 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_DRIVER_SUBMIT_CHECK =
+    ConfigBuilder("spark.kubernetes.submitInDriver")
+    .internal()
+    .booleanConf
+    .createOptional
+
   val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
       .doc("Specify the hard cpu limit for each executor pod")
