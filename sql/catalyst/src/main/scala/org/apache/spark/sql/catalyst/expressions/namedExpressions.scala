@@ -327,9 +327,9 @@ case class AttributeReference(
 case class PrettyNamedExpression(
     name: String,
     dataType: DataType = NullType)
-  extends Attribute with Unevaluable {
+  extends LeafExpression with NamedExpression with Unevaluable {
 
-  def this(attribute: Attribute) = this(attribute.name, attribute match {
+  def this(e: NamedExpression) = this(e.name, e match {
     case a: AttributeReference => a.dataType
     case a: PrettyNamedExpression => a.dataType
     case _ => NullType
@@ -338,17 +338,11 @@ case class PrettyNamedExpression(
   override def toString: String = name
   override def sql: String = toString
 
-  override def withNullability(newNullability: Boolean): Attribute =
-    throw new UnsupportedOperationException
-  override def newInstance(): Attribute = throw new UnsupportedOperationException
-  override def withQualifier(newQualifier: Option[String]): Attribute =
-    throw new UnsupportedOperationException
-  override def withName(newName: String): Attribute = throw new UnsupportedOperationException
-  override def withMetadata(newMetadata: Metadata): Attribute =
-    throw new UnsupportedOperationException
+  override def newInstance(): NamedExpression = throw new UnsupportedOperationException
   override def qualifier: Option[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def nullable: Boolean = true
+  override def toAttribute: Attribute = throw new UnsupportedOperationException
 }
 
 /**
