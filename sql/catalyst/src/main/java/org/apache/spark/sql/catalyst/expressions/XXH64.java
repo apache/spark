@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.catalyst.expressions;
 
+import com.google.common.primitives.Ints;
+
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
@@ -89,9 +91,9 @@ public final class XXH64 {
   public static long hashUnsafeBytesBlock(MemoryBlock mb, long seed) {
     Object base = mb.getBaseObject();
     long offset = mb.getBaseOffset();
-    int length = (int)mb.size();
+    long length = mb.size();
     assert (length >= 0) : "lengthInBytes cannot be negative";
-    long hash = hashBytesByWords(base, offset, length, seed);
+    long hash = hashBytesByWords(base, offset, Ints.checkedCast(length), seed);
     long end = offset + length;
     offset += length & -8;
 

@@ -42,11 +42,7 @@ public final class OnHeapMemoryBlock extends MemoryBlock {
 
   @Override
   public MemoryBlock subBlock(long offset, long size) {
-    if (offset - Platform.LONG_ARRAY_OFFSET + size > length) {
-      throw new ArrayIndexOutOfBoundsException(
-        "The sum of size " + size + ", offset " + offset + ", and -" + Platform.LONG_ARRAY_OFFSET +
-          " should not be larger than MemoryBlock length " + length);
-    }
+    checkSubBlockRange(offset, size);
     return new OnHeapMemoryBlock(array, this.offset + offset, size);
   }
 

@@ -41,10 +41,10 @@ public class HiveHasher {
 
   public static int hashUnsafeBytesBlock(MemoryBlock mb) {
     long offset = mb.getBaseOffset();
-    int lengthInBytes = (int)mb.size();
+    long lengthInBytes = mb.size();
     assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
     int result = 0;
-    for (int i = 0; i < lengthInBytes; i++) {
+    for (long i = 0; i < lengthInBytes; i++) {
       result = (result * 31) + (int) mb.getByte(offset + i);
     }
     return result;

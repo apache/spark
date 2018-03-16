@@ -59,13 +59,17 @@ public abstract class MemoryBlock {
    */
   private int pageNumber = NO_PAGE_NUMBER;
 
-  public MemoryBlock(@Nullable Object obj, long offset, long length) {
+  protected MemoryBlock(@Nullable Object obj, long offset, long length) {
+    if (offset < 0 || length < 0) {
+      throw new ArrayIndexOutOfBoundsException(
+        "Length " + length + " and offset " + offset + "must be non-negative");
+    }
     this.obj = obj;
     this.offset = offset;
     this.length = length;
   }
 
-  public MemoryBlock() {
+  protected MemoryBlock() {
     this(null, 0, 0);
   }
 
@@ -130,6 +134,18 @@ public abstract class MemoryBlock {
    * copied. If parameters are invalid, an exception is thrown
    */
   public abstract MemoryBlock subBlock(long offset, long size);
+
+  protected void checkSubBlockRange(long offset, long size) {
+    if (offset < 0 || length < 0) {
+      throw new ArrayIndexOutOfBoundsException(
+        "Length " + length + " and offset " + offset + "must be non-negative");
+    }
+    if (offset + size > this.offset + length) {
+      throw new ArrayIndexOutOfBoundsException("The sum of size " + size + " and offset " +
+        offset + " should not be larger than " + "the sum of length " + length + " and offset " +
+        this.offset + " in the MemoryBlock");
+    }
+  }
 
   /**
    * getXXX/putXXX does not ensure guarantee behavior if the offset is invalid. e.g  cause illegal

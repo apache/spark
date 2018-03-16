@@ -23,6 +23,8 @@ import org.junit.Test;
 
 import java.nio.ByteOrder;
 
+import static org.hamcrest.core.StringContains.containsString;
+
 public class MemoryBlockSuite {
   private static final boolean bigEndianPlatform =
     ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
@@ -79,6 +81,20 @@ public class MemoryBlockSuite {
     for (int i = 40; i < memory.size(); i++) {
       Assert.assertEquals((byte) -1, memory.getByte(offset + i));
     }
+
+    try {
+      memory.subBlock(-1, -1);
+      Assert.fail();
+    } catch (Exception expected) {
+      Assert.assertThat(expected.getMessage(), containsString("non-negative"));
+    }
+
+    try {
+      memory.subBlock(offset + 16, length - 8);
+      Assert.fail();
+    } catch (Exception expected) {
+      Assert.assertThat(expected.getMessage(), containsString("should not be larger than"));
+    }
   }
 
   @Test
@@ -91,6 +107,10 @@ public class MemoryBlockSuite {
     check(memory, obj, offset, length);
 
     memory = ByteArrayMemoryBlock.fromArray(obj);
+    check(memory, obj, offset, length);
+
+    obj = new byte[96];
+    memory = new ByteArrayMemoryBlock(obj, offset, length);
     check(memory, obj, offset, length);
   }
 
@@ -105,6 +125,10 @@ public class MemoryBlockSuite {
 
     memory = OnHeapMemoryBlock.fromArray(obj);
     check(memory, obj, offset, length);
+
+    obj = new long[12];
+    memory = new OnHeapMemoryBlock(obj, offset, length);
+    check(memory, obj, offset, length);
   }
 
   @Test
@@ -115,6 +139,12 @@ public class MemoryBlockSuite {
     long offset = memory.getBaseOffset();
     int length = 48;
 
+    check(memory, obj, offset, length);
+
+    long address = Platform.allocateMemory(96);
+    memory = new OffHeapMemoryBlock(address, length);
+    obj = memory.getBaseObject();
+    offset = memory.getBaseOffset();
     check(memory, obj, offset, length);
   }
 }

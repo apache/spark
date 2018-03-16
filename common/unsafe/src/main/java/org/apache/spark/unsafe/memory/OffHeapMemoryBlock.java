@@ -28,11 +28,7 @@ public class OffHeapMemoryBlock extends MemoryBlock {
 
   @Override
   public MemoryBlock subBlock(long offset, long size) {
-    if (offset + size > this.offset + length) {
-      throw new ArrayIndexOutOfBoundsException("The sum of size " + size + " and offset " +
-        offset + " should not be larger than " + "the sum of length " + length + " and offset " +
-        this.offset + " in the MemoryBlock");
-    }
+    checkSubBlockRange(offset, size);
     return new OffHeapMemoryBlock(this.offset + offset, size);
   }
 

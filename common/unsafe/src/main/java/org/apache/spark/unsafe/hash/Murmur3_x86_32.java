@@ -17,7 +17,8 @@
 
 package org.apache.spark.unsafe.hash;
 
-import org.apache.spark.unsafe.Platform;
+import com.google.common.primitives.Ints;
+
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
@@ -55,7 +56,7 @@ public final class Murmur3_x86_32 {
 
   public static int hashUnsafeWordsBlock(MemoryBlock base, int seed) {
     // This is based on Guava's `Murmur32_Hasher.processRemaining(ByteBuffer)` method.
-    int lengthInBytes = (int)base.size();
+    int lengthInBytes = Ints.checkedCast(base.size());
     assert (lengthInBytes % 8 == 0): "lengthInBytes must be a multiple of 8 (word-aligned)";
     int h1 = hashBytesByIntBlock(base, seed);
     return fmix(h1, lengthInBytes);
@@ -72,16 +73,16 @@ public final class Murmur3_x86_32 {
     // This is not compatible with original and another implementations.
     // But remain it for backward compatibility for the components existing before 2.3.
     long offset = base.getBaseOffset();
-    int lengthInBytes = (int)base.size();
+    long lengthInBytes = base.size();
     assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
-    int lengthAligned = lengthInBytes - lengthInBytes % 4;
+    long lengthAligned = lengthInBytes - lengthInBytes % 4;
     int h1 = hashBytesByIntBlock(base.subBlock(0, lengthAligned), seed);
-    for (int i = lengthAligned; i < lengthInBytes; i++) {
+    for (long i = lengthAligned; i < lengthInBytes; i++) {
       int halfWord = base.getByte(offset + i);
       int k1 = mixK1(halfWord);
       h1 = mixH1(h1, k1);
     }
-    return fmix(h1, lengthInBytes);
+    return fmix(h1, Ints.checkedCast(lengthInBytes));
   }
 
   public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes, int seed) {
@@ -96,24 +97,24 @@ public final class Murmur3_x86_32 {
     // This is compatible with original and another implementations.
     // Use this method for new components after Spark 2.3.
     long offset = base.getBaseOffset();
-    int lengthInBytes = (int)base.size();
+    long lengthInBytes = base.size();
     assert (lengthInBytes >= 0) : "lengthInBytes cannot be negative";
-    int lengthAligned = lengthInBytes - lengthInBytes % 4;
+    long lengthAligned = lengthInBytes - lengthInBytes % 4;
     int h1 = hashBytesByIntBlock(base.subBlock(0, lengthAligned), seed);
     int k1 = 0;
-    for (int i = lengthAligned, shift = 0; i < lengthInBytes; i++, shift += 8) {
+    for (long i = lengthAligned, shift = 0; i < lengthInBytes; i++, shift += 8) {
       k1 ^= (base.getByte(offset + i) & 0xFF) << shift;
     }
     h1 ^= mixK1(k1);
-    return fmix(h1, lengthInBytes);
+    return fmix(h1, Ints.checkedCast(lengthInBytes));
   }
 
   private static int hashBytesByIntBlock(MemoryBlock base, int seed) {
     long offset = base.getBaseOffset();
-    int lengthInBytes = (int)base.size();
+    long lengthInBytes = base.size();
     assert (lengthInBytes % 4 == 0);
     int h1 = seed;
-    for (int i = 0; i < lengthInBytes; i += 4) {
+    for (long i = 0; i < lengthInBytes; i += 4) {
       int halfWord = base.getInt(offset + i);
       int k1 = mixK1(halfWord);
       h1 = mixH1(h1, k1);
