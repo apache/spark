@@ -106,7 +106,7 @@ jobs:
   build-sbt:
     <<: *defaults
     environment:
-      BUILD_SBT_CACHE: "~/build-sbt-cache"
+      BUILD_SBT_CACHE: "$CIRCLE_HOME/build-sbt-cache"
     steps:
       # Saves us from recompiling every time...
       - restore_cache:
