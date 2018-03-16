@@ -277,41 +277,42 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def eval(input: InternalRow): Any = value
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = ctx.javaType(dataType)
-    // change the isNull and primitive to consts, to inline them
+    val javaType = CodeGenerator.javaType(dataType)
     if (value == null) {
-      ev.isNull = "true"
-      ev.copy(s"final $javaType ${ev.value} = ${ctx.defaultValue(dataType)};")
+      ExprCode.forNullValue(dataType)
     } else {
-      ev.isNull = "false"
       dataType match {
         case BooleanType | IntegerType | DateType =>
-          ev.copy(code = "", value = value.toString)
+          ExprCode.forNonNullValue(value.toString)
         case FloatType =>
-          val v = value.asInstanceOf[Float]
-          if (v.isNaN || v.isInfinite) {
-            val boxedValue = ctx.addReferenceObj("boxedValue", v)
-            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
-            ev.copy(code = code)
-          } else {
-            ev.copy(code = "", value = s"${value}f")
+          value.asInstanceOf[Float] match {
+            case v if v.isNaN =>
+              ExprCode.forNonNullValue("Float.NaN")
+            case Float.PositiveInfinity =>
+              ExprCode.forNonNullValue("Float.POSITIVE_INFINITY")
+            case Float.NegativeInfinity =>
+              ExprCode.forNonNullValue("Float.NEGATIVE_INFINITY")
+            case _ =>
+              ExprCode.forNonNullValue(s"${value}F")
           }
         case DoubleType =>
-          val v = value.asInstanceOf[Double]
-          if (v.isNaN || v.isInfinite) {
-            val boxedValue = ctx.addReferenceObj("boxedValue", v)
-            val code = s"final $javaType ${ev.value} = ($javaType) $boxedValue;"
-            ev.copy(code = code)
-          } else {
-            ev.copy(code = "", value = s"${value}D")
+          value.asInstanceOf[Double] match {
+            case v if v.isNaN =>
+              ExprCode.forNonNullValue("Double.NaN")
+            case Double.PositiveInfinity =>
+              ExprCode.forNonNullValue("Double.POSITIVE_INFINITY")
+            case Double.NegativeInfinity =>
+              ExprCode.forNonNullValue("Double.NEGATIVE_INFINITY")
+            case _ =>
+              ExprCode.forNonNullValue(s"${value}D")
           }
         case ByteType | ShortType =>
-          ev.copy(code = "", value = s"($javaType)$value")
+          ExprCode.forNonNullValue(s"($javaType)$value")
         case TimestampType | LongType =>
-          ev.copy(code = "", value = s"${value}L")
+          ExprCode.forNonNullValue(s"${value}L")
         case _ =>
-          ev.copy(code = "", value = ctx.addReferenceObj("literal", value,
-            ctx.javaType(dataType)))
+          val constRef = ctx.addReferenceObj("literal", value, javaType)
+          ExprCode.forNonNullValue(constRef)
       }
     }
   }

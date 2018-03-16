@@ -60,7 +60,7 @@ private[ui] class ExecutorThreadDumpPage(
           <td id={s"${threadId}_td_name"}>{thread.threadName}</td>
           <td id={s"${threadId}_td_state"}>{thread.threadState}</td>
           <td id={s"${threadId}_td_locking"}>{blockedBy}{heldLocks}</td>
-          <td id={s"${threadId}_td_stacktrace"} class="hidden">{thread.stackTrace}</td>
+          <td id={s"${threadId}_td_stacktrace"} class="hidden">{thread.stackTrace.html}</td>
         </tr>
       }
 

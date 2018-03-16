@@ -536,6 +536,35 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("create table - append to a non-partitioned table created with different paths") {
+    import testImplicits._
+    withTempDir { dir1 =>
+      withTempDir { dir2 =>
+        withTable("path_test") {
+          Seq(1L -> "a").toDF("v1", "v2")
+            .write
+            .mode(SaveMode.Append)
+            .format("json")
+            .option("path", dir1.getCanonicalPath)
+            .saveAsTable("path_test")
+
+          val ex = intercept[AnalysisException] {
+            Seq((3L, "c")).toDF("v1", "v2")
+              .write
+              .mode(SaveMode.Append)
+              .format("json")
+              .option("path", dir2.getCanonicalPath)
+              .saveAsTable("path_test")
+          }.getMessage
+          assert(ex.contains("The location of the existing table `default`.`path_test`"))
+
+          checkAnswer(
+            spark.table("path_test"), Row(1L, "a") :: Nil)
+        }
+      }
+    }
+  }
+
   test("Refresh table after changing the data source table partitioning") {
     import testImplicits._
 
@@ -1023,7 +1052,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
     val part2 = Map("a" -> "2", "b" -> "6")
     val root = new Path(catalog.getTableMetadata(tableIdent).location)
-    val fs = root.getFileSystem(spark.sparkContext.hadoopConfiguration)
+    val fs = root.getFileSystem(spark.sessionState.newHadoopConf())
     // valid
     fs.mkdirs(new Path(new Path(root, "a=1"), "b=5"))
     fs.createNewFile(new Path(new Path(root, "a=1/b=5"), "a.csv"))  // file
@@ -1568,6 +1597,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     // Ensure that change column will preserve other metadata fields.
     sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'")
     assert(getMetadata("col1").getString("key") == "value")
+    assert(getMetadata("col1").getString("comment") == "this is col1")
   }
 
   test("drop build-in function") {

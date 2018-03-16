@@ -22,9 +22,7 @@ import java.{ util => ju }
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord, KafkaConsumer }
 import org.apache.kafka.common.{ KafkaException, TopicPartition }
 
-import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
-
 
 /**
  * Consumer of single topicpartition, intended for cached reuse.
@@ -38,7 +36,7 @@ class CachedKafkaConsumer[K, V] private(
   val partition: Int,
   val kafkaParams: ju.Map[String, Object]) extends Logging {
 
-  assert(groupId == kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG),
+  require(groupId == kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG),
     "groupId used for cache key must match the groupId in kafkaParams")
 
   val topicPartition = new TopicPartition(topic, partition)
@@ -53,7 +51,7 @@ class CachedKafkaConsumer[K, V] private(
 
   // TODO if the buffer was kept around as a random-access structure,
   // could possibly optimize re-calculating of an RDD in the same batch
-  protected var buffer = ju.Collections.emptyList[ConsumerRecord[K, V]]().iterator
+  protected var buffer = ju.Collections.emptyListIterator[ConsumerRecord[K, V]]()
   protected var nextOffset = -2L
 
   def close(): Unit = consumer.close()
@@ -71,7 +69,7 @@ class CachedKafkaConsumer[K, V] private(
     }
 
     if (!buffer.hasNext()) { poll(timeout) }
-    assert(buffer.hasNext(),
+    require(buffer.hasNext(),
       s"Failed to get records for $groupId $topic $partition $offset after polling for $timeout")
     var record = buffer.next()
 
@@ -79,15 +77,54 @@ class CachedKafkaConsumer[K, V] private(
       logInfo(s"Buffer miss for $groupId $topic $partition $offset")
       seek(offset)
       poll(timeout)
-      assert(buffer.hasNext(),
+      require(buffer.hasNext(),
         s"Failed to get records for $groupId $topic $partition $offset after polling for $timeout")
       record = buffer.next()
-      assert(record.offset == offset,
-        s"Got wrong record for $groupId $topic $partition even after seeking to offset $offset")
+      require(record.offset == offset,
+        s"Got wrong record for $groupId $topic $partition even after seeking to offset $offset " +
+          s"got offset ${record.offset} instead. If this is a compacted topic, consider enabling " +
+          "spark.streaming.kafka.allowNonConsecutiveOffsets"
+      )
     }
 
     nextOffset = offset + 1
     record
+  }
+
+  /**
+   * Start a batch on a compacted topic
+   */
+  def compactedStart(offset: Long, timeout: Long): Unit = {
+    logDebug(s"compacted start $groupId $topic $partition starting $offset")
+    // This seek may not be necessary, but it's hard to tell due to gaps in compacted topics
+    if (offset != nextOffset) {
+      logInfo(s"Initial fetch for compacted $groupId $topic $partition $offset")
+      seek(offset)
+      poll(timeout)
+    }
+  }
+
+  /**
+   * Get the next record in the batch from a compacted topic.
+   * Assumes compactedStart has been called first, and ignores gaps.
+   */
+  def compactedNext(timeout: Long): ConsumerRecord[K, V] = {
+    if (!buffer.hasNext()) {
+      poll(timeout)
+    }
+    require(buffer.hasNext(),
+      s"Failed to get records for compacted $groupId $topic $partition after polling for $timeout")
+    val record = buffer.next()
+    nextOffset = record.offset + 1
+    record
+  }
+
+  /**
+   * Rewind to previous record in the batch from a compacted topic.
+   * @throws NoSuchElementException if no previous element
+   */
+  def compactedPrevious(): ConsumerRecord[K, V] = {
+    buffer.previous()
   }
 
   private def seek(offset: Long): Unit = {
@@ -99,7 +136,7 @@ class CachedKafkaConsumer[K, V] private(
     val p = consumer.poll(timeout)
     val r = p.records(topicPartition)
     logDebug(s"Polled ${p.partitions()}  ${r.size}")
-    buffer = r.iterator
+    buffer = r.listIterator
   }
 
 }

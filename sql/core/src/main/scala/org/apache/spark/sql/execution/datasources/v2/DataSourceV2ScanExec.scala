@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.streaming.continuous._
+import org.apache.spark.sql.sources.v2.DataSourceV2
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousReader
 import org.apache.spark.sql.types.StructType
@@ -36,10 +37,23 @@ import org.apache.spark.sql.types.StructType
  */
 case class DataSourceV2ScanExec(
     output: Seq[AttributeReference],
+    @transient source: DataSourceV2,
+    @transient options: Map[String, String],
     @transient reader: DataSourceReader)
-  extends LeafExecNode with DataSourceReaderHolder with ColumnarBatchScan {
+  extends LeafExecNode with DataSourceV2StringFormat with ColumnarBatchScan {
 
-  override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2ScanExec]
+  override def simpleString: String = "ScanV2 " + metadataString
+
+  // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
+  override def equals(other: Any): Boolean = other match {
+    case other: DataSourceV2ScanExec =>
+      output == other.output && reader.getClass == other.reader.getClass && options == other.options
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    Seq(output, source, options).hashCode()
+  }
 
   override def outputPartitioning: physical.Partitioning = reader match {
     case s: SupportsReportPartitioning =>

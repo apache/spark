@@ -91,7 +91,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       val accessorName = ctx.addMutableState(accessorCls, "accessor")
 
       val createCode = dt match {
-        case t if ctx.isPrimitiveType(dt) =>
+        case t if CodeGenerator.isPrimitiveType(dt) =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case NullType | StringType | BinaryType =>
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"

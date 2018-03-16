@@ -51,7 +51,7 @@ from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer, U
 from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
 from pyspark.ml.common import _java2py, _py2java
-from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, ClusteringEvaluator, \
     MulticlassClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.fpm import FPGrowth, FPGrowthModel
@@ -171,6 +171,45 @@ class MockEstimator(Estimator, HasFake):
 
 class MockModel(MockTransformer, Model, HasFake):
     pass
+
+
+class JavaWrapperMemoryTests(SparkSessionTestCase):
+
+    def test_java_object_gets_detached(self):
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["label", "weight", "features"])
+        lr = LinearRegression(maxIter=1, regParam=0.0, solver="normal", weightCol="weight",
+                              fitIntercept=False)
+
+        model = lr.fit(df)
+        summary = model.summary
+
+        self.assertIsInstance(model, JavaWrapper)
+        self.assertIsInstance(summary, JavaWrapper)
+        self.assertIsInstance(model, JavaParams)
+        self.assertNotIsInstance(summary, JavaParams)
+
+        error_no_object = 'Target Object ID does not exist for this gateway'
+
+        self.assertIn("LinearRegression_", model._java_obj.toString())
+        self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
+
+        model.__del__()
+
+        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            model._java_obj.toString()
+        self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
+
+        try:
+            summary.__del__()
+        except:
+            pass
+
+        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            model._java_obj.toString()
+        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            summary._java_obj.toString()
 
 
 class ParamTypeConversionTests(PySparkTestCase):
@@ -540,6 +579,15 @@ class EvaluatorTests(SparkSessionTestCase):
         evaluatorCopy.evaluate(df)
         self.assertEqual(evaluator._java_obj.getMetricName(), "r2")
         self.assertEqual(evaluatorCopy._java_obj.getMetricName(), "mae")
+
+    def test_clustering_evaluator_with_cosine_distance(self):
+        featureAndPredictions = map(lambda x: (Vectors.dense(x[0]), x[1]),
+                                    [([1.0, 1.0], 1.0), ([10.0, 10.0], 1.0), ([1.0, 0.5], 2.0),
+                                     ([10.0, 4.4], 2.0), ([-1.0, 1.0], 3.0), ([-100.0, 90.0], 3.0)])
+        dataset = self.spark.createDataFrame(featureAndPredictions, ["features", "prediction"])
+        evaluator = ClusteringEvaluator(predictionCol="prediction", distanceMeasure="cosine")
+        self.assertEqual(evaluator.getDistanceMeasure(), "cosine")
+        self.assertTrue(np.isclose(evaluator.evaluate(dataset),  0.992671213, atol=1e-5))
 
 
 class FeatureTests(SparkSessionTestCase):
@@ -1961,11 +2009,14 @@ class DefaultValuesTests(PySparkTestCase):
         import pyspark.ml.feature
         import pyspark.ml.classification
         import pyspark.ml.clustering
+        import pyspark.ml.evaluation
         import pyspark.ml.pipeline
         import pyspark.ml.recommendation
         import pyspark.ml.regression
+
         modules = [pyspark.ml.feature, pyspark.ml.classification, pyspark.ml.clustering,
-                   pyspark.ml.pipeline, pyspark.ml.recommendation, pyspark.ml.regression]
+                   pyspark.ml.evaluation, pyspark.ml.pipeline, pyspark.ml.recommendation,
+                   pyspark.ml.regression]
         for module in modules:
             for name, cls in inspect.getmembers(module, inspect.isclass):
                 if not name.endswith('Model') and issubclass(cls, JavaParams)\
