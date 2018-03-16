@@ -487,7 +487,10 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-22673: InMemoryRelation should utilize existing stats of the plan to be cached") {
-    withSQLConf("spark.sql.cbo.enabled" -> "true") {
+    // This test case depends on the size of parquet in statistics.
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "parquet") {
       withTempPath { workDir =>
         withTable("table1") {
           val workDirPath = workDir.getAbsolutePath
