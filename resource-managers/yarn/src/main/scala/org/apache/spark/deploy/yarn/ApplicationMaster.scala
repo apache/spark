@@ -509,7 +509,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         // if the user app did not create a SparkContext.
         throw new IllegalStateException("User did not initialize spark context!")
       }
-      // After initialisation notify user class thread to continue
       resumeDriver()
       userClassThread.join()
     } catch {
