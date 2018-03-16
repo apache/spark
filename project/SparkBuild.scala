@@ -34,6 +34,7 @@ import com.typesafe.tools.mima.plugin.MimaKeys
 import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
 import sbt.plugins.JUnitXmlReportPlugin
+import sbt.plugins.JvmPlugin
 import spray.revolver.RevolverPlugin._
 
 object BuildCommons {
@@ -84,6 +85,14 @@ object BuildCommons {
 
   val javacJVMVersion = settingKey[String]("source and target JVM version for javac")
   val scalacJVMVersion = settingKey[String]("source and target JVM version for scalac")
+}
+
+object DefaultSparkPlugin extends AutoPlugin {
+  override def requires = JvmPlugin
+
+  override def projectSettings: Seq[Def.Setting[_]] = (SparkBuild.sharedSettings
+      ++ DependencyOverrides.settings
+      ++ ExcludedDependencies.settings)
 }
 
 //noinspection ScalaStyle
@@ -326,12 +335,6 @@ object SparkBuild extends PomBuild {
     projectsMap += (projectRef.project -> (existingSettings ++ settings))
   }
 
-  // Note ordering of these settings matter.
-  /* Enable shared settings on all projects */
-  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
-    .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings))
-
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
@@ -432,8 +435,8 @@ object SparkBuild extends PomBuild {
   // TODO: move this to its upstream project.
   override def projectDefinitions(baseDirectory: File): Seq[Project] = {
     super.projectDefinitions(baseDirectory).map { x =>
-      if (projectsMap.exists(_._1 == x.id)) x.settings(projectsMap(x.id): _*)
-      else x.settings(Seq[Setting[_]](): _*)
+      (if (projectsMap.exists(_._1 == x.id)) x.settings(projectsMap(x.id): _*)
+      else x).enablePlugins(DefaultSparkPlugin)
     } ++ Seq[Project](OldDeps.project)
   }
 
