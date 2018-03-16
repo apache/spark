@@ -2504,6 +2504,10 @@ class SQLTests(ReusedSQLTestCase):
         spark.conf.unset("bogo")
         self.assertEqual(spark.conf.get("bogo", "colombia"), "colombia")
 
+        self.assertRaisesRegexp(Exception, "hyukjin", lambda: spark.conf.get("hyukjin"))
+        self.assertEqual(spark.conf.get("hyukjin", None), None)
+        self.assertEqual(spark.conf.get("spark.sql.sources.partitionOverwriteMode", None), None)
+
     def test_current_database(self):
         spark = self.spark
         spark.catalog._reset()

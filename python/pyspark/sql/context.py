@@ -22,7 +22,7 @@ import warnings
 if sys.version >= '3':
     basestring = unicode = str
 
-from pyspark import since
+from pyspark import since, _NoValue
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
@@ -124,7 +124,7 @@ class SQLContext(object):
 
     @ignore_unicode_prefix
     @since(1.3)
-    def getConf(self, key, defaultValue=None):
+    def getConf(self, key, defaultValue=_NoValue):
         """Returns the value of Spark SQL configuration property for the given key.
 
         If the key is not set and defaultValue is not None, return
