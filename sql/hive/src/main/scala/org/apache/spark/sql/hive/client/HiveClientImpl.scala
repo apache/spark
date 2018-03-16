@@ -991,6 +991,7 @@ private[hive] object HiveClientImpl {
     p.storage.serde.foreach(serdeInfo.setSerializationLib)
     serdeInfo.setParameters(p.storage.properties.asJava)
     storageDesc.setSerdeInfo(serdeInfo)
+    storageDesc.setCols(p.schema.map(_.map(toHiveColumn).toList.asJava).orNull)
     tpart.setDbName(ht.getDbName)
     tpart.setTableName(ht.getTableName)
     tpart.setValues(partValues.asJava)
@@ -1020,7 +1021,9 @@ private[hive] object HiveClientImpl {
         properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
           .map(_.asScala.toMap).orNull),
       parameters = properties,
-      stats = readHiveStats(properties))
+      stats = readHiveStats(properties),
+      schema = Option(StructType(apiPartition.getSd.getCols.asScala.map(fromHiveColumn)))
+    )
   }
 
   /**
