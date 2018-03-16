@@ -274,6 +274,9 @@ jobs:
           when: always
       - store_artifacts:
           path: /tmp/unit-tests
+      - store_artifacts:
+          path: target/tests-by-bucket.json
+          destination: tests-by-bucket.json
       - store_test_results:
           # TODO(dsanduleac): can we use $CIRCLE_TEST_RESULTS here?
           path: /tmp/circle-test-reports

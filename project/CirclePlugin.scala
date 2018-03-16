@@ -17,6 +17,7 @@
 
 import scala.annotation.tailrec
 
+import com.fasterxml.jackson.core.JsonToken
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
@@ -52,6 +53,7 @@ object CirclePlugin extends AutoPlugin {
   mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
   mapper.registerModule(DefaultScalaModule)
   case class TestResult(classname: String, result: String, run_time: Double, source: String)
+
   case class TestKey(source: String, classname: String)
 
   // Through this magical command we established that the average class run_time is 7.737
@@ -72,21 +74,41 @@ object CirclePlugin extends AutoPlugin {
             .toStream
             .groupBy(pt => TestKey(pt.project.project, pt.test.name))
 
+        log.info(s"Discovered tests in these projects: ${byProject.map(_.project.project)}")
+
         import collection.JavaConverters._
         // Get timings and sum them up by TestKey = (source, classname)
         val testResultsFile = sys.env.get("CIRCLE_INTERNAL_TASK_DATA")
             .map(taskData => file(taskData) / "circle-test-results/results.json")
+            .filter(file => file.exists())
         val testTimings = try {
+          testResultsFile.fold {
+            log.warn("Couldn't find circle test results file, using naive test packing")
+          } {
+            file => log.info(s"Using circle test results to determine test packing: $file")
+          }
           testResultsFile
-              .map(file => mapper.readValues[TestResult](mapper.getFactory.createParser(file)))
+              .map(file => {
+                val parser = mapper.getFactory.createParser(file)
+                require(
+                  parser.nextToken() == JsonToken.START_OBJECT,
+                  s"Unexpected first token: ${parser.currentToken()}")
+                require(parser.nextToken() == JsonToken.FIELD_NAME)
+                require(parser.getText == "tests")
+                require(parser.nextToken() == JsonToken.START_ARRAY)
+                parser.nextToken()
+                mapper.readValues[TestResult](parser)
+              })
               .map(_.asScala)
               .getOrElse(Iterator())
               .toStream
+              .filter(_.result != "skipped")  // don't count timings of tests that didn't run
               .groupBy(result => TestKey(result.source, result.classname))
               .mapValues(_.foldLeft(0.0d)(_ + _.run_time))
         } catch {
           case e: Exception =>
-            log.warn(f"Couldn't read test results file: $testResultsFile:%n${e.getStackTraceString}")
+            log.warn(f"Couldn't read test results file: $testResultsFile")
+            log.trace(e)
             Map.empty[TestKey, Nothing]
         }
 
@@ -95,10 +117,13 @@ object CirclePlugin extends AutoPlugin {
             .map(key => key -> testTimings.getOrElse(key, AVERAGE_TEST_CLASS_RUN_TIME))
             .toMap
 
+        val testsWithoutTimings = (testsByKey.keySet diff testTimings.keySet).size
+        log.info(s"$testsWithoutTimings / ${testsByKey.size} test classes didn't have timings in "
+            + "the previous test results file")
+
         val totalTestTime = allTestsTimings.valuesIterator.sum
+        log.info(s"Estimated total test time to be $totalTestTime")
         val timePerNode = totalTestTime / totalNodes
-//        val from = index * totalTestTime / total
-//        val to = (index + 1) * totalTestTime / total
 
         // Now, do bin packing. Sort first by runTime, then by key, to get a stable sort.
         implicit val testKeyOrdering = Ordering.by((tk: TestKey) => (tk.source, tk.classname))
@@ -112,38 +137,57 @@ object CirclePlugin extends AutoPlugin {
                     acc: List[TestKey] = Nil,
                     groups: List[List[TestKey]] = Nil): List[List[TestKey]] = {
 
-          if (acc.isEmpty && tests.isEmpty) {
-            return groups
+          if (groups.size == totalNodes || tests.isEmpty) {
+            // Short circuit the logic if we've just completed the last group
+            // (or finished all the tests early somehow)
+            require(acc.isEmpty)
+            return if (tests.isEmpty) {
+              groups
+            } else {
+              // Fit all remaining tests in the last issued bucket.
+              val lastGroup +: restGroups = groups
+              val toFit = tests.toStream.map(_._1).force
+              log.info(s"Fitting remaining tests into first bucket (which already has " +
+                  s"${lastGroup.size} tests): $toFit")
+              (toFit ++: lastGroup) :: restGroups
+            }
           }
 
-          val candidates = ((if (takeLeft) Stream(tests.uncons.map(_ -> true)) else Stream.empty)
-              #::: tests.unsnoc.map(_ -> false)
+          case class TestCandidate[A](test: A, rest: Dequeue[A], fromLeft: Boolean)
+          /** Converts a uncons/unsnoc'd value to a [[TestCandidate]]. */
+          def toCandidate[A](fromLeft: Boolean): ((A, Dequeue[A])) => TestCandidate[A] = {
+            case (test, rest) => TestCandidate(test, rest, fromLeft)
+          }
+
+          val candidates = ((
+              if (takeLeft)
+                Stream(tests.uncons.map(toCandidate(true)))
+              else
+                Stream.empty)
+              #::: tests.unsnoc.map(toCandidate(false))
               #:: Stream.empty)
               .flatMap(_.toOption)
 
           candidates
               .collectFirst {
-                case x@(((key, runTime), _), _) if soFar + runTime <= timePerNode => x
+                case x@TestCandidate((_, runTime), _, _) if soFar + runTime <= timePerNode => x
               } match {
                 case None =>
-                  if (acc.isEmpty) {
-                    if (tests.isEmpty) {
-                      groups
-                    } else {
-                      // We have a new bucket, but we can't fit any remaining test in it.
-                      // In this case, fit all remaining tests in the last issued bucket.
-                      val lastGroup +: restGroups = groups
-                      (tests.toStream.map(_._1) ++: lastGroup) :: restGroups
-                    }
-                  } else {
-                    process(tests, 0d, takeLeft = true, Nil, acc :: groups)
-                  }
-                case Some((((key, runTime), rest), fromLeft)) =>
-                    process(rest, soFar + runTime, fromLeft, key :: acc, groups)
+                  process(tests, 0d, takeLeft = true, Nil, acc :: groups)
+                case Some(TestCandidate((key, runTime), rest, fromLeft)) =>
+                  process(rest, soFar + runTime, fromLeft, key :: acc, groups)
             }
         }
 
-        val bucket = process(tests).lift.apply(index).getOrElse(Nil)
+        val buckets = process(tests)
+        val rootTarget = (target in LocalRootProject).value
+        val bucketsFile = rootTarget / "tests-by-bucket.json"
+        log.info(s"Saving test distribution into $totalNodes buckets to: $bucketsFile")
+        mapper.writeValue(bucketsFile, buckets)
+        val timingsPerBucket = buckets.map(_.iterator.map(allTestsTimings.apply).sum)
+        log.info(s"Estimated test timings per bucket: $timingsPerBucket")
+
+        val bucket = buckets.lift.apply(index).getOrElse(Nil)
 
         val groupedByProject = bucket.flatMap(testsByKey.apply)
             .groupBy(_.project)
