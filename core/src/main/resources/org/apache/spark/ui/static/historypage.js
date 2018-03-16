@@ -108,7 +108,7 @@ $(document).ready(function() {
     requestedIncomplete = getParameterByName("showIncomplete", searchString);
     requestedIncomplete = (requestedIncomplete == "true" ? true : false);
 
-    $.getJSON("api/v1/applications?limit=" + appLimit, function(response,status,jqXHR) {
+    $.getJSON(uiRoot + "/api/v1/applications?limit=" + appLimit, function(response,status,jqXHR) {
       var array = [];
       var hasMultipleAttempts = false;
       for (i in response) {
@@ -146,7 +146,7 @@ $(document).ready(function() {
         "showCompletedColumns": !requestedIncomplete,
       }
 
-      $.get("static/historypage-template.html", function(template) {
+      $.get(uiRoot + "/static/historypage-template.html", function(template) {
         var sibling = historySummary.prev();
         historySummary.detach();
         var apps = $(Mustache.render($(template).filter("#history-summary-template").html(),data));
