@@ -37,26 +37,26 @@ class VectorAssemblerSuite
 
   test("assemble") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
-    assert(assemble(Array(1), true)(0.0) === Vectors.sparse(1, Array.empty, Array.empty))
-    assert(assemble(Array(1, 1), true)(0.0, 1.0) === Vectors.sparse(2, Array(1), Array(1.0)))
+    assert(assemble(Seq(1), true)(0.0) === Vectors.sparse(1, Array.empty, Array.empty))
+    assert(assemble(Seq(1, 1), true)(0.0, 1.0) === Vectors.sparse(2, Array(1), Array(1.0)))
     val dv = Vectors.dense(2.0, 0.0)
-    assert(assemble(Array(1, 2, 1), true)(0.0, dv, 1.0) ===
+    assert(assemble(Seq(1, 2, 1), true)(0.0, dv, 1.0) ===
       Vectors.sparse(4, Array(1, 3), Array(2.0, 1.0)))
     val sv = Vectors.sparse(2, Array(0, 1), Array(3.0, 4.0))
-    assert(assemble(Array(1, 2, 1, 2), true)(0.0, dv, 1.0, sv) ===
+    assert(assemble(Seq(1, 2, 1, 2), true)(0.0, dv, 1.0, sv) ===
       Vectors.sparse(6, Array(1, 3, 4, 5), Array(2.0, 1.0, 3.0, 4.0)))
     for (v <- Seq(1, "a")) {
-      intercept[SparkException](assemble(Array(1), true)(v))
-      intercept[SparkException](assemble(Array(1, 1), true)(1.0, v))
+      intercept[SparkException](assemble(Seq(1), true)(v))
+      intercept[SparkException](assemble(Seq(1, 1), true)(1.0, v))
     }
   }
 
   test("assemble should compress vectors") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
-    val v1 = assemble(Array(1, 1, 1, 4), true)(0.0, 0.0, 0.0, Vectors.dense(4.0))
+    val v1 = assemble(Seq(1, 1, 1, 4), true)(0.0, 0.0, 0.0, Vectors.dense(4.0))
     assert(v1.isInstanceOf[SparseVector])
     val sv = Vectors.sparse(1, Array(0), Array(4.0))
-    val v2 = assemble(Array(1, 1, 1, 1), true)(1.0, 2.0, 3.0, sv)
+    val v2 = assemble(Seq(1, 1, 1, 1), true)(1.0, 2.0, 3.0, sv)
     assert(v2.isInstanceOf[DenseVector])
   }
 
@@ -152,20 +152,20 @@ class VectorAssemblerSuite
 
   test("assemble should keep nulls") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
-    assert(assemble(Array(1, 1), true)(1.0, null) === Vectors.dense(1.0, Double.NaN))
-    assert(assemble(Array(1, 2), true)(1.0, null) === Vectors.dense(1.0, Double.NaN, Double.NaN))
-    assert(assemble(Array(1), true)(null) === Vectors.dense(Double.NaN))
-    assert(assemble(Array(2), true)(null) === Vectors.dense(Double.NaN, Double.NaN))
+    assert(assemble(Seq(1, 1), true)(1.0, null) === Vectors.dense(1.0, Double.NaN))
+    assert(assemble(Seq(1, 2), true)(1.0, null) === Vectors.dense(1.0, Double.NaN, Double.NaN))
+    assert(assemble(Seq(1), true)(null) === Vectors.dense(Double.NaN))
+    assert(assemble(Seq(2), true)(null) === Vectors.dense(Double.NaN, Double.NaN))
   }
 
   test("assemble should throw errors") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
-    intercept[SparkException](assemble(Array(1, 1), false)(1.0, null) ===
+    intercept[SparkException](assemble(Seq(1, 1), false)(1.0, null) ===
       Vectors.dense(1.0, Double.NaN))
-    intercept[SparkException](assemble(Array(1, 2), false)(1.0, null) ===
+    intercept[SparkException](assemble(Seq(1, 2), false)(1.0, null) ===
       Vectors.dense(1.0, Double.NaN, Double.NaN))
-    intercept[SparkException](assemble(Array(1), false)(null) === Vectors.dense(Double.NaN))
-    intercept[SparkException](assemble(Array(2), false)(null) ===
+    intercept[SparkException](assemble(Seq(1), false)(null) === Vectors.dense(Double.NaN))
+    intercept[SparkException](assemble(Seq(2), false)(null) ===
       Vectors.dense(Double.NaN, Double.NaN))
   }
 

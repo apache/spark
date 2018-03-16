@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import java.util.NoSuchElementException
-
 import scala.collection.mutable.ArrayBuilder
 import scala.language.existentials
 
@@ -77,62 +75,41 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     transformSchema(dataset.schema, logging = true)
     // Schema transformation.
     val schema = dataset.schema
-    val colsMissingNumAttrs = $(inputCols).filter { c =>
+
+    val featureAttributesMap: Seq[Seq[Attribute]] = $(inputCols).toSeq.map { c =>
       val field = schema(c)
       field.dataType match {
-        case _: VectorUDT => -1 == AttributeGroup.fromStructField(field).size
-        case _ => false
-      }
-    }
-    if (dataset.isStreaming && colsMissingNumAttrs.nonEmpty) {
-      throw new RuntimeException(
-        s"""
-           |VectorAssembler cannot dynamically determine the size of vectors for streaming data.
-           |Consider applying VectorSizeHint to ${colsMissingNumAttrs.mkString("[", ", ", "]")}
-           |so that this transformer can be used to transform streaming inputs.
+        case _: VectorUDT =>
+          val attributeGroup = AttributeGroup.fromStructField(field)
+          var length = attributeGroup.size
+          val isMissingNumAttrs = -1 == length
+          if (isMissingNumAttrs && dataset.isStreaming) {
+            // this condition is checked for every column, but should be cheap
+            throw new RuntimeException(
+              s"""
+                 |VectorAssembler cannot dynamically determine the size of vectors for streaming
+                 |data. Consider applying VectorSizeHint to ${c} so that this transformer can be
+                 |used to transform streaming inputs.
            """.stripMargin.replaceAll("\n", " "))
-    }
-    val missingVectorSizes = colsMissingNumAttrs.map { c =>
-      val column = dataset.select(c).na.drop()
-      (column.count() > 0, $(handleInvalid)) match {
-        case (true, _) => c -> column.first.getAs[Vector](0).size
-        case (false, VectorAssembler.SKIP_INVALID | VectorAssembler.ERROR_INVALID) => c -> 0
-        case (false, _) =>
-          throw new RuntimeException(
-            s"""
-               |VectorAssembler cannot determine the size of empty vectors. Consider applying
-               |VectorSizeHint to ${colsMissingNumAttrs.mkString("[", ", ", "]")} so that this
-               |transformer can be used to transform empty columns.
-                   """.stripMargin.replaceAll("\n", " "))
-      }
-    }.toMap
-    val lengths = $(inputCols).map { c =>
-      val field = schema(c)
-      field.dataType match {
-        case _: NumericType | BooleanType => c -> 1  // DoubleType is also NumericType
-        case _: VectorUDT =>
-          c -> missingVectorSizes.getOrElse(c, AttributeGroup.fromStructField(field).size)
-      }
-    }.toMap
-    val attrs = $(inputCols).flatMap { c =>
-      val field = schema(c)
-      field.dataType match {
-        case DoubleType =>
-          val attr = Attribute.fromStructField(field)
-          // If the input column doesn't have ML attribute, assume numeric.
-          if (attr == UnresolvedAttribute) {
-            Some(NumericAttribute.defaultAttr.withName(c))
-          } else {
-            Some(attr.withName(c))
           }
-        case _: NumericType | BooleanType =>
-          // If the input column type is a compatible scalar type, assume numeric.
-          Some(NumericAttribute.defaultAttr.withName(c))
-        case _: VectorUDT =>
-          val group = AttributeGroup.fromStructField(field)
-          if (group.attributes.isDefined) {
-            // If attributes are defined, copy them with updated names.
-            group.attributes.get.zipWithIndex.map { case (attr, i) =>
+          if (isMissingNumAttrs) {
+            val column = dataset.select(c).na.drop()
+            // column count is a spark job for every column missing num attrs
+            length = (column.count() > 0, $(handleInvalid)) match {
+              // column first is the second spark job for every column missing num attrs
+              case (true, _) => column.first.getAs[Vector](0).size
+              case (false, VectorAssembler.SKIP_INVALID | VectorAssembler.ERROR_INVALID) => 0
+              case (false, _) =>
+                throw new RuntimeException(
+                  s"""
+                     |VectorAssembler cannot determine the size of empty vectors. Consider applying
+                     |VectorSizeHint to ${c} so that this transformer can be used to transform empty
+                     |columns.
+               """.stripMargin.replaceAll("\n", " "))
+            }
+          }
+          if (attributeGroup.attributes.isDefined) {
+            attributeGroup.attributes.get.zipWithIndex.toSeq.map { case (attr, i) =>
               if (attr.name.isDefined) {
                 // TODO: Define a rigorous naming scheme.
                 attr.withName(c + "_" + attr.name.get)
@@ -143,13 +120,26 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           } else {
             // Otherwise, treat all attributes as numeric. If we cannot get the number of attributes
             // from metadata, check the first row.
-            Array.tabulate(lengths(c))(i => NumericAttribute.defaultAttr.withName(c + "_" + i))
+            (0 until length).map { i => NumericAttribute.defaultAttr.withName(c + "_" + i) }
           }
+        case DoubleType =>
+          val attribute = Attribute.fromStructField(field)
+          attribute match {
+            case UnresolvedAttribute =>
+              Seq(NumericAttribute.defaultAttr.withName(c))
+            case _ =>
+              Seq(attribute.withName(c))
+          }
+        case _ : NumericType | BooleanType =>
+          // If the input column type is a compatible scalar type, assume numeric.
+          Seq(NumericAttribute.defaultAttr.withName(c))
         case otherType =>
           throw new SparkException(s"VectorAssembler does not support the $otherType type")
       }
     }
-    val metadata = new AttributeGroup($(outputCol), attrs).toMetadata()
+    val featureAttributes = featureAttributesMap.flatten[Attribute]
+    val lengths = featureAttributesMap.map(a => a.length)
+    val metadata = new AttributeGroup($(outputCol), featureAttributes.toArray).toMetadata()
     val (filteredDataset, keepInvalid) = $(handleInvalid) match {
       case StringIndexer.SKIP_INVALID => (dataset.na.drop("any", $(inputCols)), false)
       case StringIndexer.KEEP_INVALID => (dataset, true)
@@ -157,7 +147,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     }
     // Data transformation.
     val assembleFunc = udf { r: Row =>
-      VectorAssembler.assemble( $(inputCols).map(c => lengths(c)), keepInvalid)(r.toSeq: _*)
+      VectorAssembler.assemble(lengths, keepInvalid)(r.toSeq: _*)
     }.asNondeterministic()
     val args = $(inputCols).map { c =>
       schema(c).dataType match {
@@ -206,7 +196,7 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
   @Since("1.6.0")
   override def load(path: String): VectorAssembler = super.load(path)
 
-  private[feature] def assemble(lengths: Array[Int], keepInvalid: Boolean)(vv: Any*): Vector = {
+  private[feature] def assemble(lengths: Seq[Int], keepInvalid: Boolean)(vv: Any*): Vector = {
     val indices = ArrayBuilder.make[Int]
     val values = ArrayBuilder.make[Double]
     var featureIndex = 0
