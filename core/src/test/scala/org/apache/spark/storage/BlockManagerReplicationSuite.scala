@@ -151,7 +151,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
 
     // Test whether asking for peers of a unregistered block manager id returns empty list
     assert(master.getPeers(stores(0).blockManagerId).isEmpty)
-    assert(master.getPeers(BlockManagerId("", "", 1)).isEmpty)
+    assert(master.getPeers(BlockManagerId("", "host1", 1)).isEmpty)
   }
 
 

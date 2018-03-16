@@ -69,9 +69,9 @@ class JsonProtocolSuite extends SparkFunSuite {
       "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))
     ))
     val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
-      BlockManagerId("Stars", "In your multitude...", 300), 500)
+      BlockManagerId("Stars", "In-your-multitude", 300), 500)
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
-      BlockManagerId("Scarce", "to be counted...", 100))
+      BlockManagerId("Scarce", "to-be-counted", 100))
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val logUrlMap = Map("stderr" -> "mystderr", "stdout" -> "mystdout").toMap
     val applicationStart = SparkListenerApplicationStart("The winner of all", Some("appId"),
@@ -98,7 +98,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     }
     val blockUpdated =
       SparkListenerBlockUpdated(BlockUpdatedInfo(BlockManagerId("Stars",
-        "In your multitude...", 300), RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100L, 0L))
+        "In-your-multitude", 300), RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100L, 0L))
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -157,7 +157,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testJobResult(jobFailed)
 
     // TaskEndReason
-    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without-you", 15), 17, 18, 19,
       "Some exception")
     val fetchMetadataFailed = new MetadataFetchFailedException(17,
       19, "metadata Fetch failed exception").toTaskFailedReason
@@ -253,9 +253,9 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("BlockManager events backward compatibility") {
     // SparkListenerBlockManagerAdded/Removed in Spark 1.0.0 do not have a "time" property.
     val blockManagerAdded = SparkListenerBlockManagerAdded(1L,
-      BlockManagerId("Stars", "In your multitude...", 300), 500)
+      BlockManagerId("Stars", "In-your-multitude", 300), 500)
     val blockManagerRemoved = SparkListenerBlockManagerRemoved(2L,
-      BlockManagerId("Scarce", "to be counted...", 100))
+      BlockManagerId("Scarce", "to-be-counted", 100))
 
     val oldBmAdded = JsonProtocol.blockManagerAddedToJson(blockManagerAdded)
       .removeField({ _._1 == "Timestamp" })
@@ -274,11 +274,11 @@ class JsonProtocolSuite extends SparkFunSuite {
 
   test("FetchFailed backwards compatibility") {
     // FetchFailed in Spark 1.1.0 does not have a "Message" property.
-    val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+    val fetchFailed = FetchFailed(BlockManagerId("With or", "without-you", 15), 17, 18, 19,
       "ignored")
     val oldEvent = JsonProtocol.taskEndReasonToJson(fetchFailed)
       .removeField({ _._1 == "Message" })
-    val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
+    val expectedFetchFailed = FetchFailed(BlockManagerId("With or", "without-you", 15), 17, 18, 19,
       "Unknown reason")
     assert(expectedFetchFailed === JsonProtocol.taskEndReasonFromJson(oldEvent))
   }
@@ -1705,7 +1705,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "Event": "SparkListenerBlockManagerAdded",
       |  "Block Manager ID": {
       |    "Executor ID": "Stars",
-      |    "Host": "In your multitude...",
+      |    "Host": "In-your-multitude",
       |    "Port": 300
       |  },
       |  "Maximum Memory": 500,
@@ -1719,7 +1719,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "Event": "SparkListenerBlockManagerRemoved",
       |  "Block Manager ID": {
       |    "Executor ID": "Scarce",
-      |    "Host": "to be counted...",
+      |    "Host": "to-be-counted",
       |    "Port": 100
       |  },
       |  "Timestamp": 2
@@ -2018,7 +2018,7 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |  "Block Updated Info": {
       |    "Block Manager ID": {
       |      "Executor ID": "Stars",
-      |      "Host": "In your multitude...",
+      |      "Host": "In-your-multitude",
       |      "Port": 300
       |    },
       |    "Block ID": "rdd_0_0",
