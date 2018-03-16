@@ -105,6 +105,8 @@ jobs:
 
   build-sbt:
     <<: *defaults
+    environment:
+      BUILD_SBT_CACHE: "~/build-sbt-cache"
     steps:
       # Saves us from recompiling every time...
       - restore_cache:
@@ -112,6 +114,12 @@ jobs:
             - build-sbt-{{ .Branch }}-{{ .BuildNum }}
             - build-sbt-{{ .Branch }}-
             - build-sbt-master-
+      - run:
+          name: Hard link cache contents into current build directory
+          command: |
+            if [[ -d "$BUILD_SBT_CACHE" ]]; then
+              rsync --info=stats2,misc1,flist0 -a --link-dest="$BUILD_SBT_CACHE" "$BUILD_SBT_CACHE/" .
+            fi
       - checkout
       - restore_cache:
           keys:
@@ -144,19 +152,23 @@ jobs:
       - save_cache:
           key: v1-home-sbt-{{ checksum "build/sbt" }}
           paths: ~/.sbt
+      # Also hard link all the things so we can save it as a cache and restore it in future builds
+      - run:
+          name: "Hard link all the files under ***/target/scala-* directories to $BUILD_SBT_CACHE, excluding jars"
+          command: >
+            rsync --info=stats2,misc1,flist0 -a --link-dest=$PWD --delete-excluded --prune-empty-dirs
+            --exclude 'target/streams' --exclude '***/*.jar' --include 'target/scala-*/***'
+            --include '**/' --exclude '*' . "$BUILD_SBT_CACHE/"
       # Also save all the target files to the workspace, as we will need them in the future
       - persist_to_workspace:
-          root: .
+          root: "$BUILD_SBT_CACHE"
           paths:
-            - "target"
-            - "*/target"
-            - "common/*/target"
-            - "dists/*/target"
-            - "external/*/target"
-            - "resource-managers/*/target"
-            - "resource-managers/*/*/target"
-            - "sql/*/target"
-            - "project/project/target"
+            - .
+      - save_cache:
+          key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
+          paths:
+            - "$BUILD_SBT_CACHE"
+
 
 
   run-backcompat-tests:
