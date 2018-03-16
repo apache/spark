@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
-import java.nio.charset.UnsupportedCharsetException
+import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Paths}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
@@ -1285,9 +1285,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val inHex = utf8char.map("%02x".format(_)).mkString("_")
     test(s"SPARK-23649: handle the first byte of the char: $inHex") {
       withTempPath { path =>
+        def getBytes(str: String): Array[Byte] = {
+          str.getBytes(StandardCharsets.UTF_8)
+        }
         val filename = s"${path.getAbsolutePath}.csv"
-        val header = "code,channel\n".getBytes
-        val row = "ABGUN".getBytes ++ utf8char ++ ",United".getBytes
+        val header = getBytes("code,channel\n")
+        val row = getBytes("ABGUN") ++ utf8char ++ getBytes(",United")
         val content = header ++ row
         Files.write(Paths.get(filename), content)
 
@@ -1301,7 +1304,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
         assert(df.schema == expectedSchema)
 
-        val badStr = new String("ABGUN".getBytes ++ utf8char)
+        val badStr = new String(getBytes("ABGUN") ++ utf8char)
         checkAnswer(
           df,
           Row(badStr, "United") :: Nil
