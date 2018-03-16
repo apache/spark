@@ -147,8 +147,8 @@ class DataFrameReader(OptionUtils):
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param options: all other string options
 
-        >>> df = spark.read.load('python/test_support/sql/parquet_partitioned', opt1=True,
-        ...     opt2=1, opt3='str')
+        >>> df = spark.read.format("parquet").load('python/test_support/sql/parquet_partitioned',
+        ...     opt1=True, opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
 
