@@ -47,7 +47,7 @@ authentication must also be enabled and properly configured. AES encryption uses
 [Apache Commons Crypto](http://commons.apache.org/proper/commons-crypto/) library, and Spark's
 configuration system allows access to that library's configuration for advanced users.
 
-There is also support for SASL-based encryption, although it should be considered deprectated. It
+There is also support for SASL-based encryption, although it should be considered deprecated. It
 is still required when talking to shuffle services from Spark versions older than 2.2.0.
 
 The following table describes the different options available for configuring this feature.
@@ -91,8 +91,8 @@ The following table describes the different options available for configuring th
   <td>
     Whether to fall back to SASL authentication if authentication fails using Spark's internal
     mechanism. This is useful when the application is connecting to old shuffle services that
-    do not support the internal Spark authentication protocol. On the shuffle service side, enabling
-    this option will block older clients from authenticating.
+    do not support the internal Spark authentication protocol. On the shuffle service side,
+    disabling this feature will block older clients from authenticating.
   </td>
 </tr>
 <tr>
@@ -646,7 +646,7 @@ An HBase token will be obtained if HBase is in the application's classpath, and 
 configuration has Kerberos authentication turned (`hbase.security.authentication=kerberos`).
 
 Similarly, a Hive token will be obtained if Hive is in the classpath, and the configuration includes
-a URIs for remote metastore services (`hive.metastore.uris` is not empty).
+URIs for remote metastore services (`hive.metastore.uris` is not empty).
 
 Delegation token support is currently only supported in YARN and Mesos modes. Consult the
 deployment-specific page for more information.
