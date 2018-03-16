@@ -109,6 +109,16 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   }
 
   test("SPARK-23372 Verify that Parquet does not support writing empty schema") {
+    // Empty schema
+    withTempPath { outputPath =>
+      val df = spark.createDataFrame(sparkContext.emptyRDD[Row], StructType(Nil))
+      val errMsg = intercept[AnalysisException] {
+        df.write.format("parquet").save(outputPath.toString)
+      }
+      assert(errMsg.getMessage.contains(
+        "Parquet data source does not support writing empty or nested empty schemas"))
+    }
+
     // Nested empty schema.
     withTempPath { outputPath =>
       val schema = StructType(Seq(
@@ -122,18 +132,6 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
       }
       assert(errMsg.getMessage.contains(
         "Parquet data source does not support writing empty or nested empty schemas"))
-    }
-  }
-
-  allFileBasedDataSources.foreach { format =>
-    test(s"SPARK-23372 error while writing empty schema files using $format") {
-      withTempPath { outputPath =>
-        val errMsg = intercept[AnalysisException] {
-          spark.emptyDataFrame.write.format(format).save(outputPath.toString)
-        }
-        assert(errMsg.getMessage.contains(
-          "Datasource does not support writing empty schema."))
-      }
     }
   }
 
