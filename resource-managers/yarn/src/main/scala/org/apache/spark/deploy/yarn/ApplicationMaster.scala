@@ -418,16 +418,16 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
   }
 
   private def sparkContextInitialized(sc: SparkContext) = {
-    // Notify runDriver function that SparkContext is available
-    sparkContextPromise.success(sc)
-    // Pause the user class thread in order to make proper initialization in runDriver function.
-    // When it happened the thread has to be resumed with resumeDriver function.
     sparkContextPromise.synchronized {
+      // Notify runDriver function that SparkContext is available
+      sparkContextPromise.success(sc)
+      // Pause the user class thread in order to make proper initialization in runDriver function.
       sparkContextPromise.wait()
     }
   }
 
   private def resumeDriver(): Unit = {
+    // When initialization in runDriver happened the user class thread has to be resumed.
     sparkContextPromise.synchronized {
       sparkContextPromise.notify()
     }
