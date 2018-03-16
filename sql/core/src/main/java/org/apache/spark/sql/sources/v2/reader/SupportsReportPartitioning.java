@@ -26,7 +26,8 @@ import org.apache.spark.sql.sources.v2.reader.partitioning.Partitioning;
  *
  * Note that Spark will always infer a
  * {@link org.apache.spark.sql.catalyst.plans.physical.SinglePartition} partitioning when the
- * reader creates exactly 1 {@link DataReaderFactory}.
+ * reader creates exactly 1 {@link DataReaderFactory}, even if the reader does not implement
+ * this interface.
  */
 @InterfaceStability.Evolving
 public interface SupportsReportPartitioning extends DataSourceReader {
