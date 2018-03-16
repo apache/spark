@@ -3547,8 +3547,7 @@ class ArrowTests(ReusedSQLTestCase):
         with self.sql_conf({"spark.sql.execution.arrow.enabled": False}):
             pdf = df.toPandas()
 
-        with self.sql_conf({"spark.sql.execution.arrow.enabled": True}):
-            pdf_arrow = df.toPandas()
+        pdf_arrow = df.toPandas()
 
         return pdf, pdf_arrow
 
@@ -3602,8 +3601,7 @@ class ArrowTests(ReusedSQLTestCase):
         with self.sql_conf({"spark.sql.execution.arrow.enabled": False}):
             df_no_arrow = self.spark.createDataFrame(pdf, schema=schema)
 
-        with self.sql_conf({"spark.sql.execution.arrow.enabled": True}):
-            df_arrow = self.spark.createDataFrame(pdf, schema=schema)
+        df_arrow = self.spark.createDataFrame(pdf, schema=schema)
 
         return df_no_arrow, df_arrow
 
