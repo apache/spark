@@ -346,6 +346,7 @@ object UnsupportedOperationChecker {
       subPlan match {
         case (_: Project | _: Filter | _: MapElements | _: MapPartitions |
               _: DeserializeToObject | _: SerializeFromObject | _: SubqueryAlias) =>
+        case _: Deduplicate => // TODO
         case node if node.nodeName == "StreamingRelationV2" =>
         case node =>
           throwError(s"Continuous processing does not support ${node.nodeName} operations.")

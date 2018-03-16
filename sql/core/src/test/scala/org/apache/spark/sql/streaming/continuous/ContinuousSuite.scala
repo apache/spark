@@ -64,12 +64,14 @@ class ContinuousSuite extends ContinuousSuiteBase {
 
   test("basic") {
     val input = ContinuousMemoryStream[Int]
+    val df = input.toDF().dropDuplicates()
+    df.explain()
 
-    testStream(input.toDF())(
+    testStream(df)(
       AddData(input, 0, 1, 2),
       CheckAnswer(0, 1, 2),
       StopStream,
-      AddData(input, 3, 4, 5),
+      AddData(input, 2, 3, 4, 5),
       StartStream(),
       CheckAnswer(0, 1, 2, 3, 4, 5))
   }
