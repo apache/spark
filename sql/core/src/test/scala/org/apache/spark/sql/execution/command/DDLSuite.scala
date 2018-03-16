@@ -154,10 +154,15 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       Seq(4 -> "d").toDF("i", "j").write.saveAsTable("t1")
 
       val e = intercept[AnalysisException] {
-        Seq(5 -> "e").toDF("i", "j").write.mode("append").format("json").saveAsTable("t1")
+        val format = if (spark.sessionState.conf.defaultDataSourceName.equalsIgnoreCase("json")) {
+          "orc"
+        } else {
+          "json"
+        }
+        Seq(5 -> "e").toDF("i", "j").write.mode("append").format(format).saveAsTable("t1")
       }
-      assert(e.message.contains("The format of the existing table default.t1 is " +
-        "`ParquetFileFormat`. It doesn't match the specified format `JsonFileFormat`."))
+      assert(e.message.contains("The format of the existing table default.t1 is "))
+      assert(e.message.contains("It doesn't match the specified format"))
     }
   }
 }
