@@ -159,15 +159,23 @@ jobs:
             rsync --info=stats2,misc1,flist0 -a --link-dest=$PWD --delete-excluded --prune-empty-dirs
             --exclude '***/*.jar' --include 'target/***'
             --include '**/' --exclude '*' . "$BUILD_SBT_CACHE/"
-      # Also save all the target files to the workspace, as we will need them in the future
-      - persist_to_workspace:
-          root: "~/build-sbt-cache"
-          paths:
-            - .
       - save_cache:
           key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
           paths:
             - "~/build-sbt-cache"
+      # Also save all the target directories to the workspace - need assembly jars for spark submitting
+      - persist_to_workspace:
+          root: .
+          paths:
+            - "target"
+            - "*/target"
+            - "common/*/target"
+            - "dists/*/target"
+            - "external/*/target"
+            - "resource-managers/*/target"
+            - "resource-managers/*/*/target"
+            - "sql/*/target"
+            - "project/project/target"
 
   run-backcompat-tests:
     # depends on build-sbt
