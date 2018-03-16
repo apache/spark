@@ -77,7 +77,7 @@ class KafkaDataConsumerSuite extends SharedSQLContext with PrivateMethodTester {
       ENABLE_AUTO_COMMIT_CONFIG -> "false"
     )
 
-    val numThreads = 50
+    val numThreads = 100
     val numConsumerUsages = 500
 
     @volatile var error: Throwable = null
