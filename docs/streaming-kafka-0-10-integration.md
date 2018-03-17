@@ -5,6 +5,11 @@ title: Spark Streaming + Kafka Integration Guide (Kafka broker version 0.10.0 or
 
 The Spark Streaming integration for Kafka 0.10 is similar in design to the 0.8 [Direct Stream approach](streaming-kafka-0-8-integration.html#approach-2-direct-approach-no-receivers).  It provides simple parallelism,  1:1 correspondence between Kafka partitions and Spark partitions, and access to offsets and metadata. However, because the newer integration uses the [new Kafka consumer API](http://kafka.apache.org/documentation.html#newconsumerapi) instead of the simple API, there are notable differences in usage. This version of the integration is marked as experimental, so the API is potentially subject to change.
 
+### API Docs Note
+The API docs are not yet available via the above API Docs link.
+In the interim the Scaladoc can be viewed directly in the source tree 
+  ([Scala]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/external/kafka-0-10/src/main/scala/org/apache/spark/streaming/kafka010))
+
 ### Linking
 For Scala/Java applications using SBT/Maven project definitions, link your streaming application with the following artifact (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide for further information).
 
@@ -44,7 +49,7 @@ val stream = KafkaUtils.createDirectStream[String, String](
 
 stream.map(record => (record.key, record.value))
 {% endhighlight %}
-Each item in the stream is a [ConsumerRecord](http://kafka.apache.org/0100/javadoc/org/apache/kafka/clients/consumer/ConsumerRecord.html)
+Each item in the stream is a [ConsumerRecord](http://kafka.apache.org/0100/javadoc/org/apache/kafka/clients/consumer/ConsumerRecord.html).  Note that `ConsumerRecord` is not serializable.  Hence any shuffle-inducing operations on the stream (i.e. repartition) will result in a `NotSerializableException`.  
 </div>
 <div data-lang="java" markdown="1">
 {% highlight java %}
