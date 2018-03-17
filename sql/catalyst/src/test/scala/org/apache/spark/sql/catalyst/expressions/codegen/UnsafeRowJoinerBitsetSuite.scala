@@ -27,7 +27,7 @@ import org.apache.spark.unsafe.Platform
 /**
  * A test suite for the bitset portion of the row concatenation.
  */
-class GenerateUnsafeRowJoinerBitsetSuite extends SparkFunSuite {
+class UnsafeRowJoinerBitsetSuite extends SparkFunSuite {
 
   test("bitset concat: boundary size 0, 0") {
     testBitsets(0, 0)
@@ -125,10 +125,7 @@ class GenerateUnsafeRowJoinerBitsetSuite extends SparkFunSuite {
       }
     }
 
-    val concater = GenerateUnsafeRowJoiner.create(schema1, schema2)
-    val output = concater.join(row1, row2)
-
-    def dumpDebug(): String = {
+    def dumpDebug(output: UnsafeRow): String = {
       val set1 = Seq.tabulate(numFields1) { i => if (row1.isNullAt(i)) "1" else "0" }
       val set2 = Seq.tabulate(numFields2) { i => if (row2.isNullAt(i)) "1" else "0" }
       val out = Seq.tabulate(numFields1 + numFields2) { i => if (output.isNullAt(i)) "1" else "0" }
@@ -141,12 +138,18 @@ class GenerateUnsafeRowJoinerBitsetSuite extends SparkFunSuite {
        """.stripMargin
     }
 
-    for (i <- 0 until (numFields1 + numFields2)) {
-      if (i < numFields1) {
-        assert(output.isNullAt(i) === row1.isNullAt(i), dumpDebug())
-      } else {
-        assert(output.isNullAt(i) === row2.isNullAt(i - numFields1), dumpDebug())
+    def testJoiner(joiner: UnsafeRowJoiner): Unit = {
+      val output = joiner.join(row1, row2)
+      for (i <- 0 until (numFields1 + numFields2)) {
+        if (i < numFields1) {
+          assert(output.isNullAt(i) === row1.isNullAt(i), dumpDebug(output))
+        } else {
+          assert(output.isNullAt(i) === row2.isNullAt(i - numFields1), dumpDebug(output))
+        }
       }
     }
+
+    testJoiner(GenerateUnsafeRowJoiner.create(schema1, schema2))
+    testJoiner(new InterpretedUnsafeRowJoiner(schema1, schema2))
   }
 }

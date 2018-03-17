@@ -28,12 +28,12 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * Test suite for [[GenerateUnsafeRowJoiner]].
+ * Test suite for [[UnsafeRowJoiner]].
  *
- * There is also a separate [[GenerateUnsafeRowJoinerBitsetSuite]] that tests specifically
+ * There is also a separate [[UnsafeRowJoinerBitsetSuite]] that tests specifically
  * concatenation for the bitset portion, since that is the hardest one to get right.
  */
-class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
+class UnsafeRowJoinerSuite extends SparkFunSuite {
 
   private val fixed = Seq(IntegerType)
   private val variable = Seq(IntegerType, StringType)
@@ -129,11 +129,20 @@ class GenerateUnsafeRowJoinerSuite extends SparkFunSuite {
       schema1: StructType,
       row1: UnsafeRow,
       schema2: StructType,
-      row2: UnsafeRow) {
+      row2: UnsafeRow): Unit = {
+    testConcat(schema1, row1, schema2, row2, GenerateUnsafeRowJoiner.create(schema1, schema2))
+    testConcat(schema1, row1, schema2, row2, new InterpretedUnsafeRowJoiner(schema1, schema2))
+  }
+
+  private def testConcat(
+      schema1: StructType,
+      row1: UnsafeRow,
+      schema2: StructType,
+      row2: UnsafeRow,
+      concater: UnsafeRowJoiner) {
 
     // Run the joiner.
     val mergedSchema = StructType(schema1 ++ schema2)
-    val concater = GenerateUnsafeRowJoiner.create(schema1, schema2)
     val output: UnsafeRow = concater.join(row1, row2)
 
     // We'll also compare to an UnsafeRow produced with JoinedRow + UnsafeProjection. This ensures

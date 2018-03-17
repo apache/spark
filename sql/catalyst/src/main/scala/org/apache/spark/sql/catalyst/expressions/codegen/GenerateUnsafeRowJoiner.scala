@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.expressions.{Attribute, UnsafeRow}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.Platform
@@ -257,5 +254,156 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
 
     val (clazz, _) = CodeGenerator.compile(code)
     clazz.generate(Array.empty).asInstanceOf[UnsafeRowJoiner]
+  }
+}
+
+/**
+ * Interpreted version of an unsafe row joiner.
+ */
+final class InterpretedUnsafeRowJoiner(
+    schema1: StructType,
+    schema2: StructType)
+  extends UnsafeRowJoiner {
+
+  private[this] val numWordsBitset1 = (schema1.size + 63) / 64
+  private[this] val numBytesBitset1 = numWordsBitset1 * 8
+  private[this] val numBytesBitset1FullWord = (schema1.size / 64) * 8
+  private[this] val numBytesFixedRow1 = schema1.size * 8
+  private[this] val numBytesBitsetAndFixedRow1 = numBytesBitset1 + numBytesFixedRow1
+
+  private[this] val numWordsBitset2 = (schema2.size + 63) / 64
+  private[this] val numBytesBitset2 = numWordsBitset2 * 8
+  private[this] val numBytesFixedRow2 = schema2.size * 8
+  private[this] val numBytesBitsetAndFixedRow2 = numBytesBitset2 + numBytesFixedRow2
+
+  /** Number of bits we need to shift left to merge bit sets. */
+  private[this] val bitsetShift = schema1.size % 64
+
+  /** Number of bits we need to (unsigned) shift right to get the remaining bits. */
+  private[this] val remainderBitsetShift = 64 - bitsetShift
+
+  private[this] val numBytesBitsetResult = ((schema1.size + schema2.size + 63) / 64) * 8
+  // The number of bytes we can reduce when we concat two rows together.
+  // The only reduction comes from merging the bitset portion of the two rows, saving 1 word.
+  private[this] val sizeReduction = numBytesBitset1 + numBytesBitset2 - numBytesBitsetResult
+
+  private def getVariableLengthOffsets(schema: StructType, offset: Int): Array[Int] = {
+    schema.fields.zipWithIndex.collect {
+      case (field, index) if !UnsafeRow.isFixedLength(field.dataType) =>
+        Platform.BYTE_ARRAY_OFFSET + numBytesBitsetResult + offset + index * 8
+    }
+  }
+
+  private[this] val variableLengthOffsets1 = getVariableLengthOffsets(schema1, 0)
+  private[this] val variableLengthShift1 = {
+    (numBytesBitsetResult - numBytesBitset1 + numBytesFixedRow2).toLong << 32
+  }
+
+  private[this] val variableLengthOffsets2 = getVariableLengthOffsets(schema2, numBytesFixedRow1)
+  private[this] val variableLengthBaseShift2 = {
+    (numBytesBitsetResult - numBytesBitset2 + numBytesFixedRow1).toLong << 32
+  }
+
+
+  private[this] var buffer = new Array[Byte](64)
+  private[this] val result = new UnsafeRow(schema1.size + schema2.size)
+
+  private def copyMemory(obj: AnyRef, srcOffset: Long, destOffset: Long, size: Int): Unit = {
+    Platform.copyMemory(obj, srcOffset, buffer, Platform.BYTE_ARRAY_OFFSET + destOffset, size)
+  }
+
+  override def join(row1: UnsafeRow, row2: UnsafeRow): UnsafeRow = {
+    val sizeInBytes1 = row1.getSizeInBytes
+    val sizeInBytes2 = row2.getSizeInBytes
+    val sizeInBytesResult = sizeInBytes1 + sizeInBytes2 - sizeReduction
+    if (buffer.length < sizeInBytesResult) {
+      buffer = new Array[Byte](sizeInBytesResult)
+    }
+    val obj1 = row1.getBaseObject
+    val offset1 = row1.getBaseOffset
+    val obj2 = row2.getBaseObject
+    val offset2 = row2.getBaseOffset
+
+    // Create the new bit set
+    // Copy complete words in the left row's bit set to the buffer.
+    copyMemory(obj1, offset1, 0, numBytesBitset1FullWord)
+    if (bitsetShift == 0) {
+      // The bit sets are word aligned. Copy the right row's bit set to the buffer.
+      copyMemory(obj2, offset2, numBytesBitset1FullWord, numBytesBitset2)
+    } else {
+      // The bit sets are not word aligned. We need to merge them manually.
+      var i = 0
+      var offset = Platform.BYTE_ARRAY_OFFSET + numBytesBitset1FullWord
+      // Load the remaining word form the left row's bit set.
+      var previousBits = Platform.getLong(obj1, offset1 + numBytesBitset1FullWord)
+      while (i < numBytesBitset2) {
+        // Load a word from the right row's bit set.
+        val newBits = Platform.getLong(obj2, offset2 + i)
+
+        // Merge the newBits with the previous bits and write it to the new bit set.
+        Platform.putLong(buffer, offset, previousBits | (newBits << bitsetShift))
+
+        // Store the remaining bits
+        previousBits = newBits >>> remainderBitsetShift
+
+        offset += 8
+        i += 8
+      }
+      // Write the remaining bits.
+      if (sizeReduction == 0) {
+        Platform.putLong(buffer, offset, previousBits)
+      }
+    }
+
+    // Copy fixed length portions.
+    copyMemory(
+      obj1,
+      offset1 + numBytesBitset1,
+      numBytesBitsetResult,
+      numBytesFixedRow1)
+    copyMemory(
+      obj2,
+      offset2 + numBytesBitset2,
+      numBytesBitsetResult + numBytesFixedRow1,
+      numBytesFixedRow2)
+
+    // Copy variable length portions.
+    val numBytesVariableRow1 = sizeInBytes1 - numBytesBitsetAndFixedRow1
+    copyMemory(
+      obj1,
+      offset1 + numBytesBitsetAndFixedRow1,
+      numBytesBitsetResult + numBytesFixedRow1 + numBytesFixedRow2,
+      numBytesVariableRow1)
+    copyMemory(
+      obj2,
+      offset2 + numBytesBitsetAndFixedRow2,
+      numBytesBitsetResult + numBytesFixedRow1 + numBytesFixedRow2 + numBytesVariableRow1,
+      sizeInBytes2 - numBytesBitsetAndFixedRow2)
+
+    // Update the variable length portions for fields coming from row1.
+    var i = 0
+    while (i < variableLengthOffsets1.length) {
+      val offset = variableLengthOffsets1(i)
+      val offsetAndSize = Platform.getLong(buffer, offset)
+      if (offsetAndSize != 0L) {
+        Platform.putLong(buffer, offset, offsetAndSize + variableLengthShift1)
+      }
+      i += 1
+    }
+
+    // Update the variable length portions for fields coming from row2.
+    i = 0
+    val variableLengthShift2 = variableLengthBaseShift2 + (numBytesVariableRow1.toLong << 32)
+    while (i < variableLengthOffsets2.length) {
+      val offset = variableLengthOffsets2(i)
+      val offsetAndSize = Platform.getLong(buffer, offset)
+      if (offsetAndSize != 0L) {
+        Platform.putLong(buffer, offset, offsetAndSize + variableLengthShift2)
+      }
+      i += 1
+    }
+
+    result.pointTo(buffer, sizeInBytesResult)
+    result
   }
 }
