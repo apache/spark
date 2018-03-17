@@ -483,12 +483,10 @@ object DockerIntegrationTests {
  */
 object ExcludedDependencies {
   val exclusions = Seq(
-    SbtExclusionRule("asm", "asm"),
-    SbtExclusionRule("org.ow2.asm", "asm"),
     SbtExclusionRule("org.jboss.netty", "netty"),
     SbtExclusionRule("commons-logging", "commons-logging"),
     SbtExclusionRule("org.mockito", "mockito-all"),
-    SbtExclusionRule("org.mortbay.jetty", "servley-api-2.5"),
+    SbtExclusionRule("org.mortbay.jetty", "servlet-api-2.5"),
     SbtExclusionRule("javax.servlet", "servlet-api"),
     SbtExclusionRule("junit", "junit"),
     SbtExclusionRule("com.sun.jersey"),
