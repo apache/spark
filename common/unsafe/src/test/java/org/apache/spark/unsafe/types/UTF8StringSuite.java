@@ -799,12 +799,15 @@ public class UTF8StringSuite {
   @Test
   public void skipWrongFirstByte() {
     int[] wrongFirstBytes = {
-      0x80, 0xBF, // Skip Continuation bytes
+      0x80, 0x9F, 0xBF, // Skip Continuation bytes
       0xC0, 0xC2, // 0xC0..0xC1 - disallowed in UTF-8
-      0xF5, 0xF9, 0xFF // 0xF5..0xFF - disallowed in UTF-8
+      // 0xF5..0xFF - disallowed in UTF-8
+      0xF5, 0xF6, 0xF7, 0xF8, 0xF9,
+      0xFA, 0xFB, 0xFC, 0xFD, 0xFE, 0xFF
     };
+    byte[] c = new byte[1];
+
     for (int i = 0; i < wrongFirstBytes.length; ++i) {
-      byte[] c = new byte[1];
       c[0] = (byte)wrongFirstBytes[i];
       assertEquals(fromBytes(c).numChars(), 1);
     }
