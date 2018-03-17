@@ -482,8 +482,23 @@ object DockerIntegrationTests {
  * not needed by sbt build.
  */
 object ExcludedDependencies {
+  val exclusions = Seq(
+    SbtExclusionRule("asm", "asm"),
+    SbtExclusionRule("org.ow2.asm", "asm"),
+    SbtExclusionRule("org.jboss.netty", "netty"),
+    SbtExclusionRule("commons-logging", "commons-logging"),
+    SbtExclusionRule("org.mockito", "mockito-all"),
+    SbtExclusionRule("org.mortbay.jetty", "servley-api-2.5"),
+    SbtExclusionRule("javax.servlet", "servlet-api"),
+    SbtExclusionRule("junit", "junit"),
+    SbtExclusionRule("com.sun.jersey"),
+    SbtExclusionRule("com.sun.jersey.jersey-test-framework"),
+    SbtExclusionRule("com.sun.jersey.contribs")
+  )
+
   lazy val settings = Seq(
-    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
+    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
+    excludeDependencies ++= exclusions
   )
 }
 
