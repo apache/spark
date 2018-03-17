@@ -136,14 +136,13 @@ public abstract class MemoryBlock {
   public abstract MemoryBlock subBlock(long offset, long size);
 
   protected void checkSubBlockRange(long offset, long size) {
-    if (offset < 0 || length < 0) {
+    if (this.offset + offset < 0 || size < 0) {
       throw new ArrayIndexOutOfBoundsException(
-        "Length " + length + " and offset " + offset + "must be non-negative");
+        "Size " + size + " and offset " + (this.offset + offset) + " must be non-negative");
     }
-    if (offset + size > this.offset + length) {
+    if (offset + size > length) {
       throw new ArrayIndexOutOfBoundsException("The sum of size " + size + " and offset " +
-        offset + " should not be larger than " + "the sum of length " + length + " and offset " +
-        this.offset + " in the MemoryBlock");
+        offset + " should not be larger than the length " + length + " in the MemoryBlock");
     }
   }
 

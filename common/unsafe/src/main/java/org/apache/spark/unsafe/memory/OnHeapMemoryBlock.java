@@ -31,9 +31,9 @@ public final class OnHeapMemoryBlock extends MemoryBlock {
   public OnHeapMemoryBlock(long[] obj, long offset, long size) {
     super(obj, offset, size);
     this.array = obj;
-    assert(offset - Platform.LONG_ARRAY_OFFSET + size <= obj.length * 8L) :
+    assert(offset + size <= obj.length * 8L + Platform.LONG_ARRAY_OFFSET) :
       "The sum of size " + size + " and offset " + offset + " should not be larger than " +
-        "the array size " + ((obj.length * 8L) - Platform.LONG_ARRAY_OFFSET);
+        "the array size " + (obj.length * 8L + Platform.LONG_ARRAY_OFFSET);
   }
 
   public OnHeapMemoryBlock(long size) {

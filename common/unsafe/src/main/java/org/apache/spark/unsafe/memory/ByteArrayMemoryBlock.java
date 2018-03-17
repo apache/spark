@@ -31,9 +31,9 @@ public final class ByteArrayMemoryBlock extends MemoryBlock {
   public ByteArrayMemoryBlock(byte[] obj, long offset, long size) {
     super(obj, offset, size);
     this.array = obj;
-    assert(offset - Platform.BYTE_ARRAY_OFFSET + size <= obj.length) :
+    assert(offset + size <= Platform.BYTE_ARRAY_OFFSET + obj.length) :
       "The sum of size " + size + " and offset " + offset + " should not be larger than " +
-        "the array size " + ((obj.length) - Platform.BYTE_ARRAY_OFFSET);
+        "the array size " + (obj.length + Platform.BYTE_ARRAY_OFFSET);
   }
 
   public ByteArrayMemoryBlock(long length) {
