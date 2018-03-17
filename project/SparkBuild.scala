@@ -485,10 +485,6 @@ object ExcludedDependencies {
   val exclusions = Seq(
     SbtExclusionRule("org.jboss.netty", "netty"),
     SbtExclusionRule("commons-logging", "commons-logging"),
-    SbtExclusionRule("org.mockito", "mockito-all"),
-    SbtExclusionRule("org.mortbay.jetty", "servlet-api-2.5"),
-    SbtExclusionRule("javax.servlet", "servlet-api"),
-    SbtExclusionRule("junit", "junit"),
     SbtExclusionRule("com.sun.jersey"),
     SbtExclusionRule("com.sun.jersey.jersey-test-framework"),
     SbtExclusionRule("com.sun.jersey.contribs")
