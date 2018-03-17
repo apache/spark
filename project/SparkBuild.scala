@@ -91,7 +91,6 @@ object DefaultSparkPlugin extends AutoPlugin {
   override def requires = JvmPlugin
 
   override def projectSettings: Seq[Def.Setting[_]] = (SparkBuild.sharedSettings
-      ++ DependencyOverrides.settings
       ++ ExcludedDependencies.settings)
 }
 
@@ -476,14 +475,6 @@ object DockerIntegrationTests {
     resolvers += "DB2" at "https://app.camunda.com/nexus/content/repositories/public/",
     libraryDependencies += "com.oracle" % "ojdbc6" % "11.2.0.1.0" from "https://app.camunda.com/nexus/content/repositories/public/com/oracle/ojdbc6/11.2.0.1.0/ojdbc6-11.2.0.1.0.jar" // scalastyle:ignore
   )
-}
-
-/**
- * Overrides to work around sbt's dependency resolution being different from Maven's.
- */
-object DependencyOverrides {
-  lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "14.0.1")
 }
 
 /**
