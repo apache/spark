@@ -28,7 +28,7 @@ import org.apache.spark.unsafe.bitset.BitSetMethods;
  * It will remember the offset of row buffer which it starts to write, and move the cursor of row
  * buffer while writing.  If new data(can be the input record if this is the outermost writer, or
  * nested struct if this is an inner writer) comes, the starting cursor of row buffer may be
- * changed, so we need to call `UnsafeRowWriter.reset` before writing, to update the
+ * changed, so we need to call `UnsafeRowWriter.resetRowWriter` before writing, to update the
  * `startingOffset` and clear out null bits.
  *
  * Note that if this is the outermost writer, which means we will always write from the very
