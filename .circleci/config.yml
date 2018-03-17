@@ -138,6 +138,8 @@ jobs:
       - run:
           name: Download all external dependencies for the test configuration (which extends compile)
           command: dev/sbt test:externalDependencyClasspath oldDeps/test:externalDependencyClasspath
+      - store_artifacts:
+          path: /tmp/heap.bin
       - save_cache:
           key: v5-ivy-dependency-cache-{{ checksum "pom.xml" }}
           paths:
