@@ -29,7 +29,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
+import org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter
 import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -134,14 +134,13 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
         reader.map(_ => emptyUnsafeRow)
       } else {
         val unsafeRow = new UnsafeRow(1)
-        val bufferHolder = new BufferHolder(unsafeRow)
-        val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
+        val unsafeRowWriter = new UnsafeRowWriter(unsafeRow)
 
         reader.map { line =>
           // Writes to an UnsafeRow directly
-          bufferHolder.reset()
-          unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
-          unsafeRow.setTotalSize(bufferHolder.totalSize())
+          unsafeRowWriter.reset()
+          unsafeRowWriter.write(0, line.getBytes)
+          unsafeRowWriter.setTotalSize()
           unsafeRow
         }
       }

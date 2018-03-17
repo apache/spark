@@ -20,10 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
-import org.apache.spark.unsafe.types.CalendarInterval;
-import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * A helper class to write data into global row buffer using `UnsafeRow` format.
@@ -40,29 +37,45 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public final class UnsafeRowWriter extends UnsafeWriter {
 
-  private final BufferHolder holder;
-  // The offset of the global buffer where we start to write this row.
-  private int startingOffset;
+  private final UnsafeRow row;
+
   private final int nullBitsSize;
   private final int fixedSize;
 
-  public UnsafeRowWriter(BufferHolder holder, int numFields) {
-    this.holder = holder;
+  public UnsafeRowWriter(UnsafeRow row, int initialBufferSize) {
+    this(row, new BufferHolder(row, initialBufferSize), row.numFields());
+  }
+
+  public UnsafeRowWriter(UnsafeRow row) {
+    this(row, new BufferHolder(row), row.numFields());
+  }
+
+  public UnsafeRowWriter(UnsafeWriter writer, int numFields) {
+    this(null, writer.getBufferHolder(), numFields);
+  }
+
+  private UnsafeRowWriter(UnsafeRow row, BufferHolder holder, int numFields) {
+    super(holder);
+    this.row = row;
     this.nullBitsSize = UnsafeRow.calculateBitSetWidthInBytes(numFields);
     this.fixedSize = nullBitsSize + 8 * numFields;
-    this.startingOffset = holder.cursor;
+    this.startingOffset = cursor();
+  }
+
+  public void setTotalSize() {
+    row.setTotalSize(totalSize());
   }
 
   /**
    * Resets the `startingOffset` according to the current cursor of row buffer, and clear out null
    * bits.  This should be called before we write a new nested struct to the row buffer.
    */
-  public void reset() {
-    this.startingOffset = holder.cursor;
+  public void resetRowWriter() {
+    this.startingOffset = cursor();
 
     // grow the global buffer to make sure it has enough space to write fixed-length data.
-    holder.grow(fixedSize);
-    holder.cursor += fixedSize;
+    grow(fixedSize);
+    addCursor(fixedSize);
 
     zeroOutNullBytes();
   }
@@ -72,25 +85,17 @@ public final class UnsafeRowWriter extends UnsafeWriter {
    */
   public void zeroOutNullBytes() {
     for (int i = 0; i < nullBitsSize; i += 8) {
-      Platform.putLong(holder.buffer, startingOffset + i, 0L);
+      Platform.putLong(buffer(), startingOffset + i, 0L);
     }
   }
-
-  private void zeroOutPaddingBytes(int numBytes) {
-    if ((numBytes & 0x07) > 0) {
-      Platform.putLong(holder.buffer, holder.cursor + ((numBytes >> 3) << 3), 0L);
-    }
-  }
-
-  public BufferHolder holder() { return holder; }
 
   public boolean isNullAt(int ordinal) {
-    return BitSetMethods.isSet(holder.buffer, startingOffset, ordinal);
+    return BitSetMethods.isSet(buffer(), startingOffset, ordinal);
   }
 
   public void setNullAt(int ordinal) {
-    BitSetMethods.set(holder.buffer, startingOffset, ordinal);
-    Platform.putLong(holder.buffer, getFieldOffset(ordinal), 0L);
+    BitSetMethods.set(buffer(), startingOffset, ordinal);
+    Platform.putLong(buffer(), getFieldOffset(ordinal), 0L);
   }
 
   @Override
@@ -113,71 +118,63 @@ public final class UnsafeRowWriter extends UnsafeWriter {
     setNullAt(ordinal);
   }
 
+  @Override
+  protected final long getOffset(int oridinal, int elementSize) {
+    return getFieldOffset(oridinal);
+  }
+
   public long getFieldOffset(int ordinal) {
     return startingOffset + nullBitsSize + 8 * ordinal;
   }
 
-  public void setOffsetAndSize(int ordinal, int size) {
-    setOffsetAndSize(ordinal, holder.cursor, size);
-  }
-
+  @Override
   public void setOffsetAndSize(int ordinal, int currentCursor, int size) {
-    final long relativeOffset = currentCursor - startingOffset;
-    final long fieldOffset = getFieldOffset(ordinal);
-    final long offsetAndSize = (relativeOffset << 32) | (long) size;
-
-    Platform.putLong(holder.buffer, fieldOffset, offsetAndSize);
+    _setOffsetAndSize(ordinal, currentCursor, size);
   }
 
   public void write(int ordinal, boolean value) {
     final long offset = getFieldOffset(ordinal);
-    Platform.putLong(holder.buffer, offset, 0L);
-    Platform.putBoolean(holder.buffer, offset, value);
+    Platform.putLong(buffer(), offset, 0L);
+    _write(offset, value);
   }
 
   public void write(int ordinal, byte value) {
     final long offset = getFieldOffset(ordinal);
-    Platform.putLong(holder.buffer, offset, 0L);
-    Platform.putByte(holder.buffer, offset, value);
+    Platform.putLong(buffer(), offset, 0L);
+    _write(offset, value);
   }
 
   public void write(int ordinal, short value) {
     final long offset = getFieldOffset(ordinal);
-    Platform.putLong(holder.buffer, offset, 0L);
-    Platform.putShort(holder.buffer, offset, value);
+    Platform.putLong(buffer(), offset, 0L);
+    _write(offset, value);
   }
 
   public void write(int ordinal, int value) {
     final long offset = getFieldOffset(ordinal);
-    Platform.putLong(holder.buffer, offset, 0L);
-    Platform.putInt(holder.buffer, offset, value);
+    Platform.putLong(buffer(), offset, 0L);
+    _write(offset, value);
   }
 
   public void write(int ordinal, long value) {
-    Platform.putLong(holder.buffer, getFieldOffset(ordinal), value);
+    _write(getFieldOffset(ordinal), value);
   }
 
   public void write(int ordinal, float value) {
-    if (Float.isNaN(value)) {
-      value = Float.NaN;
-    }
     final long offset = getFieldOffset(ordinal);
-    Platform.putLong(holder.buffer, offset, 0L);
-    Platform.putFloat(holder.buffer, offset, value);
+    Platform.putLong(buffer(), offset, 0L);
+    _write(offset, value);
   }
 
   public void write(int ordinal, double value) {
-    if (Double.isNaN(value)) {
-      value = Double.NaN;
-    }
-    Platform.putDouble(holder.buffer, getFieldOffset(ordinal), value);
+    _write(getFieldOffset(ordinal), value);
   }
 
   public void write(int ordinal, Decimal input, int precision, int scale) {
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       // make sure Decimal object has the same scale as DecimalType
       if (input.changePrecision(precision, scale)) {
-        Platform.putLong(holder.buffer, getFieldOffset(ordinal), input.toUnscaledLong());
+        write(ordinal, input.toUnscaledLong());
       } else {
         setNullAt(ordinal);
       }
@@ -185,82 +182,31 @@ public final class UnsafeRowWriter extends UnsafeWriter {
       // grow the global buffer before writing data.
       holder.grow(16);
 
-      // zero-out the bytes
-      Platform.putLong(holder.buffer, holder.cursor, 0L);
-      Platform.putLong(holder.buffer, holder.cursor + 8, 0L);
-
       // Make sure Decimal object has the same scale as DecimalType.
       // Note that we may pass in null Decimal object to set null for it.
       if (input == null || !input.changePrecision(precision, scale)) {
-        BitSetMethods.set(holder.buffer, startingOffset, ordinal);
+        // zero-out the bytes
+        Platform.putLong(buffer(), cursor(), 0L);
+        Platform.putLong(buffer(), cursor() + 8, 0L);
+
+        BitSetMethods.set(buffer(), startingOffset, ordinal);
         // keep the offset for future update
         setOffsetAndSize(ordinal, 0);
       } else {
         final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
-        assert bytes.length <= 16;
+        final int numBytes = bytes.length;
+        assert numBytes <= 16;
+
+        zeroOutPaddingBytes(numBytes);
 
         // Write the bytes to the variable length portion.
         Platform.copyMemory(
-          bytes, Platform.BYTE_ARRAY_OFFSET, holder.buffer, holder.cursor, bytes.length);
+          bytes, Platform.BYTE_ARRAY_OFFSET, buffer(), cursor(), numBytes);
         setOffsetAndSize(ordinal, bytes.length);
       }
 
       // move the cursor forward.
-      holder.cursor += 16;
+      addCursor(16);
     }
-  }
-
-  public void write(int ordinal, UTF8String input) {
-    final int numBytes = input.numBytes();
-    final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
-
-    // grow the global buffer before writing data.
-    holder.grow(roundedSize);
-
-    zeroOutPaddingBytes(numBytes);
-
-    // Write the bytes to the variable length portion.
-    input.writeToMemory(holder.buffer, holder.cursor);
-
-    setOffsetAndSize(ordinal, numBytes);
-
-    // move the cursor forward.
-    holder.cursor += roundedSize;
-  }
-
-  public void write(int ordinal, byte[] input) {
-    write(ordinal, input, 0, input.length);
-  }
-
-  public void write(int ordinal, byte[] input, int offset, int numBytes) {
-    final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
-
-    // grow the global buffer before writing data.
-    holder.grow(roundedSize);
-
-    zeroOutPaddingBytes(numBytes);
-
-    // Write the bytes to the variable length portion.
-    Platform.copyMemory(input, Platform.BYTE_ARRAY_OFFSET + offset,
-      holder.buffer, holder.cursor, numBytes);
-
-    setOffsetAndSize(ordinal, numBytes);
-
-    // move the cursor forward.
-    holder.cursor += roundedSize;
-  }
-
-  public void write(int ordinal, CalendarInterval input) {
-    // grow the global buffer before writing data.
-    holder.grow(16);
-
-    // Write the months and microseconds fields of Interval to the variable length portion.
-    Platform.putLong(holder.buffer, holder.cursor, input.months);
-    Platform.putLong(holder.buffer, holder.cursor + 8, input.microseconds);
-
-    setOffsetAndSize(ordinal, 16);
-
-    // move the cursor forward.
-    holder.cursor += 16;
   }
 }
