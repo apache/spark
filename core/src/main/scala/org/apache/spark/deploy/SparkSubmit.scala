@@ -245,6 +245,19 @@ object SparkSubmit extends CommandLineUtils with Logging {
       args: SparkSubmitArguments,
       conf: Option[HadoopConfiguration] = None)
       : (Seq[String], Seq[String], SparkConf, String) = {
+    try {
+      doPrepareSubmitEnvironment(args, conf)
+    } catch {
+      case e: SparkException =>
+        printErrorAndExit(e.getMessage)
+        throw new RuntimeException("Unreachable production code")
+    }
+  }
+
+  private def doPrepareSubmitEnvironment(
+      args: SparkSubmitArguments,
+      conf: Option[HadoopConfiguration] = None)
+      : (Seq[String], Seq[String], SparkConf, String) = {
     // Return values
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()

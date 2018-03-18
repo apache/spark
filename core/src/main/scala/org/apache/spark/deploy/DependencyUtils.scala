@@ -23,7 +23,7 @@ import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 private[deploy] object DependencyUtils {
@@ -137,16 +137,29 @@ private[deploy] object DependencyUtils {
   def resolveGlobPaths(paths: String, hadoopConf: Configuration): String = {
     require(paths != null, "paths cannot be null.")
     Utils.stringToSeq(paths).flatMap { path =>
-      val uri = Utils.resolveURI(path)
-      uri.getScheme match {
-        case "local" | "http" | "https" | "ftp" => Array(path)
-        case _ =>
-          val fs = FileSystem.get(uri, hadoopConf)
-          Option(fs.globStatus(new Path(uri))).map { status =>
-            status.filter(_.isFile).map(_.getPath.toUri.toString)
-          }.getOrElse(Array(path))
+      val spath = path.split('#')
+      val renameAs = if (spath.length > 1) Some(spath(1)) else None
+      val resolved: Array[String] = resoloveGlobPath(spath(0), hadoopConf)
+      resolved match {
+        case array: Array[String] if !renameAs.isEmpty && array.length>1 =>
+          throw new SparkException(
+            s"${spath(1)} resolves ambiguously to multiple files: ${array.mkString(",")}")
+        case array: Array[String] if !renameAs.isEmpty => array.map( _ + "#" + renameAs.get)
+        case array => array
       }
     }.mkString(",")
+  }
+
+  private def resoloveGlobPath(path: String, hadoopConf: Configuration): Array [String] = {
+    val uri = Utils.resolveURI(path)
+    uri.getScheme match {
+      case "local" | "http" | "https" | "ftp" => Array(path)
+      case _ =>
+        val fs = FileSystem.get(uri, hadoopConf)
+        Option(fs.globStatus(new Path(uri))).map { status =>
+          status.filter(_.isFile).map(_.getPath.toUri.toString)
+        }.getOrElse(Array(path))
+    }
   }
 
 }
