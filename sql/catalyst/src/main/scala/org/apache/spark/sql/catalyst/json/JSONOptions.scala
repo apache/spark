@@ -92,14 +92,20 @@ private[sql] class JSONOptions(
   val charset: Option[String] = parameters.get("charset")
 
   /**
-   * A sequence of bytes between two consecutive json records. Supported formats:
-   * - sequence of bytes in hex format (starts from x): x0a 0d
+   * A sequence of bytes between two consecutive json records. Format of the option is:
+   *   selector (1 char) + delimiter body (any length)
+   * The following selectors are supported:
+   * - 'x' + sequence of bytes in hexadecimal format. For example: "x0a 0d".
+   *   Hex pairs can be separated by any chars different from 0-9,A-F,a-f
+   * - '\' - reserved for a sequence of control chars like "\r\n"
+   * - '/' - reserved for a sequence of visible chars like "/==="
    */
-  val recordDelimiter: Option[Array[Byte]] = parameters.get("recordDelimiter").map(
-    _.replaceAll("[^0-9A-Fa-f]", "")
-     .sliding(2, 2)
-     .toArray.map(Integer.parseInt(_, 16).toByte)
-  )
+  val recordDelimiter: Option[Array[Byte]] = parameters.get("recordDelimiter").collect {
+    case hexs if hexs.startsWith("x") =>
+      hexs.replaceAll("[^0-9A-Fa-f]", "").sliding(2, 2).toArray
+        .map(Integer.parseInt(_, 16).toByte)
+    case d => throw new NotImplementedError(d)
+  }
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
