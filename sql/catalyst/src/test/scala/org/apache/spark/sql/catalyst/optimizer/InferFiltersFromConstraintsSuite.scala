@@ -192,4 +192,16 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
     comparePlans(Optimize.execute(original.analyze), correct.analyze)
   }
+
+  test("SPARK-23405: left-semi equal-join should filter out null join keys on both sides") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val condition = Some("x.a".attr === "y.a".attr)
+    val originalQuery = x.join(y, LeftSemi, condition).analyze
+    val left = x.where(IsNotNull('a))
+    val right = y.where(IsNotNull('a))
+    val correctAnswer = left.join(right, LeftSemi, condition).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
 }

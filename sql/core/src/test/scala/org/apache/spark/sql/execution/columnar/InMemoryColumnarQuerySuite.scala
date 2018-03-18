@@ -336,7 +336,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(cached, expectedAnswer)
 
     // Check that the right size was calculated.
-    assert(cached.batchStats.value === expectedAnswer.size * INT.defaultSize)
+    assert(cached.sizeInBytesStats.value === expectedAnswer.size * INT.defaultSize)
   }
 
   test("access primitive-type columns in CachedBatch without whole stage codegen") {
@@ -477,7 +477,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
         assert(planBeforeFilter.head.isInstanceOf[InMemoryTableScanExec])
 
         val execPlan = if (enabled == "true") {
-          WholeStageCodegenExec(planBeforeFilter.head)
+          WholeStageCodegenExec(planBeforeFilter.head)(codegenStageId = 0)
         } else {
           planBeforeFilter.head
         }
@@ -487,7 +487,10 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-22673: InMemoryRelation should utilize existing stats of the plan to be cached") {
-    withSQLConf("spark.sql.cbo.enabled" -> "true") {
+    // This test case depends on the size of parquet in statistics.
+    withSQLConf(
+        SQLConf.CBO_ENABLED.key -> "true",
+        SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "parquet") {
       withTempPath { workDir =>
         withTable("table1") {
           val workDirPath = workDir.getAbsolutePath

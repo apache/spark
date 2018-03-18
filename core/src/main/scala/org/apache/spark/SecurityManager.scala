@@ -256,51 +256,6 @@ private[spark] class SecurityManager(
   // the default SSL configuration - it will be used by all communication layers unless overwritten
   private val defaultSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl", defaults = None)
 
-  // SSL configuration for the file server. This is used by Utils.setupSecureURLConnection().
-  val fileServerSSLOptions = getSSLOptions("fs")
-  val (sslSocketFactory, hostnameVerifier) = if (fileServerSSLOptions.enabled) {
-    val trustStoreManagers =
-      for (trustStore <- fileServerSSLOptions.trustStore) yield {
-        val input = Files.asByteSource(fileServerSSLOptions.trustStore.get).openStream()
-
-        try {
-          val ks = KeyStore.getInstance(KeyStore.getDefaultType)
-          ks.load(input, fileServerSSLOptions.trustStorePassword.get.toCharArray)
-
-          val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
-          tmf.init(ks)
-          tmf.getTrustManagers
-        } finally {
-          input.close()
-        }
-      }
-
-    lazy val credulousTrustStoreManagers = Array({
-      logWarning("Using 'accept-all' trust manager for SSL connections.")
-      new X509TrustManager {
-        override def getAcceptedIssuers: Array[X509Certificate] = null
-
-        override def checkClientTrusted(x509Certificates: Array[X509Certificate], s: String) {}
-
-        override def checkServerTrusted(x509Certificates: Array[X509Certificate], s: String) {}
-      }: TrustManager
-    })
-
-    require(fileServerSSLOptions.protocol.isDefined,
-      "spark.ssl.protocol is required when enabling SSL connections.")
-
-    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.get)
-    sslContext.init(null, trustStoreManagers.getOrElse(credulousTrustStoreManagers), null)
-
-    val hostVerifier = new HostnameVerifier {
-      override def verify(s: String, sslSession: SSLSession): Boolean = true
-    }
-
-    (Some(sslContext.getSocketFactory), Some(hostVerifier))
-  } else {
-    (None, None)
-  }
-
   def getSSLOptions(module: String): SSLOptions = {
     val opts = SSLOptions.parse(sparkConf, s"spark.ssl.$module", Some(defaultSSLOptions))
     logDebug(s"Created SSL options for $module: $opts")
@@ -520,19 +475,25 @@ private[spark] class SecurityManager(
    *
    * If authentication is disabled, do nothing.
    *
-   * In YARN mode, generate a new secret and store it in the current user's credentials.
+   * In YARN and local mode, generate a new secret and store it in the current user's credentials.
    *
    * In other modes, assert that the auth secret is set in the configuration.
    */
   def initializeAuth(): Unit = {
+    import SparkMasterRegex._
+
     if (!sparkConf.get(NETWORK_AUTH_ENABLED)) {
       return
     }
 
-    if (sparkConf.get(SparkLauncher.SPARK_MASTER, null) != "yarn") {
-      require(sparkConf.contains(SPARK_AUTH_SECRET_CONF),
-        s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config.")
-      return
+    val master = sparkConf.get(SparkLauncher.SPARK_MASTER, "")
+    master match {
+      case "yarn" | "local" | LOCAL_N_REGEX(_) | LOCAL_N_FAILURES_REGEX(_, _) =>
+        // Secret generation allowed here
+      case _ =>
+        require(sparkConf.contains(SPARK_AUTH_SECRET_CONF),
+          s"A secret key must be specified via the $SPARK_AUTH_SECRET_CONF config.")
+        return
     }
 
     val rnd = new SecureRandom()
@@ -541,7 +502,8 @@ private[spark] class SecurityManager(
     rnd.nextBytes(secretBytes)
 
     val creds = new Credentials()
-    creds.addSecretKey(SECRET_LOOKUP_KEY, secretBytes)
+    val secretStr = HashCodes.fromBytes(secretBytes).toString()
+    creds.addSecretKey(SECRET_LOOKUP_KEY, secretStr.getBytes(UTF_8))
     UserGroupInformation.getCurrentUser().addCredentials(creds)
   }
 

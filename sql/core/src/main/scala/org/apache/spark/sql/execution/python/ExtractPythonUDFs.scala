@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 
 /**
  * Extracts all the Python UDFs in logical aggregate, which depends on aggregate expression or
- * grouping key, evaluate them after aggregate.
+ * grouping key, or doesn't depend on any above expressions, evaluate them after aggregate.
  */
 object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
 
@@ -45,7 +45,8 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
 
   private def hasPythonUdfOverAggregate(expr: Expression, agg: Aggregate): Boolean = {
     expr.find {
-      e => PythonUDF.isScalarPythonUDF(e) && e.find(belongAggregate(_, agg)).isDefined
+      e => PythonUDF.isScalarPythonUDF(e) &&
+        (e.references.isEmpty || e.find(belongAggregate(_, agg)).isDefined)
     }.isDefined
   }
 
@@ -159,7 +160,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           }
 
           val evaluation = validUdfs.partition(
-            _.evalType == PythonEvalType.SQL_PANDAS_SCALAR_UDF
+            _.evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF
           ) match {
             case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
               ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
