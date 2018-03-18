@@ -98,13 +98,14 @@ private[sql] class JSONOptions(
    * - 'x' + sequence of bytes in hexadecimal format. For example: "x0a 0d".
    *   Hex pairs can be separated by any chars different from 0-9,A-F,a-f
    * - '\' - reserved for a sequence of control chars like "\r\n"
-   * - '/' - reserved for a sequence of visible chars like "/==="
+   *         and unicode escape like "\u000D\u000A"
    */
   val recordDelimiter: Option[Array[Byte]] = parameters.get("recordDelimiter").collect {
     case hexs if hexs.startsWith("x") =>
       hexs.replaceAll("[^0-9A-Fa-f]", "").sliding(2, 2).toArray
         .map(Integer.parseInt(_, 16).toByte)
-    case d => throw new NotImplementedError(d)
+    case delim => delim.getBytes(charset.getOrElse(
+      throw new IllegalArgumentException("Please, set the charset option for the delimiter")))
   }
 
   /** Sets config options on a Jackson [[JsonFactory]]. */

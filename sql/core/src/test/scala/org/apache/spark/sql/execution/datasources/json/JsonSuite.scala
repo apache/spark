@@ -2063,4 +2063,31 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       )
     }
   }
+
+  def readWrittenJson(delimiter: (String, Int)): Unit = {
+    val (recordDelimiter, index) = delimiter
+    test(s"read written json in UTF-16BE with delimiter $index") {
+      val charset = "UTF-16BE"
+      case class Rec(f1: String, f2: Int)
+      withTempPath { path =>
+        val ds = spark.createDataset(Seq(
+          ("a", 1), ("b", 2), ("c", 3))
+        ).repartition(1)
+        ds.write
+          .option("charset", charset)
+          .format("json").mode("overwrite")
+          .save(path.getCanonicalPath)
+        val savedDf = spark
+          .read
+          .schema(ds.schema)
+          .option("charset", charset)
+          .option("recordDelimiter", recordDelimiter)
+          .json(path.getCanonicalPath)
+
+        checkAnswer(savedDf.toDF(), ds.toDF())
+      }
+    }
+  }
+
+  List("x00 0a", "\n", "\u000a").zipWithIndex.foreach(readWrittenJson(_))
 }
