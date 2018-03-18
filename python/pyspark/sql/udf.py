@@ -20,7 +20,6 @@ User-defined function related classes and functions
 import sys
 import inspect
 import functools
-import itertools
 import sys
 
 from pyspark import SparkContext, since
@@ -52,8 +51,7 @@ def _create_udf(f, returnType, evalType):
         argspec = _get_argspec(f)
 
         if evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF and len(argspec.args) == 0 and \
-                argspec.varargs is None and not \
-                (sys.version_info[0] > 2 and len(argspec.kwonlyargs) > 0):
+                argspec.varargs is None:
             raise ValueError(
                 "Invalid function: 0-arg pandas_udfs are not supported. "
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
@@ -167,38 +165,7 @@ class UserDefinedFunction(object):
             self._name, wrapped_func, jdt, self.evalType, self.deterministic)
         return judf
 
-    def __call__(self, *cols, **kwcols):
-        # Handle keyword arguments for python3
-        if sys.version_info[0] > 2:
-            spec = _get_argspec(self.func)
-            required = spec.args + spec.kwonlyargs
-            defaults = spec.kwonlydefaults or {}
-            if len(cols) < len(required):
-                print('qqqqq', '\nrequired', required, '\ndefaults', defaults, '\ncols', cols, '\nkwcols', kwcols)
-
-                def _normalize_args(cols_, kwcols_):
-                    """
-                    Extract remaining required arguments (from kwcols) in proper order.
-                    Ensure no duplicate or unused arguments were passed.
-                    """
-                    updated_cols = tuple(itertools.chain.from_iterable(
-                        [cols_, (kwcols_.pop(c) for c in required[len(cols_):] if c not in defaults)]))
-                    kwargs_remaining = list(set(kwcols_.keys()) - set(defaults.keys()))
-                    print('REMAIN', kwargs_remaining)
-                    if kwargs_remaining:
-                        raise TypeError(self._name + "() "
-                                        + "got unexpected (or duplicated) keyword arguments: "
-                                        + str(kwargs_remaining))
-                    return updated_cols
-
-                def _merge(d1, d2):
-                    d = d1.copy()
-                    d.update(d2)
-                    print('merged', d)
-                    return d
-
-                cols = _normalize_args(cols, _merge(kwcols, kwcols))
-                print('FINALLLL cols', cols)
+    def __call__(self, *cols):
         judf = self._judf
         sc = SparkContext._active_spark_context
         return Column(judf.apply(_to_seq(sc, cols, _to_java_column)))
@@ -220,8 +187,8 @@ class UserDefinedFunction(object):
             a for a in functools.WRAPPER_ASSIGNMENTS if a != '__name__' and a != '__module__')
 
         @functools.wraps(self.func, assigned=assignments)
-        def wrapper(*args, **kwargs):
-            return self(*args, **kwargs)
+        def wrapper(*args):
+            return self(*args)
 
         wrapper.__name__ = self._name
         wrapper.__module__ = (self.func.__module__ if hasattr(self.func, '__module__')
