@@ -286,6 +286,9 @@ final class InterpretedUnsafeRowJoiner(
   // The number of bytes we can reduce when we concat two rows together.
   // The only reduction comes from merging the bitset portion of the two rows, saving 1 word.
   private[this] val sizeReduction = numBytesBitset1 + numBytesBitset2 - numBytesBitsetResult
+  private[this] val numBytesBitsetAndFixedRowResult = {
+    numBytesBitsetResult + numBytesFixedRow1 + numBytesFixedRow2
+  }
 
   private def getVariableLengthOffsets(schema: StructType, offset: Int): Array[Int] = {
     schema.fields.zipWithIndex.collect {
@@ -372,12 +375,12 @@ final class InterpretedUnsafeRowJoiner(
     copyMemory(
       obj1,
       offset1 + numBytesBitsetAndFixedRow1,
-      numBytesBitsetResult + numBytesFixedRow1 + numBytesFixedRow2,
+      numBytesBitsetAndFixedRowResult,
       numBytesVariableRow1)
     copyMemory(
       obj2,
       offset2 + numBytesBitsetAndFixedRow2,
-      numBytesBitsetResult + numBytesFixedRow1 + numBytesFixedRow2 + numBytesVariableRow1,
+      numBytesBitsetAndFixedRowResult + numBytesVariableRow1,
       sizeInBytes2 - numBytesBitsetAndFixedRow2)
 
     // Update the variable length portions for fields coming from row1.
