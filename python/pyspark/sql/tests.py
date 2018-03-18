@@ -2504,6 +2504,17 @@ class SQLTests(ReusedSQLTestCase):
         spark.conf.unset("bogo")
         self.assertEqual(spark.conf.get("bogo", "colombia"), "colombia")
 
+        self.assertEqual(spark.conf.get("hyukjin", None), None)
+
+        # This returns 'STATIC' because it's the default value of
+        # 'spark.sql.sources.partitionOverwriteMode', and `defaultValue` in
+        # `spark.conf.get` is unset.
+        self.assertEqual(spark.conf.get("spark.sql.sources.partitionOverwriteMode"), "STATIC")
+
+        # This returns None because 'spark.sql.sources.partitionOverwriteMode' is unset, but
+        # `defaultValue` in `spark.conf.get` is set to None.
+        self.assertEqual(spark.conf.get("spark.sql.sources.partitionOverwriteMode", None), None)
+
     def test_current_database(self):
         spark = self.spark
         spark.catalog._reset()
