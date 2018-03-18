@@ -120,7 +120,7 @@ object TextInputJsonDataSource extends JsonDataSource {
       file: PartitionedFile,
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
-    val linesReader = new HadoopFileLinesReader(file, conf, parser.options.recordSeparator)
+    val linesReader = new HadoopFileLinesReader(file, conf, parser.options.recordDelimiter)
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
     val safeParser = new FailureSafeParser[Text](
       input => parser.parse(input, CreateJacksonParser.text, textToUTF8String),

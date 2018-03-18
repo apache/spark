@@ -95,7 +95,7 @@ private[sql] class JSONOptions(
    * A sequence of bytes between two consecutive json records. Supported formats:
    * - sequence of bytes in hex format (starts from x): x0a 0d
    */
-  val recordSeparator: Option[Array[Byte]] = parameters.get("recordSeparator").map(
+  val recordDelimiter: Option[Array[Byte]] = parameters.get("recordDelimiter").map(
     _.replaceAll("[^0-9A-Fa-f]", "")
      .sliding(2, 2)
      .toArray.map(Integer.parseInt(_, 16).toByte)
