@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.{File, StringWriter}
+import java.io.{File, FileOutputStream, StringWriter}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.Locale
@@ -2065,8 +2065,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
   
   def checkReadWrittenJson(charset: String, delimiter: String, runId: Int): Unit = {
-    test(s"checks Spark is able to read json written by Spark itself #{$runId}") {
-      case class Rec(f1: String, f2: Int)
+    test(s"checks Spark is able to read json written by Spark itself #${runId}") {
       withTempPath { path =>
         val ds = spark.createDataset(Seq(
           ("a", 1), ("b", 2), ("c", 3))
@@ -2094,4 +2093,46 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     ("\u000a", "UTF-32BE"),
     ("x0a 00 00 00", "UTF-32LE")
   ).zipWithIndex.foreach{case ((d, c), i) => checkReadWrittenJson(c, d, i)}
+
+  def checkReadJson(charset: String, delimiter: String, runId: Int): Unit = {
+    test(s"checks reading json in ${charset} #${runId}") {
+      val delimInBytes = {
+        if (delimiter.startsWith("x")) {
+          delimiter.replaceAll("[^0-9A-Fa-f]", "")
+            .sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toByte)
+        } else {
+          delimiter.getBytes(charset)
+        }
+      }
+      case class Rec(f1: String, f2: Int) {
+        def json = s"""{"f1":"${f1}", "f2":$f2}"""
+        def bytes = json.getBytes(charset)
+        def row = Row(f1, f2)
+      }
+      val schema = new StructType().add("f1", StringType).add("f2", IntegerType)
+      withTempPath { path =>
+        val records = List(Rec("a", 1), Rec("b", 2))
+        val data = records.map(_.bytes).reduce((a1, a2) => a1 ++ delimInBytes ++ a2)
+        val os = new FileOutputStream(path)
+        os.write(data)
+        os.close()
+        val savedDf = spark
+          .read
+          .schema(schema)
+          .option("charset", charset)
+          .option("recordDelimiter", delimiter)
+          .json(path.getCanonicalPath)
+        checkAnswer(savedDf, records.map(_.row))
+      }
+    }
+  }
+
+  List(
+    ("sep", "UTF-8"),
+    ("x00 0a 00 0d", "UTF-16BE"),
+    ("\r\n", "UTF-16LE"),
+    ("\u000d\u000a", "UTF-32BE"),
+    ("===", "UTF-32LE"),
+    ("куку", "CP1251")
+  ).zipWithIndex.foreach{case ((d, c), i) => checkReadJson(c, d, i)}
 }
