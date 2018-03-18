@@ -1799,6 +1799,12 @@ different than a Pandas timestamp. It is recommended to use Pandas time series f
 working with timestamps in `pandas_udf`s to get the best performance, see
 [here](https://pandas.pydata.org/pandas-docs/stable/timeseries.html) for details.
 
+### Keyword Arguments and Related Structures
+
+Currently, for `pandas_udf` it is not possible to pass keyword arguments to a function. The wrapped
+function must also not be a `functools.partial` function object. Functions with a zero-length argument
+list are unsupported, but can be approximated via a single-argument udf which ignores the passed arg.
+
 # Migration Guide
 
 ## Upgrading From Spark SQL 2.3 to 2.4
