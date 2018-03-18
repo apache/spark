@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.sql.sources.v2.reader;
 
-import org.scalatest.PrivateMethodTester
+import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset;
 
-import org.apache.spark.sql.test.SharedSQLContext
-
-class CachedKafkaConsumerSuite extends SharedSQLContext with PrivateMethodTester {
-
-  test("SPARK-19886: Report error cause correctly in reportDataLoss") {
-    val cause = new Exception("D'oh!")
-    val reportDataLoss = PrivateMethod[Unit]('reportDataLoss0)
-    val e = intercept[IllegalStateException] {
-      CachedKafkaConsumer.invokePrivate(reportDataLoss(true, "message", cause))
-    }
-    assert(e.getCause === cause)
-  }
+/**
+ * A mix-in interface for {@link DataReaderFactory}. Continuous data reader factories can
+ * implement this interface to provide creating {@link DataReader} with particular offset.
+ */
+@InterfaceStability.Evolving
+public interface ContinuousDataReaderFactory<T> extends DataReaderFactory<T> {
+  /**
+   * Create a DataReader with particular offset as its startOffset.
+   *
+   * @param offset offset want to set as the DataReader's startOffset.
+   */
+  DataReader<T> createDataReaderWithOffset(PartitionOffset offset);
 }

@@ -328,6 +328,32 @@ trait Nondeterministic extends Expression {
   protected def evalInternal(input: InternalRow): Any
 }
 
+/**
+ * An expression that contains mutable state. A stateful expression is always non-deterministic
+ * because the results it produces during evaluation are not only dependent on the given input
+ * but also on its internal state.
+ *
+ * The state of the expressions is generally not exposed in the parameter list and this makes
+ * comparing stateful expressions problematic because similar stateful expressions (with the same
+ * parameter list) but with different internal state will be considered equal. This is especially
+ * problematic during tree transformations. In order to counter this the `fastEquals` method for
+ * stateful expressions only returns `true` for the same reference.
+ *
+ * A stateful expression should never be evaluated multiple times for a single row. This should
+ * only be a problem for interpreted execution. This can be prevented by creating fresh copies
+ * of the stateful expression before execution, these can be made using the `freshCopy` function.
+ */
+trait Stateful extends Nondeterministic {
+  /**
+   * Return a fresh uninitialized copy of the stateful expression.
+   */
+  def freshCopy(): Stateful
+
+  /**
+   * Only the same reference is considered equal.
+   */
+  override def fastEquals(other: TreeNode[_]): Boolean = this eq other
+}
 
 /**
  * A leaf expression, i.e. one without any child expressions.

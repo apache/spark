@@ -106,7 +106,20 @@ case class RateStreamContinuousDataReaderFactory(
     partitionIndex: Int,
     increment: Long,
     rowsPerSecond: Double)
-  extends DataReaderFactory[Row] {
+  extends ContinuousDataReaderFactory[Row] {
+
+  override def createDataReaderWithOffset(offset: PartitionOffset): DataReader[Row] = {
+    val rateStreamOffset = offset.asInstanceOf[RateStreamPartitionOffset]
+    require(rateStreamOffset.partition == partitionIndex,
+      s"Expected partitionIndex: $partitionIndex, but got: ${rateStreamOffset.partition}")
+    new RateStreamContinuousDataReader(
+      rateStreamOffset.currentValue,
+      rateStreamOffset.currentTimeMs,
+      partitionIndex,
+      increment,
+      rowsPerSecond)
+  }
+
   override def createDataReader(): DataReader[Row] =
     new RateStreamContinuousDataReader(
       startValue, startTimeMs, partitionIndex, increment, rowsPerSecond)
