@@ -119,9 +119,15 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     expectedMessagePart : String,
     firstResultCol: String) {
 
+    def hasExpectedMessageDirectly(exception: Throwable): Boolean =
+      exception.getMessage.contains(expectedMessagePart)
+
     def hasExpectedMessage(exception: Throwable): Boolean =
-      exception.getMessage.contains(expectedMessagePart) ||
-        (exception.getCause != null && exception.getCause.getMessage.contains(expectedMessagePart))
+      hasExpectedMessageDirectly(exception) || (
+        exception.getCause != null && (
+          hasExpectedMessageDirectly(exception.getCause) || (
+            exception.getCause.getCause != null &&
+            hasExpectedMessageDirectly(exception.getCause.getCause))))
 
     withClue(s"""Expected message part "${expectedMessagePart}" is not found in DF test.""") {
       val exceptionOnDf = intercept[Throwable] {
