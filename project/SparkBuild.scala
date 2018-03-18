@@ -88,10 +88,15 @@ object BuildCommons {
 }
 
 object DefaultSparkPlugin extends AutoPlugin {
-  override def requires = JvmPlugin
+  override def requires: Plugins = JvmPlugin
 
-  override def projectSettings: Seq[Def.Setting[_]] = (SparkBuild.sharedSettings
-      ++ ExcludedDependencies.settings)
+  override def projectSettings: Seq[Def.Setting[_]] = SparkBuild.sharedSettings ++ Seq(
+    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
+  )
+
+  override def globalSettings: Seq[Def.Setting[_]] = Seq(
+    updateOptions := updateOptions.value.withCachedResolution(true)
+  )
 }
 
 //noinspection ScalaStyle
@@ -438,10 +443,6 @@ object SparkBuild extends PomBuild {
       else x).enablePlugins(DefaultSparkPlugin)
     } ++ Seq[Project](OldDeps.project)
   }
-
-  override def settings: Seq[Def.Setting[_]] = super.settings ++ inScope(Global)(List(
-    updateOptions := updateOptions.value.withCachedResolution(true)
-  ))
 }
 
 object Core {
@@ -474,25 +475,6 @@ object DockerIntegrationTests {
     dependencyOverrides += "com.google.guava" % "guava" % "18.0",
     resolvers += "DB2" at "https://app.camunda.com/nexus/content/repositories/public/",
     libraryDependencies += "com.oracle" % "ojdbc6" % "11.2.0.1.0" from "https://app.camunda.com/nexus/content/repositories/public/com/oracle/ojdbc6/11.2.0.1.0/ojdbc6-11.2.0.1.0.jar" // scalastyle:ignore
-  )
-}
-
-/**
- * This excludes library dependencies in sbt, which are specified in maven but are
- * not needed by sbt build.
- */
-object ExcludedDependencies {
-  val exclusions = Seq(
-    SbtExclusionRule("org.jboss.netty", "netty"),
-    SbtExclusionRule("commons-logging", "commons-logging"),
-    SbtExclusionRule("com.sun.jersey"),
-    SbtExclusionRule("com.sun.jersey.jersey-test-framework"),
-    SbtExclusionRule("com.sun.jersey.contribs")
-  )
-
-  lazy val settings = Seq(
-    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") },
-    excludeDependencies ++= exclusions
   )
 }
 
