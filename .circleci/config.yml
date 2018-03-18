@@ -147,10 +147,6 @@ jobs:
       - store_artifacts:
           path: /tmp/build-apache-spark.log
           destination: build-apache-spark.log
-      # And finally save the whole build directory
-    #   - save_cache:
-    #       key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
-    #       paths: .
       - save_cache:
           key: v1-home-sbt-{{ checksum "build/sbt" }}
           paths: ~/.sbt
@@ -183,8 +179,6 @@ jobs:
     # depends on build-sbt
     <<: *defaults
     steps:
-      # - restore_cache:
-      #     key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
       - checkout
       - attach_workspace:
           at: .
@@ -210,8 +204,6 @@ jobs:
     docker:
       - image: palantirtechnologies/circle-spark-python
     steps:
-      # - restore_cache:
-      #     key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
       - checkout
       # Python tests need assembly files build by the `build-sbt` job
       # e.g. external/kafka-0-8-assembly/target/scala-2.11/spark-streaming-kafka-0-8-assembly-2.4.0-SNAPSHOT.jar
@@ -237,8 +229,6 @@ jobs:
     docker:
       - image: palantirtechnologies/circle-spark-r
     steps:
-      # - restore_cache:
-      #     key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
       - checkout
       - attach_workspace:
           at: .
@@ -267,8 +257,6 @@ jobs:
       - run:
           name: Before running tests, ensure we created the CIRCLE_TEST_REPORTS directory
           command: mkdir -p $CIRCLE_TEST_REPORTS
-      # - restore_cache:
-      #     key: build-sbt-{{ .Branch }}-{{ .BuildNum }}
       - checkout
       - attach_workspace:
          at: .
