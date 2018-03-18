@@ -2145,7 +2145,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     ("\u000a\u000d", "UTF-32BE", true),
     ("===", "UTF-32LE", false),
     ("$^+", "UTF-32LE", true),
-    ("куку", "CP1251", false),
-    ("куку", "CP1251", true)
+    ("xEA.F3.EA.F3", "CP1251", false),
+    ("xEA.F3.EA.F3", "CP1251", true)
   ).zipWithIndex.foreach{case ((d, c, s), i) => checkReadJson(c, d, s, i)}
 }
