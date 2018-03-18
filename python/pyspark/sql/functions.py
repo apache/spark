@@ -2155,8 +2155,7 @@ def udf(f=None, returnType=StringType()):
         in boolean expressions and it ends up with being executed all internally. If the functions
         can fail on special rows, the workaround is to incorporate the condition into the functions.
 
-    .. note:: The user-defined functions may take keyword arguments e.g. (a=7) in python3, but in
-        python2 they can not.
+    .. note:: The user-defined functions may not take keyword arguments.
 
     :param f: python function if used as a standalone function
     :param returnType: the return type of the user-defined function. The value can be either a
@@ -2342,8 +2341,7 @@ def pandas_udf(f=None, returnType=None, functionType=None):
         in boolean expressions and it ends up with being executed all internally. If the functions
         can fail on special rows, the workaround is to incorporate the condition into the functions.
 
-    .. note:: The user-defined functions may take keyword arguments e.g. (a=7) in python3, but in
-        python2 they can not.
+    .. note:: The user-defined functions may not take keyword arguments.
     """
     # decorator @pandas_udf(returnType, functionType)
     is_decorator = f is None or isinstance(f, (str, DataType))
