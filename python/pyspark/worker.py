@@ -79,7 +79,7 @@ def wrap_scalar_pandas_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
     def verify_result_length(*a):
-        result = f(*a)
+        result = f(*a)  # <-- this does not have any notion that f may be a functools.partial that already has some args accounted for, so partial fns blow up
         if not hasattr(result, "__len__"):
             raise TypeError("Return type of the user-defined functon should be "
                             "Pandas.Series, but is {}".format(type(result)))
