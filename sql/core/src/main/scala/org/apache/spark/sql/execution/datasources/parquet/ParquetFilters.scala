@@ -54,7 +54,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => {
         FilterApi.eq(
           intColumn(n),
-          Option(v).map{ date =>
+          Option(v).map { date =>
             val days = date.asInstanceOf[java.sql.Date].getTime / (24 * 60 * 60 * 1000)
             days.toInt.asInstanceOf[Integer]
           }.orNull)
@@ -85,7 +85,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => {
         FilterApi.notEq(
           intColumn(n),
-          Option(v).map{ date =>
+          Option(v).map { date =>
             val days = date.asInstanceOf[java.sql.Date].getTime / (24 * 60 * 60 * 1000)
             days.toInt.asInstanceOf[Integer]
           }.orNull)
@@ -113,7 +113,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => {
         FilterApi.lt(
           intColumn(n),
-          Option(v).map{ date =>
+          Option(v).map { date =>
             val days = date.asInstanceOf[java.sql.Date].getTime / (24 * 60 * 60 * 1000)
             days.toInt.asInstanceOf[Integer]
           }.orNull)
@@ -141,7 +141,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => {
         FilterApi.ltEq(
           intColumn(n),
-          Option(v).map{ date =>
+          Option(v).map { date =>
             val days = date.asInstanceOf[java.sql.Date].getTime / (24 * 60 * 60 * 1000)
             days.toInt.asInstanceOf[Integer]
           }.orNull)
@@ -169,7 +169,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => {
         FilterApi.gt(
           intColumn(n),
-          Option(v).map{ date =>
+          Option(v).map { date =>
             val days = date.asInstanceOf[java.sql.Date].getTime / (24 * 60 * 60 * 1000)
             days.toInt.asInstanceOf[Integer]
           }.orNull)
@@ -197,7 +197,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => {
         FilterApi.gtEq(
           intColumn(n),
-          Option(v).map{ date =>
+          Option(v).map { date =>
             val days = date.asInstanceOf[java.sql.Date].getTime / (24 * 60 * 60 * 1000)
             days.toInt.asInstanceOf[Integer]
           }.orNull)
