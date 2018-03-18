@@ -2094,7 +2094,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     ("x0a 00 00 00", "UTF-32LE")
   ).zipWithIndex.foreach{case ((d, c), i) => checkReadWrittenJson(c, d, i)}
 
-  def checkReadJson(charset: String, delimiter: String, runId: Int): Unit = {
+  def checkReadJson(
+    charset: String,
+    delimiter: String,
+    inferSchema: Boolean,
+    runId: Int
+  ): Unit = {
     test(s"checks reading json in ${charset} #${runId}") {
       val delimInBytes = {
         if (delimiter.startsWith("x")) {
@@ -2116,9 +2121,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         val os = new FileOutputStream(path)
         os.write(data)
         os.close()
-        val savedDf = spark
-          .read
-          .schema(schema)
+        val reader = if (inferSchema) {
+          spark.read
+        } else {
+          spark.read.schema(schema)
+        }
+        val savedDf = reader
           .option("charset", charset)
           .option("recordDelimiter", delimiter)
           .json(path.getCanonicalPath)
@@ -2128,11 +2136,16 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   List(
-    ("sep", "UTF-8"),
-    ("x00 0a 00 0d", "UTF-16BE"),
-    ("\r\n", "UTF-16LE"),
-    ("\u000d\u000a", "UTF-32BE"),
-    ("===", "UTF-32LE"),
-    ("куку", "CP1251")
-  ).zipWithIndex.foreach{case ((d, c), i) => checkReadJson(c, d, i)}
+    ("sep", "UTF-8", false),
+    ("x00 0a 00 0d", "UTF-16BE", false),
+    ("x00 0a 00 0d", "UTF-16BE", true),
+    ("\r\n", "UTF-16LE", false),
+    ("\r\n", "UTF-16LE", true),
+    ("\u000d\u000a", "UTF-32BE", false),
+    ("\u000a\u000d", "UTF-32BE", true),
+    ("===", "UTF-32LE", false),
+    ("$^+", "UTF-32LE", true),
+    ("куку", "CP1251", false),
+    ("куку", "CP1251", true)
+  ).zipWithIndex.foreach{case ((d, c, s), i) => checkReadJson(c, d, s, i)}
 }

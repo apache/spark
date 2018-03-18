@@ -113,18 +113,24 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    readToUnsafeMem(broadcastedHadoopConf, requiredSchema, textOptions.wholeText)
+    readToUnsafeMem(
+      broadcastedHadoopConf,
+      requiredSchema,
+      textOptions.wholeText,
+      textOptions.recordDelimiter
+    )
   }
 
   private def readToUnsafeMem(
       conf: Broadcast[SerializableConfiguration],
       requiredSchema: StructType,
-      wholeTextMode: Boolean): (PartitionedFile) => Iterator[UnsafeRow] = {
+      wholeTextMode: Boolean,
+      recordDelimiter: Option[Array[Byte]]): (PartitionedFile) => Iterator[UnsafeRow] = {
 
     (file: PartitionedFile) => {
       val confValue = conf.value.value
       val reader = if (!wholeTextMode) {
-        new HadoopFileLinesReader(file, confValue)
+        new HadoopFileLinesReader(file, confValue, recordDelimiter)
       } else {
         new HadoopFileWholeTextReader(file, confValue)
       }

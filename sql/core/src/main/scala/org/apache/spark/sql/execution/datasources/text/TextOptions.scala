@@ -39,9 +39,13 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
    */
   val wholeText = parameters.getOrElse(WHOLETEXT, "false").toBoolean
 
+  val recordDelimiter: Option[Array[Byte]] = parameters.get(RECORDDELIMITER).map { hex =>
+    hex.sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toByte)
+  }
 }
 
 private[text] object TextOptions {
   val COMPRESSION = "compression"
   val WHOLETEXT = "wholetext"
+  val RECORDDELIMITER = "recordDelimiter"
 }

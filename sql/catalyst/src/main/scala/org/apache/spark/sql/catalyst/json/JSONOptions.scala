@@ -99,6 +99,10 @@ private[sql] class JSONOptions(
    *   Hex pairs can be separated by any chars different from 0-9,A-F,a-f
    * - '\' - reserved for a sequence of control chars like "\r\n"
    *         and unicode escape like "\u000D\u000A"
+   *
+   * Note: the option defines a delimiter for the json reader only, the json writer
+   * uses '\n' as the delimiter of output records (it is converted to sequence of
+   * bytes according to charset)
    */
   val recordDelimiter: Option[Array[Byte]] = parameters.get("recordDelimiter").collect {
     case hexs if hexs.startsWith("x") =>
@@ -118,5 +122,11 @@ private[sql] class JSONOptions(
     factory.configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
       allowBackslashEscapingAnyCharacter)
     factory.configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, allowUnquotedControlChars)
+  }
+
+  def getTextOptions: Map[String, String] = {
+    recordDelimiter.map{ bytes =>
+      "recordDelimiter" -> bytes.map("%02x".format(_)).mkString
+    }.toMap
   }
 }
