@@ -21,6 +21,7 @@ import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.io.api.Binary
 
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
 
@@ -50,7 +51,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => FilterApi.eq(
         binaryColumn(n),
         Option(v).map(b => Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]])).orNull)
-    case DateType =>
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => {
         FilterApi.eq(
           intColumn(n),
@@ -81,7 +82,7 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => FilterApi.notEq(
         binaryColumn(n),
         Option(v).map(b => Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]])).orNull)
-    case DateType =>
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => {
         FilterApi.notEq(
           intColumn(n),
@@ -109,7 +110,7 @@ private[parquet] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.lt(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
-    case DateType =>
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => {
         FilterApi.lt(
           intColumn(n),
@@ -137,7 +138,7 @@ private[parquet] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.ltEq(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
-    case DateType =>
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => {
         FilterApi.ltEq(
           intColumn(n),
@@ -165,7 +166,7 @@ private[parquet] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gt(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
-    case DateType =>
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => {
         FilterApi.gt(
           intColumn(n),
@@ -193,7 +194,7 @@ private[parquet] object ParquetFilters {
     case BinaryType =>
       (n: String, v: Any) =>
         FilterApi.gtEq(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
-    case DateType =>
+    case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => {
         FilterApi.gtEq(
           intColumn(n),
