@@ -33,6 +33,7 @@ import com.typesafe.sbt.pom.{MavenHelper, PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
 import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
+import sbt.internals.DslEntry
 import sbt.plugins.JUnitXmlReportPlugin
 import sbt.plugins.JvmPlugin
 import spray.revolver.RevolverPlugin._
@@ -105,7 +106,7 @@ object SparkBuild extends PomBuild {
   import BuildCommons._
   import scala.collection.mutable.Map
 
-  val projectsMap: mutable.Map[String, Seq[Setting[_]]] = mutable.Map.empty
+  val projectsMap: mutable.Map[String, Seq[DslEntry]] = mutable.Map.empty
 
   override val profiles = {
     val profiles = Properties.propOrNone("sbt.maven.profiles") orElse Properties.envOrNone("SBT_MAVEN_PROFILES") match {
@@ -334,9 +335,9 @@ object SparkBuild extends PomBuild {
     }.value.toSet
   )
 
-  def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef): Unit = {
-    val existingSettings = projectsMap.getOrElse(projectRef.project, Seq())
-    projectsMap += (projectRef.project -> (existingSettings ++ settings))
+  def enable(dslEntries: DslEntry*)(projectRef: ProjectRef): Unit = {
+    val existingSettings = projectsMap.getOrElse(projectRef.project, Vector())
+    projectsMap += (projectRef.project -> (existingSettings ++ dslEntries))
   }
 
   /* Enable tests settings for all projects except examples, assembly and tools */
@@ -438,9 +439,14 @@ object SparkBuild extends PomBuild {
 
   // TODO: move this to its upstream project.
   override def projectDefinitions(baseDirectory: File): Seq[Project] = {
+    import sbt.internals._
+    def applyDsl(project: Project, entry: DslEntry): Project = entry match {
+      case ProjectManipulation(func) => func(project)
+      case ProjectSettings(ss) => project.settings(ss)
+    }
     super.projectDefinitions(baseDirectory).map { x =>
-      (if (projectsMap.exists(_._1 == x.id)) x.settings(projectsMap(x.id): _*)
-      else x).enablePlugins(DefaultSparkPlugin)
+      val proj = x.enablePlugins(DefaultSparkPlugin)
+      projectsMap.getOrElse(x.id, Nil).foldLeft(proj)(applyDsl)
     } ++ Seq[Project](OldDeps.project)
   }
 }
