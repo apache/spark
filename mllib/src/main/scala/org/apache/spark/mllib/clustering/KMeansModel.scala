@@ -36,7 +36,7 @@ import org.apache.spark.sql.{Row, SparkSession}
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
  */
 @Since("0.8.0")
-class KMeansModel private[spark] (@Since("1.0.0") val clusterCenters: Array[Vector],
+class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
   @Since("2.4.0") val distanceMeasure: String,
   private[spark] val numIter: Int)
   extends Saveable with Serializable with PMMLExportable {

@@ -305,6 +305,7 @@ object BisectingKMeans extends DefaultParamsReadable[BisectingKMeans] {
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param numIter  Number of iterations.
  */
 @Since("2.1.0")
 @Experimental

@@ -28,6 +28,7 @@ import org.apache.spark.sql.{DataFrame, Row}
  * @param predictionCol  Name for column of predicted clusters in `predictions`.
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
+ * @param numIter  Number of iterations.
  */
 @Experimental
 class ClusteringSummary private[clustering] (

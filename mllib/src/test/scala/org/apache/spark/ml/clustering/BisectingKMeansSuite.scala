@@ -99,7 +99,6 @@ class BisectingKMeansSuite
   test("fit, transform and summary") {
     val predictionColName = "bisecting_kmeans_prediction"
     val bkm = new BisectingKMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
-
     val model = bkm.fit(dataset)
     assert(model.clusterCenters.length === k)
 

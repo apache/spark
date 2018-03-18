@@ -683,6 +683,7 @@ private class ExpectationAggregator(
  * @param featuresCol  Name for column of features in `predictions`.
  * @param k  Number of clusters.
  * @param logLikelihood  Total log-likelihood for this model on the given data.
+ * @param numIter  Number of iterations.
  */
 @Since("2.0.0")
 @Experimental
