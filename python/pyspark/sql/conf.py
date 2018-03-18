@@ -15,7 +15,9 @@
 # limitations under the License.
 #
 
-from pyspark import since
+import sys
+
+from pyspark import since, _NoValue
 from pyspark.rdd import ignore_unicode_prefix
 
 
@@ -37,15 +39,16 @@ class RuntimeConfig(object):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def get(self, key, default=None):
+    def get(self, key, default=_NoValue):
         """Returns the value of Spark runtime configuration property for the given key,
         assuming it is set.
         """
         self._checkType(key, "key")
-        if default is None:
+        if default is _NoValue:
             return self._jconf.get(key)
         else:
-            self._checkType(default, "default")
+            if default is not None:
+                self._checkType(default, "default")
             return self._jconf.get(key, default)
 
     @ignore_unicode_prefix
