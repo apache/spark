@@ -2064,10 +2064,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  def readWrittenJson(delimiter: (String, Int)): Unit = {
-    val (recordDelimiter, index) = delimiter
-    test(s"read written json in UTF-16BE with delimiter $index") {
-      val charset = "UTF-16BE"
+  def readSparkJson(charset: String, delimiter: String, runId: Int): Unit = {
+    test(s"checks Spark is able to read json written by Spark itself #{$runId}") {
       case class Rec(f1: String, f2: Int)
       withTempPath { path =>
         val ds = spark.createDataset(Seq(
@@ -2081,7 +2079,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           .read
           .schema(ds.schema)
           .option("charset", charset)
-          .option("recordDelimiter", recordDelimiter)
+          .option("recordDelimiter", delimiter)
           .json(path.getCanonicalPath)
 
         checkAnswer(savedDf.toDF(), ds.toDF())
@@ -2089,5 +2087,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  List("x00 0a", "\n", "\u000a").zipWithIndex.foreach(readWrittenJson(_))
+  List(
+    ("\n", "UTF-8"),
+    ("x00 0a", "UTF-16BE"),
+    ("\n", "UTF-16LE"),
+    ("\u000a", "UTF-32BE"),
+    ("x0a 00 00 00", "UTF-32LE")
+  ).zipWithIndex.foreach{case ((d, c), i) => readSparkJson(c, d, i)}
 }
