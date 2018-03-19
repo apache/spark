@@ -139,7 +139,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
         reader.map { line =>
           // Writes to an UnsafeRow directly
           unsafeRowWriter.reset()
-          unsafeRowWriter.write(0, line.getBytes)
+          unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
           unsafeRowWriter.setTotalSize()
           unsafeRow
         }
