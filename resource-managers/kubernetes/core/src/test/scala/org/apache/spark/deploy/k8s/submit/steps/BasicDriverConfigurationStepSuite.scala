@@ -73,16 +73,13 @@ class BasicDriverConfigurationStepSuite extends SparkFunSuite {
     assert(preparedDriverSpec.driverContainer.getImage === "spark-driver:latest")
     assert(preparedDriverSpec.driverContainer.getImagePullPolicy === CONTAINER_IMAGE_PULL_POLICY)
 
-    assert(preparedDriverSpec.driverContainer.getEnv.size === 7)
+    assert(preparedDriverSpec.driverContainer.getEnv.size === 4)
     val envs = preparedDriverSpec.driverContainer
       .getEnv
       .asScala
       .map(env => (env.getName, env.getValue))
       .toMap
     assert(envs(ENV_CLASSPATH) === "/opt/spark/spark-examples.jar")
-    assert(envs(ENV_DRIVER_MEMORY) === "256M")
-    assert(envs(ENV_DRIVER_MAIN_CLASS) === MAIN_CLASS)
-    assert(envs(ENV_DRIVER_ARGS) === "arg1 arg2 \"arg 3\"")
     assert(envs(DRIVER_CUSTOM_ENV_KEY1) === "customDriverEnv1")
     assert(envs(DRIVER_CUSTOM_ENV_KEY2) === "customDriverEnv2")
 
@@ -112,7 +109,8 @@ class BasicDriverConfigurationStepSuite extends SparkFunSuite {
     val expectedSparkConf = Map(
       KUBERNETES_DRIVER_POD_NAME.key -> "spark-driver-pod",
       "spark.app.id" -> APP_ID,
-      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> RESOURCE_NAME_PREFIX)
+      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> RESOURCE_NAME_PREFIX,
+      "spark.kubernetes.submitInDriver" -> "true")
     assert(resolvedSparkConf === expectedSparkConf)
   }
 }
