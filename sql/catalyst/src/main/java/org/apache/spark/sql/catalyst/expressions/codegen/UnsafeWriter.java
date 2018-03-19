@@ -43,18 +43,29 @@ public abstract class UnsafeWriter {
     return holder;
   }
 
-  public final byte[] buffer() { return holder.buffer(); }
+  public final byte[] buffer() {
+    return holder.buffer();
+  }
 
-  public final void reset() { holder.reset(); }
+  public final void reset() {
+    holder.reset();
+  }
 
-  public final int totalSize() { return holder.totalSize(); }
+  public final int totalSize() {
+    return holder.totalSize();
+  }
 
-  public final void grow(int neededSize) { holder.grow(neededSize); }
+  public final void grow(int neededSize) {
+    holder.grow(neededSize);
+  }
 
-  public final int cursor() { return holder.getCursor(); }
+  public final int cursor() {
+    return holder.getCursor();
+  }
 
-  public final void addCursor(int val) { holder.addCursor(val); }
-
+  public final void incrementCursor(int val) {
+    holder.incrementCursor(val);
+  }
 
   public abstract void setOffsetAndSize(int ordinal, int currentCursor, int size);
 
@@ -106,7 +117,7 @@ public abstract class UnsafeWriter {
     setOffsetAndSize(ordinal, numBytes);
 
     // move the cursor forward.
-    addCursor(roundedSize);
+    incrementCursor(roundedSize);
   }
 
   public final void write(int ordinal, byte[] input) {
@@ -128,7 +139,7 @@ public abstract class UnsafeWriter {
     setOffsetAndSize(ordinal, numBytes);
 
     // move the cursor forward.
-    addCursor(roundedSize);
+    incrementCursor(roundedSize);
   }
 
   public final void write(int ordinal, CalendarInterval input) {
@@ -142,37 +153,37 @@ public abstract class UnsafeWriter {
     setOffsetAndSize(ordinal, 16);
 
     // move the cursor forward.
-    addCursor(16);
+    incrementCursor(16);
   }
 
-  protected final void _write(long offset, boolean value) {
+  protected final void writeBoolean(long offset, boolean value) {
     Platform.putBoolean(buffer(), offset, value);
   }
 
-  protected final void _write(long offset, byte value) {
+  protected final void writeByte(long offset, byte value) {
     Platform.putByte(buffer(), offset, value);
   }
 
-  protected final void _write(long offset, short value) {
+  protected final void writeShort(long offset, short value) {
     Platform.putShort(buffer(), offset, value);
   }
 
-  protected final void _write(long offset, int value) {
+  protected final void writeInt(long offset, int value) {
     Platform.putInt(buffer(), offset, value);
   }
 
-  protected final void _write(long offset, long value) {
+  protected final void writeLong(long offset, long value) {
     Platform.putLong(buffer(), offset, value);
   }
 
-  protected final void _write(long offset, float value) {
+  protected final void writeFloat(long offset, float value) {
     if (Float.isNaN(value)) {
       value = Float.NaN;
     }
     Platform.putFloat(buffer(), offset, value);
   }
 
-  protected final void _write(long offset, double value) {
+  protected final void writeDouble(long offset, double value) {
     if (Double.isNaN(value)) {
       value = Double.NaN;
     }

@@ -165,8 +165,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
         private ByteOrder nativeOrder = null;
         private byte[][] buffers = null;
-        private UnsafeRow unsafeRow = new UnsafeRow($numFields);
-        private UnsafeRowWriter rowWriter = new UnsafeRowWriter(unsafeRow);
+        private UnsafeRowWriter rowWriter = new UnsafeRowWriter($numFields);
         private MutableUnsafeRow mutableRow = null;
 
         private int currentRow = 0;
@@ -215,7 +214,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           rowWriter.zeroOutNullBytes();
           ${extractorCalls}
           rowWriter.setTotalSize();
-          return unsafeRow;
+          return rowWriter.getRow();
         }
 
         ${ctx.declareAddedFunctions()}

@@ -42,11 +42,8 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
   /** The row representing the expression results. */
   private[this] val intermediate = new GenericInternalRow(values)
 
-  /** The row returned by the projection. */
-  private[this] val result = new UnsafeRow(numFields)
-
   /* The row writer for UnsafeRow result */
-  private[this] val rowWriter = new UnsafeRowWriter(result, numFields * 32)
+  private[this] val rowWriter = new UnsafeRowWriter(numFields, numFields * 32)
 
   /** The writer that writes the intermediate result to the result row. */
   private[this] val writer: InternalRow => Unit = {
@@ -84,7 +81,7 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
     rowWriter.reset()
     writer(intermediate)
     rowWriter.setTotalSize()
-    result
+    rowWriter.getRow()
   }
 }
 
@@ -195,27 +192,24 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
         }
 
       case ArrayType(elementType, containsNull) =>
-        val arrayWriter = new UnsafeArrayWriter(writer)
-        val elementSize = getElementSize(elementType)
+        val arrayWriter = new UnsafeArrayWriter(writer, getElementSize(elementType))
         val elementWriter = generateFieldWriter(
           arrayWriter,
           elementType,
           containsNull)
         (v, i) => {
           val tmpCursor = arrayWriter.cursor
-          writeArray(arrayWriter, elementWriter, v.getArray(i), elementSize)
+          writeArray(arrayWriter, elementWriter, v.getArray(i))
           writer.setOffsetAndSize(i, tmpCursor, arrayWriter.cursor - tmpCursor)
         }
 
       case MapType(keyType, valueType, valueContainsNull) =>
-        val keyArrayWriter = new UnsafeArrayWriter(writer)
-        val keySize = getElementSize(keyType)
+        val keyArrayWriter = new UnsafeArrayWriter(writer, getElementSize(keyType))
         val keyWriter = generateFieldWriter(
           keyArrayWriter,
           keyType,
           nullable = false)
-        val valueArrayWriter = new UnsafeArrayWriter(writer)
-        val valueSize = getElementSize(valueType)
+        val valueArrayWriter = new UnsafeArrayWriter(writer, getElementSize(valueType))
         val valueWriter = generateFieldWriter(
           valueArrayWriter,
           valueType,
@@ -232,15 +226,15 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
             case map =>
               // preserve 8 bytes to write the key array numBytes later.
               valueArrayWriter.grow(8)
-              valueArrayWriter.addCursor(8)
+              valueArrayWriter.incrementCursor(8)
 
               // Write the keys and write the numBytes of key array into the first 8 bytes.
-              writeArray(keyArrayWriter, keyWriter, map.keyArray(), keySize)
+              writeArray(keyArrayWriter, keyWriter, map.keyArray())
               Platform.putLong(
                 valueArrayWriter.buffer, tmpCursor, valueArrayWriter.cursor - tmpCursor - 8)
 
               // Write the values.
-              writeArray(valueArrayWriter, valueWriter, map.valueArray(), valueSize)
+              writeArray(valueArrayWriter, valueWriter, map.valueArray())
           }
           writer.setOffsetAndSize(i, tmpCursor, valueArrayWriter.cursor - tmpCursor)
         }
@@ -320,8 +314,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
   private def writeArray(
       arrayWriter: UnsafeArrayWriter,
       elementWriter: (SpecializedGetters, Int) => Unit,
-      array: ArrayData,
-      elementSize: Int): Unit = array match {
+      array: ArrayData): Unit = array match {
     case unsafe: UnsafeArrayData =>
       writeUnsafeData(
         arrayWriter,
@@ -330,7 +323,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
         unsafe.getSizeInBytes)
     case _ =>
       val numElements = array.numElements()
-      arrayWriter.initialize(numElements, elementSize)
+      arrayWriter.initialize(numElements)
       var i = 0
       while (i < numElements) {
         elementWriter.apply(array, i)
@@ -354,6 +347,6 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
       writer.buffer,
       writer.cursor,
       sizeInBytes)
-    writer.addCursor(sizeInBytes)
+    writer.incrementCursor(sizeInBytes)
   }
 }

@@ -35,7 +35,7 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
  * the size of the result row, after writing a record to the buffer. However, we can skip this step
  * if the fields of row are all fixed-length, as the size of result row is also fixed.
  */
-public final class BufferHolder {
+final class BufferHolder {
 
   private static final int ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
 
@@ -86,11 +86,17 @@ public final class BufferHolder {
     }
   }
 
-  byte[] buffer() { return buffer; }
+  byte[] buffer() {
+    return buffer;
+  }
 
-  int getCursor() { return cursor; }
+  int getCursor() {
+    return cursor;
+  }
 
-  void addCursor(int val) { cursor += val; }
+  void incrementCursor(int val) {
+    cursor += val;
+  }
 
   void reset() {
     cursor = Platform.BYTE_ARRAY_OFFSET + fixedSize;

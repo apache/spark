@@ -26,8 +26,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /** A simple class for converting Kafka ConsumerRecord to UnsafeRow */
 private[kafka010] class KafkaRecordToUnsafeRowConverter {
-  private val sharedRow = new UnsafeRow(7)
-  private val rowWriter = new UnsafeRowWriter(sharedRow)
+  private val rowWriter = new UnsafeRowWriter(7)
 
   def toUnsafeRow(record: ConsumerRecord[Array[Byte], Array[Byte]]): UnsafeRow = {
     rowWriter.reset()
@@ -46,6 +45,6 @@ private[kafka010] class KafkaRecordToUnsafeRowConverter {
       DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(record.timestamp)))
     rowWriter.write(6, record.timestampType.id)
     rowWriter.setTotalSize()
-    sharedRow
+    rowWriter.getRow()
   }
 }

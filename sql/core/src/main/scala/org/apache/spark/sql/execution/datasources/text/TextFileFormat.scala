@@ -133,15 +133,14 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
         val emptyUnsafeRow = new UnsafeRow(0)
         reader.map(_ => emptyUnsafeRow)
       } else {
-        val unsafeRow = new UnsafeRow(1)
-        val unsafeRowWriter = new UnsafeRowWriter(unsafeRow)
+        val unsafeRowWriter = new UnsafeRowWriter(1)
 
         reader.map { line =>
           // Writes to an UnsafeRow directly
           unsafeRowWriter.reset()
           unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
           unsafeRowWriter.setTotalSize()
-          unsafeRow
+          unsafeRowWriter.getRow()
         }
       }
     }

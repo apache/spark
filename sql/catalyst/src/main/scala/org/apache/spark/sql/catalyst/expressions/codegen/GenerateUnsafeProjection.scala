@@ -184,9 +184,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       rowWriter: String): String = {
     // Puts `input` in a local variable to avoid to re-evaluate it if it's a statement.
     val tmpInput = ctx.freshName("tmpInput")
-    val arrayWriterClass = classOf[UnsafeArrayWriter].getName
-    val arrayWriter = ctx.addMutableState(arrayWriterClass, "arrayWriter",
-      v => s"$v = new $arrayWriterClass($rowWriter);")
     val numElements = ctx.freshName("numElements")
     val index = ctx.freshName("index")
 
@@ -202,6 +199,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ if CodeGenerator.isPrimitiveType(jt) => et.defaultSize
       case _ => 8  // we need 8 bytes to store offset and length
     }
+
+    val arrayWriterClass = classOf[UnsafeArrayWriter].getName
+    val arrayWriter = ctx.addMutableState(arrayWriterClass, "arrayWriter",
+      v => s"$v = new $arrayWriterClass($rowWriter, $elementOrOffsetSize);")
 
     val tmpCursor = ctx.freshName("tmpCursor")
     val element = CodeGenerator.getValue(tmpInput, et, index)
@@ -243,7 +244,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         ${writeUnsafeData(ctx, s"((UnsafeArrayData) $tmpInput)", arrayWriter)}
       } else {
         final int $numElements = $tmpInput.numElements();
-        $arrayWriter.initialize($numElements, $elementOrOffsetSize);
+        $arrayWriter.initialize($numElements);
 
         for (int $index = 0; $index < $numElements; $index++) {
           if ($tmpInput.isNullAt($index)) {
@@ -275,7 +276,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       } else {
         // preserve 8 bytes to write the key array numBytes later.
         $rowWriter.grow(8);
-        $rowWriter.addCursor(8);
+        $rowWriter.incrementCursor(8);
 
         // Remember the current cursor so that we can write numBytes of key array later.
         final int $tmpCursor = $rowWriter.cursor();
@@ -300,7 +301,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       // grow the global buffer before writing data.
       $rowWriter.grow($sizeInBytes);
       $input.writeToMemory($rowWriter.buffer(), $rowWriter.cursor());
-      $rowWriter.addCursor($sizeInBytes);
+      $rowWriter.incrementCursor($sizeInBytes);
     """
   }
 
@@ -317,12 +318,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ => true
     }
 
-    val result = ctx.addMutableState("UnsafeRow", "result",
-      v => s"$v = new UnsafeRow(${expressions.length});")
-
     val rowWriterClass = classOf[UnsafeRowWriter].getName
     val rowWriter = ctx.addMutableState(rowWriterClass, "rowWriter",
-      v => s"$v = new $rowWriterClass($result, ${numVarLenFields * 32});")
+      v => s"$v = new $rowWriterClass(${expressions.length}, ${numVarLenFields * 32});")
 
     val resetBufferHolder = if (numVarLenFields == 0) {
       ""
@@ -348,7 +346,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         $writeExpressions
         $updateRowSize
       """
-    ExprCode(code, "false", result)
+    ExprCode(code, "false", s"$rowWriter.getRow()")
   }
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =

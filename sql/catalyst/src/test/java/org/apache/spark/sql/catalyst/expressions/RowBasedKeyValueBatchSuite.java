@@ -54,33 +54,30 @@ public class RowBasedKeyValueBatchSuite {
   }
 
   private UnsafeRow makeKeyRow(long k1, String k2) {
-    UnsafeRow row = new UnsafeRow(2);
-    UnsafeRowWriter writer = new UnsafeRowWriter(row);
+    UnsafeRowWriter writer = new UnsafeRowWriter(2);
     writer.reset();
     writer.write(0, k1);
     writer.write(1, UTF8String.fromString(k2));
     writer.setTotalSize();
-    return row;
+    return writer.getRow();
   }
 
   private UnsafeRow makeKeyRow(long k1, long k2) {
-    UnsafeRow row = new UnsafeRow(2);
-    UnsafeRowWriter writer = new UnsafeRowWriter(row);
+    UnsafeRowWriter writer = new UnsafeRowWriter(2);
     writer.reset();
     writer.write(0, k1);
     writer.write(1, k2);
     writer.setTotalSize();
-    return row;
+    return writer.getRow();
   }
 
   private UnsafeRow makeValueRow(long v1, long v2) {
-    UnsafeRow row = new UnsafeRow(2);
-    UnsafeRowWriter writer = new UnsafeRowWriter(row);
+    UnsafeRowWriter writer = new UnsafeRowWriter(2);
     writer.reset();
     writer.write(0, v1);
     writer.write(1, v2);
     writer.setTotalSize();
-    return row;
+    return writer.getRow();
   }
 
   private UnsafeRow appendRow(RowBasedKeyValueBatch batch, UnsafeRow key, UnsafeRow value) {

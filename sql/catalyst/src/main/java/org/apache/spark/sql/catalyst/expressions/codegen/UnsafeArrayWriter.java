@@ -33,6 +33,9 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
   // The number of elements in this array
   private int numElements;
 
+  // The element size in this array
+  private int elementSize;
+
   private int headerInBytes;
 
   private void assertIndexIsValid(int index) {
@@ -40,11 +43,12 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     assert index < numElements : "index (" + index + ") should < " + numElements;
   }
 
-  public UnsafeArrayWriter(UnsafeWriter writer) {
+  public UnsafeArrayWriter(UnsafeWriter writer, int elementSize) {
     super(writer.getBufferHolder());
+    this.elementSize = elementSize;
   }
 
-  public void initialize(int numElements, int elementSize) {
+  public void initialize(int numElements) {
     // We need 8 bytes to store numElements in header
     this.numElements = numElements;
     this.headerInBytes = calculateHeaderPortionInBytes(numElements);
@@ -66,7 +70,7 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     for (int i = elementSize * numElements; i < fixedPartInBytes; i++) {
       Platform.putByte(buffer(), startingOffset + headerInBytes + i, (byte) 0);
     }
-    addCursor(headerInBytes + fixedPartInBytes);
+    incrementCursor(headerInBytes + fixedPartInBytes);
   }
 
   protected long getOffset(int ordinal, int elementSize) {
@@ -116,37 +120,37 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
 
   public void write(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);
-    _write(getElementOffset(ordinal, 1), value);
+    writeBoolean(getElementOffset(ordinal, 1), value);
   }
 
   public void write(int ordinal, byte value) {
     assertIndexIsValid(ordinal);
-    _write(getElementOffset(ordinal, 1), value);
+    writeByte(getElementOffset(ordinal, 1), value);
   }
 
   public void write(int ordinal, short value) {
     assertIndexIsValid(ordinal);
-    _write(getElementOffset(ordinal, 2), value);
+    writeShort(getElementOffset(ordinal, 2), value);
   }
 
   public void write(int ordinal, int value) {
     assertIndexIsValid(ordinal);
-    _write(getElementOffset(ordinal, 4), value);
+    writeInt(getElementOffset(ordinal, 4), value);
   }
 
   public void write(int ordinal, long value) {
     assertIndexIsValid(ordinal);
-    _write(getElementOffset(ordinal, 8), value);
+    writeLong(getElementOffset(ordinal, 8), value);
   }
 
   public void write(int ordinal, float value) {
     assertIndexIsValid(ordinal);
-    _write(getElementOffset(ordinal, 4), value);
+    writeFloat(getElementOffset(ordinal, 4), value);
   }
 
   public void write(int ordinal, double value) {
     assertIndexIsValid(ordinal);
-    _write(getElementOffset(ordinal, 8), value);
+    writeDouble(getElementOffset(ordinal, 8), value);
   }
 
   public void write(int ordinal, Decimal input, int precision, int scale) {
@@ -170,7 +174,7 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
         setOffsetAndSize(ordinal, numBytes);
 
         // move the cursor forward with 8-bytes boundary
-        addCursor(roundedSize);
+        incrementCursor(roundedSize);
       }
     } else {
       setNull(ordinal);
