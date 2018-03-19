@@ -21,6 +21,7 @@ import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.io.api.Binary
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
@@ -55,9 +56,8 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => {
         FilterApi.eq(
           intColumn(n),
-          Option(v).map { date =>
-            val days = date.asInstanceOf[java.sql.Date].getTime / (24 * 60 * 60 * 1000)
-            days.toInt.asInstanceOf[Integer]
+          Option(v).map { d =>
+            DateTimeUtils.fromJavaDate(d.asInstanceOf[java.sql.Date]).asInstanceOf[Integer]
           }.orNull)
       }
   }
@@ -86,9 +86,8 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => {
         FilterApi.notEq(
           intColumn(n),
-          Option(v).map { date =>
-            val days = date.asInstanceOf[java.sql.Date].getTime / (24 * 60 * 60 * 1000)
-            days.toInt.asInstanceOf[Integer]
+          Option(v).map { d =>
+            DateTimeUtils.fromJavaDate(d.asInstanceOf[java.sql.Date]).asInstanceOf[Integer]
           }.orNull)
       }
   }
@@ -114,9 +113,8 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => {
         FilterApi.lt(
           intColumn(n),
-          Option(v).map { date =>
-            val days = date.asInstanceOf[java.sql.Date].getTime / (24 * 60 * 60 * 1000)
-            days.toInt.asInstanceOf[Integer]
+          Option(v).map { d =>
+            DateTimeUtils.fromJavaDate(d.asInstanceOf[java.sql.Date]).asInstanceOf[Integer]
           }.orNull)
       }
   }
@@ -142,9 +140,8 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => {
         FilterApi.ltEq(
           intColumn(n),
-          Option(v).map { date =>
-            val days = date.asInstanceOf[java.sql.Date].getTime / (24 * 60 * 60 * 1000)
-            days.toInt.asInstanceOf[Integer]
+          Option(v).map { d =>
+            DateTimeUtils.fromJavaDate(d.asInstanceOf[java.sql.Date]).asInstanceOf[Integer]
           }.orNull)
       }
   }
@@ -170,9 +167,8 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => {
         FilterApi.gt(
           intColumn(n),
-          Option(v).map { date =>
-            val days = date.asInstanceOf[java.sql.Date].getTime / (24 * 60 * 60 * 1000)
-            days.toInt.asInstanceOf[Integer]
+          Option(v).map { d =>
+            DateTimeUtils.fromJavaDate(d.asInstanceOf[java.sql.Date]).asInstanceOf[Integer]
           }.orNull)
       }
   }
@@ -198,9 +194,8 @@ private[parquet] object ParquetFilters {
       (n: String, v: Any) => {
         FilterApi.gtEq(
           intColumn(n),
-          Option(v).map { date =>
-            val days = date.asInstanceOf[java.sql.Date].getTime / (24 * 60 * 60 * 1000)
-            days.toInt.asInstanceOf[Integer]
+          Option(v).map { d =>
+            DateTimeUtils.fromJavaDate(d.asInstanceOf[java.sql.Date]).asInstanceOf[Integer]
           }.orNull)
       }
   }
