@@ -1207,29 +1207,32 @@ class Analyzer(
    * only performs simple existence check according to the function identifier to quickly identify
    * undefined functions without triggering relation resolution, which may incur potentially
    * expensive partition/schema discovery process in some cases.
-   *
+   * In order to avoid duplicate external functions lookup, the external function identifier will
+   * store in the local hash set externalFunctionNameSet.
    * @see [[ResolveFunctions]]
    * @see https://issues.apache.org/jira/browse/SPARK-19737
    */
   object LookupFunctions extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = {
-      val catalogFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
+      val externalFunctionNameSet = new mutable.HashSet[FunctionIdentifier]()
       plan.transformAllExpressions {
         case f: UnresolvedFunction
-          if catalogFunctionNameSet.contains(normalizeFuncName(f.name)) => f
-        case f: UnresolvedFunction if catalog.functionExists(f.name) =>
-          catalogFunctionNameSet.add(normalizeFuncName(f.name))
+          if externalFunctionNameSet.contains(normalizeFuncName(f.name)) => f
+        case f: UnresolvedFunction if catalog.buildinFunctionExists(f.name) => f
+        case f: UnresolvedFunction if catalog.externalFunctionExists(f.name) =>
+          externalFunctionNameSet.add(normalizeFuncName(f.name))
           f
         case f: UnresolvedFunction =>
           withPosition(f) {
-            throw new NoSuchFunctionException(f.name.database.getOrElse("default"),
+            throw new NoSuchFunctionException(f.name.database.getOrElse(catalog.getCurrentDatabase),
               f.name.funcName)
           }
       }
     }
 
     private def normalizeFuncName(name: FunctionIdentifier): FunctionIdentifier = {
-      FunctionIdentifier(name.funcName.toLowerCase(Locale.ROOT), name.database)
+      FunctionIdentifier(name.funcName.toLowerCase(Locale.ROOT),
+        name.database.orElse(Some(catalog.getCurrentDatabase)))
     }
   }
 

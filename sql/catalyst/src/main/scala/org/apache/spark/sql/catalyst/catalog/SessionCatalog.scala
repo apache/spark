@@ -1103,6 +1103,16 @@ class SessionCatalog(
       externalCatalog.functionExists(db, name.funcName)
   }
 
+  def buildinFunctionExists(name: FunctionIdentifier): Boolean = {
+    functionRegistry.functionExists(name)
+  }
+
+  def externalFunctionExists(name: FunctionIdentifier): Boolean = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    requireDbExists(db)
+    externalCatalog.functionExists(db, name.funcName)
+  }
+
   // ----------------------------------------------------------------
   // | Methods that interact with temporary and metastore functions |
   // ----------------------------------------------------------------
