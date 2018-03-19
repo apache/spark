@@ -2780,7 +2780,7 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def count(): Long = withAction("count", groupBy().count().queryExecution) { plan =>
+  def count(): Long = withAction("count", groupBy().count().queryExecution, true) { plan =>
     plan.executeCollect().head.getLong(0)
   }
 
@@ -3257,13 +3257,17 @@ class Dataset[T] private[sql](
    * Wrap a Dataset action to track the QueryExecution and time cost, then report to the
    * user-registered callback functions.
    */
-  private def withAction[U](name: String, qe: QueryExecution)(action: SparkPlan => U) = {
+  private def withAction[U](
+    name: String,
+    qe: QueryExecution,
+    hideSqlText: Boolean = false)(action: SparkPlan => U) = {
     try {
       qe.executedPlan.foreach { plan =>
         plan.resetMetrics()
       }
       val start = System.nanoTime()
-      val result = SQLExecution.withNewExecutionId(sparkSession, qe, sqlText) {
+      val result = SQLExecution.withNewExecutionId(sparkSession, qe,
+        if (hideSqlText) "" else sqlText) {
         action(qe.executedPlan)
       }
       val end = System.nanoTime()
