@@ -43,6 +43,8 @@ final class BufferHolder {
   private int cursor = Platform.BYTE_ARRAY_OFFSET;
   private final UnsafeRow row;
   private final int fixedSize;
+  private int[] cursorStack = new int[1];
+  private int cursorStackIndex = 0;
 
   BufferHolder(UnsafeRow row) {
     this(row, 64);
@@ -96,6 +98,22 @@ final class BufferHolder {
 
   void incrementCursor(int val) {
     cursor += val;
+  }
+
+  int pushCursor() {
+    if (cursorStack.length <= cursorStackIndex) {
+      int newSize = (cursorStack.length * 3 + 1) / 2;
+      int[] tmp = new int[newSize];
+      System.arraycopy(cursorStack, 0, tmp, 0, cursorStack.length);
+      cursorStack = tmp;
+    }
+    int cur = getCursor();
+    cursorStack[cursorStackIndex++] = cur;
+    return cursor;
+  }
+
+  int popCursor() {
+    return cursorStack[--cursorStackIndex];
   }
 
   void reset() {

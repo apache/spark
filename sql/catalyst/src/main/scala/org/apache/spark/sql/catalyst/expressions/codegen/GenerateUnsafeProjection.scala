@@ -97,7 +97,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case udt: UserDefinedType[_] => udt.sqlType
           case other => other
         }
-        val tmpCursor = ctx.freshName("tmpCursor")
 
         val setNull = dt match {
           case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
@@ -111,27 +110,27 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             s"""
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
-              final int $tmpCursor = $rowWriter.cursor();
+              $rowWriter.markCursor();
               ${writeStructToBuffer(ctx, input.value, t.map(_.dataType), rowWriter)}
-              $rowWriter.setOffsetAndSize($index, $tmpCursor, $rowWriter.cursor() - $tmpCursor);
+              $rowWriter.setOffsetAndSizeFromMark($index);
             """
 
           case a @ ArrayType(et, _) =>
             s"""
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
-              final int $tmpCursor = $rowWriter.cursor();
+              $rowWriter.markCursor();
               ${writeArrayToBuffer(ctx, input.value, et, rowWriter)}
-              $rowWriter.setOffsetAndSize($index, $tmpCursor, $rowWriter.cursor() - $tmpCursor);
+              $rowWriter.setOffsetAndSizeFromMark($index);
             """
 
           case m @ MapType(kt, vt, _) =>
             s"""
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
-              final int $tmpCursor = $rowWriter.cursor();
+              $rowWriter.markCursor();
               ${writeMapToBuffer(ctx, input.value, kt, vt, rowWriter)}
-              $rowWriter.setOffsetAndSize($index, $tmpCursor, $rowWriter.cursor() - $tmpCursor);
+              $rowWriter.setOffsetAndSizeFromMark($index);
             """
 
           case t: DecimalType =>
@@ -204,28 +203,27 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val arrayWriter = ctx.addMutableState(arrayWriterClass, "arrayWriter",
       v => s"$v = new $arrayWriterClass($rowWriter, $elementOrOffsetSize);")
 
-    val tmpCursor = ctx.freshName("tmpCursor")
     val element = CodeGenerator.getValue(tmpInput, et, index)
     val writeElement = et match {
       case t: StructType =>
         s"""
-          final int $tmpCursor = $rowWriter.cursor();
+          $rowWriter.markCursor();
           ${writeStructToBuffer(ctx, element, t.map(_.dataType), rowWriter)}
-          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $rowWriter.cursor() - $tmpCursor);
+          $arrayWriter.setOffsetAndSizeFromMark($index);
         """
 
       case a @ ArrayType(et, _) =>
         s"""
-          final int $tmpCursor = $rowWriter.cursor();
+          $rowWriter.markCursor();
           ${writeArrayToBuffer(ctx, element, et, rowWriter)}
-          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $rowWriter.cursor() - $tmpCursor);
+          $arrayWriter.setOffsetAndSizeFromMark($index);
         """
 
       case m @ MapType(kt, vt, _) =>
         s"""
-          final int $tmpCursor = $rowWriter.cursor();
+          $rowWriter.markCursor();
           ${writeMapToBuffer(ctx, element, kt, vt, rowWriter)}
-          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $rowWriter.cursor() - $tmpCursor);
+          $arrayWriter.setOffsetAndSizeFromMark($index);
         """
 
       case t: DecimalType =>

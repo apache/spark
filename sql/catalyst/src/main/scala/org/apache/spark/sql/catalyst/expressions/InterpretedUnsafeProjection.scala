@@ -174,7 +174,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
         val rowWriter = new UnsafeRowWriter(writer, numFields)
         val structWriter = generateStructWriter(rowWriter, fields)
         (v, i) => {
-          val tmpCursor = rowWriter.cursor
+          rowWriter.markCursor()
           v.getStruct(i, fields.length) match {
             case row: UnsafeRow =>
               writeUnsafeData(
@@ -188,7 +188,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
               rowWriter.resetRowWriter()
               structWriter.apply(row)
           }
-          writer.setOffsetAndSize(i, tmpCursor, rowWriter.cursor - tmpCursor)
+          writer.setOffsetAndSizeFromMark(i)
         }
 
       case ArrayType(elementType, containsNull) =>
@@ -198,9 +198,9 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
           elementType,
           containsNull)
         (v, i) => {
-          val tmpCursor = arrayWriter.cursor
+          arrayWriter.markCursor()
           writeArray(arrayWriter, elementWriter, v.getArray(i))
-          writer.setOffsetAndSize(i, tmpCursor, arrayWriter.cursor - tmpCursor)
+          writer.setOffsetAndSizeFromMark(i)
         }
 
       case MapType(keyType, valueType, valueContainsNull) =>
@@ -215,7 +215,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
           valueType,
           valueContainsNull)
         (v, i) => {
-          val tmpCursor = valueArrayWriter.cursor
+          val tmpCursor = valueArrayWriter.markCursor()
           v.getMap(i) match {
             case map: UnsafeMapData =>
               writeUnsafeData(
@@ -236,7 +236,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
               // Write the values.
               writeArray(valueArrayWriter, valueWriter, map.valueArray())
           }
-          writer.setOffsetAndSize(i, tmpCursor, valueArrayWriter.cursor - tmpCursor)
+          writer.setOffsetAndSizeFromMark(i)
         }
 
       case udt: UserDefinedType[_] =>

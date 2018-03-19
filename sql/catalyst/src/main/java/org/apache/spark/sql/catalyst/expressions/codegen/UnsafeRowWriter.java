@@ -131,8 +131,8 @@ public final class UnsafeRowWriter extends UnsafeWriter {
   }
 
   @Override
-  protected final long getOffset(int oridinal, int elementSize) {
-    return getFieldOffset(oridinal);
+  protected final long getOffset(int ordinal, int elementSize) {
+    return getFieldOffset(ordinal);
   }
 
   public long getFieldOffset(int ordinal) {
@@ -140,8 +140,8 @@ public final class UnsafeRowWriter extends UnsafeWriter {
   }
 
   @Override
-  public void setOffsetAndSize(int ordinal, int currentCursor, int size) {
-    _setOffsetAndSize(ordinal, currentCursor, size);
+  public void setOffsetAndSizeFromMark(int ordinal) {
+    _setOffsetAndSizeFromMark(ordinal);
   }
 
   public void write(int ordinal, boolean value) {
