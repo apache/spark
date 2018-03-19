@@ -118,10 +118,9 @@ class JavaParams(JavaWrapper, Params):
         """
         Transforms the embedded params to the companion Java object.
         """
-        paramMap = self.extractParamMap()
         for param in self.params:
-            if param in paramMap:
-                pair = self._make_java_param_pair(param, paramMap[param])
+            if param in self._paramMap:
+                pair = self._make_java_param_pair(param, self._paramMap[param])
                 self._java_obj.set(pair)
 
     def _transfer_param_map_to_java(self, pyParamMap):
