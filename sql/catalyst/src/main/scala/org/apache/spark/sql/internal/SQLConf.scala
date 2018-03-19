@@ -356,6 +356,7 @@ object SQLConf {
   val PARQUET_FILTER_PUSHDOWN_DATE_ENABLED = buildConf("spark.sql.parquet.filterPushdown.date")
     .doc("If true, enables Parquet filter push-down optimization for Date. " +
       "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
+    .internal()
     .booleanConf
     .createWithDefault(true)
 
