@@ -124,15 +124,14 @@ object CirclePlugin extends AutoPlugin {
           val displayMax = 10
           testsWithoutTimings.groupBy(_.source)
               .foreach { case (proj, tests) =>
-                if (tests.isEmpty) {
-                  return
+                if (tests.nonEmpty) {
+                  val remaining = tests.size - displayMax
+                  val text = (tests.iterator.map(_.classname)
+                      .take(displayMax)
+                      .mkString(", ")
+                      + { if (remaining > 0) s", ... ($remaining more)" else "" })
+                  log.info(s"Un-timed tests for project $proj: $text")
                 }
-                val remaining = tests.size - displayMax
-                val text = tests.iterator.map(_.classname)
-                    .take(displayMax)
-                    .mkString(", ")
-                    + { if (remaining > 0) s", ... ($remaining more)" else "" }
-                log.info(s"Un-timed tests for project $proj: $text")
               }
         }
 
