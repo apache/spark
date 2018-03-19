@@ -137,7 +137,7 @@ package object util {
   // Replaces attributes, string literals, complex type extractors with their pretty form so that
   // generated column names don't contain back-ticks or double-quotes.
   def usePrettyExpression(e: Expression): Expression = e transform {
-    case a: Attribute => new PrettyNamedExpression(a)
+    case a: Attribute => PrettyNamedExpression(a)
     case Literal(s: UTF8String, StringType) => PrettyNamedExpression(s.toString, StringType)
     case Literal(v, t: NumericType) if v != null => PrettyNamedExpression(v.toString, t)
     case e: GetStructField =>

@@ -329,12 +329,6 @@ case class PrettyNamedExpression(
     dataType: DataType = NullType)
   extends LeafExpression with NamedExpression with Unevaluable {
 
-  def this(e: NamedExpression) = this(e.name, e match {
-    case a: AttributeReference => a.dataType
-    case a: PrettyNamedExpression => a.dataType
-    case _ => NullType
-  })
-
   override def toString: String = name
   override def sql: String = toString
 
@@ -343,6 +337,15 @@ case class PrettyNamedExpression(
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def nullable: Boolean = true
   override def toAttribute: Attribute = throw new UnsupportedOperationException
+}
+
+object PrettyNamedExpression {
+
+  def apply(e: NamedExpression): PrettyNamedExpression = e match {
+    case a: Alias => PrettyNamedExpression(a.sql, a.dataType)
+    case e: NamedExpression if e.resolved => PrettyNamedExpression(e.name, e.dataType)
+    case _ => PrettyNamedExpression(e.name, NullType)
+  }
 }
 
 /**

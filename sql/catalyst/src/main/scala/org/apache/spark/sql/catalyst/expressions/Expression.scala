@@ -287,8 +287,7 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
 trait NonSQLExpression extends Expression {
   final override def sql: String = {
     transform {
-      case a: Attribute => new PrettyNamedExpression(a)
-      case a: Alias => new PrettyNamedExpression(a.sql, a.dataType)
+      case e: NamedExpression => PrettyNamedExpression(e)
     }.toString
   }
 }
