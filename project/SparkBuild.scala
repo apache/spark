@@ -100,6 +100,21 @@ object DefaultSparkPlugin extends AutoPlugin {
   )
 }
 
+object AssemblyExclusionsPlugin extends AutoPlugin {
+
+  override def requires: Plugins = DefaultSparkPlugin
+
+  val exclusions = Seq(
+    SbtExclusionRule("com.sun.jersey"),
+    SbtExclusionRule("com.sun.jersey.jersey-test-framework"),
+    SbtExclusionRule("com.sun.jersey.contribs")
+  )
+
+  override def projectSettings: Seq[Def.Setting[_]] = Seq(
+    excludeDependencies ++= exclusions
+  )
+}
+
 //noinspection ScalaStyle
 object SparkBuild extends PomBuild {
 
@@ -368,6 +383,7 @@ object SparkBuild extends PomBuild {
   if (!"false".equals(System.getProperty("copyDependencies"))) {
     copyJarsProjects.foreach(enable(CopyDependencies.settings))
   }
+  copyJarsProjects.foreach(enable(dsl.enablePlugins(AssemblyExclusionsPlugin)))
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
