@@ -59,7 +59,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   /**
    * A char in UTF-8 encoding can take 1-4 bytes depending on the first byte which
-   * indicates the size of the char. See Unicode standard in page 126:
+   * indicates the size of the char. See Unicode standard in page 126, Table 3-6:
    * http://www.unicode.org/versions/Unicode10.0.0/UnicodeStandard-10.0.pdf
    *
    * Binary    Hex          Comments
@@ -67,7 +67,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * 10xxxxxx  0x80..0xBF   Continuation bytes (1-3 continuation bytes)
    * 110xxxxx  0xC0..0xDF   First byte of a 2-byte character encoding
    * 1110xxxx  0xE0..0xEF   First byte of a 3-byte character encoding
-   * 11110xxx  0xF0..0xF4   First byte of a 4-byte character encoding
+   * 11110xxx  0xF0..0xF7   First byte of a 4-byte character encoding
+   *
+   * As a consequence of the well-formedness conditions specified in
+   * Table 3-7 (page 126), the following byte values are disallowed in UTF-8:
+   *   C0–C1, F5–FF.
    */
   private static byte[] bytesOfCodePointInUTF8 = {
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0x00..0x0F
