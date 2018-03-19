@@ -311,8 +311,6 @@ jobs:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
-      - restore_cache:
-          key: v1-home-sbt-{{ checksum "build/sbt" }}
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
       - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
       - run: echo "realm=Bintray API Realm" >> .credentials
