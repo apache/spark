@@ -546,6 +546,10 @@ case class DataSource(
       case dataSource: CreatableRelationProvider =>
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
+        if (DataSource.isBuiltInFileBasedDataSource(format) && data.schema.size == 0) {
+            throw new AnalysisException("Datasource does not support writing empty schema." +
+              "Please make sure the data schema has at least one or more column(s).")
+        }
         planForWritingFileFormat(format, mode, data)
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
@@ -718,5 +722,17 @@ object DataSource extends Logging {
       throw new AnalysisException(s"Path does not exist: ${globPath.head}")
     }
     globPath
+  }
+
+  def isBuiltInFileBasedDataSource(format: FileFormat): Boolean = {
+    format.getClass.getName match {
+      case "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat" => true
+      case "org.apache.spark.sql.execution.datasources.orc.OrcFileFormat" => true
+      case "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat" => true
+      case "org.apache.spark.sql.execution.datasources.json.JsonFileFormat" => true
+      case "org.apache.spark.sql.execution.datasources.text.TextFileFormat" => true
+      case "org.apache.spark.sql.hive.orc.OrcFileFormat" => true
+      case _ => false
+    }
   }
 }
