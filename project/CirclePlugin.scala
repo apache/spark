@@ -117,9 +117,24 @@ object CirclePlugin extends AutoPlugin {
             .map(key => key -> testTimings.getOrElse(key, AVERAGE_TEST_CLASS_RUN_TIME))
             .toMap
 
-        val testsWithoutTimings = (testsByKey.keySet diff testTimings.keySet).size
-        log.info(s"$testsWithoutTimings / ${testsByKey.size} test classes didn't have timings in "
+        val testsWithoutTimings = testsByKey.keySet diff testTimings.keySet
+        log.info(s"${testsWithoutTimings.size} / ${testsByKey.size} test classes didn't have timings in "
             + "the previous test results file")
+        if (testTimings.nonEmpty) {
+          val displayMax = 10
+          testsWithoutTimings.groupBy(_.source)
+              .foreach { case (proj, tests) =>
+                if (tests.isEmpty) {
+                  return
+                }
+                val remaining = tests.size - displayMax
+                val text = tests.iterator.map(_.classname)
+                    .take(displayMax)
+                    .mkString(", ")
+                    + { if (remaining > 0) s", ... ($remaining more)" else "" }
+                log.info(s"Un-timed tests for project $proj: $text")
+              }
+        }
 
         val totalTestTime = allTestsTimings.valuesIterator.sum
         log.info(s"Estimated total test time to be $totalTestTime")
