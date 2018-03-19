@@ -205,6 +205,7 @@ jobs:
     <<: *defaults
     docker:
       - image: palantirtechnologies/circle-spark-python
+    parallelism: 2
     steps:
       - checkout
       # Python tests need assembly files build by the `build-sbt` job

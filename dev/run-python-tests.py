@@ -18,16 +18,44 @@
 #
 
 from __future__ import print_function
+import logging
 
 from build_environment import get_build_environment, modules_to_test
+from sparktestsupport.shellutils import subprocess_check_output
 from test_functions import *
 
+LOGGER = logging.getLogger()
+
+all_python_executables = ["python2.7", "python3.6"]
 
 if __name__ == '__main__':
     env = get_build_environment()
     mtt = modules_to_test(env)
 
+    circleNodeIndex = os.getenv("CIRCLE_NODE_INDEX")
+    circleNodeTotal = os.getenv("CIRCLE_NODE_TOTAL")
+    if circleNodeTotal is not None:
+        length = len(all_python_executables)
+        fromExec = int(circleNodeIndex) * length / int(circleNodeTotal)
+        toExec = (int(circleNodeIndex) + 1) * length / int(circleNodeTotal)
+        python_executables_for_run = all_python_executables[fromExec:toExec]
+    else:
+        python_executables_for_run = all_python_executables
+
+    LOGGER.info("Testing following python executables in this run: %s", python_executables_for_run)
+
     modules_with_python_tests = [m for m in mtt.test_modules if m.python_test_goals]
     if modules_with_python_tests:
-        run_python_tests(modules_with_python_tests, 1, ["python2.7", "python3.6"])
-        run_python_packaging_tests()
+        run_python_tests(modules_with_python_tests, 1, python_executables_for_run)
+
+        # Packaging tests create a conda environment for each python version
+        # We'd like to use the same version that our executables above use
+        python_exact_versions = [
+            subprocess_check_output(
+                [python_exec, "-c", "import platform; print(platform.python_version())"],
+                universal_newlines=True).strip()
+            for python_exec in python_executables_for_run
+        ]
+        LOGGER.info("Running python packaging tests for following python versions using conda: %s",
+                    python_exact_versions)
+        run_python_packaging_tests(use_conda=True, python_versions=python_exact_versions)

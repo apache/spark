@@ -468,9 +468,14 @@ def run_python_tests(test_modules, parallelism, python_executables=None):
     run_cmd(command)
 
 
-def run_python_packaging_tests():
+def run_python_packaging_tests(use_conda, python_versions=None):
     set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
     command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
+    env = dict(os.environ)
+    if python_versions is not None:
+        env["PYTHON_EXECS_IN"] = python_versions.join(";")
+        if use_conda:
+            env["USE_CONDA"] = "1"
     run_cmd(command)
 
 
