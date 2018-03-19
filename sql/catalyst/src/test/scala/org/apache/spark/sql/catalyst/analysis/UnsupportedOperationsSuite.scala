@@ -140,6 +140,21 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Complete,
     expectedMsgs = Seq("distinct aggregation"))
 
+  assertNotSupportedInStreamingPlan(
+    "aggregate on both sides of stateful op",
+    EventTimeWatermark(
+      attribute,
+      CalendarInterval.fromString("interval 1 second"),
+      Aggregate(
+        attributeWithWatermark :: Nil,
+        aggExprs("a"),
+        EventTimeWatermark(
+          attribute,
+          CalendarInterval.fromString("interval 2 seconds"),
+          streamRelation))),
+    outputMode = Append,
+    expectedMsgs = Seq("both before and after"))
+
   val att = new AttributeReference(name = "a", dataType = LongType)()
   // FlatMapGroupsWithState: Both function modes equivalent and supported in batch.
   for (funcMode <- Seq(Append, Update)) {
