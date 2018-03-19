@@ -138,25 +138,21 @@ private[deploy] object DependencyUtils {
   def resolveGlobPaths(paths: String, hadoopConf: Configuration): String = {
     require(paths != null, "paths cannot be null.")
     Utils.stringToSeq(paths).flatMap { path =>
-      val (base, fragment) = splitOnFragment(Utils.resolveURI(path))
+      val (base, fragment) = splitOnFragment(path)
       (resolveGlobPath(base, hadoopConf), fragment) match {
-        case (resolved: Array[String], Some(_)) if resolved.length > 1 => throw new SparkException(
+        case (resolved, Some(_)) if resolved.length > 1 => throw new SparkException(
             s"${base.toString} resolves ambiguously to multiple files: ${resolved.mkString(",")}")
-        case (resolved: Array[String], Some(namedAs)) => resolved.map( _ + "#" + namedAs)
+        case (resolved, Some(namedAs)) => resolved.map( _ + "#" + namedAs)
         case (resolved, _) => resolved
       }
     }.mkString(",")
   }
 
-  private def splitOnFragment(uri: URI): (URI, Option[String]) = {
-    return (cutFragment(uri), getFragment(uri))
-  }
-  private def getFragment(uri: URI) = {
-    if (uri.getFragment != null) Some(uri.getFragment) else None
-  }
-
-  private def cutFragment(uri: URI) = {
-    new URI(uri.getScheme, uri.getSchemeSpecificPart, null)
+  private def splitOnFragment(path: String): (URI, Option[String]) = {
+    val uri = Utils.resolveURI(path)
+    val withoutFragment = new URI(uri.getScheme, uri.getSchemeSpecificPart, null)
+    val fragment = if (uri.getFragment != null) Some(uri.getFragment) else None
+    (withoutFragment, fragment)
   }
 
   private def resolveGlobPath(uri: URI, hadoopConf: Configuration): Array [String] = {
