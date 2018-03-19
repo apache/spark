@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.File
+import java.net.URI
 
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
@@ -137,28 +138,35 @@ private[deploy] object DependencyUtils {
   def resolveGlobPaths(paths: String, hadoopConf: Configuration): String = {
     require(paths != null, "paths cannot be null.")
     Utils.stringToSeq(paths).flatMap { path =>
-      val spath = path.split('#')
-      val renameAs = if (spath.length > 1) Some(spath(1)) else None
-      val resolved: Array[String] = resoloveGlobPath(spath(0), hadoopConf)
-      resolved match {
-        case array: Array[String] if !renameAs.isEmpty && array.length>1 =>
-          throw new SparkException(
-            s"${spath(1)} resolves ambiguously to multiple files: ${array.mkString(",")}")
-        case array: Array[String] if !renameAs.isEmpty => array.map( _ + "#" + renameAs.get)
-        case array => array
+      val (base, fragment) = splitOnFragment(Utils.resolveURI(path))
+      (resolveGlobPath(base, hadoopConf), fragment) match {
+        case (resolved: Array[String], Some(_)) if resolved.length > 1 => throw new SparkException(
+            s"${base.toString} resolves ambiguously to multiple files: ${resolved.mkString(",")}")
+        case (resolved: Array[String], Some(namedAs)) => resolved.map( _ + "#" + namedAs)
+        case (resolved, _) => resolved
       }
     }.mkString(",")
   }
 
-  private def resoloveGlobPath(path: String, hadoopConf: Configuration): Array [String] = {
-    val uri = Utils.resolveURI(path)
+  private def splitOnFragment(uri: URI): (URI, Option[String]) = {
+    return (cutFragment(uri), getFragment(uri))
+  }
+  private def getFragment(uri: URI) = {
+    if (uri.getFragment != null) Some(uri.getFragment) else None
+  }
+
+  private def cutFragment(uri: URI) = {
+    new URI(uri.getScheme, uri.getSchemeSpecificPart, null)
+  }
+
+  private def resolveGlobPath(uri: URI, hadoopConf: Configuration): Array [String] = {
     uri.getScheme match {
-      case "local" | "http" | "https" | "ftp" => Array(path)
+      case "local" | "http" | "https" | "ftp" => Array(uri.toString)
       case _ =>
         val fs = FileSystem.get(uri, hadoopConf)
         Option(fs.globStatus(new Path(uri))).map { status =>
           status.filter(_.isFile).map(_.getPath.toUri.toString)
-        }.getOrElse(Array(path))
+        }.getOrElse(Array(uri.toString))
     }
   }
 

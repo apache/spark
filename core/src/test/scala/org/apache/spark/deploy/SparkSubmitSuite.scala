@@ -105,17 +105,11 @@ class SparkSubmitSuite
 
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler
-  var dir: File = null
 
   override def beforeEach() {
-    dir = Utils.createTempDir()
     super.beforeEach()
   }
 
-  override def afterEach() {
-    super.afterEach()
-    Utils.deleteRecursively(dir)
-  }
   // scalastyle:off println
   test("prints usage on empty input") {
     testPrematureExit(Array.empty[String], "Usage: spark-submit")
@@ -612,6 +606,7 @@ class SparkSubmitSuite
   }
 
   test("resolves command line argument paths correctly") {
+    val dir = Utils.createTempDir()
     val archive = Paths.get(dir.toPath.toString, "single.zip")
     Files.createFile(archive)
     val jars = "/jar1,/jar2"                 // --jars
@@ -667,9 +662,8 @@ class SparkSubmitSuite
     conf3.get(PYSPARK_PYTHON.key) should be ("python3.5")
   }
 
-  var cleanExit = false
-
-  test("cannot resolve ambiguous archive mapping") {
+  test("ambiguous archive mapping results in error message") {
+    val dir = Utils.createTempDir()
     val archive1 = Paths.get(dir.toPath.toString, "first.zip")
     val archive2 = Paths.get(dir.toPath.toString, "second.zip")
     Files.createFile(archive1)
