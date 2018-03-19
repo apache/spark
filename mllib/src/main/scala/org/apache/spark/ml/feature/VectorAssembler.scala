@@ -54,7 +54,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
-  @Since("1.6.0")
+  @Since("2.4.0")
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
   /**
@@ -126,9 +126,9 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     val lengths = featureAttributesMap.map(a => a.length)
     val metadata = new AttributeGroup($(outputCol), featureAttributes.toArray).toMetadata()
     val (filteredDataset, keepInvalid) = $(handleInvalid) match {
-      case StringIndexer.SKIP_INVALID => (dataset.na.drop($(inputCols)), false)
-      case StringIndexer.KEEP_INVALID => (dataset, true)
-      case StringIndexer.ERROR_INVALID => (dataset, false)
+      case VectorAssembler.SKIP_INVALID => (dataset.na.drop($(inputCols)), false)
+      case VectorAssembler.KEEP_INVALID => (dataset, true)
+      case VectorAssembler.ERROR_INVALID => (dataset, false)
     }
     // Data transformation.
     val assembleFunc = udf { r: Row =>
