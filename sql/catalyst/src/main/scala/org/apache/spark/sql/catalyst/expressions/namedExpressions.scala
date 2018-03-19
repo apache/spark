@@ -324,28 +324,31 @@ case class AttributeReference(
  * A place holder used when printing expressions without debugging information such as the
  * expression id or the unresolved indicator.
  */
-case class PrettyNamedExpression(
+case class PrettyAttribute(
     name: String,
     dataType: DataType = NullType)
-  extends LeafExpression with NamedExpression with Unevaluable {
+  extends Attribute with Unevaluable {
+
+  def this(attribute: Attribute) = this(attribute.name, attribute match {
+    case a: AttributeReference => a.dataType
+    case a: PrettyAttribute => a.dataType
+    case _ => NullType
+  })
 
   override def toString: String = name
   override def sql: String = toString
 
-  override def newInstance(): NamedExpression = throw new UnsupportedOperationException
+  override def withNullability(newNullability: Boolean): Attribute =
+    throw new UnsupportedOperationException
+  override def newInstance(): Attribute = throw new UnsupportedOperationException
+  override def withQualifier(newQualifier: Option[String]): Attribute =
+    throw new UnsupportedOperationException
+  override def withName(newName: String): Attribute = throw new UnsupportedOperationException
+  override def withMetadata(newMetadata: Metadata): Attribute =
+    throw new UnsupportedOperationException
   override def qualifier: Option[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def nullable: Boolean = true
-  override def toAttribute: Attribute = throw new UnsupportedOperationException
-}
-
-object PrettyNamedExpression {
-
-  def apply(e: NamedExpression): PrettyNamedExpression = e match {
-    case a: Alias => PrettyNamedExpression(a.sql, a.dataType)
-    case e: NamedExpression if e.resolved => PrettyNamedExpression(e.name, e.dataType)
-    case _ => PrettyNamedExpression(e.name, NullType)
-  }
 }
 
 /**
