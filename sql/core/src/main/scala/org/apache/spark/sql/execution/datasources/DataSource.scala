@@ -205,8 +205,14 @@ case class DataSource(
         caseInsensitiveOptions,
         tempFileIndex.allFiles())
     }.getOrElse {
+      val files = tempFileIndex.allFiles()
+      val errorMsg = if (files.length == 0) {
+        "There is no input files."
+      } else {
+        s"Failed at ${files.mkString(",")}"
+      }
       throw new AnalysisException(
-        s"Unable to infer schema for $format. It must be specified manually.")
+        s"Unable to infer schema for $format. It must be specified manually. $errorMsg")
     }
 
     // We just print a waring message if the data schema and partition schema have the duplicate
