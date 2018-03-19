@@ -96,7 +96,8 @@ object DefaultSparkPlugin extends AutoPlugin {
   )
 
   override def globalSettings: Seq[Def.Setting[_]] = Seq(
-    updateOptions := updateOptions.value.withCachedResolution(true)
+    // Cached resolution is behaving very weirdly, disable it.
+    updateOptions := updateOptions.value.withCachedResolution(false)
   )
 }
 
