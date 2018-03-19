@@ -129,7 +129,8 @@ jobs:
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
-          key: v1-home-sbt-{{ checksum "build/sbt" }}
+          keys:
+            - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/\$global/update/\$global/streams/update_cache_2.10/inputs" }}
       # Given the build-sbt cache, this is superfluous, but leave it in in case we will want to remove the former
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
@@ -148,7 +149,7 @@ jobs:
           path: /tmp/build-apache-spark.log
           destination: build-apache-spark.log
       - save_cache:
-          key: v1-home-sbt-{{ checksum "build/sbt" }}
+          key: v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/\$global/update/\$global/streams/update_cache_2.10/inputs" }}
           paths: ~/.sbt
       # Also hard link all the things so we can save it as a cache and restore it in future builds
       - run:
@@ -190,7 +191,8 @@ jobs:
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
       - restore_cache:
-          key: v1-home-sbt-{{ checksum "build/sbt" }}
+          keys:
+            - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/\$global/update/\$global/streams/update_cache_2.10/inputs" }}
       - run: |
           dev/run-backcompat-tests.py | tee /tmp/run-backcompat-tests.log
       - store_artifacts:
@@ -215,7 +217,8 @@ jobs:
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
       - restore_cache:
-          key: v1-home-sbt-{{ checksum "build/sbt" }}
+          keys:
+            - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/\$global/update/\$global/streams/update_cache_2.10/inputs" }}
       - run: dev/run-python-tests.py
       - store_test_results:
           path: target/test-reports
@@ -238,7 +241,8 @@ jobs:
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
       - restore_cache:
-          key: v1-home-sbt-{{ checksum "build/sbt" }}
+          keys:
+            - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/\$global/update/\$global/streams/update_cache_2.10/inputs" }}
       - run:
           name: Install SparkR
           command: R/install-dev.sh
@@ -267,7 +271,8 @@ jobs:
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
       - restore_cache:
-          key: v1-home-sbt-{{ checksum "build/sbt" }}
+          keys:
+            - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/\$global/update/\$global/streams/update_cache_2.10/inputs" }}
       - run:
           name: Run all tests
           command: ./dev/run-scala-tests.py \
