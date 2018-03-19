@@ -169,6 +169,26 @@ class VectorAssemblerSuite
       Vectors.dense(Double.NaN, Double.NaN))
   }
 
+  test("get lengths function") {
+    val df = Seq[(Long, Long, java.lang.Double, Vector, String, Vector, Long)](
+      (1, 2, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 7L),
+      (2, 1, 0.0, null, "a", Vectors.sparse(2, Array(1), Array(3.0)), 6L),
+      (3, 3, null, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 8L),
+      (4, 4, null, null, "a", Vectors.sparse(2, Array(1), Array(3.0)), 9L)
+    ).toDF("id1", "id2", "x", "y", "name", "z", "n")
+    assert(VectorAssembler.getLengthsFromFirst(df, Seq("y")).exists(_ == "y" -> 2))
+    intercept[NullPointerException](VectorAssembler.getLengthsFromFirst(df.sort("id2"), Seq("y")))
+    intercept[NoSuchElementException](
+      VectorAssembler.getLengthsFromFirst(df.filter("id1 > 4"), Seq("y")))
+
+    assert(VectorAssembler.getLengths(
+      df.sort("id2"), Seq("y"), VectorAssembler.SKIP_INVALID).exists(_ == "y" -> 2))
+    intercept[NullPointerException](VectorAssembler.getLengths(
+      df.sort("id2"), Seq("y"), VectorAssembler.ERROR_INVALID))
+    intercept[RuntimeException](VectorAssembler.getLengths(
+      df.sort("id2"), Seq("y"), VectorAssembler.KEEP_INVALID))
+  }
+
   test("Handle Invalid should behave properly") {
     val df = Seq[(Long, Long, java.lang.Double, Vector, String, Vector, Long)](
       (1, 2, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 7L),
@@ -181,19 +201,20 @@ class VectorAssemblerSuite
       .setInputCols(Array("x", "y", "z", "n"))
       .setOutputCol("features")
 
+    // behavior when first row has information
     assert(assembler.setHandleInvalid("skip").transform(df).count() == 1)
-    assert(assembler.setHandleInvalid("keep").transform(df).count() == 4)
-    assert(assembler.setHandleInvalid("keep").transform(df.sort("id2")).count() == 4)
+    intercept[RuntimeException](assembler.setHandleInvalid("keep").transform(df).cache())
     intercept[SparkException](assembler.setHandleInvalid("error").transform(df).cache())
 
-    // all numeric columns are null
-    assert(assembler.setHandleInvalid("keep").transform(df.filter("id1==3")).count() == 1)
+    // numeric column is all null
+    intercept[RuntimeException](
+      assembler.setHandleInvalid("keep").transform(df.filter("id1==3")).count() == 1)
 
-    // all vector columns are null
+    // vector column is all null
     val df2 = df.filter("0 == id1 % 2")
-    assert(assembler.setHandleInvalid("skip").transform(df2).count() == 0)
+    intercept[RuntimeException](assembler.setHandleInvalid("skip").transform(df2))
     intercept[RuntimeException](assembler.setHandleInvalid("keep").transform(df2))
-    intercept[SparkException](assembler.setHandleInvalid("error").transform(df2).collect())
+    intercept[NullPointerException](assembler.setHandleInvalid("error").transform(df2).cache())
   }
 
 }

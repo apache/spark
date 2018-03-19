@@ -26,7 +26,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute, UnresolvedAttribute}
-import org.apache.spark.ml.linalg.{Vector, VectorUDT, Vectors}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -72,41 +72,6 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   setDefault(handleInvalid, VectorAssembler.ERROR_INVALID)
 
-  def getLengthsFromFirst(dataset: Dataset[_], columns: Seq[String]): Map[String, Int] = {
-    val first_row = dataset.toDF.select(columns.map(col): _*).first
-    columns.zip(first_row.toSeq).filter(_._2 != null).map {
-      case (c, x) => c -> x.asInstanceOf[Vector].size
-    }.toMap
-  }
-
-  def getLengths(dataset: Dataset[_], columns: Seq[String]): Map[String, Int] = {
-    val group_sizes = columns.map { c =>
-      c -> AttributeGroup.fromStructField(dataset.schema(c)).size
-    }.toMap
-    val missing_columns: Seq[String] = group_sizes.filter(_._2 == -1).keys.toSeq
-
-    val first_sizes: Map[String, Int] = (missing_columns.nonEmpty, $(handleInvalid)) match {
-      case (true, VectorAssembler.ERROR_INVALID) =>
-        getLengthsFromFirst(dataset, missing_columns)
-      case (true, VectorAssembler.SKIP_INVALID) =>
-        getLengthsFromFirst(dataset.na.drop, missing_columns)
-      case (true, VectorAssembler.KEEP_INVALID) =>
-        throw new RuntimeException("Consider using VectorSizeHint for columns: " +
-          + missing_columns.mkString("[", ",", "]"))
-      case (false, _) =>
-        Map.empty
-    }
-    (first_sizes.size < missing_columns.size, $(handleInvalid)) match {
-      case (true, VectorAssembler.ERROR_INVALID) =>
-        throw new NullPointerException("Saw null value on the first row")
-      case (true, VectorAssembler.SKIP_INVALID) =>
-        logWarning("Saw column with all null values, might result in an empty DataFrame with" +
-          "incomplete metadata")
-      case (false, _) =>
-    }
-    group_sizes ++ first_sizes
-  }
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
@@ -119,7 +84,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
         case _ => false
       }
     }
-    val vectorColsLengths: Map[String, Int] = getLengths(dataset, vectorCols)
+    val vectorColsLengths = VectorAssembler.getLengths(dataset, vectorCols, $(handleInvalid))
 
     val featureAttributesMap = $(inputCols).toSeq.map { c =>
       val field = schema(c)
@@ -212,6 +177,41 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
   private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
+
+
+  private[feature] def getLengthsFromFirst(dataset: Dataset[_],
+                                           columns: Seq[String]): Map[String, Int] = {
+    try {
+      val first_row = dataset.toDF.select(columns.map(col): _*).first
+      columns.zip(first_row.toSeq).map {
+        case (c, x) => c -> x.asInstanceOf[Vector].size
+      }.toMap
+    } catch {
+      case e: NullPointerException => throw new NullPointerException(
+        "Saw null value on the first row: " + e.toString)
+      case e: NoSuchElementException => throw new NoSuchElementException(
+        "Cannot infer vector size from all empty DataFrame" + e.toString)
+    }
+  }
+
+  private[feature] def getLengths(dataset: Dataset[_], columns: Seq[String],
+                                  handleInvalid: String) = {
+    val group_sizes = columns.map { c =>
+      c -> AttributeGroup.fromStructField(dataset.schema(c)).size
+    }.toMap
+    val missing_columns: Seq[String] = group_sizes.filter(_._2 == -1).keys.toSeq
+    val first_sizes: Map[String, Int] = (missing_columns.nonEmpty, handleInvalid) match {
+      case (true, VectorAssembler.ERROR_INVALID) =>
+        getLengthsFromFirst(dataset, missing_columns)
+      case (true, VectorAssembler.SKIP_INVALID) =>
+        getLengthsFromFirst(dataset.na.drop, missing_columns)
+      case (true, VectorAssembler.KEEP_INVALID) => throw new RuntimeException(
+        "Consider using VectorSizeHint for columns: " + missing_columns.mkString("[", ",", "]"))
+      case (_, _) => Map.empty
+    }
+    group_sizes ++ first_sizes
+  }
+
 
   @Since("1.6.0")
   override def load(path: String): VectorAssembler = super.load(path)
