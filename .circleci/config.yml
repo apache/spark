@@ -211,14 +211,6 @@ jobs:
       # e.g. external/kafka-0-8-assembly/target/scala-2.11/spark-streaming-kafka-0-8-assembly-2.4.0-SNAPSHOT.jar
       - attach_workspace:
           at: .
-      # TODO(dsanduleac): do we need the maven cache?
-      - restore_cache:
-          key: maven-dependency-cache-{{ checksum "pom.xml" }}
-      - restore_cache:
-          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
-      - restore_cache:
-          keys:
-            - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/\$global/update/\$global/streams/update_cache_2.10/inputs" }}
       - run: dev/run-python-tests.py
       - store_test_results:
           path: target/test-reports
@@ -235,14 +227,6 @@ jobs:
       - checkout
       - attach_workspace:
           at: .
-      # TODO(dsanduleac): do we need the maven cache?
-      - restore_cache:
-          key: maven-dependency-cache-{{ checksum "pom.xml" }}
-      - restore_cache:
-          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
-      - restore_cache:
-          keys:
-            - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/\$global/update/\$global/streams/update_cache_2.10/inputs" }}
       - run:
           name: Install SparkR
           command: R/install-dev.sh
