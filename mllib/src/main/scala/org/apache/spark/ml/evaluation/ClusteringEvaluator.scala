@@ -174,8 +174,10 @@ private[evaluation] abstract class Silhouette {
 
   protected def getNumberOfFeatures(dataFrame: DataFrame, columnName: String): Int = {
     val group = AttributeGroup.fromStructField(dataFrame.schema(columnName))
-    group.numAttributes.getOrElse {
+    if (group.size < 0) {
       dataFrame.select(col(columnName)).first().getAs[Vector](0).size
+    } else {
+      group.size
     }
   }
 }
