@@ -133,11 +133,11 @@ jobs:
       # Given the build-sbt cache, this is superfluous, but leave it in in case we will want to remove the former
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - run:
+          name: Download all external dependencies for the test configuration (which extends compile) and ensure we update first
+          command: dev/sbt update test:externalDependencyClasspath oldDeps/test:externalDependencyClasspath
       - run: |
           dev/build-apache-spark.py | tee /tmp/build-apache-spark.log
-      - run:
-          name: Download all external dependencies for the test configuration (which extends compile)
-          command: dev/sbt test:externalDependencyClasspath oldDeps/test:externalDependencyClasspath
       - store_artifacts:
           path: /tmp/heap.bin
       - save_cache:
