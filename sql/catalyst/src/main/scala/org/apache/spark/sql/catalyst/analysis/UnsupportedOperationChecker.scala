@@ -160,14 +160,20 @@ object UnsupportedOperationChecker {
         case _: InsertIntoDir =>
           throwError("InsertIntoDir is not supported with streaming DataFrames/Datasets")
 
-        case e: EventTimeWatermark =>
-          val statefulChildren = e.collect {
+        case outer: EventTimeWatermark =>
+          val statefulChildren = outer.collect {
             case a: Aggregate if a.isStreaming => a
             case d: Deduplicate if d.isStreaming => d
             case f: FlatMapGroupsWithState if f.isStreaming => f
           }
           statefulChildren.foreach { statefulNode =>
-            if (statefulNode.collectFirst{ case e: EventTimeWatermark => e }.isDefined) {
+            val innerNonEquivalentWatermarks = statefulNode.collect {
+              case inner: EventTimeWatermark
+                  if !inner.eventTime.semanticEquals(outer.eventTime) ||
+                    inner.delay != outer.delay =>
+                inner
+            }
+            if (innerNonEquivalentWatermarks.nonEmpty) {
               throwError("Watermarks both before and after a stateful operator in a streaming " +
                 "DataFrame/Dataset are not supported.")
             }
