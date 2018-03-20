@@ -1116,13 +1116,12 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
   override def prettyName: String = "add_months"
 }
 /**
-   * Returns number of months between dates `date1` and `date2`. 
-   * If `date1` is later than `date2`, then the result is positive.
-   * If `date1` and `date2` are on the same day of month, or both are the last day of month,
+   * Returns number of months between dates `timestamp1` and `timestamp2`.
+   * If `timestamp` is later than `timestamp2`, then the result is positive.
+   * If `timestamp1` and `timestamp2` are on the same day of month, or both are the last day of month,
    * returns an integer (time of day will be ignored).
-   *
    * Otherwise, the difference is calculated based on 31 days per month, and rounded to
-   * 8 digits.  
+   * 8 digits.
 */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
