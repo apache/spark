@@ -679,26 +679,26 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
       // Infer filter for left/right outer joins
       val newLeftOpt = joinType match {
         case RightOuter if newConditionOpt.isDefined =>
-          val rightConstraints = right.constraints.union(
-            splitConjunctivePredicates(newConditionOpt.get).toSet)
-          val inferredConstraints = ExpressionSet(
-            QueryPlanConstraints.inferAdditionalConstraints(rightConstraints))
-          val leftConditions = inferredConstraints
-            .filter(_.deterministic)
-            .filter(_.references.subsetOf(left.outputSet))
-          leftConditions.reduceLeftOption(And).map(Filter(_, left))
+          val inferredConstraints = left.getRelevantConstraints(
+            left.constraints
+              .union(right.constraints)
+              .union(splitConjunctivePredicates(newConditionOpt.get).toSet))
+          val newFilters = inferredConstraints
+            .filterNot(left.constraints.contains)
+            .reduceLeftOption(And)
+          newFilters.map(Filter(_, left))
         case _ => None
       }
       val newRightOpt = joinType match {
         case LeftOuter if newConditionOpt.isDefined =>
-          val leftConstraints = left.constraints.union(
-            splitConjunctivePredicates(newConditionOpt.get).toSet)
-          val inferredConstraints = ExpressionSet(
-            QueryPlanConstraints.inferAdditionalConstraints(leftConstraints))
-          val rightConditions = inferredConstraints
-            .filter(_.deterministic)
-            .filter(_.references.subsetOf(right.outputSet))
-          rightConditions.reduceLeftOption(And).map(Filter(_, right))
+          val inferredConstraints = right.getRelevantConstraints(
+            right.constraints
+              .union(left.constraints)
+              .union(splitConjunctivePredicates(newConditionOpt.get).toSet))
+          val newFilters = inferredConstraints
+            .filterNot(right.constraints.contains)
+            .reduceLeftOption(And)
+          newFilters.map(Filter(_, right))
         case _ => None
       }
 
