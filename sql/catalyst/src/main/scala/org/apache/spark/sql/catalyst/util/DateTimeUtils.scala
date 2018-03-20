@@ -862,7 +862,7 @@ object DateTimeUtils {
       daysToMillis(newDays, timeZone) * 1000L - daysToMillis(days, timeZone) * 1000L +
       microseconds
   }
-   
+
   /**
    * Returns number of months between time1 and time2. time1 and time2 are expressed in
    * microseconds since 1.1.1970.
