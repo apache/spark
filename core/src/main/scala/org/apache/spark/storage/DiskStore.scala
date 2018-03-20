@@ -301,7 +301,10 @@ private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: 
     written
   }
 
-  override def deallocate(): Unit = source.close()
+  override def deallocate() {
+    source.close()
+    StorageUtils.dispose(buffer)
+  }
 }
 
 private class CountingWritableChannel(sink: WritableByteChannel) extends WritableByteChannel {
