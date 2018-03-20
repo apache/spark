@@ -1804,10 +1804,10 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     By default, the dynamic allocation will request enough executors to maximize the 
     parallelism according to the number of tasks to process. While this minimizes the 
-    latency of the job, with small tasks this setting wastes a lot of resources due to
+    latency of the job, with small tasks this setting can waste a lot of resources due to
     executor allocation overhead, as some executor might not even do any work.
     This setting allows to set a divisor that will be used to reduce the number of
-    executors w.r.t. full parallelism
+    executors w.r.t. full parallelism.
     Defaults to 1.0
   </td>
 </tr>
