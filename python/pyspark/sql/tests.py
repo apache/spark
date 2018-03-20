@@ -33,6 +33,7 @@ import datetime
 import array
 import ctypes
 import py4j
+from contextlib import contextmanager
 
 try:
     import xmlrunner
@@ -200,6 +201,28 @@ class ReusedSQLTestCase(ReusedPySparkTestCase):
                "\n\nExpected:\n%s\n%s" % (expected, expected.dtypes) +
                "\n\nResult:\n%s\n%s" % (result, result.dtypes))
         self.assertTrue(expected.equals(result), msg=msg)
+
+    @contextmanager
+    def sql_conf(self, pairs):
+        """
+        A convenient context manager to test some configuration specific logic. This sets
+        `value` to the configuration `key` and then restores it back when it exits.
+        """
+        assert isinstance(pairs, dict), "pairs should be a dictionary."
+
+        keys = pairs.keys()
+        new_values = pairs.values()
+        old_values = [self.spark.conf.get(key, None) for key in keys]
+        for key, new_value in zip(keys, new_values):
+            self.spark.conf.set(key, new_value)
+        try:
+            yield
+        finally:
+            for key, old_value in zip(keys, old_values):
+                if old_value is None:
+                    self.spark.conf.unset(key)
+                else:
+                    self.spark.conf.set(key, old_value)
 
 
 class DataTypeTests(unittest.TestCase):
