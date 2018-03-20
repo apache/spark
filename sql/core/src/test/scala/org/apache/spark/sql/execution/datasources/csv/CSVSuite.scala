@@ -1279,4 +1279,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       Row("0,2013-111-11 12:13:14") :: Row(null) :: Nil
     )
   }
+
+  test("Check column names during schema validation") {
+    withTempPath { path =>
+      import collection.JavaConverters._
+      val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
+      val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
+      odf.write.option("header", "true").csv(path.getCanonicalPath)
+      val ischema = new StructType().add("f2", DoubleType).add("f1", DoubleType)
+      val idf = spark.read.schema(ischema).option("header", "true").csv(path.getCanonicalPath)
+
+      checkAnswer(idf.select('f1), odf.select('f1))
+    }
+  }
 }
