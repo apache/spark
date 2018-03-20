@@ -248,7 +248,9 @@ object SparkSubmit extends CommandLineUtils with Logging {
     try {
       doPrepareSubmitEnvironment(args, conf)
     } catch {
-      case e: SparkException => printErrorAndExit(e.getMessage); throw e
+      case e: SparkException =>
+        printErrorAndExit(e.getMessage)
+        throw e
     }
   }
 

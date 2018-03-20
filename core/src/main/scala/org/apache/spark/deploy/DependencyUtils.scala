@@ -155,7 +155,7 @@ private[deploy] object DependencyUtils {
     (withoutFragment, fragment)
   }
 
-  private def resolveGlobPath(uri: URI, hadoopConf: Configuration): Array [String] = {
+  private def resolveGlobPath(uri: URI, hadoopConf: Configuration): Array[String] = {
     uri.getScheme match {
       case "local" | "http" | "https" | "ftp" => Array(uri.toString)
       case _ =>
