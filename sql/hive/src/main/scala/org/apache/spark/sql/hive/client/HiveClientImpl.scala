@@ -25,7 +25,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -181,6 +181,11 @@ private[hive] class HiveClientImpl(
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
     }
     SessionState.start(state)
+
+    val resourceDir = new Path(hiveConf.getVar(ConfVars.DOWNLOADED_RESOURCES_DIR))
+    val fs: FileSystem = resourceDir.getFileSystem(hiveConf)
+    fs.deleteOnExit(resourceDir)
+
     state.out = new PrintStream(outputBuffer, true, "UTF-8")
     state.err = new PrintStream(outputBuffer, true, "UTF-8")
     state
