@@ -18,8 +18,6 @@
 package org.apache.spark.sql.hive.client
 
 import java.io.{File, IOException, PrintStream}
-import java.util.Locale
-import java.io.{File, PrintStream}
 import java.lang.{Iterable => JIterable}
 import java.util.{Locale, Map => JMap}
 
@@ -32,8 +30,7 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
-import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order, SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
@@ -197,11 +194,6 @@ private[hive] class HiveClientImpl(
         ioe.printStackTrace()
     }
   }
-
-  // Log the default warehouse location.
-  logInfo(
-    s"Warehouse location for Hive client " +
-      s"(version ${version.fullVersion}) is ${conf.get("hive.metastore.warehouse.dir")}")
 
   /** Returns the configuration for the current session. */
   def conf: HiveConf = state.getConf
