@@ -174,7 +174,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
         val rowWriter = new UnsafeRowWriter(writer, numFields)
         val structWriter = generateStructWriter(rowWriter, fields)
         (v, i) => {
-          rowWriter.markCursor()
+          writer.markCursor()
           v.getStruct(i, fields.length) match {
             case row: UnsafeRow =>
               writeUnsafeData(
@@ -198,7 +198,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
           elementType,
           containsNull)
         (v, i) => {
-          arrayWriter.markCursor()
+          writer.markCursor()
           writeArray(arrayWriter, elementWriter, v.getArray(i))
           writer.setOffsetAndSizeFromMark(i)
         }
@@ -215,7 +215,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
           valueType,
           valueContainsNull)
         (v, i) => {
-          val tmpCursor = valueArrayWriter.markCursor()
+          val tmpCursor = writer.markCursor()
           v.getMap(i) match {
             case map: UnsafeMapData =>
               writeUnsafeData(

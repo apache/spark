@@ -102,8 +102,7 @@ final class BufferHolder {
 
   int pushCursor() {
     if (cursorStack.length <= cursorStackIndex) {
-      int newSize = (cursorStack.length * 3 + 1) / 2;
-      int[] tmp = new int[newSize];
+      int[] tmp = new int[(cursorStack.length * 3 + 1) / 2];
       System.arraycopy(cursorStack, 0, tmp, 0, cursorStack.length);
       cursorStack = tmp;
     }

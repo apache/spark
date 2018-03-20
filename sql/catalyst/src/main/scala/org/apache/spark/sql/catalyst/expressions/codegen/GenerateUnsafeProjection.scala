@@ -207,22 +207,22 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val writeElement = et match {
       case t: StructType =>
         s"""
-          $rowWriter.markCursor();
-          ${writeStructToBuffer(ctx, element, t.map(_.dataType), rowWriter)}
+          $arrayWriter.markCursor();
+          ${writeStructToBuffer(ctx, element, t.map(_.dataType), arrayWriter)}
           $arrayWriter.setOffsetAndSizeFromMark($index);
         """
 
       case a @ ArrayType(et, _) =>
         s"""
-          $rowWriter.markCursor();
-          ${writeArrayToBuffer(ctx, element, et, rowWriter)}
+          $arrayWriter.markCursor();
+          ${writeArrayToBuffer(ctx, element, et, arrayWriter)}
           $arrayWriter.setOffsetAndSizeFromMark($index);
         """
 
       case m @ MapType(kt, vt, _) =>
         s"""
-          $rowWriter.markCursor();
-          ${writeMapToBuffer(ctx, element, kt, vt, rowWriter)}
+          $arrayWriter.markCursor();
+          ${writeMapToBuffer(ctx, element, kt, vt, arrayWriter)}
           $arrayWriter.setOffsetAndSizeFromMark($index);
         """
 
