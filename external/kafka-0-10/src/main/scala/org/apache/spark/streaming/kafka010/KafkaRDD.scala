@@ -19,8 +19,6 @@ package org.apache.spark.streaming.kafka010
 
 import java.{ util => ju }
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
 import org.apache.kafka.common.TopicPartition
 
@@ -243,22 +241,17 @@ private class KafkaRDDIterator[K, V](
 
   context.addTaskCompletionListener(_ => closeIfNeeded())
 
-  val consumer = if (useConsumerCache) {
-    CachedKafkaConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
-    if (context.attemptNumber >= 1) {
-      // just in case the prior attempt failures were cache related
-      CachedKafkaConsumer.remove(groupId, part.topic, part.partition)
-    }
-    CachedKafkaConsumer.get[K, V](groupId, part.topic, part.partition, kafkaParams)
-  } else {
-    CachedKafkaConsumer.getUncached[K, V](groupId, part.topic, part.partition, kafkaParams)
+  val consumer = {
+    KafkaDataConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
+    KafkaDataConsumer.acquire[K, V](
+      groupId, part.topicPartition(), kafkaParams, context, useConsumerCache)
   }
 
   var requestOffset = part.fromOffset
 
   def closeIfNeeded(): Unit = {
-    if (!useConsumerCache && consumer != null) {
-      consumer.close()
+    if (consumer != null) {
+      consumer.release()
     }
   }
 
