@@ -1287,9 +1287,16 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
       odf.write.option("header", "true").csv(path.getCanonicalPath)
       val ischema = new StructType().add("f2", DoubleType).add("f1", DoubleType)
-      val idf = spark.read.schema(ischema).option("header", "true").csv(path.getCanonicalPath)
-
-      checkAnswer(idf.select('f1), odf.select('f1))
+      val exception = intercept[SparkException] {
+         spark.read
+           .schema(ischema)
+           .option("header", "true")
+           .csv(path.getCanonicalPath)
+           .collect()
+      }
+      assert(exception.getMessage.contains(
+        "Fields in the header of csv file are not matched to field names of the schema"
+      ))
     }
   }
 }

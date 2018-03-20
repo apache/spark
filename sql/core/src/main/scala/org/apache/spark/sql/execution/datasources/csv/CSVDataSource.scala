@@ -141,7 +141,11 @@ object TextInputCSVDataSource extends CSVDataSource {
 
     val hasHeader = parser.options.headerFlag && file.start == 0
     if (hasHeader) {
-      lines.take(1).foreach { header =>
+      // Checking header field names are matched to fields in schema.
+      // The header is removed from lines.
+      // Note: if there are only comments in the first block, the header would probably
+      // be not extracted.
+      CSVUtils.extractHeader(lines, parser.options).foreach { header =>
         UnivocityParser.checkHeaderBySchema(parser, dataSchema, header)
       }
     }

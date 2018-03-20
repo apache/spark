@@ -289,21 +289,12 @@ private[csv] object UnivocityParser {
    */
   def parseIterator(
       lines: Iterator[String],
-      shouldDropHeader: Boolean,
       parser: UnivocityParser,
       schema: StructType): Iterator[InternalRow] = {
     val options = parser.options
 
-    val linesWithoutHeader = if (shouldDropHeader) {
-      // Note that if there are only comments in the first block, the header would probably
-      // be not dropped.
-      CSVUtils.dropHeaderLine(lines, options)
-    } else {
-      lines
-    }
-
     val filteredLines: Iterator[String] =
-      CSVUtils.filterCommentAndEmpty(linesWithoutHeader, options)
+      CSVUtils.filterCommentAndEmpty(lines, options)
 
     val safeParser = new FailureSafeParser[String](
       input => Seq(parser.parse(input)),
