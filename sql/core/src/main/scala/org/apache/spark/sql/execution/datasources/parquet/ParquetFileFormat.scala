@@ -68,24 +68,6 @@ class ParquetFileFormat
 
   override def toString: String = "Parquet"
 
-  private def verifySchema(schema: StructType): Unit = {
-    def verifyInternal(schema: StructType): Boolean = {
-      schema.size == 0 || schema.find {
-        case StructField(_, b: StructType, _, _) => verifyInternal(b)
-        case _ => false
-      }.isDefined
-    }
-
-
-    if (verifyInternal(schema)) {
-      throw new AnalysisException(
-        s"""
-           |Parquet data source does not support writing empty or nested empty schemas.
-           |Please make sure the data schema has at least one or more column(s).
-         """.stripMargin)
-    }
-  }
-
   override def hashCode(): Int = getClass.hashCode()
 
   override def equals(other: Any): Boolean = other.isInstanceOf[ParquetFileFormat]
@@ -95,7 +77,6 @@ class ParquetFileFormat
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    verifySchema(dataSchema)
     val parquetOptions = new ParquetOptions(options, sparkSession.sessionState.conf)
 
     val conf = ContextUtil.getConfiguration(job)

@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.streaming.sources.TextSocketSourceProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
+import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.Utils
 
@@ -546,10 +546,7 @@ case class DataSource(
       case dataSource: CreatableRelationProvider =>
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
-        if (DataSource.isBuiltInFileBasedDataSource(format) && data.schema.size == 0) {
-            throw new AnalysisException("Datasource does not support writing empty schema." +
-              "Please make sure the data schema has at least one or more column(s).")
-        }
+        DataSource.verifySchema(data.schema)
         planForWritingFileFormat(format, mode, data)
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
@@ -724,15 +721,26 @@ object DataSource extends Logging {
     globPath
   }
 
-  def isBuiltInFileBasedDataSource(format: FileFormat): Boolean = {
-    format.getClass.getName match {
-      case "org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat" => true
-      case "org.apache.spark.sql.execution.datasources.orc.OrcFileFormat" => true
-      case "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat" => true
-      case "org.apache.spark.sql.execution.datasources.json.JsonFileFormat" => true
-      case "org.apache.spark.sql.execution.datasources.text.TextFileFormat" => true
-      case "org.apache.spark.sql.hive.orc.OrcFileFormat" => true
-      case _ => false
+  /**
+   * Called before writing into a FileFormat based data source to make sure the
+   * supplied schema is not empty.
+   * @param schema
+   */
+  private def verifySchema(schema: StructType): Unit = {
+    def verifyInternal(schema: StructType): Boolean = {
+      schema.size == 0 || schema.find {
+        case StructField(_, b: StructType, _, _) => verifyInternal(b)
+        case _ => false
+      }.isDefined
+    }
+
+
+    if (verifyInternal(schema)) {
+      throw new AnalysisException(
+        s"""
+           |Datasource does not support writing empty or nested empty schemas.
+           |Please make sure the data schema has at least one or more column(s).
+         """.stripMargin)
     }
   }
 }
