@@ -63,13 +63,4 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
     // Mark the page as freed (so we can detect double-frees).
     memory.setPageNumber(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER);
   }
-
-  public OffHeapMemoryBlock reallocate(OffHeapMemoryBlock block, long oldSize, long newSize) {
-    OffHeapMemoryBlock mb = this.allocate(newSize);
-    if (block.getBaseOffset() != 0) {
-      MemoryBlock.copyMemory(block, mb, oldSize);
-      free(block);
-    }
-    return mb;
-  }
 }

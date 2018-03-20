@@ -30,6 +30,7 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import com.google.common.primitives.Ints;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
@@ -122,11 +123,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public UTF8String(MemoryBlock base) {
     this.base = base;
     if (base != null) {
-      if ((long) Integer.MAX_VALUE < base.size()) {
-        throw new ArrayIndexOutOfBoundsException(
-          "MemoryBlock.size " + base.size() + " should be less than " + Integer.MAX_VALUE);
-      }
-      this.numBytes = (int) base.size();
+      this.numBytes = Ints.checkedCast(base.size());
     }
   }
 
