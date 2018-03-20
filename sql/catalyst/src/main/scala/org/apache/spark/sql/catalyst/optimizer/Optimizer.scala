@@ -85,9 +85,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         EliminateSerialization,
         RemoveRedundantAliases,
         RemoveRedundantProject,
-        SimplifyCreateStructOps,
-        SimplifyCreateArrayOps,
-        SimplifyCreateMapOps,
+        SimplifyExtractValueOps,
         CombineConcats) ++
         extendedOperatorOptimizationRules
 
