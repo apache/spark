@@ -57,6 +57,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         PushDownPredicate,
         LimitPushDown,
         ColumnPruning,
+        EliminateRIInnerJoins,
         InferFiltersFromConstraints,
         // Operator combine
         CollapseRepartition,

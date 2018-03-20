@@ -58,6 +58,22 @@ case class TableConstraints(
       case fk: ForeignKey => this.copy(foreignKeys = foreignKeys :+ fk)
     }
   }
+
+  /**
+   * Retrieves the foreign keys referencing the input table.
+   */
+  def findForeignKeys(
+      referencedTable: TableIdentifier,
+      resolver: Resolver): Seq[Seq[String]] =
+    foreignKeys.filter { fk =>
+      val fkReferencedTable = fk.referenceTableIdentifier
+      // TODO: uncomment validation when SPARK-22064 is implemented.
+      // fk.isValidated &&
+      resolver(fkReferencedTable.table, referencedTable.table) &&
+        fkReferencedTable.database.nonEmpty &&
+        referencedTable.database.nonEmpty &&
+        resolver(fkReferencedTable.database.get, referencedTable.database.get)
+    }.map { fk => fk.keyColumnNames}
 }
 
 object TableConstraints {

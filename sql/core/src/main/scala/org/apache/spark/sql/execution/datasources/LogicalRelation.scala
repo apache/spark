@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogMetadata, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
@@ -32,7 +32,9 @@ case class LogicalRelation(
     output: Seq[AttributeReference],
     catalogTable: Option[CatalogTable],
     override val isStreaming: Boolean)
-  extends LeafNode with MultiInstanceRelation {
+  extends LeafNode with MultiInstanceRelation with CatalogMetadata {
+
+  override val metadata = catalogTable
 
   // Only care about relation when canonicalizing.
   override def doCanonicalize(): LogicalPlan = copy(

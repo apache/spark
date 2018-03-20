@@ -610,3 +610,10 @@ case class HiveTableRelation(
     dataCols = dataCols.map(_.newInstance()),
     partitionCols = partitionCols.map(_.newInstance()))
 }
+
+/**
+ * An interface implemented by the LogicalRelation to return the underlying catalog table.
+ */
+trait CatalogMetadata {
+  def metadata: Option[CatalogTable] = None
+}

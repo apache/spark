@@ -74,7 +74,7 @@ object CostBasedJoinReorder extends Rule[LogicalPlan] with PredicateHelper {
    * Extracts items of consecutive inner joins and join conditions.
    * This method works for bushy trees and left/right deep trees.
    */
-  private def extractInnerJoins(plan: LogicalPlan): (Seq[LogicalPlan], Set[Expression]) = {
+  def extractInnerJoins(plan: LogicalPlan): (Seq[LogicalPlan], Set[Expression]) = {
     plan match {
       case Join(left, right, _: InnerLike, Some(cond)) =>
         val (leftPlans, leftConditions) = extractInnerJoins(left)
