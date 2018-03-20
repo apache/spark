@@ -141,7 +141,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     expectedMsgs = Seq("distinct aggregation"))
 
   assertNotSupportedInStreamingPlan(
-    "aggregate on both sides of stateful op",
+    "watermark on both sides of aggregate",
     EventTimeWatermark(
       attribute,
       CalendarInterval.fromString("interval 1 second"),
@@ -153,6 +153,35 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
           CalendarInterval.fromString("interval 2 seconds"),
           streamRelation))),
     outputMode = Append,
+    expectedMsgs = Seq("both before and after"))
+
+  assertNotSupportedInStreamingPlan(
+    "watermark on both sides of deduplicate",
+    EventTimeWatermark(
+      attribute,
+      CalendarInterval.fromString("interval 1 second"),
+      Deduplicate(
+        attributeWithWatermark :: Nil,
+        EventTimeWatermark(
+          attribute,
+          CalendarInterval.fromString("interval 2 seconds"),
+          streamRelation))),
+    outputMode = Append,
+    expectedMsgs = Seq("both before and after"))
+
+  assertNotSupportedInStreamingPlan(
+    "watermark on both sides of flatMapGroupsWithState",
+    EventTimeWatermark(
+      attribute,
+      CalendarInterval.fromString("interval 1 second"),
+      FlatMapGroupsWithState(
+        null, attribute, attribute, Seq(attribute), Seq(attribute), attribute,
+        null, Update, isMapGroupsWithState = false, null,
+        EventTimeWatermark(
+          attribute,
+          CalendarInterval.fromString("interval 2 seconds"),
+          streamRelation))),
+    outputMode = Update,
     expectedMsgs = Seq("both before and after"))
 
   val att = new AttributeReference(name = "a", dataType = LongType)()

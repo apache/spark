@@ -179,8 +179,8 @@ object UnsupportedOperationChecker {
                 inner
             }
             if (innerNonEquivalentWatermarks.nonEmpty) {
-              throwError("Watermarks may not be present both before and after a stateful " +
-                "operator in a streaming DataFrame/Dataset.")
+              throwError("Watermarks both before and after a stateful operator in a streaming " +
+                "DataFrame/Dataset are not well-defined, and thus not supported.")
             }
           }
 
