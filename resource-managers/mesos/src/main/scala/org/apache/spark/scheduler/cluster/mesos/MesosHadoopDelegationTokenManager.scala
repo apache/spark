@@ -29,6 +29,7 @@ import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDelegationTokens
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.ThreadUtils
 
 
@@ -104,9 +105,10 @@ private[spark] class MesosHadoopDelegationTokenManager(
           } catch {
             case e: Exception =>
               // Log the error and try to write new tokens back in an hour
-              logWarning("Couldn't broadcast tokens, trying again in an hour", e)
-              credentialRenewerThread.schedule(this,
-                conf.get(config.CREDENTIALS_RENEWAL_RETRY_WAIT), TimeUnit.SECONDS)
+              val delay = TimeUnit.SECONDS.toMillis(conf.get(config.CREDENTIALS_RENEWAL_RETRY_WAIT))
+              logWarning(
+                s"Couldn't broadcast tokens, trying again in ${UIUtils.formatDuration(delay)}", e)
+              credentialRenewerThread.schedule(this, delay, TimeUnit.MILLISECONDS)
               return
           }
           scheduleRenewal(this)
