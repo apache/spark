@@ -35,7 +35,7 @@ abstract class ExternalCatalog
   extends ListenerBus[ExternalCatalogEventListener, ExternalCatalogEvent] {
   import CatalogTypes.TablePartitionSpec
 
-  protected var clientInited = false
+  @volatile protected var clientInited: Boolean = false
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
