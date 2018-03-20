@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
@@ -365,5 +365,35 @@ class SparkSqlParserSuite extends AnalysisTest {
     assertEqual(
       "SELECT a || b || c FROM t",
       Project(UnresolvedAlias(concat) :: Nil, UnresolvedRelation(TableIdentifier("t"))))
+  }
+
+  test("alter table add table constraint") {
+    def expected(constraint: TableConstraint): AlterTableAddConstraintCommand = {
+      AlterTableAddConstraintCommand(TableIdentifier("t"), constraint)
+    }
+
+    // primary key
+    val pkSql = "ALTER TABLE t ADD CONSTRAINT pk PRIMARY KEY"
+    val pk = PrimaryKey("pk", Seq("c1"))
+    assertEqual(s"$pkSql (c1)", expected(pk))
+    assertEqual(s"$pkSql (c1) NOVALIDATE NORELY", expected(pk))
+    assertEqual(s"$pkSql (c1, c2)", expected(pk.copy(keyColumnNames = Seq("c1", "c2"))))
+    assertEqual(s"$pkSql (c1) RELY", expected(pk.copy(isRely = true)))
+
+    intercept(s"${pkSql}(c1) VALIDATE NORELY", "VALIDATE option is not currently supported.")
+
+    // foreign key
+    val fkSql = "ALTER TABLE t ADD CONSTRAINT fk1 FOREIGN KEY"
+    val fk = ForeignKey("fk1", Seq("c1"), TableIdentifier("t1"), Seq("c1"), false, false)
+    assertEqual(s"$fkSql (c1) references t1(c1) NOVALIDATE NORELY", expected(fk))
+    assertEqual(s"$fkSql (c1) references t1(c1) NOVALIDATE NORELY", expected(fk))
+    assertEqual(s"$fkSql (c1) references t1(c1) NOVALIDATE RELY", expected(fk.copy(isRely = true)))
+    assertEqual(s"$fkSql (c1, c2) references t1(c1, c2)",
+      expected(fk.copy(keyColumnNames = Seq("c1", "c2"), referenceColumnNames = Seq("c1", "c2"))))
+    assertEqual(s"$fkSql (c1, c2) references t1",
+      expected(fk.copy(keyColumnNames = Seq("c1", "c2"), referenceColumnNames = Seq.empty)))
+
+    intercept(s"${fkSql}(c1) REFERENCES t1(c1) VALIDATE NORELY",
+      "VALIDATE option is not currently supported.")
   }
 }

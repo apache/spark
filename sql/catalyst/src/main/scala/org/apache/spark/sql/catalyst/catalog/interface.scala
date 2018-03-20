@@ -231,7 +231,8 @@ case class CatalogTable(
     unsupportedFeatures: Seq[String] = Seq.empty,
     tracksPartitionsInCatalog: Boolean = false,
     schemaPreservesCase: Boolean = true,
-    ignoredProperties: Map[String, String] = Map.empty) {
+    ignoredProperties: Map[String, String] = Map.empty,
+    tableConstraints: Option[TableConstraints] = None) {
 
   import CatalogTable._
 

@@ -165,6 +165,16 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       assert(e.message.contains("It doesn't match the specified format"))
     }
   }
+
+  test("alter table add constraint") {
+    withTable("t") {
+      sql("create table t (c1 int) using parquet")
+      val e = intercept[UnsupportedOperationException] {
+        sql("ALTER TABLE t ADD PRIMARY KEY(c1)")
+      }.getMessage
+      assert(e.contains("Hive support is required to add table constraints."))
+    }
+  }
 }
 
 abstract class DDLSuite extends QueryTest with SQLTestUtils {
