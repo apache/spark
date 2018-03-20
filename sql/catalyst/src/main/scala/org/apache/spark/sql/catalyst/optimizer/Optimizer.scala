@@ -155,7 +155,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PropagateEmptyRelation) :+
     // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
     Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts) 
+      CheckCartesianProducts)
   }
 
   /**
