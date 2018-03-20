@@ -16,16 +16,11 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import java.util.UUID
-
-import com.google.common.primitives.Longs
-
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.steps._
-import org.apache.spark.deploy.k8s.submit.steps.initcontainer.InitContainerConfigOrchestrator
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.SystemClock
 import org.apache.spark.util.Utils
@@ -34,13 +29,11 @@ import org.apache.spark.util.Utils
  * Figures out and returns the complete ordered list of needed DriverConfigurationSteps to
  * configure the Spark driver pod. The returned steps will be applied one by one in the given
  * order to produce a final KubernetesDriverSpec that is used in KubernetesClientApplication
- * to construct and create the driver pod. It uses the InitContainerConfigOrchestrator to
- * configure the driver init-container if one is needed, i.e., when there are remote dependencies
- * to localize.
+ * to construct and create the driver pod.
  */
 private[spark] class DriverConfigOrchestrator(
     kubernetesAppId: String,
-    launchTime: Long,
+    kubernetesResourceNamePrefix: String,
     mainAppResource: Option[MainAppResource],
     appName: String,
     mainClass: String,
@@ -50,15 +43,8 @@ private[spark] class DriverConfigOrchestrator(
   // The resource name prefix is derived from the Spark application name, making it easy to connect
   // the names of the Kubernetes resources from e.g. kubectl or the Kubernetes dashboard to the
   // application the user submitted.
-  private val kubernetesResourceNamePrefix = {
-    val uuid = UUID.nameUUIDFromBytes(Longs.toByteArray(launchTime)).toString.replaceAll("-", "")
-    s"$appName-$uuid".toLowerCase.replaceAll("\\.", "-")
-  }
 
   private val imagePullPolicy = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
-  private val initContainerConfigMapName = s"$kubernetesResourceNamePrefix-init-config"
-  private val jarsDownloadPath = sparkConf.get(JARS_DOWNLOAD_LOCATION)
-  private val filesDownloadPath = sparkConf.get(FILES_DOWNLOAD_LOCATION)
 
   def getAllConfigurationSteps: Seq[DriverConfigurationStep] = {
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
@@ -126,9 +112,7 @@ private[spark] class DriverConfigOrchestrator(
     val dependencyResolutionStep = if (sparkJars.nonEmpty || sparkFiles.nonEmpty) {
       Seq(new DependencyResolutionStep(
         sparkJars,
-        sparkFiles,
-        jarsDownloadPath,
-        filesDownloadPath))
+        sparkFiles))
     } else {
       Nil
     }
@@ -139,33 +123,12 @@ private[spark] class DriverConfigOrchestrator(
       Nil
     }
 
-    val initContainerBootstrapStep = if (existNonContainerLocalFiles(sparkJars ++ sparkFiles)) {
-      val orchestrator = new InitContainerConfigOrchestrator(
-        sparkJars,
-        sparkFiles,
-        jarsDownloadPath,
-        filesDownloadPath,
-        imagePullPolicy,
-        initContainerConfigMapName,
-        INIT_CONTAINER_PROPERTIES_FILE_NAME,
-        sparkConf)
-      val bootstrapStep = new DriverInitContainerBootstrapStep(
-        orchestrator.getAllConfigurationSteps,
-        initContainerConfigMapName,
-        INIT_CONTAINER_PROPERTIES_FILE_NAME)
-
-      Seq(bootstrapStep)
-    } else {
-      Nil
-    }
-
     Seq(
       initialSubmissionStep,
       serviceBootstrapStep,
       kubernetesCredentialsStep) ++
       dependencyResolutionStep ++
-      mountSecretsStep ++
-      initContainerBootstrapStep
+      mountSecretsStep
   }
 
   private def existSubmissionLocalFiles(files: Seq[String]): Boolean = {

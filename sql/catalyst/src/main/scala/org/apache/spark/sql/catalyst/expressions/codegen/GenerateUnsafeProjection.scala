@@ -247,7 +247,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
         for (int $index = 0; $index < $numElements; $index++) {
           if ($tmpInput.isNullAt($index)) {
-            $arrayWriter.setNull$primitiveTypeName($index);
+            $arrayWriter.setNull${elementOrOffsetSize}Bytes($index);
           } else {
             $writeElement
           }
