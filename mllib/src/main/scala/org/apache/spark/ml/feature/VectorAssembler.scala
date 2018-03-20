@@ -97,7 +97,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
             case _ =>
               Seq(attribute.withName(c))
           }
-        case _ : NumericType | BooleanType =>
+        case _: NumericType | BooleanType =>
           // If the input column type is a compatible scalar type, assume numeric.
           Seq(NumericAttribute.defaultAttr.withName(c))
         case _: VectorUDT =>

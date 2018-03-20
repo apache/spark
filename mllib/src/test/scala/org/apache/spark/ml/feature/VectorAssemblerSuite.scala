@@ -203,8 +203,8 @@ class VectorAssemblerSuite
 
     // behavior when first row has information
     assert(assembler.setHandleInvalid("skip").transform(df).count() == 1)
-    intercept[RuntimeException](assembler.setHandleInvalid("keep").transform(df).cache())
-    intercept[SparkException](assembler.setHandleInvalid("error").transform(df).cache())
+    intercept[RuntimeException](assembler.setHandleInvalid("keep").transform(df).collect())
+    intercept[SparkException](assembler.setHandleInvalid("error").transform(df).collect())
 
     // numeric column is all null
     intercept[RuntimeException](
@@ -214,7 +214,7 @@ class VectorAssemblerSuite
     val df2 = df.filter("0 == id1 % 2")
     intercept[RuntimeException](assembler.setHandleInvalid("skip").transform(df2))
     intercept[RuntimeException](assembler.setHandleInvalid("keep").transform(df2))
-    intercept[NullPointerException](assembler.setHandleInvalid("error").transform(df2).cache())
+    intercept[NullPointerException](assembler.setHandleInvalid("error").transform(df2).collect())
   }
 
 }
