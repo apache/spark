@@ -25,7 +25,7 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.metadata.Hive
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.Token
@@ -78,6 +78,7 @@ private[security] class HiveDelegationTokenProvider
       hadoopConf: Configuration,
       sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
+    var metaStoreClient: HiveMetaStoreClient = null
     try {
       val conf = hiveConf(hadoopConf)
 
@@ -92,8 +93,8 @@ private[security] class HiveDelegationTokenProvider
         s"$principal at $metastoreUri")
 
       doAsRealUser {
-        val hive = Hive.get(conf, classOf[HiveConf])
-        val tokenStr = hive.getDelegationToken(currentUser.getUserName(), principal)
+        metaStoreClient = new HiveMetaStoreClient(conf.asInstanceOf[HiveConf])
+        val tokenStr = metaStoreClient.getDelegationToken(currentUser.getUserName, principal)
 
         val hive2Token = new Token[DelegationTokenIdentifier]()
         hive2Token.decodeFromUrlString(tokenStr)
@@ -111,7 +112,9 @@ private[security] class HiveDelegationTokenProvider
         None
     } finally {
       Utils.tryLogNonFatalError {
-        Hive.closeCurrent()
+        if (metaStoreClient != null) {
+          metaStoreClient.close()
+        }
       }
     }
   }

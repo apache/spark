@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{File, PrintStream}
 import java.lang.{Iterable => JIterable}
-import java.util.{Locale, Map => JMap}
+import java.util.{ArrayList => JArrayList, HashMap => JHashMap, List => JList, Locale, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -31,12 +31,16 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
-import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
+import org.apache.hadoop.hive.metastore.api.{SerDeInfo, SkewedInfo, StorageDescriptor, Table => HiveMetaApiTable}
 import org.apache.hadoop.hive.ql.Driver
+import org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
+import org.apache.hadoop.hive.serde.serdeConstants
+import org.apache.hadoop.hive.serde2.MetadataTypedColumnsetSerDe
+import org.apache.hadoop.mapred.SequenceFileInputFormat
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
@@ -908,11 +912,39 @@ private[hive] object HiveClientImpl {
     Utils.classForName(name)
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
+  private def toHiveMetaApiTable(table: CatalogTable): HiveMetaApiTable = {
+    val sd = new StorageDescriptor
+    sd.setSerdeInfo(new SerDeInfo)
+    sd.setNumBuckets(-1)
+    sd.setBucketCols(new JArrayList[String])
+    sd.setCols(new JArrayList[FieldSchema])
+    sd.setParameters(new JHashMap[String, String])
+    sd.setSortCols(new JArrayList[Order])
+    sd.getSerdeInfo.setParameters(new JHashMap[String, String])
+    sd.getSerdeInfo.getParameters.put(serdeConstants.SERIALIZATION_FORMAT, "1")
+    sd.setInputFormat(classOf[SequenceFileInputFormat[_, _]].getName)
+    sd.setOutputFormat(classOf[HiveSequenceFileOutputFormat[_, _]].getName)
+    val skewInfo: SkewedInfo = new SkewedInfo
+    skewInfo.setSkewedColNames(new JArrayList[String])
+    skewInfo.setSkewedColValues(new JArrayList[JList[String]])
+    skewInfo.setSkewedColValueLocationMaps(new JHashMap[JList[String], String])
+    sd.setSkewedInfo(skewInfo)
+
+    val apiTable = new HiveMetaApiTable()
+    apiTable.setSd(sd)
+    apiTable.setPartitionKeys(new JArrayList[FieldSchema])
+    apiTable.setParameters(new JHashMap[String, String])
+    apiTable.setTableType(HiveTableType.MANAGED_TABLE.toString)
+    apiTable.setDbName(table.database)
+    apiTable.setTableName(table.identifier.table)
+    apiTable
+  }
+
   /**
    * Converts the native table metadata representation format CatalogTable to Hive's Table.
    */
   def toHiveTable(table: CatalogTable, userName: Option[String] = None): HiveTable = {
-    val hiveTable = new HiveTable(table.database, table.identifier.table)
+    val hiveTable = new HiveTable(toHiveMetaApiTable(table))
     // For EXTERNAL_TABLE, we also need to set EXTERNAL field in the table properties.
     // Otherwise, Hive metastore will change the table to a MANAGED_TABLE.
     // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
