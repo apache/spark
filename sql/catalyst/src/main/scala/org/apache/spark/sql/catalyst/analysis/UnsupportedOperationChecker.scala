@@ -165,8 +165,13 @@ object UnsupportedOperationChecker {
             case a: Aggregate if a.isStreaming => a
             case d: Deduplicate if d.isStreaming => d
             case f: FlatMapGroupsWithState if f.isStreaming => f
+            case j: Join => j
           }
           statefulChildren.foreach { statefulNode =>
+            // If two watermark ops are exactly equivalent (on the same Attribute and with the
+            // same interval), allow them both. This is to minimize disruption; this validation was
+            // added after the tests and one of our existing unit tests expects the special case
+            // to work.
             val innerNonEquivalentWatermarks = statefulNode.collect {
               case inner: EventTimeWatermark
                   if !inner.eventTime.semanticEquals(outer.eventTime) ||
@@ -174,8 +179,8 @@ object UnsupportedOperationChecker {
                 inner
             }
             if (innerNonEquivalentWatermarks.nonEmpty) {
-              throwError("Watermarks both before and after a stateful operator in a streaming " +
-                "DataFrame/Dataset are not supported.")
+              throwError("Watermarks may not be present both before and after a stateful " +
+                "operator in a streaming DataFrame/Dataset.")
             }
           }
 
