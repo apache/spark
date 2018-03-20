@@ -136,7 +136,7 @@ jobs:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
       - run:
           name: Download all external dependencies for the test configuration (which extends compile) and ensure we update first
-          command: dev/sbt update test:externalDependencyClasspath oldDeps/test:externalDependencyClasspath
+          command: dev/sbt test:externalDependencyClasspath oldDeps/test:externalDependencyClasspath
       - run: |
           dev/build-apache-spark.py | tee /tmp/build-apache-spark.log
       - store_artifacts:
