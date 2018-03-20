@@ -99,8 +99,6 @@ class Analyzer(
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
-  private lazy val random = new Random()
-
   def executeAndCheck(plan: LogicalPlan): LogicalPlan = {
     val analyzed = execute(plan)
     try {
@@ -2002,6 +2000,8 @@ class Analyzer(
    * Set the seed for random number generation in Uuid expressions.
    */
   object ResolvedUuidExpressions extends Rule[LogicalPlan] {
+    private lazy val random = new Random()
+
     override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
       case p if p.resolved => p
       case p => p transformExpressionsUp {

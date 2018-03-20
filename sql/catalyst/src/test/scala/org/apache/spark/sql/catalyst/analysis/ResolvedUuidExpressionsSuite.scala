@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
@@ -39,16 +37,12 @@ class ResolvedUuidExpressionsSuite extends AnalysisTest {
   private val analyzer = getAnalyzer(caseSensitive = true)
 
   private def getUuidExpressions(plan: LogicalPlan): Seq[Uuid] = {
-    val uuids = new ArrayBuffer[Uuid]()
-    plan.transformUp {
+    plan.flatMap {
       case p =>
-        p.transformExpressionsUp {
-          case u: Uuid =>
-            uuids += u
-            u
-        }
+        p.expressions.flatMap(_.collect {
+          case u: Uuid => u
+        })
     }
-    uuids.toSeq
   }
 
   test("analyzed plan sets random seed for Uuid expression") {
