@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
@@ -98,6 +99,8 @@ class Analyzer(
     this(catalog, conf, conf.optimizerMaxIterations)
   }
 
+  private lazy val random = new Random()
+
   def executeAndCheck(plan: LogicalPlan): LogicalPlan = {
     val analyzed = execute(plan)
     try {
@@ -177,6 +180,7 @@ class Analyzer(
       TimeWindowing ::
       ResolveInlineTables(conf) ::
       ResolveTimeZone(conf) ::
+      ResolvedUuidExpressions ::
       TypeCoercion.typeCoercionRules(conf) ++
       extendedResolutionRules : _*),
     Batch("Post-Hoc Resolution", Once, postHocResolutionRules: _*),
@@ -1991,6 +1995,18 @@ class Analyzer(
           e -> ne
         }
       }.toMap
+    }
+  }
+
+  /**
+   * Set the seed for random number generation in Uuid expressions.
+   */
+  object ResolvedUuidExpressions extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
+      case p if p.resolved => p
+      case p => p transformExpressionsUp {
+        case Uuid(None) => Uuid(Some(random.nextLong()))
+      }
     }
   }
 
