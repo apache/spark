@@ -65,8 +65,7 @@ public final class Murmur3_x86_32 {
   public static int hashUnsafeWords(Object base, long offset, int lengthInBytes, int seed) {
     // This is based on Guava's `Murmur32_Hasher.processRemaining(ByteBuffer)` method.
     assert (lengthInBytes % 8 == 0): "lengthInBytes must be a multiple of 8 (word-aligned)";
-    int h1 = hashUnsafeWordsBlock(MemoryBlock.allocateFromObject(base, offset, lengthInBytes), seed);
-    return fmix(h1, lengthInBytes);
+    return hashUnsafeWordsBlock(MemoryBlock.allocateFromObject(base, offset, lengthInBytes), seed);
   }
 
   public static int hashUnsafeBytesBlock(MemoryBlock base, int seed) {
@@ -120,10 +119,6 @@ public final class Murmur3_x86_32 {
       h1 = mixH1(h1, k1);
     }
     return h1;
-  }
-
-  private static int hashBytesByInt(Object base, long offset, int lengthInBytes, int seed) {
-    return hashBytesByIntBlock(MemoryBlock.allocateFromObject(base, offset, lengthInBytes), seed);
   }
 
   public int hashLong(long input) {
