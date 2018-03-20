@@ -19,9 +19,17 @@ package org.apache.spark.ml.stat;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.commons.math3.distribution.NormalDistribution;
+import org.apache.spark.ml.linalg.VectorUDT;
+import org.apache.spark.sql.Encoder;
+import org.apache.spark.sql.Encoders;
+import org.apache.spark.sql.types.DoubleType;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
@@ -37,17 +45,11 @@ public class JavaKolmogorovSmirnovTestSuite extends SharedSparkSession {
   @Override
   public void setUp() throws IOException {
     super.setUp();
-    List<Double> points = new ArrayList<>();
-    points.add(0.1);
-    points.add(1.1);
-    points.add(10.1);
-    points.add(-1.1);
+    List<java.lang.Double> points = Arrays.asList(0.1, 1.1, 10.1, -1.1);
 
-    dataset =
-      spark.createDataFrame(jsc.parallelize(points, 2), Double.class).toDF("sample");
+    dataset = spark.createDataset(points, Encoders.DOUBLE()).toDF("sample");
   }
 
-  /*
   @Test
   public void testKSTestCDF() {
     // Create theoretical distributions
@@ -67,7 +69,6 @@ public class JavaKolmogorovSmirnovTestSuite extends SharedSparkSession {
     // Cannot reject null hypothesis
     assert(pValue1 > pThreshold);
   }
-  */
 
   @Test
   public void testKSTestNamedDistribution() {

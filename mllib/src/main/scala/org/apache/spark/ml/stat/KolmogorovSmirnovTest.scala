@@ -20,6 +20,7 @@ package org.apache.spark.ml.stat
 import scala.annotation.varargs
 
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.api.java.function.Function
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.stat.{Statistics => OldStatistics}
 import org.apache.spark.rdd.RDD
@@ -74,6 +75,15 @@ object KolmogorovSmirnovTest {
     val testResult = OldStatistics.kolmogorovSmirnovTest(rdd, cdf)
     spark.createDataFrame(Seq(KolmogorovSmirnovTestResult(
       testResult.pValue, testResult.statistic)))
+  }
+
+  /**
+   * Java-friendly version of `test(dataset: DataFrame, sampleCol: String, cdf: Double => Double)`
+   */
+  @Since("2.4.0")
+  def test(dataset: DataFrame, sampleCol: String,
+    cdf: Function[java.lang.Double, java.lang.Double]): DataFrame = {
+    test(dataset, sampleCol, (x: Double) => cdf.call(x))
   }
 
   /**
