@@ -50,7 +50,9 @@ abstract class CSVDataSource extends Serializable {
       conf: Configuration,
       file: PartitionedFile,
       parser: UnivocityParser,
-      schema: StructType): Iterator[InternalRow]
+      schema: StructType, // Schema of projection
+      dataSchema: StructType // Schema of data in csv files
+  ): Iterator[InternalRow]
 
   /**
    * Infers the schema from `inputPaths` files.
@@ -127,7 +129,8 @@ object TextInputCSVDataSource extends CSVDataSource {
       conf: Configuration,
       file: PartitionedFile,
       parser: UnivocityParser,
-      schema: StructType): Iterator[InternalRow] = {
+      schema: StructType,
+      dataSchema: StructType): Iterator[InternalRow] = {
     val lines = {
       val linesReader = new HadoopFileLinesReader(file, conf)
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
@@ -136,8 +139,15 @@ object TextInputCSVDataSource extends CSVDataSource {
       }
     }
 
-    val shouldDropHeader = parser.options.headerFlag && file.start == 0
-    UnivocityParser.parseIterator(lines, shouldDropHeader, parser, schema)
+    val hasHeader = parser.options.headerFlag && file.start == 0
+    if (hasHeader) {
+      lines.take(1).foreach { header =>
+        UnivocityParser.checkHeaderBySchema(parser, dataSchema, header)
+      }
+    }
+
+    UnivocityParser.parseIterator(
+      conf, lines, shouldDropHeader = hasHeader, parser, schema, file.filePath)
   }
 
   override def infer(
@@ -204,7 +214,8 @@ object MultiLineCSVDataSource extends CSVDataSource {
       conf: Configuration,
       file: PartitionedFile,
       parser: UnivocityParser,
-      schema: StructType): Iterator[InternalRow] = {
+      schema: StructType,
+      dataSchema: StructType): Iterator[InternalRow] = {
     UnivocityParser.parseStream(
       CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))),
       parser.options.headerFlag,

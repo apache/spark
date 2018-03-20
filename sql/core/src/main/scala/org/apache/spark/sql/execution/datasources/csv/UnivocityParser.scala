@@ -312,4 +312,26 @@ private[csv] object UnivocityParser {
       parser.options.columnNameOfCorruptRecord)
     filteredLines.flatMap(safeParser.parse)
   }
+
+  def checkHeaderBySchema(
+      parser: UnivocityParser,
+      schema: StructType,
+      header: String
+  ): Unit = {
+    val columnNames = parser.tokenizer.parseLine(header)
+    val fieldNames = schema.map(_.name)
+    val isMatched = fieldNames.zip(columnNames).forall { pair =>
+      val (nameInSchema, nameInHeader) = pair
+      nameInSchema == nameInHeader
+    }
+    if (!isMatched) {
+      throw new IllegalArgumentException(
+        s"""
+           |Fields in the header of csv file are not matched to field names of the schema:
+           | Header: ${header}
+           | Schema: ${fieldNames.mkString(",")}
+           |""".stripMargin
+      )
+    }
+  }
 }
