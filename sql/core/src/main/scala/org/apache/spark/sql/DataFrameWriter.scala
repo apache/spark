@@ -322,6 +322,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     runCommand(df.sparkSession, "insertInto") {
       InsertIntoTable(
         table = UnresolvedRelation(tableIdent),
+        columns = None,
         partition = Map.empty[String, Option[String]],
         query = df.logicalPlan,
         overwrite = mode == SaveMode.Overwrite,

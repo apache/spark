@@ -25,7 +25,7 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalog}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
@@ -65,6 +65,7 @@ import org.apache.spark.sql.hive.client.HiveClientImpl
  */
 case class InsertIntoHiveTable(
     table: CatalogTable,
+    columns: Option[Seq[Expression]],
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,

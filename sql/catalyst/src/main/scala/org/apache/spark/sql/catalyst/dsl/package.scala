@@ -371,7 +371,7 @@ package object dsl {
 
       def insertInto(tableName: String, overwrite: Boolean = false): LogicalPlan =
         InsertIntoTable(
-          analysis.UnresolvedRelation(TableIdentifier(tableName)),
+          analysis.UnresolvedRelation(TableIdentifier(tableName)), None,
           Map.empty, logicalPlan, overwrite, ifPartitionNotExists = false)
 
       def as(alias: String): LogicalPlan = SubqueryAlias(alias, logicalPlan)
