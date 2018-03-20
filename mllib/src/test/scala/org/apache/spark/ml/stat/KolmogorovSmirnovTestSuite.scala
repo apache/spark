@@ -17,7 +17,8 @@
 
 package org.apache.spark.ml.stat
 
-import org.apache.commons.math3.distribution.{ExponentialDistribution, NormalDistribution}
+import org.apache.commons.math3.distribution.{ExponentialDistribution, NormalDistribution,
+  RealDistribution, UniformRealDistribution}
 import org.apache.commons.math3.stat.inference.{KolmogorovSmirnovTest => Math3KSTest}
 
 import org.apache.spark.SparkFunSuite
@@ -31,65 +32,71 @@ class KolmogorovSmirnovTestSuite
 
   import testImplicits._
 
-  test("1 sample Kolmogorov-Smirnov test: apache commons math3 implementation equivalence") {
-    // Create theoretical distributions
-    val stdNormalDist = new NormalDistribution(0, 1)
-    val expDist = new ExponentialDistribution(0.6)
+  def apacheCommonMath3EquivalenceTest(
+    sampleDist: RealDistribution,
+    theoreticalDist: RealDistribution,
+    theoreticalDistByName: (String, Array[Double]),
+    rejectNullHypothesis: Boolean): Unit = {
 
     // set seeds
     val seed = 10L
-    stdNormalDist.reseedRandomGenerator(seed)
-    expDist.reseedRandomGenerator(seed)
+    sampleDist.reseedRandomGenerator(seed)
+    if (theoreticalDist != null) {
+      theoreticalDist.reseedRandomGenerator(seed)
+    }
 
     // Sample data from the distributions and parallelize it
     val n = 100000
-    val sampledNormArray = stdNormalDist.sample(n)
-    val sampledNormDF = sc.parallelize(sampledNormArray, 10).toDF("sample")
-    val sampledExpArray = expDist.sample(n)
-    val sampledExpDF = sc.parallelize(sampledExpArray, 10).toDF("sample")
+    val sampledArray = sampleDist.sample(n)
+    val sampledDF = sc.parallelize(sampledArray, 10).toDF("sample")
 
     // Use a apache math commons local KS test to verify calculations
     val ksTest = new Math3KSTest()
     val pThreshold = 0.05
 
     // Comparing a standard normal sample to a standard normal distribution
-    val Row(pValue1: Double, statistic1: Double) = KolmogorovSmirnovTest
-      .test(sampledNormDF, "sample", "norm", 0.0, 1.0).head()
-    val referenceStat1 = ksTest.kolmogorovSmirnovStatistic(stdNormalDist, sampledNormArray)
+    val Row(pValue1: Double, statistic1: Double) =
+      if (theoreticalDist != null) {
+        val cdf = (x: Double) => theoreticalDist.cumulativeProbability(x)
+        KolmogorovSmirnovTest.test(sampledDF, "sample", cdf).head()
+      } else {
+        KolmogorovSmirnovTest.test(sampledDF, "sample",
+          theoreticalDistByName._1,
+          theoreticalDistByName._2: _*
+        ).head()
+      }
+    val theoreticalDistMath3 = if (theoreticalDist == null) {
+      assert(theoreticalDistByName._1 == "norm")
+      val params = theoreticalDistByName._2
+      new NormalDistribution(params(0), params(1))
+    } else {
+      theoreticalDist
+    }
+    val referenceStat1 = ksTest.kolmogorovSmirnovStatistic(theoreticalDistMath3, sampledArray)
     val referencePVal1 = 1 - ksTest.cdf(referenceStat1, n)
     // Verify vs apache math commons ks test
     assert(statistic1 ~== referenceStat1 relTol 1e-4)
     assert(pValue1 ~== referencePVal1 relTol 1e-4)
-    // Cannot reject null hypothesis
-    assert(pValue1 > pThreshold)
 
-    // Comparing an exponential sample to a standard normal distribution
-    val Row(pValue2: Double, statistic2: Double) = KolmogorovSmirnovTest
-      .test(sampledExpDF, "sample", "norm", 0, 1).head()
-    val referenceStat2 = ksTest.kolmogorovSmirnovStatistic(stdNormalDist, sampledExpArray)
-    val referencePVal2 = 1 - ksTest.cdf(referenceStat2, n)
-    // verify vs apache math commons ks test
-    assert(statistic2 ~== referenceStat2 relTol 1e-4)
-    assert(pValue2 ~== referencePVal2 relTol 1e-4)
-    // reject null hypothesis
-    assert(pValue2 < pThreshold)
+    if (rejectNullHypothesis) {
+      assert(pValue1 < pThreshold)
+    } else {
+      assert(pValue1 > pThreshold)
+    }
+  }
 
-    // Testing the use of a user provided CDF function
-    // Distribution is not serializable, so will have to create in the lambda
-    val expCDF = (x: Double) => new ExponentialDistribution(0.2).cumulativeProbability(x)
+  test("1 sample Kolmogorov-Smirnov test: apache commons math3 implementation equivalence") {
+    // Create theoretical distributions
+    val stdNormalDist = new NormalDistribution(0.0, 1.0)
+    val expDist = new ExponentialDistribution(0.6)
+    val uniformDist = new UniformRealDistribution(0.0, 1.0)
+    val expDist2 = new ExponentialDistribution(0.2)
+    val stdNormByName = Tuple2("norm", Array(0.0, 1.0))
 
-    // Comparing an exponential sample with mean X to an exponential distribution with mean Y
-    // Where X != Y
-    val Row(pValue3: Double, statistic3: Double) = KolmogorovSmirnovTest
-      .test(sampledExpDF, "sample", expCDF).head()
-    val referenceStat3 = ksTest.kolmogorovSmirnovStatistic(new ExponentialDistribution(0.2),
-      sampledExpArray)
-    val referencePVal3 = 1 - ksTest.cdf(referenceStat3, sampledExpArray.length)
-    // verify vs apache math commons ks test
-    assert(statistic3 ~== referenceStat3 relTol 1e-4)
-    assert(pValue3 ~== referencePVal3 relTol 1e-4)
-    // reject null hypothesis
-    assert(pValue3 < pThreshold)
+    apacheCommonMath3EquivalenceTest(stdNormalDist, null, stdNormByName, false)
+    apacheCommonMath3EquivalenceTest(expDist, null, stdNormByName, true)
+    apacheCommonMath3EquivalenceTest(uniformDist, null, stdNormByName, true)
+    apacheCommonMath3EquivalenceTest(expDist, expDist2, null, true)
   }
 
   test("1 sample Kolmogorov-Smirnov test: R implementation equivalence") {

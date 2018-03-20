@@ -43,8 +43,8 @@ object KolmogorovSmirnovTest {
 
   /** Used to construct output schema of test */
   private case class KolmogorovSmirnovTestResult(
-      pValues: Double,
-      statistics: Double)
+      pValue: Double,
+      statistic: Double)
 
   private def getSampleRDD(dataset: DataFrame, sampleCol: String): RDD[Double] = {
     SchemaUtils.checkNumericType(dataset.schema, sampleCol)
