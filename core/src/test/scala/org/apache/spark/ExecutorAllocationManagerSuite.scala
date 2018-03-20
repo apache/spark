@@ -151,22 +151,32 @@ class ExecutorAllocationManagerSuite
       .setAppName("test-executor-allocation-manager")
       .set("spark.dynamicAllocation.enabled", "true")
       .set("spark.dynamicAllocation.testing", "true")
+      .set("spark.dynamicAllocation.maxExecutors", "15")
+      .set("spark.dynamicAllocation.minExecutors", "3")
       .set("spark.dynamicAllocation.fullParallelismDivisor", divisor.toString)
       .set("spark.executor.cores", cores.toString)
     val sc = new SparkContext(conf)
     contexts += sc
     var manager = sc.executorAllocationManager.get
     post(sc.listenerBus, SparkListenerStageSubmitted(createStageInfo(0, 20)))
-    assert(maxNumExecutorsNeeded(manager) === expected)
+    for (i <- 0 to 5) {
+      addExecutors(manager)
+    }
+    assert(numExecutorsTarget(manager) === expected)
     sc.stop()
   }
 
   test("fullParallelismDivisor is correctly handled") {
-    testParallelismDivisor(1, 1.0, 20)
+    testParallelismDivisor(1, 2.0, 10)
     testParallelismDivisor(1, 3.0, 7)
     testParallelismDivisor(2, 3.0, 4)
     testParallelismDivisor(1, 2.6, 8)
+
+    // max/min executors capping
+    testParallelismDivisor(1, 1.0, 15) // should be 20 but capped by max
+    testParallelismDivisor(4, 3.0, 3)  // should be 2 but elevated by min
   }
+
 
   test("add executors capped by num pending tasks") {
     sc = createSparkContext(0, 10, 0)
