@@ -22,10 +22,11 @@ import java.util.Locale
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, NamedExpression, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.execution.datasources.DDLPreprocessingUtils.{expectedTypeMapping, mapToExpectedTypes}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
@@ -326,6 +327,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
  * inserted have the correct data type and fields have the correct names.
  */
 case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
+
   private def preprocess(
       insert: InsertIntoTable,
       tblName: String,
@@ -334,19 +336,8 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
       insert.partition, partColNames, tblName, conf.resolver)
 
-    val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
-    val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
+    val newQuery = matchQueryAttributesToTableColumns(insert, tblName, normalizedPartSpec)
 
-    if (expectedColumns.length != insert.query.schema.length) {
-      throw new AnalysisException(
-        s"$tblName requires that the data to be inserted have the same number of columns as the " +
-          s"target table: target table has ${insert.table.output.size} column(s) but the " +
-          s"inserted data has ${insert.query.output.length + staticPartCols.size} column(s), " +
-          s"including ${staticPartCols.size} partition column(s) having constant value(s).")
-    }
-
-    val newQuery = DDLPreprocessingUtils.castAndRenameQueryOutput(
-      insert.query, expectedColumns, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
         throw new AnalysisException(
@@ -357,16 +348,86 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] {
            """.stripMargin)
       }
 
-      insert.copy(query = newQuery, partition = normalizedPartSpec)
+      insert.copy(query = newQuery, partition = normalizedPartSpec, columns = None)
     } else {
       // All partition columns are dynamic because the InsertIntoTable command does
       // not explicitly specify partitioning columns.
-      insert.copy(query = newQuery, partition = partColNames.map(_ -> None).toMap)
+      insert.copy(query = newQuery,
+        partition = partColNames.map(_ -> None).toMap,
+        columns = None)
+    }
+  }
+
+  private def matchQueryAttributesToTableColumns(
+      insert: InsertIntoTable,
+      tblName: String,
+      normalizedPartSpec: Map[String,
+      Option[String]]): LogicalPlan = {
+    val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
+    logInfo(s"Static part: $staticPartCols")
+    if (insert.columns.exists(_.length != insert.table.output.length - insert.partition.size)) {
+      throw new AnalysisException(
+        s"Specified number of columns is ${insert.columns.get.length} that must be equal to the " +
+          s"number of columns of table $tblName which is ${insert.table.output.length}")
+    }
+
+    val explicitTableOutput = tableOutput(insert).filterNot(a => staticPartCols.contains(a.name))
+
+    if (explicitTableOutput.length != insert.query.schema.length) {
+      throw new AnalysisException(
+        s"$tblName requires that the data to be inserted have the same number of columns as the " +
+          s"target table: target table has ${insert.table.output.size} column(s) but the " +
+          s"target table: target table has ${insert.table.output.size} column(s) but the " +
+          s"inserted data has ${insert.query.output.length + staticPartCols.size} column(s), " +
+          s"including ${staticPartCols.size} partition column(s) having constant value(s).")
+    }
+
+    val childMap = mapQueryToTableOutput(insert, tblName, explicitTableOutput)
+    // Output fields need to match table attribute ordering
+    // because subsequent operations rely on this
+    val orderedQueryOutput = insert.table.output.flatMap(tableCol =>
+      childMap.get(tableCol.name).toList)
+    val newQuery = if (orderedQueryOutput == insert.query.output) {
+      insert.query
+    } else {
+      Project(orderedQueryOutput, insert.query)
+    }
+    newQuery
+  }
+
+  private def mapQueryToTableOutput(
+      insert: InsertIntoTable,
+      tblName: String,
+      explicitTableOutput: Seq[Attribute]): Map[String, NamedExpression] = {
+    val mapping = expectedTypeMapping(insert.query.output, explicitTableOutput, conf)
+    val mappedQueryOutput = insert.query.output.map(key => mapping.getOrElse(key,
+      throw new AnalysisException(s"Could not map property $key in current output to any " +
+        s"column in table $tblName. Possible values are: ${mapping.keys.mkString(",")}")))
+    val queryOutputMapping = mappedQueryOutput.map(v => (v.name, v)).toMap
+    queryOutputMapping
+  }
+
+  private def tableOutput(insert: InsertIntoTable) = {
+    if (insert.columns.isDefined) {
+      val b = Seq.newBuilder[Attribute]
+      val ci = insert.columns.get.iterator
+      val out = insert.table.output.toArray
+      for (i <- insert.table.output.indices) {
+        if (insert.columns.get.contains(out(i))) {
+          b += ci.next()
+        } else {
+          b += out(i)
+        }
+
+      }
+      b.result()
+    } else {
+      insert.table.output
     }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
+    case i @ InsertIntoTable(table, _, _, query, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
@@ -443,7 +504,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoTable(l @ LogicalRelation(relation, _, _, _), partition, query, _, _) =>
+      case InsertIntoTable(l @ LogicalRelation(relation, _, _, _), _, partition, query, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case LogicalRelation(src, _, _, _) => src
@@ -465,7 +526,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
           case _ => failAnalysis(s"$relation does not allow insertion.")
         }
 
-      case InsertIntoTable(t, _, _, _, _)
+      case InsertIntoTable(t, _, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
           t.isInstanceOf[OneRowRelation] ||
@@ -486,7 +547,20 @@ object DDLPreprocessingUtils {
       query: LogicalPlan,
       expectedOutput: Seq[Attribute],
       conf: SQLConf): LogicalPlan = {
-    val newChildOutput = expectedOutput.zip(query.output).map {
+    val currentOutput = query.output
+    val newChildOutput = mapToExpectedTypes(currentOutput, expectedOutput, conf)
+    if (newChildOutput == query.output) {
+      query
+    } else {
+      Project(newChildOutput, query)
+    }
+  }
+
+  def mapToExpectedTypes(
+      currentOutput: Seq[Attribute],
+      expectedOutput: Seq[Attribute],
+      conf: SQLConf): Seq[NamedExpression] = {
+    val newChildOutput = expectedOutput.zip(currentOutput).map {
       case (expected, actual) =>
         if (expected.dataType.sameType(actual.dataType) &&
           expected.name == actual.name &&
@@ -501,11 +575,28 @@ object DDLPreprocessingUtils {
             expected.name)(explicitMetadata = Option(expected.metadata))
         }
     }
+    newChildOutput
+  }
 
-    if (newChildOutput == query.output) {
-      query
-    } else {
-      Project(newChildOutput, query)
+  def expectedTypeMapping(
+                           queryOutput: Seq[Attribute],
+                           tableOutput: Seq[Attribute],
+                           conf: SQLConf): Map[Attribute, NamedExpression] = {
+    val newChildOutput = tableOutput.zip(queryOutput).map {
+      case (expected, actual) =>
+        if (expected.dataType.sameType(actual.dataType) &&
+          expected.name == actual.name &&
+          expected.metadata == actual.metadata) {
+          actual -> actual
+        } else {
+          // Renaming is needed for handling the following cases like
+          // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
+          // 2) Target tables have column metadata
+          actual -> Alias(
+            Cast(actual, expected.dataType, Option(conf.sessionLocalTimeZone)),
+            expected.name)(explicitMetadata = Option(expected.metadata))
+        }
     }
+    newChildOutput.toMap
   }
 }

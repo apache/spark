@@ -370,6 +370,15 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       }
   }
 
+  testPartitionedTable("SPARK-20845: INSERT statement should match explicitly provided columns") {
+    tableName =>
+      withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+        sql(s"INSERT INTO TABLE $tableName (d, a) PARTITION (b, c) SELECT 4, 1, 2 AS b, 3 AS c")
+        // sql(s"INSERT INTO TABLE $tableName SELECT 4 as d, 3 as c, 2 as b, 1 as a")
+        checkAnswer(sql(s"SELECT a, b, c, d FROM $tableName"), Row(1, 2, 3, 4))
+      }
+  }
+
   testPartitionedTable("INSERT INTO a partitioned table (semantic and error handling)") {
     tableName =>
       withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
