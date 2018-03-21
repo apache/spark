@@ -1280,23 +1280,28 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     )
   }
 
-  test("Check column names during schema validation") {
-    withTempPath { path =>
-      import collection.JavaConverters._
-      val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
-      val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
-      odf.write.option("header", "true").csv(path.getCanonicalPath)
-      val ischema = new StructType().add("f2", DoubleType).add("f1", DoubleType)
-      val exception = intercept[SparkException] {
-         spark.read
-           .schema(ischema)
-           .option("header", "true")
-           .csv(path.getCanonicalPath)
-           .collect()
+  def checkHeader(multiLine: String): Unit = {
+    test(s"Check column names during schema validation - multiLine = $multiLine") {
+      withTempPath { path =>
+        import collection.JavaConverters._
+        val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
+        val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
+        odf.write.option("header", "true").csv(path.getCanonicalPath)
+        val ischema = new StructType().add("f2", DoubleType).add("f1", DoubleType)
+        val exception = intercept[SparkException] {
+          spark.read
+            .schema(ischema)
+            .option("header", "true")
+            .option("multiLine", multiLine)
+            .csv(path.getCanonicalPath)
+            .collect()
+        }
+        assert(exception.getMessage.contains(
+          "Fields in the header of csv file are not matched to field names of the schema"
+        ))
       }
-      assert(exception.getMessage.contains(
-        "Fields in the header of csv file are not matched to field names of the schema"
-      ))
     }
   }
+
+  List("false", "true").foreach(checkHeader(_))
 }

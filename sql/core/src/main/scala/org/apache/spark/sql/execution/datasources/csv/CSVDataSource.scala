@@ -145,9 +145,8 @@ object TextInputCSVDataSource extends CSVDataSource {
       // The header is removed from lines.
       // Note: if there are only comments in the first block, the header would probably
       // be not extracted.
-      CSVUtils.extractHeader(lines, parser.options).foreach { header =>
-        UnivocityParser.checkHeaderBySchema(parser, dataSchema, header)
-      }
+      val checkHeader = UnivocityParser.checkHeader(parser, dataSchema, _: String)
+      CSVUtils.extractHeader(lines, parser.options).foreach(checkHeader(_))
     }
 
     UnivocityParser.parseIterator(
@@ -224,7 +223,10 @@ object MultiLineCSVDataSource extends CSVDataSource {
       CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))),
       parser.options.headerFlag,
       parser,
-      schema)
+      schema,
+      file.filePath,
+      checkHeader = UnivocityParser.checkHeaderColumnNames(parser, dataSchema, _)
+    )
   }
 
   override def infer(
@@ -232,11 +234,13 @@ object MultiLineCSVDataSource extends CSVDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    val checkHeader = (_: Array[String]) => ()
     csv.flatMap { lines =>
       val path = new Path(lines.getPath())
       UnivocityParser.tokenizeStream(
         CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
         shouldDropHeader = false,
+        checkHeader,
         new CsvParser(parsedOptions.asParserSettings))
     }.take(1).headOption match {
       case Some(firstRow) =>
@@ -248,6 +252,7 @@ object MultiLineCSVDataSource extends CSVDataSource {
               lines.getConfiguration,
               new Path(lines.getPath())),
             parsedOptions.headerFlag,
+            checkHeader,
             new CsvParser(parsedOptions.asParserSettings))
         }
         CSVInferSchema.infer(tokenRDD, header, parsedOptions)

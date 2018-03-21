@@ -237,8 +237,9 @@ private[csv] object UnivocityParser {
   def tokenizeStream(
       inputStream: InputStream,
       shouldDropHeader: Boolean,
+      checkHeader: Array[String] => Unit,
       tokenizer: CsvParser): Iterator[Array[String]] = {
-    convertStream(inputStream, shouldDropHeader, tokenizer)(tokens => tokens)
+    convertStream(inputStream, shouldDropHeader, tokenizer, checkHeader)(tokens => tokens)
   }
 
   /**
@@ -248,14 +249,16 @@ private[csv] object UnivocityParser {
       inputStream: InputStream,
       shouldDropHeader: Boolean,
       parser: UnivocityParser,
-      schema: StructType): Iterator[InternalRow] = {
+      schema: StructType,
+      filePath: String,
+      checkHeader: Array[String] => Unit): Iterator[InternalRow] = {
     val tokenizer = parser.tokenizer
     val safeParser = new FailureSafeParser[Array[String]](
       input => Seq(parser.convert(input)),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
-    convertStream(inputStream, shouldDropHeader, tokenizer) { tokens =>
+    convertStream(inputStream, shouldDropHeader, tokenizer, checkHeader) { tokens =>
       safeParser.parse(tokens)
     }.flatten
   }
@@ -263,11 +266,14 @@ private[csv] object UnivocityParser {
   private def convertStream[T](
       inputStream: InputStream,
       shouldDropHeader: Boolean,
-      tokenizer: CsvParser)(convert: Array[String] => T) = new Iterator[T] {
+      tokenizer: CsvParser,
+      checkHeader: Array[String] => Unit
+  )(convert: Array[String] => T) = new Iterator[T] {
     tokenizer.beginParsing(inputStream)
     private var nextRecord = {
       if (shouldDropHeader) {
-        tokenizer.parseNext()
+        val header = tokenizer.parseNext()
+        checkHeader(header)
       }
       tokenizer.parseNext()
     }
@@ -304,25 +310,35 @@ private[csv] object UnivocityParser {
     filteredLines.flatMap(safeParser.parse)
   }
 
-  def checkHeaderBySchema(
-      parser: UnivocityParser,
-      schema: StructType,
-      header: String
+  def checkHeaderColumnNames(
+    parser: UnivocityParser,
+    schema: StructType,
+    columnNames: Array[String]
   ): Unit = {
+    if (columnNames != null) {
+      val fieldNames = schema.map(_.name)
+      val isMatched = fieldNames.zip(columnNames).forall { pair =>
+        val (nameInSchema, nameInHeader) = pair
+        nameInSchema == nameInHeader
+      }
+      if (!isMatched) {
+        throw new IllegalArgumentException(
+          s"""
+             |Fields in the header of csv file are not matched to field names of the schema:
+             | Header: ${columnNames.mkString(",")}
+
+             | Schema: ${fieldNames.mkString(",")}
+
+
+             |""".
+            stripMargin
+        )
+      }
+    }
+  }
+
+  def checkHeader(parser: UnivocityParser, schema: StructType, header: String): Unit = {
     val columnNames = parser.tokenizer.parseLine(header)
-    val fieldNames = schema.map(_.name)
-    val isMatched = fieldNames.zip(columnNames).forall { pair =>
-      val (nameInSchema, nameInHeader) = pair
-      nameInSchema == nameInHeader
-    }
-    if (!isMatched) {
-      throw new IllegalArgumentException(
-        s"""
-           |Fields in the header of csv file are not matched to field names of the schema:
-           | Header: ${header}
-           | Schema: ${fieldNames.mkString(",")}
-           |""".stripMargin
-      )
-    }
+    checkHeaderColumnNames(parser, schema, columnNames)
   }
 }

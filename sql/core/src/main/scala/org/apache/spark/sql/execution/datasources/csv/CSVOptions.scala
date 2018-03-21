@@ -149,7 +149,7 @@ class CSVOptions(
   val inputBufferSize = 128
 
   val isCommentSet = this.comment != '\u0000'
-
+  
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
