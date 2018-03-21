@@ -35,6 +35,9 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
  * @param lineSeparator A line separator that should be used for each line. If the value is `None`,
  *                      it covers `\r`, `\r\n` and `\n`.
  * @param conf Hadoop configuration
+ *
+ * @note The behavior when `lineSeparator` is `None` (covering `\r`, `\r\n` and `\n`) is defined
+ * by [[LineRecordReader]], not within Spark.
  */
 class HadoopFileLinesReader(
     file: PartitionedFile,
