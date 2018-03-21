@@ -128,6 +128,10 @@ private[ml] object Node {
 @Since("2.4.0")
 trait ClassificationNode extends Node {
 
+  /**
+   * Get count for specified label in this node
+   * @param label label number in the range [0, numClasses)
+   */
   @Since("2.4.0")
   def getLabelCount(label: Int): Double = {
     require(label >= 0 && label < impurityStats.stats.length,
@@ -140,12 +144,15 @@ trait ClassificationNode extends Node {
 @Since("2.4.0")
 trait RegressionNode extends Node {
 
+  /** Number of data points in this node */
   @Since("2.4.0")
   def getCount: Double = impurityStats.stats(0)
 
+  /** Sum of data points labels in this node */
   @Since("2.4.0")
   def getSum: Double = impurityStats.stats(1)
 
+  /** Sum of data points label squares in this node */
   @Since("2.4.0")
   def getSumOfSquares: Double = impurityStats.stats(2)
 }
