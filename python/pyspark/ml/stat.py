@@ -180,9 +180,6 @@ class Summarizer(object):
     .. versionadded:: 2.4.0
 
     """
-    def __init__(self, js):
-        self._js = js
-
     @staticmethod
     @since("2.4.0")
     def mean(col, weightCol=None):
@@ -288,7 +285,23 @@ class Summarizer(object):
         sc = SparkContext._active_spark_context
         js = JavaWrapper._new_java_obj("org.apache.spark.ml.stat.Summarizer.metrics",
                                        _to_seq(sc, metrics))
-        return Summarizer(js)
+        return SummarizerBuilder(js)
+
+
+class SummarizerBuilder(object):
+    """
+    .. note:: Experimental
+
+    A builder object that provides summary statistics about a given column.
+
+    Users should not directly create such builders, but instead use one of the methods in
+    :py:class:`pyspark.ml.stat.Summary`
+
+    .. versionadded:: 2.4.0
+
+    """
+    def __init__(self, js):
+        self._js = js
 
     @since("2.4.0")
     def summary(self, featureCol, weightCol=None):
