@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.k8s.{InitContainerBootstrap, KubernetesUtils, MountSecretsBootstrap, PodWithDetachedInitContainer}
+import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD}
@@ -34,18 +34,10 @@ import org.apache.spark.util.Utils
  * @param sparkConf Spark configuration
  * @param mountSecretsBootstrap an optional component for mounting user-specified secrets onto
  *                              user-specified paths into the executor container
- * @param initContainerBootstrap an optional component for bootstrapping the executor init-container
- *                               if one is needed, i.e., when there are remote dependencies to
- *                               localize
- * @param initContainerMountSecretsBootstrap an optional component for mounting user-specified
- *                                           secrets onto user-specified paths into the executor
- *                                           init-container
  */
 private[spark] class ExecutorPodFactory(
     sparkConf: SparkConf,
-    mountSecretsBootstrap: Option[MountSecretsBootstrap],
-    initContainerBootstrap: Option[InitContainerBootstrap],
-    initContainerMountSecretsBootstrap: Option[MountSecretsBootstrap]) {
+    mountSecretsBootstrap: Option[MountSecretsBootstrap]) {
 
   private val executorExtraClasspath = sparkConf.get(EXECUTOR_CLASS_PATH)
 
@@ -93,8 +85,6 @@ private[spark] class ExecutorPodFactory(
 
   private val executorCores = sparkConf.getDouble("spark.executor.cores", 1)
   private val executorLimitCores = sparkConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
-
-  private val executorJarsDownloadDir = sparkConf.get(JARS_DOWNLOAD_LOCATION)
 
   /**
    * Configure and construct an executor pod with the given parameters.
@@ -147,8 +137,9 @@ private[spark] class ExecutorPodFactory(
       (ENV_EXECUTOR_CORES, math.ceil(executorCores).toInt.toString),
       (ENV_EXECUTOR_MEMORY, executorMemoryString),
       (ENV_APPLICATION_ID, applicationId),
-      (ENV_EXECUTOR_ID, executorId),
-      (ENV_MOUNTED_CLASSPATH, s"$executorJarsDownloadDir/*")) ++ executorEnvs)
+      // This is to set the SPARK_CONF_DIR to be /opt/spark/conf
+      (ENV_SPARK_CONF_DIR, SPARK_CONF_DIR_INTERNAL),
+      (ENV_EXECUTOR_ID, executorId)) ++ executorEnvs)
       .map(env => new EnvVarBuilder()
         .withName(env._1)
         .withValue(env._2)
@@ -221,30 +212,10 @@ private[spark] class ExecutorPodFactory(
         (bootstrap.addSecretVolumes(executorPod), bootstrap.mountSecrets(containerWithLimitCores))
       }.getOrElse((executorPod, containerWithLimitCores))
 
-    val (bootstrappedPod, bootstrappedContainer) =
-      initContainerBootstrap.map { bootstrap =>
-        val podWithInitContainer = bootstrap.bootstrapInitContainer(
-          PodWithDetachedInitContainer(
-            maybeSecretsMountedPod,
-            new ContainerBuilder().build(),
-            maybeSecretsMountedContainer))
 
-        val (pod, mayBeSecretsMountedInitContainer) =
-          initContainerMountSecretsBootstrap.map { bootstrap =>
-            // Mount the secret volumes given that the volumes have already been added to the
-            // executor pod when mounting the secrets into the main executor container.
-            (podWithInitContainer.pod, bootstrap.mountSecrets(podWithInitContainer.initContainer))
-          }.getOrElse((podWithInitContainer.pod, podWithInitContainer.initContainer))
-
-        val bootstrappedPod = KubernetesUtils.appendInitContainer(
-          pod, mayBeSecretsMountedInitContainer)
-
-        (bootstrappedPod, podWithInitContainer.mainContainer)
-      }.getOrElse((maybeSecretsMountedPod, maybeSecretsMountedContainer))
-
-    new PodBuilder(bootstrappedPod)
+    new PodBuilder(maybeSecretsMountedPod)
       .editSpec()
-        .addToContainers(bootstrappedContainer)
+        .addToContainers(maybeSecretsMountedContainer)
         .endSpec()
       .build()
   }

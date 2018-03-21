@@ -22,7 +22,10 @@ set -ex
 # Check whether there is a passwd entry for the container UID
 myuid=$(id -u)
 mygid=$(id -g)
+# turn off -e for getent because it will return error code in anonymous uid case
+set +e
 uidentry=$(getent passwd $myuid)
+set -e
 
 # If there is no passwd entry for the container UID, attempt to create one
 if [ -z "$uidentry" ] ; then
@@ -53,14 +56,10 @@ fi
 case "$SPARK_K8S_CMD" in
   driver)
     CMD=(
-      ${JAVA_HOME}/bin/java
-      "${SPARK_JAVA_OPTS[@]}"
-      -cp "$SPARK_CLASSPATH"
-      -Xms$SPARK_DRIVER_MEMORY
-      -Xmx$SPARK_DRIVER_MEMORY
-      -Dspark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS
-      $SPARK_DRIVER_CLASS
-      $SPARK_DRIVER_ARGS
+      "$SPARK_HOME/bin/spark-submit"
+      --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
+      --deploy-mode client
+      "$@"
     )
     ;;
 
@@ -77,14 +76,6 @@ case "$SPARK_K8S_CMD" in
       --cores $SPARK_EXECUTOR_CORES
       --app-id $SPARK_APPLICATION_ID
       --hostname $SPARK_EXECUTOR_POD_IP
-    )
-    ;;
-
-  init)
-    CMD=(
-      "$SPARK_HOME/bin/spark-class"
-      "org.apache.spark.deploy.k8s.SparkPodInitContainer"
-      "$@"
     )
     ;;
 
