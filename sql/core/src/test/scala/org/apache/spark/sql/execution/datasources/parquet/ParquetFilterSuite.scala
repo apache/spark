@@ -317,31 +317,33 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
   test("filter pushdown - date") {
     implicit class IntToDate(int: Int) {
-      def d: Date = new Date(Date.valueOf("2018-03-01").getTime + 24 * 60 * 60 * 1000 * (int - 1))
+      def date: Date =
+        new Date(Date.valueOf("2018-03-01").getTime + 24 * 60 * 60 * 1000 * (int - 1))
     }
 
-    withParquetDataFrame((1 to 4).map(i => Tuple1(i.d))) { implicit df =>
+    withParquetDataFrame((1 to 4).map(i => Tuple1(i.date))) { implicit df =>
       checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(i => Row.apply(i.d)))
+      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], (1 to 4).map(i => Row.apply(i.date)))
 
-      checkFilterPredicate('_1 === 1.d, classOf[Eq[_]], 1.d)
-      checkFilterPredicate('_1 <=> 1.d, classOf[Eq[_]], 1.d)
-      checkFilterPredicate('_1 =!= 1.d, classOf[NotEq[_]], (2 to 4).map(i => Row.apply(i.d)))
+      checkFilterPredicate('_1 === 1.date, classOf[Eq[_]], 1.date)
+      checkFilterPredicate('_1 <=> 1.date, classOf[Eq[_]], 1.date)
+      checkFilterPredicate('_1 =!= 1.date, classOf[NotEq[_]], (2 to 4).map(i => Row.apply(i.date)))
 
-      checkFilterPredicate('_1 < 2.d, classOf[Lt[_]], 1.d)
-      checkFilterPredicate('_1 > 3.d, classOf[Gt[_]], 4.d)
-      checkFilterPredicate('_1 <= 1.d, classOf[LtEq[_]], 1.d)
-      checkFilterPredicate('_1 >= 4.d, classOf[GtEq[_]], 4.d)
+      checkFilterPredicate('_1 < 2.date, classOf[Lt[_]], 1.date)
+      checkFilterPredicate('_1 > 3.date, classOf[Gt[_]], 4.date)
+      checkFilterPredicate('_1 <= 1.date, classOf[LtEq[_]], 1.date)
+      checkFilterPredicate('_1 >= 4.date, classOf[GtEq[_]], 4.date)
 
-      checkFilterPredicate(Literal(1.d) === '_1, classOf[Eq[_]], 1.d)
-      checkFilterPredicate(Literal(1.d) <=> '_1, classOf[Eq[_]], 1.d)
-      checkFilterPredicate(Literal(2.d) > '_1, classOf[Lt[_]], 1.d)
-      checkFilterPredicate(Literal(3.d) < '_1, classOf[Gt[_]], 4.d)
-      checkFilterPredicate(Literal(1.d) >= '_1, classOf[LtEq[_]], 1.d)
-      checkFilterPredicate(Literal(4.d) <= '_1, classOf[GtEq[_]], 4.d)
+      checkFilterPredicate(Literal(1.date) === '_1, classOf[Eq[_]], 1.date)
+      checkFilterPredicate(Literal(1.date) <=> '_1, classOf[Eq[_]], 1.date)
+      checkFilterPredicate(Literal(2.date) > '_1, classOf[Lt[_]], 1.date)
+      checkFilterPredicate(Literal(3.date) < '_1, classOf[Gt[_]], 4.date)
+      checkFilterPredicate(Literal(1.date) >= '_1, classOf[LtEq[_]], 1.date)
+      checkFilterPredicate(Literal(4.date) <= '_1, classOf[GtEq[_]], 4.date)
 
-      checkFilterPredicate(!('_1 < 4.d), classOf[GtEq[_]], 4.d)
-      checkFilterPredicate('_1 < 2.d || '_1 > 3.d, classOf[Operators.Or], Seq(Row(1.d), Row(4.d)))
+      checkFilterPredicate(!('_1 < 4.date), classOf[GtEq[_]], 4.date)
+      checkFilterPredicate('_1 < 2.date || '_1 > 3.date, classOf[Operators.Or],
+        Seq(Row(1.date), Row(4.date)))
     }
   }
 
