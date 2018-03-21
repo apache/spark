@@ -1291,8 +1291,9 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         val exception = intercept[SparkException] {
           spark.read
             .schema(ischema)
-            .option("header", "true")
             .option("multiLine", multiLine)
+            .option("header", "true")
+            .option("checkHeader", "true")
             .csv(path.getCanonicalPath)
             .collect()
         }

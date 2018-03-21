@@ -315,7 +315,7 @@ private[csv] object UnivocityParser {
     schema: StructType,
     columnNames: Array[String]
   ): Unit = {
-    if (columnNames != null) {
+    if (parser.options.checkHeader && columnNames != null) {
       val fieldNames = schema.map(_.name)
       val isMatched = fieldNames.zip(columnNames).forall { pair =>
         val (nameInSchema, nameInHeader) = pair
@@ -323,22 +323,16 @@ private[csv] object UnivocityParser {
       }
       if (!isMatched) {
         throw new IllegalArgumentException(
-          s"""
-             |Fields in the header of csv file are not matched to field names of the schema:
-             | Header: ${columnNames.mkString(",")}
-
-             | Schema: ${fieldNames.mkString(",")}
-
-
-             |""".
-            stripMargin
+          s"""|Fields in the header of csv file are not matched to field names of the schema:
+              | Header: ${columnNames.mkString(",")}
+              | Schema: ${fieldNames.mkString(",")}""".stripMargin
         )
       }
     }
   }
 
   def checkHeader(parser: UnivocityParser, schema: StructType, header: String): Unit = {
-    val columnNames = parser.tokenizer.parseLine(header)
+    lazy val columnNames = parser.tokenizer.parseLine(header)
     checkHeaderColumnNames(parser, schema, columnNames)
   }
 }
