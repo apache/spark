@@ -155,6 +155,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       case (null, _) => "null"
       case (s: String, StringType) => "\"" + s + "\""
       case (decimal, DecimalType()) => decimal.toString
+      case (interval, CalendarIntervalType) => interval.toString
       case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 
@@ -178,6 +179,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
           DateTimeUtils.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone))
       case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
       case (decimal: java.math.BigDecimal, DecimalType()) => formatDecimal(decimal)
+      case (interval, CalendarIntervalType) => interval.toString
       case (other, tpe) if primitiveTypes.contains(tpe) => other.toString
     }
   }
