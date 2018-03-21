@@ -331,11 +331,12 @@ private[spark] object JettyUtils extends Logging {
           connectionFactories: _*)
         connector.setPort(port)
         connector.setHost(hostName)
-        connector.start()
-
+        
         // Currently we only use "SelectChannelConnector"
         // Limit the max acceptor number to 8 so that we don't waste a lot of threads
         connector.setAcceptQueueSize(math.min(connector.getAcceptors, 8))
+
+        connector.start()
 
         // The number of selectors always equals to the number of acceptors
         minThreads += connector.getAcceptors * 2
