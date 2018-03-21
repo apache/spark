@@ -109,7 +109,7 @@ private[spark] class SparkUI private (
     }
   }
 
-  def getApplicationInfoList: Iterator[ApplicationInfo] = {
+  def getApplicationInfoList(user: Option[String]): Iterator[ApplicationInfo] = {
     Iterator(new ApplicationInfo(
       id = appId,
       name = appName,
@@ -131,7 +131,7 @@ private[spark] class SparkUI private (
   }
 
   def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
-    getApplicationInfoList.find(_.id == appId)
+    getApplicationInfoList(None).find(_.id == appId)
   }
 
   def getStreamingJobProgressListener: Option[SparkListener] = streamingJobProgressListener

@@ -221,7 +221,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     oldLog.mkdir()
 
     provider.checkForLogs()
-    val appListAfterRename = provider.getListing()
+    val appListAfterRename = provider.getListing(None)
     appListAfterRename.size should be (1)
   }
 
@@ -784,7 +784,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       (checkFn: Seq[ApplicationInfo] => Unit): Unit = {
     provider.checkForLogs()
     provider.cleanLogs()
-    checkFn(provider.getListing().toSeq)
+    checkFn(provider.getListing(None).toSeq)
   }
 
   private def writeFile(file: File, isNewFormat: Boolean, codec: Option[CompressionCodec],
