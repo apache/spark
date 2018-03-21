@@ -609,11 +609,10 @@ class SparkSubmitSuite
     val dir = Utils.createTempDir()
     val archive = Paths.get(dir.toPath.toString, "single.zip")
     Files.createFile(archive)
-    val jars = "/jar1,/jar2"                 // --jars
-    val files = "local:/file1,file2"          // --files
+    val jars = "/jar1,/jar2"
+    val files = "local:/file1,file2"
     val archives = s"file:/archive1,${dir.toPath.toAbsolutePath.toString}/*.zip#archive3"
-                                             // --archives
-    val pyFiles = "py-file1,py-file2"        // --py-files
+    val pyFiles = "py-file1,py-file2"
 
     // Test jars and files
     val clArgs = Seq(
@@ -668,11 +667,10 @@ class SparkSubmitSuite
     val archive2 = Paths.get(dir.toPath.toString, "second.zip")
     Files.createFile(archive1)
     Files.createFile(archive2)
-    val jars = "/jar1,/jar2"                 // --jars
-    val files = "local:/file1,file2"          // --files
-    // --archives
+    val jars = "/jar1,/jar2"
+    val files = "local:/file1,file2"
     val archives = s"file:/archive1,${dir.toPath.toAbsolutePath.toString}/*.zip#archive3"
-    val pyFiles = "py-file1,py-file2"        // --py-files
+    val pyFiles = "py-file1,py-file2"
 
     // Test files and archives (Yarn)
     val clArgs2 = Seq(

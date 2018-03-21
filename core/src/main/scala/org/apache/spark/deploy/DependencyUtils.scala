@@ -151,8 +151,7 @@ private[deploy] object DependencyUtils {
   private def splitOnFragment(path: String): (URI, Option[String]) = {
     val uri = Utils.resolveURI(path)
     val withoutFragment = new URI(uri.getScheme, uri.getSchemeSpecificPart, null)
-    val fragment = if (uri.getFragment != null) Some(uri.getFragment) else None
-    (withoutFragment, fragment)
+    (withoutFragment, Option(uri.getFragment))
   }
 
   private def resolveGlobPath(uri: URI, hadoopConf: Configuration): Array[String] = {
