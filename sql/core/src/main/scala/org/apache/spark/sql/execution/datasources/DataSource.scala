@@ -546,7 +546,7 @@ case class DataSource(
       case dataSource: CreatableRelationProvider =>
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
-        DataSource.verifySchema(data.schema)
+        DataSource.hasEmptySchema(data.schema)
         planForWritingFileFormat(format, mode, data)
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
@@ -726,16 +726,16 @@ object DataSource extends Logging {
    * supplied schema is not empty.
    * @param schema
    */
-  private def verifySchema(schema: StructType): Unit = {
-    def verifyInternal(schema: StructType): Boolean = {
+  private def hasEmptySchema(schema: StructType): Unit = {
+    def hasEmptySchemaInternal(schema: StructType): Boolean = {
       schema.size == 0 || schema.find {
-        case StructField(_, b: StructType, _, _) => verifyInternal(b)
+        case StructField(_, b: StructType, _, _) => hasEmptySchemaInternal(b)
         case _ => false
       }.isDefined
     }
 
 
-    if (verifyInternal(schema)) {
+    if (hasEmptySchemaInternal(schema)) {
       throw new AnalysisException(
         s"""
            |Datasource does not support writing empty or nested empty schemas.
