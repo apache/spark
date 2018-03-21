@@ -17,14 +17,32 @@
 
 package org.apache.spark.sql
 
+import java.io.FileNotFoundException
+
 import org.apache.hadoop.fs.Path
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
-class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
+
+class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
   import testImplicits._
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.sessionState.conf.setConf(SQLConf.ORC_IMPLEMENTATION, "native")
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      spark.sessionState.conf.unsetConf(SQLConf.ORC_IMPLEMENTATION)
+    } finally {
+      super.afterAll()
+    }
+  }
 
   private val allFileBasedDataSources = Seq("orc", "parquet", "csv", "json", "text")
   private val nameWithSpecialChars = "sp&cial%c hars"
@@ -72,6 +90,23 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  Seq("orc", "parquet").foreach { format =>
+    test(s"SPARK-23271 empty RDD when saved should write a metadata only file - $format") {
+      withTempPath { outputPath =>
+        val df = spark.emptyDataFrame.select(lit(1).as("i"))
+        df.write.format(format).save(outputPath.toString)
+        val partFiles = outputPath.listFiles()
+          .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+        assert(partFiles.length === 1)
+
+        // Now read the file.
+        val df1 = spark.read.format(format).load(outputPath.toString)
+        checkAnswer(df1, Seq.empty[Row])
+        assert(df1.schema.equals(df.schema.asNullable))
+      }
+    }
+  }
+
   allFileBasedDataSources.foreach { format =>
     test(s"SPARK-22146 read files containing special characters using $format") {
       withTempDir { dir =>
@@ -102,17 +137,27 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext {
       def testIgnoreMissingFiles(): Unit = {
         withTempDir { dir =>
           val basePath = dir.getCanonicalPath
+
           Seq("0").toDF("a").write.format(format).save(new Path(basePath, "first").toString)
           Seq("1").toDF("a").write.format(format).save(new Path(basePath, "second").toString)
+
           val thirdPath = new Path(basePath, "third")
+          val fs = thirdPath.getFileSystem(spark.sessionState.newHadoopConf())
           Seq("2").toDF("a").write.format(format).save(thirdPath.toString)
+          val files = fs.listStatus(thirdPath).filter(_.isFile).map(_.getPath)
+
           val df = spark.read.format(format).load(
             new Path(basePath, "first").toString,
             new Path(basePath, "second").toString,
             new Path(basePath, "third").toString)
 
-          val fs = thirdPath.getFileSystem(spark.sparkContext.hadoopConfiguration)
+          // Make sure all data files are deleted and can't be opened.
+          files.foreach(f => fs.delete(f, false))
           assert(fs.delete(thirdPath, true))
+          for (f <- files) {
+            intercept[FileNotFoundException](fs.open(f))
+          }
+
           checkAnswer(df, Seq(Row("0"), Row("1")))
         }
       }

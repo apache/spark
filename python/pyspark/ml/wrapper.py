@@ -36,6 +36,10 @@ class JavaWrapper(object):
         super(JavaWrapper, self).__init__()
         self._java_obj = java_obj
 
+    def __del__(self):
+        if SparkContext._active_spark_context and self._java_obj is not None:
+            SparkContext._active_spark_context._gateway.detach(self._java_obj)
+
     @classmethod
     def _create_from_java_class(cls, java_class, *args):
         """
@@ -99,10 +103,6 @@ class JavaParams(JavaWrapper, Params):
     #: synced with the Python wrapper in fit/transform/evaluate/copy.
 
     __metaclass__ = ABCMeta
-
-    def __del__(self):
-        if SparkContext._active_spark_context:
-            SparkContext._active_spark_context._gateway.detach(self._java_obj)
 
     def _make_java_param_pair(self, param, value):
         """

@@ -82,6 +82,27 @@ a Spark driver program configured to connect to Mesos.
 Alternatively, you can also install Spark in the same location in all the Mesos slaves, and configure
 `spark.mesos.executor.home` (defaults to SPARK_HOME) to point to that location.
 
+## Authenticating to Mesos
+
+When Mesos Framework authentication is enabled it is necessary to provide a principal and secret by which to authenticate Spark to Mesos.  Each Spark job will register with Mesos as a separate framework.
+
+Depending on your deployment environment you may wish to create a single set of framework credentials that are shared across all users or create framework credentials for each user.  Creating and managing framework credentials should be done following the Mesos [Authentication documentation](http://mesos.apache.org/documentation/latest/authentication/).
+
+Framework credentials may be specified in a variety of ways depending on your deployment environment and security requirements.  The most simple way is to specify the `spark.mesos.principal` and `spark.mesos.secret` values directly in your Spark configuration.  Alternatively you may specify these values indirectly by instead specifying `spark.mesos.principal.file` and `spark.mesos.secret.file`, these settings point to files containing the principal and secret.  These files must be plaintext files in UTF-8 encoding.  Combined with appropriate file ownership and mode/ACLs this provides a more secure way to specify these credentials.
+
+Additionally if you prefer to use environment variables you can specify all of the above via environment variables instead, the environment variable names are simply the configuration settings uppercased with `.` replaced with `_` e.g. `SPARK_MESOS_PRINCIPAL`.
+
+### Credential Specification Preference Order
+
+Please note that if you specify multiple ways to obtain the credentials then the following preference order applies.  Spark will use the first valid value found and any subsequent values are ignored:
+
+- `spark.mesos.principal` configuration setting
+- `SPARK_MESOS_PRINCIPAL` environment variable
+- `spark.mesos.principal.file` configuration setting
+- `SPARK_MESOS_PRINCIPAL_FILE` environment variable
+
+An equivalent order applies for the secret.  Essentially we prefer the configuration to be specified directly rather than indirectly by files, and we prefer that configuration settings are used over environment variables.
+
 ## Uploading Spark Package
 
 When Mesos runs a task on a Mesos slave for the first time, that slave must have a Spark binary
@@ -427,7 +448,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.principal</code></td>
   <td>(none)</td>
   <td>
-    Set the principal with which Spark framework will use to authenticate with Mesos.
+    Set the principal with which Spark framework will use to authenticate with Mesos.  You can also specify this via the environment variable `SPARK_MESOS_PRINCIPAL`.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.principal.file</code></td>
+  <td>(none)</td>
+  <td>
+    Set the file containing the principal with which Spark framework will use to authenticate with Mesos.  Allows specifying the principal indirectly in more security conscious deployments.  The file must be readable by the user launching the job and be UTF-8 encoded plaintext.  You can also specify this via the environment variable `SPARK_MESOS_PRINCIPAL_FILE`.
   </td>
 </tr>
 <tr>
@@ -435,7 +463,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Set the secret with which Spark framework will use to authenticate with Mesos. Used, for example, when
-    authenticating with the registry.
+    authenticating with the registry.  You can also specify this via the environment variable `SPARK_MESOS_SECRET`.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.secret.file</code></td>
+  <td>(none)</td>
+  <td>
+    Set the file containing the secret with which Spark framework will use to authenticate with Mesos. Used, for example, when
+    authenticating with the registry.  Allows for specifying the secret indirectly in more security conscious deployments.  The file must be readable by the user launching the job and be UTF-8 encoded plaintext.  You can also specify this via the environment variable `SPARK_MESOS_SECRET_FILE`.
   </td>
 </tr>
 <tr>

@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -95,7 +96,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       assert(fetchedStats2.get.sizeInBytes == 0)
 
       val expectedColStat =
-        "key" -> ColumnStat(0, None, None, 0, IntegerType.defaultSize, IntegerType.defaultSize)
+        "key" -> CatalogColumnStat(Some(0), None, None, Some(0),
+          Some(IntegerType.defaultSize), Some(IntegerType.defaultSize))
 
       // There won't be histogram for empty column.
       Seq("true", "false").foreach { histogramEnabled =>
@@ -156,7 +158,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     Seq(stats, statsWithHgms).foreach { s =>
       s.zip(df.schema).foreach { case ((k, v), field) =>
         withClue(s"column $k with type ${field.dataType}") {
-          val roundtrip = ColumnStat.fromMap("table_is_foo", field, v.toMap(k, field.dataType))
+          val roundtrip = CatalogColumnStat.fromMap("table_is_foo", field.name, v.toMap(k))
           assert(roundtrip == Some(v))
         }
       }
@@ -187,7 +189,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }.mkString(", "))
 
     val expectedColStats = dataTypes.map { case (tpe, idx) =>
-      (s"col$idx", ColumnStat(0, None, None, 1, tpe.defaultSize.toLong, tpe.defaultSize.toLong))
+      (s"col$idx", CatalogColumnStat(Some(0), None, None, Some(1),
+        Some(tpe.defaultSize.toLong), Some(tpe.defaultSize.toLong)))
     }
 
     // There won't be histograms for null columns.

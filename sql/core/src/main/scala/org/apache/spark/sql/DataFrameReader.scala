@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.sources.v2._
+import org.apache.spark.sql.sources.v2.{DataSourceV2, ReadSupport, ReadSupportWithSchema}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -189,39 +189,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
-      val ds = cls.newInstance()
-      val options = new DataSourceOptions((extraOptions ++
-        DataSourceV2Utils.extractSessionConfigs(
-          ds = ds.asInstanceOf[DataSourceV2],
-          conf = sparkSession.sessionState.conf)).asJava)
+      val ds = cls.newInstance().asInstanceOf[DataSourceV2]
+      if (ds.isInstanceOf[ReadSupport] || ds.isInstanceOf[ReadSupportWithSchema]) {
+        val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
+          ds = ds, conf = sparkSession.sessionState.conf)
+        Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
+          ds, extraOptions.toMap ++ sessionOptions,
+          userSpecifiedSchema = userSpecifiedSchema))
 
-      // Streaming also uses the data source V2 API. So it may be that the data source implements
-      // v2, but has no v2 implementation for batch reads. In that case, we fall back to loading
-      // the dataframe as a v1 source.
-      val reader = (ds, userSpecifiedSchema) match {
-        case (ds: ReadSupportWithSchema, Some(schema)) =>
-          ds.createReader(schema, options)
-
-        case (ds: ReadSupport, None) =>
-          ds.createReader(options)
-
-        case (ds: ReadSupportWithSchema, None) =>
-          throw new AnalysisException(s"A schema needs to be specified when using $ds.")
-
-        case (ds: ReadSupport, Some(schema)) =>
-          val reader = ds.createReader(options)
-          if (reader.readSchema() != schema) {
-            throw new AnalysisException(s"$ds does not allow user-specified schemas.")
-          }
-          reader
-
-        case _ => null // fall back to v1
-      }
-
-      if (reader == null) {
-        loadV1Source(paths: _*)
       } else {
-        Dataset.ofRows(sparkSession, DataSourceV2Relation(reader))
+        loadV1Source(paths: _*)
       }
     } else {
       loadV1Source(paths: _*)
@@ -368,12 +345,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    * during parsing.
    *   <ul>
-   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
-   *     the malformed string into a field configured by `columnNameOfCorruptRecord`. To keep
-   *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
-   *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
-   *     during parsing. When inferring a schema, it implicitly adds a `columnNameOfCorruptRecord`
-   *     field in an output schema.</li>
+   *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
+   *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To
+   *     keep corrupt records, an user can set a string type field named
+   *     `columnNameOfCorruptRecord` in an user-defined schema. If a schema does not have the
+   *     field, it drops corrupt records during parsing. When inferring a schema, it implicitly
+   *     adds a `columnNameOfCorruptRecord` field in an output schema.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
@@ -573,12 +550,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
    *    during parsing. It supports the following case-insensitive modes.
    *   <ul>
-   *     <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts
-   *     the malformed string into a field configured by `columnNameOfCorruptRecord`. To keep
+   *     <li>`PERMISSIVE` : when it meets a corrupted record, puts the malformed string into a
+   *     field configured by `columnNameOfCorruptRecord`, and sets other fields to `null`. To keep
    *     corrupt records, an user can set a string type field named `columnNameOfCorruptRecord`
    *     in an user-defined schema. If a schema does not have the field, it drops corrupt records
-   *     during parsing. When a length of parsed CSV tokens is shorter than an expected length
-   *     of a schema, it sets `null` for extra fields.</li>
+   *     during parsing. A record with less/more tokens than schema is not a corrupted record to
+   *     CSV. When it meets a record having fewer tokens than the length of the schema, sets
+   *     `null` to extra fields. When the record has more tokens than the length of the schema,
+   *     it drops extra tokens.</li>
    *     <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *     <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    *   </ul>
