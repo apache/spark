@@ -324,8 +324,8 @@ private[csv] object UnivocityParser {
       if (!isMatched) {
         throw new IllegalArgumentException(
           s"""|Fields in the header of csv file are not matched to field names of the schema:
-              | Header: ${columnNames.mkString(",")}
-              | Schema: ${fieldNames.mkString(",")}""".stripMargin
+              | Header: ${columnNames.mkString(", ")}
+              | Schema: ${fieldNames.mkString(", ")}""".stripMargin
         )
       }
     }
