@@ -22,8 +22,9 @@ import scala.util.Random
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
+import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -124,5 +125,13 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
       // case when input contains duplicated rows.
       assertConsistency(spark.range(10000).map(i => Random.nextInt(1000).toLong))
     }
+  }
+
+  test("SPARK-23707: no shuffle exchange with single partition") {
+    val ds1 = spark.range(0, 10, 1, 1).agg(count("*"))
+    val ds2 = spark.range(0, 10, 1, 2).agg(count("*"))
+
+    assert(ds1.queryExecution.executedPlan.collect { case e: Exchange => e }.isEmpty)
+    assert(ds2.queryExecution.executedPlan.collect { case e: Exchange => e }.nonEmpty)
   }
 }

@@ -348,6 +348,13 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
+  /** Specifies how data is partitioned across different nodes in the cluster. */
+  override def outputPartitioning: Partitioning = if (numSlices == 1) {
+    SinglePartition
+  } else {
+    super.outputPartitioning
+  }
+
   override def doCanonicalize(): SparkPlan = {
     RangeExec(range.canonicalized.asInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Range])
   }
@@ -396,11 +403,11 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     // The default size of a batch, which must be positive integer
     val batchSize = 1000
 
-    val initRange = ctx.freshName("initRange")
-
-    val initRangeFuncName = ctx.addNewFunction(initRange,
+    // Two LeafNode shouldn't be combined into one WholeStageCodegen, so here don't need fresh
+    // the function's name.
+    val initRangeFuncName = ctx.addNewFunction("initRange",
       s"""
-        | private void ${initRange}(int idx) {
+        | private void initRange(int idx) {
         |   $BigInt index = $BigInt.valueOf(idx);
         |   $BigInt numSlice = $BigInt.valueOf(${numSlices}L);
         |   $BigInt numElement = $BigInt.valueOf(${numElements.toLong}L);
