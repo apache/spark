@@ -20,6 +20,9 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import javax.annotation.Nonnull;
+
+import com.google.common.primitives.Ints;
 
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.types.*;
@@ -61,8 +64,8 @@ public final class UnsafeArrayData extends ArrayData {
     return 8 + ((numFields + 63)/ 64) * 8;
   }
 
-  private Object baseObject;
-  private long baseOffset;
+  @Nonnull
+  private MemoryBlock base;
 
   // The number of elements in this array
   private int numElements;
@@ -78,8 +81,8 @@ public final class UnsafeArrayData extends ArrayData {
     return elementOffset + ordinal * elementSize;
   }
 
-  public Object getBaseObject() { return baseObject; }
-  public long getBaseOffset() { return baseOffset; }
+  public Object getBaseObject() { return base.getBaseObject(); }
+  public long getBaseOffset() { return base.getBaseOffset(); }
   public int getSizeInBytes() { return sizeInBytes; }
 
   private void assertIndexIsValid(int ordinal) {
@@ -109,23 +112,28 @@ public final class UnsafeArrayData extends ArrayData {
    * @param sizeInBytes the size of this array's backing data, in bytes
    */
   public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
+    MemoryBlock block = MemoryBlock.allocateFromObject(baseObject, baseOffset, sizeInBytes);
+    pointTo(block);
+  }
+
+  public void pointTo(MemoryBlock base) {
+    long baseOffset = base.getBaseOffset();
     // Read the number of elements from the first 8 bytes.
-    final long numElements = Platform.getLong(baseObject, baseOffset);
+    final long numElements = base.getLong(baseOffset);
     assert numElements >= 0 : "numElements (" + numElements + ") should >= 0";
     assert numElements <= Integer.MAX_VALUE :
       "numElements (" + numElements + ") should <= Integer.MAX_VALUE";
 
     this.numElements = (int)numElements;
-    this.baseObject = baseObject;
-    this.baseOffset = baseOffset;
-    this.sizeInBytes = sizeInBytes;
+    this.base = base;
+    this.sizeInBytes = Ints.checkedCast(base.size());
     this.elementOffset = baseOffset + calculateHeaderPortionInBytes(this.numElements);
   }
 
   @Override
   public boolean isNullAt(int ordinal) {
     assertIndexIsValid(ordinal);
-    return BitSetMethods.isSet(baseObject, baseOffset + 8, ordinal);
+    return BitSetMethods.isSetBlock(base, base.getBaseOffset() + 8, ordinal);
   }
 
   @Override
@@ -175,43 +183,43 @@ public final class UnsafeArrayData extends ArrayData {
   @Override
   public boolean getBoolean(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getBoolean(baseObject, getElementOffset(ordinal, 1));
+    return base.getBoolean(getElementOffset(ordinal, 1));
   }
 
   @Override
   public byte getByte(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getByte(baseObject, getElementOffset(ordinal, 1));
+    return base.getByte(getElementOffset(ordinal, 1));
   }
 
   @Override
   public short getShort(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getShort(baseObject, getElementOffset(ordinal, 2));
+    return base.getShort(getElementOffset(ordinal, 2));
   }
 
   @Override
   public int getInt(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getInt(baseObject, getElementOffset(ordinal, 4));
+    return base.getInt( getElementOffset(ordinal, 4));
   }
 
   @Override
   public long getLong(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getLong(baseObject, getElementOffset(ordinal, 8));
+    return base.getLong(getElementOffset(ordinal, 8));
   }
 
   @Override
   public float getFloat(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getFloat(baseObject, getElementOffset(ordinal, 4));
+    return base.getFloat(getElementOffset(ordinal, 4));
   }
 
   @Override
   public double getDouble(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getDouble(baseObject, getElementOffset(ordinal, 8));
+    return base.getDouble(getElementOffset(ordinal, 8));
   }
 
   @Override
@@ -233,7 +241,7 @@ public final class UnsafeArrayData extends ArrayData {
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
-    MemoryBlock mb = MemoryBlock.allocateFromObject(baseObject, baseOffset + offset, size);
+    MemoryBlock mb = base.subBlock(offset, size);
     return new UTF8String(mb);
   }
 
@@ -244,7 +252,7 @@ public final class UnsafeArrayData extends ArrayData {
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
     final byte[] bytes = new byte[size];
-    Platform.copyMemory(baseObject, baseOffset + offset, bytes, Platform.BYTE_ARRAY_OFFSET, size);
+    base.writeTo(offset, bytes, Platform.BYTE_ARRAY_OFFSET, size);
     return bytes;
   }
 
@@ -253,8 +261,8 @@ public final class UnsafeArrayData extends ArrayData {
     if (isNullAt(ordinal)) return null;
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
-    final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
-    final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
+    final int months = (int) base.getLong(base.getBaseOffset() + offset);
+    final long microseconds = base.getLong(base.getBaseOffset() + offset + 8);
     return new CalendarInterval(months, microseconds);
   }
 
@@ -265,7 +273,7 @@ public final class UnsafeArrayData extends ArrayData {
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
     final UnsafeRow row = new UnsafeRow(numFields);
-    row.pointTo(baseObject, baseOffset + offset, size);
+    row.pointTo(base.getBaseObject(), base.getBaseOffset() + offset, size);
     return row;
   }
 
@@ -276,7 +284,7 @@ public final class UnsafeArrayData extends ArrayData {
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
     final UnsafeArrayData array = new UnsafeArrayData();
-    array.pointTo(baseObject, baseOffset + offset, size);
+    array.pointTo(base.subBlock(offset, size));
     return array;
   }
 
@@ -287,7 +295,7 @@ public final class UnsafeArrayData extends ArrayData {
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
     final UnsafeMapData map = new UnsafeMapData();
-    map.pointTo(baseObject, baseOffset + offset, size);
+    map.pointTo(base.subBlock(offset, size));
     return map;
   }
 
@@ -296,7 +304,7 @@ public final class UnsafeArrayData extends ArrayData {
 
   public void setNullAt(int ordinal) {
     assertIndexIsValid(ordinal);
-    BitSetMethods.set(baseObject, baseOffset + 8, ordinal);
+    BitSetMethods.setBlock(base, base.getBaseOffset() + 8, ordinal);
 
     /* we assume the corresponding column was already 0 or
        will be set to 0 later by the caller side */
@@ -304,27 +312,27 @@ public final class UnsafeArrayData extends ArrayData {
 
   public void setBoolean(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);
-    Platform.putBoolean(baseObject, getElementOffset(ordinal, 1), value);
+    base.putBoolean(getElementOffset(ordinal, 1), value);
   }
 
   public void setByte(int ordinal, byte value) {
     assertIndexIsValid(ordinal);
-    Platform.putByte(baseObject, getElementOffset(ordinal, 1), value);
+    base.putByte(getElementOffset(ordinal, 1), value);
   }
 
   public void setShort(int ordinal, short value) {
     assertIndexIsValid(ordinal);
-    Platform.putShort(baseObject, getElementOffset(ordinal, 2), value);
+    base.putShort(getElementOffset(ordinal, 2), value);
   }
 
   public void setInt(int ordinal, int value) {
     assertIndexIsValid(ordinal);
-    Platform.putInt(baseObject, getElementOffset(ordinal, 4), value);
+    base.putInt(getElementOffset(ordinal, 4), value);
   }
 
   public void setLong(int ordinal, long value) {
     assertIndexIsValid(ordinal);
-    Platform.putLong(baseObject, getElementOffset(ordinal, 8), value);
+    base.putLong(getElementOffset(ordinal, 8), value);
   }
 
   public void setFloat(int ordinal, float value) {
@@ -332,7 +340,7 @@ public final class UnsafeArrayData extends ArrayData {
       value = Float.NaN;
     }
     assertIndexIsValid(ordinal);
-    Platform.putFloat(baseObject, getElementOffset(ordinal, 4), value);
+    base.putFloat(getElementOffset(ordinal, 4), value);
   }
 
   public void setDouble(int ordinal, double value) {
@@ -340,7 +348,7 @@ public final class UnsafeArrayData extends ArrayData {
       value = Double.NaN;
     }
     assertIndexIsValid(ordinal);
-    Platform.putDouble(baseObject, getElementOffset(ordinal, 8), value);
+    base.putDouble(getElementOffset(ordinal, 8), value);
   }
 
   // This `hashCode` computation could consume much processor time for large data.
@@ -349,7 +357,7 @@ public final class UnsafeArrayData extends ArrayData {
   // The same issue exists in `UnsafeRow.hashCode`.
   @Override
   public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeBytes(baseObject, baseOffset, sizeInBytes, 42);
+    return Murmur3_x86_32.hashUnsafeBytesBlock(base, 42);
   }
 
   @Override
@@ -357,14 +365,13 @@ public final class UnsafeArrayData extends ArrayData {
     if (other instanceof UnsafeArrayData) {
       UnsafeArrayData o = (UnsafeArrayData) other;
       return (sizeInBytes == o.sizeInBytes) &&
-        ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
-          sizeInBytes);
+        ByteArrayMethods.arrayEqualsBlock(base, 0, o.base, 0, sizeInBytes);
     }
     return false;
   }
 
   public void writeToMemory(Object target, long targetOffset) {
-    Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+    base.writeTo(0, target, targetOffset, sizeInBytes);
   }
 
   public void writeTo(ByteBuffer buffer) {
@@ -380,65 +387,65 @@ public final class UnsafeArrayData extends ArrayData {
   public UnsafeArrayData copy() {
     UnsafeArrayData arrayCopy = new UnsafeArrayData();
     final byte[] arrayDataCopy = new byte[sizeInBytes];
-    Platform.copyMemory(
-      baseObject, baseOffset, arrayDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
-    arrayCopy.pointTo(arrayDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+    MemoryBlock mb = ByteArrayMemoryBlock.fromArray(arrayDataCopy);
+    MemoryBlock.copyMemory(base, mb, sizeInBytes);
+    arrayCopy.pointTo(mb);
     return arrayCopy;
   }
 
   @Override
   public boolean[] toBooleanArray() {
     boolean[] values = new boolean[numElements];
-    Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.BOOLEAN_ARRAY_OFFSET, numElements);
+    base.writeTo(
+      elementOffset - base.getBaseOffset(), values, Platform.BOOLEAN_ARRAY_OFFSET, numElements);
     return values;
   }
 
   @Override
   public byte[] toByteArray() {
     byte[] values = new byte[numElements];
-    Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.BYTE_ARRAY_OFFSET, numElements);
+    base.writeTo(
+      elementOffset - base.getBaseOffset(), values, Platform.BYTE_ARRAY_OFFSET, numElements);
     return values;
   }
 
   @Override
   public short[] toShortArray() {
     short[] values = new short[numElements];
-    Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.SHORT_ARRAY_OFFSET, numElements * 2);
+    base.writeTo(
+      elementOffset - base.getBaseOffset(), values, Platform.SHORT_ARRAY_OFFSET, numElements * 2);
     return values;
   }
 
   @Override
   public int[] toIntArray() {
     int[] values = new int[numElements];
-    Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.INT_ARRAY_OFFSET, numElements * 4);
+    base.writeTo(
+      elementOffset - base.getBaseOffset(), values, Platform.INT_ARRAY_OFFSET, numElements * 4);
     return values;
   }
 
   @Override
   public long[] toLongArray() {
     long[] values = new long[numElements];
-    Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.LONG_ARRAY_OFFSET, numElements * 8);
+    base.writeTo(
+      elementOffset - base.getBaseOffset(), values, Platform.LONG_ARRAY_OFFSET, numElements * 8);
     return values;
   }
 
   @Override
   public float[] toFloatArray() {
     float[] values = new float[numElements];
-    Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.FLOAT_ARRAY_OFFSET, numElements * 4);
+    base.writeTo(
+      elementOffset - base.getBaseOffset(), values, Platform.FLOAT_ARRAY_OFFSET, numElements * 4);
     return values;
   }
 
   @Override
   public double[] toDoubleArray() {
     double[] values = new double[numElements];
-    Platform.copyMemory(
-      baseObject, elementOffset, values, Platform.DOUBLE_ARRAY_OFFSET, numElements * 8);
+    base.writeTo(
+      elementOffset - base.getBaseOffset(), values, Platform.DOUBLE_ARRAY_OFFSET, numElements * 8);
     return values;
   }
 
@@ -459,7 +466,8 @@ public final class UnsafeArrayData extends ArrayData {
       Platform.LONG_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
 
     UnsafeArrayData result = new UnsafeArrayData();
-    result.pointTo(data, Platform.LONG_ARRAY_OFFSET, (int)totalSizeInLongs * 8);
+    MemoryBlock mb = OnHeapMemoryBlock.fromArray(data);
+    result.pointTo(mb);
     return result;
   }
 

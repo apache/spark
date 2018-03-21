@@ -25,11 +25,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import javax.annotation.Nonnull;
 
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import com.google.common.primitives.Ints;
 
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.*;
@@ -109,8 +111,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   // Private fields and methods
   //////////////////////////////////////////////////////////////////////////////
 
-  private Object baseObject;
-  private long baseOffset;
+  @Nonnull
+  private MemoryBlock base;
 
   /** The number of fields in this row, used for calculating the bitset width (and in assertions) */
   private int numFields;
@@ -122,7 +124,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   private int bitSetWidthInBytes;
 
   private long getFieldOffset(int ordinal) {
-    return baseOffset + bitSetWidthInBytes + ordinal * 8L;
+    return getBaseOffset() + bitSetWidthInBytes + ordinal * 8L;
   }
 
   private void assertIndexIsValid(int index) {
@@ -148,8 +150,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   // for serializer
   public UnsafeRow() {}
 
-  public Object getBaseObject() { return baseObject; }
-  public long getBaseOffset() { return baseOffset; }
+  public MemoryBlock getMemoryBlock() { return base; }
+  public Object getBaseObject() { return base.getBaseObject(); }
+  public long getBaseOffset() { return base.getBaseOffset(); }
   public int getSizeInBytes() { return sizeInBytes; }
 
   @Override
@@ -163,11 +166,15 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    * @param sizeInBytes the size of this row's backing data, in bytes
    */
   public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
+    MemoryBlock block = MemoryBlock.allocateFromObject(baseObject, baseOffset, sizeInBytes);
+    pointTo(block);
+  }
+
+  public void pointTo(MemoryBlock base) {
     assert numFields >= 0 : "numFields (" + numFields + ") should >= 0";
+    this.base = base;
+    this.sizeInBytes = Ints.checkedCast(base.size());
     assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
-    this.baseObject = baseObject;
-    this.baseOffset = baseOffset;
-    this.sizeInBytes = sizeInBytes;
   }
 
   /**
@@ -183,21 +190,22 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void setTotalSize(int sizeInBytes) {
     assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
     this.sizeInBytes = sizeInBytes;
+    base = MemoryBlock.allocateFromObject(base.getBaseObject(), base.getBaseOffset(), sizeInBytes);
   }
 
   public void setNotNullAt(int i) {
     assertIndexIsValid(i);
-    BitSetMethods.unset(baseObject, baseOffset, i);
+    BitSetMethods.unsetBlock(base, getBaseOffset(), i);
   }
 
   @Override
   public void setNullAt(int i) {
     assertIndexIsValid(i);
-    BitSetMethods.set(baseObject, baseOffset, i);
+    BitSetMethods.setBlock(base, getBaseOffset(), i);
     // To preserve row equality, zero out the value when setting the column to null.
     // Since this row does not currently support updates to variable-length values, we don't
     // have to worry about zeroing out that data.
-    Platform.putLong(baseObject, getFieldOffset(i), 0);
+    base.putLong(getFieldOffset(i), 0);
   }
 
   @Override
@@ -209,14 +217,14 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   public void setInt(int ordinal, int value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    Platform.putInt(baseObject, getFieldOffset(ordinal), value);
+    base.putInt(getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setLong(int ordinal, long value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    Platform.putLong(baseObject, getFieldOffset(ordinal), value);
+    base.putLong(getFieldOffset(ordinal), value);
   }
 
   @Override
@@ -226,28 +234,28 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (Double.isNaN(value)) {
       value = Double.NaN;
     }
-    Platform.putDouble(baseObject, getFieldOffset(ordinal), value);
+    base.putDouble(getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setBoolean(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    Platform.putBoolean(baseObject, getFieldOffset(ordinal), value);
+    base.putBoolean(getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setShort(int ordinal, short value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    Platform.putShort(baseObject, getFieldOffset(ordinal), value);
+    base.putShort(getFieldOffset(ordinal), value);
   }
 
   @Override
   public void setByte(int ordinal, byte value) {
     assertIndexIsValid(ordinal);
     setNotNullAt(ordinal);
-    Platform.putByte(baseObject, getFieldOffset(ordinal), value);
+    base.putByte(getFieldOffset(ordinal), value);
   }
 
   @Override
@@ -257,7 +265,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (Float.isNaN(value)) {
       value = Float.NaN;
     }
-    Platform.putFloat(baseObject, getFieldOffset(ordinal), value);
+    base.putFloat(getFieldOffset(ordinal), value);
   }
 
   /**
@@ -281,13 +289,13 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       long cursor = getLong(ordinal) >>> 32;
       assert cursor > 0 : "invalid cursor " + cursor;
       // zero-out the bytes
-      Platform.putLong(baseObject, baseOffset + cursor, 0L);
-      Platform.putLong(baseObject, baseOffset + cursor + 8, 0L);
+      base.putLong(getBaseOffset() + cursor, 0L);
+      base.putLong(getBaseOffset() + cursor + 8, 0L);
 
       if (value == null) {
         setNullAt(ordinal);
         // keep the offset for future update
-        Platform.putLong(baseObject, getFieldOffset(ordinal), cursor << 32);
+        base.putLong(getFieldOffset(ordinal), cursor << 32);
       } else {
 
         final BigInteger integer = value.toJavaBigDecimal().unscaledValue();
@@ -295,8 +303,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
         assert(bytes.length <= 16);
 
         // Write the bytes to the variable length portion.
-        Platform.copyMemory(
-          bytes, Platform.BYTE_ARRAY_OFFSET, baseObject, baseOffset + cursor, bytes.length);
+        base.copyFrom(bytes, Platform.BYTE_ARRAY_OFFSET, cursor, bytes.length);
         setLong(ordinal, (cursor << 32) | ((long) bytes.length));
       }
     }
@@ -349,49 +356,49 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   @Override
   public boolean isNullAt(int ordinal) {
     assertIndexIsValid(ordinal);
-    return BitSetMethods.isSet(baseObject, baseOffset, ordinal);
+    return BitSetMethods.isSetBlock(base, getBaseOffset(), ordinal);
   }
 
   @Override
   public boolean getBoolean(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getBoolean(baseObject, getFieldOffset(ordinal));
+    return base.getBoolean(getFieldOffset(ordinal));
   }
 
   @Override
   public byte getByte(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getByte(baseObject, getFieldOffset(ordinal));
+    return base.getByte(getFieldOffset(ordinal));
   }
 
   @Override
   public short getShort(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getShort(baseObject, getFieldOffset(ordinal));
+    return base.getShort(getFieldOffset(ordinal));
   }
 
   @Override
   public int getInt(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getInt(baseObject, getFieldOffset(ordinal));
+    return base.getInt(getFieldOffset(ordinal));
   }
 
   @Override
   public long getLong(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getLong(baseObject, getFieldOffset(ordinal));
+    return base.getLong(getFieldOffset(ordinal));
   }
 
   @Override
   public float getFloat(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getFloat(baseObject, getFieldOffset(ordinal));
+    return base.getFloat(getFieldOffset(ordinal));
   }
 
   @Override
   public double getDouble(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getDouble(baseObject, getFieldOffset(ordinal));
+    return base.getDouble(getFieldOffset(ordinal));
   }
 
   @Override
@@ -415,7 +422,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
-    MemoryBlock mb = MemoryBlock.allocateFromObject(baseObject, baseOffset + offset, size);
+    MemoryBlock mb = base.subBlock(offset, size);
     return new UTF8String(mb);
   }
 
@@ -428,9 +435,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) offsetAndSize;
       final byte[] bytes = new byte[size];
-      Platform.copyMemory(
-        baseObject,
-        baseOffset + offset,
+      base.writeTo(
+        offset,
         bytes,
         Platform.BYTE_ARRAY_OFFSET,
         size
@@ -446,8 +452,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     } else {
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
-      final int months = (int) Platform.getLong(baseObject, baseOffset + offset);
-      final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
+      final int months = (int) base.getLong(getBaseOffset() + offset);
+      final long microseconds = base.getLong(getBaseOffset() + offset + 8);
       return new CalendarInterval(months, microseconds);
     }
   }
@@ -461,7 +467,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) offsetAndSize;
       final UnsafeRow row = new UnsafeRow(numFields);
-      row.pointTo(baseObject, baseOffset + offset, size);
+      row.pointTo(base.subBlock(offset, size));
       return row;
     }
   }
@@ -475,7 +481,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) offsetAndSize;
       final UnsafeArrayData array = new UnsafeArrayData();
-      array.pointTo(baseObject, baseOffset + offset, size);
+      array.pointTo(base.subBlock(offset, size));
       return array;
     }
   }
@@ -489,7 +495,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) offsetAndSize;
       final UnsafeMapData map = new UnsafeMapData();
-      map.pointTo(baseObject, baseOffset + offset, size);
+      map.pointTo(base.subBlock(offset, size));
       return map;
     }
   }
@@ -501,15 +507,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   @Override
   public UnsafeRow copy() {
     UnsafeRow rowCopy = new UnsafeRow(numFields);
-    final byte[] rowDataCopy = new byte[sizeInBytes];
-    Platform.copyMemory(
-      baseObject,
-      baseOffset,
-      rowDataCopy,
-      Platform.BYTE_ARRAY_OFFSET,
-      sizeInBytes
-    );
-    rowCopy.pointTo(rowDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+    ByteArrayMemoryBlock mb = ByteArrayMemoryBlock.fromArray(new byte[sizeInBytes]);
+    MemoryBlock.copyMemory(base, mb, sizeInBytes);
+    rowCopy.pointTo(mb);
     return rowCopy;
   }
 
@@ -529,13 +529,14 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    */
   public void copyFrom(UnsafeRow row) {
     // copyFrom is only available for UnsafeRow created from byte array.
-    assert (baseObject instanceof byte[]) && baseOffset == Platform.BYTE_ARRAY_OFFSET;
+    assert (base instanceof ByteArrayMemoryBlock) && getBaseOffset() == Platform.BYTE_ARRAY_OFFSET;
     if (row.sizeInBytes > this.sizeInBytes) {
-      // resize the underlying byte[] if it's not large enough.
-      this.baseObject = new byte[row.sizeInBytes];
+      // resize the underlying byte[] if it's not large enough.Bit
+      base = ByteArrayMemoryBlock.fromArray(new byte[row.sizeInBytes]);
+    } else if (row.sizeInBytes != this.sizeInBytes) {
+      base = base.subBlock(0, row.sizeInBytes);
     }
-    Platform.copyMemory(
-      row.baseObject, row.baseOffset, this.baseObject, this.baseOffset, row.sizeInBytes);
+    MemoryBlock.copyMemory(row.base, 0, base, 0, row.sizeInBytes);
     // update the sizeInBytes.
     this.sizeInBytes = row.sizeInBytes;
   }
@@ -549,16 +550,16 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    *                    buffer will not be used and may be null.
    */
   public void writeToStream(OutputStream out, byte[] writeBuffer) throws IOException {
-    if (baseObject instanceof byte[]) {
-      int offsetInByteArray = (int) (baseOffset - Platform.BYTE_ARRAY_OFFSET);
-      out.write((byte[]) baseObject, offsetInByteArray, sizeInBytes);
+    if (base instanceof ByteArrayMemoryBlock) {
+      int offsetInByteArray = (int) (getBaseOffset() - Platform.BYTE_ARRAY_OFFSET);
+      out.write((byte[]) getBaseObject(), offsetInByteArray, sizeInBytes);
     } else {
       int dataRemaining = sizeInBytes;
-      long rowReadPosition = baseOffset;
+      long rowReadPosition = 0;
       while (dataRemaining > 0) {
         int toTransfer = Math.min(writeBuffer.length, dataRemaining);
-        Platform.copyMemory(
-          baseObject, rowReadPosition, writeBuffer, Platform.BYTE_ARRAY_OFFSET, toTransfer);
+        base.writeTo(
+          rowReadPosition, writeBuffer, Platform.BYTE_ARRAY_OFFSET, toTransfer);
         out.write(writeBuffer, 0, toTransfer);
         rowReadPosition += toTransfer;
         dataRemaining -= toTransfer;
@@ -568,7 +569,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeWords(baseObject, baseOffset, sizeInBytes, 42);
+    return Murmur3_x86_32.hashUnsafeWordsBlock(base, 42);
   }
 
   @Override
@@ -576,8 +577,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     if (other instanceof UnsafeRow) {
       UnsafeRow o = (UnsafeRow) other;
       return (sizeInBytes == o.sizeInBytes) &&
-        ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
-          sizeInBytes);
+        ByteArrayMethods.arrayEqualsBlock(base, 0, o.base, 0, sizeInBytes);
     }
     return false;
   }
@@ -586,12 +586,14 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    * Returns the underlying bytes for this UnsafeRow.
    */
   public byte[] getBytes() {
-    if (baseObject instanceof byte[] && baseOffset == Platform.BYTE_ARRAY_OFFSET
-      && (((byte[]) baseObject).length == sizeInBytes)) {
-      return (byte[]) baseObject;
+    if (base instanceof ByteArrayMemoryBlock && getBaseOffset() == Platform.BYTE_ARRAY_OFFSET
+      && (((byte[]) getBaseObject()).length == sizeInBytes)) {
+      return (byte[]) getBaseObject();
     } else {
       byte[] bytes = new byte[sizeInBytes];
-      Platform.copyMemory(baseObject, baseOffset, bytes, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+      if (base != null) {
+        base.writeTo(0, bytes, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+      }
       return bytes;
     }
   }
@@ -602,7 +604,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     StringBuilder build = new StringBuilder("[");
     for (int i = 0; i < sizeInBytes; i += 8) {
       if (i != 0) build.append(',');
-      build.append(java.lang.Long.toHexString(Platform.getLong(baseObject, baseOffset + i)));
+      build.append(java.lang.Long.toHexString(base.getLong(getBaseOffset() + i)));
     }
     build.append(']');
     return build.toString();
@@ -610,7 +612,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public boolean anyNull() {
-    return BitSetMethods.anySet(baseObject, baseOffset, bitSetWidthInBytes / 8);
+    return BitSetMethods.anySetBlock(base, getBaseOffset(), bitSetWidthInBytes / 8);
   }
 
   /**
@@ -619,7 +621,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    * bytes in this string.
    */
   public void writeToMemory(Object target, long targetOffset) {
-    Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+    base.writeTo(0, target, targetOffset, sizeInBytes);
   }
 
   public void writeTo(ByteBuffer buffer) {
@@ -644,9 +646,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     buffer.putInt(size);
     int pos = buffer.position();
     buffer.position(pos + size);
-    Platform.copyMemory(
-      baseObject,
-      baseOffset + offset,
+    base.writeTo(
+      offset,
       buffer.array(),
       Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + pos,
       size);
@@ -662,12 +663,12 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
-    this.baseOffset = BYTE_ARRAY_OFFSET;
     this.sizeInBytes = in.readInt();
     this.numFields = in.readInt();
     this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
-    this.baseObject = new byte[sizeInBytes];
-    in.readFully((byte[]) baseObject);
+    byte[] array = new byte[sizeInBytes];
+    in.readFully(array);
+    this.base = ByteArrayMemoryBlock.fromArray(array);
   }
 
   @Override
@@ -680,11 +681,11 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
 
   @Override
   public void read(Kryo kryo, Input in) {
-    this.baseOffset = BYTE_ARRAY_OFFSET;
     this.sizeInBytes = in.readInt();
     this.numFields = in.readInt();
     this.bitSetWidthInBytes = calculateBitSetWidthInBytes(numFields);
-    this.baseObject = new byte[sizeInBytes];
-    in.read((byte[]) baseObject);
+    byte[] array = new byte[sizeInBytes];
+    in.read(array);
+    this.base = ByteArrayMemoryBlock.fromArray(array);
   }
 }

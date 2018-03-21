@@ -18,9 +18,14 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import java.nio.ByteBuffer;
+import javax.annotation.Nonnull;
+
+import com.google.common.primitives.Ints;
 
 import org.apache.spark.sql.catalyst.util.MapData;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
  * An Unsafe implementation of Map which is backed by raw memory instead of Java objects.
@@ -32,16 +37,16 @@ import org.apache.spark.unsafe.Platform;
 // TODO: Use a more efficient format which doesn't depend on unsafe array.
 public final class UnsafeMapData extends MapData {
 
-  private Object baseObject;
-  private long baseOffset;
+  @Nonnull
+  private MemoryBlock base;
 
   // The size of this map's backing data, in bytes.
   // The 4-bytes header of key array `numBytes` is also included, so it's actually equal to
   // 4 + key array numBytes + value array numBytes.
   private int sizeInBytes;
 
-  public Object getBaseObject() { return baseObject; }
-  public long getBaseOffset() { return baseOffset; }
+  public Object getBaseObject() { return base.getBaseObject(); }
+  public long getBaseOffset() { return base.getBaseOffset(); }
   public int getSizeInBytes() { return sizeInBytes; }
 
   private final UnsafeArrayData keys;
@@ -65,22 +70,27 @@ public final class UnsafeMapData extends MapData {
    * @param sizeInBytes the size of this map's backing data, in bytes
    */
   public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
+    MemoryBlock block = MemoryBlock.allocateFromObject(baseObject, baseOffset, sizeInBytes);
+    pointTo(block);
+  }
+
+  public void pointTo(MemoryBlock base) {
+    long baseOffset = base.getBaseOffset();
+    this.base = base;
+    this.sizeInBytes = Ints.checkedCast(base.size());
+
     // Read the numBytes of key array from the first 8 bytes.
-    final long keyArraySize = Platform.getLong(baseObject, baseOffset);
+    final long keyArraySize = base.getLong(baseOffset);
     assert keyArraySize >= 0 : "keyArraySize (" + keyArraySize + ") should >= 0";
     assert keyArraySize <= Integer.MAX_VALUE :
       "keyArraySize (" + keyArraySize + ") should <= Integer.MAX_VALUE";
     final int valueArraySize = sizeInBytes - (int)keyArraySize - 8;
     assert valueArraySize >= 0 : "valueArraySize (" + valueArraySize + ") should >= 0";
 
-    keys.pointTo(baseObject, baseOffset + 8, (int)keyArraySize);
-    values.pointTo(baseObject, baseOffset + 8 + keyArraySize, valueArraySize);
+    keys.pointTo(base.subBlock(8, keyArraySize));
+    values.pointTo(base.subBlock(8 + keyArraySize, valueArraySize));
 
     assert keys.numElements() == values.numElements();
-
-    this.baseObject = baseObject;
-    this.baseOffset = baseOffset;
-    this.sizeInBytes = sizeInBytes;
   }
 
   @Override
@@ -99,7 +109,7 @@ public final class UnsafeMapData extends MapData {
   }
 
   public void writeToMemory(Object target, long targetOffset) {
-    Platform.copyMemory(baseObject, baseOffset, target, targetOffset, sizeInBytes);
+    base.writeTo(0, target, targetOffset, sizeInBytes);
   }
 
   public void writeTo(ByteBuffer buffer) {
@@ -114,10 +124,9 @@ public final class UnsafeMapData extends MapData {
   @Override
   public UnsafeMapData copy() {
     UnsafeMapData mapCopy = new UnsafeMapData();
-    final byte[] mapDataCopy = new byte[sizeInBytes];
-    Platform.copyMemory(
-      baseObject, baseOffset, mapDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
-    mapCopy.pointTo(mapDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
+    MemoryBlock mb = ByteArrayMemoryBlock.fromArray(new byte[sizeInBytes]);
+    MemoryBlock.copyMemory(base, mb, sizeInBytes);
+    mapCopy.pointTo(mb);
     return mapCopy;
   }
 }

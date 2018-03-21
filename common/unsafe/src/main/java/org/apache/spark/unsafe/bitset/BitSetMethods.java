@@ -18,6 +18,8 @@
 package org.apache.spark.unsafe.bitset;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
  * Methods for working with fixed-size uncompressed bitsets.
@@ -38,42 +40,50 @@ public final class BitSetMethods {
    * Sets the bit at the specified index to {@code true}.
    */
   public static void set(Object baseObject, long baseOffset, int index) {
+    setBlock(ByteArrayMemoryBlock.fromArray((byte[]) baseObject), baseOffset, index);
+  }
+
+  public static void setBlock(MemoryBlock mb, long baseOffset, int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     final long mask = 1L << (index & 0x3f);  // mod 64 and shift
     final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
-    final long word = Platform.getLong(baseObject, wordOffset);
-    Platform.putLong(baseObject, wordOffset, word | mask);
+    final long word = mb.getLong(wordOffset);
+    mb.putLong(wordOffset, word | mask);
   }
 
   /**
    * Sets the bit at the specified index to {@code false}.
    */
-  public static void unset(Object baseObject, long baseOffset, int index) {
+  public static void unsetBlock(MemoryBlock mb, long baseOffset, int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     final long mask = 1L << (index & 0x3f);  // mod 64 and shift
     final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
-    final long word = Platform.getLong(baseObject, wordOffset);
-    Platform.putLong(baseObject, wordOffset, word & ~mask);
+    final long word = mb.getLong(wordOffset);
+    mb.putLong(wordOffset, word & ~mask);
   }
 
   /**
    * Returns {@code true} if the bit is set at the specified index.
    */
   public static boolean isSet(Object baseObject, long baseOffset, int index) {
+    return isSetBlock(ByteArrayMemoryBlock.fromArray((byte[]) baseObject), baseOffset, index);
+  }
+
+  public static boolean isSetBlock(MemoryBlock mb, long baseOffset, int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     final long mask = 1L << (index & 0x3f);  // mod 64 and shift
     final long wordOffset = baseOffset + (index >> 6) * WORD_SIZE;
-    final long word = Platform.getLong(baseObject, wordOffset);
+    final long word = mb.getLong(wordOffset);
     return (word & mask) != 0;
   }
 
   /**
    * Returns {@code true} if any bit is set.
    */
-  public static boolean anySet(Object baseObject, long baseOffset, long bitSetWidthInWords) {
+  public static boolean anySetBlock(MemoryBlock mb, long baseOffset, long bitSetWidthInWords) {
     long addr = baseOffset;
     for (int i = 0; i < bitSetWidthInWords; i++, addr += WORD_SIZE) {
-      if (Platform.getLong(baseObject, addr) != 0) {
+      if (mb.getLong(addr) != 0) {
         return true;
       }
     }

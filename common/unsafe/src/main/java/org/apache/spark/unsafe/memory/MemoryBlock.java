@@ -17,6 +17,7 @@
 
 package org.apache.spark.unsafe.memory;
 
+import java.io.Serializable;
 import javax.annotation.Nullable;
 
 import org.apache.spark.unsafe.Platform;
@@ -25,7 +26,7 @@ import org.apache.spark.unsafe.Platform;
  * A representation of a consecutive memory block in Spark. It defines the common interfaces
  * for memory accessing and mutating.
  */
-public abstract class MemoryBlock {
+public abstract class MemoryBlock implements Serializable {
   /** Special `pageNumber` value for pages which were not allocated by TaskMemoryManagers */
   public static final int NO_PAGE_NUMBER = -1;
 

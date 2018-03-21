@@ -56,8 +56,10 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
   def create(schema1: StructType, schema2: StructType): UnsafeRowJoiner = {
     val ctx = new CodegenContext
     val offset = Platform.BYTE_ARRAY_OFFSET
-    val getLong = "Platform.getLong"
-    val putLong = "Platform.putLong"
+    val getLong = "getLong"
+    val putLong = "putLong"
+    val memoryBlock = "org.apache.spark.unsafe.memory.MemoryBlock"
+    val byteArrayMemoryBlock = "org.apache.spark.unsafe.memory.ByteArrayMemoryBlock"
 
     val bitset1Words = (schema1.size + 63) / 64
     val bitset2Words = (schema2.size + 63) / 64
@@ -72,41 +74,41 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     val copyBitset = Seq.tabulate(outputBitsetWords) { i =>
       val bits = if (bitset1Remainder > 0 && bitset2Words != 0) {
         if (i < bitset1Words - 1) {
-          s"$getLong(obj1, offset1 + ${i * 8})"
+          s"obj1.$getLong(offset1 + ${i * 8})"
         } else if (i == bitset1Words - 1) {
           // combine last work of bitset1 and first word of bitset2
-          s"$getLong(obj1, offset1 + ${i * 8}) | ($getLong(obj2, offset2) << $bitset1Remainder)"
+          s"obj1.$getLong(offset1 + ${i * 8}) | (obj2.$getLong(offset2) << $bitset1Remainder)"
         } else if (i - bitset1Words < bitset2Words - 1) {
           // combine next two words of bitset2
-          s"($getLong(obj2, offset2 + ${(i - bitset1Words) * 8}) >>> (64 - $bitset1Remainder))" +
-            s" | ($getLong(obj2, offset2 + ${(i - bitset1Words + 1) * 8}) << $bitset1Remainder)"
+          s"(obj2.$getLong(offset2 + ${(i - bitset1Words) * 8}) >>> (64 - $bitset1Remainder))" +
+            s" | (obj2.$getLong(offset2 + ${(i - bitset1Words + 1) * 8}) << $bitset1Remainder)"
         } else {
           // last word of bitset2
-          s"$getLong(obj2, offset2 + ${(i - bitset1Words) * 8}) >>> (64 - $bitset1Remainder)"
+          s"obj2.$getLong(offset2 + ${(i - bitset1Words) * 8}) >>> (64 - $bitset1Remainder)"
         }
       } else {
         // they are aligned by word
         if (i < bitset1Words) {
-          s"$getLong(obj1, offset1 + ${i * 8})"
+          s"obj1.$getLong(offset1 + ${i * 8})"
         } else {
-          s"$getLong(obj2, offset2 + ${(i - bitset1Words) * 8})"
+          s"obj2.$getLong(offset2 + ${(i - bitset1Words) * 8})"
         }
       }
-      s"$putLong(buf, ${offset + i * 8}, $bits);\n"
+      s"buf.$putLong(${offset + i * 8}, $bits);\n"
     }
 
     val copyBitsets = ctx.splitExpressions(
       expressions = copyBitset,
       funcName = "copyBitsetFunc",
-      arguments = ("java.lang.Object", "obj1") :: ("long", "offset1") ::
-                  ("java.lang.Object", "obj2") :: ("long", "offset2") :: Nil)
+      arguments = (memoryBlock, "obj1") :: ("long", "offset1") ::
+                  (memoryBlock, "obj2") :: ("long", "offset2") :: Nil)
 
     // --------------------- copy fixed length portion from row 1 ----------------------- //
-    var cursor = offset + outputBitsetWords * 8
+    var cursor = outputBitsetWords * 8
     val copyFixedLengthRow1 = s"""
        |// Copy fixed length data for row1
-       |Platform.copyMemory(
-       |  obj1, offset1 + ${bitset1Words * 8},
+       |$memoryBlock.copyMemory(
+       |  obj1, ${bitset1Words * 8},
        |  buf, $cursor,
        |  ${schema1.size * 8});
      """.stripMargin
@@ -115,8 +117,8 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     // --------------------- copy fixed length portion from row 2 ----------------------- //
     val copyFixedLengthRow2 = s"""
        |// Copy fixed length data for row2
-       |Platform.copyMemory(
-       |  obj2, offset2 + ${bitset2Words * 8},
+       |$memoryBlock.copyMemory(
+       |  obj2, ${bitset2Words * 8},
        |  buf, $cursor,
        |  ${schema2.size * 8});
      """.stripMargin
@@ -127,8 +129,8 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     val copyVariableLengthRow1 = s"""
        |// Copy variable length data for row1
        |long numBytesVariableRow1 = row1.getSizeInBytes() - $numBytesBitsetAndFixedRow1;
-       |Platform.copyMemory(
-       |  obj1, offset1 + ${(bitset1Words + schema1.size) * 8},
+       |$memoryBlock.copyMemory(
+       |  obj1, ${(bitset1Words + schema1.size) * 8},
        |  buf, $cursor,
        |  numBytesVariableRow1);
      """.stripMargin
@@ -138,8 +140,8 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     val copyVariableLengthRow2 = s"""
        |// Copy variable length data for row2
        |long numBytesVariableRow2 = row2.getSizeInBytes() - $numBytesBitsetAndFixedRow2;
-       |Platform.copyMemory(
-       |  obj2, offset2 + ${(bitset2Words + schema2.size) * 8},
+       |$memoryBlock.copyMemory(
+       |  obj2, ${(bitset2Words + schema2.size) * 8},
        |  buf, $cursor + numBytesVariableRow1,
        |  numBytesVariableRow2);
      """.stripMargin
@@ -198,9 +200,9 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
         // Thus it is safe to perform `existingOffset != 0` checks here in the place of
         // more expensive null-bit checks.
         s"""
-           |existingOffset = $getLong(buf, $cursor);
+           |existingOffset = buf.$getLong($cursor);
            |if (existingOffset != 0) {
-           |    $putLong(buf, $cursor, existingOffset + ($shift << 32));
+           |    buf.$putLong($cursor, existingOffset + ($shift << 32));
            |}
          """.stripMargin
       }
@@ -219,7 +221,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |}
        |
        |class SpecificUnsafeRowJoiner extends ${classOf[UnsafeRowJoiner].getName} {
-       |  private byte[] buf = new byte[64];
+       |  private $memoryBlock buf = $byteArrayMemoryBlock.fromArray(new byte[64]);
        |  private UnsafeRow out = new UnsafeRow(${schema1.size + schema2.size});
        |
        |  ${ctx.declareAddedFunctions()}
@@ -229,13 +231,15 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    // row2: ${schema2.size}, $bitset2Words words in bitset
        |    // output: ${schema1.size + schema2.size} fields, $outputBitsetWords words in bitset
        |    final int sizeInBytes = row1.getSizeInBytes() + row2.getSizeInBytes() - $sizeReduction;
-       |    if (sizeInBytes > buf.length) {
-       |      buf = new byte[sizeInBytes];
+       |    if (sizeInBytes > buf.size()) {
+       |      buf = $byteArrayMemoryBlock.fromArray(new byte[sizeInBytes]);
+       |    } else if (sizeInBytes != buf.size()) {
+       |      buf = buf.subBlock(0, sizeInBytes);
        |    }
        |
-       |    final java.lang.Object obj1 = row1.getBaseObject();
+       |    final $memoryBlock obj1 = row1.getMemoryBlock();
        |    final long offset1 = row1.getBaseOffset();
-       |    final java.lang.Object obj2 = row2.getBaseObject();
+       |    final $memoryBlock obj2 = row2.getMemoryBlock();
        |    final long offset2 = row2.getBaseOffset();
        |
        |    $copyBitsets
@@ -246,7 +250,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |    long existingOffset;
        |    $updateOffsets
        |
-       |    out.pointTo(buf, sizeInBytes);
+       |    out.pointTo(buf);
        |
        |    return out;
        |  }
