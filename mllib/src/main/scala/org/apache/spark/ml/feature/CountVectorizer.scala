@@ -70,15 +70,15 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
   def getMinDF: Double = $(minDF)
 
   /**
-    * Specifies the maximum number of different documents a term could appear in to be included
-    * in the vocabulary. A term that appears more than the threshold will be ignored. If this is an
-    * integer greater than or equal to 1, this specifies the maximum number of documents the term
-    * could appear in; if this is a double in [0,1), then this specifies the maximum fraction of
-    * documents the term could appear in.
-    *
-    * Default: (2^63^) - 1
-    * @group param
-    */
+   * Specifies the maximum number of different documents a term could appear in to be included
+   * in the vocabulary. A term that appears more than the threshold will be ignored. If this is an
+   * integer greater than or equal to 1, this specifies the maximum number of documents the term
+   * could appear in; if this is a double in [0,1), then this specifies the maximum fraction of
+   * documents the term could appear in.
+   *
+   * Default: (2^63^) - 1
+   * @group param
+   */
   val maxDF: DoubleParam = new DoubleParam(this, "maxDF", "Specifies the maximum number of" +
     " different documents a term could appear in to be included in the vocabulary." +
     " A term that appears more than the threshold will be ignored. If this is an integer >= 1," +
