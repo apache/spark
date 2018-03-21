@@ -35,7 +35,9 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
- * A feature transformer that merges multiple columns into a vector column.
+ * A feature transformer that merges multiple columns into a vector column. This requires one pass
+ * over the entire dataset. In case we need to infer column lengths from the data we require an
+ * additional call to the 'first' Dataset method, see 'handleInvalid' parameter.
  */
 @Since("1.4.0")
 class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
@@ -60,15 +62,22 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   /**
    * Param for how to handle invalid data (NULL values). Options are 'skip' (filter out rows with
    * invalid data), 'error' (throw an error), or 'keep' (return relevant number of NaN in the
-   * output).
+   * output). Column lengths are taken from the size of ML Attribute Group, which can be set using
+   * `VectorSizeHint` in a pipeline before `VectorAssembler`. Column lengths can also be inferred
+   * from first rows of the data since it is safe to do so but only in case of 'error' or 'skip'.
    * Default: "error"
    * @group param
    */
   @Since("2.4.0")
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
-    "How to handle invalid data (NULL values). Options are 'skip' (filter out rows with " +
-      "invalid data), 'error' (throw an error), or 'keep' (return relevant number of NaN " +
-      "in the output).", ParamValidators.inArray(VectorAssembler.supportedHandleInvalids))
+    """
+    | Param for how to handle invalid data (NULL values). Options are 'skip' (filter out rows with
+    | invalid data), 'error' (throw an error), or 'keep' (return relevant number of NaN in the
+    | output). Column lengths are taken from the size of ML Attribute Group, which can be set using
+    | `VectorSizeHint` in a pipeline before `VectorAssembler`. Column lengths can also be inferred
+    | from first rows of the data since it is safe to do so but only in case of 'error' or 'skip'.
+    | """.stripMargin.replaceAll("\n", " "),
+    ParamValidators.inArray(VectorAssembler.supportedHandleInvalids))
 
   setDefault(handleInvalid, VectorAssembler.ERROR_INVALID)
 
@@ -122,9 +131,9 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
           throw new SparkException(s"VectorAssembler does not support the $otherType type")
       }
     }
-    val featureAttributes = featureAttributesMap.flatten[Attribute]
-    val lengths = featureAttributesMap.map(a => a.length)
-    val metadata = new AttributeGroup($(outputCol), featureAttributes.toArray).toMetadata()
+    val featureAttributes = featureAttributesMap.flatten[Attribute].toArray
+    val lengths = featureAttributesMap.map(a => a.length).toArray
+    val metadata = new AttributeGroup($(outputCol), featureAttributes).toMetadata()
     val (filteredDataset, keepInvalid) = $(handleInvalid) match {
       case VectorAssembler.SKIP_INVALID => (dataset.na.drop($(inputCols)), false)
       case VectorAssembler.KEEP_INVALID => (dataset, true)
@@ -178,19 +187,28 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
 
-
-  private[feature] def getLengthsFromFirst(dataset: Dataset[_],
-                                           columns: Seq[String]): Map[String, Int] = {
+  /**
+   * Infers lengths of vector columns from the first row of the dataset
+   * @param dataset the dataset
+   * @param columns name of vector columns whose lengths need to be inferred
+   * @return map of column names to lengths
+   */
+  private[feature] def getVectorLengthsFromFirstRow(
+      dataset: Dataset[_], columns: Seq[String]): Map[String, Int] = {
     try {
-      val first_row = dataset.toDF.select(columns.map(col): _*).first
+      val first_row = dataset.toDF().select(columns.map(col): _*).first()
       columns.zip(first_row.toSeq).map {
         case (c, x) => c -> x.asInstanceOf[Vector].size
       }.toMap
     } catch {
       case e: NullPointerException => throw new NullPointerException(
-        "Saw null value on the first row: " + e.toString)
+        s"""Encountered null value while inferring lengths from the first row. Consider using
+           |VectorSizeHint to add metadata for columns: ${columns.mkString("[", ", ", "]")}.
+           |""".stripMargin.replaceAll("\n", " ") + e.toString)
       case e: NoSuchElementException => throw new NoSuchElementException(
-        "Cannot infer vector size from all empty DataFrame" + e.toString)
+        s"""Encountered empty dataframe while inferring lengths from the first row. Consider using
+           |VectorSizeHint to add metadata for columns: ${columns.mkString("[", ", ", "]")}.
+           |""".stripMargin.replaceAll("\n", " ") + e.toString)
     }
   }
 
@@ -202,11 +220,13 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
     val missing_columns: Seq[String] = group_sizes.filter(_._2 == -1).keys.toSeq
     val first_sizes: Map[String, Int] = (missing_columns.nonEmpty, handleInvalid) match {
       case (true, VectorAssembler.ERROR_INVALID) =>
-        getLengthsFromFirst(dataset, missing_columns)
+        getVectorLengthsFromFirstRow(dataset, missing_columns)
       case (true, VectorAssembler.SKIP_INVALID) =>
-        getLengthsFromFirst(dataset.na.drop, missing_columns)
+        getVectorLengthsFromFirstRow(dataset.na.drop(missing_columns), missing_columns)
       case (true, VectorAssembler.KEEP_INVALID) => throw new RuntimeException(
-        "Consider using VectorSizeHint for columns: " + missing_columns.mkString("[", ",", "]"))
+        s"""Can not infer column lengths for 'keep invalid' mode. Consider using
+           |VectorSizeHint to add metadata for columns: ${columns.mkString("[", ", ", "]")}.
+           |""".stripMargin.replaceAll("\n", " "))
       case (_, _) => Map.empty
     }
     group_sizes ++ first_sizes
@@ -216,7 +236,14 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
   @Since("1.6.0")
   override def load(path: String): VectorAssembler = super.load(path)
 
-  private[feature] def assemble(lengths: Seq[Int], keepInvalid: Boolean)(vv: Any*): Vector = {
+  /**
+   * Returns a UDF that has the required information to assemble each row.
+   * @param lengths an array of lengths of input columns, whose size should be equal to the number
+   *                of cells in the row (vv)
+   * @param keepInvalid indicate whether to throw an error or not on seeing a null in the rows
+   * @return  a udf that can be applied on each row
+   */
+  private[feature] def assemble(lengths: Array[Int], keepInvalid: Boolean)(vv: Any*): Vector = {
     val indices = ArrayBuilder.make[Int]
     val values = ArrayBuilder.make[Double]
     var featureIndex = 0

@@ -18,12 +18,12 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NominalAttribute, NumericAttribute}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 
 class VectorAssemblerSuite
@@ -31,45 +31,55 @@ class VectorAssemblerSuite
 
   import testImplicits._
 
+  @transient var dfWithNulls: Dataset[_] = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    dfWithNulls = Seq[(Long, Long, java.lang.Double, Vector, String, Vector, Long, String)](
+      (1, 2, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 7L, null),
+      (2, 1, 0.0, null, "a", Vectors.sparse(2, Array(1), Array(3.0)), 6L, null),
+      (3, 3, null, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 8L, null),
+      (4, 4, null, null, "a", Vectors.sparse(2, Array(1), Array(3.0)), 9L, null))
+      .toDF("id1", "id2", "x", "y", "name", "z", "n", "nulls")
+  }
+
   test("params") {
     ParamsSuite.checkParams(new VectorAssembler)
   }
 
   test("assemble") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
-    assert(assemble(Seq(1), true)(0.0) === Vectors.sparse(1, Array.empty, Array.empty))
-    assert(assemble(Seq(1, 1), true)(0.0, 1.0) === Vectors.sparse(2, Array(1), Array(1.0)))
+    assert(assemble(Array(1), true)(0.0) === Vectors.sparse(1, Array.empty, Array.empty))
+    assert(assemble(Array(1, 1), true)(0.0, 1.0) === Vectors.sparse(2, Array(1), Array(1.0)))
     val dv = Vectors.dense(2.0, 0.0)
-    assert(assemble(Seq(1, 2, 1), true)(0.0, dv, 1.0) ===
+    assert(assemble(Array(1, 2, 1), true)(0.0, dv, 1.0) ===
       Vectors.sparse(4, Array(1, 3), Array(2.0, 1.0)))
     val sv = Vectors.sparse(2, Array(0, 1), Array(3.0, 4.0))
-    assert(assemble(Seq(1, 2, 1, 2), true)(0.0, dv, 1.0, sv) ===
+    assert(assemble(Array(1, 2, 1, 2), true)(0.0, dv, 1.0, sv) ===
       Vectors.sparse(6, Array(1, 3, 4, 5), Array(2.0, 1.0, 3.0, 4.0)))
     for (v <- Seq(1, "a")) {
-      intercept[SparkException](assemble(Seq(1), true)(v))
-      intercept[SparkException](assemble(Seq(1, 1), true)(1.0, v))
+      intercept[SparkException](assemble(Array(1), true)(v))
+      intercept[SparkException](assemble(Array(1, 1), true)(1.0, v))
     }
   }
 
   test("assemble should compress vectors") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
-    val v1 = assemble(Seq(1, 1, 1, 4), true)(0.0, 0.0, 0.0, Vectors.dense(4.0))
+    val v1 = assemble(Array(1, 1, 1, 1), true)(0.0, 0.0, 0.0, Vectors.dense(4.0))
     assert(v1.isInstanceOf[SparseVector])
     val sv = Vectors.sparse(1, Array(0), Array(4.0))
-    val v2 = assemble(Seq(1, 1, 1, 1), true)(1.0, 2.0, 3.0, sv)
+    val v2 = assemble(Array(1, 1, 1, 1), true)(1.0, 2.0, 3.0, sv)
     assert(v2.isInstanceOf[DenseVector])
   }
 
   test("VectorAssembler") {
-    val df = Seq(
-      (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L)
-    ).toDF("id", "x", "y", "name", "z", "n")
+    val df = dfWithNulls.filter("id1 == 1").withColumn("id", col("id1"))
     val assembler = new VectorAssembler()
       .setInputCols(Array("x", "y", "z", "n"))
       .setOutputCol("features")
     assembler.transform(df).select("features").collect().foreach {
       case Row(v: Vector) =>
-        assert(v === Vectors.sparse(6, Array(1, 2, 4, 5), Array(1.0, 2.0, 3.0, 10.0)))
+        assert(v === Vectors.sparse(6, Array(1, 2, 4, 5), Array(1.0, 2.0, 3.0, 7.0)))
     }
   }
 
@@ -150,71 +160,90 @@ class VectorAssemblerSuite
       .count() == 1)
   }
 
-  test("assemble should keep nulls") {
+  test("assemble should keep nulls when keepInvalid is true") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
-    assert(assemble(Seq(1, 1), true)(1.0, null) === Vectors.dense(1.0, Double.NaN))
-    assert(assemble(Seq(1, 2), true)(1.0, null) === Vectors.dense(1.0, Double.NaN, Double.NaN))
-    assert(assemble(Seq(1), true)(null) === Vectors.dense(Double.NaN))
-    assert(assemble(Seq(2), true)(null) === Vectors.dense(Double.NaN, Double.NaN))
+    assert(assemble(Array(1, 1), true)(1.0, null) === Vectors.dense(1.0, Double.NaN))
+    assert(assemble(Array(1, 2), true)(1.0, null) === Vectors.dense(1.0, Double.NaN, Double.NaN))
+    assert(assemble(Array(1), true)(null) === Vectors.dense(Double.NaN))
+    assert(assemble(Array(2), true)(null) === Vectors.dense(Double.NaN, Double.NaN))
   }
 
-  test("assemble should throw errors") {
+  test("assemble should throw errors when keepInvalid is false") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
-    intercept[SparkException](assemble(Seq(1, 1), false)(1.0, null) ===
+    intercept[SparkException](assemble(Array(1, 1), false)(1.0, null) ===
       Vectors.dense(1.0, Double.NaN))
-    intercept[SparkException](assemble(Seq(1, 2), false)(1.0, null) ===
+    intercept[SparkException](assemble(Array(1, 2), false)(1.0, null) ===
       Vectors.dense(1.0, Double.NaN, Double.NaN))
-    intercept[SparkException](assemble(Seq(1), false)(null) === Vectors.dense(Double.NaN))
-    intercept[SparkException](assemble(Seq(2), false)(null) ===
+    intercept[SparkException](assemble(Array(1), false)(null) === Vectors.dense(Double.NaN))
+    intercept[SparkException](assemble(Array(2), false)(null) ===
       Vectors.dense(Double.NaN, Double.NaN))
   }
 
-  test("get lengths function") {
-    val df = Seq[(Long, Long, java.lang.Double, Vector, String, Vector, Long)](
-      (1, 2, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 7L),
-      (2, 1, 0.0, null, "a", Vectors.sparse(2, Array(1), Array(3.0)), 6L),
-      (3, 3, null, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 8L),
-      (4, 4, null, null, "a", Vectors.sparse(2, Array(1), Array(3.0)), 9L)
-    ).toDF("id1", "id2", "x", "y", "name", "z", "n")
-    assert(VectorAssembler.getLengthsFromFirst(df, Seq("y")).exists(_ == "y" -> 2))
-    intercept[NullPointerException](VectorAssembler.getLengthsFromFirst(df.sort("id2"), Seq("y")))
-    intercept[NoSuchElementException](
-      VectorAssembler.getLengthsFromFirst(df.filter("id1 > 4"), Seq("y")))
+  test("get lengths functions") {
+    import org.apache.spark.ml.feature.VectorAssembler._
+    val df = dfWithNulls
+    assert(getVectorLengthsFromFirstRow(df, Seq("y")) === Map("y" -> 2))
+    assert(intercept[NullPointerException](getVectorLengthsFromFirstRow(df.sort("id2"), Seq("y")))
+      .getMessage.contains("VectorSizeHint"))
+    assert(intercept[NoSuchElementException](getVectorLengthsFromFirstRow(df.filter("id1 > 4"),
+      Seq("y"))).getMessage.contains("VectorSizeHint"))
 
-    assert(VectorAssembler.getLengths(
-      df.sort("id2"), Seq("y"), VectorAssembler.SKIP_INVALID).exists(_ == "y" -> 2))
-    intercept[NullPointerException](VectorAssembler.getLengths(
-      df.sort("id2"), Seq("y"), VectorAssembler.ERROR_INVALID))
-    intercept[RuntimeException](VectorAssembler.getLengths(
-      df.sort("id2"), Seq("y"), VectorAssembler.KEEP_INVALID))
+    assert(getLengths(df.sort("id2"), Seq("y"), SKIP_INVALID).exists(_ == "y" -> 2))
+    assert(intercept[NullPointerException](getLengths(df.sort("id2"), Seq("y"), ERROR_INVALID))
+      .getMessage.contains("VectorSizeHint"))
+    assert(intercept[RuntimeException](getLengths(df.sort("id2"), Seq("y"), KEEP_INVALID))
+      .getMessage.contains("VectorSizeHint"))
   }
 
   test("Handle Invalid should behave properly") {
-    val df = Seq[(Long, Long, java.lang.Double, Vector, String, Vector, Long)](
-      (1, 2, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 7L),
-      (2, 1, 0.0, null, "a", Vectors.sparse(2, Array(1), Array(3.0)), 6L),
-      (3, 3, null, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 8L),
-      (4, 4, null, null, "a", Vectors.sparse(2, Array(1), Array(3.0)), 9L)
-    ).toDF("id1", "id2", "x", "y", "name", "z", "n")
-
     val assembler = new VectorAssembler()
       .setInputCols(Array("x", "y", "z", "n"))
       .setOutputCol("features")
 
+    def run_with_metadata(mode: String, additional_filter: String = "true"): Dataset[_] = {
+      val attributeY = new AttributeGroup("y", 2)
+      val subAttributesOfZ = Array(NumericAttribute.defaultAttr, NumericAttribute.defaultAttr)
+      val attributeZ = new AttributeGroup(
+        "z",
+        Array[Attribute](
+          NumericAttribute.defaultAttr.withName("foo"),
+          NumericAttribute.defaultAttr.withName("bar")))
+      val dfWithMetadata = dfWithNulls.withColumn("y", col("y"), attributeY.toMetadata())
+        .withColumn("z", col("z"), attributeZ.toMetadata()).filter(additional_filter)
+      val output = assembler.setHandleInvalid(mode).transform(dfWithMetadata)
+      output.collect()
+      output
+    }
+    def run_with_first_row(mode: String): Dataset[_] = {
+      val output = assembler.setHandleInvalid(mode).transform(dfWithNulls)
+      output.collect()
+      output
+    }
+    def run_with_all_null_vectors(mode: String): Dataset[_] = {
+      val output = assembler.setHandleInvalid(mode).transform(dfWithNulls.filter("0 == id1 % 2"))
+      output.collect()
+      output
+    }
+
+    // behavior when vector size hint is given
+    assert(run_with_metadata("keep").count() == 4, "should keep all rows")
+    assert(run_with_metadata("skip").count() == 1, "should skip rows with nulls")
+    intercept[SparkException](run_with_metadata("error"))
+
     // behavior when first row has information
-    assert(assembler.setHandleInvalid("skip").transform(df).count() == 1)
-    intercept[RuntimeException](assembler.setHandleInvalid("keep").transform(df).collect())
-    intercept[SparkException](assembler.setHandleInvalid("error").transform(df).collect())
+    assert(intercept[RuntimeException](run_with_first_row("keep").count())
+      .getMessage.contains("VectorSizeHint"), "should suggest to use metadata")
+    assert(run_with_first_row("skip").count() == 1, "should infer size and skip rows with nulls")
+    intercept[SparkException](run_with_first_row("error"))
 
-    // numeric column is all null
-    intercept[RuntimeException](
-      assembler.setHandleInvalid("keep").transform(df.filter("id1==3")).count() == 1)
+    // behavior when vector column is all null
+    assert(intercept[RuntimeException](run_with_all_null_vectors("skip"))
+      .getMessage.contains("VectorSizeHint"), "should suggest to use metadata")
+    assert(intercept[NullPointerException](run_with_all_null_vectors("error"))
+      .getMessage.contains("VectorSizeHint"), "should suggest to use metadata")
 
-    // vector column is all null
-    val df2 = df.filter("0 == id1 % 2")
-    intercept[RuntimeException](assembler.setHandleInvalid("skip").transform(df2))
-    intercept[RuntimeException](assembler.setHandleInvalid("keep").transform(df2))
-    intercept[NullPointerException](assembler.setHandleInvalid("error").transform(df2).collect())
+    // behavior when scalar column is all null
+    assert(run_with_metadata("keep", additional_filter = "id1 > 2").count() == 2)
   }
 
 }
