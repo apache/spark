@@ -2000,25 +2000,22 @@ class DataFrame(object):
                 require_minimum_pyarrow_version()
                 to_arrow_schema(self.schema)
             except Exception as e:
+                msg = (
+                    "toPandas attempted Arrow optimization because "
+                    "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                    "failed by the reason below:\n  %s\n" % _exception_message(e))
 
                 if self.sql_ctx.getConf("spark.sql.execution.arrow.fallback.enabled", "true") \
                         .lower() == "true":
-                    msg = (
-                        "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
-                        "failed by the reason below:\n  %s\n"
-                        "Attempts non-optimization as "
-                        "'spark.sql.execution.arrow.fallback.enabled' is set to "
-                        "true." % _exception_message(e))
+                    msg += (
+                        "Attempting non-optimization as "
+                        "'spark.sql.execution.arrow.fallback.enabled' is set to true.")
                     warnings.warn(msg)
                     use_arrow = False
                 else:
-                    msg = (
-                        "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
-                        "failed by the reason below:\n  %s\n"
+                    msg += (
                         "For fallback to non-optimization automatically, please set true to "
-                        "'spark.sql.execution.arrow.fallback.enabled'." % _exception_message(e))
+                        "'spark.sql.execution.arrow.fallback.enabled'.")
                     warnings.warn(msg)
                     raise
 
@@ -2048,7 +2045,6 @@ class DataFrame(object):
                         "Note that 'spark.sql.execution.arrow.fallback.enabled' does "
                         "not have an effect in such failure in the middle of "
                         "computation." % _exception_message(e))
-                    # TODO: e.args = (msg,) + e.args[1:]
                     warnings.warn(msg)
                     raise
 
