@@ -18,13 +18,14 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.util.{Locale, ServiceConfigurationError, ServiceLoader}
+import java.util.concurrent.Callable
 
 import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -47,7 +48,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * The main class responsible for representing a pluggable Data Source in Spark SQL. In addition to
@@ -157,7 +158,7 @@ case class DataSource(
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(hadoopConf)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
+        DataSource.getGlobbedPaths(sparkSession, fs, hadoopConf, qualified)
       }.toArray
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None, fileStatusCache)
     }
@@ -387,7 +388,8 @@ case class DataSource(
         val allPaths = caseInsensitiveOptions.get("path") ++ paths
         val hadoopConf = sparkSession.sessionState.newHadoopConf()
         val globbedPaths = allPaths.flatMap(
-          DataSource.checkAndGlobPathIfNecessary(hadoopConf, _, checkFilesExist)).toArray
+          DataSource.checkAndGlobPathIfNecessary(hadoopConf,
+            _, checkFilesExist, sparkSession)).toArray
 
         val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
         val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format, fileStatusCache)
@@ -703,11 +705,12 @@ object DataSource extends Logging {
   private def checkAndGlobPathIfNecessary(
       hadoopConf: Configuration,
       path: String,
-      checkFilesExist: Boolean): Seq[Path] = {
+      checkFilesExist: Boolean,
+      sparkSession: SparkSession): Seq[Path] = {
     val hdfsPath = new Path(path)
     val fs = hdfsPath.getFileSystem(hadoopConf)
     val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    val globPath = SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
+    val globPath = getGlobbedPaths(sparkSession, fs, hadoopConf, qualified)
 
     if (globPath.isEmpty) {
       throw new AnalysisException(s"Path does not exist: $qualified")
@@ -718,5 +721,37 @@ object DataSource extends Logging {
       throw new AnalysisException(s"Path does not exist: ${globPath.head}")
     }
     globPath
+  }
+
+  /**
+   * Return all paths represented by the wildcard string.
+   * Use a local thread pool to do this while there's too many paths.
+   */
+  private def getGlobbedPaths(
+      sparkSession: SparkSession,
+      fs: FileSystem,
+      hadoopConf: Configuration,
+      qualified: Path): Seq[Path] = {
+    val paths = SparkHadoopUtil.get.expandGlobPath(fs, qualified)
+    if (paths.size < sparkSession.sessionState.conf.parallelGetGlobbedPathParallelism) {
+      SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
+    } else {
+      val parallelGetGlobbedPathParallelism =
+        sparkSession.sessionState.conf.parallelGetGlobbedPathParallelism
+      val numParallelism = Math.min(paths.size, parallelGetGlobbedPathParallelism * 2)
+      val threadPool = ThreadUtils.newDaemonCachedThreadPool(
+        "parallel-get-globbed-paths-thread-pool", numParallelism)
+      val result = paths.map { pathStr =>
+        threadPool.submit(new Callable[Seq[Path]] {
+          override def call(): Seq[Path] = {
+            val path = new Path(pathStr)
+            val fs = path.getFileSystem(hadoopConf)
+            SparkHadoopUtil.get.globPathIfNecessary(fs, path)
+          }
+        })
+      }.flatMap(_.get)
+      threadPool.shutdownNow()
+      result
+    }
   }
 }
