@@ -647,14 +647,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Loads text files and returns a `DataFrame` whose schema starts with a string column named
    * "value", and followed by partitioned columns if there are any.
    *
-   * You can set the following text-specific option(s) for reading text files:
-   * <ul>
-   * <li>`wholetext` ( default `false`): If true, read a file as a single row and not split by "\n".
-   * </li>
-   * </ul>
-   * By default, each line in the text files is a new row in the resulting DataFrame.
-   *
-   * Usage example:
+   * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:
    *   spark.read.text("/path/to/spark/README.md")
@@ -662,6 +655,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *   // Java:
    *   spark.read().text("/path/to/spark/README.md")
    * }}}
+   *
+   * You can set the following text-specific option(s) for reading text files:
+   * <ul>
+   * <li>`wholetext` (default `false`): If true, read a file as a single row and not split by "\n".
+   * </li>
+   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing.</li>
+   * </ul>
    *
    * @param paths input paths
    * @since 1.6.0
@@ -686,11 +687,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * If the directory structure of the text files contains partitioning information, those are
    * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
    *
-   * You can set the following textFile-specific option(s) for reading text files:
-   * <ul>
-   * <li>`wholetext` ( default `false`): If true, read a file as a single row and not split by "\n".
-   * </li>
-   * </ul>
    * By default, each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:
@@ -699,6 +695,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *   // Java:
    *   spark.read().textFile("/path/to/spark/README.md")
    * }}}
+   *
+   * You can set the following textFile-specific option(s) for reading text files:
+   * <ul>
+   * <li>`wholetext` (default `false`): If true, read a file as a single row and not split by "\n".
+   * </li>
+   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing.</li>
+   * </ul>
    *
    * @param paths input path
    * @since 2.0.0

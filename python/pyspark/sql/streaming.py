@@ -531,17 +531,20 @@ class DataStreamReader(OptionUtils):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def text(self, path):
+    def text(self, path, wholetext=False, lineSep=None):
         """
         Loads a text file stream and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
         are any.
 
-        Each line in the text file is a new row in the resulting DataFrame.
+        By default, each line in the text file is a new row in the resulting DataFrame.
 
         .. note:: Evolving.
 
         :param paths: string, or list of strings, for input path(s).
+        :param wholetext: if true, read each file from input path(s) as a single row.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> text_sdf = spark.readStream.text(tempfile.mkdtemp())
         >>> text_sdf.isStreaming
@@ -549,6 +552,7 @@ class DataStreamReader(OptionUtils):
         >>> "value" in str(text_sdf.schema)
         True
         """
+        self._set_opts(wholetext=wholetext, lineSep=lineSep)
         if isinstance(path, basestring):
             return self._df(self._jreader.text(path))
         else:
