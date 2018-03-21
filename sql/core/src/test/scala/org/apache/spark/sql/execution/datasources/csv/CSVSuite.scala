@@ -1323,7 +1323,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     assert(sampled.count() == ds.count())
   }
 
-  test(s"Select a little of many columns") {
+  test("Select a little of many columns") {
     withTempPath { path =>
       import collection.JavaConverters._
       val schema = new StructType()
@@ -1341,10 +1341,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
       val idf = spark.read
         .schema(schema)
         .csv(path.getCanonicalPath)
+        .select('f15, 'f10, 'f5)
 
       checkAnswer(
-        idf.select('f5, 'f10, 'f15),
-        List(Row(5, 10, 15), Row(-5, -10, -15))
+        idf,
+        List(Row(15, 10, 5), Row(-15, -10, -5))
       )
     }
   }

@@ -73,11 +73,25 @@ class UnivocityParser(
   // Each input token is placed in each output row's position by mapping these. In this case,
   //
   //   output row - ["A", 2]
-  private val valueConverters: Array[ValueConverter] =
-    schema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
+  private val valueConverters: Array[ValueConverter] = {
+    requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
+  }
 
-  private val tokenIndexArr: Array[Int] = {
-    requiredSchema.map(f => schema.indexOf(f)).toArray
+  private val tokenIndexArr: Seq[java.lang.Integer] = {
+    requiredSchema.map(f => new java.lang.Integer(schema.indexOf(f)))
+  }
+
+  private val tokenizer = {
+    val parserSetting = options.asParserSettings
+    parserSetting.selectIndexes(tokenIndexArr: _*)
+    new CsvParser(parserSetting)
+  }
+
+  private val row = new GenericInternalRow(requiredSchema.length)
+
+  // Retrieve the raw record string.
+  private def getCurrentInput: UTF8String = {
+    UTF8String.fromString(tokenizer.getContext.currentParsedContent().stripLineEnd)
   }
 
   /**
@@ -211,8 +225,7 @@ class UnivocityParser(
       try {
         var i = 0
         while (i < requiredSchema.length) {
-          val from = tokenIndexArr(i)
-          row(i) = valueConverters(from).apply(tokens(from))
+          row(i) = valueConverters(i).apply(tokens(i))
           i += 1
         }
         row
