@@ -126,7 +126,7 @@ class JavaParams(JavaWrapper, Params):
             if self.hasDefault(param):
                 pair = self._make_java_param_pair(param, self._defaultParamMap[param])
                 pair_defaults.append(pair)
-        if len(pair_defaults) != 0:
+        if len(pair_defaults) > 0:
             sc = SparkContext._active_spark_context
             pair_defaults_seq = sc._jvm.PythonUtils.toSeq(pair_defaults)
             self._java_obj.setDefault(pair_defaults_seq)
