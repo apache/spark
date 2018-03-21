@@ -17,9 +17,11 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.Locale
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.param.{BooleanParam, ParamMap, StringArrayParam}
+import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, StringArrayParam}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -84,7 +86,36 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   @Since("1.5.0")
   def getCaseSensitive: Boolean = $(caseSensitive)
 
-  setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"), caseSensitive -> false)
+  /**
+   * [[https://docs.oracle.com/javase/8/docs/api/java/util/Locale.html Locale]] of the input.
+   * Ignored when [[caseSensitive]] is false.
+   * Default: Locale.English
+   * @see `StopWordsRemover.loadDefaultStopWords()`
+   * @group param
+   */
+  @Since("2.5.0")
+  val locale: Param[Locale] = new Param[Locale](this, "locale",
+    "Locale of the input. Ignored when caseSensitive is false.")
+
+  /**
+   * @group setParam
+   * @throws IllegalArgumentException if `value` is not an available locale.
+   */
+  @Since("2.5.0")
+  def setLocale(value: Locale): this.type = {
+    if (Locale.getAvailableLocales contains value) {
+      set(locale, value)
+    } else {
+      throw new IllegalArgumentException(s"Unsupported locale: $value")
+    }
+  }
+
+  /** @group getParam */
+  @Since("2.5.0")
+  def getLocale: Locale = $(locale)
+
+  setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"),
+    caseSensitive -> false, locale -> Locale.ENGLISH)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -95,8 +126,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
         terms.filter(s => !stopWordsSet.contains(s))
       }
     } else {
-      // TODO: support user locale (SPARK-15064)
-      val toLower = (s: String) => if (s != null) s.toLowerCase else s
+      val toLower = (s: String) => if (s != null) s.toLowerCase(getLocale) else s
       val lowerStopWords = $(stopWords).map(toLower(_)).toSet
       udf { terms: Seq[String] =>
         terms.filter(s => !lowerStopWords.contains(toLower(s)))
