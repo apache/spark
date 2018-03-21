@@ -153,7 +153,7 @@ class ExecutorAllocationManagerSuite
       .set("spark.dynamicAllocation.testing", "true")
       .set("spark.dynamicAllocation.maxExecutors", "15")
       .set("spark.dynamicAllocation.minExecutors", "3")
-      .set("spark.dynamicAllocation.fullParallelismDivisor", divisor.toString)
+      .set("spark.dynamicAllocation.fullExecutorAllocationDivisor", divisor.toString)
       .set("spark.executor.cores", cores.toString)
     val sc = new SparkContext(conf)
     contexts += sc
@@ -166,7 +166,7 @@ class ExecutorAllocationManagerSuite
     sc.stop()
   }
 
-  test("fullParallelismDivisor is correctly handled") {
+  test("fullExecutorAllocationDivisor is correctly handled") {
     testParallelismDivisor(1, 2.0, 10)
     testParallelismDivisor(1, 3.0, 7)
     testParallelismDivisor(2, 3.0, 4)

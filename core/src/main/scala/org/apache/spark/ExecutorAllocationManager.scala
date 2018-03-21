@@ -69,6 +69,10 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  *   spark.dynamicAllocation.maxExecutors - Upper bound on the number of executors
  *   spark.dynamicAllocation.initialExecutors - Number of executors to start with
  *
+ *   spark.dynamicAllocation.fullExecutorAllocationDivisor -
+ *     This is used to reduce the parallelism of the dynamic allocation that can waste
+ *     resources when tasks are small
+ *
  *   spark.dynamicAllocation.schedulerBacklogTimeout (M) -
  *     If there are backlogged tasks for this duration, add new executors
  *
@@ -119,8 +123,8 @@ private[spark] class ExecutorAllocationManager(
   private val tasksPerExecutorForFullParallelism =
     conf.getInt("spark.executor.cores", 1) / conf.getInt("spark.task.cpus", 1)
 
-  private val fullParallelismDivisor =
-    conf.getDouble("spark.dynamicAllocation.fullParallelismDivisor", 1.0)
+  private val fullExecutorAllocationDivisor =
+    conf.getDouble("spark.dynamicAllocation.fullExecutorAllocationDivisor", 1.0)
 
   validateSettings()
 
@@ -213,12 +217,12 @@ private[spark] class ExecutorAllocationManager(
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
     if (tasksPerExecutorForFullParallelism == 0) {
-      throw new SparkException("spark.executor.cores must not be less than spark.task.cpus.")
+      throw new SparkException("spark.executor.cores must not be < spark.task.cpus.")
     }
 
-    if (fullParallelismDivisor < 1.0) {
+    if (fullExecutorAllocationDivisor < 1.0) {
       throw new SparkException(
-        "spark.dynamicAllocation.fullParallelismDivisor must be higher than 1.0")
+        "spark.dynamicAllocation.fullExecutorAllocationDivisor must be >= 1.0")
     }
   }
 
@@ -276,7 +280,7 @@ private[spark] class ExecutorAllocationManager(
   }
 
   private def tasksPerExecutor() =
-    fullParallelismDivisor * tasksPerExecutorForFullParallelism
+    fullExecutorAllocationDivisor * tasksPerExecutorForFullParallelism
 
   /**
    * The maximum number of executors we would need under the current load to satisfy all running

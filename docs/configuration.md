@@ -1753,7 +1753,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and
     <code>spark.dynamicAllocation.initialExecutors</code>
-    <code>spark.dynamicAllocation.fullParallelismDivisor</code>
+    <code>spark.dynamicAllocation.fullExecutorAllocationDivisor</code>
   </td>
 </tr>
 <tr>
@@ -1799,7 +1799,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.dynamicAllocation.fullParallelismDivisor</code></td>
+  <td><code>spark.dynamicAllocation.fullExecutorAllocationDivisor</code></td>
   <td>1</td>
   <td>
     By default, the dynamic allocation will request enough executors to maximize the
