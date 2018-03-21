@@ -125,30 +125,35 @@ private[ml] object Node {
   }
 }
 
+@Since("2.4.0")
 trait ClassificationNode extends Node {
 
   @Since("2.4.0")
   def getLabelCount(label: Int): Double = {
-    require(label >= 0 && label < impurityStats.stats.length)
+    require(label >= 0 && label < impurityStats.stats.length,
+      "label should be in the rangle between 0 (inclusive) " +
+      s"and ${impurityStats.stats.length} (exclusive).")
     impurityStats.stats(label)
   }
 }
 
+@Since("2.4.0")
 trait RegressionNode extends Node {
 
   @Since("2.4.0")
-  def getCount(): Double = impurityStats.stats(0)
+  def getCount: Double = impurityStats.stats(0)
 
   @Since("2.4.0")
-  def getSum(): Double = impurityStats.stats(1)
+  def getSum: Double = impurityStats.stats(1)
 
   @Since("2.4.0")
-  def getSquareSum(): Double = impurityStats.stats(2)
+  def getSumOfSquares: Double = impurityStats.stats(2)
 }
 
+@Since("2.4.0")
 trait LeafNode extends Node {
 
-  /** Prediction this node make. */
+  /** Prediction this node makes. */
   def prediction: Double
 
   /** Impurity measure at this node (for training data) */
@@ -179,9 +184,8 @@ trait LeafNode extends Node {
 
 /**
  * Decision tree leaf node for classification.
- * @param prediction  Prediction this node makes
- * @param impurity  Impurity measure at this node (for training data)
  */
+@Since("2.4.0")
 class ClassificationLeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
@@ -195,9 +199,8 @@ class ClassificationLeafNode private[ml] (
 
 /**
  * Decision tree leaf node for regression.
- * @param prediction  Prediction this node makes
- * @param impurity  Impurity measure at this node (for training data)
  */
+@Since("2.4.0")
 class RegressionLeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
@@ -212,6 +215,7 @@ class RegressionLeafNode private[ml] (
 /**
  * Internal Decision Tree node.
  */
+@Since("2.4.0")
 trait InternalNode extends Node{
 
   /**
@@ -304,21 +308,15 @@ private object InternalNode {
 
 /**
  * Internal Decision Tree node for regression.
- * @param prediction  Prediction this node would make if it were a leaf node
- * @param impurity  Impurity measure at this node (for training data)
- * @param gain Information gain value. Values less than 0 indicate missing values;
- *             this quirk will be removed with future updates.
- * @param leftChild  Left-hand child node
- * @param rightChild  Right-hand child node
- * @param split  Information about the test used to split to the left or right child.
  */
+@Since("2.4.0")
 class ClassificationInternalNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
     override val gain: Double,
     override val leftChild: ClassificationNode,
     override val rightChild: ClassificationNode,
-    val split: Split,
+    override val split: Split,
     override private[ml] val impurityStats: ImpurityCalculator)
   extends ClassificationNode with InternalNode {
 
@@ -335,14 +333,8 @@ class ClassificationInternalNode private[ml] (
 
 /**
  * Internal Decision Tree node for regression.
- * @param prediction  Prediction this node would make if it were a leaf node
- * @param impurity  Impurity measure at this node (for training data)
- * @param gain Information gain value. Values less than 0 indicate missing values;
- *             this quirk will be removed with future updates.
- * @param leftChild  Left-hand child node
- * @param rightChild  Right-hand child node
- * @param split  Information about the test used to split to the left or right child.
  */
+@Since("2.4.0")
 class RegressionInternalNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,

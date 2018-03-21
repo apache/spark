@@ -279,7 +279,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
       implicit val format = DefaultFormats
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
-      val root = loadTreeNodes(path, metadata, sparkSession, false)
+      val root = loadTreeNodes(path, metadata, sparkSession, isClassification = false)
       val model = new DecisionTreeRegressionModel(metadata.uid,
         root.asInstanceOf[RegressionNode], numFeatures)
       DefaultParamsReader.getAndSetParams(model, metadata)
@@ -296,7 +296,7 @@ object DecisionTreeRegressionModel extends MLReadable[DecisionTreeRegressionMode
     require(oldModel.algo == OldAlgo.Regression,
       s"Cannot convert non-regression DecisionTreeModel (old API) to" +
         s" DecisionTreeRegressionModel (new API).  Algo is: ${oldModel.algo}")
-    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures, false)
+    val rootNode = Node.fromOld(oldModel.topNode, categoricalFeatures, isClassification = false)
     val uid = if (parent != null) parent.uid else Identifiable.randomUID("dtr")
     new DecisionTreeRegressionModel(uid, rootNode.asInstanceOf[RegressionNode], numFeatures)
   }
