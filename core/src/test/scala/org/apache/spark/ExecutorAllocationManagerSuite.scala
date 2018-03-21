@@ -145,7 +145,7 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsToAdd(manager) === 1)
   }
 
-  def testParallelismDivisor(cores:Int, divisor:Double, expected: Int): Unit = {
+  def testParallelismDivisor(cores: Int, divisor: Double, expected: Int): Unit = {
     val conf = new SparkConf()
       .setMaster("myDummyLocalExternalClusterManager")
       .setAppName("test-executor-allocation-manager")
