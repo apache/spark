@@ -1322,4 +1322,30 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
     val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 1.0).csv(ds)
     assert(sampled.count() == ds.count())
   }
+
+  test(s"Select a little of many columns") {
+    withTempPath { path =>
+      import collection.JavaConverters._
+      val schema = new StructType()
+        .add("f1", IntegerType).add("f2", IntegerType).add("f3", IntegerType)
+        .add("f4", IntegerType).add("f5", IntegerType).add("f6", IntegerType)
+        .add("f7", IntegerType).add("f8", IntegerType).add("f9", IntegerType)
+        .add("f10", IntegerType).add("f11", IntegerType).add("f12", IntegerType)
+        .add("f13", IntegerType).add("f14", IntegerType).add("f15", IntegerType)
+
+      val odf = spark.createDataFrame(List(
+        Row(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
+        Row(-1, -2, -3, -4, -5, -6, -7, -8, -9, -10, -11, -12, -13, -14, -15)
+      ).asJava, schema)
+      odf.write.csv(path.getCanonicalPath)
+      val idf = spark.read
+        .schema(schema)
+        .csv(path.getCanonicalPath)
+
+      checkAnswer(
+        idf.select('f5, 'f10, 'f15),
+        List(Row(5, 10, 15), Row(-5, -10, -15))
+      )
+    }
+  }
 }
