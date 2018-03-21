@@ -412,45 +412,47 @@ class FileStreamSinkSuite extends StreamTest {
       val inputData = MemoryStream[String]
       val df = inputData.toDF()
 
-      val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
-      val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
+      withTempDir { outputDir =>
+        withTempDir { checkpointDir =>
 
-      var query: StreamingQuery = null
+          var query: StreamingQuery = null
 
-      var numTasks = 0
-      var recordsWritten: Long = 0L
-      var bytesWritten: Long = 0L
-      try {
-        spark.sparkContext.addSparkListener(new SparkListener() {
-          override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-            val outputMetrics = taskEnd.taskMetrics.outputMetrics
-            recordsWritten += outputMetrics.recordsWritten
-            bytesWritten += outputMetrics.bytesWritten
-            numTasks += 1
+          var numTasks = 0
+          var recordsWritten: Long = 0L
+          var bytesWritten: Long = 0L
+          try {
+            spark.sparkContext.addSparkListener(new SparkListener() {
+              override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+                val outputMetrics = taskEnd.taskMetrics.outputMetrics
+                recordsWritten += outputMetrics.recordsWritten
+                bytesWritten += outputMetrics.bytesWritten
+                numTasks += 1
+              }
+            })
+
+            query =
+              df.writeStream
+                .option("checkpointLocation", checkpointDir.getCanonicalPath)
+                .format(format)
+                .start(outputDir.getCanonicalPath)
+
+            inputData.addData("1", "2", "3")
+            inputData.addData("4", "5")
+
+            failAfter(streamingTimeout) {
+              query.processAllAvailable()
+            }
+            spark.sparkContext.listenerBus.waitUntilEmpty(streamingTimeout.toMillis)
+
+            assert(numTasks > 0)
+            assert(recordsWritten === 5)
+            // This is heavily file type/version specific but should be filled
+            assert(bytesWritten > 0)
+          } finally {
+            if (query != null) {
+              query.stop()
+            }
           }
-        })
-
-        query =
-          df.writeStream
-            .option("checkpointLocation", checkpointDir)
-            .format(format)
-            .start(outputDir)
-
-        inputData.addData("1", "2", "3")
-        inputData.addData("4", "5")
-
-        failAfter(streamingTimeout) {
-          query.processAllAvailable()
-        }
-        spark.sparkContext.listenerBus.waitUntilEmpty(streamingTimeout.toMillis)
-
-        assert(numTasks > 0)
-        assert(recordsWritten === 5)
-        // This is heavily file type/version specific but should be filled
-        assert(bytesWritten > 0)
-      } finally {
-        if (query != null) {
-          query.stop()
         }
       }
     }
