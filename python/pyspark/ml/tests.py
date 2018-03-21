@@ -516,12 +516,21 @@ class ParamTests(SparkSessionTestCase):
 
     def test_preserve_set_state(self):
         dataset = self.spark.createDataFrame([(0.5,)], ["data"])
-        model = Binarizer(inputCol="data")
-        self.assertFalse(model.isSet("threshold"))
-        model.transform(dataset)
-        model._transfer_params_from_java()
-        self.assertFalse(model.isSet("threshold"),
+        binarizer = Binarizer(inputCol="data")
+        self.assertFalse(binarizer.isSet("threshold"))
+        binarizer.transform(dataset)
+        binarizer._transfer_params_from_java()
+        self.assertFalse(binarizer.isSet("threshold"),
                          "Params not explicitly set should remain unset after transform")
+
+    def test_default_params_transferred(self):
+        dataset = self.spark.createDataFrame([(0.5,)], ["data"])
+        binarizer = Binarizer(inputCol="data")
+        # intentionally change the pyspark default, but don't set it
+        binarizer._defaultParamMap[binarizer.outputCol] = "my_default"
+        result = binarizer.transform(dataset).select("my_default").collect()
+        self.assertFalse(binarizer.isSet(binarizer.outputCol))
+        self.assertEqual(result[0][0], 1.0)
 
     @staticmethod
     def check_params(test_self, py_stage, check_params_exist=True):
