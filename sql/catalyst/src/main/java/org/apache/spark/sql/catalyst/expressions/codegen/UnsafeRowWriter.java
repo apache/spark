@@ -38,7 +38,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * beginning of the global row buffer, we don't need to update `startingOffset` and can just call
  * `zeroOutNullBytes` before writing new data.
  */
-public class UnsafeRowWriter {
+public final class UnsafeRowWriter extends UnsafeWriter {
 
   private final BufferHolder holder;
   // The offset of the global buffer where we start to write this row.
@@ -93,18 +93,38 @@ public class UnsafeRowWriter {
     Platform.putLong(holder.buffer, getFieldOffset(ordinal), 0L);
   }
 
+  @Override
+  public void setNull1Bytes(int ordinal) {
+    setNullAt(ordinal);
+  }
+
+  @Override
+  public void setNull2Bytes(int ordinal) {
+    setNullAt(ordinal);
+  }
+
+  @Override
+  public void setNull4Bytes(int ordinal) {
+    setNullAt(ordinal);
+  }
+
+  @Override
+  public void setNull8Bytes(int ordinal) {
+    setNullAt(ordinal);
+  }
+
   public long getFieldOffset(int ordinal) {
     return startingOffset + nullBitsSize + 8 * ordinal;
   }
 
-  public void setOffsetAndSize(int ordinal, long size) {
+  public void setOffsetAndSize(int ordinal, int size) {
     setOffsetAndSize(ordinal, holder.cursor, size);
   }
 
-  public void setOffsetAndSize(int ordinal, long currentCursor, long size) {
+  public void setOffsetAndSize(int ordinal, int currentCursor, int size) {
     final long relativeOffset = currentCursor - startingOffset;
     final long fieldOffset = getFieldOffset(ordinal);
-    final long offsetAndSize = (relativeOffset << 32) | size;
+    final long offsetAndSize = (relativeOffset << 32) | (long) size;
 
     Platform.putLong(holder.buffer, fieldOffset, offsetAndSize);
   }
@@ -174,7 +194,7 @@ public class UnsafeRowWriter {
       if (input == null || !input.changePrecision(precision, scale)) {
         BitSetMethods.set(holder.buffer, startingOffset, ordinal);
         // keep the offset for future update
-        setOffsetAndSize(ordinal, 0L);
+        setOffsetAndSize(ordinal, 0);
       } else {
         final byte[] bytes = input.toJavaBigDecimal().unscaledValue().toByteArray();
         assert bytes.length <= 16;

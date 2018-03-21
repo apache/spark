@@ -51,7 +51,7 @@ from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer, U
 from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
 from pyspark.ml.common import _java2py, _py2java
-from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, ClusteringEvaluator, \
     MulticlassClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.fpm import FPGrowth, FPGrowthModel
@@ -171,6 +171,45 @@ class MockEstimator(Estimator, HasFake):
 
 class MockModel(MockTransformer, Model, HasFake):
     pass
+
+
+class JavaWrapperMemoryTests(SparkSessionTestCase):
+
+    def test_java_object_gets_detached(self):
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["label", "weight", "features"])
+        lr = LinearRegression(maxIter=1, regParam=0.0, solver="normal", weightCol="weight",
+                              fitIntercept=False)
+
+        model = lr.fit(df)
+        summary = model.summary
+
+        self.assertIsInstance(model, JavaWrapper)
+        self.assertIsInstance(summary, JavaWrapper)
+        self.assertIsInstance(model, JavaParams)
+        self.assertNotIsInstance(summary, JavaParams)
+
+        error_no_object = 'Target Object ID does not exist for this gateway'
+
+        self.assertIn("LinearRegression_", model._java_obj.toString())
+        self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
+
+        model.__del__()
+
+        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            model._java_obj.toString()
+        self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
+
+        try:
+            summary.__del__()
+        except:
+            pass
+
+        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            model._java_obj.toString()
+        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            summary._java_obj.toString()
 
 
 class ParamTypeConversionTests(PySparkTestCase):
@@ -418,6 +457,9 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(algo.getK(), 10)
         algo.setInitSteps(10)
         self.assertEqual(algo.getInitSteps(), 10)
+        self.assertEqual(algo.getDistanceMeasure(), "euclidean")
+        algo.setDistanceMeasure("cosine")
+        self.assertEqual(algo.getDistanceMeasure(), "cosine")
 
     def test_hasseed(self):
         noSeedSpecd = TestParams()
@@ -538,6 +580,15 @@ class EvaluatorTests(SparkSessionTestCase):
         self.assertEqual(evaluator._java_obj.getMetricName(), "r2")
         self.assertEqual(evaluatorCopy._java_obj.getMetricName(), "mae")
 
+    def test_clustering_evaluator_with_cosine_distance(self):
+        featureAndPredictions = map(lambda x: (Vectors.dense(x[0]), x[1]),
+                                    [([1.0, 1.0], 1.0), ([10.0, 10.0], 1.0), ([1.0, 0.5], 2.0),
+                                     ([10.0, 4.4], 2.0), ([-1.0, 1.0], 3.0), ([-100.0, 90.0], 3.0)])
+        dataset = self.spark.createDataFrame(featureAndPredictions, ["features", "prediction"])
+        evaluator = ClusteringEvaluator(predictionCol="prediction", distanceMeasure="cosine")
+        self.assertEqual(evaluator.getDistanceMeasure(), "cosine")
+        self.assertTrue(np.isclose(evaluator.evaluate(dataset),  0.992671213, atol=1e-5))
+
 
 class FeatureTests(SparkSessionTestCase):
 
@@ -627,6 +678,34 @@ class FeatureTests(SparkSessionTestCase):
         for r in transformedList:
             feature, expected = r
             self.assertEqual(feature, expected)
+
+    def test_count_vectorizer_from_vocab(self):
+        model = CountVectorizerModel.from_vocabulary(["a", "b", "c"], inputCol="words",
+                                                     outputCol="features", minTF=2)
+        self.assertEqual(model.vocabulary, ["a", "b", "c"])
+        self.assertEqual(model.getMinTF(), 2)
+
+        dataset = self.spark.createDataFrame([
+            (0, "a a a b b c".split(' '), SparseVector(3, {0: 3.0, 1: 2.0}),),
+            (1, "a a".split(' '), SparseVector(3, {0: 2.0}),),
+            (2, "a b".split(' '), SparseVector(3, {}),)], ["id", "words", "expected"])
+
+        transformed_list = model.transform(dataset).select("features", "expected").collect()
+
+        for r in transformed_list:
+            feature, expected = r
+            self.assertEqual(feature, expected)
+
+        # Test an empty vocabulary
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, "vocabSize.*invalid.*0"):
+                CountVectorizerModel.from_vocabulary([], inputCol="words")
+
+        # Test model with default settings can transform
+        model_default = CountVectorizerModel.from_vocabulary(["a", "b", "c"], inputCol="words")
+        transformed_list = model_default.transform(dataset)\
+            .select(model_default.getOrDefault(model_default.outputCol)).collect()
+        self.assertEqual(len(transformed_list), 3)
 
     def test_rformula_force_index_label(self):
         df = self.spark.createDataFrame([
@@ -1620,6 +1699,21 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(s.k, 2)
 
 
+class KMeansTests(SparkSessionTestCase):
+
+    def test_kmeans_cosine_distance(self):
+        data = [(Vectors.dense([1.0, 1.0]),), (Vectors.dense([10.0, 10.0]),),
+                (Vectors.dense([1.0, 0.5]),), (Vectors.dense([10.0, 4.4]),),
+                (Vectors.dense([-1.0, 1.0]),), (Vectors.dense([-100.0, 90.0]),)]
+        df = self.spark.createDataFrame(data, ["features"])
+        kmeans = KMeans(k=3, seed=1, distanceMeasure="cosine")
+        model = kmeans.fit(df)
+        result = model.transform(df).collect()
+        self.assertTrue(result[0].prediction == result[1].prediction)
+        self.assertTrue(result[2].prediction == result[3].prediction)
+        self.assertTrue(result[4].prediction == result[5].prediction)
+
+
 class OneVsRestTests(SparkSessionTestCase):
 
     def test_copy(self):
@@ -1943,15 +2037,18 @@ class DefaultValuesTests(PySparkTestCase):
         import pyspark.ml.feature
         import pyspark.ml.classification
         import pyspark.ml.clustering
+        import pyspark.ml.evaluation
         import pyspark.ml.pipeline
         import pyspark.ml.recommendation
         import pyspark.ml.regression
+
         modules = [pyspark.ml.feature, pyspark.ml.classification, pyspark.ml.clustering,
-                   pyspark.ml.pipeline, pyspark.ml.recommendation, pyspark.ml.regression]
+                   pyspark.ml.evaluation, pyspark.ml.pipeline, pyspark.ml.recommendation,
+                   pyspark.ml.regression]
         for module in modules:
             for name, cls in inspect.getmembers(module, inspect.isclass):
-                if not name.endswith('Model') and issubclass(cls, JavaParams)\
-                        and not inspect.isabstract(cls):
+                if not name.endswith('Model') and not name.endswith('Params')\
+                        and issubclass(cls, JavaParams) and not inspect.isabstract(cls):
                     # NOTE: disable check_params_exist until there is parity with Scala API
                     ParamTests.check_params(self, cls(), check_params_exist=False)
 

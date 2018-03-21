@@ -14,23 +14,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit.steps.initcontainer
 
-import org.apache.spark.deploy.k8s.MountSecretsBootstrap
+package org.apache.spark.sql.types
 
-/**
- * An init-container configuration step for mounting user-specified secrets onto user-specified
- * paths.
- *
- * @param bootstrap a utility actually handling mounting of the secrets
- */
-private[spark] class InitContainerMountSecretsStep(
-    bootstrap: MountSecretsBootstrap) extends InitContainerConfigurationStep {
+import org.apache.spark.SparkFunSuite
 
-  override def configureInitContainer(spec: InitContainerSpec) : InitContainerSpec = {
-    // Mount the secret volumes given that the volumes have already been added to the driver pod
-    // when mounting the secrets into the main driver container.
-    val initContainer = bootstrap.mountSecrets(spec.initContainer)
-    spec.copy(initContainer = initContainer)
+class StructTypeSuite extends SparkFunSuite {
+
+  val s = StructType.fromDDL("a INT, b STRING")
+
+  test("lookup a single missing field should output existing fields") {
+    val e = intercept[IllegalArgumentException](s("c")).getMessage
+    assert(e.contains("Available fields: a, b"))
+  }
+
+  test("lookup a set of missing fields should output existing fields") {
+    val e = intercept[IllegalArgumentException](s(Set("a", "c"))).getMessage
+    assert(e.contains("Available fields: a, b"))
+  }
+
+  test("lookup fieldIndex for missing field should output existing fields") {
+    val e = intercept[IllegalArgumentException](s.fieldIndex("c")).getMessage
+    assert(e.contains("Available fields: a, b"))
   }
 }

@@ -14,12 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit.steps.initcontainer
+package org.apache.spark.sql
 
-/**
- * Represents a step in configuring the driver init-container.
- */
-private[spark] trait InitContainerConfigurationStep {
+import org.apache.kafka.common.TopicPartition
 
-  def configureInitContainer(spec: InitContainerSpec): InitContainerSpec
+package object kafka010 {   // scalastyle:ignore
+  // ^^ scalastyle:ignore is for ignoring warnings about digits in package name
+  type PartitionOffsetMap = Map[TopicPartition, Long]
 }
