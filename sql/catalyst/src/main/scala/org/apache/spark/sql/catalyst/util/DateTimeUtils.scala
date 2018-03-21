@@ -193,6 +193,10 @@ object DateTimeUtils {
     millisToDays(date.getTime)
   }
 
+  def fromJavaDate(date: Date, timeZone: TimeZone): SQLDate = {
+    millisToDays(date.getTime, timeZone)
+  }
+
   /**
    * Returns a java.sql.Date from number of days since epoch.
    */

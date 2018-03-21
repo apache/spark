@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.sql.Date
+
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.FilterApi._
 import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.SQLDate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types._
@@ -30,6 +33,10 @@ import org.apache.spark.sql.types._
  * Some utility function to convert Spark data source filters to Parquet filters.
  */
 private[parquet] object ParquetFilters {
+
+  private def dateToDays(date: Date): SQLDate = {
+    DateTimeUtils.fromJavaDate(date, DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone))
+  }
 
   private val makeEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
     case BooleanType =>
@@ -54,10 +61,9 @@ private[parquet] object ParquetFilters {
         Option(v).map(b => Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]])).orNull)
     case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => FilterApi.eq(
-          intColumn(n),
-          Option(v).map { d =>
-            DateTimeUtils.fromJavaDate(d.asInstanceOf[java.sql.Date]).asInstanceOf[Integer]
-          }.orNull)
+        intColumn(n),
+        Option(v).map(date => dateToDays(date.asInstanceOf[java.sql.Date]).asInstanceOf[Integer])
+          .orNull)
   }
 
   private val makeNotEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -82,10 +88,9 @@ private[parquet] object ParquetFilters {
         Option(v).map(b => Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]])).orNull)
     case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => FilterApi.notEq(
-          intColumn(n),
-          Option(v).map { d =>
-            DateTimeUtils.fromJavaDate(d.asInstanceOf[java.sql.Date]).asInstanceOf[Integer]
-          }.orNull)
+        intColumn(n),
+        Option(v).map(date => dateToDays(date.asInstanceOf[java.sql.Date]).asInstanceOf[Integer])
+          .orNull)
   }
 
   private val makeLt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -107,10 +112,9 @@ private[parquet] object ParquetFilters {
         FilterApi.lt(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
     case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => FilterApi.lt(
-          intColumn(n),
-          Option(v).map { d =>
-            DateTimeUtils.fromJavaDate(d.asInstanceOf[java.sql.Date]).asInstanceOf[Integer]
-          }.orNull)
+        intColumn(n),
+        Option(v).map(date => dateToDays(date.asInstanceOf[java.sql.Date]).asInstanceOf[Integer])
+          .orNull)
   }
 
   private val makeLtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -132,10 +136,9 @@ private[parquet] object ParquetFilters {
         FilterApi.ltEq(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
     case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => FilterApi.ltEq(
-          intColumn(n),
-          Option(v).map { d =>
-            DateTimeUtils.fromJavaDate(d.asInstanceOf[java.sql.Date]).asInstanceOf[Integer]
-          }.orNull)
+        intColumn(n),
+        Option(v).map(date => dateToDays(date.asInstanceOf[java.sql.Date]).asInstanceOf[Integer])
+          .orNull)
   }
 
   private val makeGt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -157,10 +160,9 @@ private[parquet] object ParquetFilters {
         FilterApi.gt(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
     case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => FilterApi.gt(
-          intColumn(n),
-          Option(v).map { d =>
-            DateTimeUtils.fromJavaDate(d.asInstanceOf[java.sql.Date]).asInstanceOf[Integer]
-          }.orNull)
+        intColumn(n),
+        Option(v).map(date => dateToDays(date.asInstanceOf[java.sql.Date]).asInstanceOf[Integer])
+          .orNull)
   }
 
   private val makeGtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -182,10 +184,9 @@ private[parquet] object ParquetFilters {
         FilterApi.gtEq(binaryColumn(n), Binary.fromReusedByteArray(v.asInstanceOf[Array[Byte]]))
     case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => FilterApi.gtEq(
-          intColumn(n),
-          Option(v).map { d =>
-            DateTimeUtils.fromJavaDate(d.asInstanceOf[java.sql.Date]).asInstanceOf[Integer]
-          }.orNull)
+        intColumn(n),
+        Option(v).map(date => dateToDays(date.asInstanceOf[java.sql.Date]).asInstanceOf[Integer])
+          .orNull)
   }
 
   /**
