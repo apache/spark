@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming.continuous
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkException, TaskContext}
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -30,7 +29,7 @@ import org.apache.spark.sql.execution.streaming.StreamExecution
 import org.apache.spark.sql.sources.v2.writer.{DataSourceWriter, SupportsWriteInternalRow, WriterCommitMessage}
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 
-class ContinuousWriteExec(writer: StreamWriter, query: SparkPlan) extends SparkPlan {
+case class ContinuousWriteExec(writer: StreamWriter, query: SparkPlan) extends SparkPlan {
   override def children: Seq[SparkPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
 
@@ -40,7 +39,6 @@ class ContinuousWriteExec(writer: StreamWriter, query: SparkPlan) extends SparkP
       case _ => new InternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
     }
 
-    val useCommitCoordinator = writer.useCommitCoordinator
     val rdd = new ContinuousWriteRDD(query.execute(), writerFactory)
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)
 

@@ -24,20 +24,21 @@ import org.apache.spark.sql.execution.datasources.v2.DataWritingSparkTask.{logEr
 import org.apache.spark.sql.sources.v2.writer.{DataWriter, DataWriterFactory, WriterCommitMessage}
 import org.apache.spark.util.Utils
 
-class ContinuousWriteRDD[T](var prev: RDD[T], writeTask: DataWriterFactory[InternalRow])
-    extends RDD[T](prev) {
+class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactory[InternalRow])
+    extends RDD[Unit](prev) {
 
-  override val partitioner = firstParent[T].partitioner
+  override val partitioner = prev.partitioner
 
-  override def getPartitions: Array[Partition] = firstParent[T].partitions
+  override def getPartitions: Array[Partition] = prev.partitions
 
-  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[Unit] = {
     val epochCoordinator = EpochCoordinatorRef.get(
       context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       SparkEnv.get)
     val currentMsg: WriterCommitMessage = null
     var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
+    val dataIterator = prev.compute(split, context)
     do {
       var dataWriter: DataWriter[InternalRow] = null
       // write the data and commit this writer.
@@ -45,7 +46,6 @@ class ContinuousWriteRDD[T](var prev: RDD[T], writeTask: DataWriterFactory[Inter
         try {
           dataWriter = writeTask.createDataWriter(
             context.partitionId(), context.attemptNumber(), currentEpoch)
-          val dataIterator = prev.compute(split, context)
           while (dataIterator.hasNext) {
             dataWriter.write(dataIterator.next())
           }
@@ -67,9 +67,9 @@ class ContinuousWriteRDD[T](var prev: RDD[T], writeTask: DataWriterFactory[Inter
         if (dataWriter != null) dataWriter.abort()
         logError(s"Writer for partition ${context.partitionId()} aborted.")
       })
-    } while (!context.isInterrupted())
+    } while (!context.isInterrupted() && !context.isCompleted())
 
-    currentMsg
+    Iterator()
   }
 
   override def clearDependencies() {
