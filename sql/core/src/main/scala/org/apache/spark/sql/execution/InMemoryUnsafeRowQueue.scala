@@ -51,7 +51,15 @@ private[sql] class InMemoryUnsafeRowQueue(
     initialSize: Int,
     pageSizeBytes: Long,
     numRowsInMemoryBufferThreshold: Int,
-    numRowsSpillThreshold: Int) extends Logging {
+    numRowsSpillThreshold: Int)
+  extends ExternalAppendOnlyUnsafeRowArray(taskMemoryManager,
+      blockManager,
+      serializerManager,
+      taskContext,
+      initialSize,
+      pageSizeBytes,
+      numRowsInMemoryBufferThreshold,
+      numRowsSpillThreshold) {
 
   def this(numRowsInMemoryBufferThreshold: Int, numRowsSpillThreshold: Int) {
     this(
@@ -83,14 +91,14 @@ private[sql] class InMemoryUnsafeRowQueue(
 
   private var numFieldsPerRow = 0
 
-  def length: Int = numRows
-
-  def isEmpty: Boolean = numRows == 0
+//  def length: Int = numRows
+//
+//  def isEmpty: Boolean = numRows == 0
 
   /**
    * Clears up resources (eg. memory) held by the backing storage
    */
-  def clear(): Unit = {
+  override def clear(): Unit = {
     /*if (spillableArray != null) {
       // The last `spillableArray` of this task will be cleaned up via task completion listener
       // inside `UnsafeExternalSorter`
@@ -114,7 +122,7 @@ private[sql] class InMemoryUnsafeRowQueue(
     }
   }
 
-  def add(unsafeRow: UnsafeRow): Unit = {
+  override def add(unsafeRow: UnsafeRow): Unit = {
     if (numRows < numRowsInMemoryBufferThreshold) {
       inMemoryQueue += unsafeRow.copy()
     } else {
@@ -170,7 +178,7 @@ private[sql] class InMemoryUnsafeRowQueue(
    * the iterator, then the iterator is invalidated thus saving clients from thinking that they
    * have read all the data while there were new rows added to this array.
    */
-  def generateIterator(startIndex: Int): Iterator[UnsafeRow] = {
+  override def generateIterator(startIndex: Int): Iterator[UnsafeRow] = {
     if (startIndex < 0 || (numRows > 0 && startIndex > numRows)) {
       throw new ArrayIndexOutOfBoundsException(
         "Invalid `startIndex` provided for generating iterator over the array. " +
@@ -184,7 +192,7 @@ private[sql] class InMemoryUnsafeRowQueue(
     }*/
   }
 
-  def generateIterator(): Iterator[UnsafeRow] = generateIterator(startIndex = 0)
+//  override def generateIterator(): Iterator[UnsafeRow] = generateIterator(startIndex = 0)
 
   private[this]
   abstract class ExternalAppendOnlyUnsafeRowArrayIterator extends Iterator[UnsafeRow] {

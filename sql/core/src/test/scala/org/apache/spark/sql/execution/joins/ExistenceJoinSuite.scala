@@ -144,13 +144,13 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(left.sqlContext.sessionState.conf).apply(
-              SortMergeJoinExec(leftKeys, rightKeys, joinType, boundCondition, left, right)),
+              SortMergeJoinExec(leftKeys, rightKeys, joinType, Nil, boundCondition, left, right)),
             expectedAnswer,
             sortAnswers = true)
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(left.sqlContext.sessionState.conf).apply(
               createLeftSemiPlusJoin(SortMergeJoinExec(
-                leftKeys, rightKeys, leftSemiPlus, boundCondition, left, right))),
+                leftKeys, rightKeys, leftSemiPlus, Nil, boundCondition, left, right))),
             expectedAnswer,
             sortAnswers = true)
         }
