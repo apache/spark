@@ -25,3 +25,4 @@ package org.apache.spark
  *   (may be inexact due to use of compressed map statuses)
  */
 private[spark] class MapOutputStatistics(val shuffleId: Int, val bytesByPartitionId: Array[Long])
+  extends Serializable
