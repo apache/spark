@@ -407,7 +407,7 @@ class DataStreamReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None,  allowUnquotedControlChars=None):
+             multiLine=None,  allowUnquotedControlChars=None, lineSep=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -484,7 +484,7 @@ class DataStreamReader(OptionUtils):
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
-            allowUnquotedControlChars=allowUnquotedControlChars)
+            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
         else:

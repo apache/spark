@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.json
 
 import java.io.{File, FileOutputStream, StringWriter}
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.util.Locale
 
@@ -27,7 +28,7 @@ import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
@@ -2066,17 +2067,17 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   def checkReadJson(
     charset: String,
-    delimiter: String,
+    lineSep: String,
     inferSchema: Boolean,
     runId: Int
   ): Unit = {
     test(s"checks reading json in ${charset} #${runId}") {
       val delimInBytes = {
-        if (delimiter.startsWith("x")) {
-          delimiter.replaceAll("[^0-9A-Fa-f]", "")
+        if (lineSep.startsWith("x")) {
+          lineSep.replaceAll("[^0-9A-Fa-f]", "")
             .sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toByte)
         } else {
-          delimiter.getBytes(charset)
+          lineSep.getBytes(charset)
         }
       }
       case class Rec(f1: String, f2: Int) {
@@ -2097,7 +2098,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           spark.read.schema(schema)
         }
         val savedDf = reader
-          .option("lineSep", delimiter)
+          .option("lineSep", lineSep)
           .json(path.getCanonicalPath)
         checkAnswer(savedDf, records.map(_.row))
       }
@@ -2114,8 +2115,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     ("아", "UTF-8", false),
     ("куку", "UTF-8", true),
     ("sep", "UTF-8", false),
-    ("x00 0a 00 0d", "UTF-8", true),
-    ("xEA.F3.EA.F3", "UTF-8", false),
+    ("x0a 0d", "UTF-8", true),
+    ("x54.45", "UTF-8", false),
     ("\r\n", "UTF-8", false),
     ("\r\n", "UTF-8", true),
     ("\u000d\u000a", "UTF-8", false),
@@ -2123,5 +2124,33 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     ("===", "UTF-8", false),
     ("$^+", "UTF-8", true)
   ).zipWithIndex.foreach{case ((d, c, s), i) => checkReadJson(c, d, s, i)}
+  // scalastyle:on nonascii
+
+  def testLineSeparator(lineSep: String): Unit = {
+    test(s"SPARK-21289: Support line separator - lineSep: '$lineSep'") {
+      // Write
+      withTempPath { path =>
+        Seq("a", "b", "c").toDF("value").coalesce(1)
+          .write.option("lineSepInWrite", lineSep).json(path.getAbsolutePath)
+        val partFile = TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
+        val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
+        assert(
+          readBack === s"""{"value":"a"}$lineSep{"value":"b"}$lineSep{"value":"c"}$lineSep""")
+      }
+
+      // Roundtrip
+      withTempPath { path =>
+        val df = Seq("a", "b", "c").toDF()
+        df.write.option("lineSepInWrite", lineSep).json(path.getAbsolutePath)
+        val readBack = spark.read.option("lineSep", lineSep).json(path.getAbsolutePath)
+        checkAnswer(df, readBack)
+      }
+    }
+  }
+
+  // scalastyle:off nonascii
+  Seq("|", "^", "::", "!!!@3", 0x1E.toChar.toString, "아").foreach { lineSep =>
+    testLineSeparator(lineSep)
+  }
   // scalastyle:on nonascii
 }

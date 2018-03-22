@@ -519,6 +519,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * </ul>
+   * <li>`lineSep` (default `\n`): defines the line separator that should
+   * be used for writing.</li>
+   * </ul>
    *
    * @since 1.4.0
    */

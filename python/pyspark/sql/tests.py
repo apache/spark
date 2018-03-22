@@ -648,6 +648,23 @@ class SQLTests(ReusedSQLTestCase):
         self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udaf",
                                 lambda: spark.udf.registerJavaUDAF("udaf1", "non_existed_udaf"))
 
+    def test_linesep_json(self):
+        df = self.spark.read.json("python/test_support/sql/people.json", lineSep=",")
+        expected = [Row(_corrupt_record=None, name=u'Michael'),
+                    Row(_corrupt_record=u' "age":30}\n{"name":"Justin"', name=None),
+                    Row(_corrupt_record=u' "age":19}\n', name=None)]
+        self.assertEqual(df.collect(), expected)
+
+        tpath = tempfile.mkdtemp()
+        shutil.rmtree(tpath)
+        try:
+            df = self.spark.read.json("python/test_support/sql/people.json")
+            df.write.json(tpath, lineSep="!!")
+            readback = self.spark.read.json(tpath, lineSep="!!")
+            self.assertEqual(readback.collect(), df.collect())
+        finally:
+            shutil.rmtree(tpath)
+
     def test_multiLine_json(self):
         people1 = self.spark.read.json("python/test_support/sql/people.json")
         people_array = self.spark.read.json("python/test_support/sql/people_array.json",
