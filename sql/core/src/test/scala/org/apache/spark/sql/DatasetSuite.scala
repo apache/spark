@@ -1279,7 +1279,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         val agg = cp.groupBy('id % 2).agg(count('id))
 
         agg.queryExecution.executedPlan.collectFirst {
-          case ShuffleExchangeExec(_, _: RDDScanExec, _) =>
+          case ShuffleExchangeExec(_, _: RDDScanExec) =>
           case BroadcastExchangeExec(_, _: RDDScanExec) =>
         }.foreach { _ =>
           fail(
