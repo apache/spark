@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
+import java.nio.file.{Files, Paths}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -606,10 +606,13 @@ class SparkSubmitSuite
   }
 
   test("resolves command line argument paths correctly") {
-    val jars = "/jar1,/jar2"                 // --jars
-    val files = "local:/file1,file2"          // --files
-    val archives = "file:/archive1,archive2" // --archives
-    val pyFiles = "py-file1,py-file2"        // --py-files
+    val dir = Utils.createTempDir()
+    val archive = Paths.get(dir.toPath.toString, "single.zip")
+    Files.createFile(archive)
+    val jars = "/jar1,/jar2"
+    val files = "local:/file1,file2"
+    val archives = s"file:/archive1,${dir.toPath.toAbsolutePath.toString}/*.zip#archive3"
+    val pyFiles = "py-file1,py-file2"
 
     // Test jars and files
     val clArgs = Seq(
@@ -636,9 +639,10 @@ class SparkSubmitSuite
     val appArgs2 = new SparkSubmitArguments(clArgs2)
     val (_, _, conf2, _) = SparkSubmit.prepareSubmitEnvironment(appArgs2)
     appArgs2.files should be (Utils.resolveURIs(files))
-    appArgs2.archives should be (Utils.resolveURIs(archives))
+    appArgs2.archives should fullyMatch regex ("file:/archive1,file:.*#archive3")
     conf2.get("spark.yarn.dist.files") should be (Utils.resolveURIs(files))
-    conf2.get("spark.yarn.dist.archives") should be (Utils.resolveURIs(archives))
+    conf2.get("spark.yarn.dist.archives") should fullyMatch regex
+      ("file:/archive1,file:.*#archive3")
 
     // Test python files
     val clArgs3 = Seq(
@@ -655,6 +659,29 @@ class SparkSubmitSuite
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
     conf3.get(PYSPARK_DRIVER_PYTHON.key) should be ("python3.4")
     conf3.get(PYSPARK_PYTHON.key) should be ("python3.5")
+  }
+
+  test("ambiguous archive mapping results in error message") {
+    val dir = Utils.createTempDir()
+    val archive1 = Paths.get(dir.toPath.toString, "first.zip")
+    val archive2 = Paths.get(dir.toPath.toString, "second.zip")
+    Files.createFile(archive1)
+    Files.createFile(archive2)
+    val jars = "/jar1,/jar2"
+    val files = "local:/file1,file2"
+    val archives = s"file:/archive1,${dir.toPath.toAbsolutePath.toString}/*.zip#archive3"
+    val pyFiles = "py-file1,py-file2"
+
+    // Test files and archives (Yarn)
+    val clArgs2 = Seq(
+      "--master", "yarn",
+      "--class", "org.SomeClass",
+      "--files", files,
+      "--archives", archives,
+      "thejar.jar"
+    )
+
+    testPrematureExit(clArgs2.toArray, "resolves ambiguously to multiple files")
   }
 
   test("resolves config paths correctly") {
