@@ -1115,6 +1115,7 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
 
   override def prettyName: String = "add_months"
 }
+
 /**
    * Returns number of months between dates `timestamp1` and `timestamp2`.
    * If `timestamp` is later than `timestamp2`, then the result is positive.
