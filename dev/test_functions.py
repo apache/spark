@@ -473,7 +473,7 @@ def run_python_packaging_tests(use_conda, python_versions=None):
     command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
     env = dict(os.environ)
     if python_versions is not None:
-        env["PYTHON_EXECS_IN"] = python_versions.join(";")
+        env["PYTHON_EXECS_IN"] = ";".join(python_versions)
         if use_conda:
             env["USE_CONDA"] = "1"
     run_cmd(command)
