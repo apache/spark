@@ -170,13 +170,10 @@ class VectorAssemblerSuite
 
   test("assemble should throw errors when keepInvalid is false") {
     import org.apache.spark.ml.feature.VectorAssembler.assemble
-    intercept[SparkException](assemble(Array(1, 1), false)(1.0, null) ===
-      Vectors.dense(1.0, Double.NaN))
-    intercept[SparkException](assemble(Array(1, 2), false)(1.0, null) ===
-      Vectors.dense(1.0, Double.NaN, Double.NaN))
-    intercept[SparkException](assemble(Array(1), false)(null) === Vectors.dense(Double.NaN))
-    intercept[SparkException](assemble(Array(2), false)(null) ===
-      Vectors.dense(Double.NaN, Double.NaN))
+    intercept[SparkException](assemble(Array(1, 1), false)(1.0, null))
+    intercept[SparkException](assemble(Array(1, 2), false)(1.0, null))
+    intercept[SparkException](assemble(Array(1), false)(null))
+    intercept[SparkException](assemble(Array(2), false)(null))
   }
 
   test("get lengths functions") {
