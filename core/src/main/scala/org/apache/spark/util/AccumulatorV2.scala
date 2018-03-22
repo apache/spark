@@ -290,7 +290,8 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
   private var _count = 0L
 
   /**
-   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * Returns false if this accumulator has had any values added to it or the sum is non-zero.
+   *
    * @since 2.0.0
    */
   override def isZero: Boolean = _sum == 0L && _count == 0
@@ -368,6 +369,9 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   private var _sum = 0.0
   private var _count = 0L
 
+  /**
+   * Returns false if this accumulator has had any values added to it or the sum is non-zero.
+   */
   override def isZero: Boolean = _sum == 0.0 && _count == 0
 
   override def copy(): DoubleAccumulator = {
@@ -441,6 +445,9 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
 class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
   private val _list: java.util.List[T] = Collections.synchronizedList(new ArrayList[T]())
 
+  /**
+   * Returns false if this accumulator instance has any values in it.
+   */
   override def isZero: Boolean = _list.isEmpty
 
   override def copyAndReset(): CollectionAccumulator[T] = new CollectionAccumulator

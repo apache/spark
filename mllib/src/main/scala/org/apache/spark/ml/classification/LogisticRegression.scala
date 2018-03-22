@@ -1090,7 +1090,7 @@ class LogisticRegressionModel private[spark] (
    * Predict label for the given feature vector.
    * The behavior of this can be adjusted using `thresholds`.
    */
-  override protected def predict(features: Vector): Double = if (isMultinomial) {
+  override def predict(features: Vector): Double = if (isMultinomial) {
     super.predict(features)
   } else {
     // Note: We should use getThreshold instead of $(threshold) since getThreshold is overridden.

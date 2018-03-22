@@ -265,6 +265,21 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
       Vector, DecisionTreeClassificationModel](this, newTree, newData)
   }
 
+  test("prediction on single instance") {
+    val rdd = continuousDataPointsForMulticlassRDD
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(4)
+      .setMaxBins(100)
+    val categoricalFeatures = Map(0 -> 3)
+    val numClasses = 3
+
+    val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val newTree = dt.fit(newData)
+
+    testPredictionModelSinglePrediction(newTree, newData)
+  }
+
   test("training with 1-category categorical feature") {
     val data = sc.parallelize(Seq(
       LabeledPoint(0, Vectors.dense(0, 2, 3)),
