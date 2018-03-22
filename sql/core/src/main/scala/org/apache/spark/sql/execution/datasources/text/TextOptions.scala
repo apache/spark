@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs}
 
 /**
@@ -39,13 +41,18 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
    */
   val wholeText = parameters.getOrElse(WHOLETEXT, "false").toBoolean
 
-  val lineSeparator: Option[Array[Byte]] = parameters.get(LINESEP).map { hex =>
+  val lineSeparator: Option[Array[Byte]] = parameters.get(LINE_SEPARATOR).map { hex =>
     hex.sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toByte)
   }
+
+  // Note that the option 'lineSep' uses a different default value in read and write.
+  val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator
+  val lineSeparatorInWrite: Array[Byte] =
+    lineSeparatorInRead.getOrElse("\n".getBytes(StandardCharsets.UTF_8))
 }
 
 private[text] object TextOptions {
   val COMPRESSION = "compression"
   val WHOLETEXT = "wholetext"
-  val LINESEP = "lineSep"
+  val LINE_SEPARATOR = "lineSep"
 }
