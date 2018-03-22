@@ -12,6 +12,7 @@ test-defaults: &test-defaults
   <<: *defaults
   environment:
     CIRCLE_TEST_REPORTS: /tmp/circle-test-reports
+    TEST_RESULTS_FILE: /tmp/test-results/results.json
 
 
 all-branches-and-tags: &all-branches-and-tags
@@ -258,11 +259,42 @@ jobs:
       - restore_cache:
           keys:
             - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/$global/update/$global/streams/update_cache_2.10/inputs" }}
+      - restore_cache:
+          keys:
+            - v1-test-results-{{ .Branch }}-{{ .BuildNum }}
+            - v1-test-results-{{ .Branch }}-
+            - v1-test-results-master-
+      - run:
+          name: Merge cached test results with results provided by circle (if any)
+          command: |
+            [[ -f "$CIRCLE_INTERNAL_TASK_DATA/circle-test-results/results.json" ]] && circle_exists=1
+            [[ -f "$TEST_RESULTS_FILE" ]] && cached_exists=1
+            if [[ -z "$circle_exists" ]] || [[ -z "$cached_exists" ]]; then
+              # Only one exists, CirclePlugin will try to look for both so we're good.
+              exit 0
+            fi
+
+            # Otherwise, combine the two, preferring newer results from circle test results
+            echo "Found both cached and circle test results, merging"
+            jq -s 'def meld:
+               reduce .[] as $o
+                 ({}; reduce ($o|keys)[] as $key (.; .[$key] += [$o[$key]] ));
+              def grp: map([{key: "\(.source)~\(.classname)", value: .}] | from_entries) | meld;
+              ((.[0].tests | grp) * (.[1].tests | grp)) | map(values) | flatten | {tests: .}' \
+                "$TEST_RESULTS_FILE" \
+                "$CIRCLE_INTERNAL_TASK_DATA/circle-test-results/results.json" \
+                > /tmp/new-test-results.json
+            # Overwrite the previously cached results with the merged file
+            mv -f /tmp/new-test-results.json "$TEST_RESULTS_FILE"
       - run:
           name: Run all tests
           command: ./dev/run-scala-tests.py \
               | tee -a "/tmp/run-scala-tests.log"
           no_output_timeout: 15m
+      - save_cache:
+          key: v1-test-results-{{ .Branch }}-{{ .BuildNum }}
+          paths:
+            - "/tmp/test-results"
       - store_artifacts:
           path: /tmp/run-scala-tests.log
           destination: run-scala-tests.log
