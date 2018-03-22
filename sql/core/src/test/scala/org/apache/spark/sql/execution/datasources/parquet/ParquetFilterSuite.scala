@@ -354,7 +354,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         '_1 < "2018-03-19".date || '_1 > "2018-03-20".date,
         classOf[Operators.Or],
         Seq(Row("2018-03-18".date), Row("2018-03-21".date)))
-        }
+    }
   }
 
   test("SPARK-6554: don't push down predicates which reference partition columns") {
