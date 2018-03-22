@@ -293,6 +293,9 @@ jobs:
 
   deploy:
     <<: *defaults
+    # Some part of the maven setup fails if there's no R, so we need to use the R image here
+    docker:
+      - image: palantirtechnologies/circle-spark-r
     steps:
       - checkout
       - attach_workspace:
