@@ -99,6 +99,8 @@ private[sql] class JSONOptions(
    *   Hex pairs can be separated by any chars different from 0-9,A-F,a-f
    * - '\' - reserved for a sequence of control chars like "\r\n"
    *         and unicode escape like "\u000D\u000A"
+   * - 'r' - specifies a regular expression
+   * - 'none' - json records are not divided by any delimiter
    *
    * Note: the option defines a delimiter for the json reader only, the json writer
    * uses '\n' as the delimiter of output records (it is converted to sequence of
@@ -108,6 +110,8 @@ private[sql] class JSONOptions(
     case hexs if hexs.startsWith("x") =>
       hexs.replaceAll("[^0-9A-Fa-f]", "").sliding(2, 2).toArray
         .map(Integer.parseInt(_, 16).toByte)
+    case reserved if reserved.startsWith("r") || reserved.startsWith("none") =>
+      throw new NotImplementedError(s"the $reserved selector has not supported yet")
     case delim => delim.getBytes(charset.getOrElse(
       throw new IllegalArgumentException("Please, set the charset option for the delimiter")))
   }
