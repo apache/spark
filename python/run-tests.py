@@ -31,6 +31,7 @@ if sys.version < '3':
     import Queue
 else:
     import queue as Queue
+from collections import deque
 from distutils.version import LooseVersion
 
 
@@ -66,7 +67,7 @@ else:
     raise Exception("Cannot find assembly build directory, please build Spark first.")
 
 
-def run_individual_python_test(test_name, pyspark_python):
+def run_individual_python_test(test_name, pyspark_python, failed_tests_deque):
     env = dict(os.environ)
     env.update({
         'SPARK_DIST_CLASSPATH': SPARK_DIST_CLASSPATH,
@@ -77,18 +78,31 @@ def run_individual_python_test(test_name, pyspark_python):
     })
     LOGGER.info("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
+    # This line must come before the try block, file shouldn't be closed before 'worker' is done
+    per_test_output = tempfile.TemporaryFile()
     try:
-        per_test_output = tempfile.TemporaryFile()
-        retcode = subprocess.Popen(
+        process = subprocess.Popen(
             [os.path.join(SPARK_HOME, "bin/pyspark"), test_name],
-            stderr=per_test_output, stdout=per_test_output, env=env).wait()
+            # bufsize must be 0 (unbuffered), 1 (line buffered) doesn't seem to work
+            stderr=subprocess.STDOUT, stdout=subprocess.PIPE, env=env, bufsize=0,
+            universal_newlines=True)
+
+        def consume_log(output):
+            for line in process.stdout:
+                print("({}) {} - {}".format(pyspark_python, test_name, line), end=b'')
+                print(line, file=output, end=b'')
+
+        worker = Thread(target=consume_log, args=(per_test_output,))
+        worker.start()  # This is essential as we need to consume the stdout pipe
+        retcode = process.wait()
     except:
         LOGGER.exception("Got exception while running %s with %s", test_name, pyspark_python)
         # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
         # this code is invoked from a thread other than the main thread.
-        os._exit(1)
+        os._exit(-1)
     duration = time.time() - start_time
-    # Exit on the first failure.
+    worker.join()  # Wait on the thread that consumed the output
+    # If it failed, append output to LOG_FILE, add to failed tests and carry on
     if retcode != 0:
         try:
             with FAILURE_REPORTING_LOCK:
@@ -105,9 +119,7 @@ def run_individual_python_test(test_name, pyspark_python):
             LOGGER.exception("Got an exception while trying to print failed test output")
         finally:
             print_red("\nHad test failures in %s with %s; see logs." % (test_name, pyspark_python))
-            # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
-            # this code is invoked from a thread other than the main thread.
-            os._exit(-1)
+            failed_tests_deque.append((test_name, pyspark_python))
     else:
         per_test_output.close()
         LOGGER.info("Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
@@ -257,20 +269,22 @@ def main():
                         priority = 100
                     task_queue.put((priority, (python_exec, test_goal)))
 
-    def process_queue(task_queue):
+    def process_queue(task_queue, failed_tests_deque):
         while True:
             try:
                 (priority, (python_exec, test_goal)) = task_queue.get_nowait()
             except Queue.Empty:
                 break
             try:
-                run_individual_python_test(test_goal, python_exec)
+                run_individual_python_test(test_goal, python_exec, failed_tests_deque)
             finally:
                 task_queue.task_done()
 
+    # Using a deque because it supports thread-safe appends
+    failed_tests_deque = deque()
     start_time = time.time()
     for _ in range(opts.parallelism):
-        worker = Thread(target=process_queue, args=(task_queue,))
+        worker = Thread(target=process_queue, args=(task_queue, failed_tests_deque))
         worker.daemon = True
         worker.start()
     try:
@@ -279,6 +293,12 @@ def main():
         print_red("Exiting due to interrupt")
         sys.exit(-1)
     total_duration = time.time() - start_time
+    if len(failed_tests_deque) != 0:
+        LOGGER.error("%i tests failed after %i seconds:", len(failed_tests_deque), total_duration)
+        for test_and_python in failed_tests_deque:
+            print_red("\nHad test failures in %s with %s; see logs." % test_and_python)
+        sys.exit(-1)
+
     LOGGER.info("Tests passed in %i seconds", total_duration)
 
 

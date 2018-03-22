@@ -52,26 +52,29 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
                            spark.executor.extraJavaOptions = tmpArg)
 }
 
-test_package("SparkR")
-
 if (identical(Sys.getenv("NOT_CRAN"), "true")) {
   if (identical(Sys.getenv("CONDA_TESTS"), "true")) {
+      summaryReporter <- ProgressReporter$new()
+      options(testthat.output_file = "target/R/R/conda/r-tests.xml")
+      junitReporter <- JunitReporter$new()
       # set random seed for predictable results. mostly for base's sample() in tree and classification
       set.seed(42)
-      # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
-      testthat:::run_tests("SparkR",
+      testthat:::test_package_dir("SparkR",
       file.path(sparkRDir, "pkg", "tests", "condatests"),
       NULL,
-      "summary")
+      MultiReporter$new(reporters = list(summaryReporter, junitReporter)))
   } else {
+      summaryReporter <- ProgressReporter$new()
+      options(testthat.output_file = "target/R/R/r-tests.xml")
+      junitReporter <- JunitReporter$new()
+      reporter <- MultiReporter$new(reporters = list(summaryReporter, junitReporter))
       # set random seed for predictable results. mostly for base's sample() in tree and classification
+      test_package("SparkR", reporter = reporter)
       set.seed(42)
-      # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
-      testthat:::run_tests("SparkR",
+      testthat:::test_package_dir("SparkR",
       file.path(sparkRDir, "pkg", "tests", "fulltests"),
       NULL,
-      "summary")
+      reporter)
   }
 }
 
-SparkR:::uninstallDownloadedSpark()

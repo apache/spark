@@ -25,12 +25,8 @@ import tempfile
 import random
 import struct
 import shutil
+import unishark
 from functools import reduce
-
-try:
-    import xmlrunner
-except ImportError:
-    xmlrunner = None
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -1579,12 +1575,12 @@ if __name__ == "__main__":
     for testcase in testcases:
         sys.stderr.write("[Running %s]\n" % (testcase))
         tests = unittest.TestLoader().loadTestsFromTestCase(testcase)
-        if xmlrunner:
-            result = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=3).run(tests)
-            if not result.wasSuccessful():
-                failed = True
-        else:
-            result = unittest.TextTestRunner(verbosity=3).run(tests)
-            if not result.wasSuccessful():
-                failed = True
+        runner = unishark.BufferedTestRunner(
+            verbosity=3,
+            reporters=[unishark.XUnitReporter('target/test-reports/pyspark.streaming/{}'.format(
+                os.path.basename(os.environ.get("PYSPARK_PYTHON", ""))))])
+
+        result = runner.run(tests)
+        if not result.wasSuccessful():
+            failed = True
     sys.exit(failed)

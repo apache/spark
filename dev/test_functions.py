@@ -284,14 +284,19 @@ def exec_sbt(sbt_args=()):
     # with failure (either resolution or compilation) prompts the user for
     # input either q, r, etc to quit or retry. This echo is there to make it
     # not block.
-    echo_proc = subprocess.Popen(["echo", "\"q\n\""], stdout=subprocess.PIPE)
+    echo_proc = subprocess.Popen(["echo", "q\n"], stdout=subprocess.PIPE)
     sbt_proc = subprocess.Popen(sbt_cmd,
                                 stdin=echo_proc.stdout,
                                 stdout=subprocess.PIPE)
     echo_proc.wait()
-    for line in iter(sbt_proc.stdout.readline, b''):
+    lines = iter(sbt_proc.stdout.readline, b'')
+    if sys.version_info > (3,):
+        write_bytes = sys.stdout.buffer.write
+    else:
+        write_bytes = lambda bytes: print(bytes, end='')
+    for line in lines:
         if not sbt_output_filter.match(line):
-            print(line, end='')
+            write_bytes(line)
     retcode = sbt_proc.wait()
 
     if retcode != 0:
@@ -450,19 +455,27 @@ def run_scala_tests(build_tool, hadoop_version, test_modules, excluded_tags):
         run_scala_tests_sbt(test_modules, test_profiles)
 
 
-def run_python_tests(test_modules, parallelism):
+def run_python_tests(test_modules, parallelism, python_executables=None):
     set_title_and_block("Running PySpark tests", "BLOCK_PYSPARK_UNIT_TESTS")
 
     command = [os.path.join(SPARK_HOME, "python", "run-tests")]
     if test_modules != [modules.root]:
         command.append("--modules=%s" % ','.join(m.name for m in test_modules))
+    if python_executables is not None:
+        command.append("--python-executables={}".format(",".join(python_executables)))
     command.append("--parallelism=%i" % parallelism)
+    command.append("--verbose")
     run_cmd(command)
 
 
-def run_python_packaging_tests():
+def run_python_packaging_tests(use_conda, python_versions=None):
     set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
     command = [os.path.join(SPARK_HOME, "dev", "run-pip-tests")]
+    env = dict(os.environ)
+    if python_versions is not None:
+        env["PYTHON_EXECS_IN"] = ";".join(python_versions)
+        if use_conda:
+            env["USE_CONDA"] = "1"
     run_cmd(command)
 
 

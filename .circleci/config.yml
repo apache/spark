@@ -1,0 +1,365 @@
+version: 2
+
+defaults: &defaults
+  docker:
+    - image: palantirtechnologies/circle-spark-base
+  resource_class: xlarge
+  environment:
+    TERM: dumb
+
+
+test-defaults: &test-defaults
+  <<: *defaults
+  environment:
+    CIRCLE_TEST_REPORTS: /tmp/circle-test-reports
+
+
+all-branches-and-tags: &all-branches-and-tags
+  filters:
+    # run on all branches and tags
+    tags:
+      only: /.*/
+
+
+jobs:
+  build-maven:
+    <<: *defaults
+    # Some part of the maven setup fails if there's no R, so we need to use the R image here
+    docker:
+      - image: palantirtechnologies/circle-spark-r
+    steps:
+      # Saves us from recompiling every time...
+      - restore_cache:
+          keys:
+            - build-maven-{{ .Branch }}-{{ .BuildNum }}
+            - build-maven-{{ .Branch }}-
+            - build-maven-master-
+      - checkout
+      - restore_cache:
+          keys:
+            - maven-dependency-cache-{{ checksum "pom.xml" }}
+            # Fallback - see https://circleci.com/docs/2.0/configuration-reference/#example-2
+            - maven-dependency-cache-
+      # Given the build-maven cache, this is superfluous, but leave it in in case we will want to remove the former
+      - restore_cache:
+          keys:
+            - build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+            - build-binaries-
+      - run: |
+          ./build/mvn -T1C -DskipTests -Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Phive -Psparkr install \
+            | tee -a "/tmp/mvn-install.log"
+      - store_artifacts:
+          path: /tmp/mvn-install.log
+          destination: mvn-install.log
+      # Get sbt to run trivially, ensures its launcher is downloaded under build/
+      - run: ./build/sbt -h || true
+      - save_cache:
+          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+          paths:
+            - "build"
+      - save_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+          paths:
+            - "~/.m2"
+      # And finally save the whole project directory
+      - save_cache:
+          key: build-maven-{{ .Branch }}-{{ .BuildNum }}
+          paths: .
+
+  run-style-tests:
+    # depends only on build-maven
+    <<: *test-defaults
+    resource_class: small
+    steps:
+      - checkout
+      - restore_cache:
+          key: build-maven-{{ .Branch }}-{{ .BuildNum }}
+      # Need maven dependency cache, otherwise checkstyle tests fail as such:
+      # Failed to execute goal on project spark-assembly_2.11: Could not resolve dependencies for project org.apache.spark:spark-assembly_2.11:pom:2.4.0-SNAPSHOT
+      - restore_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+      - restore_cache:
+          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - run: dev/run-style-tests.py | tee /tmp/run-style-tests.log
+      - store_artifacts:
+          path: /tmp/run-style-tests.log
+          destination: run-style-tests.log
+
+  run-build-tests:
+    # depends only on build-maven
+    <<: *test-defaults
+    resource_class: small
+    steps:
+      - checkout
+      - restore_cache:
+          key: build-maven-{{ .Branch }}-{{ .BuildNum }}
+      - restore_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+      - restore_cache:
+          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - run: |
+          dev/run-build-tests.py | tee /tmp/run-build-tests.log
+      - store_artifacts:
+          path: /tmp/run-build-tests.log
+          destination: run-build-tests.log
+
+  build-sbt:
+    <<: *defaults
+    environment:
+      BUILD_SBT_CACHE: "/home/circleci/build-sbt-cache"
+    steps:
+      # Saves us from recompiling every time...
+      - restore_cache:
+          keys:
+            - v1-build-sbt-{{ .Branch }}-{{ .BuildNum }}
+            - v1-build-sbt-{{ .Branch }}-
+            - v1-build-sbt-master-
+      - checkout
+      - run:
+          name: Hard link cache contents into current build directory
+          command: |
+            if [[ -d "$BUILD_SBT_CACHE" ]]; then
+              rsync --info=stats2,misc1,flist0 -a --link-dest="$BUILD_SBT_CACHE" "$BUILD_SBT_CACHE/" .
+            fi
+      - restore_cache:
+          keys:
+            - v5-ivy-dependency-cache-{{ checksum "pom.xml" }}
+            # if cache for exact version of `pom.xml` is not present then load any most recent one
+            - v5-ivy-dependency-cache-
+      - restore_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+      - restore_cache:
+          keys:
+            - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/$global/update/$global/streams/update_cache_2.10/inputs" }}
+      # Given the build-sbt cache, this is superfluous, but leave it in in case we will want to remove the former
+      - restore_cache:
+          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - run:
+          name: Download all external dependencies for the test configuration (which extends compile) and ensure we update first
+          command: dev/sbt test:externalDependencyClasspath oldDeps/test:externalDependencyClasspath
+      - run: |
+          dev/build-apache-spark.py | tee /tmp/build-apache-spark.log
+      - store_artifacts:
+          path: /tmp/heap.bin
+      - save_cache:
+          key: v5-ivy-dependency-cache-{{ checksum "pom.xml" }}
+          paths:
+            - "~/.ivy2"
+      - store_artifacts:
+          path: /tmp/build-apache-spark.log
+          destination: build-apache-spark.log
+      - save_cache:
+          key: v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/$global/update/$global/streams/update_cache_2.10/inputs" }}
+          paths: ~/.sbt
+      # Also hard link all the things so we can save it as a cache and restore it in future builds
+      - run:
+          name: "Hard link all the files under ***/target directories to $BUILD_SBT_CACHE, excluding jars"
+          command: >
+            rsync --info=stats2,misc1,flist0 -a --link-dest=$PWD --delete-excluded --prune-empty-dirs
+            --exclude '***/*.jar' --include 'target/***'
+            --include '**/' --exclude '*' . "$BUILD_SBT_CACHE/"
+      - save_cache:
+          key: v1-build-sbt-{{ .Branch }}-{{ .BuildNum }}
+          paths:
+            - "~/build-sbt-cache"
+      # Also save all the target directories to the workspace - need assembly jars for spark submitting
+      - persist_to_workspace:
+          root: .
+          paths:
+            - "target"
+            - "*/target"
+            - "common/*/target"
+            - "dists/*/target"
+            - "external/*/target"
+            - "resource-managers/*/target"
+            - "resource-managers/*/*/target"
+            - "sql/*/target"
+            - "project/project/target"
+
+  run-backcompat-tests:
+    # depends on build-sbt
+    <<: *defaults
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - restore_cache:
+          key: v5-ivy-dependency-cache-{{ checksum "pom.xml" }}
+      # TODO(dsanduleac): do we need the maven cache?
+      - restore_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+      - restore_cache:
+          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - restore_cache:
+          keys:
+            - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/$global/update/$global/streams/update_cache_2.10/inputs" }}
+      - run: |
+          dev/run-backcompat-tests.py | tee /tmp/run-backcompat-tests.log
+      - store_artifacts:
+          path: /tmp/run-backcompat-tests.log
+          destination: run-backcompat-tests.log
+
+
+  run-python-tests:
+    # depends on build-sbt, so we're restoring the build-sbt cache
+    <<: *defaults
+    docker:
+      - image: palantirtechnologies/circle-spark-python
+    parallelism: 2
+    steps:
+      - checkout
+      # Python tests need assembly files build by the `build-sbt` job
+      # e.g. external/kafka-0-8-assembly/target/scala-2.11/spark-streaming-kafka-0-8-assembly-2.4.0-SNAPSHOT.jar
+      - attach_workspace:
+          at: .
+      - run: dev/run-python-tests.py
+      - store_test_results:
+          path: target/test-reports
+      - store_artifacts:
+          path: python/unit-tests.log
+
+
+  run-r-tests:
+    # depends on build-sbt, so we're restoring the build-sbt cache
+    <<: *defaults
+    docker:
+      - image: palantirtechnologies/circle-spark-r
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - run:
+          name: Install SparkR
+          command: R/install-dev.sh
+      - run: dev/run-r-tests.py
+      - store_test_results:
+          path: target/R
+
+
+  run-scala-tests:
+    <<: *test-defaults
+    # project/CirclePlugin.scala does its own test splitting in SBT based on CIRCLE_NODE_INDEX, CIRCLE_NODE_TOTAL
+    parallelism: 6
+    # Spark runs a lot of tests in parallel, we need 16 GB of RAM for this
+    resource_class: xlarge
+    steps:
+      - run:
+          name: Before running tests, ensure we created the CIRCLE_TEST_REPORTS directory
+          command: mkdir -p $CIRCLE_TEST_REPORTS
+      - checkout
+      - attach_workspace:
+         at: .
+      - restore_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+      - restore_cache:
+          key: v5-ivy-dependency-cache-{{ checksum "pom.xml" }}
+      - restore_cache:
+          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - restore_cache:
+          keys:
+            - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/$global/update/$global/streams/update_cache_2.10/inputs" }}
+      - run:
+          name: Run all tests
+          command: ./dev/run-scala-tests.py \
+              | tee -a "/tmp/run-scala-tests.log"
+          no_output_timeout: 15m
+      - store_artifacts:
+          path: /tmp/run-scala-tests.log
+          destination: run-scala-tests.log
+      - run:
+          name: Collect unit tests
+          command: mkdir -p /tmp/unit-tests && find . -name unit-tests.log -exec rsync -R {} /tmp/unit-tests/ \;
+          when: always
+      - store_artifacts:
+          path: /tmp/unit-tests
+      - store_artifacts:
+          path: target/tests-by-bucket.json
+          destination: tests-by-bucket.json
+      - store_test_results:
+          # TODO(dsanduleac): can we use $CIRCLE_TEST_RESULTS here?
+          path: /tmp/circle-test-reports
+      - run:
+          name: Collect yarn integration test logs
+          command: |
+            shopt -s nullglob
+            files=(resource-managers/yarn/target/./org.apache.spark.deploy.yarn.*/*-logDir-*)
+            mkdir -p /tmp/yarn-tests
+            if [[ ${#files[@]} != 0 ]]; then
+              rsync -Rrm "${files[@]}" /tmp/yarn-tests/
+            fi
+          when: always
+      - store_artifacts:
+          path: /tmp/yarn-tests
+
+  deploy:
+    <<: *defaults
+    steps:
+      - checkout
+      - attach_workspace:
+          at: .
+      - restore_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+      - restore_cache:
+          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - run: echo "user=$BINTRAY_USERNAME" > .credentials
+      - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
+      - run: echo "realm=Bintray API Realm" >> .credentials
+      - run: echo "host=api.bintray.com" >> .credentials
+      - deploy: dev/publish.sh
+      - store_artifacts:
+          path: /tmp/make-distribution.log
+          destination: make-distribution.log
+      - store_artifacts:
+          path: /tmp/publish_artifacts.log
+          destination: publish_artifacts.log
+      - deploy: curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/spark/$(git describe --tags)/publish
+
+workflows:
+  version: 2
+  build-test-deploy:
+    jobs:
+      - build-maven:
+          <<: *all-branches-and-tags
+      - run-style-tests:
+          requires:
+            - build-maven
+          <<: *all-branches-and-tags
+      - run-build-tests:
+          requires:
+            - build-maven
+          <<: *all-branches-and-tags
+      - build-sbt:
+          requires:
+            - build-maven
+          <<: *all-branches-and-tags
+      - run-backcompat-tests:
+          requires:
+            - build-sbt
+          <<: *all-branches-and-tags
+      - run-scala-tests:
+          requires:
+            - build-sbt
+          <<: *all-branches-and-tags
+      - run-python-tests:
+          requires:
+            - build-sbt
+          <<: *all-branches-and-tags
+      - run-r-tests:
+          requires:
+            - build-sbt
+          <<: *all-branches-and-tags
+      - deploy:
+          requires:
+            - build-maven
+            - build-sbt
+            # Tests
+            - run-build-tests
+            - run-backcompat-tests
+            - run-scala-tests
+            - run-python-tests
+            - run-r-tests
+          filters:
+            tags:
+              only: /[0-9]+(?:\.[0-9]+){2,}-palantir\.[0-9]+(?:\.[0-9]+)*/
+            branches:
+              only: master

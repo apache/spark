@@ -33,7 +33,9 @@ import com.typesafe.sbt.pom.{MavenHelper, PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
 import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
+import sbt.internals.DslEntry
 import sbt.plugins.JUnitXmlReportPlugin
+import sbt.plugins.JvmPlugin
 import spray.revolver.RevolverPlugin._
 
 object BuildCommons {
@@ -64,7 +66,8 @@ object BuildCommons {
       "docker-integration-tests", "hadoop-cloud",
       "kubernetes-integration-tests",
       "kubernetes-integration-tests-spark-jobs", "kubernetes-integration-tests-spark-jobs-helpers",
-      "kubernetes-docker-minimal-bundle"
+      "kubernetes-docker-minimal-bundle",
+      "spark-dist-hadoop-palantir"
     ).map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =
@@ -85,13 +88,41 @@ object BuildCommons {
   val scalacJVMVersion = settingKey[String]("source and target JVM version for scalac")
 }
 
+object DefaultSparkPlugin extends AutoPlugin {
+  override def requires: Plugins = JvmPlugin
+
+  override def projectSettings: Seq[Def.Setting[_]] = SparkBuild.sharedSettings ++ Seq(
+    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
+  )
+
+  override def globalSettings: Seq[Def.Setting[_]] = Seq(
+    // Cached resolution is behaving very weirdly, disable it.
+    updateOptions := updateOptions.value.withCachedResolution(false)
+  )
+}
+
+object AssemblyExclusionsPlugin extends AutoPlugin {
+
+  override def requires: Plugins = DefaultSparkPlugin
+
+  val exclusions = Seq(
+    SbtExclusionRule("com.sun.jersey"),
+    SbtExclusionRule("com.sun.jersey.jersey-test-framework"),
+    SbtExclusionRule("com.sun.jersey.contribs")
+  )
+
+  override def projectSettings: Seq[Def.Setting[_]] = Seq(
+    excludeDependencies ++= exclusions
+  )
+}
+
 //noinspection ScalaStyle
 object SparkBuild extends PomBuild {
 
   import BuildCommons._
   import scala.collection.mutable.Map
 
-  val projectsMap: mutable.Map[String, Seq[Setting[_]]] = mutable.Map.empty
+  val projectsMap: mutable.Map[String, Seq[DslEntry]] = mutable.Map.empty
 
   override val profiles = {
     val profiles = Properties.propOrNone("sbt.maven.profiles") orElse Properties.envOrNone("SBT_MAVEN_PROFILES") match {
@@ -320,16 +351,10 @@ object SparkBuild extends PomBuild {
     }.value.toSet
   )
 
-  def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef): Unit = {
-    val existingSettings = projectsMap.getOrElse(projectRef.project, Seq())
-    projectsMap += (projectRef.project -> (existingSettings ++ settings))
+  def enable(dslEntries: DslEntry*)(projectRef: ProjectRef): Unit = {
+    val existingSettings = projectsMap.getOrElse(projectRef.project, Vector())
+    projectsMap += (projectRef.project -> (existingSettings ++ dslEntries))
   }
-
-  // Note ordering of these settings matter.
-  /* Enable shared settings on all projects */
-  (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ copyJarsProjects ++ Seq(spark, tools))
-    .foreach(enable(sharedSettings ++ DependencyOverrides.settings ++
-      ExcludedDependencies.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
@@ -359,6 +384,7 @@ object SparkBuild extends PomBuild {
   if (!"false".equals(System.getProperty("copyDependencies"))) {
     copyJarsProjects.foreach(enable(CopyDependencies.settings))
   }
+  copyJarsProjects.foreach(enable(dsl.enablePlugins(AssemblyExclusionsPlugin)))
 
   /* Enable Assembly for all assembly projects */
   assemblyProjects.foreach(enable(Assembly.settings))
@@ -430,15 +456,16 @@ object SparkBuild extends PomBuild {
 
   // TODO: move this to its upstream project.
   override def projectDefinitions(baseDirectory: File): Seq[Project] = {
+    import sbt.internals._
+    def applyDsl(project: Project, entry: DslEntry): Project = entry match {
+      case ProjectManipulation(func) => func(project)
+      case ProjectSettings(ss) => project.settings(ss)
+    }
     super.projectDefinitions(baseDirectory).map { x =>
-      if (projectsMap.exists(_._1 == x.id)) x.settings(projectsMap(x.id): _*)
-      else x.settings(Seq[Setting[_]](): _*)
+      val proj = x.enablePlugins(DefaultSparkPlugin)
+      projectsMap.getOrElse(x.id, Nil).foldLeft(proj)(applyDsl)
     } ++ Seq[Project](OldDeps.project)
   }
-
-  override def settings: Seq[Def.Setting[_]] = super.settings ++ inScope(Global)(List(
-    updateOptions := updateOptions.value.withCachedResolution(true)
-  ))
 }
 
 object Core {
@@ -475,24 +502,6 @@ object DockerIntegrationTests {
 }
 
 /**
- * Overrides to work around sbt's dependency resolution being different from Maven's.
- */
-object DependencyOverrides {
-  lazy val settings = Seq(
-    dependencyOverrides += "com.google.guava" % "guava" % "14.0.1")
-}
-
-/**
- * This excludes library dependencies in sbt, which are specified in maven but are
- * not needed by sbt build.
- */
-object ExcludedDependencies {
-  lazy val settings = Seq(
-    libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
-  )
-}
-
-/**
  * Project to pull previous artifacts of Spark for generating Mima excludes.
  */
 object OldDeps {
@@ -506,7 +515,7 @@ object OldDeps {
       .join
   }
 
-  def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
+  def oldDepsSettings() = Seq(
     name := "old-deps",
     libraryDependencies := allPreviousArtifactKeys.value.flatten
   )

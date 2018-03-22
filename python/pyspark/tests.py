@@ -35,10 +35,7 @@ import threading
 import hashlib
 
 from py4j.protocol import Py4JJavaError
-try:
-    import xmlrunner
-except ImportError:
-    xmlrunner = None
+xmlrunner = None
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -51,6 +48,8 @@ else:
     if sys.version_info[0] >= 3:
         xrange = range
         basestring = str
+
+import unishark
 
 if sys.version >= "3":
     from io import StringIO
@@ -2172,11 +2171,19 @@ class SparkSubmitTests(unittest.TestCase):
             |spark.conda.channelUrls       https://repo.continuum.io/pkgs/free
             |spark.conda.bootstrapPackages python=3.5
         """.format(os.environ["CONDA_BIN"]))
+        env = dict(os.environ)
+        del env['PYSPARK_PYTHON']
+        del env['PYSPARK_DRIVER_PYTHON']
         proc = subprocess.Popen([self.sparkSubmit,
                                  "--properties-file", props,
-                                 script], stdout=subprocess.PIPE)
+                                 script],
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                env=env)
         out, err = proc.communicate()
-        self.assertEqual(0, proc.returncode)
+        if 0 != proc.returncode:
+            self.fail(("spark-submit was unsuccessful with error code {}\n\n" +
+                       "stdout:\n{}\n\nstderr:\n{}").format(proc.returncode, out, err))
         self.assertIn("[2, 4, 6]", out.decode('utf-8'))
 
 
@@ -2375,10 +2382,10 @@ if __name__ == "__main__":
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     if not _have_numpy:
         print("NOTE: Skipping NumPy tests as it does not seem to be installed")
-    if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
-    else:
-        unittest.main()
+    runner = unishark.BufferedTestRunner(
+        reporters=[unishark.XUnitReporter('target/test-reports/pyspark/{}'.format(
+            os.path.basename(os.environ.get("PYSPARK_PYTHON", ""))))])
+    unittest.main(testRunner=runner)
     if not _have_scipy:
         print("NOTE: SciPy tests were skipped as it does not seem to be installed")
     if not _have_numpy:

@@ -27,15 +27,12 @@ from math import sqrt
 from time import time, sleep
 from shutil import rmtree
 
+import unishark
 from numpy import (
     array, array_equal, zeros, inf, random, exp, dot, all, mean, abs, arange, tile, ones)
 from numpy import sum as array_sum
 
 from py4j.protocol import Py4JJavaError
-try:
-    import xmlrunner
-except ImportError:
-    xmlrunner = None
 
 if sys.version > '3':
     basestring = str
@@ -1766,10 +1763,10 @@ if __name__ == "__main__":
     from pyspark.mllib.tests import *
     if not _have_scipy:
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
-    if xmlrunner:
-        unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
-    else:
-        unittest.main()
+    runner = unishark.BufferedTestRunner(
+        reporters=[unishark.XUnitReporter('target/test-reports/pyspark.mllib/{}'.format(
+            os.path.basename(os.environ.get("PYSPARK_PYTHON", ""))))])
+    unittest.main(testRunner=runner)
     if not _have_scipy:
         print("NOTE: SciPy tests were skipped as it does not seem to be installed")
     sc.stop()
