@@ -71,6 +71,13 @@ class SQLAppStatusStore(
   def planGraph(executionId: Long): SparkPlanGraph = {
     store.read(classOf[SparkPlanGraphWrapper], executionId).toSparkPlanGraph()
   }
+
+  def capturedSqlTexts: Seq[SQLTextData] = {
+    listener match {
+      case Some(l) => l.sqlTexts.toSeq
+      case None => Seq.empty[SQLTextData]
+    }
+  }
 }
 
 class SQLExecutionUIData(
@@ -139,3 +146,7 @@ case class SQLPlanMetric(
     name: String,
     accumulatorId: Long,
     metricType: String)
+
+case class SQLTextData(
+    submissionTime: Long,
+    sqlText: String)

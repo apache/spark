@@ -41,6 +41,11 @@ case class SparkListenerSQLExecutionStart(
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
   extends SparkListenerEvent
 
+@DeveloperApi
+case class SparkListenerSQLTextCaptured(
+  submissionTime: Long,
+  sqlText: String) extends SparkListenerEvent
+
 /**
  * A message used to update SQL metric value for driver-side updates (which doesn't get reflected
  * automatically).
