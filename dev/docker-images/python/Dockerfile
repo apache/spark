@@ -41,10 +41,11 @@ RUN curl -L https://github.com/pyenv/pyenv-installer/raw/master/bin/pyenv-instal
 
 RUN mkdir -p $(pyenv root)/versions \
   && ln -s $CONDA_ROOT $(pyenv root)/versions/our-miniconda \
-  && $CONDA_BIN create -y -n python2 -c anaconda -c conda-forge python==2.7.11 numpy pyarrow==0.8.0 pandas nomkl \
-  && $CONDA_BIN create -y -n python3 -c anaconda -c conda-forge python=3.6 numpy pyarrow==0.8.0 pandas nomkl \
-  && $CONDA_BIN clean --all \
-  && pyenv global our-miniconda/envs/python2 our-miniconda/envs/python3 \
+  && $CONDA_BIN create -y -n python2 -c anaconda -c conda-forge python==2.7.11 numpy=1.11.2 pyarrow==0.8.0 pandas nomkl \
+  && $CONDA_BIN create -y -n python3 -c anaconda -c conda-forge python=3.6 numpy=1.11.2 pyarrow==0.8.0 pandas nomkl \
+  && $CONDA_BIN clean --all
+
+RUN pyenv global our-miniconda/envs/python2 our-miniconda/envs/python3 \
   && pyenv rehash
 
 RUN $CONDA_BIN install -y -n python2 -c anaconda -c conda-forge xmlrunner \
