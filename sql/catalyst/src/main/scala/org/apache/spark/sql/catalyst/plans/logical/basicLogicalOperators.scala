@@ -430,6 +430,10 @@ case class View(
   override def simpleString: String = {
     s"View (${desc.identifier}, ${output.mkString("[", ",", "]")})"
   }
+
+  override def simpleStringLeaf: String = {
+    s"View (${desc.identifier}, ${output.map(_.stringWithType).mkString("[", ",", "]")})"
+  }
 }
 
 /**
@@ -517,6 +521,11 @@ case class Range(
 
   override def simpleString: String = {
     s"Range ($start, $end, step=$step, splits=$numSlices)"
+  }
+
+  override def simpleStringLeaf: String = {
+    val outputString = output.map(_.stringWithType).mkString(", ")
+    s"Range ($start, $end, step=$step, splits=$numSlices, output=[$outputString])"
   }
 
   override def computeStats(): Statistics = {

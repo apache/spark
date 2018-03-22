@@ -168,16 +168,16 @@ struct<plan:string>
 col1: string, col2: int, col1: string, col2: int
 Project [col1#x, col2#x, col1#x, col2#x]
 +- Join Cross
-   :- LocalRelation [col1#x, col2#x]
-   +- LocalRelation [col1#x, col2#x]
+   :- LocalRelation [col1#x: string, col2#x: int]
+   +- LocalRelation [col1#x: string, col2#x: int]
 
 == Optimized Logical Plan ==
 Join Cross
-:- LocalRelation [col1#x, col2#x]
-+- LocalRelation [col1#x, col2#x]
+:- LocalRelation [col1#x: string, col2#x: int]
++- LocalRelation [col1#x: string, col2#x: int]
 
 == Physical Plan ==
 BroadcastNestedLoopJoin BuildRight, Cross
-:- LocalTableScan [col1#x, col2#x]
+:- LocalTableScan [col1#x: string, col2#x: int]
 +- BroadcastExchange IdentityBroadcastMode
-   +- LocalTableScan [col1#x, col2#x]
+   +- LocalTableScan [col1#x: string, col2#x: int]

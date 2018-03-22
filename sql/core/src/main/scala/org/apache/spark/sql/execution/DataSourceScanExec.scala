@@ -50,16 +50,24 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
   // Metadata that describes more details of this scan.
   protected def metadata: Map[String, String]
 
-  override def simpleString: String = {
+  private def metadataString: String = {
     val metadataEntries = metadata.toSeq.sorted.map {
       case (key, value) =>
         key + ": " + StringUtils.abbreviate(redact(value), 100)
     }
-    val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
-    s"$nodeNamePrefix$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
+    Utils.truncatedString(metadataEntries, " ", ", ", "")
   }
 
-  override def verboseString: String = redact(super.verboseString)
+  override def simpleString: String = {
+    s"$nodeNamePrefix$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataString"
+  }
+
+  override def simpleStringLeaf: String = {
+    s"$nodeNamePrefix$nodeName${Utils.truncatedString(
+      output.map(_.stringWithType), "[", ",", "]")}$metadataString"
+  }
+
+  override def verboseString(isLeaf: Boolean): String = redact(super.verboseString(isLeaf))
 
   override def treeString(verbose: Boolean, addSuffix: Boolean): String = {
     redact(super.treeString(verbose, addSuffix))

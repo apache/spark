@@ -36,8 +36,8 @@ abstract class LogicalPlan
   /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = children.exists(_.isStreaming == true)
 
-  override def verboseStringWithSuffix: String = {
-    super.verboseString + statsCache.map(", " + _.toString).getOrElse("")
+  override def verboseStringWithSuffix(isLeaf: Boolean): String = {
+    super.verboseString(isLeaf) + statsCache.map(", " + _.toString).getOrElse("")
   }
 
   /**

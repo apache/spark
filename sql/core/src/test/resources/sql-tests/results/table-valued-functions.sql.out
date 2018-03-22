@@ -102,7 +102,7 @@ EXPLAIN select * from RaNgE(2)
 struct<plan:string>
 -- !query 8 output
 == Physical Plan ==
-*Range (0, 2, step=1, splits=2)
+*Range (0, 2, step=1, splits=2, output=[id#xL: bigint])
 
 
 -- !query 9
@@ -120,16 +120,16 @@ struct<plan:string>
 id: bigint, id: bigint
 Project [id#xL, id#xL]
 +- Join Cross
-   :- Range (0, 3, step=1, splits=None)
-   +- Range (0, 3, step=1, splits=None)
+   :- Range (0, 3, step=1, splits=None, output=[id#xL: bigint])
+   +- Range (0, 3, step=1, splits=None, output=[id#xL: bigint])
 
 == Optimized Logical Plan ==
 Join Cross
-:- Range (0, 3, step=1, splits=None)
-+- Range (0, 3, step=1, splits=None)
+:- Range (0, 3, step=1, splits=None, output=[id#xL: bigint])
++- Range (0, 3, step=1, splits=None, output=[id#xL: bigint])
 
 == Physical Plan ==
 BroadcastNestedLoopJoin BuildRight, Cross
-:- *Range (0, 3, step=1, splits=2)
+:- *Range (0, 3, step=1, splits=2, output=[id#xL: bigint])
 +- BroadcastExchange IdentityBroadcastMode
-   +- *Range (0, 3, step=1, splits=2)
+   +- *Range (0, 3, step=1, splits=2, output=[id#xL: bigint])

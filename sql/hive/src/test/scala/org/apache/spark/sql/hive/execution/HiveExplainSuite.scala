@@ -184,7 +184,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
          |   +- AnalysisBarrier
          |         +- Aggregate [a#0], [a#0, count(1) AS count#0L]
          |            +- Project [_1#0 AS a#0, _2#0 AS b#0]
-         |               +- LocalRelation [_1#0, _2#0]
+         |               +- LocalRelation [_1#0: int, _2#0: int]
          |""".stripMargin))
   }
 }

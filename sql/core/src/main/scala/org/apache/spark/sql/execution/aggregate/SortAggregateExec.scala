@@ -109,7 +109,7 @@ case class SortAggregateExec(
 
   override def simpleString: String = toString(verbose = false)
 
-  override def verboseString: String = toString(verbose = true)
+  override def verboseString(isLeaf: Boolean): String = toString(verbose = true)
 
   private def toString(verbose: Boolean): String = {
     val allAggregateExpressions = aggregateExpressions

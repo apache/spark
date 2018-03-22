@@ -540,6 +540,11 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   }
 
   override def simpleString: String = s"Range ($start, $end, step=$step, splits=$numSlices)"
+
+  override def simpleStringLeaf: String = {
+    val outputString = output.map(_.stringWithType).mkString(", ")
+    s"Range ($start, $end, step=$step, splits=$numSlices, output=[$outputString])"
+  }
 }
 
 /**

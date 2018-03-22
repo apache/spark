@@ -45,15 +45,15 @@ col: string
 Project [concat(concat(concat(cast(col1#xL as string), cast(col2#xL as string)), cast(col3#xL as string)), cast(col4#xL as string)) AS col#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Project [id#xL AS col1#xL, id#xL AS col2#xL, id#xL AS col3#xL, id#xL AS col4#xL]
-      +- Range (0, 10, step=1, splits=None)
+      +- Range (0, 10, step=1, splits=None, output=[id#xL: bigint])
 
 == Optimized Logical Plan ==
 Project [concat(cast(id#xL as string), cast(id#xL as string), cast(id#xL as string), cast(id#xL as string)) AS col#x]
-+- Range (0, 10, step=1, splits=None)
++- Range (0, 10, step=1, splits=None, output=[id#xL: bigint])
 
 == Physical Plan ==
 *Project [concat(cast(id#xL as string), cast(id#xL as string), cast(id#xL as string), cast(id#xL as string)) AS col#x]
-+- *Range (0, 10, step=1, splits=2)
++- *Range (0, 10, step=1, splits=2, output=[id#xL: bigint])
 
 
 -- !query 4
@@ -143,7 +143,7 @@ struct<plan:string>
 -- !query 13 output
 == Physical Plan ==
 *Project [concat(cast(id#xL as string), cast((id#xL + 1) as string), cast(encode(cast((id#xL + 2) as string), utf-8) as string), cast(encode(cast((id#xL + 3) as string), utf-8) as string)) AS col#x]
-+- *Range (0, 10, step=1, splits=2)
++- *Range (0, 10, step=1, splits=2, output=[id#xL: bigint])
 
 
 -- !query 14
@@ -160,4 +160,4 @@ struct<plan:string>
 -- !query 14 output
 == Physical Plan ==
 *Project [concat(cast(id#xL as string), cast(encode(cast((id#xL + 2) as string), utf-8) as string), cast(encode(cast((id#xL + 3) as string), utf-8) as string)) AS col#x]
-+- *Range (0, 10, step=1, splits=2)
++- *Range (0, 10, step=1, splits=2, output=[id#xL: bigint])

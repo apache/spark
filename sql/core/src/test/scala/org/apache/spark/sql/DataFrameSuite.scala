@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.io.File
+import java.io.{ByteArrayOutputStream, File}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.UUID
@@ -2263,5 +2263,26 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     val df = spark.range(1).select(expr1, expr2.otherwise(0))
     checkAnswer(df, Row(0, 10) :: Nil)
     assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+  }
+
+  test("SPARK-23531: explain should show attributes' type") {
+    withTempPath { path =>
+      spark.range(1).select($"id", ($"id" + lit(1)).as("plusone")).write.save(path.getAbsolutePath)
+      val df = spark.read.load(path.getAbsolutePath).select($"id", $"plusone" - lit(1))
+      val consoleOut = new ByteArrayOutputStream()
+      try {
+        Seq(true, false).foreach { extended =>
+          Console.withOut(consoleOut) {
+            df.explain(extended)
+          }
+          val explainOut = consoleOut.toString
+          assert(explainOut.contains("bigint"))
+          assert(!explainOut.contains(": bigint - 1"))
+          consoleOut.reset()
+        }
+      } finally {
+        consoleOut.close()
+      }
+    }
   }
 }

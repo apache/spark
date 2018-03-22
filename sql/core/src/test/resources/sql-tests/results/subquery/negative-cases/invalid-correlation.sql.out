@@ -112,5 +112,5 @@ Aggregate [min(outer(t2a#x)) AS min(outer())#x]
 +- SubqueryAlias t3
    +- Project [t3a#x, t3b#x, t3c#x]
       +- SubqueryAlias t3
-         +- LocalRelation [t3a#x, t3b#x, t3c#x]
+         +- LocalRelation [t3a#x: int, t3b#x: int, t3c#x: int]
 ;

@@ -173,7 +173,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
 
   override def simpleString: String = statePrefix + super.simpleString
 
-  override def verboseString: String = simpleString
+  override def simpleStringLeaf: String = statePrefix + super.simpleStringLeaf
+
+  override def verboseString(isLeaf: Boolean): String = {
+    if (isLeaf) simpleStringLeaf else simpleString
+  }
 
   /**
    * All the subqueries of current plan.
