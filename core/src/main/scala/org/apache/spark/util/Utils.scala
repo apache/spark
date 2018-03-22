@@ -46,6 +46,7 @@ import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
+import org.apache.commons.codec.digest.DigestUtils
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
@@ -451,8 +452,13 @@ private[spark] object Utils extends Logging {
       securityMgr: SecurityManager,
       hadoopConf: Configuration,
       timestamp: Long,
-      useCache: Boolean): File = {
-    val fileName = decodeFileNameInURI(new URI(url))
+      useCache: Boolean,
+      withMD5Prefix: Boolean = false): File = {
+    val fileName = if (withMD5Prefix) {
+      s"${DigestUtils.md5Hex(url)}-${decodeFileNameInURI(new URI(url))}"
+    } else {
+      decodeFileNameInURI(new URI(url))
+    }
     val targetFile = new File(targetDir, fileName)
     val fetchCacheEnabled = conf.getBoolean("spark.files.useFetchCache", defaultValue = true)
     if (useCache && fetchCacheEnabled) {

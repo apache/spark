@@ -525,4 +525,12 @@ package object config {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("1g")
 
+  private[spark] val SPARK_JARS_DECORATE_NAME =
+    ConfigBuilder("spark.jars.decorateName")
+      .doc("When executor updates dependencies, it's possible it will fetch different jars but" +
+          " with the same file name(e.g. /pathA/udfs.jar and /pathB/udfs.jar). To avoid the" +
+          " conflict, user can enable this config and all jars fetched by executor will be" +
+          " renamed with a MD5 prefix.")
+      .booleanConf
+      .createWithDefault(false)
 }

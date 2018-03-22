@@ -29,6 +29,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.Files
+import org.apache.commons.codec.digest.DigestUtils
 import org.mockito.Matchers.any
 import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.BeforeAndAfterAll
@@ -873,6 +874,10 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
       Utils.fetchFile(uri, destDir, conf, sm, hc, 0L, false)
       assert(Files.equal(f, destFile))
     }
+    val jarWithMD5Prefix = Utils.fetchFile(jarUri, destDir, conf, sm, hc, 0L, false, true)
+    assert(jarWithMD5Prefix.getAbsolutePath ==
+        new File(destDir, DigestUtils.md5Hex(jarUri) + "-jar").getAbsolutePath)
+    assert(Files.equal(jarWithMD5Prefix, jar))
 
     // Try to download files that do not exist.
     Seq("files", "jars", "dir1").foreach { root =>
