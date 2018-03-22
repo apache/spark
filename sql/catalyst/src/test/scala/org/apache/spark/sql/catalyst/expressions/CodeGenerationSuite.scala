@@ -442,4 +442,48 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(ctx.calculateParamLength(Seq.range(0, 100).map(Literal(_))) == 101)
     assert(ctx.calculateParamLength(Seq.range(0, 100).map(x => Literal(x.toLong))) == 201)
   }
+
+  test("SPARK-23760: CodegenContext.withSubExprEliminationExprs should save/restore correctly") {
+
+    val ref = BoundReference(0, IntegerType, true)
+    val add1 = Add(ref, ref)
+    val add2 = Add(add1, add1)
+
+    // raw testing of basic functionality
+    {
+      val ctx = new CodegenContext
+      val e = ref.genCode(ctx)
+      // before
+      ctx.subExprEliminationExprs += ref -> SubExprEliminationState(e.isNull, e.value)
+      assert(ctx.subExprEliminationExprs.contains(ref))
+      // call withSubExprEliminationExprs
+      ctx.withSubExprEliminationExprs(Map(add1 -> SubExprEliminationState("dummy", "dummy"))) {
+        assert(ctx.subExprEliminationExprs.contains(add1))
+        assert(!ctx.subExprEliminationExprs.contains(ref))
+        Seq.empty
+      }
+      // after
+      assert(ctx.subExprEliminationExprs.nonEmpty)
+      assert(ctx.subExprEliminationExprs.contains(ref))
+      assert(!ctx.subExprEliminationExprs.contains(add1))
+    }
+
+    // emulate an actual codegen workload
+    {
+      val ctx = new CodegenContext
+      // before
+      ctx.generateExpressions(Seq(add2, add1), doSubexpressionElimination = true) // trigger CSE
+      assert(ctx.subExprEliminationExprs.contains(add1))
+      // call withSubExprEliminationExprs
+      ctx.withSubExprEliminationExprs(Map(ref -> SubExprEliminationState("dummy", "dummy"))) {
+        assert(ctx.subExprEliminationExprs.contains(ref))
+        assert(!ctx.subExprEliminationExprs.contains(add1))
+        Seq.empty
+      }
+      // after
+      assert(ctx.subExprEliminationExprs.nonEmpty)
+      assert(ctx.subExprEliminationExprs.contains(add1))
+      assert(!ctx.subExprEliminationExprs.contains(ref))
+    }
+  }
 }
