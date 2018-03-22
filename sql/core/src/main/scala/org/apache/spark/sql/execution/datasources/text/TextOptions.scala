@@ -39,7 +39,7 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
    */
   val wholeText = parameters.getOrElse(WHOLETEXT, "false").toBoolean
 
-  val recordDelimiter: Option[Array[Byte]] = parameters.get(RECORDDELIMITER).map { hex =>
+  val lineSeparator: Option[Array[Byte]] = parameters.get(LINESEP).map { hex =>
     hex.sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toByte)
   }
 }
@@ -47,5 +47,5 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
 private[text] object TextOptions {
   val COMPRESSION = "compression"
   val WHOLETEXT = "wholetext"
-  val RECORDDELIMITER = "recordDelimiter"
+  val LINESEP = "lineSep"
 }

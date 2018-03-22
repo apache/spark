@@ -117,7 +117,7 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       broadcastedHadoopConf,
       requiredSchema,
       textOptions.wholeText,
-      textOptions.recordDelimiter
+      textOptions.lineSeparator
     )
   }
 
@@ -125,12 +125,12 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
       conf: Broadcast[SerializableConfiguration],
       requiredSchema: StructType,
       wholeTextMode: Boolean,
-      recordDelimiter: Option[Array[Byte]]): (PartitionedFile) => Iterator[UnsafeRow] = {
+      lineSeparator: Option[Array[Byte]]): (PartitionedFile) => Iterator[UnsafeRow] = {
 
     (file: PartitionedFile) => {
       val confValue = conf.value.value
       val reader = if (!wholeTextMode) {
-        new HadoopFileLinesReader(file, confValue, recordDelimiter)
+        new HadoopFileLinesReader(file, confValue, lineSeparator)
       } else {
         new HadoopFileWholeTextReader(file, confValue)
       }

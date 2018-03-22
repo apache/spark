@@ -74,6 +74,8 @@ private[sql] class JacksonGenerator(
 
   private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
 
+  private val lineSeparator: String = options.lineSeparatorInWrite
+
   private def makeWriter(dataType: DataType): ValueWriter = dataType match {
     case NullType =>
       (row: SpecializedGetters, ordinal: Int) =>
@@ -251,5 +253,8 @@ private[sql] class JacksonGenerator(
       mapType = dataType.asInstanceOf[MapType]))
   }
 
-  def writeLineEnding(): Unit = gen.writeRaw('\n')
+  def writeLineEnding(): Unit = {
+    // Note that JSON uses writer with UTF-8 charset. This string will be written out as UTF-8.
+    gen.writeRaw(lineSeparator)
+  }
 }
