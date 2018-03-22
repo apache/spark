@@ -641,6 +641,13 @@ class LinearRegressionSuite extends MLTest with DefaultReadWriteTest with PMMLRe
     }
   }
 
+  test("prediction on single instance") {
+    val trainer = new LinearRegression
+    val model = trainer.fit(datasetWithDenseFeature)
+
+    testPredictionModelSinglePrediction(model, datasetWithDenseFeature)
+  }
+
   test("linear regression model with constant label") {
     /*
        R code:

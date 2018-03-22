@@ -30,6 +30,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
@@ -417,7 +418,19 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
   }
 
   private def sparkContextInitialized(sc: SparkContext) = {
-    sparkContextPromise.success(sc)
+    sparkContextPromise.synchronized {
+      // Notify runDriver function that SparkContext is available
+      sparkContextPromise.success(sc)
+      // Pause the user class thread in order to make proper initialization in runDriver function.
+      sparkContextPromise.wait()
+    }
+  }
+
+  private def resumeDriver(): Unit = {
+    // When initialization in runDriver happened the user class thread has to be resumed.
+    sparkContextPromise.synchronized {
+      sparkContextPromise.notify()
+    }
   }
 
   private def registerAM(
@@ -496,6 +509,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         // if the user app did not create a SparkContext.
         throw new IllegalStateException("User did not initialize spark context!")
       }
+      resumeDriver()
       userClassThread.join()
     } catch {
       case e: SparkException if e.getCause().isInstanceOf[TimeoutException] =>
@@ -505,6 +519,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         finish(FinalApplicationStatus.FAILED,
           ApplicationMaster.EXIT_SC_NOT_INITED,
           "Timed out waiting for SparkContext.")
+    } finally {
+      resumeDriver()
     }
   }
 
@@ -718,7 +734,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
                 logError("User class threw exception: " + cause, cause)
                 finish(FinalApplicationStatus.FAILED,
                   ApplicationMaster.EXIT_EXCEPTION_USER_CLASS,
-                  "User class threw exception: " + cause)
+                  "User class threw exception: " + StringUtils.stringifyException(cause))
             }
             sparkContextPromise.tryFailure(e.getCause())
         } finally {

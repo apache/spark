@@ -90,16 +90,15 @@ case class RowDataSourceScanExec(
     Map("numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val unsafeRow = rdd.mapPartitionsWithIndexInternal { (index, iter) =>
+    val numOutputRows = longMetric("numOutputRows")
+
+    rdd.mapPartitionsWithIndexInternal { (index, iter) =>
       val proj = UnsafeProjection.create(schema)
       proj.initialize(index)
-      iter.map(proj)
-    }
-
-    val numOutputRows = longMetric("numOutputRows")
-    unsafeRow.map { r =>
-      numOutputRows += 1
-      r
+      iter.map( r => {
+        numOutputRows += 1
+        proj(r)
+      })
     }
   }
 
@@ -164,13 +163,15 @@ case class FileSourceScanExec(
     override val tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with ColumnarBatchScan  {
 
-  val supportsBatch: Boolean = relation.fileFormat.supportBatch(
+  override val supportsBatch: Boolean = relation.fileFormat.supportBatch(
     relation.sparkSession, StructType.fromAttributes(output))
 
-  val needsUnsafeRowConversion: Boolean = if (relation.fileFormat.isInstanceOf[ParquetSource]) {
-    SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
-  } else {
-    false
+  override val needsUnsafeRowConversion: Boolean = {
+    if (relation.fileFormat.isInstanceOf[ParquetSource]) {
+      SparkSession.getActiveSession.get.sessionState.conf.parquetVectorizedReaderEnabled
+    } else {
+      false
+    }
   }
 
   override def vectorTypes: Option[Seq[String]] =
@@ -322,56 +323,29 @@ case class FileSourceScanExec(
       // in the case of fallback, this batched scan should never fail because of:
       // 1) only primitive types are supported
       // 2) the number of columns should be smaller than spark.sql.codegen.maxFields
-      WholeStageCodegenExec(this).execute()
+      WholeStageCodegenExec(this)(codegenStageId = 0).execute()
     } else {
-      val unsafeRows = {
-        val scan = inputRDD
-        if (needsUnsafeRowConversion) {
-          scan.mapPartitionsWithIndexInternal { (index, iter) =>
-            val proj = UnsafeProjection.create(schema)
-            proj.initialize(index)
-            iter.map(proj)
-          }
-        } else {
-          scan
-        }
-      }
       val numOutputRows = longMetric("numOutputRows")
-      unsafeRows.map { r =>
-        numOutputRows += 1
-        r
+
+      if (needsUnsafeRowConversion) {
+        inputRDD.mapPartitionsWithIndexInternal { (index, iter) =>
+          val proj = UnsafeProjection.create(schema)
+          proj.initialize(index)
+          iter.map( r => {
+            numOutputRows += 1
+            proj(r)
+          })
+        }
+      } else {
+        inputRDD.map { r =>
+          numOutputRows += 1
+          r
+        }
       }
     }
   }
 
   override val nodeNamePrefix: String = "File"
-
-  override protected def doProduce(ctx: CodegenContext): String = {
-    if (supportsBatch) {
-      return super.doProduce(ctx)
-    }
-    val numOutputRows = metricTerm(ctx, "numOutputRows")
-    // PhysicalRDD always just has one input
-    val input = ctx.addMutableState("scala.collection.Iterator", "input", v => s"$v = inputs[0];")
-    val row = ctx.freshName("row")
-
-    ctx.INPUT_ROW = row
-    ctx.currentVars = null
-    // Always provide `outputVars`, so that the framework can help us build unsafe row if the input
-    // row is not unsafe row, i.e. `needsUnsafeRowConversion` is true.
-    val outputVars = output.zipWithIndex.map{ case (a, i) =>
-      BoundReference(i, a.dataType, a.nullable).genCode(ctx)
-    }
-    val inputRow = if (needsUnsafeRowConversion) null else row
-    s"""
-       |while ($input.hasNext()) {
-       |  InternalRow $row = (InternalRow) $input.next();
-       |  $numOutputRows.add(1);
-       |  ${consume(ctx, outputVars, inputRow).trim}
-       |  if (shouldStop()) return;
-       |}
-     """.stripMargin
-  }
 
   /**
    * Create an RDD for bucketed reads.

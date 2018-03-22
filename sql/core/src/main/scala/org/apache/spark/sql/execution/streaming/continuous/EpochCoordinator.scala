@@ -17,18 +17,15 @@
 
 package org.apache.spark.sql.execution.streaming.continuous
 
-import java.util.concurrent.atomic.AtomicLong
-
 import scala.collection.mutable
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.streaming.StreamingQueryWrapper
-import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousReader, PartitionOffset}
-import org.apache.spark.sql.sources.v2.streaming.writer.ContinuousWriter
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, PartitionOffset}
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
+import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.util.RpcUtils
 
 private[continuous] sealed trait EpochCoordinatorMessage extends Serializable
@@ -38,6 +35,15 @@ private[continuous] sealed trait EpochCoordinatorMessage extends Serializable
  * Atomically increment the current epoch and get the new value.
  */
 private[sql] case object IncrementAndGetEpoch extends EpochCoordinatorMessage
+
+/**
+ * The RpcEndpoint stop() will wait to clear out the message queue before terminating the
+ * object. This can lead to a race condition where the query restarts at epoch n, a new
+ * EpochCoordinator starts at epoch n, and then the old epoch coordinator commits epoch n + 1.
+ * The framework doesn't provide a handle to wait on the message queue, so we use a synchronous
+ * message to stop any writes to the ContinuousExecution object.
+ */
+private[sql] case object StopContinuousExecutionWrites extends EpochCoordinatorMessage
 
 // Init messages
 /**
@@ -70,27 +76,28 @@ private[sql] case class ReportPartitionOffset(
 
 /** Helper object used to create reference to [[EpochCoordinator]]. */
 private[sql] object EpochCoordinatorRef extends Logging {
-  private def endpointName(runId: String) = s"EpochCoordinator-$runId"
+  private def endpointName(id: String) = s"EpochCoordinator-$id"
 
   /**
    * Create a reference to a new [[EpochCoordinator]].
    */
   def create(
-      writer: ContinuousWriter,
+      writer: StreamWriter,
       reader: ContinuousReader,
       query: ContinuousExecution,
+      epochCoordinatorId: String,
       startEpoch: Long,
       session: SparkSession,
       env: SparkEnv): RpcEndpointRef = synchronized {
     val coordinator = new EpochCoordinator(
       writer, reader, query, startEpoch, session, env.rpcEnv)
-    val ref = env.rpcEnv.setupEndpoint(endpointName(query.runId.toString()), coordinator)
+    val ref = env.rpcEnv.setupEndpoint(endpointName(epochCoordinatorId), coordinator)
     logInfo("Registered EpochCoordinator endpoint")
     ref
   }
 
-  def get(runId: String, env: SparkEnv): RpcEndpointRef = synchronized {
-    val rpcEndpointRef = RpcUtils.makeDriverRef(endpointName(runId), env.conf, env.rpcEnv)
+  def get(id: String, env: SparkEnv): RpcEndpointRef = synchronized {
+    val rpcEndpointRef = RpcUtils.makeDriverRef(endpointName(id), env.conf, env.rpcEnv)
     logDebug("Retrieved existing EpochCoordinator endpoint")
     rpcEndpointRef
   }
@@ -108,13 +115,15 @@ private[sql] object EpochCoordinatorRef extends Logging {
  *   have both committed and reported an end offset for a given epoch.
  */
 private[continuous] class EpochCoordinator(
-    writer: ContinuousWriter,
+    writer: StreamWriter,
     reader: ContinuousReader,
     query: ContinuousExecution,
     startEpoch: Long,
     session: SparkSession,
     override val rpcEnv: RpcEnv)
   extends ThreadSafeRpcEndpoint with Logging {
+
+  private var queryWritesStopped: Boolean = false
 
   private var numReaderPartitions: Int = _
   private var numWriterPartitions: Int = _
@@ -147,12 +156,16 @@ private[continuous] class EpochCoordinator(
         partitionCommits.remove(k)
       }
       for (k <- partitionOffsets.keys.filter { case (e, _) => e < epoch }) {
-        partitionCommits.remove(k)
+        partitionOffsets.remove(k)
       }
     }
   }
 
   override def receive: PartialFunction[Any, Unit] = {
+    // If we just drop these messages, we won't do any writes to the query. The lame duck tasks
+    // won't shed errors or anything.
+    case _ if queryWritesStopped => ()
+
     case CommitPartitionEpoch(partitionId, epoch, message) =>
       logDebug(s"Got commit from partition $partitionId at epoch $epoch: $message")
       if (!partitionCommits.isDefinedAt((epoch, partitionId))) {
@@ -187,6 +200,10 @@ private[continuous] class EpochCoordinator(
 
     case SetWriterPartitions(numPartitions) =>
       numWriterPartitions = numPartitions
+      context.reply(())
+
+    case StopContinuousExecutionWrites =>
+      queryWritesStopped = true
       context.reply(())
   }
 }

@@ -1239,6 +1239,13 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertRaises(Py4JJavaError, rdd.pipe('grep 4', checkCode=True).collect)
         self.assertEqual([], rdd.pipe('grep 4').collect())
 
+    def test_pipe_unicode(self):
+        # Regression test for SPARK-20947
+        data = [u'\u6d4b\u8bd5', '1']
+        rdd = self.sc.parallelize(data)
+        result = rdd.pipe('cat').collect()
+        self.assertEqual(data, result)
+
 
 class ProfilerTests(PySparkTestCase):
 
@@ -2284,6 +2291,17 @@ class KeywordOnlyTests(unittest.TestCase):
         a.set(x=1, other=b, other_x=2)
         self.assertEqual(a._x, 1)
         self.assertEqual(b._x, 2)
+
+
+class UtilTests(PySparkTestCase):
+    def test_py4j_exception_message(self):
+        from pyspark.util import _exception_message
+
+        with self.assertRaises(Py4JJavaError) as context:
+            # This attempts java.lang.String(null) which throws an NPE.
+            self.sc._jvm.java.lang.String(None)
+
+        self.assertTrue('NullPointerException' in _exception_message(context.exception))
 
 
 @unittest.skipIf(not _have_scipy, "SciPy not installed")

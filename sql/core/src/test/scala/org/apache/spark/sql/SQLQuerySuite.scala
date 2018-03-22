@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.io.File
-import java.math.MathContext
 import java.net.{MalformedURLException, URL}
 import java.sql.Timestamp
 import java.util.concurrent.atomic.AtomicBoolean
@@ -1517,24 +1516,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("decimal precision with multiply/division") {
-    checkAnswer(sql("select 10.3 * 3.0"), Row(BigDecimal("30.90")))
-    checkAnswer(sql("select 10.3000 * 3.0"), Row(BigDecimal("30.90000")))
-    checkAnswer(sql("select 10.30000 * 30.0"), Row(BigDecimal("309.000000")))
-    checkAnswer(sql("select 10.300000000000000000 * 3.000000000000000000"),
-      Row(BigDecimal("30.900000000000000000000000000000000000", new MathContext(38))))
-    checkAnswer(sql("select 10.300000000000000000 * 3.0000000000000000000"),
-      Row(null))
-
-    checkAnswer(sql("select 10.3 / 3.0"), Row(BigDecimal("3.433333")))
-    checkAnswer(sql("select 10.3000 / 3.0"), Row(BigDecimal("3.4333333")))
-    checkAnswer(sql("select 10.30000 / 30.0"), Row(BigDecimal("0.343333333")))
-    checkAnswer(sql("select 10.300000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.433333333333333333333333333", new MathContext(38))))
-    checkAnswer(sql("select 10.3000000000000000000 / 3.00000000000000000"),
-      Row(BigDecimal("3.4333333333333333333333333333", new MathContext(38))))
-  }
-
   test("SPARK-10215 Div of Decimal returns null") {
     val d = Decimal(1.12321).toBigDecimal
     val df = Seq((d, 1)).toDF("a", "b")
@@ -1583,36 +1564,38 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("specifying database name for a temporary view is not allowed") {
     withTempPath { dir =>
-      val path = dir.toURI.toString
-      val df =
-        sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
-      df
-        .write
-        .format("parquet")
-        .save(path)
+      withTempView("db.t") {
+        val path = dir.toURI.toString
+        val df =
+          sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+        df
+          .write
+          .format("parquet")
+          .save(path)
 
-      // We don't support creating a temporary table while specifying a database
-      intercept[AnalysisException] {
+        // We don't support creating a temporary table while specifying a database
+        intercept[AnalysisException] {
+          spark.sql(
+            s"""
+              |CREATE TEMPORARY VIEW db.t
+              |USING parquet
+              |OPTIONS (
+              |  path '$path'
+              |)
+             """.stripMargin)
+        }.getMessage
+
+        // If you use backticks to quote the name then it's OK.
         spark.sql(
           s"""
-            |CREATE TEMPORARY VIEW db.t
+            |CREATE TEMPORARY VIEW `db.t`
             |USING parquet
             |OPTIONS (
             |  path '$path'
             |)
            """.stripMargin)
-      }.getMessage
-
-      // If you use backticks to quote the name then it's OK.
-      spark.sql(
-        s"""
-          |CREATE TEMPORARY VIEW `db.t`
-          |USING parquet
-          |OPTIONS (
-          |  path '$path'
-          |)
-         """.stripMargin)
-      checkAnswer(spark.table("`db.t`"), df)
+        checkAnswer(spark.table("`db.t`"), df)
+      }
     }
   }
 
@@ -1631,6 +1614,46 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Seq(Row(1), Row(1)))
       checkAnswer(sql("SELECT MAX(value) FROM src GROUP BY key + 1 ORDER BY (key + 1) * 2"),
         Seq(Row(1), Row(1)))
+    }
+  }
+
+  test("SPARK-23281: verify the correctness of sort direction on composite order by clause") {
+    withTempView("src") {
+      Seq[(Integer, Integer)](
+        (1, 1),
+        (1, 3),
+        (2, 3),
+        (3, 3),
+        (4, null),
+        (5, null)
+      ).toDF("key", "value").createOrReplaceTempView("src")
+
+      checkAnswer(sql(
+        """
+          |SELECT MAX(value) as value, key as col2
+          |FROM src
+          |GROUP BY key
+          |ORDER BY value desc, key
+        """.stripMargin),
+        Seq(Row(3, 1), Row(3, 2), Row(3, 3), Row(null, 4), Row(null, 5)))
+
+      checkAnswer(sql(
+        """
+          |SELECT MAX(value) as value, key as col2
+          |FROM src
+          |GROUP BY key
+          |ORDER BY value desc, key desc
+        """.stripMargin),
+        Seq(Row(3, 3), Row(3, 2), Row(3, 1), Row(null, 5), Row(null, 4)))
+
+      checkAnswer(sql(
+        """
+          |SELECT MAX(value) as value, key as col2
+          |FROM src
+          |GROUP BY key
+          |ORDER BY value asc, key desc
+        """.stripMargin),
+        Seq(Row(null, 5), Row(null, 4), Row(3, 3), Row(3, 2), Row(3, 1)))
     }
   }
 
@@ -1914,12 +1937,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       var e = intercept[AnalysisException] {
         sql("SELECT a.* FROM temp_table_no_cols a")
       }.getMessage
-      assert(e.contains("cannot resolve 'a.*' give input columns ''"))
+      assert(e.contains("cannot resolve 'a.*' given input columns ''"))
 
       e = intercept[AnalysisException] {
         dfNoCols.select($"b.*")
       }.getMessage
-      assert(e.contains("cannot resolve 'b.*' give input columns ''"))
+      assert(e.contains("cannot resolve 'b.*' given input columns ''"))
     }
   }
 
@@ -2127,7 +2150,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("data source table created in InMemoryCatalog should be able to read/write") {
     withTable("tbl") {
-      sql("CREATE TABLE tbl(i INT, j STRING) USING parquet")
+      val provider = spark.sessionState.conf.defaultDataSourceName
+      sql(s"CREATE TABLE tbl(i INT, j STRING) USING $provider")
       checkAnswer(sql("SELECT i, j FROM tbl"), Nil)
 
       Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
@@ -2451,9 +2475,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-16975: Column-partition path starting '_' should be handled correctly") {
     withTempDir { dir =>
-      val parquetDir = new File(dir, "parquet").getCanonicalPath
-      spark.range(10).withColumn("_col", $"id").write.partitionBy("_col").save(parquetDir)
-      spark.read.parquet(parquetDir)
+      val dataDir = new File(dir, "data").getCanonicalPath
+      spark.range(10).withColumn("_col", $"id").write.partitionBy("_col").save(dataDir)
+      spark.read.load(dataDir)
     }
   }
 
@@ -2717,6 +2741,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-23079: constraints should be inferred correctly with aliases") {
+    withTable("t") {
+      spark.range(5).write.saveAsTable("t")
+      val t = spark.read.table("t")
+      val left = t.withColumn("xid", $"id" + lit(1)).as("x")
+      val right = t.withColumnRenamed("id", "xid").as("y")
+      val df = left.join(right, "xid").filter("id = 3").toDF()
+      checkAnswer(df, Row(4, 3))
+    }
+  }
+
   test("SRARK-22266: the same aggregate function was calculated multiple times") {
     val query = "SELECT a, max(b+1), max(b+1) + 1 FROM testData2 GROUP BY a"
     val df = sql(query)
@@ -2754,22 +2789,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         // The DESC TABLE should report same schema as table scan.
         assert(sql("desc t").select("col_name")
           .as[String].collect().mkString(",").contains("i,p,j"))
-      }
-    }
-  }
-
-  // Only New OrcFileFormat supports this
-  Seq(classOf[org.apache.spark.sql.execution.datasources.orc.OrcFileFormat].getCanonicalName,
-      "parquet").foreach { format =>
-    test(s"SPARK-15474 Write and read back non-emtpy schema with empty dataframe - $format") {
-      withTempPath { file =>
-        val path = file.getCanonicalPath
-        val emptyDf = Seq((true, 1, "str")).toDF.limit(0)
-        emptyDf.write.format(format).save(path)
-
-        val df = spark.read.format(format).load(path)
-        assert(df.schema.sameType(emptyDf.schema))
-        checkAnswer(df, emptyDf)
       }
     }
   }

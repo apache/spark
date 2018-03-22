@@ -166,7 +166,7 @@ class FileStreamSource(
     val newDataSource =
       DataSource(
         sparkSession,
-        paths = files.map(_.path),
+        paths = files.map(f => new Path(new URI(f.path)).toString),
         userSpecifiedSchema = Some(schema),
         partitionColumns = partitionColumns,
         className = fileFormatClassName,

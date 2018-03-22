@@ -5,7 +5,7 @@ title: Submitting Applications
 
 The `spark-submit` script in Spark's `bin` directory is used to launch applications on a cluster.
 It can use all of Spark's supported [cluster managers](cluster-overview.html#cluster-manager-types)
-through a uniform interface so you don't have to configure your application specially for each one.
+through a uniform interface so you don't have to configure your application especially for each one.
 
 # Bundling Your Application's Dependencies
 If your code depends on other projects, you will need to package them alongside
@@ -58,7 +58,7 @@ for applications that involve the REPL (e.g. Spark shell).
 
 Alternatively, if your application is submitted from a machine far from the worker machines (e.g.
 locally on your laptop), it is common to use `cluster` mode to minimize network latency between
-the drivers and the executors. Currently, standalone mode does not support cluster mode for Python
+the drivers and the executors. Currently, the standalone mode does not support cluster mode for Python
 applications.
 
 For Python applications, simply pass a `.py` file in the place of `<application-jar>` instead of a JAR,
@@ -68,7 +68,7 @@ There are a few options available that are specific to the
 [cluster manager](cluster-overview.html#cluster-manager-types) that is being used.
 For example, with a [Spark standalone cluster](spark-standalone.html) with `cluster` deploy mode,
 you can also specify `--supervise` to make sure that the driver is automatically restarted if it
-fails with non-zero exit code. To enumerate all such options available to `spark-submit`,
+fails with a non-zero exit code. To enumerate all such options available to `spark-submit`,
 run it with `--help`. Here are a few examples of common options:
 
 {% highlight bash %}
@@ -192,7 +192,7 @@ debugging information by running `spark-submit` with the `--verbose` option.
 
 # Advanced Dependency Management
 When using `spark-submit`, the application jar along with any jars included with the `--jars` option
-will be automatically transferred to the cluster. URLs supplied after `--jars` must be separated by commas. That list is included on the driver and executor classpaths. Directory expansion does not work with `--jars`.
+will be automatically transferred to the cluster. URLs supplied after `--jars` must be separated by commas. That list is included in the driver and executor classpaths. Directory expansion does not work with `--jars`.
 
 Spark uses the following URL scheme to allow different strategies for disseminating jars:
 

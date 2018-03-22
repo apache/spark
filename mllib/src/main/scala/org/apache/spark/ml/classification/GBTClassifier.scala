@@ -267,7 +267,7 @@ class GBTClassificationModel private[ml](
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     // If thresholds defined, use predictRaw to get probabilities, otherwise use optimization
     if (isDefined(thresholds)) {
       super.predict(features)

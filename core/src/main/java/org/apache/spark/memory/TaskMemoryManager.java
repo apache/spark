@@ -172,10 +172,7 @@ public class TaskMemoryManager {
             currentEntry = sortedConsumers.lastEntry();
           }
           List<MemoryConsumer> cList = currentEntry.getValue();
-          MemoryConsumer c = cList.remove(cList.size() - 1);
-          if (cList.isEmpty()) {
-            sortedConsumers.remove(currentEntry.getKey());
-          }
+          MemoryConsumer c = cList.get(cList.size() - 1);
           try {
             long released = c.spill(required - got, consumer);
             if (released > 0) {
@@ -184,6 +181,11 @@ public class TaskMemoryManager {
               got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
               if (got >= required) {
                 break;
+              }
+            } else {
+              cList.remove(cList.size() - 1);
+              if (cList.isEmpty()) {
+                sortedConsumers.remove(currentEntry.getKey());
               }
             }
           } catch (ClosedByInterruptException e) {

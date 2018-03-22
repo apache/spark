@@ -646,7 +646,7 @@ class LinearRegressionModel private[ml] (
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams with GeneralMLWritable {
 
-  def this(uid: String, coefficients: Vector, intercept: Double) =
+  private[ml] def this(uid: String, coefficients: Vector, intercept: Double) =
     this(uid, coefficients, intercept, 1.0)
 
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
@@ -700,7 +700,7 @@ class LinearRegressionModel private[ml] (
   }
 
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     dot(features, coefficients) + intercept
   }
 

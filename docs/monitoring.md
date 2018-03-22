@@ -118,7 +118,7 @@ The history server can be configured as follows:
     <td>
       The number of applications to retain UI data for in the cache. If this cap is exceeded, then
       the oldest applications will be removed from the cache. If an application is not in the cache,
-      it will have to be loaded from disk if its accessed from the UI.
+      it will have to be loaded from disk if it is accessed from the UI.
     </td>
   </tr>
   <tr>
@@ -348,6 +348,13 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td>A list of all active executors for the given application.</td>
   </tr>
   <tr>
+    <td><code>/applications/[app-id]/executors/[executor-id]/threads</code></td>
+    <td>
+      Stack traces of all the threads running within the given active executor.
+      Not available via the history server.
+    </td>
+  </tr>
+  <tr>
     <td><code>/applications/[app-id]/allexecutors</code></td>
     <td>A list of all(active and dead) executors for the given application.</td>
   </tr>
@@ -407,7 +414,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
   </tr>
 </table>
 
-The number of jobs and stages which can retrieved is constrained by the same retention
+The number of jobs and stages which can be retrieved is constrained by the same retention
 mechanism of the standalone Spark UI; `"spark.ui.retainedJobs"` defines the threshold
 value triggering garbage collection on jobs, and `spark.ui.retainedStages` that for stages.
 Note that the garbage collection takes place on playback: it is possible to retrieve
@@ -422,10 +429,10 @@ These endpoints have been strongly versioned to make it easier to develop applic
 * Individual fields will never be removed for any given endpoint
 * New endpoints may be added
 * New fields may be added to existing endpoints
-* New versions of the api may be added in the future at a separate endpoint (eg., `api/v2`).  New versions are *not* required to be backwards compatible.
+* New versions of the api may be added in the future as a separate endpoint (eg., `api/v2`).  New versions are *not* required to be backwards compatible.
 * Api versions may be dropped, but only after at least one minor release of co-existing with a new api version.
 
-Note that even when examining the UI of a running applications, the `applications/[app-id]` portion is
+Note that even when examining the UI of running applications, the `applications/[app-id]` portion is
 still required, though there is only one application available.  Eg. to see the list of jobs for the
 running app, you would go to `http://localhost:4040/api/v1/applications/[app-id]/jobs`.  This is to
 keep the paths consistent in both modes.
