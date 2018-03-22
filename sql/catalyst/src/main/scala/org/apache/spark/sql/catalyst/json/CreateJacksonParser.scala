@@ -53,7 +53,9 @@ private[sql] object CreateJacksonParser extends Serializable {
     row: InternalRow,
     charset: Option[String] = None
   ): JsonParser = {
+    require(charset == Some("UTF-8"))
     val is = new ByteArrayInputStream(row.getBinary(0))
-    inputStream(jsonFactory, is, charset)
+
+    inputStream(jsonFactory, is)
   }
 }

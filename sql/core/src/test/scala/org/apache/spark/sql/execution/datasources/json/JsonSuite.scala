@@ -2063,36 +2063,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       )
     }
   }
-  
-  def checkReadWrittenJson(charset: String, delimiter: String, runId: Int): Unit = {
-    test(s"checks Spark is able to read json written by Spark itself #${runId}") {
-      withTempPath { path =>
-        val ds = spark.createDataset(Seq(
-          ("a", 1), ("b", 2), ("c", 3))
-        ).repartition(1)
-        ds.write
-          .option("charset", charset)
-          .format("json").mode("overwrite")
-          .save(path.getCanonicalPath)
-        val savedDf = spark
-          .read
-          .schema(ds.schema)
-          .option("charset", charset)
-          .option("recordDelimiter", delimiter)
-          .json(path.getCanonicalPath)
-
-        checkAnswer(savedDf.toDF(), ds.toDF())
-      }
-    }
-  }
-
-  List(
-    ("\n", "UTF-8"),
-    ("x00 0a", "UTF-16BE"),
-    ("\n", "UTF-16LE"),
-    ("\u000a", "UTF-32BE"),
-    ("x0a 00 00 00", "UTF-32LE")
-  ).zipWithIndex.foreach{case ((d, c), i) => checkReadWrittenJson(c, d, i)}
 
   def checkReadJson(
     charset: String,
@@ -2127,7 +2097,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           spark.read.schema(schema)
         }
         val savedDf = reader
-          .option("charset", charset)
           .option("recordDelimiter", delimiter)
           .json(path.getCanonicalPath)
         checkAnswer(savedDf, records.map(_.row))
@@ -2137,15 +2106,13 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   List(
     ("sep", "UTF-8", false),
-    ("x00 0a 00 0d", "UTF-16BE", false),
-    ("x00 0a 00 0d", "UTF-16BE", true),
-    ("\r\n", "UTF-16LE", false),
-    ("\r\n", "UTF-16LE", true),
-    ("\u000d\u000a", "UTF-32BE", false),
-    ("\u000a\u000d", "UTF-32BE", true),
-    ("===", "UTF-32LE", false),
-    ("$^+", "UTF-32LE", true),
-    ("xEA.F3.EA.F3", "CP1251", false),
-    ("xEA.F3.EA.F3", "CP1251", true)
+    ("x00 0a 00 0d", "UTF-8", true),
+    ("xEA.F3.EA.F3", "UTF-8", false),
+    ("\r\n", "UTF-8", false),
+    ("\r\n", "UTF-8", true),
+    ("\u000d\u000a", "UTF-8", false),
+    ("\u000a\u000d", "UTF-8", true),
+    ("===", "UTF-8", false),
+    ("$^+", "UTF-8", true)
   ).zipWithIndex.foreach{case ((d, c, s), i) => checkReadJson(c, d, s, i)}
 }

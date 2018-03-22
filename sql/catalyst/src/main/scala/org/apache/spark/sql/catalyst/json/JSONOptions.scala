@@ -85,11 +85,7 @@ private[sql] class JSONOptions(
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
-  /**
-   * Standard charset name. For example UTF-8, UTF-16 and UTF-32.
-   * If charset is not specified (None), it will be detected automatically.
-   */
-  val charset: Option[String] = parameters.get("charset")
+  val charset: Option[String] = Some("UTF-8")
 
   /**
    * A sequence of bytes between two consecutive json records. Format of the option is:
