@@ -349,7 +349,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   /** Specifies how data is partitioned across different nodes in the cluster. */
-  override def outputPartitioning: Partitioning = if (numSlices == 1) {
+  override def outputPartitioning: Partitioning = if (numSlices == 1 && numElements != 0) {
     SinglePartition
   } else {
     super.outputPartitioning
