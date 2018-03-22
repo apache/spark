@@ -16,7 +16,6 @@
 #
 
 import sys
-import warnings
 import json
 
 if sys.version >= '3':

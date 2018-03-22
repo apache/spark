@@ -24,8 +24,6 @@ if sys.version >= '3':
 else:
     intlike = (int, long)
 
-from abc import ABCMeta, abstractmethod
-
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq

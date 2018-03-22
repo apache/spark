@@ -18,7 +18,6 @@
 """
 A collections of builtin functions
 """
-import math
 import sys
 import functools
 import warnings
@@ -28,10 +27,10 @@ if sys.version < "3":
 
 from pyspark import since, SparkContext
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
+# Keep UserDefinedFunction import for backwards compatibility, see SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_udf
 
 
