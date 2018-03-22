@@ -62,8 +62,7 @@ private[parquet] object ParquetFilters {
     case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => FilterApi.eq(
         intColumn(n),
-        Option(v).map(date => dateToDays(date.asInstanceOf[java.sql.Date]).asInstanceOf[Integer])
-          .orNull)
+        Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
   }
 
   private val makeNotEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -89,8 +88,7 @@ private[parquet] object ParquetFilters {
     case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => FilterApi.notEq(
         intColumn(n),
-        Option(v).map(date => dateToDays(date.asInstanceOf[java.sql.Date]).asInstanceOf[Integer])
-          .orNull)
+        Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
   }
 
   private val makeLt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -113,8 +111,7 @@ private[parquet] object ParquetFilters {
     case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => FilterApi.lt(
         intColumn(n),
-        Option(v).map(date => dateToDays(date.asInstanceOf[java.sql.Date]).asInstanceOf[Integer])
-          .orNull)
+        Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
   }
 
   private val makeLtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -137,8 +134,7 @@ private[parquet] object ParquetFilters {
     case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => FilterApi.ltEq(
         intColumn(n),
-        Option(v).map(date => dateToDays(date.asInstanceOf[java.sql.Date]).asInstanceOf[Integer])
-          .orNull)
+        Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
   }
 
   private val makeGt: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -161,8 +157,7 @@ private[parquet] object ParquetFilters {
     case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => FilterApi.gt(
         intColumn(n),
-        Option(v).map(date => dateToDays(date.asInstanceOf[java.sql.Date]).asInstanceOf[Integer])
-          .orNull)
+        Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
   }
 
   private val makeGtEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
@@ -185,8 +180,7 @@ private[parquet] object ParquetFilters {
     case DateType if SQLConf.get.parquetFilterPushDownDate =>
       (n: String, v: Any) => FilterApi.gtEq(
         intColumn(n),
-        Option(v).map(date => dateToDays(date.asInstanceOf[java.sql.Date]).asInstanceOf[Integer])
-          .orNull)
+        Option(v).map(date => dateToDays(date.asInstanceOf[Date]).asInstanceOf[Integer]).orNull)
   }
 
   /**

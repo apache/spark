@@ -320,41 +320,40 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       def date: Date = Date.valueOf(s)
     }
 
-    withParquetDataFrame(
-      Seq("2018-03-18", "2018-03-19", "2018-03-20", "2018-03-21").map(i => Tuple1(i.date))) {
-        implicit df =>
-          checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
-          checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]],
-            Seq("2018-03-18", "2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(i.date)))
+    val data = Seq("2018-03-18", "2018-03-19", "2018-03-20", "2018-03-21")
 
-          checkFilterPredicate('_1 === "2018-03-18".date, classOf[Eq[_]], "2018-03-18".date)
-          checkFilterPredicate('_1 <=> "2018-03-18".date, classOf[Eq[_]], "2018-03-18".date)
-          checkFilterPredicate('_1 =!= "2018-03-18".date, classOf[NotEq[_]],
-            Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(i.date)))
+    withParquetDataFrame(data.map(i => Tuple1(i.date))) { implicit df =>
+      checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], data.map(i => Row.apply(i.date)))
 
-          checkFilterPredicate('_1 < "2018-03-19".date, classOf[Lt[_]], "2018-03-18".date)
-          checkFilterPredicate('_1 > "2018-03-20".date, classOf[Gt[_]], "2018-03-21".date)
-          checkFilterPredicate('_1 <= "2018-03-18".date, classOf[LtEq[_]], "2018-03-18".date)
-          checkFilterPredicate('_1 >= "2018-03-21".date, classOf[GtEq[_]], "2018-03-21".date)
+      checkFilterPredicate('_1 === "2018-03-18".date, classOf[Eq[_]], "2018-03-18".date)
+      checkFilterPredicate('_1 <=> "2018-03-18".date, classOf[Eq[_]], "2018-03-18".date)
+      checkFilterPredicate('_1 =!= "2018-03-18".date, classOf[NotEq[_]],
+        Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(i.date)))
 
-          checkFilterPredicate(
-            Literal("2018-03-18".date) === '_1, classOf[Eq[_]], "2018-03-18".date)
-          checkFilterPredicate(
-            Literal("2018-03-18".date) <=> '_1, classOf[Eq[_]], "2018-03-18".date)
-          checkFilterPredicate(
-            Literal("2018-03-19".date) > '_1, classOf[Lt[_]], "2018-03-18".date)
-          checkFilterPredicate(
-            Literal("2018-03-20".date) < '_1, classOf[Gt[_]], "2018-03-21".date)
-          checkFilterPredicate(
-            Literal("2018-03-18".date) >= '_1, classOf[LtEq[_]], "2018-03-18".date)
-          checkFilterPredicate(
-            Literal("2018-03-21".date) <= '_1, classOf[GtEq[_]], "2018-03-21".date)
+      checkFilterPredicate('_1 < "2018-03-19".date, classOf[Lt[_]], "2018-03-18".date)
+      checkFilterPredicate('_1 > "2018-03-20".date, classOf[Gt[_]], "2018-03-21".date)
+      checkFilterPredicate('_1 <= "2018-03-18".date, classOf[LtEq[_]], "2018-03-18".date)
+      checkFilterPredicate('_1 >= "2018-03-21".date, classOf[GtEq[_]], "2018-03-21".date)
 
-          checkFilterPredicate(!('_1 < "2018-03-21".date), classOf[GtEq[_]], "2018-03-21".date)
-          checkFilterPredicate(
-            '_1 < "2018-03-19".date || '_1 > "2018-03-20".date,
-            classOf[Operators.Or],
-            Seq(Row("2018-03-18".date), Row("2018-03-21".date)))
+      checkFilterPredicate(
+        Literal("2018-03-18".date) === '_1, classOf[Eq[_]], "2018-03-18".date)
+      checkFilterPredicate(
+        Literal("2018-03-18".date) <=> '_1, classOf[Eq[_]], "2018-03-18".date)
+      checkFilterPredicate(
+        Literal("2018-03-19".date) > '_1, classOf[Lt[_]], "2018-03-18".date)
+      checkFilterPredicate(
+        Literal("2018-03-20".date) < '_1, classOf[Gt[_]], "2018-03-21".date)
+      checkFilterPredicate(
+        Literal("2018-03-18".date) >= '_1, classOf[LtEq[_]], "2018-03-18".date)
+      checkFilterPredicate(
+        Literal("2018-03-21".date) <= '_1, classOf[GtEq[_]], "2018-03-21".date)
+
+      checkFilterPredicate(!('_1 < "2018-03-21".date), classOf[GtEq[_]], "2018-03-21".date)
+      checkFilterPredicate(
+        '_1 < "2018-03-19".date || '_1 > "2018-03-20".date,
+        classOf[Operators.Or],
+        Seq(Row("2018-03-18".date), Row("2018-03-21".date)))
         }
   }
 

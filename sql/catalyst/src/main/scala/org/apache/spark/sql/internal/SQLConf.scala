@@ -358,7 +358,7 @@ object SQLConf {
       "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
     .internal()
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("Whether to be compatible with the legacy Parquet format adopted by Spark 1.4 and prior " +
