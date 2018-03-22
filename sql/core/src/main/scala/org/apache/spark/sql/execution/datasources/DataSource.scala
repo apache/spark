@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.streaming.sources.TextSocketSourceProvider
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
+import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.Utils
 
@@ -546,6 +546,7 @@ case class DataSource(
       case dataSource: CreatableRelationProvider =>
         SaveIntoDataSourceCommand(data, dataSource, caseInsensitiveOptions, mode)
       case format: FileFormat =>
+        DataSource.validateSchema(data.schema)
         planForWritingFileFormat(format, mode, data)
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
@@ -718,5 +719,28 @@ object DataSource extends Logging {
       throw new AnalysisException(s"Path does not exist: ${globPath.head}")
     }
     globPath
+  }
+
+  /**
+   * Called before writing into a FileFormat based data source to make sure the
+   * supplied schema is not empty.
+   * @param schema
+   */
+  private def validateSchema(schema: StructType): Unit = {
+    def hasEmptySchema(schema: StructType): Boolean = {
+      schema.size == 0 || schema.find {
+        case StructField(_, b: StructType, _, _) => hasEmptySchema(b)
+        case _ => false
+      }.isDefined
+    }
+
+
+    if (hasEmptySchema(schema)) {
+      throw new AnalysisException(
+        s"""
+           |Datasource does not support writing empty or nested empty schemas.
+           |Please make sure the data schema has at least one or more column(s).
+         """.stripMargin)
+    }
   }
 }
