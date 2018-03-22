@@ -41,8 +41,7 @@ import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordCo
  */
 case class ShuffleExchangeExec(
     var newPartitioning: Partitioning,
-    child: SparkPlan,
-    @transient coordinator: Option[ExchangeCoordinator]) extends Exchange {
+    child: SparkPlan) extends Exchange {
 
   // NOTE: coordinator can be null after serialization/deserialization,
   //       e.g. it can be null on the Executor side
@@ -51,35 +50,13 @@ case class ShuffleExchangeExec(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"))
 
   override def nodeName: String = {
-    val extraInfo = coordinator match {
-      case Some(exchangeCoordinator) =>
-        s"(coordinator id: ${System.identityHashCode(exchangeCoordinator)})"
-      case _ => ""
-    }
-
-    val simpleNodeName = "Exchange"
-    s"$simpleNodeName$extraInfo"
+    "Exchange"
   }
 
   override def outputPartitioning: Partitioning = newPartitioning
 
   private val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
-
-  override protected def doPrepare(): Unit = {
-    // If an ExchangeCoordinator is needed, we register this Exchange operator
-    // to the coordinator when we do prepare. It is important to make sure
-    // we register this operator right before the execution instead of register it
-    // in the constructor because it is possible that we create new instances of
-    // Exchange operators when we transform the physical plan
-    // (then the ExchangeCoordinator will hold references of unneeded Exchanges).
-    // So, we should only call registerExchange just before we start to execute
-    // the plan.
-    coordinator match {
-      case Some(exchangeCoordinator) => exchangeCoordinator.registerExchange(this)
-      case _ =>
-    }
-  }
 
   /**
    * Returns a [[ShuffleDependency]] that will partition rows of its child based on
@@ -119,25 +96,32 @@ case class ShuffleExchangeExec(
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
     if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = coordinator match {
-        case Some(exchangeCoordinator) =>
-          val shuffleRDD = exchangeCoordinator.postShuffleRDD(this)
-          assert(shuffleRDD.partitions.length == newPartitioning.numPartitions)
-          shuffleRDD
-        case _ =>
-          val shuffleDependency = prepareShuffleDependency()
-          preparePostShuffleRDD(shuffleDependency)
+      val shuffleDependency = prepareShuffleDependency()
+      cachedShuffleRDD = preparePostShuffleRDD(shuffleDependency)
+    }
+    cachedShuffleRDD
+  }
+
+  private var _mapOutputStatistics: MapOutputStatistics = null
+
+  def mapOutputStatistics: MapOutputStatistics = _mapOutputStatistics
+
+  def eagerExecute(): RDD[InternalRow] = {
+    if (cachedShuffleRDD == null) {
+      val shuffleDependency = prepareShuffleDependency()
+      if (shuffleDependency.rdd.partitions.length != 0) {
+        // submitMapStage does not accept RDD with 0 partition.
+        // So, we will not submit this dependency.
+        val submittedStageFuture = sqlContext.sparkContext.submitMapStage(shuffleDependency)
+        _mapOutputStatistics = submittedStageFuture.get()
       }
+      cachedShuffleRDD = preparePostShuffleRDD(shuffleDependency)
     }
     cachedShuffleRDD
   }
 }
 
 object ShuffleExchangeExec {
-  def apply(newPartitioning: Partitioning, child: SparkPlan): ShuffleExchangeExec = {
-    ShuffleExchangeExec(newPartitioning, child, coordinator = Option.empty[ExchangeCoordinator])
-  }
-
   /**
    * Determines whether records must be defensively copied before being sent to the shuffle.
    * Several of Spark's shuffle components will buffer deserialized Java objects in memory. The
