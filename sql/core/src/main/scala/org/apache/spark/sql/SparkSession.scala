@@ -146,6 +146,8 @@ class SparkSession private(
       }
   }
 
+  lazy private val substitutor = new VariableSubstitution(sessionState.conf)
+
   /**
    * A wrapped version of this session in the form of a [[SQLContext]], for backward compatibility.
    *
@@ -635,7 +637,8 @@ class SparkSession private(
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = {
-    Dataset.ofRows(self, sessionState.sqlParser.parsePlan(sqlText))
+    Dataset.ofRows(self, sessionState.sqlParser.parsePlan(sqlText),
+      substitutor.substitute(sqlText))
   }
 
   /**

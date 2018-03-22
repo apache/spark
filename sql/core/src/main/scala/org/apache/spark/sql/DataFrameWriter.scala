@@ -653,7 +653,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     try {
       val start = System.nanoTime()
       // call `QueryExecution.toRDD` to trigger the execution of commands.
-      SQLExecution.withNewExecutionId(session, qe)(qe.toRdd)
+      SQLExecution.withNewExecutionId(session, qe, ds.sqlText)(qe.toRdd)
       val end = System.nanoTime()
       session.listenerManager.onSuccess(name, qe, end - start)
     } catch {

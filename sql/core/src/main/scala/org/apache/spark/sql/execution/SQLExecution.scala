@@ -58,7 +58,8 @@ object SQLExecution {
    */
   def withNewExecutionId[T](
       sparkSession: SparkSession,
-      queryExecution: QueryExecution)(body: => T): T = {
+      queryExecution: QueryExecution,
+      sqlText: String = "")(body: => T): T = {
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
     val executionId = SQLExecution.nextExecutionId
@@ -69,10 +70,10 @@ object SQLExecution {
       // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
       // streaming queries would give us call site like "run at <unknown>:0"
       val callSite = sparkSession.sparkContext.getCallSite()
-
       sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
         executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
-        SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
+        SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan),
+        System.currentTimeMillis(), sqlText))
       try {
         body
       } finally {

@@ -503,7 +503,7 @@ class MicroBatchExecution(
       new Dataset(sparkSessionToRunBatch, lastExecution, RowEncoder(lastExecution.analyzed.schema))
 
     reportTimeTaken("addBatch") {
-      SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
+      SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution, nextBatch.sqlText) {
         sink match {
           case s: Sink => s.addBatch(currentBatchId, nextBatch)
           case _: StreamWriteSupport =>

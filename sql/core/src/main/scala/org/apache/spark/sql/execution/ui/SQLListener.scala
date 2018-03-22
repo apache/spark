@@ -34,7 +34,8 @@ case class SparkListenerSQLExecutionStart(
     details: String,
     physicalPlanDescription: String,
     sparkPlanInfo: SparkPlanInfo,
-    time: Long)
+    time: Long,
+    sqlText: String)
   extends SparkListenerEvent
 
 @DeveloperApi

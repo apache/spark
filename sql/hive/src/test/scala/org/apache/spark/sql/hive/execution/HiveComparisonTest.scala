@@ -345,7 +345,9 @@ abstract class HiveComparisonTest
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
           val query = new TestHiveQueryExecution(queryString.replace("../../data", testDataPath))
           def getResult(): Seq[String] = {
-            SQLExecution.withNewExecutionId(query.sparkSession, query)(query.hiveResultString())
+            SQLExecution.withNewExecutionId(query.sparkSession, query, queryString) {
+              query.hiveResultString()
+            }
           }
           try { (query, prepareAnswer(query, getResult())) } catch {
             case e: Throwable =>
