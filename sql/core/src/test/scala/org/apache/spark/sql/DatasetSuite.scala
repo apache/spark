@@ -1446,6 +1446,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val data = Seq(("a", null))
     checkDataset(data.toDS(), data: _*)
   }
+
+  test("treeAggregate on Dataset API") {
+    val ds = (0 to 100).map(x => DoubleData(x, x.toString)).toDS
+    val aggregated = ds.repartition(10).treeAggregate(DoubleData(0, "0"))(
+      (x, y) => DoubleData(x.id + y.id, (x.val1.toInt + y.val1.toInt).toString),
+      (x, y) => DoubleData(x.id + y.id, (x.val1.toInt + y.val1.toInt).toString), 5)
+
+    assert(aggregated.id == (0 to 100).sum)
+    assert(aggregated.val1 == (0 to 100).sum.toString)
+  }
 }
 
 case class SingleData(id: Int)

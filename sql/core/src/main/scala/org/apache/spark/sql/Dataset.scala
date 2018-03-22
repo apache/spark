@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
+import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
@@ -1657,6 +1658,43 @@ class Dataset[T] private[sql](
   @InterfaceStability.Evolving
   def groupByKey[K](func: MapFunction[T, K], encoder: Encoder[K]): KeyValueGroupedDataset[K, T] =
     groupByKey(func.call(_))(encoder)
+
+
+  /**
+   * Aggregates the elements of this Dataset in a multi-level tree pattern.
+   *
+   * @param depth suggested depth of the tree (default: 2)
+   */
+  private[spark] def treeAggregate[U : Encoder : ClassTag](zeroValue: U)(
+      seqOp: (U, T) => U,
+      combOp: (U, U) => U,
+      depth: Int = 2): U = {
+    require(depth >= 1, s"Depth must be greater than or equal to 1 but got $depth.")
+    val sparkContext = sparkSession.sparkContext
+    val copiedZeroValue = Utils.clone(zeroValue, sparkContext.env.closureSerializer.newInstance())
+    if (rdd.partitions.length == 0) {
+      copiedZeroValue
+    } else {
+      val aggregatePartition =
+        (it: Iterator[T]) => it.aggregate(zeroValue)(seqOp, combOp)
+      var partiallyAggregated: Dataset[U] = mapPartitions(it => Iterator(aggregatePartition(it)))
+      var numPartitions = partiallyAggregated.rdd.partitions.length
+      val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
+      // If creating an extra level doesn't help reduce
+      // the wall-clock time, we stop tree aggregation.
+
+      // Don't trigger TreeAggregation when it doesn't save wall-clock time
+      while (numPartitions > scale + math.ceil(numPartitions.toDouble / scale)) {
+        numPartitions /= scale
+        val curNumPartitions = numPartitions
+        partiallyAggregated = partiallyAggregated.repartition(curNumPartitions,
+          Seq(new Column(Remainder(SparkPartitionID(), Literal(curNumPartitions)))): _*
+        ).mapPartitions(it => Iterator(it.fold(copiedZeroValue)(combOp)))
+      }
+      // Using `rdd` of `partiallyAggregated` helps to remove the serialization of `mapPartitions`.
+      partiallyAggregated.rdd.fold(copiedZeroValue)(combOp)
+    }
+  }
 
   /**
    * Create a multi-dimensional rollup for the current Dataset using the specified columns,
