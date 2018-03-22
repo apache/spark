@@ -868,7 +868,7 @@ object DateTimeUtils {
    * microseconds since 1.1.1970.
    *
    * If time1 and time2 are on the same day of month, or both are the last day of month,
-   * returns an integer (time under a day will be ignored).
+   * time of a day will be ignored.
    *
    * Otherwise, the difference is calculated based on 31 days per month, and rounded to
    * 8 digits.
@@ -882,7 +882,7 @@ object DateTimeUtils {
    * microseconds since 1.1.1970.
    *
    * If time1 and time2 are on the same day of month, or both are the last day of month,
-   * returns an integer (time under a day will be ignored).
+   * returns, time of day will be ignored.
    *
    * Otherwise, the difference is calculated based on 31 days per month, and rounded to
    * 8 digits.
