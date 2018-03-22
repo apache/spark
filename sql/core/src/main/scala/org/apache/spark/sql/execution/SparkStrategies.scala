@@ -241,41 +241,46 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // --- BroadcastHashJoin --------------------------------------------------------------------
 
       // broadcast hints were specified
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, rangeConds, condition, left, right)
         if canBroadcastByHints(joinType, left, right) =>
         val buildSide = broadcastSideByHints(joinType, left, right)
+        val cond = (rangeConds ++ condition.map(x => Seq(x)).getOrElse(Nil)).reduceOption(And)
         Seq(joins.BroadcastHashJoinExec(
-          leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, joinType, buildSide, cond, planLater(left), planLater(right)))
 
       // broadcast hints were not specified, so need to infer it from size and configuration.
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, rangeConds, condition, left, right)
         if canBroadcastBySizes(joinType, left, right) =>
         val buildSide = broadcastSideBySizes(joinType, left, right)
+        val cond = (rangeConds ++ condition.map(x => Seq(x)).getOrElse(Nil)).reduceOption(And)
         Seq(joins.BroadcastHashJoinExec(
-          leftKeys, rightKeys, joinType, buildSide, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, joinType, buildSide, cond, planLater(left), planLater(right)))
 
       // --- ShuffledHashJoin ---------------------------------------------------------------------
 
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, rangeConds, condition, left, right)
          if !conf.preferSortMergeJoin && canBuildRight(joinType) && canBuildLocalHashMap(right)
            && muchSmaller(right, left) ||
            !RowOrdering.isOrderable(leftKeys) =>
+        val cond = (rangeConds ++ condition.map(x => Seq(x)).getOrElse(Nil)).reduceOption(And)
         Seq(joins.ShuffledHashJoinExec(
-          leftKeys, rightKeys, joinType, BuildRight, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, joinType, BuildRight, cond, planLater(left), planLater(right)))
 
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, rangeConds, condition, left, right)
          if !conf.preferSortMergeJoin && canBuildLeft(joinType) && canBuildLocalHashMap(left)
            && muchSmaller(left, right) ||
            !RowOrdering.isOrderable(leftKeys) =>
+        val cond = (rangeConds ++ condition.map(x => Seq(x)).getOrElse(Nil)).reduceOption(And)
         Seq(joins.ShuffledHashJoinExec(
-          leftKeys, rightKeys, joinType, BuildLeft, condition, planLater(left), planLater(right)))
+          leftKeys, rightKeys, joinType, BuildLeft, cond, planLater(left), planLater(right)))
 
       // --- SortMergeJoin ------------------------------------------------------------
 
-      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+      case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, rangeConds, condition, left, right)
         if RowOrdering.isOrderable(leftKeys) =>
+//        val cond = (rangeConds ++ condition.map(x => Seq(x)).getOrElse(Nil)).reduceOption(And)
         joins.SortMergeJoinExec(
-          leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+          leftKeys, rightKeys, joinType, rangeConds, condition, planLater(left), planLater(right)) :: Nil
 
       // --- Without joining keys ------------------------------------------------------------
 
@@ -380,11 +385,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object StreamingJoinStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
       plan match {
-        case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+        case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, rangePreds, condition, left, right)
           if left.isStreaming && right.isStreaming =>
 
           new StreamingSymmetricHashJoinExec(
-            leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+            leftKeys, rightKeys, joinType, (rangePreds ++ condition.map(x => Seq(x)).getOrElse(Nil)).reduceOption(And),
+            planLater(left), planLater(right)) :: Nil
 
         case Join(left, right, _, _) if left.isStreaming && right.isStreaming =>
           throw new AnalysisException(
@@ -628,6 +634,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
+        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child)) :: Nil
+      case r: logical.FixedRangeRepartitionByExpression =>
         exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child)) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
