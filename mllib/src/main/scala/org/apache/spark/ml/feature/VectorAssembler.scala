@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import java.util.NoSuchElementException
 
-import scala.collection.mutable.ArrayBuilder
+import scala.collection.mutable
 import scala.language.existentials
 
 import org.apache.spark.SparkException
@@ -35,9 +35,10 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
- * A feature transformer that merges multiple columns into a vector column. This requires one pass
- * over the entire dataset. In case we need to infer column lengths from the data we require an
- * additional call to the 'first' Dataset method, see 'handleInvalid' parameter.
+ * A feature transformer that merges multiple columns into a vector column.
+ *
+ * This requires one pass over the entire dataset. In case we need to infer column lengths from the
+ * data we require an additional call to the 'first' Dataset method, see 'handleInvalid' parameter.
  */
 @Since("1.4.0")
 class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
@@ -87,7 +88,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     // Schema transformation.
     val schema = dataset.schema
 
-    val vectorCols = $(inputCols).toSeq.filter { c =>
+    val vectorCols = $(inputCols).filter { c =>
       schema(c).dataType match {
         case _: VectorUDT => true
         case _ => false
@@ -95,7 +96,7 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
     }
     val vectorColsLengths = VectorAssembler.getLengths(dataset, vectorCols, $(handleInvalid))
 
-    val featureAttributesMap = $(inputCols).toSeq.map { c =>
+    val featureAttributesMap = $(inputCols).map { c =>
       val field = schema(c)
       field.dataType match {
         case DoubleType =>
@@ -237,21 +238,25 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
   override def load(path: String): VectorAssembler = super.load(path)
 
   /**
-   * Returns a UDF that has the required information to assemble each row.
+   * Returns a function that has the required information to assemble each row.
    * @param lengths an array of lengths of input columns, whose size should be equal to the number
    *                of cells in the row (vv)
    * @param keepInvalid indicate whether to throw an error or not on seeing a null in the rows
    * @return  a udf that can be applied on each row
    */
   private[feature] def assemble(lengths: Array[Int], keepInvalid: Boolean)(vv: Any*): Vector = {
-    val indices = ArrayBuilder.make[Int]
-    val values = ArrayBuilder.make[Double]
+    val indices = mutable.ArrayBuilder.make[Int]
+    val values = mutable.ArrayBuilder.make[Double]
     var featureIndex = 0
 
     var inputColumnIndex = 0
     vv.foreach {
       case v: Double =>
-        if (v != 0.0) {
+        if (v.isNaN && !keepInvalid) {
+          throw new SparkException("Encountered NaN while assembling a row in 'error' handle " +
+            "invalid mode. Consider removing NaNs from dataset or using handle invalid modes " +
+            "'keep' or 'skip'.")
+        } else if (v != 0.0) {
           indices += featureIndex
           values += v
         }
@@ -267,16 +272,18 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
         inputColumnIndex += 1
         featureIndex += vec.size
       case null =>
-        keepInvalid match {
-          case false => throw new SparkException("Values to assemble cannot be null.")
-          case true =>
-            val length: Int = lengths(inputColumnIndex)
-            Array.range(0, length).foreach { case (i) =>
-              indices += featureIndex + i
-              values += Double.NaN
-            }
-            inputColumnIndex += 1
-            featureIndex += length
+        if (keepInvalid) {
+          val length: Int = lengths(inputColumnIndex)
+          Array.range(0, length).foreach { i =>
+            indices += featureIndex + i
+            values += Double.NaN
+          }
+          inputColumnIndex += 1
+          featureIndex += length
+        } else {
+          throw new SparkException("Encountered null while assembling a row in 'error' handle " +
+            "invalid mode. Consider removing nulls from dataset or using handle invalid modes " +
+            "'keep' or 'skip'.")
         }
       case o =>
         throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
