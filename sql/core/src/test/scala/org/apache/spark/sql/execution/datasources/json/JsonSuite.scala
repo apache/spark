@@ -2104,7 +2104,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
+  // scalastyle:off nonascii
   List(
+    ("|", "UTF-8", false),
+    ("^", "UTF-8", true),
+    ("::", "UTF-8", true),
+    ("!!!@3", "UTF-8", false),
+    (0x1E.toChar.toString, "UTF-8", true),
+    ("아", "UTF-8", false),
+    ("куку", "UTF-8", true),
     ("sep", "UTF-8", false),
     ("x00 0a 00 0d", "UTF-8", true),
     ("xEA.F3.EA.F3", "UTF-8", false),
@@ -2115,4 +2123,5 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     ("===", "UTF-8", false),
     ("$^+", "UTF-8", true)
   ).zipWithIndex.foreach{case ((d, c, s), i) => checkReadJson(c, d, s, i)}
+  // scalastyle:on nonascii
 }
