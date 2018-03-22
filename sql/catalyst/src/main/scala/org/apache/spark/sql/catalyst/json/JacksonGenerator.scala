@@ -171,8 +171,10 @@ private[sql] class JacksonGenerator(
     var i = 0
     while (i < row.numFields) {
       val field = schema(i)
-      if (!row.isNullAt(i)) {
-        gen.writeFieldName(field.name)
+      gen.writeFieldName(field.name)
+      if (row.isNullAt(i)) {
+        gen.writeNull()
+      } else {
         fieldWriters(i).apply(row, i)
       }
       i += 1
