@@ -309,8 +309,8 @@ private[ml] object DefaultParamsWriter {
       ("timestamp" -> System.currentTimeMillis()) ~
       ("sparkVersion" -> sc.version) ~
       ("uid" -> uid) ~
-      ("defaultParamMap" -> jsonDefaultParams) ~
-      ("paramMap" -> jsonParams)
+      ("paramMap" -> jsonParams) ~
+      ("defaultParamMap" -> jsonDefaultParams)
     val metadata = extraMetadata match {
       case Some(jObject) =>
         basicMetadata ~ jObject
@@ -412,16 +412,20 @@ private[ml] object DefaultParamsReader {
     def getAndSetParams(
         instance: Params,
         skipParams: Option[List[String]] = None): Unit = {
-      setParams(instance, false, skipParams)
-      setParams(instance, true, skipParams)
+      setParams(instance, skipParams, isDefault = false)
+
+      // For metadata file prior to Spark 2.4, there is no default section.
+      val (major, minor) = VersionUtils.majorMinorVersion(sparkVersion)
+      if (major >= 2 && minor >= 4) {
+        setParams(instance, skipParams, isDefault = true)
+      }
     }
 
     private def setParams(
         instance: Params,
-        isDefault: Boolean,
-        skipParams: Option[List[String]]): Unit = {
+        skipParams: Option[List[String]],
+        isDefault: Boolean): Unit = {
       implicit val format = DefaultFormats
-      val (major, minor) = VersionUtils.majorMinorVersion(sparkVersion)
       val paramsToSet = if (isDefault) defaultParams else params
       paramsToSet match {
         case JObject(pairs) =>
@@ -430,14 +434,12 @@ private[ml] object DefaultParamsReader {
               val param = instance.getParam(paramName)
               val value = param.jsonDecode(compact(render(jsonValue)))
               if (isDefault) {
-                instance.setDefault(param, value)
+                Params.setDefault(instance, param, value)
               } else {
                 instance.set(param, value)
               }
             }
           }
-        // For metadata file prior to Spark 2.4, there is no default section.
-        case JNothing if isDefault && (major == 2 && minor < 4 || major < 2) =>
         case _ =>
           throw new IllegalArgumentException(
             s"Cannot recognize JSON metadata: ${metadataJson}.")

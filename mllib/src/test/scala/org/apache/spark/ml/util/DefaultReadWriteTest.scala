@@ -195,7 +195,7 @@ class DefaultReadWriteSuite extends SparkFunSuite with MLlibTestSparkContext
     }
   }
 
-  test("User-suppiled value for default param should be kept after persistence") {
+  test("User-supplied value for default param should be kept after persistence") {
     val myParams = new MyParams("my_params")
     myParams.set(myParams.intParamWithDefault, 100)
     val loadedMyParams = testDefaultReadWrite(myParams)
