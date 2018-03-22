@@ -140,7 +140,7 @@ class Column(val expr: Expression) extends Logging {
   override def toString: String = toPrettySQL(expr)
 
   override def equals(that: Any): Boolean = that match {
-    case that: Column => that.expr.equals(this.expr)
+    case that: Column => that.expr.semanticEquals(this.expr)
     case _ => false
   }
 

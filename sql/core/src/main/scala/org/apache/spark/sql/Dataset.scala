@@ -1238,9 +1238,22 @@ class Dataset[T] private[sql](
       if (sqlContext.conf.supportQuotedRegexColumnName) {
         colRegex(colName)
       } else {
-        val expr = resolve(colName)
-        Column(expr)
+        createCol(colName)
       }
+  }
+
+  private def createCol(name: String): Column = {
+    val expr = resolve(name) transform {
+      case a: AttributeReference =>
+        // Associate the returned `AttributeReference` with the `AnalysisBarrier` of this Dataset,
+        // by putting the barrier id into `AttributeReference.metadata`. This information is only
+        // used to disambiguate the attributes in join condition when resolving self-join and
+        // de-duplicating the right side plan. This special metadata will be remove after analysis.
+        val metadata = new MetadataBuilder().withMetadata(a.metadata)
+          .putLong(AnalysisBarrier.metadataKey, planWithBarrier.id).build()
+        a.withMetadata(metadata)
+    }
+    Column(expr)
   }
 
   /**
@@ -1256,7 +1269,7 @@ class Dataset[T] private[sql](
       case ParserUtils.qualifiedEscapedIdentifier(nameParts, columnNameRegex) =>
         Column(UnresolvedRegex(columnNameRegex, Some(nameParts), caseSensitive))
       case _ =>
-        Column(resolve(colName))
+        createCol(colName)
     }
   }
 
@@ -1829,7 +1842,7 @@ class Dataset[T] private[sql](
   def union(other: Dataset[T]): Dataset[T] = withSetOperator {
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan, other.logicalPlan)).mapChildren(AnalysisBarrier)
+    CombineUnions(Union(logicalPlan, other.logicalPlan)).mapChildren(AnalysisBarrier(_))
   }
 
   /**
@@ -1888,7 +1901,7 @@ class Dataset[T] private[sql](
 
     // This breaks caching, but it's usually ok because it addresses a very specific use case:
     // using union to union many files or partitions.
-    CombineUnions(Union(logicalPlan, rightChild)).mapChildren(AnalysisBarrier)
+    CombineUnions(Union(logicalPlan, rightChild)).mapChildren(AnalysisBarrier(_))
   }
 
   /**
@@ -2295,7 +2308,7 @@ class Dataset[T] private[sql](
     }
     val attrs = this.planWithBarrier.output
     val colsAfterDrop = attrs.filter { attr =>
-      attr != expression
+      !attr.semanticEquals(expression)
     }.map(attr => Column(attr))
     select(colsAfterDrop : _*)
   }
