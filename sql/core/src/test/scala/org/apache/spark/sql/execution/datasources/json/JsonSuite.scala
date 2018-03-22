@@ -2131,7 +2131,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       // Write
       withTempPath { path =>
         Seq("a", "b", "c").toDF("value").coalesce(1)
-          .write.option("lineSepInWrite", lineSep).json(path.getAbsolutePath)
+          .write.option("lineSep", lineSep).json(path.getAbsolutePath)
         val partFile = TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
         val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
         assert(
@@ -2141,7 +2141,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       // Roundtrip
       withTempPath { path =>
         val df = Seq("a", "b", "c").toDF()
-        df.write.option("lineSepInWrite", lineSep).json(path.getAbsolutePath)
+        df.write.option("lineSep", lineSep).json(path.getAbsolutePath)
         val readBack = spark.read.option("lineSep", lineSep).json(path.getAbsolutePath)
         checkAnswer(df, readBack)
       }

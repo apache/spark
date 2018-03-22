@@ -113,7 +113,9 @@ private[sql] class JSONOptions(
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator
 
   // Note that JSON uses writer with UTF-8 charset. This string will be written out as UTF-8.
-  val lineSeparatorInWrite: String = parameters.get("lineSepInWrite").getOrElse("\n")
+  val lineSeparatorInWrite: String = {
+    lineSeparator.map(new String(_, charset.getOrElse("UTF-8"))).getOrElse("\n")
+  }
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
