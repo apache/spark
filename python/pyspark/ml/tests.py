@@ -697,6 +697,31 @@ class FeatureTests(SparkSessionTestCase):
             feature, expected = r
             self.assertEqual(feature, expected)
 
+    def test_count_vectorizer_with_maxDF(self):
+        dataset = self.spark.createDataFrame([
+            (0, "a b c d".split(' '), SparseVector(3, {0: 1.0, 1: 1.0, 2: 1.0}),),
+            (1, "a b c".split(' '), SparseVector(3, {0: 1.0, 1: 1.0}),),
+            (2, "a b".split(' '), SparseVector(3, {0: 1.0}),),
+            (3, "a".split(' '), SparseVector(3,  {}),)], ["id", "words", "expected"])
+        cv = CountVectorizer(inputCol="words", outputCol="features")
+        model1 = cv.setMaxDF(3).fit(dataset)
+        self.assertEqual(model1.vocabulary, ['b', 'c', 'd'])
+
+        transformedList1 = model1.transform(dataset).select("features", "expected").collect()
+
+        for r in transformedList1:
+            feature, expected = r
+            self.assertEqual(feature, expected)
+
+        model2 = cv.setMaxDF(0.75).fit(dataset)
+        self.assertEqual(model2.vocabulary, ['b', 'c', 'd'])
+
+        transformedList2 = model2.transform(dataset).select("features", "expected").collect()
+
+        for r in transformedList2:
+            feature, expected = r
+            self.assertEqual(feature, expected)
+
     def test_count_vectorizer_from_vocab(self):
         model = CountVectorizerModel.from_vocabulary(["a", "b", "c"], inputCol="words",
                                                      outputCol="features", minTF=2)
