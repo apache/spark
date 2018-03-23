@@ -2007,7 +2007,7 @@ class DataFrame(object):
                         "toPandas attempted Arrow optimization because "
                         "'spark.sql.execution.arrow.enabled' is set to true; however, "
                         "failed by the reason below:\n  %s\n"
-                        "Attempts non-optimization as "
+                        "Attempting non-optimization as "
                         "'spark.sql.execution.arrow.fallback.enabled' is set to "
                         "true." % _exception_message(e))
                     warnings.warn(msg)
