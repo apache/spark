@@ -35,7 +35,6 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
     val epochCoordinator = EpochCoordinatorRef.get(
       context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       SparkEnv.get)
-    val currentMsg: WriterCommitMessage = null
     var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
     val dataIterator = prev.compute(split, context)
@@ -49,12 +48,14 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
           while (dataIterator.hasNext) {
             dataWriter.write(dataIterator.next())
           }
-          logInfo(s"Writer for partition ${context.partitionId()} is committing.")
+          logInfo(s"Writer for partition ${context.partitionId()} " +
+            s"in epoch $currentEpoch is committing.")
           val msg = dataWriter.commit()
-          logInfo(s"Writer for partition ${context.partitionId()} committed.")
           epochCoordinator.send(
             CommitPartitionEpoch(context.partitionId(), currentEpoch, msg)
           )
+          logInfo(s"Writer for partition ${context.partitionId()} " +
+            s"in epoch $currentEpoch committed.")
           currentEpoch += 1
         } catch {
           case _: InterruptedException =>
@@ -62,7 +63,7 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
         }
       })(catchBlock = {
         // If there is an error, abort this writer. We enter this callback in the middle of
-        // rethrowing an exception, so runContinuous will stop executing at this point.
+        // rethrowing an exception, so compute() will stop executing at this point.
         logError(s"Writer for partition ${context.partitionId()} is aborting.")
         if (dataWriter != null) dataWriter.abort()
         logError(s"Writer for partition ${context.partitionId()} aborted.")
