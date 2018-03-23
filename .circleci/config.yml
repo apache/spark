@@ -247,7 +247,7 @@ jobs:
   run-scala-tests:
     <<: *test-defaults
     # project/CirclePlugin.scala does its own test splitting in SBT based on CIRCLE_NODE_INDEX, CIRCLE_NODE_TOTAL
-    parallelism: 12
+    parallelism: 9
     # Spark runs a lot of tests in parallel, we need 16 GB of RAM for this
     resource_class: xlarge
     steps:
