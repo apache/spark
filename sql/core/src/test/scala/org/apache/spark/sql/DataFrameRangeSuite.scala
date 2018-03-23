@@ -155,7 +155,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
     val listener = new SparkListener {
       override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
         eventually(timeout(10.seconds), interval(1.millis)) {
-          assert(DataFrameRangeSuite.stageToKill > 0)
+          assert(DataFrameRangeSuite.stageToKill != DataFrameRangeSuite.INVALID_STAGE_ID)
         }
         sparkContext.cancelStage(DataFrameRangeSuite.stageToKill)
       }
@@ -164,7 +164,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
     sparkContext.addSparkListener(listener)
     for (codegen <- Seq(true, false)) {
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString()) {
-        DataFrameRangeSuite.stageToKill = -1
+        DataFrameRangeSuite.stageToKill = DataFrameRangeSuite.INVALID_STAGE_ID
         val ex = intercept[SparkException] {
           spark.range(0, 100000000000L, 1, 1).map { x =>
             DataFrameRangeSuite.stageToKill = TaskContext.get().stageId()
@@ -206,5 +206,6 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
 }
 
 object DataFrameRangeSuite {
-  @volatile var stageToKill = -1
+  val INVALID_STAGE_ID = -1
+  @volatile var stageToKill = INVALID_STAGE_ID
 }
