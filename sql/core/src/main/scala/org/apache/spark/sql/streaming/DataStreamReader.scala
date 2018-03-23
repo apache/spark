@@ -268,7 +268,6 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
-   * </ul>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing.</li>
    * </ul>

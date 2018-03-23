@@ -41,8 +41,16 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
    */
   val wholeText = parameters.getOrElse(WHOLETEXT, "false").toBoolean
 
-  val lineSeparator: Option[Array[Byte]] = parameters.get(LINE_SEPARATOR).map { hex =>
-    hex.sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toByte)
+  val charset: Option[String] = Some("UTF-8")
+
+  val lineSeparator: Option[Array[Byte]] = parameters.get("lineSep").collect {
+    case hexs if hexs.startsWith("x") =>
+      hexs.replaceAll("[^0-9A-Fa-f]", "").sliding(2, 2).toArray
+        .map(Integer.parseInt(_, 16).toByte)
+    case reserved if reserved.startsWith("r") || reserved.startsWith("/") =>
+      throw new NotImplementedError(s"the $reserved selector has not supported yet")
+    case delim => delim.getBytes(charset.getOrElse(
+      throw new IllegalArgumentException("Please, set the charset option for the delimiter")))
   }
 
   // Note that the option 'lineSep' uses a different default value in read and write.

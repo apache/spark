@@ -131,7 +131,7 @@ private[sql] class JSONOptions(
 
   def getTextOptions: Map[String, String] = {
     lineSeparatorInRead.map{ bytes =>
-      "lineSep" -> bytes.map("%02x".format(_)).mkString
+      "lineSep" -> bytes.map("x%02x".format(_)).mkString
     }.toMap
   }
 }
