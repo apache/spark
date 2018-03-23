@@ -281,6 +281,7 @@ jobs:
               # Only one exists, CirclePlugin will try to look for both so we're good.
               if [[ -n "$circle_exists" ]]; then
                 echo "Copying over circle test results file for caching"
+                mkdir -p "$(dirname "$TEST_RESULTS_FILE")"
                 cp "$CIRCLE_TEST_RESULTS_FILE" "$TEST_RESULTS_FILE"
               fi
               exit 0
