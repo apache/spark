@@ -88,16 +88,16 @@ private[util] sealed trait BaseReadWrite {
 }
 
 /**
- * Implemented by objects that provide ML exportability.
+ * Abstract class to be implemented by objects that provide ML exportability.
  *
  * A new instance of this class will be instantiated each time a save call is made.
  *
  * Must have a valid zero argument constructor which will be called to instantiate.
  *
- * @since 2.3.0
+ * @since 2.4.0
  */
 @InterfaceStability.Unstable
-@Since("2.3.0")
+@Since("2.4.0")
 trait MLWriterFormat {
   /**
    * Function to write the provided pipeline stage out.
@@ -107,7 +107,7 @@ trait MLWriterFormat {
    * @param optionMap  User provided options stored as strings.
    * @param stage  The pipeline stage to be saved.
    */
-  @Since("2.3.0")
+  @Since("2.4.0")
   def write(path: String, session: SparkSession, optionMap: mutable.Map[String, String],
     stage: PipelineStage): Unit
 }
@@ -118,10 +118,10 @@ trait MLWriterFormat {
  *
  * A new instance of this class will be instantiated each time a save call is made.
  *
- * @since 2.3.0
+ * @since 2.4.0
  */
 @InterfaceStability.Unstable
-@Since("2.3.0")
+@Since("2.4.0")
 trait MLFormatRegister extends MLWriterFormat {
   /**
    * The string that represents the format that this format provider uses. This is, along with
@@ -133,11 +133,13 @@ trait MLFormatRegister extends MLWriterFormat {
    * }}}
    * Indicates that this format is capable of saving a pmml model.
    *
+   * Must have a valid zero argument constructor which will be called to instantiate.
+   *
    * Format discovery is done using a ServiceLoader so make sure to list your format in
    * META-INF/services.
-   * @since 2.3.0
+   * @since 2.4.0
    */
-  @Since("2.3.0")
+  @Since("2.4.0")
   def format(): String
 
   /**
@@ -152,9 +154,9 @@ trait MLFormatRegister extends MLWriterFormat {
    *
    * Format discovery is done using a ServiceLoader so make sure to list your format in
    * META-INF/services.
-   * @since 2.3.0
+   * @since 2.4.0
    */
-  @Since("2.3.0")
+  @Since("2.4.0")
   def stageName(): String
 
   private[ml] def shortName(): String = s"${format()}+${stageName()}"
@@ -223,7 +225,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
  * A ML Writer which delegates based on the requested format.
  */
 @InterfaceStability.Unstable
-@Since("2.3.0")
+@Since("2.4.0")
 class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
   private var source: String = "internal"
 
@@ -231,7 +233,7 @@ class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
    * Specifies the format of ML export (e.g. "pmml", "internal", or
    * the fully qualified class name for export).
    */
-  @Since("2.3.0")
+  @Since("2.4.0")
   def format(source: String): this.type = {
     this.source = source
     this
@@ -240,7 +242,7 @@ class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
   /**
    * Dispatches the save to the correct MLFormat.
    */
-  @Since("2.3.0")
+  @Since("2.4.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   @throws[SparkException]("If multiple sources for a given short name format are found.")
   override protected def saveImpl(path: String): Unit = {
@@ -307,13 +309,13 @@ trait MLWritable {
 /**
  * Trait for classes that provide `GeneralMLWriter`.
  */
-@Since("2.3.0")
+@Since("2.4.0")
 @InterfaceStability.Unstable
 trait GeneralMLWritable extends MLWritable {
   /**
    * Returns an `MLWriter` instance for this ML instance.
    */
-  @Since("2.3.0")
+  @Since("2.4.0")
   override def write: GeneralMLWriter
 }
 
