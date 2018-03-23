@@ -185,6 +185,26 @@ public class LauncherServerSuite extends BaseSuite {
     }
   }
 
+  @Test
+  public void testAppHandleDisconnect() throws Exception {
+    LauncherServer server = LauncherServer.getOrCreateServer();
+    ChildProcAppHandle handle = new ChildProcAppHandle(server);
+    String secret = server.registerHandle(handle);
+
+    TestClient client = null;
+    try {
+      Socket s = new Socket(InetAddress.getLoopbackAddress(), server.getPort());
+      client = new TestClient(s);
+      client.send(new Hello(secret, "1.4.0"));
+      handle.disconnect();
+      waitForError(client, secret);
+    } finally {
+      handle.kill();
+      close(client);
+      client.clientThread.join();
+    }
+  }
+
   private void close(Closeable c) {
     if (c != null) {
       try {
