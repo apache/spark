@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
-version=$(git describe --tags)
+version=$(git describe --tags --first-parent)
 
 PALANTIR_FLAGS=(-Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Phive -Pyarn -Psparkr)
 
