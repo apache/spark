@@ -149,8 +149,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       CSVUtils.extractHeader(lines, parser.options).foreach(checkHeader(_))
     }
 
-    UnivocityParser.parseIterator(
-      conf, lines, shouldDropHeader = hasHeader, parser, schema, file.filePath)
+    UnivocityParser.parseIterator(lines, parser, schema)
   }
 
   override def infer(

@@ -1285,7 +1285,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   def checkHeader(multiLine: String): Unit = {
-    test(s"Check column names during schema validation - multiLine = $multiLine") {
+    test(s"SPARK-23786: Checking column names against schema ($multiLine)") {
       withTempPath { path =>
         import collection.JavaConverters._
         val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
