@@ -97,7 +97,7 @@ trait QueryPlanConstraints { self: LogicalPlan =>
    * Recursively explores the expressions which are null intolerant and returns all attributes
    * in these expressions.
    */
-  protected def scanNullIntolerantAttribute(expr: Expression): Seq[Attribute] = expr match {
+  private def scanNullIntolerantAttribute(expr: Expression): Seq[Attribute] = expr match {
     case a: Attribute => Seq(a)
     case _: NullIntolerant => expr.children.flatMap(scanNullIntolerantAttribute)
     case _ => Seq.empty[Attribute]
