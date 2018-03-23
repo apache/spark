@@ -668,21 +668,23 @@ class SparkSession(object):
                 except Exception as e:
                     from pyspark.util import _exception_message
 
-                    msg = (
-                        "createDataFrame attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
-                        "failed by the reason below:\n  %s\n" % _exception_message(e))
-
                     if self.conf.get("spark.sql.execution.arrow.fallback.enabled", "true") \
                             .lower() == "true":
-                        msg += (
-                            "Attempting non-optimization as "
-                            "'spark.sql.execution.arrow.fallback.enabled' is set to true.")
+                        msg = (
+                            "createDataFrame attempted Arrow optimization because "
+                            "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                            "failed by the reason below:\n  %s\n"
+                            "Attempts non-optimization as "
+                            "'spark.sql.execution.arrow.fallback.enabled' is set to "
+                            "true." % _exception_message(e))
                         warnings.warn(msg)
                     else:
-                        msg += (
-                            "For fallback to non-optimization automatically, please set "
-                            "true to 'spark.sql.execution.arrow.fallback.enabled'.")
+                        msg = (
+                            "createDataFrame attempted Arrow optimization because "
+                            "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                            "failed by the reason below:\n  %s\n"
+                            "For fallback to non-optimization automatically, please set true to "
+                            "'spark.sql.execution.arrow.fallback.enabled'." % _exception_message(e))
                         warnings.warn(msg)
                         raise
             data = self._convert_from_pandas(data, schema, timezone)
