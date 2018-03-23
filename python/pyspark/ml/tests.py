@@ -369,7 +369,7 @@ class HasThrowableProperty(Params):
         raise RuntimeError("Test property to raise error when invoked")
 
 
-class ParamTests(PySparkTestCase):
+class ParamTests(SparkSessionTestCase):
 
     def test_copy_new_parent(self):
         testParams = TestParams()
@@ -513,6 +513,24 @@ class ParamTests(PySparkTestCase):
             "Logistic Regression getThreshold found inconsistent.*$",
             LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
         )
+
+    def test_preserve_set_state(self):
+        dataset = self.spark.createDataFrame([(0.5,)], ["data"])
+        binarizer = Binarizer(inputCol="data")
+        self.assertFalse(binarizer.isSet("threshold"))
+        binarizer.transform(dataset)
+        binarizer._transfer_params_from_java()
+        self.assertFalse(binarizer.isSet("threshold"),
+                         "Params not explicitly set should remain unset after transform")
+
+    def test_default_params_transferred(self):
+        dataset = self.spark.createDataFrame([(0.5,)], ["data"])
+        binarizer = Binarizer(inputCol="data")
+        # intentionally change the pyspark default, but don't set it
+        binarizer._defaultParamMap[binarizer.outputCol] = "my_default"
+        result = binarizer.transform(dataset).select("my_default").collect()
+        self.assertFalse(binarizer.isSet(binarizer.outputCol))
+        self.assertEqual(result[0][0], 1.0)
 
     @staticmethod
     def check_params(test_self, py_stage, check_params_exist=True):
