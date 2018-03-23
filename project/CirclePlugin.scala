@@ -77,15 +77,20 @@ object CirclePlugin extends AutoPlugin {
         log.info(s"Discovered tests in these projects: ${byProject.map(_.project.project)}")
 
         import collection.JavaConverters._
-        // Get timings and sum them up by TestKey = (source, classname)
-        val testResultsFile = sys.env.get("CIRCLE_INTERNAL_TASK_DATA")
+        val fromCircle = sys.env.get("CIRCLE_INTERNAL_TASK_DATA")
             .map(taskData => file(taskData) / "circle-test-results/results.json")
-            .filter(file => file.exists())
+        val fromCached = sys.env.get("TEST_RESULTS_FILE").map(file)
+
+        val testResultsFile = List(fromCached, fromCircle)
+            .collectFirst {
+              case Some(file) if file.exists() =>
+                log.info(s"Using circle test results to determine test packing: $file")
+                file
+            }
+        // Get timings and sum them up by TestKey = (source, classname)
         val testTimings = try {
-          testResultsFile.fold {
-            log.warn("Couldn't find circle test results file, using naive test packing")
-          } {
-            file => log.info(s"Using circle test results to determine test packing: $file")
+          if (testResultsFile.isEmpty) {
+            log.warn("Couldn't find any circle test results file, using naive test packing")
           }
           testResultsFile
               .map(file => {
