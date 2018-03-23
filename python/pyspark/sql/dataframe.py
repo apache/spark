@@ -2015,10 +2015,10 @@ class DataFrame(object):
                 else:
                     msg = (
                         "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
-                        "failed by the reason below:\n  %s\n"
-                        "For fallback to non-optimization automatically, please set true to "
-                        "'spark.sql.execution.arrow.fallback.enabled'." % _exception_message(e))
+                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                        "the error below and will not continue because automatic fallback "
+                        "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
+                        "false.\n  %s" % _exception_message(e))
                     warnings.warn(msg)
                     raise
 
@@ -2043,12 +2043,10 @@ class DataFrame(object):
                     # be executed. So, simply fail in this case for now.
                     msg = (
                         "toPandas attempted Arrow optimization because "
-                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
-                        "failed unexpectedly:\n  %s\n"
-                        "Note that 'spark.sql.execution.arrow.fallback.enabled' does "
-                        "not have an effect in such failure in the middle of "
-                        "computation." % _exception_message(e))
-                    # TODO: e.args = (msg,) + e.args[1:]
+                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                        "the error below and can not continue. Note that "
+                        "'spark.sql.execution.arrow.fallback.enabled' does not have an effect "
+                        "on failures in the middle of computation.\n  %s" % _exception_message(e))
                     warnings.warn(msg)
                     raise
 
