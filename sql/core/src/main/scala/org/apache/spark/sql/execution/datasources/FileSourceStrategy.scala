@@ -19,12 +19,15 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.util.collection.BitSet
 
 /**
  * A strategy for planning scans over collections of files that might be partitioned or bucketed
@@ -50,6 +53,107 @@ import org.apache.spark.sql.execution.SparkPlan
  *     and add it.  Proceed to the next file.
  */
 object FileSourceStrategy extends Strategy with Logging {
+
+  // should prune buckets iff num buckets is greater than 1 and there is only one bucket column
+  private def shouldPruneBuckets(bucketSpec: Option[BucketSpec]): Boolean = {
+    bucketSpec match {
+      case Some(spec) => spec.bucketColumnNames.length == 1 && spec.numBuckets > 1
+      case None => false
+    }
+  }
+
+  private def getExpressionBuckets(expr: Expression,
+                                   bucketColumnName: String,
+                                   numBuckets: Int): BitSet = {
+
+    def getMatchedBucketBitSet(attr: Attribute, v: Any): BitSet = {
+      val matchedBuckets = new BitSet(numBuckets)
+      matchedBuckets.set(getBucketId(attr, numBuckets, v))
+      matchedBuckets
+    }
+
+    expr match {
+      case expressions.EqualTo(a: Attribute, Literal(v, _)) if a.name == bucketColumnName =>
+        getMatchedBucketBitSet(a, v)
+      case expressions.EqualTo(Literal(v, _), a: Attribute) if a.name == bucketColumnName =>
+        getMatchedBucketBitSet(a, v)
+      case expressions.EqualNullSafe(a: Attribute, Literal(v, _)) if a.name == bucketColumnName =>
+        getMatchedBucketBitSet(a, v)
+      case expressions.EqualNullSafe(Literal(v, _), a: Attribute) if a.name == bucketColumnName =>
+        getMatchedBucketBitSet(a, v)
+      case expressions.In(a: Attribute, list)
+        if list.forall(_.isInstanceOf[Literal]) && a.name == bucketColumnName =>
+        val valuesSet = list.map(e => e.eval(EmptyRow))
+        valuesSet
+          .map(v => getMatchedBucketBitSet(a, v))
+          .fold(new BitSet(numBuckets))(_ | _)
+      case expressions.IsNull(a: Attribute) if a.name == bucketColumnName =>
+        getMatchedBucketBitSet(a, null)
+      case expressions.And(left, right) =>
+        getExpressionBuckets(left, bucketColumnName, numBuckets) |
+          getExpressionBuckets(right, bucketColumnName, numBuckets)
+      case expressions.Or(left, right) =>
+        val leftBuckets = getExpressionBuckets(left, bucketColumnName, numBuckets)
+        val rightBuckets = getExpressionBuckets(right, bucketColumnName, numBuckets)
+
+        // if some expression in OR condition requires all buckets, return an empty BitSet
+        if (leftBuckets.cardinality() == 0 || rightBuckets.cardinality() == 0) {
+          new BitSet(numBuckets)
+        } else {
+          // return a BitSet that includes all required buckets
+          leftBuckets | rightBuckets
+        }
+      case _ => new BitSet(numBuckets)
+    }
+  }
+
+  private def getBuckets(normalizedFilters: Seq[Expression],
+                         bucketSpec: BucketSpec): Option[BitSet] = {
+
+    val bucketColumnName = bucketSpec.bucketColumnNames.head
+    val numBuckets = bucketSpec.numBuckets
+    //    val matchedBuckets = new BitSet(numBuckets)
+    //    matchedBuckets.clear()
+
+    // TODO should be OR?
+    val matchedBuckets = normalizedFilters
+      .map(f => getExpressionBuckets(f, bucketColumnName, numBuckets))
+      .fold(new BitSet(numBuckets))(_ | _)
+
+    val numBucketsSelected = if (matchedBuckets.cardinality() != 0) matchedBuckets.cardinality()
+    else numBuckets
+    logInfo {
+      s"Pruned ${numBuckets - numBucketsSelected} out of $numBuckets buckets."
+    }
+
+    // None means all the buckets need to be scanned
+    if (matchedBuckets.cardinality() == 0) None else Some(matchedBuckets)
+  }
+
+  //  // Get the bucket ID based on the bucketing values.
+  //  // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
+  //  def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
+  //    val mutableRow = new SpecificInternalRow(Seq(bucketColumn.dataType))
+  //    mutableRow(0) = cast(Literal(value), bucketColumn.dataType).eval(null)
+  //    val bucketIdGeneration = UnsafeProjection.create(
+  //      HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,
+  //      bucketColumn :: Nil)
+  //
+  //    bucketIdGeneration(mutableRow).getInt(0)
+  //  }
+
+  // Given bucketColumn, numBuckets and value, returns the corresponding bucketId
+  // TODO replace with getBucketId from DataSourceStrategy
+  private def getBucketId(attr: Attribute, numBuckets: Int, value: Any): Int = {
+    val mutableInternalRow = new SpecificInternalRow(Seq(attr.dataType))
+    mutableInternalRow.update(0, value)
+
+    val bucketIdGenerator = UnsafeProjection.create(
+      HashPartitioning(Seq(attr), numBuckets).partitionIdExpression :: Nil,
+      attr :: Nil)
+    bucketIdGenerator(mutableInternalRow).getInt(0)
+  }
+
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(projects, filters,
       l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table, _)) =>
@@ -78,6 +182,13 @@ object FileSourceStrategy extends Strategy with Logging {
       val partitionKeyFilters =
         ExpressionSet(normalizedFilters.filter(_.references.subsetOf(partitionSet)))
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
+
+      val bucketSpec: Option[BucketSpec] = fsRelation.bucketSpec
+      val bucketSet = if (shouldPruneBuckets(bucketSpec)) {
+        getBuckets(normalizedFilters, bucketSpec.get)
+      } else {
+        None
+      }
 
       val dataColumns =
         l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
@@ -108,6 +219,7 @@ object FileSourceStrategy extends Strategy with Logging {
           outputAttributes,
           outputSchema,
           partitionKeyFilters.toSeq,
+          bucketSet,
           dataFilters,
           table.map(_.identifier))
 

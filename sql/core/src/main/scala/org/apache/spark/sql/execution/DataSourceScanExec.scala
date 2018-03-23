@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
   val relation: BaseRelation
@@ -151,6 +152,7 @@ case class RowDataSourceScanExec(
  * @param output Output attributes of the scan, including data attributes and partition attributes.
  * @param requiredSchema Required schema of the underlying relation, excluding partition columns.
  * @param partitionFilters Predicates to use for partition pruning.
+ * @param OptionalBucketSet Bucket ids for bucket pruning
  * @param dataFilters Filters on non-partition columns.
  * @param tableIdentifier identifier for the table in the metastore.
  */
@@ -159,6 +161,7 @@ case class FileSourceScanExec(
     output: Seq[Attribute],
     requiredSchema: StructType,
     partitionFilters: Seq[Expression],
+    OptionalBucketSet: Option[BitSet],
     dataFilters: Seq[Expression],
     override val tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with ColumnarBatchScan  {
@@ -371,14 +374,27 @@ case class FileSourceScanExec(
           val hosts = getBlockHosts(getBlockLocations(f), 0, f.getLen)
           PartitionedFile(p.values, f.getPath.toUri.toString, 0, f.getLen, hosts)
         }
-      }.groupBy { f =>
-        BucketingUtils
-          .getBucketId(new Path(f.filePath).getName)
-          .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
       }
 
+    val prunedBucketed = if (OptionalBucketSet.isDefined) {
+      val bucketSet = OptionalBucketSet.get
+      bucketed.filter {
+        f => bucketSet.get(
+          BucketingUtils.getBucketId(new Path(f.filePath).getName)
+            .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}")))
+      }
+    } else {
+      bucketed
+    }
+
+    val filesGroupedToBuckets = prunedBucketed.groupBy { f =>
+      BucketingUtils
+        .getBucketId(new Path(f.filePath).getName)
+        .getOrElse(sys.error(s"Invalid bucket file ${f.filePath}"))
+    }
+
     val filePartitions = Seq.tabulate(bucketSpec.numBuckets) { bucketId =>
-      FilePartition(bucketId, bucketed.getOrElse(bucketId, Nil))
+      FilePartition(bucketId, filesGroupedToBuckets.getOrElse(bucketId, Nil))
     }
 
     new FileScanRDD(fsRelation.sparkSession, readFile, filePartitions)
@@ -503,6 +519,7 @@ case class FileSourceScanExec(
       output.map(QueryPlan.normalizeExprId(_, output)),
       requiredSchema,
       QueryPlan.normalizePredicates(partitionFilters, output),
+      OptionalBucketSet,
       QueryPlan.normalizePredicates(dataFilters, output),
       None)
   }
