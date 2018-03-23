@@ -250,7 +250,6 @@ private[csv] object UnivocityParser {
       shouldDropHeader: Boolean,
       parser: UnivocityParser,
       schema: StructType,
-      filePath: String,
       checkHeader: Array[String] => Unit): Iterator[InternalRow] = {
     val tokenizer = parser.tokenizer
     val safeParser = new FailureSafeParser[Array[String]](
