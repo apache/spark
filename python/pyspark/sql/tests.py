@@ -21,6 +21,7 @@ Unit tests for pyspark.sql; additional tests are implemented as doctests in
 individual modules.
 """
 import os
+import glob
 import sys
 import subprocess
 import pydoc
@@ -82,6 +83,31 @@ from pyspark.tests import QuietTest, ReusedPySparkTestCase, PySparkTestCase, Spa
 from pyspark.sql.functions import UserDefinedFunction, sha2, lit
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
+
+
+def found_file(pattern):
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    files = glob.glob(os.path.join(SPARK_HOME, pattern))
+    return len(files) > 0
+
+
+def search_hive_assembly_jars():
+    pattern = "assembly/target/scala-*/jars/spark-hive_*-*.jar"
+    if not found_file(pattern):
+        raise Exception(
+            ("Failed to find Hive assembly jar. ") +
+            "You need to build Spark with "
+            "'build/sbt -Phive package' or "
+            "'build/mvn -DskipTests -Phive package' before running this test.")
+
+
+def search_test_udf_classes():
+    pattern = "sql/core/target/scala-*/test-classes/" + \
+              "test/org/apache/spark/sql/JavaStringLength.class"
+    if not found_file(pattern):
+        raise Exception(
+            ("Failed to find test udf classes. ") +
+            "You need to build Spark with 'build/sbt sql/test:compile'")
 
 
 class UTCOffsetTimezone(datetime.tzinfo):
@@ -5205,6 +5231,8 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *
+    search_hive_assembly_jars()
+    search_test_udf_classes()
     if xmlrunner:
         unittest.main(testRunner=xmlrunner.XMLTestRunner(output='target/test-reports'))
     else:
