@@ -224,7 +224,7 @@ private[spark] object UIUtils extends Logging {
         {commonHeaderNodes}
         {if (showVisualization) vizHeaderNodes else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes else Seq.empty}
-        <link rel="shortcut icon" href="/static/spark-logo-77x50px-hd.png"></link>
+        <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
         <title>{appName} - {title}</title>
       </head>
       <body>
