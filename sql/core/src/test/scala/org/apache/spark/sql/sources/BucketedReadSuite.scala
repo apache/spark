@@ -80,14 +80,14 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  // TODO update description
   // To verify if the bucket pruning works, this function checks two conditions:
   //   1) Check if the pruned buckets (before filtering) are empty.
   //   2) Verify the final result is the same as the expected one
-  private def checkPrunedAnswers(
-      bucketSpec: BucketSpec,
-      bucketValues: Seq[Integer],
-      filterCondition: Column,
-      originalDataFrame: DataFrame): Unit = {
+  private def checkPrunedAnswers(bucketSpec: BucketSpec,
+                                 bucketValues: Seq[Integer],
+                                 filterCondition: Column,
+                                 originalDataFrame: DataFrame): Unit = {
     // This test verifies parts of the plan. Disable whole stage codegen.
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       val strategy = DataSourceStrategy(spark.sessionState.conf)
@@ -97,25 +97,31 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       assert(bucketColumnNames.length == 1)
       val bucketColumnIndex = bucketedDataFrame.schema.fieldIndex(bucketColumnNames.head)
       val bucketColumn = bucketedDataFrame.schema.toAttributes(bucketColumnIndex)
-      val matchedBuckets = new BitSet(numBuckets)
-      bucketValues.foreach { value =>
-        matchedBuckets.set(strategy.getBucketId(bucketColumn, numBuckets, value))
-      }
 
       // Filter could hide the bug in bucket pruning. Thus, skipping all the filters
       val plan = bucketedDataFrame.filter(filterCondition).queryExecution.executedPlan
       val rdd = plan.find(_.isInstanceOf[DataSourceScanExec])
       assert(rdd.isDefined, plan)
 
-      val checkedResult = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
-        if (matchedBuckets.get(index % numBuckets) && iter.nonEmpty) Iterator(index) else Iterator()
+      // if nothing should be pruned, skip the pruning test
+      if (bucketValues.nonEmpty) {
+        val matchedBuckets = new BitSet(numBuckets)
+        bucketValues.foreach { value =>
+          matchedBuckets.set(strategy.getBucketId(bucketColumn, numBuckets, value))
+        }
+        val invalidBuckets = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
+          // return indexes of partitions that should have been pruned and are not empty
+          if (!matchedBuckets.get(index % numBuckets) && iter.nonEmpty) {
+            Iterator(index)
+          } else {
+            Iterator()
+          }
+        }.collect()
+
+        if (invalidBuckets.nonEmpty) {
+          fail(s"Buckets $invalidBuckets should have been pruned from:\n$plan")
+        }
       }
-      // TODO: These tests are not testing the right columns.
-//      // checking if all the pruned buckets are empty
-//      val invalidBuckets = checkedResult.collect().toList
-//      if (invalidBuckets.nonEmpty) {
-//        fail(s"Buckets $invalidBuckets should have been pruned from:\n$plan")
-//      }
 
       checkAnswer(
         bucketedDataFrame.filter(filterCondition).orderBy("i", "j", "k"),
@@ -228,6 +234,30 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           bucketSpec,
           bucketValues = j :: Nil,
           filterCondition = $"j" === j && $"i" > j % 5,
+          df)
+
+        checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = Seq(j, j + 1),
+          filterCondition = $"j" === j || $"j" === (j + 1),
+          df)
+
+        checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = Nil,
+          filterCondition = $"j" === j || $"i" === 0,
+          df)
+
+        checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = Seq(j),
+          filterCondition = ($"i" === 0 || $"k" > $"j") && $"j" === j,
+          df)
+
+        checkPrunedAnswers(
+          bucketSpec,
+          bucketValues = Seq(j, j + 1),
+          filterCondition = $"j" === j || ($"j" === (j + 1) && $"i" === 0),
           df)
       }
     }
