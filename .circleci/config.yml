@@ -274,10 +274,15 @@ jobs:
       - run:
           name: Merge cached test results with results provided by circle (if any)
           command: |
-            [[ -f "$CIRCLE_INTERNAL_TASK_DATA/circle-test-results/results.json" ]] && circle_exists=1
+            CIRCLE_TEST_RESULTS_FILE="$CIRCLE_INTERNAL_TASK_DATA/circle-test-results/results.json"
+            [[ -f "$CIRCLE_TEST_RESULTS_FILE" ]] && circle_exists=1
             [[ -f "$TEST_RESULTS_FILE" ]] && cached_exists=1
             if [[ -z "$circle_exists" ]] || [[ -z "$cached_exists" ]]; then
               # Only one exists, CirclePlugin will try to look for both so we're good.
+              if [[ -n "$circle_exists" ]]; then
+                echo "Copying over circle test results file for caching"
+                cp "$CIRCLE_TEST_RESULTS_FILE" "$TEST_RESULTS_FILE"
+              fi
               exit 0
             fi
 
@@ -293,15 +298,16 @@ jobs:
                 > /tmp/new-test-results.json
             # Overwrite the previously cached results with the merged file
             mv -f /tmp/new-test-results.json "$TEST_RESULTS_FILE"
+      - save_cache:
+          key: v1-test-results-{{ .Branch }}-{{ .BuildNum }}
+          paths:
+            - "/tmp/test-results"
       - run:
           name: Run all tests
           command: ./dev/run-scala-tests.py \
               | tee -a "/tmp/run-scala-tests.log"
           no_output_timeout: 15m
-      - save_cache:
-          key: v1-test-results-{{ .Branch }}-{{ .BuildNum }}
-          paths:
-            - "/tmp/test-results"
+
       - store_artifacts:
           path: /tmp/run-scala-tests.log
           destination: run-scala-tests.log
