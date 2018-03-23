@@ -239,6 +239,7 @@ class DataFrameReader(OptionUtils):
                                           including tab and line feed characters) or not.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
+
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
         [('age', 'bigint'), ('name', 'string')]
@@ -774,6 +775,7 @@ class DataFrameWriter(OptionUtils):
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
         :param lineSep: defines the line separator that should be used for writing. If None is
                         set, it uses the default value, ``\\n``.
+
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)

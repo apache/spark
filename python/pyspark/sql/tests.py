@@ -670,6 +670,12 @@ class SQLTests(ReusedSQLTestCase):
         finally:
             shutil.rmtree(tpath)
 
+    def test_multiline_json(self):
+        people1 = self.spark.read.json("python/test_support/sql/people.json")
+        people_array = self.spark.read.json("python/test_support/sql/people_array.json",
+                                            multiLine=True)
+        self.assertEqual(people1.collect(), people_array.collect())
+
     def test_linesep_json(self):
         df = self.spark.read.json("python/test_support/sql/people.json", lineSep=",")
         expected = [Row(_corrupt_record=None, name=u'Michael'),
@@ -686,12 +692,6 @@ class SQLTests(ReusedSQLTestCase):
             self.assertEqual(readback.collect(), df.collect())
         finally:
             shutil.rmtree(tpath)
-
-    def test_multiline_json(self):
-        people1 = self.spark.read.json("python/test_support/sql/people.json")
-        people_array = self.spark.read.json("python/test_support/sql/people_array.json",
-                                            multiLine=True)
-        self.assertEqual(people1.collect(), people_array.collect())
 
     def test_multiline_csv(self):
         ages_newlines = self.spark.read.csv(
