@@ -338,7 +338,7 @@ object PageRank extends Logging {
 
     def sendMessage(edge: EdgeTriplet[(Double, Double), Double]) = {
       if (edge.srcAttr._2 > tol) {
-        Iterator((edge.dstId, edge.srcAttr._2 * edge.attr))
+        Iterator((edge.dstId, edge.srcAttr._1 * edge.attr))
       } else {
         Iterator.empty
       }
