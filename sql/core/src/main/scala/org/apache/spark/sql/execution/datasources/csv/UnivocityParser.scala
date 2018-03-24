@@ -199,14 +199,14 @@ class UnivocityParser(
   def parse(input: String): InternalRow = convert(tokenizer.parseLine(input))
 
   private def convert(tokens: Array[String]): InternalRow = {
-    if (tokens.length != schema.length) {
+    if (tokens.length != requiredSchema.length) {
       // If the number of tokens doesn't match the schema, we should treat it as a malformed record.
       // However, we still have chance to parse some of the tokens, by adding extra null tokens in
       // the tail if the number is smaller, or by dropping extra tokens if the number is larger.
-      val checkedTokens = if (schema.length > tokens.length) {
-        tokens ++ new Array[String](schema.length - tokens.length)
+      val checkedTokens = if (requiredSchema.length > tokens.length) {
+        tokens ++ new Array[String](requiredSchema.length - tokens.length)
       } else {
-        tokens.take(schema.length)
+        tokens.take(requiredSchema.length)
       }
       def getPartialResult(): Option[InternalRow] = {
         try {
