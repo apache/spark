@@ -267,7 +267,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils with Te
         .options(Map("header" -> "true", "mode" -> "dropmalformed"))
         .load(testFile(carsFile))
 
-      assert(cars.select("year").collect().size === 2)
+      assert(cars.collect().size === 2)
     }
   }
 
