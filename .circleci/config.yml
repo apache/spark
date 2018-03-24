@@ -353,7 +353,7 @@ jobs:
       # This is potentially costly but we can't use the workspace as it would conflict with
       # compilation results from build-sbt
       - save_cache:
-          key: v1-maven-build-with-version-{{ .Branch }}-{{ .BuildNum }}
+          key: v1-maven-build-with-version-{{ .Branch }}-{{ .Revision }}
           paths:
             - .
 
@@ -366,7 +366,7 @@ jobs:
       # This cache contains the whole project after version was set and mvn package was called
       # Restoring first (and instead of checkout) as mvn versions:set mutates real source code...
       - restore_cache:
-          key: v1-maven-build-with-version-{{ .Branch }}-{{ .BuildNum }}
+          key: v1-maven-build-with-version-{{ .Branch }}-{{ .Revision }}
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
       - restore_cache:
