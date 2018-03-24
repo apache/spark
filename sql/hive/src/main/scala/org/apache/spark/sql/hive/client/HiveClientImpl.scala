@@ -912,7 +912,7 @@ private[hive] object HiveClientImpl {
     Utils.classForName(name)
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
-  private def toHiveMetaApiTable(table: CatalogTable): HiveMetaApiTable = {
+  private def getHiveEmptyTable(table: CatalogTable): HiveMetaApiTable = {
     val sd = new StorageDescriptor
     sd.setSerdeInfo(new SerDeInfo)
     sd.setNumBuckets(-1)
@@ -944,7 +944,7 @@ private[hive] object HiveClientImpl {
    * Converts the native table metadata representation format CatalogTable to Hive's Table.
    */
   def toHiveTable(table: CatalogTable, userName: Option[String] = None): HiveTable = {
-    val hiveTable = new HiveTable(toHiveMetaApiTable(table))
+    val hiveTable = new HiveTable(getHiveEmptyTable(table))
     // For EXTERNAL_TABLE, we also need to set EXTERNAL field in the table properties.
     // Otherwise, Hive metastore will change the table to a MANAGED_TABLE.
     // (metastore/src/java/org/apache/hadoop/hive/metastore/ObjectStore.java#L1095-L1105)
