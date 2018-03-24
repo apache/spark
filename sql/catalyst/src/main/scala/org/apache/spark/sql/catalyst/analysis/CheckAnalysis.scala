@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
@@ -118,6 +119,8 @@ trait CheckAnalysis extends PredicateHelper {
             e match {
               case _: AggregateExpression | _: OffsetWindowFunction | _: AggregateWindowFunction =>
                 w
+              case f: PythonUDF if PythonUDF.isWindowPandasUDF(f) =>
+                w
               case _ =>
                 failAnalysis(s"Expression '$e' not supported within a window function.")
             }
@@ -154,7 +157,7 @@ trait CheckAnalysis extends PredicateHelper {
 
           case Aggregate(groupingExprs, aggregateExprs, child) =>
             def isAggregateExpression(expr: Expression) = {
-              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupAggPandasUDF(expr)
+              expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
             }
 
             def checkValidAggregateExpression(expr: Expression): Unit = expr match {

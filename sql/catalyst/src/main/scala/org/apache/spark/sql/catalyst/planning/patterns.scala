@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.planning
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -215,7 +216,7 @@ object PhysicalAggregation {
           case agg: AggregateExpression
             if !equivalentAggregateExpressions.addExpr(agg) => agg
           case udf: PythonUDF
-            if PythonUDF.isGroupAggPandasUDF(udf) &&
+            if PythonUDF.isGroupedAggPandasUDF(udf) &&
               !equivalentAggregateExpressions.addExpr(udf) => udf
         }
       }
@@ -245,7 +246,7 @@ object PhysicalAggregation {
             equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
               .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
             // Similar to AggregateExpression
-          case ue: PythonUDF if PythonUDF.isGroupAggPandasUDF(ue) =>
+          case ue: PythonUDF if PythonUDF.isGroupedAggPandasUDF(ue) =>
             equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
               .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
           case expression =>
@@ -264,6 +265,46 @@ object PhysicalAggregation {
         aggregateExpressions,
         rewrittenResultExpressions,
         child))
+
+    case _ => None
+  }
+}
+
+object PhysicalWindow {
+
+  sealed trait WindowFunctionType
+
+  // Whether the window function is a Scalar window function or a Python window function.
+  // We don't current support mixes of these two types so we use a single enum to present all
+  // window functions in the window expression.
+  case object Scala extends WindowFunctionType
+  case object Python extends WindowFunctionType
+
+  // windowFunctionType, windowExpression, partitionSpec, orderSpec, resultExpression, child
+  type ReturnType =
+    (WindowFunctionType,
+      Seq[WindowExpression], Seq[Expression], Seq[SortOrder], Seq[NamedExpression], LogicalPlan)
+
+  def unapply(a: Any): Option[ReturnType] = a match {
+    case logical.Window(windowExpressions, partitionSpec, orderSpec, child) =>
+
+      val newWindowExpressions = windowExpressions.flatMap { expr =>
+        expr.collect {
+          case we: WindowExpression => we
+        }
+      }
+
+      val windowFunctionType = newWindowExpressions.map(_.windowFunction) match {
+        case wfs: Seq[Expression] if wfs.forall(PythonUDF.isWindowPandasUDF) => Python
+        case wfs: Seq[Expression] if !wfs.exists(PythonUDF.isWindowPandasUDF) => Scala
+        case _ => throw new AnalysisException(
+          "Cannot use a mixture of window function and window Pandas UDF")
+      }
+
+      val resultExpressions = windowExpressions.map(_.toAttribute)
+
+      Some((windowFunctionType,
+        newWindowExpressions, partitionSpec, orderSpec, resultExpressions, child))
 
     case _ => None
   }

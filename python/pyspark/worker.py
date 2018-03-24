@@ -127,6 +127,17 @@ def wrap_grouped_agg_pandas_udf(f, return_type):
 
     return lambda *a: (wrapped(*a), arrow_return_type)
 
+def wrap_window_agg_pandas_udf(f, return_type):
+    arrow_return_type = to_arrow_type(return_type)
+
+    def wrapped(*series):
+        import pandas as pd
+        import numpy as np
+        result = f(*series)
+        # This doesn't work with non primitive types
+        return pd.Series(np.repeat(result, len(series[0])))
+
+    return lambda *a: (wrapped(*a), arrow_return_type)
 
 def read_single_udf(pickleSer, infile, eval_type):
     num_arg = read_int(infile)
@@ -151,6 +162,8 @@ def read_single_udf(pickleSer, infile, eval_type):
         return arg_offsets, wrap_grouped_map_pandas_udf(func, return_type, argspec)
     elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
         return arg_offsets, wrap_grouped_agg_pandas_udf(func, return_type)
+    elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
+        return arg_offsets, wrap_window_agg_pandas_udf(func, return_type)
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         return arg_offsets, wrap_udf(func, return_type)
     else:
@@ -195,7 +208,8 @@ def read_udfs(pickleSer, infile, eval_type):
 
     if eval_type in (PythonEvalType.SQL_SCALAR_PANDAS_UDF,
                      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
+                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
+                     PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF):
         timezone = utf8_deserializer.loads(infile)
         ser = ArrowStreamPandasSerializer(timezone)
     else:
