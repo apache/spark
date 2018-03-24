@@ -25,6 +25,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.tags.Flaky
 
 
 class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
@@ -115,7 +116,11 @@ class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with Befo
   }
 
   allFileBasedDataSources.foreach { format =>
-    testQuietly(s"Enabling/disabling ignoreMissingFiles using $format") {
+    val tags = format match {
+      case "orc" => List(Flaky)
+      case _ => List()
+    }
+    testQuietly(s"Enabling/disabling ignoreMissingFiles using $format", tags: _*) {
       def testIgnoreMissingFiles(): Unit = {
         withTempDir { dir =>
           val basePath = dir.getCanonicalPath

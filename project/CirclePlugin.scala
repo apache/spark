@@ -46,9 +46,9 @@ object CirclePlugin extends AutoPlugin {
   override def trigger: PluginTrigger = allRequirements
 
   private[this] lazy val testsByProject = Def.task {
-    // Defaults.detectTests is basically the value of Keys.definedTests, but since we're
-    // overriding the latter depending on the value of this task, we can't depend on it
-    ProjectTests(thisProjectRef.value, Defaults.detectTests.value)
+    // We can use Keys.definedTests because we resolve this task 'in Test' but later define it
+    // 'in Circle' so there's no cycle.
+    ProjectTests(thisProjectRef.value, (definedTests in Test).value)
   }
 
   private[this] lazy val mapper = new ObjectMapper() with ScalaObjectMapper

@@ -37,5 +37,9 @@ if __name__ == '__main__':
     env = get_build_environment()
     mtt = modules_to_test(env)
 
+    excluded_tags = mtt.excluded_tags + [
+        "org.apache.spark.tags.FlakyTest"
+    ]
+
     # run the test suites
-    run_scala_tests(env.build_tool, env.hadoop_version, mtt.test_modules, mtt.excluded_tags)
+    run_scala_tests(env.build_tool, env.hadoop_version, mtt.test_modules, excluded_tags)

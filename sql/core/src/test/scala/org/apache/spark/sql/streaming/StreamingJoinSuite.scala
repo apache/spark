@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorS
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.Flaky
 import org.apache.spark.util.Utils
 
 
@@ -446,7 +447,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     (input1, input2, joined)
   }
 
-  test("left outer early state exclusion on left") {
+  test("left outer early state exclusion on left", Flaky) {
     val (leftInput, df1) = setupStream("left", 2)
     val (rightInput, df2) = setupStream("right", 3)
     // Use different schemas to ensure the null row is being generated from the correct side.
@@ -477,7 +478,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     )
   }
 
-  test("left outer early state exclusion on right") {
+  test("left outer early state exclusion on right", Flaky) {
     val (leftInput, df1) = setupStream("left", 2)
     val (rightInput, df2) = setupStream("right", 3)
     // Use different schemas to ensure the null row is being generated from the correct side.
@@ -508,7 +509,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     )
   }
 
-  test("right outer early state exclusion on left") {
+  test("right outer early state exclusion on left", Flaky) {
     val (leftInput, df1) = setupStream("left", 2)
     val (rightInput, df2) = setupStream("right", 3)
     // Use different schemas to ensure the null row is being generated from the correct side.
@@ -539,7 +540,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     )
   }
 
-  test("right outer early state exclusion on right") {
+  test("right outer early state exclusion on right", Flaky) {
     val (leftInput, df1) = setupStream("left", 2)
     val (rightInput, df2) = setupStream("right", 3)
     // Use different schemas to ensure the null row is being generated from the correct side.
