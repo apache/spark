@@ -164,7 +164,16 @@ case class KafkaContinuousDataReaderFactory(
     startOffset: Long,
     kafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends DataReaderFactory[UnsafeRow] {
+    failOnDataLoss: Boolean) extends ContinuousDataReaderFactory[UnsafeRow] {
+
+  override def createDataReaderWithOffset(offset: PartitionOffset): DataReader[UnsafeRow] = {
+    val kafkaOffset = offset.asInstanceOf[KafkaSourcePartitionOffset]
+    require(kafkaOffset.topicPartition == topicPartition,
+      s"Expected topicPartition: $topicPartition, but got: ${kafkaOffset.topicPartition}")
+    new KafkaContinuousDataReader(
+      topicPartition, kafkaOffset.partitionOffset, kafkaParams, pollTimeoutMs, failOnDataLoss)
+  }
+
   override def createDataReader(): KafkaContinuousDataReader = {
     new KafkaContinuousDataReader(
       topicPartition, startOffset, kafkaParams, pollTimeoutMs, failOnDataLoss)
@@ -187,8 +196,7 @@ class KafkaContinuousDataReader(
     kafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean) extends ContinuousDataReader[UnsafeRow] {
-  private val consumer =
-    CachedKafkaConsumer.createUncached(topicPartition.topic, topicPartition.partition, kafkaParams)
+  private val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams, useCache = false)
   private val converter = new KafkaRecordToUnsafeRowConverter
 
   private var nextKafkaOffset = startOffset
@@ -236,6 +244,6 @@ class KafkaContinuousDataReader(
   }
 
   override def close(): Unit = {
-    consumer.close()
+    consumer.release()
   }
 }

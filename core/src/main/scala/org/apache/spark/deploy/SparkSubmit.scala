@@ -245,6 +245,19 @@ object SparkSubmit extends CommandLineUtils with Logging {
       args: SparkSubmitArguments,
       conf: Option[HadoopConfiguration] = None)
       : (Seq[String], Seq[String], SparkConf, String) = {
+    try {
+      doPrepareSubmitEnvironment(args, conf)
+    } catch {
+      case e: SparkException =>
+        printErrorAndExit(e.getMessage)
+        throw e
+    }
+  }
+
+  private def doPrepareSubmitEnvironment(
+      args: SparkSubmitArguments,
+      conf: Option[HadoopConfiguration] = None)
+      : (Seq[String], Seq[String], SparkConf, String) = {
     // Return values
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
@@ -320,8 +333,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
         printErrorAndExit("Python applications are currently not supported for Kubernetes.")
       case (KUBERNETES, _) if args.isR =>
         printErrorAndExit("R applications are currently not supported for Kubernetes.")
-      case (KUBERNETES, CLIENT) =>
-        printErrorAndExit("Client mode is currently not supported for Kubernetes.")
       case (LOCAL, CLUSTER) =>
         printErrorAndExit("Cluster deploy mode is not compatible with master \"local\"")
       case (_, CLUSTER) if isShell(args.primaryResource) =>

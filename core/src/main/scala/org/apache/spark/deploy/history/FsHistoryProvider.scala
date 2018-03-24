@@ -173,7 +173,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Fixed size thread pool to fetch and parse log files.
    */
   private val replayExecutor: ExecutorService = {
-    if (Utils.isTesting) {
+    if (!Utils.isTesting) {
       ThreadUtils.newDaemonFixedThreadPool(NUM_PROCESSING_THREADS, "log-replay-executor")
     } else {
       MoreExecutors.sameThreadExecutor()

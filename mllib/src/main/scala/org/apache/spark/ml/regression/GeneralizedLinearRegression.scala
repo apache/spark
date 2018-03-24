@@ -1010,7 +1010,7 @@ class GeneralizedLinearRegressionModel private[ml] (
 
   private lazy val familyAndLink = FamilyAndLink(this)
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     predict(features, 0.0)
   }
 

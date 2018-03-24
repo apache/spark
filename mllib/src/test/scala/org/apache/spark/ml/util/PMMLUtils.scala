@@ -14,23 +14,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit.steps.initcontainer
+package org.apache.spark.ml.util
 
-import org.apache.spark.deploy.k8s.MountSecretsBootstrap
+import java.io.StringReader
+import javax.xml.bind.Unmarshaller
+import javax.xml.transform.Source
+
+import org.dmg.pmml._
+import org.jpmml.model.{ImportFilter, JAXBUtil}
+import org.xml.sax.InputSource
 
 /**
- * An init-container configuration step for mounting user-specified secrets onto user-specified
- * paths.
- *
- * @param bootstrap a utility actually handling mounting of the secrets
+ * Testing utils for working with PMML.
+ * Predictive Model Markup Language (PMML) is an XML-based file format
+ * developed by the Data Mining Group (www.dmg.org).
  */
-private[spark] class InitContainerMountSecretsStep(
-    bootstrap: MountSecretsBootstrap) extends InitContainerConfigurationStep {
-
-  override def configureInitContainer(spec: InitContainerSpec) : InitContainerSpec = {
-    // Mount the secret volumes given that the volumes have already been added to the driver pod
-    // when mounting the secrets into the main driver container.
-    val initContainer = bootstrap.mountSecrets(spec.initContainer)
-    spec.copy(initContainer = initContainer)
+private[spark] object PMMLUtils {
+  /**
+   * :: Experimental ::
+   * Load a PMML model from a string. Note: for testing only, PMML model evaluation is supported
+   * through external spark-packages.
+   */
+  def loadFromString(input: String): PMML = {
+    val is = new StringReader(input)
+    val transformed = ImportFilter.apply(new InputSource(is))
+    JAXBUtil.unmarshalPMML(transformed)
   }
 }
