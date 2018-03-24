@@ -77,13 +77,14 @@ class UnivocityParser(
     requiredSchema.map(f => makeConverter(f.name, f.dataType, f.nullable, options)).toArray
   }
 
-  private val tokenIndexArr: Seq[java.lang.Integer] = {
-    requiredSchema.map(f => new java.lang.Integer(schema.indexOf(f)))
-  }
-
   private val tokenizer = {
     val parserSetting = options.asParserSettings
-    parserSetting.selectIndexes(tokenIndexArr: _*)
+    if (requiredSchema.length < schema.length) {
+      val tokenIndexArr: Seq[java.lang.Integer] = {
+        requiredSchema.map(f => new java.lang.Integer(schema.indexOf(f)))
+      }
+      parserSetting.selectIndexes(tokenIndexArr: _*)
+    }
     new CsvParser(parserSetting)
   }
 
