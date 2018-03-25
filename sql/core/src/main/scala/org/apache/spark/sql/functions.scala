@@ -2601,8 +2601,12 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Returns the date that is numMonths after startDate.
+   * Returns the date that is `numMonths` after `startDate`.
    *
+   * @param startDate A date, timestamp or string. If a string, the data must be in a format that
+   *                  can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param numMonths The number of months to add to `startDate`, can be negative to subtract months
+   * @return A date, or null if `startDate` was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2630,12 +2634,15 @@ object functions {
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
-   * A pattern `dd.MM.yyyy` would return a string like `18.03.1993`.
-   * All pattern letters of `java.text.SimpleDateFormat` can be used.
+   * See [[java.text.SimpleDateFormat]] for valid date and time format patterns
    *
+   * @param dateExpr A date, timestamp or string. If a string, the data must be in a format that
+   *                 can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param format A pattern `dd.MM.yyyy` would return a string like `18.03.1993`
+   * @return A string, or null if `dateExpr` was a string that could not be cast to a timestamp
    * @note Use specialized functions like [[year]] whenever possible as they benefit from a
    * specialized implementation.
-   *
+   * @throws IllegalArgumentException if the `format` pattern is invalid
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2645,6 +2652,11 @@ object functions {
 
   /**
    * Returns the date that is `days` days after `start`
+   *
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days  The number of days to add to `start`, can be negative to subtract days
+   * @return A date, or null if `start` was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2652,6 +2664,11 @@ object functions {
 
   /**
    * Returns the date that is `days` days before `start`
+   *
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param days  The number of days to subtract from `start`, can be negative to add days
+   * @return A date, or null if `start` was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2659,6 +2676,19 @@ object functions {
 
   /**
    * Returns the number of days from `start` to `end`.
+   *
+   * Only considers the date part of the input. For example:
+   * {{{
+   * dateddiff("2018-01-10 00:00:00", "2018-01-09 23:59:59")
+   * // returns 1
+   * }}}
+   *
+   * @param end A date, timestamp or string. If a string, the data must be in a format that
+   *            can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param start A date, timestamp or string. If a string, the data must be in a format that
+   *              can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return An integer, or null if either `end` or `start` were strings that could not be cast to
+   *         a date. Negative if `end` is before `start`
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2666,6 +2696,7 @@ object functions {
 
   /**
    * Extracts the year as an integer from a given date/timestamp/string.
+   * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2673,6 +2704,7 @@ object functions {
 
   /**
    * Extracts the quarter as an integer from a given date/timestamp/string.
+   * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2680,6 +2712,7 @@ object functions {
 
   /**
    * Extracts the month as an integer from a given date/timestamp/string.
+   * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2687,6 +2720,8 @@ object functions {
 
   /**
    * Extracts the day of the week as an integer from a given date/timestamp/string.
+   * Ranges from 1 for a Sunday through to 7 for a Saturday
+   * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 2.3.0
    */
@@ -2694,6 +2729,7 @@ object functions {
 
   /**
    * Extracts the day of the month as an integer from a given date/timestamp/string.
+   * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2701,6 +2737,7 @@ object functions {
 
   /**
    * Extracts the day of the year as an integer from a given date/timestamp/string.
+   * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2708,16 +2745,20 @@ object functions {
 
   /**
    * Extracts the hours as an integer from a given date/timestamp/string.
+   * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
   def hour(e: Column): Column = withExpr { Hour(e.expr) }
 
   /**
-   * Given a date column, returns the last day of the month which the given date belongs to.
+   * Returns the last day of the month which the given date belongs to.
    * For example, input "2015-07-27" returns "2015-07-31" since July 31 is the last day of the
    * month in July 2015.
    *
+   * @param e A date, timestamp or string. If a string, the data must be in a format that can be
+   *          cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return A date, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2725,46 +2766,60 @@ object functions {
 
   /**
    * Extracts the minutes as an integer from a given date/timestamp/string.
+   * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
   def minute(e: Column): Column = withExpr { Minute(e.expr) }
 
   /**
-   * Returns number of months between dates `date1` and `date2`.
-   * If `date1` is later than `date2`, then the result is positive.
-   * If `date1` and `date2` are on the same day of month, or both are the last day of month,
-   * time of day will be ignored.
+   * Returns number of months between dates `start` and `end`.
    *
-   * Otherwise, the difference is calculated based on 31 days per month, and rounded to
-   * 8 digits.
+   * A whole number is returned if both inputs have the same day of month or both are the last day
+   * of their respective months. Otherwise, the difference is calculated assuming 31 days per month.
+   *
+   * For example:
+   * {{{
+   * months_between("2017-11-14", "2017-07-14")  // returns 4.0
+   * months_between("2017-01-01", "2017-01-10")  // returns 0.29032258
+   * months_between("2017-06-01", "2017-06-16 12:00:00")  // returns -0.5
+   * }}}
+   *
+   * @param end   A date, timestamp or string. If a string, the data must be in a format that can
+   *              be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param start A date, timestamp or string. If a string, the data must be in a format that can
+   *              cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return A double, or null if either `end` or `start` were strings that could not be cast to a
+   *         timestamp. Negative if `end` is before `start`
    * @group datetime_funcs
    * @since 1.5.0
    */
-  def months_between(date1: Column, date2: Column): Column = withExpr {
-    new MonthsBetween(date1.expr, date2.expr)
+  def months_between(end: Column, start: Column): Column = withExpr {
+    new MonthsBetween(end.expr, start.expr)
   }
 
   /**
-   * Returns number of months between dates `date1` and `date2`. If `roundOff` is set to true, the
+   * Returns number of months between dates `end` and `start`. If `roundOff` is set to true, the
    * result is rounded off to 8 digits; it is not rounded otherwise.
    * @group datetime_funcs
    * @since 2.4.0
    */
-  def months_between(date1: Column, date2: Column, roundOff: Boolean): Column = withExpr {
-    MonthsBetween(date1.expr, date2.expr, lit(roundOff).expr)
+  def months_between(end: Column, start: Column, roundOff: Boolean): Column = withExpr {
+    MonthsBetween(end.expr, start.expr, lit(roundOff).expr)
   }
 
   /**
-   * Given a date column, returns the first date which is later than the value of the date column
-   * that is on the specified day of the week.
+   * Returns the first date which is later than the value of the `date` column that is on the
+   * specified day of the week.
    *
    * For example, `next_day('2015-07-27', "Sunday")` returns 2015-08-02 because that is the first
    * Sunday after 2015-07-27.
    *
-   * Day of the week parameter is case insensitive, and accepts:
-   * "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun".
-   *
+   * @param date      A date, timestamp or string. If a string, the data must be in a format that
+   *                  can be cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param dayOfWeek Case insensitive, and accepts: "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
+   * @return A date, or null if `date` was a string that could not be cast to a date or if
+   *         `dayOfWeek` was an invalid value
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2774,6 +2829,7 @@ object functions {
 
   /**
    * Extracts the seconds as an integer from a given date/timestamp/string.
+   * @return An integer, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2781,6 +2837,11 @@ object functions {
 
   /**
    * Extracts the week number as an integer from a given date/timestamp/string.
+   *
+   * A week is considered to start on a Monday and week 1 is the first week with more than 3 days,
+   * as defined by ISO 8601
+   *
+   * @return An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2788,8 +2849,12 @@ object functions {
 
   /**
    * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
-   * representing the timestamp of that moment in the current system time zone in the given
-   * format.
+   * representing the timestamp of that moment in the current system time zone in the
+   * yyyy-MM-dd HH:mm:ss format.
+   *
+   * @param ut A number of a type that is castable to a long, such as string or integer. Can be
+   *           negative for timestamps before the unix epoch
+   * @return A string, or null if the input was a string that could not be cast to a long
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2801,6 +2866,14 @@ object functions {
    * Converts the number of seconds from unix epoch (1970-01-01 00:00:00 UTC) to a string
    * representing the timestamp of that moment in the current system time zone in the given
    * format.
+   *
+   * See [[java.text.SimpleDateFormat]] for valid date and time format patterns
+   *
+   * @param ut A number of a type that is castable to a long, such as string or integer. Can be
+   *           negative for timestamps before the unix epoch
+   * @param f  A date time pattern that the input will be formatted to
+   * @return A string, or null if `ut` was a string that could not be cast to a long or `f` was
+   *         an invalid date time pattern
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2809,7 +2882,7 @@ object functions {
   }
 
   /**
-   * Returns the current Unix timestamp (in seconds).
+   * Returns the current Unix timestamp (in seconds) as a long.
    *
    * @note All calls of `unix_timestamp` within the same query return the same value
    * (i.e. the current timestamp is calculated at the start of query evaluation).
@@ -2824,8 +2897,10 @@ object functions {
   /**
    * Converts time string in format yyyy-MM-dd HH:mm:ss to Unix timestamp (in seconds),
    * using the default timezone and the default locale.
-   * Returns `null` if fails.
    *
+   * @param s A date, timestamp or string. If a string, the data must be in the
+   *          `yyyy-MM-dd HH:mm:ss` format
+   * @return A long, or null if the input was a string not of the correct format
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2835,17 +2910,25 @@ object functions {
 
   /**
    * Converts time string with given pattern to Unix timestamp (in seconds).
-   * Returns `null` if fails.
    *
-   * @see <a href="http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html">
-   * Customizing Formats</a>
+   * See [[java.text.SimpleDateFormat]] for valid date and time format patterns
+   *
+   * @param s A date, timestamp or string. If a string, the data must be in a format that can be
+   *          cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param p A date time pattern detailing the format of `s` when `s` is a string
+   * @return A long, or null if `s` was a string that could not be cast to a date or `p` was
+   *         an invalid format
    * @group datetime_funcs
    * @since 1.5.0
    */
   def unix_timestamp(s: Column, p: String): Column = withExpr { UnixTimestamp(s.expr, Literal(p)) }
 
   /**
-   * Convert time string to a Unix timestamp (in seconds) by casting rules to `TimestampType`.
+   * Converts to a timestamp by casting rules to `TimestampType`.
+   *
+   * @param s A date, timestamp or string. If a string, the data must be in a format that can be
+   *          cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return A timestamp, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
    * @since 2.2.0
    */
@@ -2854,9 +2937,15 @@ object functions {
   }
 
   /**
-   * Convert time string to a Unix timestamp (in seconds) with a specified format
-   * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
-   * to Unix timestamp (in seconds), return null if fail.
+   * Converts time string with the given pattern to timestamp.
+   *
+   * See [[java.text.SimpleDateFormat]] for valid date and time format patterns
+   *
+   * @param s   A date, timestamp or string. If a string, the data must be in a format that can be
+   *            cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param fmt A date time pattern detailing the format of `s` when `s` is a string
+   * @return A timestamp, or null if `s` was a string that could not be cast to a timestamp or
+   *         `fmt` was an invalid format
    * @group datetime_funcs
    * @since 2.2.0
    */
@@ -2874,9 +2963,14 @@ object functions {
 
   /**
    * Converts the column into a `DateType` with a specified format
-   * (see [http://docs.oracle.com/javase/tutorial/i18n/format/simpleDateFormat.html])
-   * return null if fail.
    *
+   * See [[java.text.SimpleDateFormat]] for valid date and time format patterns
+   *
+   * @param e   A date, timestamp or string. If a string, the data must be in a format that can be
+   *            cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param fmt A date time pattern detailing the format of `e` when `e`is a string
+   * @return A date, or null if `e` was a string that could not be cast to a date or `fmt` was an
+   *         invalid format
    * @group datetime_funcs
    * @since 2.2.0
    */
@@ -2887,9 +2981,15 @@ object functions {
   /**
    * Returns date truncated to the unit specified by the format.
    *
+   * For example, `trunc("2018-11-19 12:01:19", "year")` returns 2018-01-01
+   *
+   * @param date A date, timestamp or string. If a string, the data must be in a format that can be
+   *             cast to a date, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
    * @param format: 'year', 'yyyy', 'yy' for truncate by year,
    *               or 'month', 'mon', 'mm' for truncate by month
    *
+   * @return A date, or null if `date` was a string that could not be cast to a date or `format`
+   *         was an invalid value
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2900,11 +3000,16 @@ object functions {
   /**
    * Returns timestamp truncated to the unit specified by the format.
    *
+   * For example, `date_tunc("2018-11-19 12:01:19", "year")` returns 2018-01-01 00:00:00
+   *
    * @param format: 'year', 'yyyy', 'yy' for truncate by year,
    *                'month', 'mon', 'mm' for truncate by month,
    *                'day', 'dd' for truncate by day,
    *                Other options are: 'second', 'minute', 'hour', 'week', 'month', 'quarter'
-   *
+   * @param timestamp A date, timestamp or string. If a string, the data must be in a format that
+   *                  can be cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @return A timestamp, or null if `timestamp` was a string that could not be cast to a timestamp
+   *         or `format` was an invalid value
    * @group datetime_funcs
    * @since 2.3.0
    */
@@ -2916,6 +3021,13 @@ object functions {
    * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
    * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
    * '2017-07-14 03:40:00.0'.
+   *
+   * @param ts A date, timestamp or string. If a string, the data must be in a format that can be
+   *           cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param tz A string detailing the time zone that the input should be adjusted to, such as
+   *           `Europe/London`, `PST` or `GMT+5`
+   * @return A timestamp, or null if `ts` was a string that could not be cast to a timestamp or
+   *         `tz` was an invalid value
    * @group datetime_funcs
    * @since 1.5.0
    */
@@ -2927,6 +3039,13 @@ object functions {
    * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
    * zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
    * '2017-07-14 01:40:00.0'.
+   *
+   * @param ts A date, timestamp or string. If a string, the data must be in a format that can be
+   *           cast to a timestamp, such as `yyyy-MM-dd` or `yyyy-MM-dd HH:mm:ss.SSSS`
+   * @param tz A string detailing the time zone that the input belongs to, such as `Europe/London`,
+   *           `PST` or `GMT+5`
+   * @return A timestamp, or null if `ts` was a string that could not be cast to a timestamp or
+   *         `tz` was an invalid value
    * @group datetime_funcs
    * @since 1.5.0
    */
