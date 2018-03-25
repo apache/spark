@@ -234,7 +234,6 @@ object MultiLineCSVDataSource extends CSVDataSource {
       parser.options.headerFlag,
       parser,
       schema,
-      file.filePath,
       checkHeader)
   }
 
