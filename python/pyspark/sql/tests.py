@@ -2977,7 +2977,7 @@ class SQLTests(ReusedSQLTestCase):
     def test_checking_csv_header(self):
         tmpPath = tempfile.mkdtemp()
         shutil.rmtree(tmpPath)
-        self.spark.createDataFrame([[1, 1000],[2000, 2]]).\
+        self.spark.createDataFrame([[1, 1000], [2000, 2]]).\
             toDF('f1', 'f2').write.option("header", "true").csv(tmpPath)
         schema = StructType([
             StructField('f2', IntegerType(), nullable=True),
