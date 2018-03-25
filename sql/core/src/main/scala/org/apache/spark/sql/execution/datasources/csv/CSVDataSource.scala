@@ -145,7 +145,12 @@ object TextInputCSVDataSource extends CSVDataSource {
       // The header will be removed from lines.
       // Note: if there are only comments in the first block, the header would probably
       // be not extracted.
-      val checkHeader = UnivocityParser.checkHeader(parser, dataSchema, _: String)
+      val checkHeader = UnivocityParser.checkHeader(
+        parser,
+        dataSchema,
+        _: String,
+        file.filePath
+      )
       CSVUtils.extractHeader(lines, parser.options).foreach(checkHeader(_))
     }
 
@@ -218,13 +223,19 @@ object MultiLineCSVDataSource extends CSVDataSource {
       parser: UnivocityParser,
       schema: StructType,
       dataSchema: StructType): Iterator[InternalRow] = {
+    val checkHeader = UnivocityParser.checkHeaderColumnNames(
+      parser,
+      dataSchema,
+      _: Array[String],
+      file.filePath
+    )
     UnivocityParser.parseStream(
       CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))),
       parser.options.headerFlag,
       parser,
       schema,
-      checkHeader = UnivocityParser.checkHeaderColumnNames(parser, dataSchema, _)
-    )
+      file.filePath,
+      checkHeader)
   }
 
   override def infer(
