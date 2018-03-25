@@ -58,9 +58,9 @@ object CirclePlugin extends AutoPlugin {
 
   case class TestKey(source: String, classname: String)
 
-  // Through this magical command we established that the average class run_time is 7.737
+  // Through this magical command we established that the average class run_time is 8.841
   // jq <~/results.json '.tests | map(select(.result != "skipped")) | group_by(.classname) | map(map(.run_time) | add) | (add / length)'
-  private[this] val AVERAGE_TEST_CLASS_RUN_TIME = 7.737d
+  private[this] val AVERAGE_TEST_CLASS_RUN_TIME = 8.841d
 
   override def globalSettings: Seq[Def.Setting[_]] = List(
     circleTestsByProject := {
@@ -109,9 +109,9 @@ object CirclePlugin extends AutoPlugin {
               .map(_.asScala)
               .getOrElse(Iterator())
               .toStream
-              .filter(_.result != "skipped")  // don't count timings of tests that didn't run
               .groupBy(result => TestKey(result.source, result.classname))
-              .mapValues(_.foldLeft(0.0d)(_ + _.run_time))
+              // don't count timings on skipped tests, but remember we've seen the classname
+              .mapValues(_.filter(_.result != "skipped").foldLeft(0.0d)(_ + _.run_time))
         } catch {
           case e: Exception =>
             log.warn(f"Couldn't read test results file: $testResultsFile")
