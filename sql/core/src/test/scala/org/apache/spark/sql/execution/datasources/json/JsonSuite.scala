@@ -2113,4 +2113,18 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     testLineSeparator(lineSep)
   }
   // scalastyle:on nonascii
+
+  test("""SPARK-21289: Support line separator - default value \r, \r\n and \n""") {
+    val data =
+      "{\"f\": \"a\", \"f0\": 1}\r{\"f\": \"c\",  \"f0\": 2}\r\n{\"f\": \"d\",  \"f0\": 3}\n"
+
+    withTempPath { path =>
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+      val df = spark.read.json(path.getAbsolutePath)
+      val expectedSchema =
+        StructType(StructField("f", StringType) :: StructField("f0", LongType) :: Nil)
+      checkAnswer(df, Seq(("a", 1), ("c", 2), ("d", 3)).toDF())
+      assert(df.schema === expectedSchema)
+    }
+  }
 }
