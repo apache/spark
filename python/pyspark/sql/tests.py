@@ -2974,6 +2974,21 @@ class SQLTests(ReusedSQLTestCase):
                 os.environ['TZ'] = orig_env_tz
             time.tzset()
 
+    def test_checking_csv_header(self):
+        tmpPath = tempfile.mkdtemp()
+        shutil.rmtree(tmpPath)
+        self.spark.createDataFrame([[1, 1000],[2000, 2]]).\
+            toDF('f1', 'f2').write.option("header", "true").csv(tmpPath)
+        schema = StructType([
+            StructField('f2', IntegerType(), nullable=True),
+            StructField('f1', IntegerType(), nullable=True)])
+        df = self.spark.read.option('header', 'true').schema(schema).csv(tmpPath)
+        self.assertRaisesRegexp(
+            Exception,
+            "Fields in the header of csv file are not matched to field names of the schema",
+            lambda: df.collect())
+        shutil.rmtree(tmpPath)
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
