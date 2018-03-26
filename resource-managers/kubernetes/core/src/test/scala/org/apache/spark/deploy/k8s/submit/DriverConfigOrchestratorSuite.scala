@@ -33,22 +33,6 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
   private val SECRET_BAR = "bar"
   private val SECRET_MOUNT_PATH = "/etc/secrets/driver"
 
-  test("Base submission steps with a main app resource.") {
-    val sparkConf = new SparkConf(false).set(CONTAINER_IMAGE, DRIVER_IMAGE)
-    val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
-    val orchestrator = new DriverConfigOrchestrator(
-      APP_ID,
-      KUBERNETES_RESOURCE_PREFIX,
-      Some(mainAppResource),
-      APP_NAME,
-      MAIN_CLASS,
-      APP_ARGS,
-      sparkConf)
-    validateStepTypes(
-      orchestrator,
-      classOf[DependencyResolutionStep])
-  }
-
   test("Submission steps with driver secrets to mount") {
     val sparkConf = new SparkConf(false)
       .set(CONTAINER_IMAGE, DRIVER_IMAGE)
@@ -65,7 +49,6 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       sparkConf)
     validateStepTypes(
       orchestrator,
-      classOf[DependencyResolutionStep],
       classOf[DriverMountSecretsStep])
   }
 
