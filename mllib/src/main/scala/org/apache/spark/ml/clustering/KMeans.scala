@@ -105,7 +105,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 @Since("1.5.0")
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    private val parentModel: MLlibKMeansModel)
+    private[clustering] val parentModel: MLlibKMeansModel)
   extends Model[KMeansModel] with KMeansParams with GeneralMLWritable {
 
   @Since("1.5.0")
@@ -212,6 +212,21 @@ private class InternalKMeansModelWriter extends MLWriterFormat with MLFormatRegi
     sparkSession.createDataFrame(data).repartition(1).write.parquet(dataPath)
   }
 }
+
+/** A writer for KMeans that handles the "pmml" format */
+private class PMMLKMeansModelWriter extends MLWriterFormat with MLFormatRegister {
+
+  override def format(): String = "pmml"
+  override def stageName(): String = "org.apache.spark.ml.clustering.KMeansModel"
+
+  override def write(path: String, sparkSession: SparkSession,
+    optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
+    val instance = stage.asInstanceOf[KMeansModel]
+    val sc = sparkSession.sparkContext
+    instance.parentModel.toPMML(sc, path)
+  }
+}
+
 
 @Since("1.6.0")
 object KMeansModel extends MLReadable[KMeansModel] {
