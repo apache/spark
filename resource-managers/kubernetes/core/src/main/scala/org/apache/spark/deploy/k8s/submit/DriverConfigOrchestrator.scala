@@ -65,12 +65,6 @@ private[spark] class DriverConfigOrchestrator(
       SPARK_APP_ID_LABEL -> kubernetesAppId,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
 
-    val serviceBootstrapStep = new DriverServiceBootstrapStep(
-      kubernetesResourceNamePrefix,
-      allDriverLabels,
-      sparkConf,
-      new SystemClock)
-
     val additionalMainAppJar = if (mainAppResource.nonEmpty) {
        val mayBeResource = mainAppResource.get match {
         case JavaMainAppResource(resource) if resource != SparkLauncher.NO_RESOURCE =>
@@ -110,10 +104,8 @@ private[spark] class DriverConfigOrchestrator(
       Nil
     }
 
-    Seq(
-      serviceBootstrapStep) ++
-      dependencyResolutionStep ++
-      mountSecretsStep
+    dependencyResolutionStep ++
+    mountSecretsStep
   }
 
   private def existSubmissionLocalFiles(files: Seq[String]): Boolean = {

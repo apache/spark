@@ -46,23 +46,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       sparkConf)
     validateStepTypes(
       orchestrator,
-      classOf[DriverServiceBootstrapStep],
       classOf[DependencyResolutionStep])
-  }
-
-  test("Base submission steps without a main app resource.") {
-    val sparkConf = new SparkConf(false).set(CONTAINER_IMAGE, DRIVER_IMAGE)
-    val orchestrator = new DriverConfigOrchestrator(
-      APP_ID,
-      KUBERNETES_RESOURCE_PREFIX,
-      Option.empty,
-      APP_NAME,
-      MAIN_CLASS,
-      APP_ARGS,
-      sparkConf)
-    validateStepTypes(
-      orchestrator,
-      classOf[DriverServiceBootstrapStep],
   }
 
   test("Submission steps with driver secrets to mount") {
@@ -81,7 +65,6 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       sparkConf)
     validateStepTypes(
       orchestrator,
-      classOf[DriverServiceBootstrapStep],
       classOf[DependencyResolutionStep],
       classOf[DriverMountSecretsStep])
   }

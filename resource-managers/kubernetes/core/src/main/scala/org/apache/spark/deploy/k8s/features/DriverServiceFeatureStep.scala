@@ -14,61 +14,65 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit.steps
+package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.ServiceBuilder
+import io.fabric8.kubernetes.api.model.{HasMetadata, ServiceBuilder}
 
-import org.apache.spark.SparkConf
-import org.apache.spark.deploy.k8s.Config._
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Clock
+import org.apache.spark.util.{Clock, SystemClock}
 
-/**
- * Allows the driver to be reachable by executor pods through a headless service. The service's
- * ports should correspond to the ports that the executor will reach the pod at for RPC.
- */
-private[spark] class DriverServiceBootstrapStep(
-    resourceNamePrefix: String,
-    driverLabels: Map[String, String],
-    sparkConf: SparkConf,
-    clock: Clock) extends DriverConfigurationStep with Logging {
+private[spark] class DriverServiceFeatureStep(
+  kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf],
+  clock: Clock = new SystemClock)
+  extends KubernetesFeatureConfigStep with Logging {
+  import DriverServiceFeatureStep._
 
-  import DriverServiceBootstrapStep._
-
-  override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
-    require(sparkConf.getOption(DRIVER_BIND_ADDRESS_KEY).isEmpty,
-      s"$DRIVER_BIND_ADDRESS_KEY is not supported in Kubernetes mode, as the driver's bind " +
+  require(kubernetesConf.getOption(DRIVER_BIND_ADDRESS_KEY).isEmpty,
+    s"$DRIVER_BIND_ADDRESS_KEY is not supported in Kubernetes mode, as the driver's bind " +
       "address is managed and set to the driver pod's IP address.")
-    require(sparkConf.getOption(DRIVER_HOST_KEY).isEmpty,
-      s"$DRIVER_HOST_KEY is not supported in Kubernetes mode, as the driver's hostname will be " +
+  require(kubernetesConf.getOption(DRIVER_HOST_KEY).isEmpty,
+    s"$DRIVER_HOST_KEY is not supported in Kubernetes mode, as the driver's hostname will be " +
       "managed via a Kubernetes service.")
 
-    val preferredServiceName = s"$resourceNamePrefix$DRIVER_SVC_POSTFIX"
-    val resolvedServiceName = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
-      preferredServiceName
-    } else {
-      val randomServiceId = clock.getTimeMillis()
-      val shorterServiceName = s"spark-$randomServiceId$DRIVER_SVC_POSTFIX"
-      logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is " +
-        s"too long (must be <= $MAX_SERVICE_NAME_LENGTH characters). Falling back to use " +
-        s"$shorterServiceName as the driver service's name.")
-      shorterServiceName
-    }
+  private val preferredServiceName = s"${kubernetesConf.appResourceNamePrefix}$DRIVER_SVC_POSTFIX"
+  private val resolvedServiceName = if (preferredServiceName.length <= MAX_SERVICE_NAME_LENGTH) {
+    preferredServiceName
+  } else {
+    val randomServiceId = clock.getTimeMillis()
+    val shorterServiceName = s"spark-$randomServiceId$DRIVER_SVC_POSTFIX"
+    logWarning(s"Driver's hostname would preferably be $preferredServiceName, but this is " +
+      s"too long (must be <= $MAX_SERVICE_NAME_LENGTH characters). Falling back to use " +
+      s"$shorterServiceName as the driver service's name.")
+    shorterServiceName
+  }
 
-    val driverPort = sparkConf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT)
-    val driverBlockManagerPort = sparkConf.getInt(
-        org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
+  private val driverPort = kubernetesConf.sparkConf.getInt(
+    "spark.driver.port", DEFAULT_DRIVER_PORT)
+  private val driverBlockManagerPort = kubernetesConf.sparkConf.getInt(
+    org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
+
+  override def configurePod(pod: SparkPod): SparkPod = pod
+
+  override def getAdditionalPodSystemProperties(): Map[String, String] = {
+    val driverHostname = s"$resolvedServiceName.${kubernetesConf.namespace()}.svc"
+    Map(DRIVER_HOST_KEY -> driverHostname,
+      "spark.driver.port" -> driverPort.toString,
+      org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT.key ->
+        driverBlockManagerPort.toString)
+  }
+
+  override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
     val driverService = new ServiceBuilder()
       .withNewMetadata()
         .withName(resolvedServiceName)
         .endMetadata()
       .withNewSpec()
         .withClusterIP("None")
-        .withSelector(driverLabels.asJava)
+        .withSelector(kubernetesConf.roleLabels.asJava)
         .addNewPort()
           .withName(DRIVER_PORT_NAME)
           .withPort(driverPort)
@@ -81,22 +85,11 @@ private[spark] class DriverServiceBootstrapStep(
           .endPort()
         .endSpec()
       .build()
-
-    val namespace = sparkConf.get(KUBERNETES_NAMESPACE)
-    val driverHostname = s"${driverService.getMetadata.getName}.$namespace.svc"
-    val resolvedSparkConf = driverSpec.driverSparkConf.clone()
-      .set(DRIVER_HOST_KEY, driverHostname)
-      .set("spark.driver.port", driverPort.toString)
-      .set(
-        org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT, driverBlockManagerPort)
-
-    driverSpec.copy(
-      driverSparkConf = resolvedSparkConf,
-      otherKubernetesResources = driverSpec.otherKubernetesResources ++ Seq(driverService))
+    Seq(driverService)
   }
 }
 
-private[spark] object DriverServiceBootstrapStep {
+private[spark] object DriverServiceFeatureStep {
   val DRIVER_BIND_ADDRESS_KEY = org.apache.spark.internal.config.DRIVER_BIND_ADDRESS.key
   val DRIVER_HOST_KEY = org.apache.spark.internal.config.DRIVER_HOST_ADDRESS.key
   val DRIVER_SVC_POSTFIX = "-driver-svc"
