@@ -1099,11 +1099,10 @@ class SessionCatalog(
   def functionExists(name: FunctionIdentifier): Boolean = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     requireDbExists(db)
-    functionRegistry.functionExists(name) ||
-      externalCatalog.functionExists(db, name.funcName)
+    builtinFunctionExists(name) || externalFunctionExists(name)
   }
 
-  def buildinFunctionExists(name: FunctionIdentifier): Boolean = {
+  def builtinFunctionExists(name: FunctionIdentifier): Boolean = {
     functionRegistry.functionExists(name)
   }
 

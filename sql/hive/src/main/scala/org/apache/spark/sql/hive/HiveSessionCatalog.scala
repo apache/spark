@@ -175,7 +175,9 @@ private[sql] class HiveSessionCatalog(
     super.functionExists(name) || hiveFunctions.contains(name.funcName)
   }
 
-  override def externalFunctionExists(name: FunctionIdentifier): Boolean = functionExists(name)
+  override def externalFunctionExists(name: FunctionIdentifier): Boolean = {
+    super.externalFunctionExists(name) || hiveFunctions.contains(name.funcName)
+  }
 
   /** List of functions we pass over to Hive. Note that over time this list should go to 0. */
   // We have a list of Hive built-in functions that we do not support. So, we will check
