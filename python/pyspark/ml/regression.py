@@ -353,7 +353,7 @@ class LinearRegressionSummary(JavaWrapper):
         """
         Returns Adjusted R^2, the adjusted coefficient of determination.
 
-        .. seealso:: `Wikipedia coefficient of determination \
+        .. seealso:: `Wikipedia coefficient of determination, Adjusted R^2 \
         <https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2>`_
 
         .. note:: This ignores instance weights (setting all to 1.0) from
