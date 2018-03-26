@@ -66,7 +66,12 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
 
   class Writer(jobId: String, path: String, conf: Configuration) extends DataSourceWriter {
     override def createWriterFactory(): DataWriterFactory[Row] = {
+      SimpleCounter.resetCounter
       new SimpleCSVDataWriterFactory(path, jobId, new SerializableConfiguration(conf))
+    }
+
+    override def onDataWriterCommit(message: WriterCommitMessage): Unit = {
+      SimpleCounter.increaseCounter
     }
 
     override def commit(messages: Array[WriterCommitMessage]): Unit = {
@@ -183,10 +188,29 @@ class SimpleCSVDataReaderFactory(path: String, conf: SerializableConfiguration)
   }
 }
 
+private[v2] object SimpleCounter {
+  private var count: Int = 0
+
+  def increaseCounter: Unit = {
+    count += 1
+  }
+
+  def getCounter: Int = {
+    count
+  }
+
+  def resetCounter: Unit = {
+    count = 0
+  }
+}
+
 class SimpleCSVDataWriterFactory(path: String, jobId: String, conf: SerializableConfiguration)
   extends DataWriterFactory[Row] {
 
-  override def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[Row] = {
+  override def createDataWriter(
+      partitionId: Int,
+      attemptNumber: Int,
+      epochId: Long): DataWriter[Row] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
     val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
     val fs = filePath.getFileSystem(conf.value)
@@ -219,7 +243,10 @@ class SimpleCSVDataWriter(fs: FileSystem, file: Path) extends DataWriter[Row] {
 class InternalRowCSVDataWriterFactory(path: String, jobId: String, conf: SerializableConfiguration)
   extends DataWriterFactory[InternalRow] {
 
-  override def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
+  override def createDataWriter(
+      partitionId: Int,
+      attemptNumber: Int,
+      epochId: Long): DataWriter[InternalRow] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
     val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
     val fs = filePath.getFileSystem(conf.value)

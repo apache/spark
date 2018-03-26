@@ -147,8 +147,8 @@ class DataFrameReader(OptionUtils):
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param options: all other string options
 
-        >>> df = spark.read.load('python/test_support/sql/parquet_partitioned', opt1=True,
-        ...     opt2=1, opt3='str')
+        >>> df = spark.read.format("parquet").load('python/test_support/sql/parquet_partitioned',
+        ...     opt1=True, opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
 
@@ -209,13 +209,13 @@ class DataFrameReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
-                 record, and puts the malformed string into a field configured by \
-                 ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
-                 a string type field named ``columnNameOfCorruptRecord`` in an user-defined \
-                 schema. If a schema does not have the field, it drops corrupt records during \
-                 parsing. When inferring a schema, it implicitly adds a \
-                 ``columnNameOfCorruptRecord`` field in an output schema.
+                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                  into a field configured by ``columnNameOfCorruptRecord``, and sets other \
+                  fields to ``null``. To keep corrupt records, an user can set a string type \
+                  field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
+                  schema does not have the field, it drops corrupt records during parsing. \
+                  When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
+                  field in an output schema.
                 *  ``DROPMALFORMED`` : ignores the whole corrupted records.
                 *  ``FAILFAST`` : throws an exception when it meets corrupted records.
 
@@ -304,16 +304,18 @@ class DataFrameReader(OptionUtils):
 
     @ignore_unicode_prefix
     @since(1.6)
-    def text(self, paths, wholetext=False):
+    def text(self, paths, wholetext=False, lineSep=None):
         """
         Loads text files and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
         are any.
 
-        Each line in the text file is a new row in the resulting DataFrame.
+        By default, each line in the text file is a new row in the resulting DataFrame.
 
         :param paths: string, or list of strings, for input path(s).
         :param wholetext: if true, read each file from input path(s) as a single row.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
@@ -322,7 +324,7 @@ class DataFrameReader(OptionUtils):
         >>> df.collect()
         [Row(value=u'hello\\nthis')]
         """
-        self._set_opts(wholetext=wholetext)
+        self._set_opts(wholetext=wholetext, lineSep=lineSep)
         if isinstance(paths, basestring):
             paths = [paths]
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
@@ -393,13 +395,15 @@ class DataFrameReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
-                  record, and puts the malformed string into a field configured by \
-                  ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
-                  a string type field named ``columnNameOfCorruptRecord`` in an \
-                  user-defined schema. If a schema does not have the field, it drops corrupt \
-                  records during parsing. When a length of parsed CSV tokens is shorter than \
-                  an expected length of a schema, it sets `null` for extra fields.
+                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                  into a field configured by ``columnNameOfCorruptRecord``, and sets other \
+                  fields to ``null``. To keep corrupt records, an user can set a string type \
+                  field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
+                  schema does not have the field, it drops corrupt records during parsing. \
+                  A record with less/more tokens than schema is not a corrupted record to CSV. \
+                  When it meets a record having fewer tokens than the length of the schema, \
+                  sets ``null`` to extra fields. When the record has more tokens than the \
+                  length of the schema, it drops extra tokens.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
 
@@ -802,18 +806,20 @@ class DataFrameWriter(OptionUtils):
         self._jwrite.parquet(path)
 
     @since(1.6)
-    def text(self, path, compression=None):
+    def text(self, path, compression=None, lineSep=None):
         """Saves the content of the DataFrame in a text file at the specified path.
 
         :param path: the path in any Hadoop supported file system
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
+        :param lineSep: defines the line separator that should be used for writing. If None is
+                        set, it uses the default value, ``\\n``.
 
         The DataFrame must have only one column that is of string type.
         Each row becomes a new line in the output file.
         """
-        self._set_opts(compression=compression)
+        self._set_opts(compression=compression, lineSep=lineSep)
         self._jwrite.text(path)
 
     @since(2.0)
@@ -968,7 +974,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     sc.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

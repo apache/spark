@@ -29,9 +29,9 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.kafka010.KafkaSource.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
+import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -66,12 +66,12 @@ class KafkaContinuousReader(
   // Initialized when creating reader factories. If this diverges from the partitions at the latest
   // offsets, we need to reconfigure.
   // Exposed outside this object only for unit tests.
-  private[sql] var knownPartitions: Set[TopicPartition] = _
+  @volatile private[sql] var knownPartitions: Set[TopicPartition] = _
 
   override def readSchema: StructType = KafkaOffsetReader.kafkaSchema
 
   private var offset: Offset = _
-  override def setOffset(start: ju.Optional[Offset]): Unit = {
+  override def setStartOffset(start: ju.Optional[Offset]): Unit = {
     offset = start.orElse {
       val offsets = initialOffsets match {
         case EarliestOffsetRangeLimit => KafkaSourceOffset(offsetReader.fetchEarliestOffsets())
@@ -164,7 +164,16 @@ case class KafkaContinuousDataReaderFactory(
     startOffset: Long,
     kafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends DataReaderFactory[UnsafeRow] {
+    failOnDataLoss: Boolean) extends ContinuousDataReaderFactory[UnsafeRow] {
+
+  override def createDataReaderWithOffset(offset: PartitionOffset): DataReader[UnsafeRow] = {
+    val kafkaOffset = offset.asInstanceOf[KafkaSourcePartitionOffset]
+    require(kafkaOffset.topicPartition == topicPartition,
+      s"Expected topicPartition: $topicPartition, but got: ${kafkaOffset.topicPartition}")
+    new KafkaContinuousDataReader(
+      topicPartition, kafkaOffset.partitionOffset, kafkaParams, pollTimeoutMs, failOnDataLoss)
+  }
+
   override def createDataReader(): KafkaContinuousDataReader = {
     new KafkaContinuousDataReader(
       topicPartition, startOffset, kafkaParams, pollTimeoutMs, failOnDataLoss)
@@ -187,13 +196,8 @@ class KafkaContinuousDataReader(
     kafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean) extends ContinuousDataReader[UnsafeRow] {
-  private val topic = topicPartition.topic
-  private val kafkaPartition = topicPartition.partition
-  private val consumer = CachedKafkaConsumer.createUncached(topic, kafkaPartition, kafkaParams)
-
-  private val sharedRow = new UnsafeRow(7)
-  private val bufferHolder = new BufferHolder(sharedRow)
-  private val rowWriter = new UnsafeRowWriter(bufferHolder, 7)
+  private val consumer = KafkaDataConsumer.acquire(topicPartition, kafkaParams, useCache = false)
+  private val converter = new KafkaRecordToUnsafeRowConverter
 
   private var nextKafkaOffset = startOffset
   private var currentRecord: ConsumerRecord[Array[Byte], Array[Byte]] = _
@@ -232,22 +236,7 @@ class KafkaContinuousDataReader(
   }
 
   override def get(): UnsafeRow = {
-    bufferHolder.reset()
-
-    if (currentRecord.key == null) {
-      rowWriter.setNullAt(0)
-    } else {
-      rowWriter.write(0, currentRecord.key)
-    }
-    rowWriter.write(1, currentRecord.value)
-    rowWriter.write(2, UTF8String.fromString(currentRecord.topic))
-    rowWriter.write(3, currentRecord.partition)
-    rowWriter.write(4, currentRecord.offset)
-    rowWriter.write(5,
-      DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(currentRecord.timestamp)))
-    rowWriter.write(6, currentRecord.timestampType.id)
-    sharedRow.setTotalSize(bufferHolder.totalSize)
-    sharedRow
+    converter.toUnsafeRow(currentRecord)
   }
 
   override def getOffset(): KafkaSourcePartitionOffset = {
@@ -255,6 +244,6 @@ class KafkaContinuousDataReader(
   }
 
   override def close(): Unit = {
-    consumer.close()
+    consumer.release()
   }
 }

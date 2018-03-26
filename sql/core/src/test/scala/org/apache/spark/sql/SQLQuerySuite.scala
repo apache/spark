@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import java.io.File
-import java.math.MathContext
 import java.net.{MalformedURLException, URL}
 import java.sql.Timestamp
 import java.util.concurrent.atomic.AtomicBoolean
@@ -1618,6 +1617,46 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-23281: verify the correctness of sort direction on composite order by clause") {
+    withTempView("src") {
+      Seq[(Integer, Integer)](
+        (1, 1),
+        (1, 3),
+        (2, 3),
+        (3, 3),
+        (4, null),
+        (5, null)
+      ).toDF("key", "value").createOrReplaceTempView("src")
+
+      checkAnswer(sql(
+        """
+          |SELECT MAX(value) as value, key as col2
+          |FROM src
+          |GROUP BY key
+          |ORDER BY value desc, key
+        """.stripMargin),
+        Seq(Row(3, 1), Row(3, 2), Row(3, 3), Row(null, 4), Row(null, 5)))
+
+      checkAnswer(sql(
+        """
+          |SELECT MAX(value) as value, key as col2
+          |FROM src
+          |GROUP BY key
+          |ORDER BY value desc, key desc
+        """.stripMargin),
+        Seq(Row(3, 3), Row(3, 2), Row(3, 1), Row(null, 5), Row(null, 4)))
+
+      checkAnswer(sql(
+        """
+          |SELECT MAX(value) as value, key as col2
+          |FROM src
+          |GROUP BY key
+          |ORDER BY value asc, key desc
+        """.stripMargin),
+        Seq(Row(null, 5), Row(null, 4), Row(3, 3), Row(3, 2), Row(3, 1)))
+    }
+  }
+
   test("run sql directly on files") {
     val df = spark.range(100).toDF()
     withTempPath(f => {
@@ -2111,7 +2150,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("data source table created in InMemoryCatalog should be able to read/write") {
     withTable("tbl") {
-      sql("CREATE TABLE tbl(i INT, j STRING) USING parquet")
+      val provider = spark.sessionState.conf.defaultDataSourceName
+      sql(s"CREATE TABLE tbl(i INT, j STRING) USING $provider")
       checkAnswer(sql("SELECT i, j FROM tbl"), Nil)
 
       Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
@@ -2435,9 +2475,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-16975: Column-partition path starting '_' should be handled correctly") {
     withTempDir { dir =>
-      val parquetDir = new File(dir, "parquet").getCanonicalPath
-      spark.range(10).withColumn("_col", $"id").write.partitionBy("_col").save(parquetDir)
-      spark.read.parquet(parquetDir)
+      val dataDir = new File(dir, "data").getCanonicalPath
+      spark.range(10).withColumn("_col", $"id").write.partitionBy("_col").save(dataDir)
+      spark.read.load(dataDir)
     }
   }
 

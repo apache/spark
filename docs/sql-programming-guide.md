@@ -1004,6 +1004,29 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
 </tr>
 </table>
 
+## ORC Files
+
+Since Spark 2.3, Spark supports a vectorized ORC reader with a new ORC file format for ORC files.
+To do that, the following configurations are newly added. The vectorized reader is used for the
+native ORC tables (e.g., the ones created using the clause `USING ORC`) when `spark.sql.orc.impl`
+is set to `native` and `spark.sql.orc.enableVectorizedReader` is set to `true`. For the Hive ORC
+serde tables (e.g., the ones created using the clause `USING HIVE OPTIONS (fileFormat 'ORC')`),
+the vectorized reader is used when `spark.sql.hive.convertMetastoreOrc` is also set to `true`.
+
+<table class="table">
+  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th></tr>
+  <tr>
+    <td><code>spark.sql.orc.impl</code></td>
+    <td><code>hive</code></td>
+    <td>The name of ORC implementation. It can be one of <code>native</code> and <code>hive</code>. <code>native</code> means the native ORC support that is built on Apache ORC 1.4. `hive` means the ORC library in Hive 1.2.1.</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.orc.enableVectorizedReader</code></td>
+    <td><code>true</code></td>
+    <td>Enables vectorized orc decoding in <code>native</code> implementation. If <code>false</code>, a new non-vectorized ORC reader is used in <code>native</code> implementation. For <code>hive</code> implementation, this is ignored.</td>
+  </tr>
+</table>
+
 ## JSON Datasets
 <div class="codetabs">
 
@@ -1191,7 +1214,7 @@ The following options can be used to configure the version of Hive that is used 
     <td><code>1.2.1</code></td>
     <td>
       Version of the Hive metastore. Available
-      options are <code>0.12.0</code> through <code>1.2.1</code>.
+      options are <code>0.12.0</code> through <code>2.3.2</code>.
     </td>
   </tr>
   <tr>
@@ -1666,6 +1689,10 @@ using the call `toPandas()` and when creating a Spark DataFrame from a Pandas Da
 `createDataFrame(pandas_df)`. To use Arrow when executing these calls, users need to first set
 the Spark configuration 'spark.sql.execution.arrow.enabled' to 'true'. This is disabled by default.
 
+In addition, optimizations enabled by 'spark.sql.execution.arrow.enabled' could fallback automatically
+to non-Arrow optimization implementation if an error occurs before the actual computation within Spark.
+This can be controlled by 'spark.sql.execution.arrow.fallback.enabled'.
+
 <div class="codetabs">
 <div data-lang="python" markdown="1">
 {% include_example dataframe_with_arrow python/sql/arrow.py %}
@@ -1676,7 +1703,7 @@ Using the above optimizations with Arrow will produce the same results as when A
 enabled. Note that even with Arrow, `toPandas()` results in the collection of all records in the
 DataFrame to the driver program and should be done on a small subset of the data. Not all Spark
 data types are currently supported and an error can be raised if a column has an unsupported type,
-see [Supported Types](#supported-sql-arrow-types). If an error occurs during `createDataFrame()`,
+see [Supported SQL Types](#supported-sql-arrow-types). If an error occurs during `createDataFrame()`,
 Spark will fall back to create the DataFrame without Arrow.
 
 ## Pandas UDFs (a.k.a. Vectorized UDFs)
@@ -1734,7 +1761,7 @@ For detailed usage, please see [`pyspark.sql.functions.pandas_udf`](api/python/p
 
 ### Supported SQL Types
 
-Currently, all Spark SQL data types are supported by Arrow-based conversion except `MapType`,
+Currently, all Spark SQL data types are supported by Arrow-based conversion except `BinaryType`, `MapType`,
 `ArrayType` of `TimestampType`, and nested `StructType`.
 
 ### Setting Arrow Batch Size
@@ -1773,6 +1800,14 @@ working with timestamps in `pandas_udf`s to get the best performance, see
 [here](https://pandas.pydata.org/pandas-docs/stable/timeseries.html) for details.
 
 # Migration Guide
+
+## Upgrading From Spark SQL 2.3 to 2.4
+
+  - Since Spark 2.4, Spark maximizes the usage of a vectorized ORC reader for ORC files by default. To do that, `spark.sql.orc.impl` and `spark.sql.orc.filterPushdown` change their default values to `native` and `true` respectively.
+  - In PySpark, when Arrow optimization is enabled, previously `toPandas` just failed when Arrow optimization is unabled to be used whereas `createDataFrame` from Pandas DataFrame allowed the fallback to non-optimization. Now, both `toPandas` and `createDataFrame` from Pandas DataFrame allow the fallback by default, which can be switched off by `spark.sql.execution.arrow.fallback.enabled`.
+ - Since Spark 2.4, writing an empty dataframe to a directory launches at least one write task, even if physically the dataframe has no partition. This introduces a small behavior change that for self-describing file formats like Parquet and Orc, Spark creates a metadata-only file in the target directory when writing a 0-partition dataframe, so that schema inference can still work if users read that directory later. The new behavior is more reasonable and more consistent regarding writing empty dataframe.
+ - Since Spark 2.4, expression IDs in UDF arguments do not appear in column names. For example, an column name in Spark 2.4 is not `UDF:f(col0 AS colA#28)` but ``UDF:f(col0 AS `colA`)``.
+ - Since Spark 2.4, writing a dataframe with an empty or nested empty schema using any file formats (parquet, orc, json, text, csv etc.) is not allowed. An exception is thrown when attempting to write dataframes with empty schema. 
 
 ## Upgrading From Spark SQL 2.2 to 2.3
 
@@ -1929,10 +1964,13 @@ working with timestamps in `pandas_udf`s to get the best performance, see
     - The rules to determine the result type of an arithmetic operation have been updated. In particular, if the precision / scale needed are out of the range of available values, the scale is reduced up to 6, in order to prevent the truncation of the integer part of the decimals. All the arithmetic operations are affected by the change, ie. addition (`+`), subtraction (`-`), multiplication (`*`), division (`/`), remainder (`%`) and positive module (`pmod`).
     - Literal values used in SQL operations are converted to DECIMAL with the exact precision and scale needed by them.
     - The configuration `spark.sql.decimalOperations.allowPrecisionLoss` has been introduced. It defaults to `true`, which means the new behavior described here; if set to `false`, Spark uses previous rules, ie. it doesn't adjust the needed scale to represent the values and it returns NULL if an exact representation of the value is not possible.
+  - In PySpark, `df.replace` does not allow to omit `value` when `to_replace` is not a dictionary. Previously, `value` could be omitted in the other cases and had `None` by default, which is counterintuitive and error prone.
 
 ## Upgrading From Spark SQL 2.1 to 2.2
 
   - Spark 2.1.1 introduced a new configuration key: `spark.sql.hive.caseSensitiveInferenceMode`. It had a default setting of `NEVER_INFER`, which kept behavior identical to 2.1.0. However, Spark 2.2.0 changes this setting's default value to `INFER_AND_SAVE` to restore compatibility with reading Hive metastore tables whose underlying file schema have mixed-case column names. With the `INFER_AND_SAVE` configuration value, on first access Spark will perform schema inference on any Hive metastore table for which it has not already saved an inferred schema. Note that schema inference can be a very time consuming operation for tables with thousands of partitions. If compatibility with mixed-case column names is not a concern, you can safely set `spark.sql.hive.caseSensitiveInferenceMode` to `NEVER_INFER` to avoid the initial overhead of schema inference. Note that with the new default `INFER_AND_SAVE` setting, the results of the schema inference are saved as a metastore key for future use. Therefore, the initial schema inference occurs only at a table's first access.
+  
+  - Since Spark 2.2.1 and 2.3.0, the schema is always inferred at runtime when the data source tables have the columns that exist in both partition schema and data schema. The inferred schema does not have the partitioned columns. When reading the table, Spark respects the partition values of these overlapping columns instead of the values stored in the data source files. In 2.2.0 and 2.1.x release, the inferred schema is partitioned but the data of the table is invisible to users (i.e., the result set is empty).
 
 ## Upgrading From Spark SQL 2.0 to 2.1
 
@@ -2193,7 +2231,7 @@ referencing a singleton.
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.
 Currently Hive SerDes and UDFs are based on Hive 1.2.1,
 and Spark SQL can be connected to different versions of Hive Metastore
-(from 0.12.0 to 2.1.1. Also see [Interacting with Different Versions of Hive Metastore] (#interacting-with-different-versions-of-hive-metastore)).
+(from 0.12.0 to 2.3.2. Also see [Interacting with Different Versions of Hive Metastore](#interacting-with-different-versions-of-hive-metastore)).
 
 #### Deploying in Existing Hive Warehouses
 

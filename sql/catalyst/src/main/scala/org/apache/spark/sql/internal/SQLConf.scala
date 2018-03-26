@@ -141,6 +141,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val CACHE_VECTORIZED_READER_ENABLED =
+    buildConf("spark.sql.inMemoryColumnarStorage.enableVectorizedReader")
+      .doc("Enables vectorized reader for columnar caching.")
+      .booleanConf
+      .createWithDefault(true)
+
   val COLUMN_VECTOR_OFFHEAP_ENABLED =
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
@@ -375,6 +381,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PARQUET_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.parquet.columnarReaderBatchSize")
+    .doc("The number of rows to include in a parquet vectorized reader batch. The number should " +
+      "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
+    .intConf
+    .createWithDefault(4096)
+
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
@@ -387,7 +399,7 @@ object SQLConf {
 
   val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
     .doc("When native, use the native version of ORC support instead of the ORC library in Hive " +
-      "1.2.1. It is 'hive' by default prior to Spark 2.3.")
+      "1.2.1. It is 'hive' by default prior to Spark 2.4.")
     .internal()
     .stringConf
     .checkValues(Set("hive", "native"))
@@ -397,6 +409,12 @@ object SQLConf {
     .doc("Enables vectorized orc decoding.")
     .booleanConf
     .createWithDefault(true)
+
+  val ORC_VECTORIZED_READER_BATCH_SIZE = buildConf("spark.sql.orc.columnarReaderBatchSize")
+    .doc("The number of rows to include in a orc vectorized reader batch. The number should " +
+      "be carefully chosen to minimize overhead and avoid OOMs in reading data.")
+    .intConf
+    .createWithDefault(4096)
 
   val ORC_COPY_BATCH_TO_SPARK = buildConf("spark.sql.orc.copyBatchToSpark")
     .doc("Whether or not to copy the ORC columnar batch to Spark columnar batch in the " +
@@ -474,6 +492,14 @@ object SQLConf {
       "to parse.")
     .stringConf
     .createWithDefault("_corrupt_record")
+
+  val FROM_JSON_FORCE_NULLABLE_SCHEMA = buildConf("spark.sql.fromJsonForceNullableSchema")
+    .internal()
+    .doc("When true, force the output schema of the from_json() function to be nullable " +
+      "(including all the fields). Otherwise, the schema might not be compatible with" +
+      "actual data, which leads to curruptions.")
+    .booleanConf
+    .createWithDefault(true)
 
   val BROADCAST_TIMEOUT = buildConf("spark.sql.broadcastTimeout")
     .doc("Timeout in seconds for the broadcast wait time in broadcast joins.")
@@ -1040,15 +1066,22 @@ object SQLConf {
       .intConf
       .createWithDefault(100)
 
-  val ARROW_EXECUTION_ENABLE =
+  val ARROW_EXECUTION_ENABLED =
     buildConf("spark.sql.execution.arrow.enabled")
       .doc("When true, make use of Apache Arrow for columnar data transfers. Currently available " +
         "for use with pyspark.sql.DataFrame.toPandas, and " +
         "pyspark.sql.SparkSession.createDataFrame when its input is a Pandas DataFrame. " +
         "The following data types are unsupported: " +
-        "MapType, ArrayType of TimestampType, and nested StructType.")
+        "BinaryType, MapType, ArrayType of TimestampType, and nested StructType.")
       .booleanConf
       .createWithDefault(false)
+
+  val ARROW_FALLBACK_ENABLED =
+    buildConf("spark.sql.execution.arrow.fallback.enabled")
+      .doc("When true, optimizations enabled by 'spark.sql.execution.arrow.enabled' will " +
+        "fallback automatically to non-optimized implementations if an error occurs.")
+      .booleanConf
+      .createWithDefault(true)
 
   val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
     buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
@@ -1128,9 +1161,19 @@ object SQLConf {
   val DISABLED_V2_STREAMING_WRITERS = buildConf("spark.sql.streaming.disabledV2Writers")
     .internal()
     .doc("A comma-separated list of fully qualified data source register class names for which" +
-      " StreamWriteSupport is disabled. Writes to these sources will fail back to the V1 Sink.")
+      " StreamWriteSupport is disabled. Writes to these sources will fall back to the V1 Sinks.")
     .stringConf
     .createWithDefault("")
+
+  val DISABLED_V2_STREAMING_MICROBATCH_READERS =
+    buildConf("spark.sql.streaming.disabledV2MicroBatchReaders")
+      .internal()
+      .doc(
+        "A comma-separated list of fully qualified data source register class names for which " +
+          "MicroBatchReadSupport is disabled. Reads from these sources will fall back to the " +
+          "V1 Sources.")
+      .stringConf
+      .createWithDefault("")
 
   object PartitionOverwriteMode extends Enumeration {
     val STATIC, DYNAMIC = Value
@@ -1250,11 +1293,17 @@ class SQLConf extends Serializable with Logging {
 
   def orcVectorizedReaderEnabled: Boolean = getConf(ORC_VECTORIZED_READER_ENABLED)
 
+  def orcVectorizedReaderBatchSize: Int = getConf(ORC_VECTORIZED_READER_BATCH_SIZE)
+
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
 
+  def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
+
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
+
+  def cacheVectorizedReaderEnabled: Boolean = getConf(CACHE_VECTORIZED_READER_ENABLED)
 
   def numShufflePartitions: Int = getConf(SHUFFLE_PARTITIONS)
 
@@ -1484,7 +1533,9 @@ class SQLConf extends Serializable with Logging {
 
   def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 
-  def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
+  def arrowEnabled: Boolean = getConf(ARROW_EXECUTION_ENABLED)
+
+  def arrowFallbackEnabled: Boolean = getConf(ARROW_FALLBACK_ENABLED)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
@@ -1500,6 +1551,9 @@ class SQLConf extends Serializable with Logging {
     getConf(CONTINUOUS_STREAMING_EXECUTOR_POLL_INTERVAL_MS)
 
   def disabledV2StreamingWriters: String = getConf(DISABLED_V2_STREAMING_WRITERS)
+
+  def disabledV2StreamingMicroBatchReaders: String =
+    getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
 
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 

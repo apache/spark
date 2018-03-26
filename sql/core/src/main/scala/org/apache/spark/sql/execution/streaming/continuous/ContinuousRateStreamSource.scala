@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.streaming.{RateSourceProvider, RateStreamO
 import org.apache.spark.sql.execution.streaming.sources.RateStreamSourceV2
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.StructType
 
 case class RateStreamPartitionOffset(
@@ -61,7 +61,7 @@ class RateStreamContinuousReader(options: DataSourceOptions)
 
   private var offset: Offset = _
 
-  override def setOffset(offset: java.util.Optional[Offset]): Unit = {
+  override def setStartOffset(offset: java.util.Optional[Offset]): Unit = {
     this.offset = offset.orElse(RateStreamSourceV2.createInitialOffset(numPartitions, creationTime))
   }
 
@@ -106,7 +106,20 @@ case class RateStreamContinuousDataReaderFactory(
     partitionIndex: Int,
     increment: Long,
     rowsPerSecond: Double)
-  extends DataReaderFactory[Row] {
+  extends ContinuousDataReaderFactory[Row] {
+
+  override def createDataReaderWithOffset(offset: PartitionOffset): DataReader[Row] = {
+    val rateStreamOffset = offset.asInstanceOf[RateStreamPartitionOffset]
+    require(rateStreamOffset.partition == partitionIndex,
+      s"Expected partitionIndex: $partitionIndex, but got: ${rateStreamOffset.partition}")
+    new RateStreamContinuousDataReader(
+      rateStreamOffset.currentValue,
+      rateStreamOffset.currentTimeMs,
+      partitionIndex,
+      increment,
+      rowsPerSecond)
+  }
+
   override def createDataReader(): DataReader[Row] =
     new RateStreamContinuousDataReader(
       startValue, startTimeMs, partitionIndex, increment, rowsPerSecond)

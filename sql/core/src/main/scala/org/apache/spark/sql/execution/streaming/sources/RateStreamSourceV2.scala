@@ -29,10 +29,9 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.streaming.MicroBatchReadSupport
-import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
 import org.apache.spark.util.{ManualClock, SystemClock}
 
@@ -152,7 +151,7 @@ case class RateStreamBatchTask(vals: Seq[(Long, Long)]) extends DataReaderFactor
 }
 
 class RateStreamBatchReader(vals: Seq[(Long, Long)]) extends DataReader[Row] {
-  var currentIndex = -1
+  private var currentIndex = -1
 
   override def next(): Boolean = {
     // Return true as long as the new index is in the seq.
