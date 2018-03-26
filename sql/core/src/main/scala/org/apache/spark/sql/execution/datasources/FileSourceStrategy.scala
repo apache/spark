@@ -68,7 +68,7 @@ object FileSourceStrategy extends Strategy with Logging {
 
     def getMatchedBucketBitSet(attr: Attribute, v: Any): BitSet = {
       val matchedBuckets = new BitSet(numBuckets)
-      matchedBuckets.set(getBucketId(attr, numBuckets, v))
+      matchedBuckets.set(BucketingUtils.getBucketIdFromValue(attr, numBuckets, v))
       matchedBuckets
     }
 
@@ -112,10 +112,7 @@ object FileSourceStrategy extends Strategy with Logging {
 
     val bucketColumnName = bucketSpec.bucketColumnNames.head
     val numBuckets = bucketSpec.numBuckets
-    //    val matchedBuckets = new BitSet(numBuckets)
-    //    matchedBuckets.clear()
 
-    // TODO should be OR?
     val matchedBuckets = normalizedFilters
       .map(f => getExpressionBuckets(f, bucketColumnName, numBuckets))
       .fold(new BitSet(numBuckets))(_ | _)
@@ -128,30 +125,6 @@ object FileSourceStrategy extends Strategy with Logging {
 
     // None means all the buckets need to be scanned
     if (matchedBuckets.cardinality() == 0) None else Some(matchedBuckets)
-  }
-
-  //  // Get the bucket ID based on the bucketing values.
-  //  // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
-  //  def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
-  //    val mutableRow = new SpecificInternalRow(Seq(bucketColumn.dataType))
-  //    mutableRow(0) = cast(Literal(value), bucketColumn.dataType).eval(null)
-  //    val bucketIdGeneration = UnsafeProjection.create(
-  //      HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,
-  //      bucketColumn :: Nil)
-  //
-  //    bucketIdGeneration(mutableRow).getInt(0)
-  //  }
-
-  // Given bucketColumn, numBuckets and value, returns the corresponding bucketId
-  // TODO replace with getBucketId from DataSourceStrategy
-  private def getBucketId(attr: Attribute, numBuckets: Int, value: Any): Int = {
-    val mutableInternalRow = new SpecificInternalRow(Seq(attr.dataType))
-    mutableInternalRow.update(0, value)
-
-    val bucketIdGenerator = UnsafeProjection.create(
-      HashPartitioning(Seq(attr), numBuckets).partitionIdExpression :: Nil,
-      attr :: Nil)
-    bucketIdGenerator(mutableInternalRow).getInt(0)
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {

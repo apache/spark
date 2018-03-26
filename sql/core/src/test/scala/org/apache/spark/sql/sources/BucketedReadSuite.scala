@@ -24,14 +24,14 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
-import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.datasources.BucketingUtils
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.execution.{DataSourceScanExec, SortExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
+import org.apache.spark.sql.test.{SQLTestUtils, SharedSQLContext}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.BitSet
 
@@ -90,7 +90,6 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
                                  originalDataFrame: DataFrame): Unit = {
     // This test verifies parts of the plan. Disable whole stage codegen.
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
-      val strategy = DataSourceStrategy(spark.sessionState.conf)
       val bucketedDataFrame = spark.table("bucketed_table").select("i", "j", "k")
       val BucketSpec(numBuckets, bucketColumnNames, _) = bucketSpec
       // Limit: bucket pruning only works when the bucket column has one and only one column
@@ -107,7 +106,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       if (bucketValues.nonEmpty) {
         val matchedBuckets = new BitSet(numBuckets)
         bucketValues.foreach { value =>
-          matchedBuckets.set(strategy.getBucketId(bucketColumn, numBuckets, value))
+          matchedBuckets.set(BucketingUtils.getBucketIdFromValue(bucketColumn, numBuckets, value))
         }
         val invalidBuckets = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
           // return indexes of partitions that should have been pruned and are not empty
@@ -236,28 +235,25 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           filterCondition = $"j" === j && $"i" > j % 5,
           df)
 
+        // check multiple bucket values OR condition
         checkPrunedAnswers(
           bucketSpec,
           bucketValues = Seq(j, j + 1),
           filterCondition = $"j" === j || $"j" === (j + 1),
           df)
 
+        // check bucket value and none bucket value OR condition
         checkPrunedAnswers(
           bucketSpec,
           bucketValues = Nil,
           filterCondition = $"j" === j || $"i" === 0,
           df)
 
+        // check AND condition in complex expression
         checkPrunedAnswers(
           bucketSpec,
           bucketValues = Seq(j),
           filterCondition = ($"i" === 0 || $"k" > $"j") && $"j" === j,
-          df)
-
-        checkPrunedAnswers(
-          bucketSpec,
-          bucketValues = Seq(j, j + 1),
-          filterCondition = $"j" === j || ($"j" === (j + 1) && $"i" === 0),
           df)
       }
     }
