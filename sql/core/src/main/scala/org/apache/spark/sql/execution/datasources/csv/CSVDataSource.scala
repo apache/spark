@@ -145,13 +145,9 @@ object TextInputCSVDataSource extends CSVDataSource {
       // The header will be removed from lines.
       // Note: if there are only comments in the first block, the header would probably
       // be not extracted.
-      val checkHeader = UnivocityParser.checkHeader(
-        parser,
-        dataSchema,
-        _: String,
-        file.filePath
-      )
-      CSVUtils.extractHeader(lines, parser.options).foreach(checkHeader(_))
+      CSVUtils.extractHeader(lines, parser.options).foreach { header =>
+        UnivocityParser.checkHeader(header, parser, dataSchema, file.filePath)
+      }
     }
 
     UnivocityParser.parseIterator(lines, parser, schema)
