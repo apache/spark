@@ -134,6 +134,63 @@ class Correlation(object):
         return _java2py(sc, javaCorrObj.corr(*args))
 
 
+class KolmogorovSmirnovTest(object):
+    """
+    .. note:: Experimental
+
+    Conduct the two-sided Kolmogorov Smirnov (KS) test for data sampled from a
+    continuous distribution. By comparing the largest difference between the empirical cumulative
+    distribution of the sample data and the theoretical distribution we can provide a test for the
+    the null hypothesis that the sample data comes from that theoretical distribution.
+
+    :param dataset:
+      a dataset or a dataframe containing the sample of data to test.
+    :param sampleCol:
+      Name of sample column in dataset, of any numerical type.
+    :param distName:
+      a `string` name for a theoretical distribution, currently only support "norm".
+    :param params:
+      a list of `Double` values specifying the parameters to be used for the theoretical
+      distribution
+    :return:
+      A dataframe that contains the Kolmogorov-Smirnov test result for the input sampled data.
+      This DataFrame will contain a single Row with the following fields:
+      - `pValue: Double`
+      - `statistic: Double`
+
+    >>> from pyspark.ml.stat import KolmogorovSmirnovTest
+    >>> dataset = [[-1.0], [0.0], [1.0]]
+    >>> dataset = spark.createDataFrame(dataset, ['sample'])
+    >>> ksResult = KolmogorovSmirnovTest.test(dataset, 'sample', 'norm', 0.0, 1.0).collect()[0]
+    >>> round(ksResult.pValue, 3)
+    1.0
+    >>> round(ksResult.statistic, 3)
+    0.175
+    >>> dataset = [[2.0], [3.0], [4.0]]
+    >>> dataset = spark.createDataFrame(dataset, ['sample'])
+    >>> ksResult = KolmogorovSmirnovTest.test(dataset, 'sample', 'norm', 3.0, 1.0).collect()[0]
+    >>> round(ksResult.pValue, 3)
+    1.0
+    >>> round(ksResult.statistic, 3)
+    0.175
+
+    .. versionadded:: 2.4.0
+
+    """
+    @staticmethod
+    @since("2.4.0")
+    def test(dataset, sampleCol, distName, *params):
+        """
+        Perform a Kolmogorov-Smirnov test using dataset.
+        """
+        sc = SparkContext._active_spark_context
+        javaTestObj = _jvm().org.apache.spark.ml.stat.KolmogorovSmirnovTest
+        dataset = _py2java(sc, dataset)
+        params = [float(param) for param in params]
+        return _java2py(sc, javaTestObj.test(dataset, sampleCol, distName,
+                                             _jvm().PythonUtils.toSeq(params)))
+
+
 if __name__ == "__main__":
     import doctest
     import pyspark.ml.stat
