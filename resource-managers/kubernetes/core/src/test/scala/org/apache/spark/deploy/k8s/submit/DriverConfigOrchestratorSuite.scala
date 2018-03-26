@@ -47,7 +47,6 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
     validateStepTypes(
       orchestrator,
       classOf[DriverServiceBootstrapStep],
-      classOf[DriverKubernetesCredentialsStep],
       classOf[DependencyResolutionStep])
   }
 
@@ -64,7 +63,6 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
     validateStepTypes(
       orchestrator,
       classOf[DriverServiceBootstrapStep],
-      classOf[DriverKubernetesCredentialsStep])
   }
 
   test("Submission steps with driver secrets to mount") {
@@ -84,7 +82,6 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
     validateStepTypes(
       orchestrator,
       classOf[DriverServiceBootstrapStep],
-      classOf[DriverKubernetesCredentialsStep],
       classOf[DependencyResolutionStep],
       classOf[DriverMountSecretsStep])
   }

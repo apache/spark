@@ -71,9 +71,6 @@ private[spark] class DriverConfigOrchestrator(
       sparkConf,
       new SystemClock)
 
-    val kubernetesCredentialsStep = new DriverKubernetesCredentialsStep(
-      sparkConf, kubernetesResourceNamePrefix)
-
     val additionalMainAppJar = if (mainAppResource.nonEmpty) {
        val mayBeResource = mainAppResource.get match {
         case JavaMainAppResource(resource) if resource != SparkLauncher.NO_RESOURCE =>
@@ -114,8 +111,7 @@ private[spark] class DriverConfigOrchestrator(
     }
 
     Seq(
-      serviceBootstrapStep,
-      kubernetesCredentialsStep) ++
+      serviceBootstrapStep) ++
       dependencyResolutionStep ++
       mountSecretsStep
   }
