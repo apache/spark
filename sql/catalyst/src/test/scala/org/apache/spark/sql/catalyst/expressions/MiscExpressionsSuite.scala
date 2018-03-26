@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -40,7 +43,23 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("uuid") {
-    checkEvaluation(Length(Uuid()), 36)
-    assert(evaluate(Uuid()) !== evaluate(Uuid()))
+    def assertIncorrectEval(f: () => Unit): Unit = {
+      intercept[Exception] {
+        f()
+      }.getMessage().contains("Incorrect evaluation")
+    }
+
+    checkEvaluation(Length(Uuid(Some(0))), 36)
+    val r = new Random()
+    val seed1 = Some(r.nextLong())
+    val uuid1 = evaluate(Uuid(seed1)).asInstanceOf[UTF8String]
+    checkEvaluation(Uuid(seed1), uuid1.toString)
+
+    val seed2 = Some(r.nextLong())
+    val uuid2 = evaluate(Uuid(seed2)).asInstanceOf[UTF8String]
+    assertIncorrectEval(() => checkEvaluationWithoutCodegen(Uuid(seed1), uuid2))
+    assertIncorrectEval(() => checkEvaluationWithGeneratedMutableProjection(Uuid(seed1), uuid2))
+    assertIncorrectEval(() => checkEvalutionWithUnsafeProjection(Uuid(seed1), uuid2))
+    assertIncorrectEval(() => checkEvaluationWithOptimization(Uuid(seed1), uuid2))
   }
 }
