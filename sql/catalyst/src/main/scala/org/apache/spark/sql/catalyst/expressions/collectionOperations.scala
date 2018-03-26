@@ -304,8 +304,11 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val arrayCheck = checkInputDataTypesAreArrays
-    if(arrayCheck.isFailure) arrayCheck
-    else TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
+    if(arrayCheck.isFailure) {
+      arrayCheck
+    } else {
+      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
+    }
   }
 
   private def checkInputDataTypesAreArrays(): TypeCheckResult =
@@ -352,7 +355,7 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
     val variableName = ctx.freshName("numElements")
     val code = elements
       .map(el => s"$variableName += $el.numElements();")
-      .foldLeft( s"int $variableName = 0;")((acc, s) => acc + "\n" + s)
+      .foldLeft(s"int $variableName = 0;")((acc, s) => acc + "\n" + s)
     (code, variableName)
   }
 
@@ -372,7 +375,7 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
     val unsafeArraySizeInBytes = s"""
       |int $arraySizeName = UnsafeArrayData.calculateHeaderPortionInBytes($numElemName) +
       |${classOf[ByteArrayMethods].getName}.roundNumberOfBytesToNearestWord(
-      |${elementType.defaultSize} * $numElemName
+      |  ${elementType.defaultSize} * $numElemName
       |);
       """.stripMargin
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
@@ -380,16 +383,16 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
     val assignments = elements.map { el =>
       s"""
-        |for(int z = 0; z < $el.numElements(); z++) {
-        | if($el.isNullAt(z)) {
-        |   $tempArrayDataName.setNullAt($counter);
-        | } else {
-        |   $tempArrayDataName.set$primitiveValueTypeName(
-        |     $counter,
-        |     $el.get$primitiveValueTypeName(z)
-        |   );
-        | }
-        | $counter++;
+        |for (int z = 0; z < $el.numElements(); z++) {
+        |  if ($el.isNullAt(z)) {
+        |    $tempArrayDataName.setNullAt($counter);
+        |  } else {
+        |    $tempArrayDataName.set$primitiveValueTypeName(
+        |      $counter,
+        |      $el.get$primitiveValueTypeName(z)
+        |    );
+        |  }
+        |  $counter++;
         |}
         """.stripMargin
     }.mkString("\n")
@@ -404,7 +407,7 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
       |int $counter = 0;
       |$assignments
       |$arrayDataName = $tempArrayDataName;
-    """.stripMargin
+      """.stripMargin
 
   }
 
@@ -420,11 +423,11 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
 
     val assignments = elements.map { el =>
       s"""
-        |for(int z = 0; z < $el.numElements(); z++) {
+        |for (int z = 0; z < $el.numElements(); z++) {
         |  $arrayName[$counter] = $el.array()[z];
         |  $counter++;
         |}
-     """.stripMargin
+        """.stripMargin
     }.mkString("\n")
 
     s"""
@@ -433,7 +436,7 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
       |int $counter = 0;
       |$assignments
       |$arrayDataName = new $genericArrayClass($arrayName);
-     """.stripMargin
+      """.stripMargin
   }
 
   override def prettyName: String = "concat_arrays"

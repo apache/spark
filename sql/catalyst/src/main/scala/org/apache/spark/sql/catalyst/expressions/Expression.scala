@@ -701,7 +701,7 @@ abstract class TernaryExpression extends Expression {
 trait UserDefinedExpression
 
 /**
- * The trait covers logic for performing null save evaluation and code generation.
+ * The trait covers logic for performing null safe evaluation and code generation.
  */
 trait NullSafeEvaluation extends Expression
 {
@@ -716,9 +716,12 @@ trait NullSafeEvaluation extends Expression
    */
   override def eval(input: InternalRow): Any =
   {
-    val values = children.map(_.eval(input))
-    if (values.contains(null)) null
-    else nullSafeEval(values)
+    val values = children.toStream.map(_.eval(input))
+    if (values.contains(null)) {
+      null
+    } else {
+      nullSafeEval(values)
+    }
   }
 
   /**
@@ -761,12 +764,11 @@ trait NullSafeEvaluation extends Expression
     val resultCode = f(gens.map(_.value))
 
     if (nullable) {
-      val nullSafeEval =
-        (s"""
+      val nullSafeEval = children.zip(gens).foldRight(s"""
           ${ev.isNull} = false; // resultCode could change nullability.
           $resultCode
-        """ /: children.zip(gens)) {
-          case (acc, (child, gen)) =>
+        """) {
+          case ((child, gen), acc) =>
             gen.code + ctx.nullSafeExec(child.nullable, gen.isNull)(acc)
         }
 
