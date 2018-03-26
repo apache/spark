@@ -959,25 +959,28 @@ class SparkSubmitSuite
   }
 
   test("download remote resource if it is not supported by yarn service") {
-    testRemoteResources(isHttpSchemeBlacklisted = false, supportMockHttpFs = false)
+    testRemoteResources(enableHttpFs = false, blacklistHttpFs = false)
   }
 
   test("avoid downloading remote resource if it is supported by yarn service") {
-    testRemoteResources(isHttpSchemeBlacklisted = false, supportMockHttpFs = true)
+    testRemoteResources(enableHttpFs = true, blacklistHttpFs = false)
   }
 
   test("force download from blacklisted schemes") {
-    testRemoteResources(isHttpSchemeBlacklisted = true, supportMockHttpFs = true)
+    testRemoteResources(enableHttpFs = true, blacklistHttpFs = true)
   }
 
-  private def testRemoteResources(isHttpSchemeBlacklisted: Boolean,
-      supportMockHttpFs: Boolean): Unit = {
+  private def testRemoteResources(
+      enableHttpFs: Boolean,
+      blacklistHttpFs: Boolean): Unit = {
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
-    if (supportMockHttpFs) {
+    if (enableHttpFs) {
       hadoopConf.set("fs.http.impl", classOf[TestFileSystem].getCanonicalName)
-      hadoopConf.set("fs.http.impl.disable.cache", "true")
+    } else {
+      hadoopConf.set("fs.http.impl", getClass().getName() + ".DoesNotExist")
     }
+    hadoopConf.set("fs.http.impl.disable.cache", "true")
 
     val tmpDir = Utils.createTempDir()
     val mainResource = File.createTempFile("tmpPy", ".py", tmpDir)
@@ -986,20 +989,19 @@ class SparkSubmitSuite
     val tmpHttpJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpDir)
     val tmpHttpJarPath = s"http://${new File(tmpHttpJar.toURI).getAbsolutePath}"
 
+    val forceDownloadArgs = if (blacklistHttpFs) {
+      Seq("--conf", "spark.yarn.dist.forceDownloadSchemes=http")
+    } else {
+      Nil
+    }
+
     val args = Seq(
       "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
       "--name", "testApp",
       "--master", "yarn",
       "--deploy-mode", "client",
-      "--jars", s"$tmpS3JarPath,$tmpHttpJarPath",
-      s"s3a://$mainResource"
-    ) ++ (
-      if (isHttpSchemeBlacklisted) {
-        Seq("--conf", "spark.yarn.dist.forceDownloadSchemes=http,https")
-      } else {
-        Nil
-      }
-    )
+      "--jars", s"$tmpS3JarPath,$tmpHttpJarPath"
+    ) ++ forceDownloadArgs ++ Seq(s"s3a://$mainResource")
 
     val appArgs = new SparkSubmitArguments(args)
     val (_, _, conf, _) = SparkSubmit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
@@ -1009,7 +1011,7 @@ class SparkSubmitSuite
     // The URI of remote S3 resource should still be remote.
     assert(jars.contains(tmpS3JarPath))
 
-    if (supportMockHttpFs) {
+    if (enableHttpFs && !blacklistHttpFs) {
       // If Http FS is supported by yarn service, the URI of remote http resource should
       // still be remote.
       assert(jars.contains(tmpHttpJarPath))
