@@ -1302,7 +1302,39 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
             .collect()
         }
         assert(exception.getMessage.contains(
-          "Fields in the header of csv file are not matched to field names of the schema"
+          "CSV file header does not contain the expected fields"
+        ))
+
+        val shortSchema = new StructType().add("f1", DoubleType)
+        val exceptionForShortSchema = intercept[SparkException] {
+          spark.read
+            .schema(shortSchema)
+            .option("multiLine", multiLine)
+            .option("header", "true")
+            .option("checkHeader", "true")
+            .csv(path.getCanonicalPath)
+            .collect()
+        }
+        assert(exceptionForShortSchema.getMessage.contains(
+          "Number of column in CSV header is not equal to number of fields in the schema"
+        ))
+
+        val longSchema = new StructType()
+          .add("f1", DoubleType)
+          .add("f2", DoubleType)
+          .add("f3", DoubleType)
+
+        val exceptionForLongSchema = intercept[SparkException] {
+          spark.read
+            .schema(longSchema)
+            .option("multiLine", multiLine)
+            .option("header", "true")
+            .option("checkHeader", "true")
+            .csv(path.getCanonicalPath)
+            .collect()
+        }
+        assert(exceptionForLongSchema.getMessage.contains(
+          "Header length: 2, schema size: 3"
         ))
       }
     }

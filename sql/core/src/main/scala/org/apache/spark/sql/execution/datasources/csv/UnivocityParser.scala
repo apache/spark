@@ -317,18 +317,36 @@ private[csv] object UnivocityParser {
     fileName: String
   ): Unit = {
     if (parser.options.checkHeader && columnNames != null) {
-      val fieldNames = schema.map(_.name)
-      val isMatched = fieldNames.zip(columnNames).forall { pair =>
-        val (nameInSchema, nameInHeader) = pair
-        nameInSchema == nameInHeader
-      }
-      if (!isMatched) {
-        throw new IllegalArgumentException(
-          s"""|Fields in the header of csv file are not matched to field names of the schema:
-              | Header: ${columnNames.mkString(", ")}
-              | Schema: ${fieldNames.mkString(", ")}
+      val fieldNames = schema.map(_.name).toIndexedSeq
+      val (headerLen, schemaSize) = (columnNames.size, fieldNames.length)
+      var error: Option[String] = None
+
+      if (headerLen == schemaSize) {
+        var i = 0
+        while (error.isEmpty && i < headerLen) {
+          val nameInSchema = fieldNames(i).toLowerCase
+          val nameInHeader = columnNames(i).toLowerCase
+          if (nameInHeader != nameInSchema) {
+            error = Some(
+              s"""|CSV file header does not contain the expected fields.
+                  | Header: ${columnNames.mkString(", ")}
+                  | Schema: ${fieldNames.mkString(", ")}
+                  |Expected: $nameInSchema but found: $nameInHeader
+                  |CSV file: $fileName""".stripMargin
+            )
+          }
+          i += 1
+        }
+      } else {
+        error = Some(
+          s"""|Number of column in CSV header is not equal to number of fields in the schema:
+              | Header length: $headerLen, schema size: $schemaSize
               |CSV file: $fileName""".stripMargin
         )
+      }
+
+      error.headOption.foreach { msg =>
+        throw new IllegalArgumentException(msg)
       }
     }
   }
