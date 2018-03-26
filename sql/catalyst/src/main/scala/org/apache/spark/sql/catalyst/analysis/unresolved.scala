@@ -485,6 +485,15 @@ case class UnresolvedOrdinal(ordinal: Int)
  * Concatenates multiple columns of the same type into one.
  * @param children Could be string, binary or array expressions
  */
+@ExpressionDescription(
+  usage = "_FUNC_(col1, col2, ..., colN) - Returns the concatenation of col1, col2, ..., colN.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark', 'SQL');
+       SparkSQL
+      > SELECT _FUNC_(array(1, 2, 3), array(4, 5), array(6));
+       [1,2,3,4,5,6]
+  """)
 case class UnresolvedConcat(children: Seq[Expression]) extends Expression
   with Unevaluable {
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
