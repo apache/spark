@@ -22,7 +22,7 @@ if sys.version >= '3':
 
 from py4j.java_gateway import JavaClass
 
-from pyspark import RDD, since, keyword_only
+from pyspark import RDD, since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
