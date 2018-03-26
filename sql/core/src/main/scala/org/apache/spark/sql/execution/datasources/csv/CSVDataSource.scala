@@ -120,6 +120,61 @@ object CSVDataSource {
       TextInputCSVDataSource
     }
   }
+
+  def checkHeaderColumnNames(
+    schema: StructType,
+    columnNames: Array[String],
+    fileName: String,
+    checkHeaderFlag: Boolean
+  ): Unit = {
+    if (checkHeaderFlag && columnNames != null) {
+      val fieldNames = schema.map(_.name).toIndexedSeq
+      val (headerLen, schemaSize) = (columnNames.size, fieldNames.length)
+      var error: Option[String] = None
+
+      if (headerLen == schemaSize) {
+        var i = 0
+        while (error.isEmpty && i < headerLen) {
+          val nameInSchema = fieldNames(i).toLowerCase
+          val nameInHeader = columnNames(i).toLowerCase
+          if (nameInHeader != nameInSchema) {
+            error = Some(
+              s"""|CSV file header does not contain the expected fields.
+                  | Header: ${columnNames.mkString(", ")}
+                  | Schema: ${fieldNames.mkString(", ")}
+                  |Expected: $nameInSchema but found: $nameInHeader
+                  |CSV file: $fileName""".stripMargin
+            )
+          }
+          i += 1
+        }
+      } else {
+        error = Some(
+          s"""|Number of column in CSV header is not equal to number of fields in the schema:
+              | Header length: $headerLen, schema size: $schemaSize
+              |CSV file: $fileName""".stripMargin
+        )
+      }
+
+      error.headOption.foreach { msg =>
+        throw new IllegalArgumentException(msg)
+      }
+    }
+  }
+
+  def checkHeader(
+    header: String,
+    parser: CsvParser,
+    schema: StructType,
+    fileName: String,
+    checkHeaderFlag: Boolean
+  ): Unit = {
+    if (checkHeaderFlag) {
+      val columnNames = parser.parseLine(header)
+
+      checkHeaderColumnNames(schema, columnNames, fileName, checkHeaderFlag)
+    }
+  }
 }
 
 object TextInputCSVDataSource extends CSVDataSource {
@@ -146,7 +201,8 @@ object TextInputCSVDataSource extends CSVDataSource {
       // Note: if there are only comments in the first block, the header would probably
       // be not extracted.
       CSVUtils.extractHeader(lines, parser.options).foreach { header =>
-        UnivocityParser.checkHeader(header, parser, dataSchema, file.filePath)
+        CSVDataSource.checkHeader(header, parser.tokenizer, dataSchema,
+          file.filePath, parser.options.checkHeader)
       }
     }
 
@@ -220,7 +276,9 @@ object MultiLineCSVDataSource extends CSVDataSource {
       schema: StructType,
       dataSchema: StructType): Iterator[InternalRow] = {
     def checkHeader(header: Array[String]): Unit = {
-      UnivocityParser.checkHeaderColumnNames(parser, dataSchema, header, file.filePath)
+      CSVDataSource.checkHeaderColumnNames(dataSchema, header, file.filePath,
+        parser.options.checkHeader
+      )
     }
 
     UnivocityParser.parseStream(
