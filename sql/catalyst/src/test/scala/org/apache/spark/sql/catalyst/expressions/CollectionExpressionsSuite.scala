@@ -105,4 +105,41 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
   }
+
+  test("Flatten") {
+    val intType = ArrayType(ArrayType(IntegerType))
+    val ai0 = Literal.create(Seq(Seq(1, 2, 3), Seq(4, 5), Seq(6)), intType)
+    val ai1 = Literal.create(Seq(Seq(1, 2, 3), Seq.empty, Seq(6)), intType)
+    val ai2 = Literal.create(Seq(Seq(null, null, null), Seq(4, null), Seq(6)), intType)
+    val ai3 = Literal.create(Seq(null, Seq(4, null), Seq(6)), intType)
+    val ai4 = Literal.create(Seq(Seq(1)), intType)
+    val ai5 = Literal.create(Seq(Seq.empty), intType)
+    val ai6 = Literal.create(Seq.empty, intType)
+
+    checkEvaluation(Flatten(ai0), Seq(1, 2, 3, 4, 5, 6))
+    checkEvaluation(Flatten(ai1), Seq(1, 2, 3, 6))
+    checkEvaluation(Flatten(ai2), Seq(null, null, null, 4, null, 6))
+    checkEvaluation(Flatten(ai3), null)
+    checkEvaluation(Flatten(ai4), Seq(1))
+    checkEvaluation(Flatten(ai5), Seq.empty)
+    checkEvaluation(Flatten(ai6), Seq.empty)
+
+    val strType = ArrayType(ArrayType(StringType))
+    val as0 = Literal.create(Seq(Seq("a"), Seq("b", "c"), Seq("d", "e", "f")), strType)
+    val as1 = Literal.create(Seq(Seq.empty, Seq("a", "b"), Seq.empty), strType)
+    val as2 = Literal.create(Seq(Seq(null, null), Seq("a", null), Seq(null)), strType)
+    val as3 = Literal.create(Seq(Seq("a"), null), strType)
+    val as4 = Literal.create(Seq(Seq("a")), strType)
+    val as5 = Literal.create(Seq(Seq.empty), strType)
+    val as6 = Literal.create(Seq.empty, strType)
+
+    checkEvaluation(Flatten(as0), Seq("a", "b", "c", "d", "e", "f"))
+    checkEvaluation(Flatten(as1), Seq("a", "b"))
+    checkEvaluation(Flatten(as2), Seq(null, null, "a", null, null))
+    checkEvaluation(Flatten(as3), null)
+    checkEvaluation(Flatten(as4), Seq("a"))
+    checkEvaluation(Flatten(as5), Seq.empty)
+    checkEvaluation(Flatten(as6), Seq.empty)
+
+  }
 }

@@ -413,6 +413,51 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("flatten function") {
+    val df = Seq(
+      (Seq(Seq(1, 2, 3), Seq(4, 5), Seq(6)), Seq(Seq("a", "b"), Seq("c"))),
+      (Seq(Seq(1), Seq.empty, Seq(2)), Seq(Seq(null), Seq(null, "a"))),
+      (Seq(Seq(2), null, Seq(1)), Seq(Seq("a"), null))
+    ).toDF("i", "s")
+    val edf = Seq((1, "a", Seq(1, 2, 3))).toDF("i", "s", "arr")
+
+    // Simple test cases
+    checkAnswer(
+      df.select(flatten($"i")),
+      Seq(Row(Seq(1, 2, 3, 4, 5, 6)), Row(Seq(1, 2)), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("flatten(i)"),
+      Seq(Row(Seq(1, 2, 3, 4, 5, 6)), Row(Seq(1, 2)), Row(null))
+    )
+    checkAnswer(
+      edf.selectExpr("flatten(array(arr, array(null, 5)))"),
+      Seq(Row(Seq(1, 2, 3, null, 5)))
+    )
+    checkAnswer(
+      df.select(flatten($"s")),
+      Seq(Row(Seq("a", "b", "c")), Row(Seq(null, null, "a")), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("flatten(s)"),
+      Seq(Row(Seq("a", "b", "c")), Row(Seq(null, null, "a")), Row(null))
+    )
+
+    // Error test cases
+    intercept[AnalysisException] {
+      edf.select(flatten($"arr"))
+    }
+    intercept[AnalysisException] {
+      edf.select(flatten($"i"))
+    }
+    intercept[AnalysisException] {
+      edf.select(flatten($"s"))
+    }
+    intercept[AnalysisException] {
+      edf.selectExpr("flatten(null)")
+    }
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {
