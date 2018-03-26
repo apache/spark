@@ -357,7 +357,10 @@ private[csv] object UnivocityParser {
       schema: StructType,
       fileName: String
   ): Unit = {
-    lazy val columnNames = parser.tokenizer.parseLine(header)
-    checkHeaderColumnNames(parser, schema, columnNames, fileName)
+    if (parser.options.checkHeader) {
+      val columnNames = parser.tokenizer.parseLine(header)
+
+      checkHeaderColumnNames(parser, schema, columnNames, fileName)
+    }
   }
 }
