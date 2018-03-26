@@ -354,8 +354,10 @@ jobs:
       # compilation results from build-sbt
       - save_cache:
           key: v1-maven-build-with-version-{{ .Branch }}-{{ .Revision }}
-          paths:
-            - .
+          paths: .
+      - save_cache:
+          key: v1-maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
+          paths: ~/.m2
 
   deploy:
     <<: *defaults
@@ -368,7 +370,7 @@ jobs:
       - restore_cache:
           key: v1-maven-build-with-version-{{ .Branch }}-{{ .Revision }}
       - restore_cache:
-          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+          key: v1-maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
       - restore_cache:
           key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
 
