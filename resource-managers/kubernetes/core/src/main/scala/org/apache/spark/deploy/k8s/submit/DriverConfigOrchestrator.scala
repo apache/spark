@@ -65,16 +65,6 @@ private[spark] class DriverConfigOrchestrator(
       SPARK_APP_ID_LABEL -> kubernetesAppId,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
 
-    val initialSubmissionStep = new BasicDriverConfigurationStep(
-      kubernetesAppId,
-      kubernetesResourceNamePrefix,
-      allDriverLabels,
-      imagePullPolicy,
-      appName,
-      mainClass,
-      appArgs,
-      sparkConf)
-
     val serviceBootstrapStep = new DriverServiceBootstrapStep(
       kubernetesResourceNamePrefix,
       allDriverLabels,
@@ -124,7 +114,6 @@ private[spark] class DriverConfigOrchestrator(
     }
 
     Seq(
-      initialSubmissionStep,
       serviceBootstrapStep,
       kubernetesCredentialsStep) ++
       dependencyResolutionStep ++

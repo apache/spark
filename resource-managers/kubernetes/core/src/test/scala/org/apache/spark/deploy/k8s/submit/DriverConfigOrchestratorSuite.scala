@@ -46,7 +46,6 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       sparkConf)
     validateStepTypes(
       orchestrator,
-      classOf[BasicDriverConfigurationStep],
       classOf[DriverServiceBootstrapStep],
       classOf[DriverKubernetesCredentialsStep],
       classOf[DependencyResolutionStep])
@@ -64,7 +63,6 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       sparkConf)
     validateStepTypes(
       orchestrator,
-      classOf[BasicDriverConfigurationStep],
       classOf[DriverServiceBootstrapStep],
       classOf[DriverKubernetesCredentialsStep])
   }
@@ -85,7 +83,6 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       sparkConf)
     validateStepTypes(
       orchestrator,
-      classOf[BasicDriverConfigurationStep],
       classOf[DriverServiceBootstrapStep],
       classOf[DriverKubernetesCredentialsStep],
       classOf[DependencyResolutionStep],
