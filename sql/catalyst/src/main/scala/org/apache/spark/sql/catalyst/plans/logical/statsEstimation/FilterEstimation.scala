@@ -427,7 +427,11 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
     // return the filter selectivity.  Without advanced statistics such as histograms,
     // we have to assume uniform distribution.
-    Some(math.min(newNdv.toDouble / ndv.toDouble, 1.0))
+    if (ndv.toDouble != 0) {
+      Some(math.min(newNdv.toDouble / ndv.toDouble, 1.0))
+    } else {
+      Some(0.0)
+    }
   }
 
   /**
