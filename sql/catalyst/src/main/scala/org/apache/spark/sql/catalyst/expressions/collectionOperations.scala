@@ -294,12 +294,13 @@ case class ArrayContains(left: Expression, right: Expression)
  * Concatenates multiple arrays into one.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr, ...) - Concatenates multiple arrays into one.",
+  usage = "_FUNC_(expr, ...) - Concatenates multiple arrays of the same type into one.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(4, 5), array(6));
        [1,2,3,4,5,6]
-  """)
+  """,
+  since = "2.4.0")
 case class ConcatArrays(children: Seq[Expression]) extends Expression with NullSafeEvaluation {
 
   override def checkInputDataTypes(): TypeCheckResult = {
