@@ -219,12 +219,10 @@ object MultiLineCSVDataSource extends CSVDataSource {
       parser: UnivocityParser,
       schema: StructType,
       dataSchema: StructType): Iterator[InternalRow] = {
-    val checkHeader = UnivocityParser.checkHeaderColumnNames(
-      parser,
-      dataSchema,
-      _: Array[String],
-      file.filePath
-    )
+    def checkHeader(header: Array[String]): Unit = {
+      UnivocityParser.checkHeaderColumnNames(parser, dataSchema, header, file.filePath)
+    }
+
     UnivocityParser.parseStream(
       CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))),
       parser.options.headerFlag,
@@ -239,7 +237,8 @@ object MultiLineCSVDataSource extends CSVDataSource {
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
     // The header is not checked because there is no schema against with it could be check
-    val checkHeader = (_: Array[String]) => ()
+    def checkHeader(header: Array[String]): Unit = ()
+
     csv.flatMap { lines =>
       val path = new Path(lines.getPath())
       UnivocityParser.tokenizeStream(
