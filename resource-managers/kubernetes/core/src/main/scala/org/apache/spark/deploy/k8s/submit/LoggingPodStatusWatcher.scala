@@ -117,15 +117,22 @@ private[k8s] class LoggingPodStatusWatcherImpl(
       ("node name", pod.getSpec.getNodeName()),
 
       // status
-      ("start time", pod.getStatus.getStartTime.getTime),
+      ("start time", Option.apply(pod.getStatus)
+        .flatMap(status => Option.apply(status.getStartTime))
+        .map(_.getTime)
+        .getOrElse("unknown")),
       ("container images",
-        pod.getStatus.getContainerStatuses()
-          .asScala
-          .map(_.getImage)
-          .mkString(", ")),
-      ("phase", pod.getStatus.getPhase()),
-      ("status", pod.getStatus.getContainerStatuses().toString)
-    )
+        Option.apply(pod.getStatus)
+          .flatMap(status => Option.apply(status.getContainerStatuses()))
+          .map(_.asScala
+            .map(_.getImage)
+            .mkString(", "))
+          .getOrElse("unknown")),
+      ("phase", Option.apply(pod.getStatus).map(_.getPhase).getOrElse("unknown")),
+      ("status", Option.apply(pod.getStatus)
+        .flatMap(status => Option.apply(status.getContainerStatuses))
+        .map(_.toString)
+        .getOrElse("unknown")))
     formatPairsBundle(details)
   }
 
