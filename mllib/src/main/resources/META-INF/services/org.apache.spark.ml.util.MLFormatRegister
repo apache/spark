@@ -1,2 +1,3 @@
 org.apache.spark.ml.regression.InternalLinearRegressionModelWriter
 org.apache.spark.ml.regression.PMMLLinearRegressionModelWriter
+org.apache.spark.ml.clustering.InternalKMeansModelWriter
