@@ -152,8 +152,12 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluationWithoutCodegen(expr, expected, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expr, expected, inputRow)
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
-      checkEvalutionWithUnsafeProjection(expr, expected, inputRow)
-      }
+      checkEvaluationWithUnsafeProjection(
+        expr,
+        expected,
+        inputRow,
+        UnsafeProjection) // TODO(hvanhovell) revert this when SPARK-23587 is fixed
+    }
     checkEvaluationWithOptimization(expr, expected, inputRow)
   }
 
