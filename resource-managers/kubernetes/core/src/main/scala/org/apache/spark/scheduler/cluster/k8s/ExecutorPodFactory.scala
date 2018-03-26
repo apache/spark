@@ -28,16 +28,16 @@ import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTI
 import org.apache.spark.util.Utils
 
 /**
- * A factory class for bootstrapping and creating executor pods with the given bootstrapping
- * components.
- *
- * @param sparkConf Spark configuration
- * @param mountSecretsBootstrap an optional component for mounting user-specified secrets onto
- *                              user-specified paths into the executor container
- */
+  * A factory class for bootstrapping and creating executor pods with the given bootstrapping
+  * components.
+  *
+  * @param sparkConf Spark configuration
+  * @param mountSecretsBootstrap an optional component for mounting user-specified secrets onto
+  *                              user-specified paths into the executor container
+  */
 private[spark] class ExecutorPodFactory(
-    sparkConf: SparkConf,
-    mountSecretsBootstrap: Option[MountSecretsBootstrap]) {
+                                         sparkConf: SparkConf,
+                                         mountSecretsBootstrap: Option[MountSecretsBootstrap]) {
 
   private val executorExtraClasspath = sparkConf.get(EXECUTOR_CLASS_PATH)
 
@@ -87,25 +87,16 @@ private[spark] class ExecutorPodFactory(
   private val executorLimitCores = sparkConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
   /**
-   * Configure and construct an executor pod with the given parameters.
-   */
+    * Configure and construct an executor pod with the given parameters.
+    */
   def createExecutorPod(
-      executorId: String,
-      applicationId: String,
-      driverUrl: String,
-      executorEnvs: Seq[(String, String)],
-      driverPod: Pod,
-      nodeToLocalTaskCount: Map[String, Int]): Pod = {
-   val prefix = (executorPodNamePrefix == "spark") match {
-     case true =>
-       val appName = sparkConf.getOption("spark.app.name").getOrElse("spark")
-       val launchTime = System.currentTimeMillis()
-       s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
-      // We are in client mode.
-     case false =>
-       executorPodNamePrefix //  We are in cluster mode.
-   }
-   val name = s"$prefix-exec-$executorId"
+                         executorId: String,
+                         applicationId: String,
+                         driverUrl: String,
+                         executorEnvs: Seq[(String, String)],
+                         driverPod: Pod,
+                         nodeToLocalTaskCount: Map[String, Int]): Pod = {
+    val name = s"$executorPodNamePrefix-exec-$executorId"
 
     // hostname must be no longer than 63 characters, so take the last 63 characters of the pod
     // name as the hostname.  This preserves uniqueness since the end of name contains
@@ -175,47 +166,47 @@ private[spark] class ExecutorPodFactory(
       .withImage(executorContainerImage)
       .withImagePullPolicy(imagePullPolicy)
       .withNewResources()
-        .addToRequests("memory", executorMemoryQuantity)
-        .addToLimits("memory", executorMemoryLimitQuantity)
-        .addToRequests("cpu", executorCpuQuantity)
-        .endResources()
+      .addToRequests("memory", executorMemoryQuantity)
+      .addToLimits("memory", executorMemoryLimitQuantity)
+      .addToRequests("cpu", executorCpuQuantity)
+      .endResources()
       .addAllToEnv(executorEnv.asJava)
       .withPorts(requiredPorts.asJava)
       .addToArgs("executor")
       .build()
 
-   val executorPod = (driverPod == null) match {
+    val executorPod = (driverPod == null) match {
      case true => new PodBuilder()
        .withNewMetadata()
-         .withName(name)
-         .withLabels(resolvedExecutorLabels.asJava)
-         .withAnnotations(executorAnnotations.asJava)
+       .withName(name)
+       .withLabels(resolvedExecutorLabels.asJava)
+       .withAnnotations(executorAnnotations.asJava)
        .endMetadata()
        .withNewSpec()
-         .withHostname(hostname)
-         .withRestartPolicy("Never")
-         .withNodeSelector(nodeSelector.asJava)
-         .endSpec()
+       .withHostname(hostname)
+       .withRestartPolicy("Never")
+       .withNodeSelector(nodeSelector.asJava)
+       .endSpec()
        .build()
-     case false => new PodBuilder()
-       .withNewMetadata()
-         .withName(name)
-         .withLabels(resolvedExecutorLabels.asJava)
-         .withAnnotations(executorAnnotations.asJava)
-         .withOwnerReferences()
-          .addNewOwnerReference()
-            .withController(true)
-            .withApiVersion(driverPod.getApiVersion)
-            .withKind(driverPod.getKind)
-            .withName(driverPod.getMetadata.getName)
-            .withUid(driverPod.getMetadata.getUid)
-            .endOwnerReference()
-        .endMetadata()
+    case false => new PodBuilder()
+      .withNewMetadata()
+      .withName(name)
+      .withLabels(resolvedExecutorLabels.asJava)
+      .withAnnotations(executorAnnotations.asJava)
+      .withOwnerReferences()
+      .addNewOwnerReference()
+      .withController(true)
+      .withApiVersion(driverPod.getApiVersion)
+      .withKind(driverPod.getKind)
+      .withName(driverPod.getMetadata.getName)
+      .withUid(driverPod.getMetadata.getUid)
+      .endOwnerReference()
+      .endMetadata()
       .withNewSpec()
-        .withHostname(hostname)
-        .withRestartPolicy("Never")
-        .withNodeSelector(nodeSelector.asJava)
-        .endSpec()
+      .withHostname(hostname)
+      .withRestartPolicy("Never")
+      .withNodeSelector(nodeSelector.asJava)
+      .endSpec()
       .build()
 
     val containerWithLimitCores = executorLimitCores.map { limitCores =>
@@ -237,8 +228,8 @@ private[spark] class ExecutorPodFactory(
 
     new PodBuilder(maybeSecretsMountedPod)
       .editSpec()
-        .addToContainers(maybeSecretsMountedContainer)
-        .endSpec()
+      .addToContainers(maybeSecretsMountedContainer)
+      .endSpec()
       .build()
   }
 }

@@ -87,7 +87,6 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager
       None
     }
 
-
     val modeHandler: ManagerSpecificHandlers = {
       new java.io.File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH).exists() match {
         case true => new InClusterHandlers()
