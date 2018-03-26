@@ -81,7 +81,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public static UTF8String fromBytes(byte[] bytes) {
     if (bytes != null) {
-      return new UTF8String(bytes, BYTE_ARRAY_OFFSET, bytes.length);
+      return new UTF8String(
+        MemoryBlock.allocateFromObject(bytes, BYTE_ARRAY_OFFSET, bytes.length));
     } else {
       return null;
     }
@@ -94,7 +95,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public static UTF8String fromBytes(byte[] bytes, int offset, int numBytes) {
     if (bytes != null) {
-      return new UTF8String(bytes, BYTE_ARRAY_OFFSET + offset, numBytes);
+      return new UTF8String(
+        MemoryBlock.allocateFromObject(bytes, BYTE_ARRAY_OFFSET + offset, numBytes));
     } else {
       return null;
     }
@@ -114,10 +116,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     byte[] spaces = new byte[length];
     Arrays.fill(spaces, (byte) ' ');
     return fromBytes(spaces);
-  }
-
-  protected UTF8String(byte[] bytes, long offset, int numBytes) {
-    this(new ByteArrayMemoryBlock(bytes, offset, numBytes));
   }
 
   public UTF8String(MemoryBlock base) {

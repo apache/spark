@@ -72,16 +72,16 @@ public final class Murmur3_x86_32 {
     // This is not compatible with original and another implementations.
     // But remain it for backward compatibility for the components existing before 2.3.
     long offset = base.getBaseOffset();
-    long lengthInBytes = base.size();
+    int lengthInBytes = Ints.checkedCast(base.size());
     assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
-    long lengthAligned = lengthInBytes - lengthInBytes % 4;
+    int lengthAligned = lengthInBytes - lengthInBytes % 4;
     int h1 = hashBytesByIntBlock(base.subBlock(0, lengthAligned), seed);
-    for (long i = lengthAligned; i < lengthInBytes; i++) {
+    for (int i = lengthAligned; i < lengthInBytes; i++) {
       int halfWord = base.getByte(offset + i);
       int k1 = mixK1(halfWord);
       h1 = mixH1(h1, k1);
     }
-    return fmix(h1, Ints.checkedCast(lengthInBytes));
+    return fmix(h1, lengthInBytes);
   }
 
   public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes, int seed) {
@@ -96,16 +96,16 @@ public final class Murmur3_x86_32 {
     // This is compatible with original and another implementations.
     // Use this method for new components after Spark 2.3.
     long offset = base.getBaseOffset();
-    long lengthInBytes = base.size();
+    int lengthInBytes = Ints.checkedCast(base.size());
     assert (lengthInBytes >= 0) : "lengthInBytes cannot be negative";
-    long lengthAligned = lengthInBytes - lengthInBytes % 4;
+    int lengthAligned = lengthInBytes - lengthInBytes % 4;
     int h1 = hashBytesByIntBlock(base.subBlock(0, lengthAligned), seed);
     int k1 = 0;
-    for (long i = lengthAligned, shift = 0; i < lengthInBytes; i++, shift += 8) {
+    for (int i = lengthAligned, shift = 0; i < lengthInBytes; i++, shift += 8) {
       k1 ^= (base.getByte(offset + i) & 0xFF) << shift;
     }
     h1 ^= mixK1(k1);
-    return fmix(h1, Ints.checkedCast(lengthInBytes));
+    return fmix(h1, lengthInBytes);
   }
 
   private static int hashBytesByIntBlock(MemoryBlock base, int seed) {
