@@ -52,15 +52,6 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
   /** @group getParam */
   def getK: Int = $(k)
 
-  /** Validates and transforms the input schema. */
-  protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
-    require(!schema.fieldNames.contains($(outputCol)),
-      s"Output column ${$(outputCol)} already exists.")
-    val attrGroup = new AttributeGroup($(outputCol), $(k))
-    SchemaUtils.appendColumn(schema, attrGroup.toStructField())
-  }
-
 }
 
 /**
@@ -103,7 +94,11 @@ class PCA @Since("1.5.0") (
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    require(!schema.fieldNames.contains($(outputCol)),
+      s"Output column ${$(outputCol)} already exists.")
+    val attrGroup = new AttributeGroup($(outputCol), $(k))
+    SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }
 
   @Since("1.5.0")
@@ -164,7 +159,16 @@ class PCAModel private[ml] (
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
-    validateAndTransformSchema(schema)
+    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    val group = AttributeGroup.fromStructField(schema($(inputCol)))
+    if (group.size < 0) {
+      require(group.size == pc.numRows,
+        s"Length of input vectors do not match the expected size ${pc.numRows}")
+    }
+    require(!schema.fieldNames.contains($(outputCol)),
+      s"Output column ${$(outputCol)} already exists.")
+    val attrGroup = new AttributeGroup($(outputCol), $(k))
+    SchemaUtils.appendColumn(schema, attrGroup.toStructField())
   }
 
   @Since("1.5.0")
