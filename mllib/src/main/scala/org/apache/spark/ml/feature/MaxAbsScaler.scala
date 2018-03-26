@@ -136,6 +136,11 @@ class MaxAbsScalerModel private[ml] (
   @Since("2.0.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    val group = AttributeGroup.fromStructField(schema($(inputCol)))
+    if (group.size >= 0) {
+      require(group.size == maxAbs.size,
+        s"Length of input vectors do not match the expected size ${maxAbs.size}")
+    }
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
     val attrGroup = new AttributeGroup($(outputCol), maxAbs.size)
