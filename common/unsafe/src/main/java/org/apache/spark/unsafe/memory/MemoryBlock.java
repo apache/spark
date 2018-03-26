@@ -149,6 +149,8 @@ public abstract class MemoryBlock {
   /**
    * getXXX/putXXX does not ensure guarantee behavior if the offset is invalid. e.g  cause illegal
    * memory access, throw an exception, or etc.
+   * getXXX/putXXX uses an index based on this.offset that includes the size of metadata such as
+   * JVM object header. Thus, the offset is expected as an logical offset in the memory block.
    */
   public abstract int getInt(long offset);
 

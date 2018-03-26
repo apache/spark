@@ -222,15 +222,14 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // After getting the data, we use a mask to mask out data that is not part of the string.
     long p;
     long mask = 0;
-    long offset = base.getBaseOffset();
     if (IS_LITTLE_ENDIAN) {
       if (numBytes >= 8) {
-        p = base.getLong(offset);
+        p = base.getLong(0);
       } else if (numBytes > 4) {
-        p = base.getLong(offset);
+        p = base.getLong(0);
         mask = (1L << (8 - numBytes) * 8) - 1;
       } else if (numBytes > 0) {
-        p = (long) base.getInt(offset);
+        p = (long) base.getInt(0);
         mask = (1L << (8 - numBytes) * 8) - 1;
       } else {
         p = 0;
@@ -239,12 +238,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     } else {
       // byteOrder == ByteOrder.BIG_ENDIAN
       if (numBytes >= 8) {
-        p = base.getLong(offset);
+        p = base.getLong(0);
       } else if (numBytes > 4) {
-        p = base.getLong(offset);
+        p = base.getLong(0);
         mask = (1L << (8 - numBytes) * 8) - 1;
       } else if (numBytes > 0) {
-        p = ((long) base.getInt(offset)) << 32;
+        p = ((long) base.getInt(0)) << 32;
         mask = (1L << (8 - numBytes) * 8) - 1;
       } else {
         p = 0;
@@ -336,7 +335,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the byte at position `i`.
    */
   private byte getByte(int i) {
-    return base.getByte(getBaseOffset() + i);
+    return base.getByte(i);
   }
 
   private boolean matchAt(final UTF8String s, int pos) {
@@ -1196,12 +1195,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public int compareTo(@Nonnull final UTF8String other) {
     int len = Math.min(numBytes, other.numBytes);
     int wordMax = (len / 8) * 8;
-    long offset = getBaseOffset();
-    long roffset = other.getBaseOffset();
     MemoryBlock rbase = other.base;
     for (int i = 0; i < wordMax; i += 8) {
-      long left = base.getLong(offset + i);
-      long right = rbase.getLong(roffset + i);
+      long left = base.getLong(i);
+      long right = rbase.getLong(i);
       if (left != right) {
         if (IS_LITTLE_ENDIAN) {
           return Long.compareUnsigned(Long.reverseBytes(left), Long.reverseBytes(right));
@@ -1212,7 +1209,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
     for (int i = wordMax; i < len; i++) {
       // In UTF-8, the byte should be unsigned, so we should compare them as unsigned int.
-      int res = (getByte(i) & 0xFF) - (rbase.getByte(roffset + i) & 0xFF);
+      int res = (getByte(i) & 0xFF) - (rbase.getByte(i) & 0xFF);
       if (res != 0) {
         return res;
       }

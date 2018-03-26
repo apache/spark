@@ -18,6 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.junit.Assert;
 import org.junit.Test;
@@ -89,13 +91,13 @@ public class HiveHasherSuite {
       int byteArrSize = rand.nextInt(100) * 8;
       byte[] bytes = new byte[byteArrSize];
       rand.nextBytes(bytes);
+      MemoryBlock mb = ByteArrayMemoryBlock.fromArray(bytes);
 
       Assert.assertEquals(
-          HiveHasher.hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
-          HiveHasher.hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
+          HiveHasher.hashUnsafeBytesBlock(mb),
+          HiveHasher.hashUnsafeBytesBlock(mb));
 
-      hashcodes.add(HiveHasher.hashUnsafeBytes(
-          bytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
+      hashcodes.add(HiveHasher.hashUnsafeBytesBlock(mb));
     }
 
     // A very loose bound.
@@ -112,13 +114,13 @@ public class HiveHasherSuite {
       byte[] strBytes = String.valueOf(i).getBytes(StandardCharsets.UTF_8);
       byte[] paddedBytes = new byte[byteArrSize];
       System.arraycopy(strBytes, 0, paddedBytes, 0, strBytes.length);
+      MemoryBlock mb = ByteArrayMemoryBlock.fromArray(paddedBytes);
 
       Assert.assertEquals(
-          HiveHasher.hashUnsafeBytes(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize),
-          HiveHasher.hashUnsafeBytes(paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
+          HiveHasher.hashUnsafeBytesBlock(mb),
+          HiveHasher.hashUnsafeBytesBlock(mb));
 
-      hashcodes.add(HiveHasher.hashUnsafeBytes(
-          paddedBytes, Platform.BYTE_ARRAY_OFFSET, byteArrSize));
+      hashcodes.add(HiveHasher.hashUnsafeBytesBlock(mb));
     }
 
     // A very loose bound.

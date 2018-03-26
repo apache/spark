@@ -71,13 +71,12 @@ public final class Murmur3_x86_32 {
   public static int hashUnsafeBytesBlock(MemoryBlock base, int seed) {
     // This is not compatible with original and another implementations.
     // But remain it for backward compatibility for the components existing before 2.3.
-    long offset = base.getBaseOffset();
     int lengthInBytes = Ints.checkedCast(base.size());
     assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
     int lengthAligned = lengthInBytes - lengthInBytes % 4;
     int h1 = hashBytesByIntBlock(base.subBlock(0, lengthAligned), seed);
     for (int i = lengthAligned; i < lengthInBytes; i++) {
-      int halfWord = base.getByte(offset + i);
+      int halfWord = base.getByte(i);
       int k1 = mixK1(halfWord);
       h1 = mixH1(h1, k1);
     }
@@ -95,26 +94,24 @@ public final class Murmur3_x86_32 {
   public static int hashUnsafeBytes2Block(MemoryBlock base, int seed) {
     // This is compatible with original and another implementations.
     // Use this method for new components after Spark 2.3.
-    long offset = base.getBaseOffset();
     int lengthInBytes = Ints.checkedCast(base.size());
     assert (lengthInBytes >= 0) : "lengthInBytes cannot be negative";
     int lengthAligned = lengthInBytes - lengthInBytes % 4;
     int h1 = hashBytesByIntBlock(base.subBlock(0, lengthAligned), seed);
     int k1 = 0;
     for (int i = lengthAligned, shift = 0; i < lengthInBytes; i++, shift += 8) {
-      k1 ^= (base.getByte(offset + i) & 0xFF) << shift;
+      k1 ^= (base.getByte(i) & 0xFF) << shift;
     }
     h1 ^= mixK1(k1);
     return fmix(h1, lengthInBytes);
   }
 
   private static int hashBytesByIntBlock(MemoryBlock base, int seed) {
-    long offset = base.getBaseOffset();
     long lengthInBytes = base.size();
     assert (lengthInBytes % 4 == 0);
     int h1 = seed;
     for (long i = 0; i < lengthInBytes; i += 4) {
-      int halfWord = base.getInt(offset + i);
+      int halfWord = base.getInt(i);
       int k1 = mixK1(halfWord);
       h1 = mixH1(h1, k1);
     }
