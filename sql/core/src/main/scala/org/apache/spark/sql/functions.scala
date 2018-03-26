@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedConcat, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -2229,16 +2229,6 @@ object functions {
   def base64(e: Column): Column = withExpr { Base64(e.expr) }
 
   /**
-   * Concatenates multiple input columns together into a single column.
-   * If all inputs are binary, concat returns an output as binary. Otherwise, it returns as string.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  @scala.annotation.varargs
-  def concat(exprs: Column*): Column = withExpr { Concat(exprs.map(_.expr)) }
-
-  /**
    * Concatenates multiple input string columns together into a single string column,
    * using the given separator.
    *
@@ -3047,12 +3037,14 @@ object functions {
   }
 
   /**
-   * Merges multiple arrays into one by putting elements from the specific array after elements
-   * from the previous array. If any of the arrays is null, null is returned.
+   * Concatenates multiple input columns together into a single column.
+   * The function works with strings, binary columns and arrays of the same time.
+   *
    * @group collection_funcs
-   * @since 2.4.0
+   * @since 1.5.0
    */
-  def concat_arrays(columns: Column*): Column = withExpr { ConcatArrays(columns.map(_.expr)) }
+  @scala.annotation.varargs
+  def concat(exprs: Column*): Column = withExpr { UnresolvedConcat(exprs.map(_.expr)) }
 
   /**
    * Creates a new row for each element in the given array or map column.

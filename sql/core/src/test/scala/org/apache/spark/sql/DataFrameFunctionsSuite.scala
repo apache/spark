@@ -413,60 +413,56 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("concat arrays function") {
-    val nint : Int = null.asInstanceOf[Int]
+  test("concat function - arrays") {
     val nseqi : Seq[Int] = null
     val nseqs : Seq[String] = null
     val df = Seq(
       (Seq(1), Seq(2, 3, 4), Seq(5, 6), nseqi, Seq("a", "b", "c"), Seq("d", "e"), Seq("f"), nseqs),
-      (Seq(1, nint), Seq.empty[Int], Seq(2), nseqi, Seq("a"), Seq.empty[String], Seq(null), nseqs)
+      (Seq(1, 0), Seq.empty[Int], Seq(2), nseqi, Seq("a"), Seq.empty[String], Seq(null), nseqs)
     ).toDF("i1", "i2", "i3", "in", "s1", "s2", "s3", "sn")
 
     // Simple test cases
     checkAnswer(
-      df.select(concat_arrays($"i1", $"i2", $"i3")),
-      Seq(Row(Seq(1, 2, 3, 4, 5, 6)), Row(Seq(1, nint, 2)))
+      df.select(concat($"i1", $"i2", $"i3")),
+      Seq(Row(Seq(1, 2, 3, 4, 5, 6)), Row(Seq(1, 0, 2)))
     )
     checkAnswer(
-      df.selectExpr("concat_arrays(i1, i2, i3)"),
-      Seq(Row(Seq(1, 2, 3, 4, 5, 6)), Row(Seq(1, nint, 2)))
+      df.selectExpr("concat(array(1, null), i2, i3)"),
+      Seq(Row(Seq(1, null, 2, 3, 4, 5, 6)), Row(Seq(1, null, 2)))
     )
     checkAnswer(
-      df.select(concat_arrays($"s1", $"s2", $"s3")),
+      df.select(concat($"s1", $"s2", $"s3")),
       Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
     )
     checkAnswer(
-      df.selectExpr("concat_arrays(s1, s2, s3)"),
+      df.selectExpr("concat(s1, s2, s3)"),
       Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
     )
 
     // Null test cases
     checkAnswer(
-      df.select(concat_arrays($"i1", $"in")),
+      df.select(concat($"i1", $"in")),
       Seq(Row(null), Row(null))
     )
     checkAnswer(
-      df.select(concat_arrays($"in", $"i1")),
+      df.select(concat($"in", $"i1")),
       Seq(Row(null), Row(null))
     )
     checkAnswer(
-      df.select(concat_arrays($"s1", $"sn")),
+      df.select(concat($"s1", $"sn")),
       Seq(Row(null), Row(null))
     )
     checkAnswer(
-      df.select(concat_arrays($"sn", $"s1")),
+      df.select(concat($"sn", $"s1")),
       Seq(Row(null), Row(null))
     )
 
     // Type error test cases
     intercept[AnalysisException] {
-      df.select(concat_arrays($"i1", $"s1"))
+      df.select(concat($"i1", $"s1"))
     }
     intercept[AnalysisException] {
-      df.select(concat_arrays(lit("a"), lit("b")))
-    }
-    intercept[AnalysisException] {
-      df.selectExpr("concat_arrays(i1, i2, null)")
+      df.selectExpr("concat(i1, i2, null)")
     }
   }
 

@@ -480,3 +480,15 @@ case class UnresolvedOrdinal(ordinal: Int)
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
   override lazy val resolved = false
 }
+
+/**
+ * Concatenates multiple columns of the same type into one.
+ * @param children Could be string, binary or array expressions
+ */
+case class UnresolvedConcat(children: Seq[Expression]) extends Expression
+  with Unevaluable {
+  override def dataType: DataType = throw new UnresolvedException(this, "dataType")
+  override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
+  override def nullable: Boolean = throw new UnresolvedException(this, "nullable")
+  override lazy val resolved = false
+}

@@ -825,6 +825,8 @@ class Analyzer(
         result
       case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
         ExtractValue(child, fieldExpr, resolver)
+      case UnresolvedConcat(children) if children.forall(_.resolved) =>
+        ResolveConcat(children)
       case _ => e.mapChildren(resolve(_, q))
     }
 

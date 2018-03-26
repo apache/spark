@@ -291,6 +291,21 @@ case class ArrayContains(left: Expression, right: Expression)
 }
 
 /**
+ * Replaces [[org.apache.spark.sql.catalyst.analysis.UnresolvedConcat UnresolvedConcat]]s
+ * with concrete concate expressions.
+ */
+object ResolveConcat
+{
+  def apply(children: Seq[Expression]): Expression = {
+    if (children.nonEmpty && ArrayType.acceptsType(children(0).dataType)) {
+      ConcatArrays(children)
+    } else {
+      Concat(children)
+    }
+  }
+}
+
+/**
  * Concatenates multiple arrays into one.
  */
 @ExpressionDescription(
@@ -440,5 +455,5 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
       """.stripMargin
   }
 
-  override def prettyName: String = "concat_arrays"
+  override def prettyName: String = "concat"
 }
