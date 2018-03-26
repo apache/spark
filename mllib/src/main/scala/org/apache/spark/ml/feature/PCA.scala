@@ -161,7 +161,7 @@ class PCAModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
     val group = AttributeGroup.fromStructField(schema($(inputCol)))
-    if (group.size < 0) {
+    if (group.size >= 0) {
       require(group.size == pc.numRows,
         s"Length of input vectors do not match the expected size ${pc.numRows}")
     }
