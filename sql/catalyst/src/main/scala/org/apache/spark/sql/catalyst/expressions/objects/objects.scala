@@ -28,7 +28,7 @@ import scala.util.Try
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -274,7 +274,7 @@ case class Invoke(
       null
     } else {
       val args = arguments.map(e => e.eval(input).asInstanceOf[Object])
-      val argClasses = CallMethodViaReflection.expressionJavaClasses(arguments)
+      val argClasses = ScalaReflection.expressionJavaClasses(arguments)
       val method = obj.getClass.getDeclaredMethod(functionName, argClasses : _*)
       if (needNullCheck && args.exists(_ == null)) {
         // return null if one of arguments is null
@@ -286,7 +286,7 @@ case class Invoke(
           ret
         } else {
           // cast a primitive value using Boxed class
-          val boxedClass = CallMethodViaReflection.typeBoxedJavaMapping(dataType)
+          val boxedClass = ScalaReflection.typeBoxedJavaMapping(dataType)
           boxedClass.cast(ret)
         }
       }
