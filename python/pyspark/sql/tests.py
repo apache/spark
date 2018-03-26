@@ -3806,6 +3806,7 @@ class ArrowTests(ReusedSQLTestCase):
     not _have_pandas or not _have_pyarrow,
     _pandas_requirement_message or _pyarrow_requirement_message)
 class PandasUDFTests(ReusedSQLTestCase):
+
     def test_pandas_udf_basic(self):
         from pyspark.rdd import PythonEvalType
         from pyspark.sql.functions import pandas_udf, PandasUDFType
@@ -3965,6 +3966,15 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             return pd.Series(np.random.random(len(v)))
         random_udf = random_udf.asNondeterministic()
         return random_udf
+
+    def test_pandas_udf_tokenize(self):
+        from pyspark.sql.functions import pandas_udf
+        tokenize = pandas_udf(lambda s: s.apply(lambda str: str.split(' ')),
+                              ArrayType(StringType()))
+        self.assertEqual(udf.returnType, ArrayType(StringType()))
+        df = self.spark.createDataFrame([("hi boo",), ("bye boo",)], ["vals"])
+        result = df.select(tokenize("vals").alias("hi"))
+        self.assertEqual([], result.collect())
 
     def test_vectorized_udf_basic(self):
         from pyspark.sql.functions import pandas_udf, col, array
