@@ -236,10 +236,10 @@ private[csv] object UnivocityParser {
    */
   def tokenizeStream(
       inputStream: InputStream,
-      shouldDropHeader: Boolean,
-      checkHeader: Array[String] => Unit,
+      dropFirstRecord: Boolean,
+      checkFirstRecord: Array[String] => Unit,
       tokenizer: CsvParser): Iterator[Array[String]] = {
-    convertStream(inputStream, shouldDropHeader, tokenizer, checkHeader)(tokens => tokens)
+    convertStream(inputStream, dropFirstRecord, tokenizer, checkFirstRecord)(tokens => tokens)
   }
 
   /**
@@ -247,32 +247,33 @@ private[csv] object UnivocityParser {
    */
   def parseStream(
       inputStream: InputStream,
-      shouldDropHeader: Boolean,
+      dropFirstRecord: Boolean,
       parser: UnivocityParser,
       schema: StructType,
-      checkHeader: Array[String] => Unit): Iterator[InternalRow] = {
+      filePath: String,
+      checkFirstRecord: Array[String] => Unit): Iterator[InternalRow] = {
     val tokenizer = parser.tokenizer
     val safeParser = new FailureSafeParser[Array[String]](
       input => Seq(parser.convert(input)),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
-    convertStream(inputStream, shouldDropHeader, tokenizer, checkHeader) { tokens =>
+    convertStream(inputStream, dropFirstRecord, tokenizer, checkFirstRecord) { tokens =>
       safeParser.parse(tokens)
     }.flatten
   }
 
   private def convertStream[T](
       inputStream: InputStream,
-      shouldDropHeader: Boolean,
+      dropFirstRecord: Boolean,
       tokenizer: CsvParser,
-      checkHeader: Array[String] => Unit
+      checkFirstRecord: Array[String] => Unit
   )(convert: Array[String] => T) = new Iterator[T] {
     tokenizer.beginParsing(inputStream)
     private var nextRecord = {
-      if (shouldDropHeader) {
-        val header = tokenizer.parseNext()
-        checkHeader(header)
+      if (dropFirstRecord) {
+        val firstRecord = tokenizer.parseNext()
+        checkFirstRecord(firstRecord)
       }
       tokenizer.parseNext()
     }

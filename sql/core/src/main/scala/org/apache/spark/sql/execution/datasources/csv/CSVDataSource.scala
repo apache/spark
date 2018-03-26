@@ -301,7 +301,7 @@ object MultiLineCSVDataSource extends CSVDataSource {
       val path = new Path(lines.getPath())
       UnivocityParser.tokenizeStream(
         CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
-        shouldDropHeader = false,
+        dropFirstRecord = false,
         checkHeader,
         new CsvParser(parsedOptions.asParserSettings))
     }.take(1).headOption match {
