@@ -89,23 +89,7 @@ private[spark] class DriverConfigOrchestrator(
       throw new SparkException("The Kubernetes mode does not yet support referencing application " +
         "dependencies in the local file system.")
     }
-
-    val dependencyResolutionStep = if (sparkJars.nonEmpty || sparkFiles.nonEmpty) {
-      Seq(new DependencyResolutionStep(
-        sparkJars,
-        sparkFiles))
-    } else {
-      Nil
-    }
-
-    val mountSecretsStep = if (secretNamesToMountPaths.nonEmpty) {
-      Seq(new DriverMountSecretsStep(new MountSecretsBootstrap(secretNamesToMountPaths)))
-    } else {
-      Nil
-    }
-
-    dependencyResolutionStep ++
-    mountSecretsStep
+    throw new SparkException("Eventually deleting this code path")
   }
 
   private def existSubmissionLocalFiles(files: Seq[String]): Boolean = {
