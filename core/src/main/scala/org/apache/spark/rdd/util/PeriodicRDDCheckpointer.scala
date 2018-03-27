@@ -41,12 +41,13 @@ import org.apache.spark.util.PeriodicCheckpointer
  *  - Unpersist RDDs from queue until there are at most 3 persisted RDDs.
  *  - If using checkpointing and the checkpoint interval has been reached,
  *     - Checkpoint the new RDD, and put in a queue of checkpointed RDDs.
- *     - Remove older checkpoints.
+ *     - Remove older checkpoints except for created one and all the checkpoints it depends on.
  *
  * WARNINGS:
  *  - This class should NOT be copied (since copies may conflict on which RDDs should be
  *    checkpointed).
- *  - This class removes checkpoint files once later RDDs have been checkpointed.
+ *  - This class removes checkpoint files once later RDDs have been checkpointed and do not
+ *    have dependencies, the files to remove have been created for.
  *    However, references to the older RDDs will still return isCheckpointed = true.
  *
  * Example usage:
