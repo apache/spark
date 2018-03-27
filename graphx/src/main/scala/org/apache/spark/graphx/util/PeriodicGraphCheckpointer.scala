@@ -39,12 +39,15 @@ import org.apache.spark.util.PeriodicCheckpointer
  *  - Unpersist graphs from queue until there are at most 3 persisted graphs.
  *  - If using checkpointing and the checkpoint interval has been reached,
  *     - Checkpoint the new graph, and put in a queue of checkpointed graphs.
- *     - Remove older checkpoints.
+ *     - Remove older checkpoints except for created one and all the checkpoints it depends on.
  *
  * WARNINGS:
  *  - This class should NOT be copied (since copies may conflict on which Graphs should be
  *    checkpointed).
- *  - This class removes checkpoint files once later graphs have been checkpointed.
+ *  - This class removes checkpoint files once later graphs have been checkpointed and do not
+ *    have dependencies, the files to remove have been created for (removing checkpoint files
+ *    of prior graphs, the later ones depend on, may fail with `FileNotFoundException` in case
+ *    the later graphs are not yet materialized).
  *    However, references to the older graphs will still return isCheckpointed = true.
  *
  * Example usage:
