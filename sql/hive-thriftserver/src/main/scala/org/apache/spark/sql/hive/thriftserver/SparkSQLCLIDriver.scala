@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
-import java.util.{ArrayList => JArrayList, Locale}
+import java.util.{Locale, ArrayList => JArrayList}
 
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
@@ -43,9 +43,10 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.security.token.Token
 import org.apache.log4j.{Level, Logger}
 import org.apache.thrift.transport.TSocket
-
 import org.apache.spark.SparkConf
+
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.security.HiveDelegationTokenProvider
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
@@ -136,21 +137,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     if (isSecuredAndProxy(conf)) {
       val currentUser = UserGroupInformation.getCurrentUser
-      try {
-        SparkHadoopUtil.get.doAsRealUser {
-          val tokenStr = Hive.get(conf, classOf[HiveConf])
-             .getDelegationToken(currentUser.getShortUserName, currentUser.getRealUser.getUserName)
-          val token = new Token[DelegationTokenIdentifier]()
-          token.decodeFromUrlString(tokenStr)
-          currentUser.addToken(new Text("hive.metastore.delegation.token"), token)
-        }
-      } catch {
-        case NonFatal(_) =>
-        case e: NoClassDefFoundError =>
-          logWarning(e.getMessage)
-      } finally {
-        Utils.tryLogNonFatalError(Hive.closeCurrent())
-      }
+      val tokenProvider = new HiveDelegationTokenProvider()
+      tokenProvider.obtainDelegationTokens(hadoopConf, sparkConf, currentUser.getCredentials)
     }
 
     SessionState.start(sessionState)

@@ -17,6 +17,9 @@
 
 package org.apache.spark.deploy.security
 
+import java.lang.reflect.UndeclaredThrowableException
+import java.security.PrivilegedExceptionAction
+
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -33,7 +36,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.KEYTAB
 import org.apache.spark.util.Utils
 
-private[security] class HiveDelegationTokenProvider
+private[spark] class HiveDelegationTokenProvider
     extends HadoopDelegationTokenProvider with Logging {
 
   override def serviceName: String = "hive"
@@ -88,7 +91,7 @@ private[security] class HiveDelegationTokenProvider
       logDebug(s"Getting Hive delegation token for ${currentUser.getUserName()} against " +
         s"$principal at $metastoreUri")
 
-      SparkHadoopUtil.get.doAsRealUser {
+      doAsRealUser {
         val hive = Hive.get(conf, classOf[HiveConf])
         val tokenStr = hive.getDelegationToken(currentUser.getUserName(), principal)
 
@@ -110,6 +113,25 @@ private[security] class HiveDelegationTokenProvider
       Utils.tryLogNonFatalError {
         Hive.closeCurrent()
       }
+    }
+  }
+
+  /**
+   * Run some code as the real logged in user (which may differ from the current user, for
+   * example, when using proxying).
+   */
+  private def doAsRealUser[T](fn: => T): T = {
+    val currentUser = UserGroupInformation.getCurrentUser()
+    val realUser = Option(currentUser.getRealUser()).getOrElse(currentUser)
+
+    // For some reason the Scala-generated anonymous class ends up causing an
+    // UndeclaredThrowableException, even if you annotate the method with @throws.
+    try {
+      realUser.doAs(new PrivilegedExceptionAction[T]() {
+        override def run(): T = fn
+      })
+    } catch {
+      case e: UndeclaredThrowableException => throw Option(e.getCause()).getOrElse(e)
     }
   }
 }
