@@ -71,6 +71,7 @@ private[spark] class KubernetesConf[T <: KubernetesRoleSpecificConf](
 
 }
 
+
 private[spark] object KubernetesConf {
   def createDriverConf(
     sparkConf: SparkConf,
@@ -91,6 +92,7 @@ private[spark] object KubernetesConf {
           sparkConfWithMainAppJar.setJars(previousJars ++ Seq(res))
         }
     }
+
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf,
       KUBERNETES_DRIVER_LABEL_PREFIX)
@@ -109,6 +111,7 @@ private[spark] object KubernetesConf {
       KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_SECRETS_PREFIX)
     val driverEnvs = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_ENV_PREFIX)
+
     new KubernetesConf(
       sparkConfWithMainAppJar,
       KubernetesDriverSpecificConf(mainAppResource, mainClass, appName, appArgs),
@@ -147,6 +150,7 @@ private[spark] object KubernetesConf {
       KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_ANNOTATION_PREFIX)
     val executorSecrets =
       KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
+
     new KubernetesConf(
       sparkConf.clone(),
       KubernetesExecutorSpecificConf(executorId, driverPod),

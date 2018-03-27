@@ -40,6 +40,7 @@ private[spark] class KubernetesDriverBuilder(
     val allFeatures = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
       baseFeatures ++ Seq(provideSecretsStep(kubernetesConf))
     } else baseFeatures
+
     var spec = KubernetesSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {
       val configuredPod = feature.configurePod(spec.pod)
@@ -48,7 +49,7 @@ private[spark] class KubernetesDriverBuilder(
       spec = KubernetesSpec(
         configuredPod,
         spec.additionalDriverKubernetesResources ++ addedResources,
-        spec.podJavaSystemProperties ++ addedSystemProperties)
+        spec.systemProperties ++ addedSystemProperties)
     }
     spec
   }

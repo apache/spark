@@ -90,12 +90,12 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   }
 
   private def validateStepTypesApplied(resolvedSpec: KubernetesSpec, stepTypes: String*): Unit = {
-    assert(resolvedSpec.podJavaSystemProperties.size === stepTypes.size)
+    assert(resolvedSpec.systemProperties.size === stepTypes.size)
     stepTypes.foreach { stepType =>
       assert(resolvedSpec.pod.pod.getMetadata.getLabels.get(stepType) === stepType)
       assert(resolvedSpec.additionalDriverKubernetesResources.containsSlice(
         KubernetesFeaturesTestUtils.getSecretsForStepType(stepType)))
-      assert(resolvedSpec.podJavaSystemProperties(stepType) === stepType)
+      assert(resolvedSpec.systemProperties(stepType) === stepType)
     }
   }
 }

@@ -29,30 +29,30 @@ import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 
 private[spark] class BasicDriverFeatureStep(
-  kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf])
+  conf: KubernetesConf[KubernetesDriverSpecificConf])
   extends KubernetesFeatureConfigStep {
 
-  private val driverPodName = kubernetesConf
+  private val driverPodName = conf
     .get(KUBERNETES_DRIVER_POD_NAME)
-    .getOrElse(s"${kubernetesConf.appResourceNamePrefix}-driver")
+    .getOrElse(s"${conf.appResourceNamePrefix}-driver")
 
-  private val driverContainerImage = kubernetesConf
+  private val driverContainerImage = conf
     .get(DRIVER_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException("Must specify the driver container image"))
 
   // CPU settings
-  private val driverCpuCores = kubernetesConf.getOption("spark.driver.cores").getOrElse("1")
-  private val driverLimitCores = kubernetesConf.get(KUBERNETES_DRIVER_LIMIT_CORES)
+  private val driverCpuCores = conf.getOption("spark.driver.cores").getOrElse("1")
+  private val driverLimitCores = conf.get(KUBERNETES_DRIVER_LIMIT_CORES)
 
   // Memory settings
-  private val driverMemoryMiB = kubernetesConf.get(DRIVER_MEMORY)
-  private val memoryOverheadMiB = kubernetesConf
+  private val driverMemoryMiB = conf.get(DRIVER_MEMORY)
+  private val memoryOverheadMiB = conf
     .get(DRIVER_MEMORY_OVERHEAD)
     .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * driverMemoryMiB).toInt, MEMORY_OVERHEAD_MIN_MIB))
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val driverCustomEnvs = kubernetesConf.roleEnvs
+    val driverCustomEnvs = conf.roleEnvs
       .toSeq
       .map { env =>
         new EnvVarBuilder()
@@ -77,7 +77,7 @@ private[spark] class BasicDriverFeatureStep(
     val driverContainer = new ContainerBuilder(pod.container)
       .withName(DRIVER_CONTAINER_NAME)
       .withImage(driverContainerImage)
-      .withImagePullPolicy(kubernetesConf.imagePullPolicy())
+      .withImagePullPolicy(conf.imagePullPolicy())
       .addAllToEnv(driverCustomEnvs.asJava)
       .addNewEnv()
         .withName(ENV_DRIVER_BIND_ADDRESS)
@@ -93,22 +93,22 @@ private[spark] class BasicDriverFeatureStep(
         .endResources()
       .addToArgs("driver")
       .addToArgs("--properties-file", SPARK_CONF_PATH)
-      .addToArgs("--class", kubernetesConf.roleSpecificConf.mainClass)
+      .addToArgs("--class", conf.roleSpecificConf.mainClass)
       // The user application jar is merged into the spark.jars list and managed through that
       // property, so there is no need to reference it explicitly here.
       .addToArgs(SparkLauncher.NO_RESOURCE)
-      .addToArgs(kubernetesConf.roleSpecificConf.appArgs: _*)
+      .addToArgs(conf.roleSpecificConf.appArgs: _*)
       .build()
 
     val driverPod = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(driverPodName)
-        .addToLabels(kubernetesConf.roleLabels.asJava)
-        .addToAnnotations(kubernetesConf.roleAnnotations.asJava)
+        .addToLabels(conf.roleLabels.asJava)
+        .addToAnnotations(conf.roleAnnotations.asJava)
         .endMetadata()
       .withNewSpec()
         .withRestartPolicy("Never")
-        .withNodeSelector(kubernetesConf.nodeSelector().asJava)
+        .withNodeSelector(conf.nodeSelector().asJava)
         .endSpec()
       .build()
     SparkPod(driverPod, driverContainer)
@@ -117,14 +117,14 @@ private[spark] class BasicDriverFeatureStep(
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
     val additionalProps = mutable.Map(
       KUBERNETES_DRIVER_POD_NAME.key -> driverPodName,
-      "spark.app.id" -> kubernetesConf.appId,
-      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> kubernetesConf.appResourceNamePrefix,
+      "spark.app.id" -> conf.appId,
+      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> conf.appResourceNamePrefix,
       KUBERNETES_DRIVER_SUBMIT_CHECK.key -> "true")
 
     val resolvedSparkJars = KubernetesUtils.resolveFileUrisAndPath(
-      kubernetesConf.sparkJars())
+      conf.sparkJars())
     val resolvedSparkFiles = KubernetesUtils.resolveFileUrisAndPath(
-      kubernetesConf.sparkFiles())
+      conf.sparkFiles())
     if (resolvedSparkJars.nonEmpty) {
       additionalProps.put("spark.jars", resolvedSparkJars.mkString(","))
     }

@@ -21,7 +21,7 @@ import io.fabric8.kubernetes.api.model.HasMetadata
 private[spark] case class KubernetesSpec(
   pod: SparkPod,
   additionalDriverKubernetesResources: Seq[HasMetadata],
-  podJavaSystemProperties: Map[String, String])
+  systemProperties: Map[String, String])
 
 private[spark] object KubernetesSpec {
   def initialSpec(initialProps: Map[String, String]): KubernetesSpec = KubernetesSpec(
