@@ -2272,6 +2272,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           spark.read.schema(schema)
         }
         val savedDf = reader
+          .option("charset", charset)
           .option("lineSep", lineSep)
           .json(path.getCanonicalPath)
         checkAnswer(savedDf, records.map(_.row))
