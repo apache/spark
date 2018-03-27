@@ -327,8 +327,7 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
     }
   }
 
-  private def checkInputDataTypesAreArrays(): TypeCheckResult =
-  {
+  private def checkInputDataTypesAreArrays(): TypeCheckResult = {
     val mismatches = children.zipWithIndex.collect {
       case (child, idx) if !ArrayType.acceptsType(child.dataType) =>
         s"argument ${idx + 1} has to be ${ArrayType.simpleString} type, " +
@@ -342,10 +341,11 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
     }
   }
 
-  override def dataType: ArrayType =
+  override def dataType: ArrayType = {
     children
       .headOption.map(_.dataType.asInstanceOf[ArrayType])
-      .getOrElse(ArrayType.defaultConcreteType.asInstanceOf[ArrayType])
+      .getOrElse(ArrayType(StringType))
+  }
 
   override protected def nullSafeEval(inputs: Seq[Any]): Any = {
     val elements = inputs.flatMap(_.asInstanceOf[ArrayData].toObjectArray(dataType.elementType))
