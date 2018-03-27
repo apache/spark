@@ -96,12 +96,8 @@ private[spark] class BasicDriverFeatureStep(
       // The user application jar is merged into the spark.jars list and managed through that
       // property, so there is no need to reference it explicitly here.
       .addToArgs(SparkLauncher.NO_RESOURCE)
+      .addToArgs(kubernetesConf.roleSpecificConf.appArgs: _*)
       .build()
-    val driverContainerWithArgs = if (kubernetesConf.roleSpecificConf.appArgs.nonEmpty) {
-      new ContainerBuilder(driverContainer)
-        .addToArgs(kubernetesConf.roleSpecificConf.appArgs: _*)
-        .build()
-    } else driverContainer
 
     val driverPod = new PodBuilder(pod.pod)
       .editOrNewMetadata()
@@ -114,7 +110,7 @@ private[spark] class BasicDriverFeatureStep(
         .withNodeSelector(kubernetesConf.nodeSelector().asJava)
         .endSpec()
       .build()
-    SparkPod(driverPod, driverContainerWithArgs)
+    SparkPod(driverPod, driverContainer)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
