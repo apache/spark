@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
 /**
  * The physical plan for writing data into a continuous processing [[StreamWriter]].
  */
-case class ContinuousWriteExec(writer: StreamWriter, query: SparkPlan)
+case class WriteToContinuousDataSourceExec(writer: StreamWriter, query: SparkPlan)
     extends SparkPlan with Logging {
   override def children: Seq[SparkPlan] = Seq(query)
   override def output: Seq[Attribute] = Nil
@@ -63,7 +63,7 @@ case class ContinuousWriteExec(writer: StreamWriter, query: SparkPlan)
       sparkContext.runJob(
         rdd,
         (context: TaskContext, iter: Iterator[InternalRow]) =>
-          ContinuousWriteExec.run(writerFactory, context, iter),
+          WriteToContinuousDataSourceExec.run(writerFactory, context, iter),
         rdd.partitions.indices)
     } catch {
       case _: InterruptedException =>
@@ -82,7 +82,7 @@ case class ContinuousWriteExec(writer: StreamWriter, query: SparkPlan)
   }
 }
 
-object ContinuousWriteExec extends Logging {
+object WriteToContinuousDataSourceExec extends Logging {
   def run(
       writeTask: DataWriterFactory[InternalRow],
       context: TaskContext,
