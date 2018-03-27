@@ -218,33 +218,20 @@ case class StaticInvoke(
     returnNullable: Boolean = true) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
+  val argClasses = ScalaReflection.expressionJavaClasses(arguments)
+  val cls = if (staticObject.getName == objectName) {
+    staticObject
+  } else {
+    Utils.classForName(objectName)
+  }
 
   override def nullable: Boolean = needNullCheck || returnNullable
   override def children: Seq[Expression] = arguments
 
-  override def eval(input: InternalRow): Any = {
-    val args = arguments.map(e => e.eval(input).asInstanceOf[Object])
-    val argClasses = ScalaReflection.expressionJavaClasses(arguments)
-    val cls = if (staticObject.getName == objectName) {
-      staticObject
-    } else {
-      Utils.classForName(objectName)
-    }
-    val method = cls.getDeclaredMethod(functionName, argClasses : _*)
-    if (needNullCheck && args.exists(_ == null)) {
-      // return null if one of arguments is null
-      null
-    } else {
-      val ret = method.invoke(null, args: _*)
+  @transient lazy val method = cls.getDeclaredMethod(functionName, argClasses : _*)
 
-      if (CodeGenerator.defaultValue(dataType) == "null") {
-        ret
-      } else {
-        // cast a primitive value using Boxed class
-        val boxedClass = ScalaReflection.typeBoxedJavaMapping(dataType)
-        boxedClass.cast(ret)
-      }
-    }
+  override def eval(input: InternalRow): Any = {
+    invoke(null, method, arguments, input, dataType)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
