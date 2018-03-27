@@ -94,6 +94,10 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         cliConf.set(k, v)
     }
 
+    // Shouldn't set hive.metastore.uris before invoking HiveDelegationTokenProvider
+    val defaultMetastore = HiveConf.ConfVars.METASTOREURIS
+    cliConf.setVar(defaultMetastore, defaultMetastore.defaultStrVal)
+
     val sessionState = new CliSessionState(cliConf)
 
     sessionState.in = System.in
