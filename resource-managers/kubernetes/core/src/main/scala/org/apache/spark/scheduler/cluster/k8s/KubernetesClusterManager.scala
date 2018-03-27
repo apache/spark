@@ -53,8 +53,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager
          Some(sparkConf.get(KUBERNETES_NAMESPACE)),
          APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
          sparkConf,
-         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
-         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
+         None,
+         None)
   }
 
   val modeHandler: ManagerSpecificHandlers = null
