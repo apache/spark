@@ -714,8 +714,7 @@ trait NullSafeEvaluation extends Expression
    * If a class utilizing NullSaveEvaluation override [[nullable]], probably should also
    * override this.
    */
-  override def eval(input: InternalRow): Any =
-  {
+  override def eval(input: InternalRow): Any = {
     val values = children.toStream.map(_.eval(input))
     if (values.contains(null)) {
       null
@@ -740,9 +739,9 @@ trait NullSafeEvaluation extends Expression
    * @param f accepts a sequence of variable names and returns Java code to compute the output.
    */
   protected def defineCodeGen(
-    ctx: CodegenContext,
-    ev: ExprCode,
-    f: Seq[String] => String): ExprCode = {
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: Seq[String] => String): ExprCode = {
     nullSafeCodeGen(ctx, ev, values => {
       s"${ev.value} = ${f(values)};"
     })
@@ -757,9 +756,9 @@ trait NullSafeEvaluation extends Expression
    *          and returns Java code to compute the output.
    */
   protected def nullSafeCodeGen(
-   ctx: CodegenContext,
-   ev: ExprCode,
-   f: Seq[String] => String): ExprCode = {
+      ctx: CodegenContext,
+      ev: ExprCode,
+      f: Seq[String] => String): ExprCode = {
     val gens = children.map(_.genCode(ctx))
     val resultCode = f(gens.map(_.value))
 
@@ -767,9 +766,8 @@ trait NullSafeEvaluation extends Expression
       val nullSafeEval = children.zip(gens).foldRight(s"""
           ${ev.isNull} = false; // resultCode could change nullability.
           $resultCode
-        """) {
-          case ((child, gen), acc) =>
-            gen.code + ctx.nullSafeExec(child.nullable, gen.isNull)(acc)
+        """) { case ((child, gen), acc) =>
+          gen.code + ctx.nullSafeExec(child.nullable, gen.isNull)(acc)
         }
 
       ev.copy(code = s"""

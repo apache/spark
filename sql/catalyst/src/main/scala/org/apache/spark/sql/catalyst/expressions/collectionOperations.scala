@@ -347,7 +347,6 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
       .headOption.map(_.dataType.asInstanceOf[ArrayType])
       .getOrElse(ArrayType.defaultConcreteType.asInstanceOf[ArrayType])
 
-
   override protected def nullSafeEval(inputs: Seq[Any]): Any = {
     val elements = inputs.flatMap(_.asInstanceOf[ArrayData].toObjectArray(dataType.elementType))
     new GenericArrayData(elements)
@@ -365,9 +364,8 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
   }
 
   private def genCodeForNumberOfElements(
-    ctx: CodegenContext,
-    elements: Seq[String]
-  ) : (String, String) = {
+      ctx: CodegenContext,
+      elements: Seq[String]) : (String, String) = {
     val variableName = ctx.freshName("numElements")
     val code = elements
       .map(el => s"$variableName += $el.numElements();")
@@ -376,11 +374,10 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
   }
 
   private def genCodeForConcatOfPrimitiveElements(
-    ctx: CodegenContext,
-    elementType: DataType,
-    elements: Seq[String],
-    arrayDataName: String
-  ): String = {
+      ctx: CodegenContext,
+      elementType: DataType,
+      elements: Seq[String],
+      arrayDataName: String): String = {
     val arrayName = ctx.freshName("array")
     val arraySizeName = ctx.freshName("size")
     val counter = ctx.freshName("counter")
@@ -424,14 +421,12 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
       |$assignments
       |$arrayDataName = $tempArrayDataName;
       """.stripMargin
-
   }
 
   private def genCodeForConcatOfComplexElements(
-   ctx: CodegenContext,
-   elements: Seq[String],
-   arrayDataName: String
-  ): String = {
+      ctx: CodegenContext,
+      elements: Seq[String],
+      arrayDataName: String): String = {
     val genericArrayClass = classOf[GenericArrayData].getName
     val arrayName = ctx.freshName("arrayObject")
     val counter = ctx.freshName("counter")
