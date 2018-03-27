@@ -176,7 +176,7 @@ class DataFrameReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None, allowUnquotedControlChars=None, charset=None):
+             multiLine=None, allowUnquotedControlChars=None, charset=None, lineSep=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
@@ -239,6 +239,8 @@ class DataFrameReader(OptionUtils):
                                           including tab and line feed characters) or not.
         :param charset: standard charset name, for example UTF-8, UTF-16 and UTF-32. If None is
                           set, the charset of input json will be detected automatically.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -256,7 +258,7 @@ class DataFrameReader(OptionUtils):
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
-            allowUnquotedControlChars=allowUnquotedControlChars, charset=charset)
+            allowUnquotedControlChars=allowUnquotedControlChars, charset=charset, lineSep=lineSep)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -748,7 +750,8 @@ class DataFrameWriter(OptionUtils):
         self._jwrite.saveAsTable(name)
 
     @since(1.4)
-    def json(self, path, mode=None, compression=None, dateFormat=None, timestampFormat=None):
+    def json(self, path, mode=None, compression=None, dateFormat=None, timestampFormat=None,
+             lineSep=None):
         """Saves the content of the :class:`DataFrame` in JSON format
         (`JSON Lines text format or newline-delimited JSON <http://jsonlines.org/>`_) at the
         specified path.
@@ -772,12 +775,15 @@ class DataFrameWriter(OptionUtils):
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
+        :param lineSep: defines the line separator that should be used for writing. If None is
+                        set, it uses the default value, ``\\n``.
 
         >>> df.write.json(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
         self._set_opts(
-            compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat)
+            compression=compression, dateFormat=dateFormat, timestampFormat=timestampFormat,
+            lineSep=lineSep)
         self._jwrite.json(path)
 
     @since(1.4)

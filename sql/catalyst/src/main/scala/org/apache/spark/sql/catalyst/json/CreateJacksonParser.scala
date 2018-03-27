@@ -22,6 +22,7 @@ import java.io.{ByteArrayInputStream, InputStream, InputStreamReader}
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.hadoop.io.Text
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] object CreateJacksonParser extends Serializable {
@@ -59,5 +60,16 @@ private[sql] object CreateJacksonParser extends Serializable {
       case _ =>
         jsonFactory.createParser(is)
     }
+  }
+
+  def internalRow(
+    jsonFactory: JsonFactory,
+    row: InternalRow,
+    charset: Option[String] = None
+  ): JsonParser = {
+    require(charset == Some("UTF-8"))
+    val is = new ByteArrayInputStream(row.getBinary(0))
+
+    inputStream(jsonFactory, is)
   }
 }

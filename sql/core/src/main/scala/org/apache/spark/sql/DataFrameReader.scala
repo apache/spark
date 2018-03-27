@@ -369,6 +369,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`charset` (by default it is not set): allows to forcibly set one of standard basic
    * or extended charsets for input jsons. For example UTF-8, UTF-16BE, UTF-32. If the charset
    * is not specified (by default), the charset is detected automatically.</li>
+   * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing.</li>
    * </ul>
    *
    * @since 2.0.0
