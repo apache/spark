@@ -699,7 +699,6 @@ class SQLTests(ReusedSQLTestCase):
             self.assertEqual(readback.collect(), df.collect())
         finally:
             shutil.rmtree(tpath)
->>>>>>> json-line-sep
 
     def test_multiline_csv(self):
         ages_newlines = self.spark.read.csv(
