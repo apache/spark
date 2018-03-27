@@ -32,6 +32,9 @@ import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.util.Utils
 
+/**
+ * The physical plan for writing data into a continuous processing [[StreamWriter]].
+ */
 case class ContinuousWriteExec(writer: StreamWriter, query: SparkPlan)
     extends SparkPlan with Logging {
   override def children: Seq[SparkPlan] = Seq(query)
@@ -48,9 +51,10 @@ case class ContinuousWriteExec(writer: StreamWriter, query: SparkPlan)
 
     logInfo(s"Start processing data source writer: $writer. " +
       s"The input RDD has ${messages.length} partitions.")
+    // Let the epoch coordinator know how many partitions the write RDD has.
     EpochCoordinatorRef.get(
-      sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
-      sparkContext.env)
+        sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
+        sparkContext.env)
       .askSync[Unit](SetWriterPartitions(rdd.getNumPartitions))
 
     try {
