@@ -123,7 +123,7 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
        46707d92-02f4-4817-8116-a4c3b23e6266
   """)
 // scalastyle:on line.size.limit
-case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Nondeterministic {
+case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful {
 
   def this() = this(None)
 
@@ -152,4 +152,6 @@ case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Non
     ev.copy(code = s"final UTF8String ${ev.value} = $randomGen.getNextUUIDUTF8String();",
       isNull = "false")
   }
+
+  override def freshCopy(): Uuid = Uuid(randomSeed)
 }
