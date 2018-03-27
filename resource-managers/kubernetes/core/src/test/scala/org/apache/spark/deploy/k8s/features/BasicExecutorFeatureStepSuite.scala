@@ -124,7 +124,6 @@ class BasicExecutorFeatureStepSuite
     val conf = baseConf.clone()
     conf.set(org.apache.spark.internal.config.EXECUTOR_JAVA_OPTIONS, "foo=bar")
     conf.set(org.apache.spark.internal.config.EXECUTOR_CLASS_PATH, "bar=baz")
-    conf.setExecutorEnv("qux", "quux")
 
     val step = new BasicExecutorFeatureStep(
       new KubernetesConf(
@@ -135,7 +134,7 @@ class BasicExecutorFeatureStepSuite
         LABELS,
         ANNOTATIONS,
         Map.empty,
-        Map.empty))
+        Map("qux" -> "quux")))
     val executor = step.configurePod(SparkPod.initialPod())
 
     checkEnv(executor,

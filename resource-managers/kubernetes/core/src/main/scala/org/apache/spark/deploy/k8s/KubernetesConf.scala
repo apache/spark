@@ -150,6 +150,7 @@ private[spark] object KubernetesConf {
       KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_ANNOTATION_PREFIX)
     val executorSecrets =
       KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
+    val executorEnv = sparkConf.getExecutorEnv.toMap
 
     new KubernetesConf(
       sparkConf.clone(),
@@ -159,6 +160,6 @@ private[spark] object KubernetesConf {
       executorLabels,
       executorAnnotations,
       executorSecrets,
-      Map.empty)
+      executorEnv)
   }
 }
