@@ -41,9 +41,9 @@ import org.apache.spark.util.Utils
  * @param driverArgs arguments to the driver
  */
 private[spark] case class ClientArguments(
-     mainAppResource: Option[MainAppResource],
-     mainClass: String,
-     driverArgs: Array[String])
+  mainAppResource: Option[MainAppResource],
+  mainClass: String,
+  driverArgs: Array[String])
 
 private[spark] object ClientArguments {
 
@@ -214,7 +214,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       clientArguments.mainAppResource,
       clientArguments.mainClass,
       clientArguments.driverArgs)
-    val orchestrator = new KubernetesDriverBuilder
+    val builder = new KubernetesDriverBuilder
     val namespace = kubernetesConf.namespace()
     // The master URL has been checked for validity already in SparkSubmit.
     // We just need to get rid of the "k8s://" prefix here.
@@ -231,7 +231,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       None,
       None)) { kubernetesClient =>
         val client = new Client(
-          orchestrator,
+          builder,
           kubernetesConf,
           kubernetesClient,
           waitForAppCompletion,

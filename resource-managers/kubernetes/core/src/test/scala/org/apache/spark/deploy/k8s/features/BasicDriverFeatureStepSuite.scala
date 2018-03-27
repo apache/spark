@@ -35,8 +35,11 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   private val CUSTOM_ANNOTATION_KEY = "customAnnotation"
   private val CUSTOM_ANNOTATION_VALUE = "customAnnotationValue"
   private val DRIVER_ANNOTATIONS = Map(CUSTOM_ANNOTATION_KEY -> CUSTOM_ANNOTATION_VALUE)
-  private val DRIVER_CUSTOM_ENV_KEY1 = "customDriverEnv1"
-  private val DRIVER_CUSTOM_ENV_KEY2 = "customDriverEnv2"
+  private val DRIVER_CUSTOM_ENV1 = "customDriverEnv1"
+  private val DRIVER_CUSTOM_ENV2 = "customDriverEnv2"
+  private val DRIVER_ENVS = Map(
+    DRIVER_CUSTOM_ENV1 -> DRIVER_CUSTOM_ENV1,
+    DRIVER_CUSTOM_ENV2 -> DRIVER_CUSTOM_ENV2)
 
   test("Check the pod respects all configurations from the user.") {
     val sparkConf = new SparkConf()
@@ -46,11 +49,6 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "256M")
       .set(org.apache.spark.internal.config.DRIVER_MEMORY_OVERHEAD, 200L)
       .set(CONTAINER_IMAGE, "spark-driver:latest")
-      .set(s"$KUBERNETES_DRIVER_ENV_KEY$DRIVER_CUSTOM_ENV_KEY1", "customDriverEnv1")
-      .set(s"$KUBERNETES_DRIVER_ENV_KEY$DRIVER_CUSTOM_ENV_KEY2", "customDriverEnv2")
-    DRIVER_LABELS.foreach { case (key, value) =>
-      sparkConf.set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$key", value)
-    }
     val kubernetesConf = new KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
@@ -62,7 +60,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       APP_ID,
       DRIVER_LABELS,
       DRIVER_ANNOTATIONS,
-      Map.empty)
+      Map.empty,
+      DRIVER_ENVS)
 
     val featureStep = new BasicDriverFeatureStep(kubernetesConf)
     val basePod = SparkPod.initialPod()
@@ -78,8 +77,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .asScala
       .map(env => (env.getName, env.getValue))
       .toMap
-    assert(envs(DRIVER_CUSTOM_ENV_KEY1) === "customDriverEnv1")
-    assert(envs(DRIVER_CUSTOM_ENV_KEY2) === "customDriverEnv2")
+    assert(envs(DRIVER_CUSTOM_ENV1) === DRIVER_ENVS(DRIVER_CUSTOM_ENV1))
+    assert(envs(DRIVER_CUSTOM_ENV2) === DRIVER_ENVS(DRIVER_CUSTOM_ENV2))
 
     assert(configuredPod.container.getEnv.asScala.exists(envVar =>
       envVar.getName.equals(ENV_DRIVER_BIND_ADDRESS) &&
@@ -127,6 +126,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       APP_ID,
       DRIVER_LABELS,
       DRIVER_ANNOTATIONS,
+      Map.empty,
       Map.empty)
     val step = new BasicDriverFeatureStep(kubernetesConf)
     val additionalProperties = step.getAdditionalPodSystemProperties()

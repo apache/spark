@@ -43,7 +43,8 @@ private[spark] class KubernetesConf[T <: KubernetesRoleSpecificConf](
   val appId: String,
   val roleLabels: Map[String, String],
   val roleAnnotations: Map[String, String],
-  val roleSecretNamesToMountPaths: Map[String, String]) {
+  val roleSecretNamesToMountPaths: Map[String, String],
+  val roleEnvs: Map[String, String]) {
 
   def namespace(): String = sparkConf.get(KUBERNETES_NAMESPACE)
 
@@ -56,9 +57,6 @@ private[spark] class KubernetesConf[T <: KubernetesRoleSpecificConf](
     .getOption("spark.files")
     .map(str => str.split(",").toSeq)
     .getOrElse(Seq.empty[String])
-
-  def driverCustomEnvs(): Seq[(String, String)] =
-    sparkConf.getAllWithPrefix(KUBERNETES_DRIVER_ENV_KEY).toSeq
 
   def imagePullPolicy(): String = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
 
@@ -109,6 +107,8 @@ private[spark] object KubernetesConf {
       KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_ANNOTATION_PREFIX)
     val driverSecretNamesToMountPaths =
       KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_SECRETS_PREFIX)
+    val driverEnvs = KubernetesUtils.parsePrefixedKeyValuePairs(
+      sparkConf, KUBERNETES_DRIVER_ENV_PREFIX)
     new KubernetesConf(
       sparkConfWithMainAppJar,
       KubernetesDriverSpecificConf(mainAppResource, mainClass, appName, appArgs),
@@ -116,7 +116,8 @@ private[spark] object KubernetesConf {
       appId,
       driverLabels,
       driverAnnotations,
-      driverSecretNamesToMountPaths)
+      driverSecretNamesToMountPaths,
+      driverEnvs)
   }
 
   def createExecutorConf(
@@ -153,6 +154,7 @@ private[spark] object KubernetesConf {
       appId,
       executorLabels,
       executorAnnotations,
-      executorSecrets)
+      executorSecrets,
+      Map.empty)
   }
 }

@@ -40,6 +40,9 @@ class KubernetesConfSuite extends SparkFunSuite {
   private val SECRET_NAMES_TO_MOUNT_PATHS = Map(
     "secret1" -> "/mnt/secrets/secret1",
     "secret2" -> "/mnt/secrets/secret2")
+  private val CUSTOM_ENVS = Map(
+    "customEnvKey1" -> "customEnvValue1",
+    "customEnvKey2" -> "customEnvValue2")
   private val DRIVER_POD = new PodBuilder().build()
   private val EXECUTOR_ID = "executor-id"
 
@@ -89,7 +92,7 @@ class KubernetesConfSuite extends SparkFunSuite {
       === Array("local:///opt/spark/jar1.jar"))
   }
 
-  test("Resolve driver labels, annotations, and secret mount paths.") {
+  test("Resolve driver labels, annotations, secret mount paths, and envs.") {
     val sparkConf = new SparkConf(false)
     CUSTOM_LABELS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$key", value)
@@ -99,6 +102,9 @@ class KubernetesConfSuite extends SparkFunSuite {
     }
     SECRET_NAMES_TO_MOUNT_PATHS.foreach { case (key, value) =>
       sparkConf.set(s"$KUBERNETES_DRIVER_SECRETS_PREFIX$key", value)
+    }
+    CUSTOM_ENVS.foreach { case (key, value) =>
+      sparkConf.set(s"$KUBERNETES_DRIVER_ENV_PREFIX$key", value)
     }
 
     val conf = KubernetesConf.createDriverConf(
@@ -115,6 +121,7 @@ class KubernetesConfSuite extends SparkFunSuite {
       CUSTOM_LABELS)
     assert(conf.roleAnnotations === CUSTOM_ANNOTATIONS)
     assert(conf.roleSecretNamesToMountPaths === SECRET_NAMES_TO_MOUNT_PATHS)
+    assert(conf.roleEnvs === CUSTOM_ENVS)
   }
 
   test("Basic executor translated fields.") {

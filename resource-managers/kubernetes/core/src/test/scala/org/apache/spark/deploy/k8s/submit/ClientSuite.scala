@@ -141,6 +141,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       APP_ID,
       Map.empty,
       Map.empty,
+      Map.empty,
       Map.empty)
     when(driverBuilder.buildFromFeatures(kubernetesConf)).thenReturn(BUILT_KUBERNETES_SPEC)
     when(kubernetesClient.pods()).thenReturn(podOperations)

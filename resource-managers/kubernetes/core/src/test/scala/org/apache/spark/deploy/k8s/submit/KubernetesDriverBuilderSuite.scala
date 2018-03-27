@@ -58,6 +58,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       "appId",
       Map.empty,
       Map.empty,
+      Map.empty,
       Map.empty)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
@@ -78,7 +79,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       "appId",
       Map.empty,
       Map.empty,
-      Map("secret" -> "secretMountPath"))
+      Map("secret" -> "secretMountPath"),
+      Map.empty)
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
