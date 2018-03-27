@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -37,7 +38,9 @@ class PropagateEmptyRelationSuite extends PlanTest {
         ReplaceIntersectWithSemiJoin,
         PushDownPredicate,
         PruneFilters,
-        PropagateEmptyRelation) :: Nil
+        PropagateEmptyRelation,
+        CollapseProject,
+        TypeCoercion.FunctionArgumentConversion) :: Nil
   }
 
   object OptimizeWithoutPropagateEmptyRelation extends RuleExecutor[LogicalPlan] {
@@ -208,5 +211,12 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val correctAnswer = LocalRelation('a.int).groupBy()().analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("propaget empty relation keeps the plan resolved") {
+    val query = testRelation1.join(
+      LocalRelation('a.int, 'b.int), UsingJoin(FullOuter, "a" :: Nil), None)
+    val optimized = Optimize.execute(query.analyze)
+    assert(optimized.resolved)
   }
 }
