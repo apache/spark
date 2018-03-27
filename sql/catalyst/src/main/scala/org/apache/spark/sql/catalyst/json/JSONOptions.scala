@@ -111,8 +111,7 @@ private[sql] class JSONOptions(
         .map(Integer.parseInt(_, 16).toByte)
     case reserved if reserved.startsWith("r") || reserved.startsWith("/") =>
       throw new NotImplementedError(s"the $reserved selector has not supported yet")
-    case delim => delim.getBytes(charset.getOrElse(
-      throw new IllegalArgumentException("Please, set the charset option for the delimiter")))
+    case delim => delim.getBytes(charset.getOrElse("UTF-8"))
   }
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator
 
