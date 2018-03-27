@@ -83,6 +83,15 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       InternalRow.fromSeq(Seq()),
       """A method named "nonexisting" is not declared in any enclosing class """ +
         "nor any supertype")
+
+    val initializeWithWrongParamType = InitializeJavaBean(
+      Literal.fromObject(new TestBean),
+      Map("setX" -> Literal("1")))
+    intercept[Exception] {
+      evaluateWithoutCodegen(initializeWithWrongParamType, InternalRow.fromSeq(Seq()))
+    }.getMessage.contains(
+      """A method named "setX" is not declared in any enclosing class """ +
+        "nor any supertype")
   }
 
   test("SPARK-23585: UnwrapOption should support interpreted execution") {
@@ -126,4 +135,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       InternalRow.fromSeq(Seq(Row(null))),
       "The 0th field 'c0' of input row cannot be null.")
   }
+}
+
+class TestBean extends Serializable {
+  private var x: Int = 0
+
+  def setX(i: Int): Unit = x = i
 }
