@@ -137,10 +137,6 @@ private[spark] object SparkKubernetesClientFactory {
        .withWebsocketPingInterval(0)
        .withOption(oauthTokenValue) {
          (token, configBuilder) => configBuilder.withOauthToken(token)
-    // TODO(ECH) Deal correctly with the oauth token file.
-    //      }.withOption(oauthTokenFile) {
-    //      (file, configBuilder) =>
-    //        configBuilder.withOauthToken(Files.toString(file, Charsets.UTF_8))
      }.withOption(caCertFile) {
        (file, configBuilder) => configBuilder.withCaCertFile(file)
      }.withOption(clientKeyFile) {
