@@ -4,13 +4,15 @@ defaults: &defaults
   docker:
     - image: palantirtechnologies/circle-spark-base
   resource_class: xlarge
-  environment:
+  environment: &defaults-environment
     TERM: dumb
+    BUILD_SBT_CACHE: "/home/circleci/build-sbt-cache"
 
 
 test-defaults: &test-defaults
   <<: *defaults
   environment:
+    <<: *defaults-environment
     CIRCLE_TEST_REPORTS: /tmp/circle-test-reports
     TEST_RESULTS_FILE: /tmp/test-results/results.json
 
@@ -28,6 +30,35 @@ deployable-branches-and-tags: &deployable-branches-and-tags
     branches:
       only: master
 
+
+# Step templates
+
+step_templates:
+  restore-build-binaries-cache: &restore-build-binaries-cache
+    restore_cache:
+      key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+  restore-ivy-cache: &restore-ivy-cache
+    restore_cache:
+      keys:
+        - v7-ivy-dependency-cache-{{ .Branch }}-{{ checksum "pom.xml" }}
+        # if cache for exact version of `pom.xml` is not present then load any most recent one
+        - v7-ivy-dependency-cache-{{ .Branch }}-
+        - v7-ivy-dependency-cache-master-{{ checksum "pom.xml" }}
+        - v7-ivy-dependency-cache-master-
+  restore-home-sbt-cache: &restore-home-sbt-cache
+    restore_cache:
+      keys:
+        - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/$global/update/$global/streams/update_cache_2.10/inputs" }}
+  restore-build-sbt-cache: &restore-build-sbt-cache
+    restore_cache:
+      key: v1-build-sbt-{{ .Branch }}-{{ .Revision }}
+  link-in-build-sbt-cache: &link-in-build-sbt-cache
+    run:
+      name: Hard link cache contents into current build directory
+      command: |
+        if [[ -d "$BUILD_SBT_CACHE" ]]; then
+          rsync --info=stats2,misc1,flist0 -a --link-dest="$BUILD_SBT_CACHE" "$BUILD_SBT_CACHE/" .
+        fi
 
 jobs:
   build-maven:
@@ -80,14 +111,11 @@ jobs:
     resource_class: small
     steps:
       - checkout
-      - restore_cache:
-          key: build-maven-{{ .Branch }}-{{ .BuildNum }}
       # Need maven dependency cache, otherwise checkstyle tests fail as such:
       # Failed to execute goal on project spark-assembly_2.11: Could not resolve dependencies for project org.apache.spark:spark-assembly_2.11:pom:2.4.0-SNAPSHOT
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
-      - restore_cache:
-          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - *restore-build-binaries-cache
       - run: dev/run-style-tests.py | tee /tmp/run-style-tests.log
       - store_artifacts:
           path: /tmp/run-style-tests.log
@@ -103,8 +131,7 @@ jobs:
           key: build-maven-{{ .Branch }}-{{ .BuildNum }}
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
-      - restore_cache:
-          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - *restore-build-binaries-cache
       - run: |
           dev/run-build-tests.py | tee /tmp/run-build-tests.log
       - store_artifacts:
@@ -113,13 +140,11 @@ jobs:
 
   build-sbt:
     <<: *defaults
-    environment:
-      BUILD_SBT_CACHE: "/home/circleci/build-sbt-cache"
     steps:
       # Saves us from recompiling every time...
       - restore_cache:
           keys:
-            - v1-build-sbt-{{ .Branch }}-{{ .BuildNum }}
+            - v1-build-sbt-{{ .Branch }}-{{ .Revision }}
             - v1-build-sbt-{{ .Branch }}-
             - v1-build-sbt-master-
       - checkout
@@ -129,19 +154,9 @@ jobs:
             if [[ -d "$BUILD_SBT_CACHE" ]]; then
               rsync --info=stats2,misc1,flist0 -a --link-dest="$BUILD_SBT_CACHE" "$BUILD_SBT_CACHE/" .
             fi
-      - restore_cache:
-          keys:
-            - v5-ivy-dependency-cache-{{ checksum "pom.xml" }}
-            # if cache for exact version of `pom.xml` is not present then load any most recent one
-            - v5-ivy-dependency-cache-
-      - restore_cache:
-          key: maven-dependency-cache-{{ checksum "pom.xml" }}
-      - restore_cache:
-          keys:
-            - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/$global/update/$global/streams/update_cache_2.10/inputs" }}
-      # Given the build-sbt cache, this is superfluous, but leave it in in case we will want to remove the former
-      - restore_cache:
-          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - *restore-ivy-cache
+      - *restore-home-sbt-cache
+      - *restore-build-binaries-cache
       - run:
           name: Download all external dependencies for the test configuration (which extends compile) and ensure we update first
           command: dev/sbt test:externalDependencyClasspath oldDeps/test:externalDependencyClasspath
@@ -150,7 +165,7 @@ jobs:
       - store_artifacts:
           path: /tmp/heap.bin
       - save_cache:
-          key: v5-ivy-dependency-cache-{{ checksum "pom.xml" }}
+          key: v7-ivy-dependency-cache-{{ .Branch }}-{{ checksum "pom.xml" }}
           paths:
             - "~/.ivy2"
       - store_artifacts:
@@ -167,22 +182,16 @@ jobs:
             --exclude '***/*.jar' --include 'target/***'
             --include '**/' --exclude '*' . "$BUILD_SBT_CACHE/"
       - save_cache:
-          key: v1-build-sbt-{{ .Branch }}-{{ .BuildNum }}
+          key: v1-build-sbt-{{ .Branch }}-{{ .Revision }}
           paths:
             - "~/build-sbt-cache"
-      # Also save all the target directories to the workspace - need assembly jars for spark submitting
+      # Also save all the assembly jars directories to the workspace - need them for spark submitting
       - persist_to_workspace:
           root: .
           paths:
-            - "target"
-            - "*/target"
-            - "common/*/target"
-            - "dists/*/target"
-            - "external/*/target"
-            - "resource-managers/*/target"
-            - "resource-managers/*/*/target"
-            - "sql/*/target"
-            - "project/project/target"
+            - 'assembly/target/scala-*/jars'
+            - 'examples/target/scala-*/jars'
+            - 'external/*/target/scala-*/*.jar'
 
   run-backcompat-tests:
     # depends on build-sbt
@@ -191,16 +200,9 @@ jobs:
       - checkout
       - attach_workspace:
           at: .
-      - restore_cache:
-          key: v5-ivy-dependency-cache-{{ checksum "pom.xml" }}
-      # TODO(dsanduleac): do we need the maven cache?
-      - restore_cache:
-          key: maven-dependency-cache-{{ checksum "pom.xml" }}
-      - restore_cache:
-          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
-      - restore_cache:
-          keys:
-            - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/$global/update/$global/streams/update_cache_2.10/inputs" }}
+      - *restore-ivy-cache
+      - *restore-build-binaries-cache
+      - *restore-home-sbt-cache
       - run: |
           dev/run-backcompat-tests.py | tee /tmp/run-backcompat-tests.log
       - store_artifacts:
@@ -209,13 +211,19 @@ jobs:
 
 
   run-python-tests:
-    # depends on build-sbt, so we're restoring the build-sbt cache
+    # depends on build-sbt, but we only need the assembly jars
     <<: *defaults
     docker:
       - image: palantirtechnologies/circle-spark-python
     parallelism: 2
     steps:
       - checkout
+      # These two steps restore all the target directories except jars
+      # Necessary because of SPARK_PREPEND_CLASSES being used in python tests, and some python tests
+      # accessing classes from the core/test configuration.
+      - *restore-build-sbt-cache
+      - *link-in-build-sbt-cache
+      # ---
       # Python tests need assembly files build by the `build-sbt` job
       # e.g. external/kafka-0-8-assembly/target/scala-2.11/spark-streaming-kafka-0-8-assembly-2.4.0-SNAPSHOT.jar
       - attach_workspace:
@@ -228,7 +236,7 @@ jobs:
 
 
   run-r-tests:
-    # depends on build-sbt, so we're restoring the build-sbt cache
+    # depends on build-sbt, but we only need the assembly jars
     <<: *defaults
     docker:
       - image: palantirtechnologies/circle-spark-r
@@ -257,15 +265,13 @@ jobs:
       - checkout
       - attach_workspace:
          at: .
-      - restore_cache:
-          key: maven-dependency-cache-{{ checksum "pom.xml" }}
-      - restore_cache:
-          key: v5-ivy-dependency-cache-{{ checksum "pom.xml" }}
-      - restore_cache:
-          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
-      - restore_cache:
-          keys:
-            - v2-home-sbt-{{ checksum "build/sbt" }}-{{ checksum "project/target/streams/$global/update/$global/streams/update_cache_2.10/inputs" }}
+      # These two steps restore all the target directories except jars
+      - *restore-build-sbt-cache
+      - *link-in-build-sbt-cache
+      # ---
+      - *restore-ivy-cache
+      - *restore-build-binaries-cache
+      - *restore-home-sbt-cache
       - restore_cache:
           keys:
             - v1-test-results-{{ .Branch }}-{{ .BuildNum }}
@@ -346,8 +352,7 @@ jobs:
       - checkout
       - restore_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
-      - restore_cache:
-          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - *restore-build-binaries-cache
       - run:
           command: dev/set_version_and_package.sh
       # This is potentially costly but we can't use the workspace as it would conflict with
@@ -371,8 +376,7 @@ jobs:
           key: v1-maven-build-with-version-{{ .Branch }}-{{ .Revision }}
       - restore_cache:
           key: v1-maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
-      - restore_cache:
-          key: build-binaries-{{ checksum "build/mvn" }}-{{ checksum "build/sbt" }}
+      - *restore-build-binaries-cache
 
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
       - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
@@ -402,8 +406,6 @@ workflows:
             - build-maven
           <<: *all-branches-and-tags
       - build-sbt:
-          requires:
-            - build-maven
           <<: *all-branches-and-tags
       - run-backcompat-tests:
           requires:
@@ -424,7 +426,7 @@ workflows:
       - build-maven-versioned:
           requires:
             - build-maven
-          <<: *deployable-branches-and-tags
+          <<: *all-branches-and-tags
       - deploy:
           requires:
             - build-maven
