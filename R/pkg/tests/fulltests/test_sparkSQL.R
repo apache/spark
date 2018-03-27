@@ -3501,7 +3501,8 @@ test_that("catalog APIs, listTables, listColumns, listFunctions", {
   expect_true(nrow(f) >= 200) # 250
   expect_equal(colnames(f),
                c("name", "database", "description", "className", "isTemporary"))
-  expect_equal(take(orderBy(f, "className"), 1)$className,
+  fe <- filter(f, startsWith(f$className, "org.apache.spark.sql.catalyst.expressions"))
+  expect_equal(take(orderBy(fe, "className"), 1)$className,
                "org.apache.spark.sql.catalyst.expressions.Abs")
   expect_error(listFunctions("foo_db"),
                "Error in listFunctions : analysis error - Database 'foo_db' does not exist")
