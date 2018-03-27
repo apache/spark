@@ -211,7 +211,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("propaget empty relation keeps the plan resolved") {
+  test("propagate empty relation keeps the plan resolved") {
     val query = testRelation1.join(
       LocalRelation('a.int, 'b.int), UsingJoin(FullOuter, "a" :: Nil), None)
     val optimized = Optimize.execute(query.analyze)
