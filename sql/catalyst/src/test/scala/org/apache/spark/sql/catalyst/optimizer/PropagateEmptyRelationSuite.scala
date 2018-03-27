@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -39,8 +38,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
         PushDownPredicate,
         PruneFilters,
         PropagateEmptyRelation,
-        CollapseProject,
-        TypeCoercion.FunctionArgumentConversion) :: Nil
+        CollapseProject) :: Nil
   }
 
   object OptimizeWithoutPropagateEmptyRelation extends RuleExecutor[LogicalPlan] {

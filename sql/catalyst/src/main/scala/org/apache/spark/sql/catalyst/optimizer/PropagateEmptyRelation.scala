@@ -43,7 +43,7 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
 
   // Construct a project list from plan's output, while the value is always NULL.
   private def nullValueProjectList(plan: LogicalPlan): Seq[NamedExpression] =
-    plan.output.map{ a => Alias(Literal(null), a.name)(a.exprId) }
+    plan.output.map{ a => Alias(Cast(Literal(null), a.dataType), a.name)(a.exprId) }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p: Union if p.children.forall(isEmptyLocalRelation) =>
