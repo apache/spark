@@ -47,7 +47,9 @@ import org.apache.spark.util.PeriodicCheckpointer
  *  - This class should NOT be copied (since copies may conflict on which RDDs should be
  *    checkpointed).
  *  - This class removes checkpoint files once later RDDs have been checkpointed and do not
- *    have dependencies, the files to remove have been created for.
+ *    have dependencies, the files to remove have been created for (removing checkpoint files
+ *    of prior RDDs, the later ones depend on, may fail with `FileNotFoundException` in case
+ *    the later RDDs are not yet materialized).
  *    However, references to the older RDDs will still return isCheckpointed = true.
  *
  * Example usage:
