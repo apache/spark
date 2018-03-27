@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.objects
 
-import java.lang.reflect.Modifier
+import java.lang.reflect.{Method, Modifier}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.Builder
@@ -103,6 +103,38 @@ trait InvokeLike extends Expression with NonSQLExpression {
     val argCode = ctx.splitExpressionsWithCurrentInputs(argCodes)
 
     (argCode, argValues.mkString(", "), resultIsNull)
+  }
+
+  /**
+   * Evaluate each argument with a given row, invoke a method with a given object and arguments,
+   * and cast a return value if the return type can be mapped to a Java Boxed type
+   *
+   * @param obj the object for the method to be called. If null, perform s static method call
+   * @param method the method object to be called
+   * @param arguments the arguments used for the method call
+   * @param input the row used for evaluating arguments
+   * @param dataType the data type of the return object
+   * @return the return object of a method call
+   */
+  def invoke(
+      obj: Any,
+      method: Method,
+      arguments: Seq[Expression],
+      input: InternalRow,
+      dataType: DataType): Any = {
+    val args = arguments.map(e => e.eval(input).asInstanceOf[Object])
+    if (needNullCheck && args.exists(_ == null)) {
+      // return null if one of arguments is null
+      null
+    } else {
+      val ret = method.invoke(obj, args: _*)
+      val boxedClass = ScalaReflection.typeBoxedJavaMapping.get(dataType)
+      if (boxedClass.isDefined) {
+        boxedClass.get.cast(ret)
+      } else {
+        ret
+      }
+    }
   }
 }
 
@@ -264,6 +296,8 @@ case class Invoke(
     propagateNull: Boolean = true,
     returnNullable : Boolean = true) extends InvokeLike {
 
+  val argClasses = ScalaReflection.expressionJavaClasses(arguments)
+
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
 
@@ -273,23 +307,8 @@ case class Invoke(
       // return null if obj is null
       null
     } else {
-      val args = arguments.map(e => e.eval(input).asInstanceOf[Object])
-      val argClasses = ScalaReflection.expressionJavaClasses(arguments)
       val method = obj.getClass.getDeclaredMethod(functionName, argClasses : _*)
-      if (needNullCheck && args.exists(_ == null)) {
-        // return null if one of arguments is null
-        null
-      } else {
-        val ret = method.invoke(obj, args: _*)
-
-        if (CodeGenerator.defaultValue(dataType) == "null") {
-          ret
-        } else {
-          // cast a primitive value using Boxed class
-          val boxedClass = ScalaReflection.typeBoxedJavaMapping(dataType)
-          boxedClass.cast(ret)
-        }
-      }
+      invoke(obj, method, arguments, input, dataType)
     }
   }
 
