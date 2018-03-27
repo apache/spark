@@ -30,7 +30,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors._
@@ -80,12 +79,6 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     })
   }
 
-  private def isSecuredAndProxy(hiveConf: HiveConf): Boolean = {
-    UserGroupInformation.isSecurityEnabled &&
-      hiveConf.getTrimmed(ConfVars.METASTOREURIS.varname, "").nonEmpty &&
-      SparkHadoopUtil.get.isProxyUser(UserGroupInformation.getCurrentUser)
-  }
-
   def main(args: Array[String]) {
     val oproc = new OptionsProcessor()
     if (!oproc.process_stage1(args)) {
@@ -130,11 +123,10 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       }
     }
 
-    if (isSecuredAndProxy(conf)) {
-      val currentUser = UserGroupInformation.getCurrentUser
-      val tokenProvider = new HiveDelegationTokenProvider()
-      tokenProvider.obtainDelegationTokens(hadoopConf, sparkConf, currentUser.getCredentials)
-    }
+    Option(new HiveDelegationTokenProvider)
+      .filter(_.delegationTokensRequired(sparkConf, hadoopConf))
+      .foreach(_.obtainDelegationTokens(
+        hadoopConf, sparkConf, UserGroupInformation.getCurrentUser.getCredentials))
 
     SessionState.start(sessionState)
 
