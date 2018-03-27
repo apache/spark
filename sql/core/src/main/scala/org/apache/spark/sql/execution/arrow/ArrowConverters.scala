@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.arrow
 
-import java.io.{ByteArrayOutputStream, DataOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutputStream}
 import java.nio.channels.Channels
 import java.nio.file.{Files, Paths}
 
@@ -26,7 +26,6 @@ import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.ipc.{ArrowStreamReader, ReadChannel, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
-import org.apache.arrow.vector.util.ByteArrayReadableSeekableByteChannel
 import org.apache.spark.TaskContext
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
@@ -219,7 +218,7 @@ private[sql] object ArrowConverters {
       }
 
       private def nextBatch(): Iterator[InternalRow] = {
-        val in = new ByteArrayReadableSeekableByteChannel(arrowStreamIter.next())
+        val in = new ByteArrayInputStream(arrowStreamIter.next())
         reader = new ArrowStreamReader(in, allocator)
         reader.loadNextBatch()  // throws IOException
         val root = reader.getVectorSchemaRoot  // throws IOException
@@ -242,8 +241,8 @@ private[sql] object ArrowConverters {
   private[arrow] def loadBatch(
       batchBytes: Array[Byte],
       allocator: BufferAllocator): ArrowRecordBatch = {
-    val in = new ByteArrayReadableSeekableByteChannel(batchBytes)
-    MessageSerializer.deserializeMessageBatch(new ReadChannel(in), allocator)
+    val in = new ByteArrayInputStream(batchBytes)
+    MessageSerializer.deserializeMessageBatch(new ReadChannel(Channels.newChannel(in)), allocator)
       .asInstanceOf[ArrowRecordBatch]  // throws IOException
   }
 
