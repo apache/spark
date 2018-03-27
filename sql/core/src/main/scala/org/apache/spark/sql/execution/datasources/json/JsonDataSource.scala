@@ -122,8 +122,10 @@ object TextInputJsonDataSource extends JsonDataSource {
       schema: StructType): Iterator[InternalRow] = {
     val linesReader = new HadoopFileLinesReader(file, conf)
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
+    val charset = parser.options.charset
+
     val safeParser = new FailureSafeParser[Text](
-      input => parser.parse(input, CreateJacksonParser.text, textToUTF8String),
+      input => parser.parse[Text](input, CreateJacksonParser.text(_, _, charset), textToUTF8String),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
@@ -146,7 +148,12 @@ object MultiLineJsonDataSource extends JsonDataSource {
       parsedOptions: JSONOptions): StructType = {
     val json: RDD[PortableDataStream] = createBaseRdd(sparkSession, inputPaths)
     val sampled: RDD[PortableDataStream] = JsonUtils.sample(json, parsedOptions)
-    JsonInferSchema.infer(sampled, parsedOptions, createParser)
+
+    JsonInferSchema.infer[PortableDataStream](
+      sampled,
+      parsedOptions,
+      createParser(_, _, parsedOptions.charset)
+    )
   }
 
   private def createBaseRdd(
@@ -168,11 +175,16 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .values
   }
 
-  private def createParser(jsonFactory: JsonFactory, record: PortableDataStream): JsonParser = {
+  private def createParser(
+      jsonFactory: JsonFactory,
+      record: PortableDataStream,
+      charset: Option[String] = None): JsonParser = {
     val path = new Path(record.getPath())
     CreateJacksonParser.inputStream(
       jsonFactory,
-      CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, path))
+      CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, path),
+      charset
+    )
   }
 
   override def readFile(
@@ -180,21 +192,26 @@ object MultiLineJsonDataSource extends JsonDataSource {
       file: PartitionedFile,
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
+    def createInputStream() = {
+      CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath)))
+    }
     def partitionedFileString(ignored: Any): UTF8String = {
-      Utils.tryWithResource {
-        CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath)))
-      } { inputStream =>
-        UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
+      Utils.tryWithResource(createInputStream()) { is =>
+        UTF8String.fromBytes(ByteStreams.toByteArray(is))
       }
     }
+    val charset = parser.options.charset
 
     val safeParser = new FailureSafeParser[InputStream](
-      input => parser.parse(input, CreateJacksonParser.inputStream, partitionedFileString),
+      input => parser.parse[InputStream](
+        input,
+        CreateJacksonParser.inputStream(_, _, charset),
+        partitionedFileString
+      ),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
 
-    safeParser.parse(
-      CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))))
+    safeParser.parse(createInputStream())
   }
 }
