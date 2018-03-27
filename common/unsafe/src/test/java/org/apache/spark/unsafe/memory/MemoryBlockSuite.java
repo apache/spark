@@ -32,13 +32,13 @@ public class MemoryBlockSuite {
   private void check(MemoryBlock memory, Object obj, long offset, int length) {
     memory.setPageNumber(1);
     memory.fill((byte)-1);
-    memory.putBoolean(offset, true);
-    memory.putByte(offset + 1, (byte)127);
-    memory.putShort(offset + 2, (short)257);
-    memory.putInt(offset + 4, 0x20000002);
-    memory.putLong(offset + 8, -1L);
-    memory.putFloat(offset + 16, 1.0F);
-    memory.putDouble(offset + 20, 2.0);
+    memory.putBoolean(0, true);
+    memory.putByte(1, (byte)127);
+    memory.putShort(2, (short)257);
+    memory.putInt(4, 0x20000002);
+    memory.putLong(8, -1L);
+    memory.putFloat(16, 1.0F);
+    memory.putDouble(20, 2.0);
     MemoryBlock.copyMemory(memory, 0L, memory, 28, 4);
     int[] a = new int[2];
     a[0] = 0x12345678;
@@ -51,18 +51,18 @@ public class MemoryBlockSuite {
     Assert.assertEquals(offset, memory.getBaseOffset());
     Assert.assertEquals(length, memory.size());
     Assert.assertEquals(1, memory.getPageNumber());
-    Assert.assertEquals(true, memory.getBoolean(offset));
-    Assert.assertEquals((byte)127, memory.getByte(offset + 1 ));
-    Assert.assertEquals((short)257, memory.getShort(offset + 2));
-    Assert.assertEquals(0x20000002, memory.getInt(offset + 4));
-    Assert.assertEquals(-1L, memory.getLong(offset + 8));
-    Assert.assertEquals(1.0F, memory.getFloat(offset + 16), 0);
-    Assert.assertEquals(2.0, memory.getDouble(offset + 20), 0);
-    Assert.assertEquals(true, memory.getBoolean(offset + 28));
-    Assert.assertEquals((byte)127, memory.getByte(offset + 29 ));
-    Assert.assertEquals((short)257, memory.getShort(offset + 30));
-    Assert.assertEquals(a[0], memory.getInt(offset + 32));
-    Assert.assertEquals(a[1], memory.getInt(offset + 36));
+    Assert.assertEquals(true, memory.getBoolean(0));
+    Assert.assertEquals((byte)127, memory.getByte(1 ));
+    Assert.assertEquals((short)257, memory.getShort(2));
+    Assert.assertEquals(0x20000002, memory.getInt(4));
+    Assert.assertEquals(-1L, memory.getLong(8));
+    Assert.assertEquals(1.0F, memory.getFloat(16), 0);
+    Assert.assertEquals(2.0, memory.getDouble(20), 0);
+    Assert.assertEquals(true, memory.getBoolean(28));
+    Assert.assertEquals((byte)127, memory.getByte(29 ));
+    Assert.assertEquals((short)257, memory.getShort(30));
+    Assert.assertEquals(a[0], memory.getInt(32));
+    Assert.assertEquals(a[1], memory.getInt(36));
     if (bigEndianPlatform) {
       Assert.assertEquals(a[0],
         ((int)b[0] & 0xff) << 24 | ((int)b[1] & 0xff) << 16 |
@@ -79,7 +79,7 @@ public class MemoryBlockSuite {
         ((int)b[5] & 0xff) << 8 | ((int)b[4] & 0xff));
     }
     for (int i = 40; i < memory.size(); i++) {
-      Assert.assertEquals((byte) -1, memory.getByte(offset + i));
+      Assert.assertEquals((byte) -1, memory.getByte(i));
     }
 
     try {
@@ -90,7 +90,7 @@ public class MemoryBlockSuite {
     }
 
     try {
-      memory.subBlock(offset + 16, length - 8);
+      memory.subBlock(16, length - 8);
       Assert.fail();
     } catch (Exception expected) {
       Assert.assertThat(expected.getMessage(), containsString("should not be larger than"));

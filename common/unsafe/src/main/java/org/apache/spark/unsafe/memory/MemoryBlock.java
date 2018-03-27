@@ -136,9 +136,9 @@ public abstract class MemoryBlock {
   public abstract MemoryBlock subBlock(long offset, long size);
 
   protected void checkSubBlockRange(long offset, long size) {
-    if (this.offset + offset < 0 || size < 0) {
+    if (offset < 0 || size < 0 || this.offset + offset < 0) {
       throw new ArrayIndexOutOfBoundsException(
-        "Size " + size + " and offset " + (this.offset + offset) + " must be non-negative");
+        "Size " + size + " and offset " + offset + " must be non-negative");
     }
     if (offset + size > length) {
       throw new ArrayIndexOutOfBoundsException("The sum of size " + size + " and offset " +
@@ -150,7 +150,8 @@ public abstract class MemoryBlock {
    * getXXX/putXXX does not ensure guarantee behavior if the offset is invalid. e.g  cause illegal
    * memory access, throw an exception, or etc.
    * getXXX/putXXX uses an index based on this.offset that includes the size of metadata such as
-   * JVM object header. Thus, the offset is expected as an logical offset in the memory block.
+   * JVM object header. The offset is 0-based and is expected as an logical offset in the memory
+   * block.
    */
   public abstract int getInt(long offset);
 
