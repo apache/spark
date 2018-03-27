@@ -2985,7 +2985,7 @@ class SQLTests(ReusedSQLTestCase):
         df = self.spark.read.option('header', 'true').schema(schema).csv(tmpPath)
         self.assertRaisesRegexp(
             Exception,
-            "Fields in the header of csv file are not matched to field names of the schema",
+            "CSV file header does not contain the expected fields",
             lambda: df.collect())
         shutil.rmtree(tmpPath)
 
