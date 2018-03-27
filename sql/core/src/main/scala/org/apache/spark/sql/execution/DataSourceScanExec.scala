@@ -152,7 +152,7 @@ case class RowDataSourceScanExec(
  * @param output Output attributes of the scan, including data attributes and partition attributes.
  * @param requiredSchema Required schema of the underlying relation, excluding partition columns.
  * @param partitionFilters Predicates to use for partition pruning.
- * @param OptionalBucketSet Bucket ids for bucket pruning
+ * @param optionalBucketSet Bucket ids for bucket pruning
  * @param dataFilters Filters on non-partition columns.
  * @param tableIdentifier identifier for the table in the metastore.
  */
@@ -161,7 +161,7 @@ case class FileSourceScanExec(
     output: Seq[Attribute],
     requiredSchema: StructType,
     partitionFilters: Seq[Expression],
-    OptionalBucketSet: Option[BitSet],
+    optionalBucketSet: Option[BitSet],
     dataFilters: Seq[Expression],
     override val tableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with ColumnarBatchScan  {
@@ -289,7 +289,20 @@ case class FileSourceScanExec(
       } getOrElse {
         metadata
       }
-    withOptPartitionCount
+
+    val withSelectedBucketsCount = relation.bucketSpec.map { spec =>
+      val numSelectedBuckets = optionalBucketSet.map { b =>
+        b.cardinality()
+      } getOrElse {
+        spec.numBuckets
+      }
+      withOptPartitionCount + ("SelectedBucketsCount" ->
+        s"$numSelectedBuckets out of ${spec.numBuckets}")
+    } getOrElse {
+      withOptPartitionCount
+    }
+
+    withSelectedBucketsCount
   }
 
   private lazy val inputRDD: RDD[InternalRow] = {
@@ -376,8 +389,8 @@ case class FileSourceScanExec(
         }
       }
 
-    val prunedBucketed = if (OptionalBucketSet.isDefined) {
-      val bucketSet = OptionalBucketSet.get
+    val prunedBucketed = if (optionalBucketSet.isDefined) {
+      val bucketSet = optionalBucketSet.get
       bucketed.filter {
         f => bucketSet.get(
           BucketingUtils.getBucketId(new Path(f.filePath).getName)
@@ -519,7 +532,7 @@ case class FileSourceScanExec(
       output.map(QueryPlan.normalizeExprId(_, output)),
       requiredSchema,
       QueryPlan.normalizePredicates(partitionFilters, output),
-      OptionalBucketSet,
+      optionalBucketSet,
       QueryPlan.normalizePredicates(dataFilters, output),
       None)
   }

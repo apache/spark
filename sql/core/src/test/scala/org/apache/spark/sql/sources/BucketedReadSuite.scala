@@ -80,7 +80,6 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  // TODO update description
   // To verify if the bucket pruning works, this function checks two conditions:
   //   1) Check if the pruned buckets (before filtering) are empty.
   //   2) Verify the final result is the same as the expected one
