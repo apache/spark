@@ -18,39 +18,34 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.io._
-import java.util.{Locale, ArrayList => JArrayList}
+import java.util.{ArrayList => JArrayList, Locale}
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
 import jline.console.ConsoleReader
 import jline.console.history.FileHistory
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
 import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.metadata.Hive
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.security.token.Token
 import org.apache.log4j.{Level, Logger}
 import org.apache.thrift.transport.TSocket
-import org.apache.spark.SparkConf
 
+import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HiveDelegationTokenProvider
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
-import org.apache.spark.util.{ShutdownHookManager, Utils}
+import org.apache.spark.util.ShutdownHookManager
 
 /**
  * This code doesn't support remote connections in Hive 1.2+, as the underlying CliDriver
