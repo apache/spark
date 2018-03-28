@@ -288,6 +288,7 @@ trait NonSQLExpression extends Expression {
   final override def sql: String = {
     transform {
       case a: Attribute => new PrettyAttribute(a)
+      case a: Alias => PrettyAttribute(a.sql, a.dataType)
     }.toString
   }
 }
