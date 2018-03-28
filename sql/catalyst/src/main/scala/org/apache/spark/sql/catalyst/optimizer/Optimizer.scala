@@ -1321,10 +1321,8 @@ object UpdateNullabilityInAttributeReferences extends Rule[LogicalPlan] {
     case p if !p.isInstanceOf[LeafNode] =>
       val nullabilityMap = AttributeMap(p.children.flatMap(_.output).map { x => x -> x.nullable })
       p transformExpressions {
-        case ar: AttributeReference =>
-          nullabilityMap.get(ar).filterNot(_ == ar.nullable).map { nullable =>
-            ar.withNullability(nullable)
-          }.getOrElse(ar)
+        case ar: AttributeReference if nullabilityMap.contains(ar) =>
+          ar.withNullability(nullabilityMap(ar))
       }
   }
 }
