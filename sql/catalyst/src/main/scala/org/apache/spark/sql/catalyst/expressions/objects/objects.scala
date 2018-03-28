@@ -296,7 +296,7 @@ case class Invoke(
     propagateNull: Boolean = true,
     returnNullable : Boolean = true) extends InvokeLike {
 
-  val argClasses = ScalaReflection.expressionJavaClasses(arguments)
+  lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
 
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
