@@ -3246,15 +3246,18 @@ class Dataset[T] private[sql](
 
         val arrowBatchRDD = toArrowBatches(plan)
 
+        // Store collection results for worst case of 1 to N-1 partitions
         val results = new Array[Array[Array[Byte]]](arrowBatchRDD.partitions.size - 1)
-        var lastIndex = -1
+        var lastIndex = -1  // index of last partition written
 
         def handlePartitionBatches(index: Int, arrowBatches: Array[Array[Byte]]): Unit = {
+          // If result is from next partition in order
           if (index - 1 == lastIndex) {
             batchWriter.writeBatches(arrowBatches.iterator)
             lastIndex += 1
             while (lastIndex < results.length && results(lastIndex) != null) {
               batchWriter.writeBatches(results(lastIndex).iterator)
+              results(lastIndex) = null
               lastIndex += 1
             }
           } else {
