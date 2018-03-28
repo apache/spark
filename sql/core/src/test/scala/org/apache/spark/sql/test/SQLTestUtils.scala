@@ -61,6 +61,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
+    SparkSession.setActiveSession(spark)
     if (loadTestDataBeforeTests) {
       loadTestData()
     }
