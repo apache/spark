@@ -218,7 +218,6 @@ case class StaticInvoke(
     returnNullable: Boolean = true) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
-  val argClasses = ScalaReflection.expressionJavaClasses(arguments)
   val cls = if (staticObject.getName == objectName) {
     staticObject
   } else {
@@ -228,6 +227,7 @@ case class StaticInvoke(
   override def nullable: Boolean = needNullCheck || returnNullable
   override def children: Seq[Expression] = arguments
 
+  lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
   @transient lazy val method = cls.getDeclaredMethod(functionName, argClasses : _*)
 
   override def eval(input: InternalRow): Any = {
