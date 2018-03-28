@@ -95,6 +95,9 @@ class PCA @Since("1.5.0") (
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    val group = AttributeGroup.fromStructField(schema($(inputCol)))
+    require(group.size < 0 || group.size >= $(k),
+      s"Input vector size ${group.size} must be no less than k=${$(k)}")
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
     val attrGroup = new AttributeGroup($(outputCol), $(k))
@@ -161,10 +164,8 @@ class PCAModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
     val group = AttributeGroup.fromStructField(schema($(inputCol)))
-    if (group.size >= 0) {
-      require(group.size == pc.numRows,
-        s"Length of input vectors do not match the expected size ${pc.numRows}")
-    }
+    require(group.size < 0 || group.size == pc.numRows,
+      s"Input vector size do not match the expected size ${pc.numRows}")
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
     val attrGroup = new AttributeGroup($(outputCol), $(k))
