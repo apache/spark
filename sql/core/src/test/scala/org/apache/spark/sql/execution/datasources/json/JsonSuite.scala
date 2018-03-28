@@ -2073,8 +2073,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val fileName = "json-tests/utf16WithBOM.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
-      // The mode filters null rows produced because new line delimiter
-      // for UTF-8 is used by default.
+      // This option will be replaced by .option("lineSep", "x00 0a")
+      // as soon as lineSep allows to specify sequence of bytes in hexadecimal format.
       .option("mode", "DROPMALFORMED")
       .json(testFile(fileName))
 
@@ -2230,8 +2230,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .read
         .schema(ds.schema)
         .option("charset", charset)
-        // Wrong (nulls) rows are produced because new line delimiter
-        // for UTF-8 is used by default.
+        // This option will be replaced by .option("lineSep", "x00 0a")
+        // as soon as lineSep allows to specify sequence of bytes in hexadecimal format.
         .option("mode", "DROPMALFORMED")
         .json(path.getCanonicalPath)
 
