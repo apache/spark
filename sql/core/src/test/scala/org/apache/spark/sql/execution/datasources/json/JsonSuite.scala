@@ -2069,7 +2069,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
   }
 
-  test("json in UTF-16 with BOM") {
+  test("SPARK-23723: json in UTF-16 with BOM") {
     val fileName = "json-tests/utf16WithBOM.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
@@ -2083,7 +2083,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     ))
   }
 
-  test("multi-line json in UTF-32BE with BOM") {
+  test("SPARK-23723: multi-line json in UTF-32BE with BOM") {
     val fileName = "json-tests/utf32BEWithBOM.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
@@ -2093,7 +2093,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
   }
 
-  test("Use user's charset in reading of multi-line json in UTF-16LE") {
+  test("SPARK-23723: Use user's charset in reading of multi-line json in UTF-16LE") {
     val fileName = "json-tests/utf16LE.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
@@ -2104,7 +2104,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
   }
 
-  test("Unsupported charset name") {
+  test("SPARK-23723: Unsupported charset name") {
     val invalidCharset = "UTF-128"
     val exception = intercept[SparkException] {
       spark.read
@@ -2118,7 +2118,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(causedBy.getMessage.contains(invalidCharset))
   }
 
-  test("checking that the charset option is case agnostic") {
+  test("SPARK-23723: checking that the charset option is case agnostic") {
     val fileName = "json-tests/utf16LE.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
@@ -2130,7 +2130,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
 
-  test("specified charset is not matched to actual charset") {
+  test("SPARK-23723: specified charset is not matched to actual charset") {
     val fileName = "json-tests/utf16LE.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val exception = intercept[SparkException] {
@@ -2166,7 +2166,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(cleanedContent == expectedContent)
   }
 
-  test("save json in UTF-32BE") {
+  test("SPARK-23723: save json in UTF-32BE") {
     val charset = "UTF-32BE"
     withTempPath { path =>
       val df = spark.createDataset(Seq(("Dog", 42)))
@@ -2183,7 +2183,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  test("save json in default charset - UTF-8") {
+  test("SPARK-23723: save json in default charset - UTF-8") {
     withTempPath { path =>
       val df = spark.createDataset(Seq(("Dog", 42)))
       df.write
@@ -2198,7 +2198,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  test("wrong output charset") {
+  test("SPARK-23723: wrong output charset") {
     val charset = "UTF-128"
     val exception = intercept[SparkException] {
       withTempPath { path =>
@@ -2215,7 +2215,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(causedBy.getMessage == charset)
   }
 
-  test("read written json in UTF-16") {
+  test("SPARK-23723: read written json in UTF-16") {
     val charset = "UTF-16"
     case class Rec(f1: String, f2: Int)
     withTempPath { path =>
@@ -2245,7 +2245,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     inferSchema: Boolean,
     runId: Int
   ): Unit = {
-    test(s"checks reading json in ${charset} #${runId}") {
+    test(s"SPARK-23724: checks reading json in ${charset} #${runId}") {
       val delimInBytes = {
         if (lineSep.startsWith("x")) {
           lineSep.replaceAll("[^0-9A-Fa-f]", "")
@@ -2300,7 +2300,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   // scalastyle:on nonascii
 
   def testLineSeparator(lineSep: String): Unit = {
-    test(s"SPARK-21289: Support line separator - lineSep: '$lineSep'") {
+    test(s"SPARK-23724: Support line separator - lineSep: '$lineSep'") {
       // Write
       withTempPath { path =>
         Seq("a", "b", "c").toDF("value").coalesce(1)
