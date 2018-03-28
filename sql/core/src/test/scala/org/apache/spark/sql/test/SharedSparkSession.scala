@@ -75,7 +75,6 @@ trait SharedSparkSession
   protected def initializeSession(): Unit = {
     if (_spark == null) {
       _spark = createSparkSession
-      SparkSession.setDefaultSession(_spark)
     }
   }
 

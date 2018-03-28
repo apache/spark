@@ -28,6 +28,7 @@ private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc)
   def this(sparkConf: SparkConf) {
     this(new SparkContext("local[2]", "test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
+    SparkSession.setDefaultSession(this)
   }
 
   def this() {
