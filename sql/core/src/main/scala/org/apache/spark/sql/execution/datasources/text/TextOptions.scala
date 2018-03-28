@@ -52,7 +52,7 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
     lineSeparatorInRead.getOrElse("\n".getBytes(StandardCharsets.UTF_8))
 }
 
-private[text] object TextOptions {
+private[datasources] object TextOptions {
   val COMPRESSION = "compression"
   val WHOLETEXT = "wholetext"
   val LINE_SEPARATOR = "lineSep"
