@@ -34,7 +34,7 @@ import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.log4j.{Level, Logger}
 import org.apache.thrift.transport.TSocket
 
@@ -123,10 +123,12 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       }
     }
 
-    Option(new HiveDelegationTokenProvider)
-      .filter(_.delegationTokensRequired(sparkConf, hadoopConf))
-      .foreach(_.obtainDelegationTokens(
-        hadoopConf, sparkConf, UserGroupInformation.getCurrentUser.getCredentials))
+    val tokenProvider = new HiveDelegationTokenProvider()
+    if (tokenProvider.delegationTokensRequired(sparkConf, hadoopConf)) {
+      val credentials = new Credentials()
+      tokenProvider.obtainDelegationTokens(hadoopConf, sparkConf, credentials)
+      UserGroupInformation.getCurrentUser.addCredentials(credentials)
+    }
 
     SessionState.start(sessionState)
 
