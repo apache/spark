@@ -338,13 +338,11 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
             numFields = 1,
             containsNull = false),
           ordinal = 1) as "a2")
-      .where('id > 0L)
 
     val expected = LocalRelation('id.long)
       .select(
         ('id + 1L) as "a1",
         ('id + 1L) as "a2")
-      .where('id > 0L)
     checkRule(query, expected)
   }
 
@@ -413,9 +411,7 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
     val arrayAggRel = relation.groupBy(
       CreateArray(Seq('nullable_id)))(GetArrayItem(CreateArray(Seq('nullable_id)), 0))
     checkRule(arrayAggRel, arrayAggRel)
-  }
 
-  test("SPARK-23500: do not simplify maps in Aggregate expressions") {
     // This could be done if we had a more complex rule that checks that
     // the CreateMap does not come from key.
     val originalQuery = relation
