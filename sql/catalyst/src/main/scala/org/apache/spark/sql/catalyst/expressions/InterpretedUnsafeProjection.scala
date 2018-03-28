@@ -174,7 +174,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
         val rowWriter = new UnsafeRowWriter(writer, numFields)
         val structWriter = generateStructWriter(rowWriter, fields)
         (v, i) => {
-          writer.markCursor()
+          val markCursor = writer.cursor()
           v.getStruct(i, fields.length) match {
             case row: UnsafeRow =>
               writeUnsafeData(
@@ -188,7 +188,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
               rowWriter.resetRowWriter()
               structWriter.apply(row)
           }
-          writer.setOffsetAndSizeFromMark(i)
+          writer.setOffsetAndSizeFromMark(i, markCursor)
         }
 
       case ArrayType(elementType, containsNull) =>
@@ -198,9 +198,9 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
           elementType,
           containsNull)
         (v, i) => {
-          writer.markCursor()
+          val markCursor = writer.cursor()
           writeArray(arrayWriter, elementWriter, v.getArray(i))
-          writer.setOffsetAndSizeFromMark(i)
+          writer.setOffsetAndSizeFromMark(i, markCursor)
         }
 
       case MapType(keyType, valueType, valueContainsNull) =>
@@ -215,7 +215,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
           valueType,
           valueContainsNull)
         (v, i) => {
-          val tmpCursor = writer.markCursor()
+          val markCursor = writer.cursor()
           v.getMap(i) match {
             case map: UnsafeMapData =>
               writeUnsafeData(
@@ -231,12 +231,12 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
               // Write the keys and write the numBytes of key array into the first 8 bytes.
               writeArray(keyArrayWriter, keyWriter, map.keyArray())
               Platform.putLong(
-                valueArrayWriter.buffer, tmpCursor, valueArrayWriter.cursor - tmpCursor - 8)
+                valueArrayWriter.buffer, markCursor, valueArrayWriter.cursor - markCursor - 8)
 
               // Write the values.
               writeArray(valueArrayWriter, valueWriter, map.valueArray())
           }
-          writer.setOffsetAndSizeFromMark(i)
+          writer.setOffsetAndSizeFromMark(i, markCursor)
         }
 
       case udt: UserDefinedType[_] =>

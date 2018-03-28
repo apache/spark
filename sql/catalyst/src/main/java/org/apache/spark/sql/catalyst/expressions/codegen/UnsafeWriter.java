@@ -67,14 +67,9 @@ public abstract class UnsafeWriter {
     holder.incrementCursor(val);
   }
 
-  public final int markCursor() {
-    return holder.pushCursor();
-  }
+  public abstract void setOffsetAndSizeFromMark(int ordinal, int mark);
 
-  public abstract void setOffsetAndSizeFromMark(int ordinal);
-
-  protected void _setOffsetAndSizeFromMark(int ordinal) {
-    int mark = holder.popCursor();
+  protected void _setOffsetAndSizeFromMark(int ordinal, int mark) {
     setOffsetAndSize(ordinal, mark, cursor() - mark);
   }
 

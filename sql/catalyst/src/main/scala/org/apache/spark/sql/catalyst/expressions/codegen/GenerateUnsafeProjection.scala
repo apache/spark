@@ -104,33 +104,34 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
           case _ => s"$rowWriter.setNullAt($index);"
         }
+        val markCursor = ctx.freshName("markCursor")
 
         val writeField = dt match {
           case t: StructType =>
             s"""
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
-              $rowWriter.markCursor();
+              final int $markCursor = $rowWriter.cursor();
               ${writeStructToBuffer(ctx, input.value, t.map(_.dataType), rowWriter)}
-              $rowWriter.setOffsetAndSizeFromMark($index);
+              $rowWriter.setOffsetAndSizeFromMark($index, $markCursor);
             """
 
           case a @ ArrayType(et, _) =>
             s"""
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
-              $rowWriter.markCursor();
+              final int $markCursor = $rowWriter.cursor();
               ${writeArrayToBuffer(ctx, input.value, et, rowWriter)}
-              $rowWriter.setOffsetAndSizeFromMark($index);
+              $rowWriter.setOffsetAndSizeFromMark($index, $markCursor);
             """
 
           case m @ MapType(kt, vt, _) =>
             s"""
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
-              $rowWriter.markCursor();
+              final int $markCursor = $rowWriter.cursor();
               ${writeMapToBuffer(ctx, input.value, kt, vt, rowWriter)}
-              $rowWriter.setOffsetAndSizeFromMark($index);
+              $rowWriter.setOffsetAndSizeFromMark($index, $markCursor);
             """
 
           case t: DecimalType =>
@@ -202,28 +203,29 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val arrayWriterClass = classOf[UnsafeArrayWriter].getName
     val arrayWriter = ctx.addMutableState(arrayWriterClass, "arrayWriter",
       v => s"$v = new $arrayWriterClass($rowWriter, $elementOrOffsetSize);")
+    val markCursor = ctx.freshName("markCursor")
 
     val element = CodeGenerator.getValue(tmpInput, et, index)
     val writeElement = et match {
       case t: StructType =>
         s"""
-          $arrayWriter.markCursor();
+          final int $markCursor = $arrayWriter.cursor();
           ${writeStructToBuffer(ctx, element, t.map(_.dataType), arrayWriter)}
-          $arrayWriter.setOffsetAndSizeFromMark($index);
+          $arrayWriter.setOffsetAndSizeFromMark($index, $markCursor);
         """
 
       case a @ ArrayType(et, _) =>
         s"""
-          $arrayWriter.markCursor();
+          final int $markCursor = $arrayWriter.cursor();
           ${writeArrayToBuffer(ctx, element, et, arrayWriter)}
-          $arrayWriter.setOffsetAndSizeFromMark($index);
+          $arrayWriter.setOffsetAndSizeFromMark($index, $markCursor);
         """
 
       case m @ MapType(kt, vt, _) =>
         s"""
-          $arrayWriter.markCursor();
+          final int $markCursor = $arrayWriter.cursor();
           ${writeMapToBuffer(ctx, element, kt, vt, arrayWriter)}
-          $arrayWriter.setOffsetAndSizeFromMark($index);
+          $arrayWriter.setOffsetAndSizeFromMark($index, $markCursor);
         """
 
       case t: DecimalType =>

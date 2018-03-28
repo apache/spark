@@ -82,9 +82,9 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
   }
 
   @Override
-  public void setOffsetAndSizeFromMark(int ordinal) {
+  public void setOffsetAndSizeFromMark(int ordinal, int mark) {
     assertIndexIsValid(ordinal);
-    _setOffsetAndSizeFromMark(ordinal);
+    _setOffsetAndSizeFromMark(ordinal, mark);
   }
 
   private void setNullBit(int ordinal) {

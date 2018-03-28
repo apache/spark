@@ -140,8 +140,8 @@ public final class UnsafeRowWriter extends UnsafeWriter {
   }
 
   @Override
-  public void setOffsetAndSizeFromMark(int ordinal) {
-    _setOffsetAndSizeFromMark(ordinal);
+  public void setOffsetAndSizeFromMark(int ordinal, int mark) {
+    _setOffsetAndSizeFromMark(ordinal, mark);
   }
 
   public void write(int ordinal, boolean value) {
