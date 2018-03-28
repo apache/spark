@@ -556,7 +556,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
   test("to_json - array with single empty row") {
     val inputSchema = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
     val input = new GenericArrayData(InternalRow(null) :: Nil)
-    val output = """[{}]"""
+    val output = """[{"a":null}]"""
     checkEvaluation(
       StructsToJson(Map.empty, Literal.create(input, inputSchema), gmtId),
       output)

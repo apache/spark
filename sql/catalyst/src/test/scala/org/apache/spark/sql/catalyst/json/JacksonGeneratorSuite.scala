@@ -56,7 +56,7 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     val gen = new JacksonGenerator(dataType, writer, option)
     gen.write(input)
     gen.flush()
-    assert(writer.toString === """[{}]""")
+    assert(writer.toString === """[{"a":null}]""")
   }
 
   test("initial with StructType and write out an empty array") {

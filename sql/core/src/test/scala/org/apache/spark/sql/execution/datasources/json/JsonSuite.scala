@@ -1229,7 +1229,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val df2 = df1.toDF
     val result = df2.toJSON.collect()
     // scalastyle:off
-    assert(result(0) === "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
+    assert(result(0) === "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"],\"f5\":null}")
     assert(result(3) === "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":[\"4\",\" D4\",\" true\",\" 2147483644\"],\"f5\":2147483644}")
     // scalastyle:on
 
@@ -1265,6 +1265,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         1.7976931348623157E308,
         10,
         21474836470L,
+        null,
         "this is a simple string.")
       )
 
@@ -2062,5 +2063,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         Row(null) :: Row(null) :: Row("{\"field\": \"3\"}") :: Nil
       )
     }
+  }
+
+  test("SPARK-23773: JacksonGenerator does not include keys " +
+    "that have null value for StructTypes") {
+    val df = sql("select NAMED_STRUCT('f1', 10, 'f2', null, 'f3', 15) as my_struct")
+    val result = df.toJSON.collect()(0)
+    assert(result === "{\"my_struct\":{\"f1\":10,\"f2\":null,\"f3\":15}}")
   }
 }
