@@ -186,7 +186,9 @@ class HadoopMapReduceCommitProtocol(
         logDebug(s"Clean up default partition directories for overwriting: $partitionPaths")
         for (part <- partitionPaths) {
           val finalPartPath = new Path(path, part)
-          fs.delete(finalPartPath, true)
+          if (!fs.delete(finalPartPath, true) && !fs.exists(finalPartPath.getParent)) {
+            fs.mkdirs(finalPartPath.getParent)
+          }
           fs.rename(new Path(stagingDir, part), finalPartPath)
         }
       }
