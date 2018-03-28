@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.io.ByteArrayOutputStream
+import java.io.{ByteArrayOutputStream, CharConversionException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -361,6 +361,15 @@ class JacksonParser(
         // For such records, all fields other than the field configured by
         // `columnNameOfCorruptRecord` are set to `null`.
         throw BadRecordException(() => recordLiteral(record), () => None, e)
+      case e: CharConversionException if options.charset.isEmpty =>
+        val msg =
+          """Failed to parse a character. Charset was detected automatically.
+            |You might want to set it explicitly via the charset option like:
+            |  .option("charset", "UTF-8")
+            |Example of supported charsets:
+            |  UTF-8, UTF-16, UTF-16BE, UTF-16LE, UTF-32, UTF-32BE, UTF-32LE
+            |""".stripMargin + e.getMessage
+        throw new CharConversionException(msg)
     }
   }
 }

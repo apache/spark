@@ -2063,4 +2063,178 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       )
     }
   }
+
+  def testFile(fileName: String): String = {
+    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
+  }
+
+  test("json in UTF-16 with BOM") {
+    val fileName = "json-tests/utf16WithBOM.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val jsonDF = spark.read.schema(schema)
+      // The mode filters null rows produced because new line delimiter
+      // for UTF-8 is used by default.
+      .option("mode", "DROPMALFORMED")
+      .json(testFile(fileName))
+
+    checkAnswer(jsonDF, Seq(
+      Row("Chris", "Baird"), Row("Doug", "Rood")
+    ))
+  }
+
+  test("multi-line json in UTF-32BE with BOM") {
+    val fileName = "json-tests/utf32BEWithBOM.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val jsonDF = spark.read.schema(schema)
+      .option("multiline", "true")
+      .json(testFile(fileName))
+
+    checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
+  }
+
+  test("Use user's charset in reading of multi-line json in UTF-16LE") {
+    val fileName = "json-tests/utf16LE.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val jsonDF = spark.read.schema(schema)
+      .option("multiline", "true")
+      .option("charset", "UTF-16LE")
+      .json(testFile(fileName))
+
+    checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
+  }
+
+  test("Unsupported charset name") {
+    val invalidCharset = "UTF-128"
+    val exception = intercept[SparkException] {
+      spark.read
+        .option("charset", invalidCharset)
+        .json(testFile("json-tests/utf16LE.json"))
+        .count()
+    }
+    val causedBy = exception.getCause
+
+    assert(causedBy.isInstanceOf[java.io.UnsupportedEncodingException])
+    assert(causedBy.getMessage.contains(invalidCharset))
+  }
+
+  test("checking that the charset option is case agnostic") {
+    val fileName = "json-tests/utf16LE.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val jsonDF = spark.read.schema(schema)
+      .option("multiline", "true")
+      .option("charset", "uTf-16lE")
+      .json(testFile(fileName))
+
+    checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
+  }
+
+
+  test("specified charset is not matched to actual charset") {
+    val fileName = "json-tests/utf16LE.json"
+    val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
+    val exception = intercept[SparkException] {
+      spark.read.schema(schema)
+        .option("mode", "FAILFAST")
+        .option("multiline", "true")
+        .option("charset", "UTF-16BE")
+        .json(testFile(fileName))
+        .count()
+    }
+    val errMsg = exception.getMessage
+
+    assert(errMsg.contains("Malformed records are detected in record parsing"))
+  }
+
+  def checkCharset(
+    expectedCharset: String,
+    pathToJsonFiles: String,
+    expectedContent: String
+  ): Unit = {
+    val jsonFiles = new File(pathToJsonFiles)
+      .listFiles()
+      .filter(_.isFile)
+      .filter(_.getName.endsWith("json"))
+    val jsonContent = jsonFiles.map { file =>
+      scala.io.Source.fromFile(file, expectedCharset).mkString
+    }
+    val cleanedContent = jsonContent
+      .mkString
+      .trim
+      .replaceAll(" ", "")
+
+    assert(cleanedContent == expectedContent)
+  }
+
+  test("save json in UTF-32BE") {
+    val charset = "UTF-32BE"
+    withTempPath { path =>
+      val df = spark.createDataset(Seq(("Dog", 42)))
+      df.write
+        .option("charset", charset)
+        .format("json").mode("overwrite")
+        .save(path.getCanonicalPath)
+
+      checkCharset(
+        expectedCharset = charset,
+        pathToJsonFiles = path.getCanonicalPath,
+        expectedContent = """{"_1":"Dog","_2":42}"""
+      )
+    }
+  }
+
+  test("save json in default charset - UTF-8") {
+    withTempPath { path =>
+      val df = spark.createDataset(Seq(("Dog", 42)))
+      df.write
+        .format("json").mode("overwrite")
+        .save(path.getCanonicalPath)
+
+      checkCharset(
+        expectedCharset = "UTF-8",
+        pathToJsonFiles = path.getCanonicalPath,
+        expectedContent = """{"_1":"Dog","_2":42}"""
+      )
+    }
+  }
+
+  test("wrong output charset") {
+    val charset = "UTF-128"
+    val exception = intercept[SparkException] {
+      withTempPath { path =>
+        val df = spark.createDataset(Seq((0)))
+        df.write
+          .option("charset", charset)
+          .format("json").mode("overwrite")
+          .save(path.getCanonicalPath)
+      }
+    }
+    val causedBy = exception.getCause.getCause.getCause
+
+    assert(causedBy.isInstanceOf[java.nio.charset.UnsupportedCharsetException])
+    assert(causedBy.getMessage == charset)
+  }
+
+  test("read written json in UTF-16") {
+    val charset = "UTF-16"
+    case class Rec(f1: String, f2: Int)
+    withTempPath { path =>
+      val ds = spark.createDataset(Seq(
+        ("a", 1), ("b", 2), ("c", 3))
+      ).repartition(2)
+      ds.write
+        .option("charset", charset)
+        .format("json").mode("overwrite")
+        .save(path.getCanonicalPath)
+      val savedDf = spark
+        .read
+        .schema(ds.schema)
+        .option("charset", charset)
+        // Wrong (nulls) rows are produced because new line delimiter
+        // for UTF-8 is used by default.
+        .option("mode", "DROPMALFORMED")
+        .json(path.getCanonicalPath)
+
+      checkAnswer(savedDf.toDF(), ds.toDF())
+    }
+  }
 }

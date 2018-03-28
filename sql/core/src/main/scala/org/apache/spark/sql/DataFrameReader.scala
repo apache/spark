@@ -366,6 +366,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
+   * <li>`charset` (by default it is not set): allows to forcibly set one of standard basic
+   * or extended charsets for input jsons. For example UTF-8, UTF-16BE, UTF-32. If the charset
+   * is not specified (by default), the charset is detected automatically.</li>
    * </ul>
    *
    * @since 2.0.0
