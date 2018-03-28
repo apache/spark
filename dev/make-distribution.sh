@@ -172,13 +172,17 @@ fi
 # Store the command as an array because $MVN variable might have spaces in it.
 # Normal quoting tricks don't work.
 # See: http://mywiki.wooledge.org/BashFAQ/050
-BUILD_COMMAND=("$MVN" -T 1C $MAYBE_CLEAN package -DskipTests $@)
+if [[ -z "$DONT_BUILD" ]]; then
+  BUILD_COMMAND=("$MVN" -T 1C $MAYBE_CLEAN package -DskipTests $@)
 
-# Actually build the jar
-echo -e "\nBuilding with..."
-echo -e "\$ ${BUILD_COMMAND[@]}\n"
+  # Actually build the jar
+  echo -e "\nBuilding with..."
+  echo -e "\$ ${BUILD_COMMAND[@]}\n"
 
-"${BUILD_COMMAND[@]}"
+  "${BUILD_COMMAND[@]}"
+else
+  echo -e "\nNot running mvn package because \$DONT_BUILD was set"
+fi
 
 # Make directories
 rm -rf "$DISTDIR"
