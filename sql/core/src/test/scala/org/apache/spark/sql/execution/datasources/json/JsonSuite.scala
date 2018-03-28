@@ -2290,8 +2290,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     ("아", "UTF-32BE", false),
     ("куку", "CP1251", true),
     ("sep", "UTF-8", false),
-    ("x0a 0d", "UTF-32", true),
-    ("x54.45", "UTF-8", false),
     ("\r\n", "UTF-16LE", false),
     ("\r\n", "UTF-16BE", true),
     ("\u000d\u000a", "UTF-32BE", false),
