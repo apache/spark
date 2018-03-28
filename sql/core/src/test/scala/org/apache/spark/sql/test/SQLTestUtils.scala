@@ -64,6 +64,7 @@ private[sql] trait SQLTestUtils extends SparkFunSuite with SQLTestUtilsBase with
     if (loadTestDataBeforeTests) {
       loadTestData()
     }
+    SparkSession.setActiveSession(spark)
   }
 
   /**

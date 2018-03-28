@@ -39,16 +39,6 @@ class RateSourceSuite extends StreamTest {
 
   import testImplicits._
 
-  protected override def beforeAll(): Unit = {
-    super.beforeAll()
-    SparkSession.setActiveSession(spark)
-  }
-
-  override def afterAll(): Unit = {
-    SparkSession.clearActiveSession()
-    super.afterAll()
-  }
-
   case class AdvanceRateManualClock(seconds: Long) extends AddData {
     override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {
       assert(query.nonEmpty)
@@ -257,9 +247,9 @@ class RateSourceSuite extends StreamTest {
       .distinct()
     testStream(input)(
       AdvanceRateManualClock(2),
-      ExpectFailure[TreeNodeException[_]](t => {
+      ExpectFailure[ArithmeticException](t => {
         Seq("overflow", "rowsPerSecond").foreach { msg =>
-          assert(t.getCause.getMessage.contains(msg))
+          assert(t.getMessage.contains(msg))
         }
       })
     )
@@ -267,9 +257,9 @@ class RateSourceSuite extends StreamTest {
 
   testQuietly("illegal option values") {
     def testIllegalOptionValue(
-                                option: String,
-                                value: String,
-                                expectedMessages: Seq[String]): Unit = {
+        option: String,
+        value: String,
+        expectedMessages: Seq[String]): Unit = {
       val e = intercept[IllegalArgumentException] {
         spark.readStream
           .format("rate")
