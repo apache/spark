@@ -624,6 +624,42 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("SPARK-23772 Ignore column of all null values or empty array during JSON schema inference") {
+    withTempDirs { case (src, tmp) =>
+      withSQLConf(
+          SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true",
+          SQLConf.IGNORE_NULL_FIELDS_STREAMING_SCHEMA_INFERENCE.key -> "true") {
+
+        // Add a file so that we can infer its schema
+        stringToFile(new File(src, "existing"), "{'c0': 1, 'c1': null, 'c2': []}")
+
+        val fileStream = createFileStream("json", src.getCanonicalPath)
+
+        // FileStreamSource should infer the column "k"
+        assert(fileStream.schema === StructType(
+          StructField("c0", LongType) ::
+          StructField("c1", TypePlaceholder) ::
+          StructField("c2", ArrayType(TypePlaceholder)) :: Nil))
+
+        testStream(fileStream)(
+
+          // Should not pick up column v in the file added before start
+          AddTextFileData("{'c0': 3, 'c1': 3.8, 'c2': []}", src, tmp),
+          CheckSchema(StructType(
+            StructField("c0", LongType) ::
+            StructField("c1", DoubleType) ::
+            StructField("c2", ArrayType(TypePlaceholder)) :: Nil)),
+
+          // Should read data in column k, and ignore v
+          AddTextFileData("{'c0': 2, 'c1': 1.1, 'c2': [1, 2, 3]}", src, tmp),
+          CheckSchema(StructType(
+            StructField("c0", LongType) ::
+            StructField("c1", DoubleType) ::
+            StructField("c2", ArrayType(LongType)) :: Nil)))
+      }
+    }
+  }
+
   // =============== ORC file stream tests ================
 
   test("read from orc files") {

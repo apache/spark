@@ -47,6 +47,7 @@ import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
@@ -219,6 +220,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       CheckNewAnswerRows((data +: moreData).map(d => toExternalRow.fromRow(encoder.toRow(d))))
     }
   }
+
+  case class CheckSchema(expectedSchema: StructType) extends StreamAction with StreamMustBeRunning
 
   /** Stops the stream. It must currently be running. */
   case object StopStream extends StreamAction with StreamMustBeRunning
@@ -745,6 +748,27 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
           val sparkAnswer = fetchStreamAnswer(currentStream, sinceLastFetchOnly = true)
           QueryTest.sameRows(expectedAnswer, sparkAnswer).foreach {
             error => failTest(error)
+          }
+
+        case CheckSchema(expectedSchema) =>
+          // waitAllDataProcessed(currentStream)
+          val resultSchema = currentStream.lastExecution.analyzed.schema
+          if (expectedSchema != resultSchema) {
+            failTest(
+              s"""
+                 |== Results ==
+                 |${
+                sideBySide(
+                  s"""
+                     |== Correct Schema ==
+                     |${expectedSchema.simpleString}
+                   """.stripMargin,
+                  s"""
+                     |== Spark Result Schema ==
+                     |${resultSchema.simpleString}
+                   """.stripMargin).mkString("\n")
+              }
+              """.stripMargin)
           }
       }
       pos += 1

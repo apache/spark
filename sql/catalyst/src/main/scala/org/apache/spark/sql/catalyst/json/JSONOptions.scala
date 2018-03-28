@@ -34,17 +34,20 @@ import org.apache.spark.sql.catalyst.util._
 private[sql] class JSONOptions(
     @transient private val parameters: CaseInsensitiveMap[String],
     defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String)
+    defaultColumnNameOfCorruptRecord: String,
+    defaultIgnoreNullFieldsInStreamingSchemaInference: Boolean)
   extends Logging with Serializable  {
 
   def this(
     parameters: Map[String, String],
     defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String = "") = {
+    defaultColumnNameOfCorruptRecord: String = "",
+    defaultIgnoreNullFieldsInStreamingSchemaInference: Boolean = false) = {
       this(
         CaseInsensitiveMap(parameters),
         defaultTimeZoneId,
-        defaultColumnNameOfCorruptRecord)
+        defaultColumnNameOfCorruptRecord,
+        defaultIgnoreNullFieldsInStreamingSchemaInference)
   }
 
   val samplingRatio =
@@ -72,6 +75,9 @@ private[sql] class JSONOptions(
     parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
   val columnNameOfCorruptRecord =
     parameters.getOrElse("columnNameOfCorruptRecord", defaultColumnNameOfCorruptRecord)
+  val ignoreNullFieldsInStreamingSchemaInference =
+    parameters.get("ignoreNullFieldsInStreamingSchemaInference").map(_.toBoolean)
+      .getOrElse(defaultIgnoreNullFieldsInStreamingSchemaInference)
 
   val timeZone: TimeZone = DateTimeUtils.getTimeZone(
     parameters.getOrElse(DateTimeUtils.TIMEZONE_OPTION, defaultTimeZoneId))

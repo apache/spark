@@ -429,7 +429,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val parsedOptions = new JSONOptions(
       extraOptions.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
-      sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+      sparkSession.sessionState.conf.columnNameOfCorruptRecord,
+      sparkSession.sessionState.conf.ignoreNullFieldsInStreamingSchemaInference)
 
     val schema = userSpecifiedSchema.getOrElse {
       TextInputJsonDataSource.inferFromDataset(jsonDataset, parsedOptions)
