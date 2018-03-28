@@ -85,6 +85,38 @@ private[sql] class JSONOptions(
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
+  val charset: Option[String] = Some("UTF-8")
+
+  /**
+   * A sequence of bytes between two consecutive json records. Format of the option is:
+   *   selector (1 char) + delimiter body (any length) | sequence of chars
+   * The following selectors are supported:
+   * - 'x' + sequence of bytes in hexadecimal format. For example: "x0a 0d".
+   *   Hex pairs can be separated by any chars different from 0-9,A-F,a-f
+   * - '\' - reserved for a sequence of control chars like "\r\n"
+   *         and unicode escape like "\u000D\u000A"
+   * - 'r' and '/' - reserved for future use
+   *
+   * Note: the option defines a delimiter for the json reader only, the json writer
+   * uses '\n' as the delimiter of output records (it is converted to sequence of
+   * bytes according to charset)
+   */
+  val lineSeparator: Option[Array[Byte]] = parameters.get("lineSep").collect {
+    case hexs if hexs.startsWith("x") =>
+      hexs.replaceAll("[^0-9A-Fa-f]", "").sliding(2, 2).toArray
+        .map(Integer.parseInt(_, 16).toByte)
+    case reserved if reserved.startsWith("r") || reserved.startsWith("/") =>
+      throw new NotImplementedError(s"the $reserved selector has not supported yet")
+    case delim => delim.getBytes(charset.getOrElse(
+      throw new IllegalArgumentException("Please, set the charset option for the delimiter")))
+  }
+  val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator
+
+  // Note that JSON uses writer with UTF-8 charset. This string will be written out as UTF-8.
+  val lineSeparatorInWrite: String = {
+    lineSeparator.map(new String(_, charset.getOrElse("UTF-8"))).getOrElse("\n")
+  }
+
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
     factory.configure(JsonParser.Feature.ALLOW_COMMENTS, allowComments)
@@ -95,5 +127,11 @@ private[sql] class JSONOptions(
     factory.configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
       allowBackslashEscapingAnyCharacter)
     factory.configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, allowUnquotedControlChars)
+  }
+
+  def getTextOptions: Map[String, String] = {
+    lineSeparatorInRead.map{ bytes =>
+      "lineSep" -> bytes.map("x%02x".format(_)).mkString
+    }.toMap
   }
 }
