@@ -2098,7 +2098,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
       .option("multiline", "true")
-      .option("charset", "UTF-16LE")
+      .options(Map("charset" -> "UTF-16LE", "lineSep" -> "\n"))
       .json(testFile(fileName))
 
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
@@ -2106,16 +2106,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-23723: Unsupported charset name") {
     val invalidCharset = "UTF-128"
-    val exception = intercept[SparkException] {
+    val exception = intercept[java.io.UnsupportedEncodingException] {
       spark.read
-        .option("charset", invalidCharset)
+        .options(Map("charset" -> invalidCharset, "lineSep" -> "\n"))
         .json(testFile("json-tests/utf16LE.json"))
         .count()
     }
-    val causedBy = exception.getCause
 
-    assert(causedBy.isInstanceOf[java.io.UnsupportedEncodingException])
-    assert(causedBy.getMessage.contains(invalidCharset))
+    assert(exception.getMessage.contains(invalidCharset))
   }
 
   test("SPARK-23723: checking that the charset option is case agnostic") {
@@ -2123,7 +2121,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
       .option("multiline", "true")
-      .option("charset", "uTf-16lE")
+      .options(Map("charset" -> "uTf-16lE", "lineSep" -> "\n"))
       .json(testFile(fileName))
 
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
@@ -2137,7 +2135,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       spark.read.schema(schema)
         .option("mode", "FAILFAST")
         .option("multiline", "true")
-        .option("charset", "UTF-16BE")
+        .options(Map("charset" -> "UTF-16BE", "lineSep" -> "\n"))
         .json(testFile(fileName))
         .count()
     }
@@ -2171,7 +2169,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     withTempPath { path =>
       val df = spark.createDataset(Seq(("Dog", 42)))
       df.write
-        .option("charset", charset)
+        .options(Map("charset" -> charset, "lineSep" -> "\n"))
         .format("json").mode("overwrite")
         .save(path.getCanonicalPath)
 
@@ -2200,19 +2198,17 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-23723: wrong output charset") {
     val charset = "UTF-128"
-    val exception = intercept[SparkException] {
+    val exception = intercept[java.io.UnsupportedEncodingException] {
       withTempPath { path =>
         val df = spark.createDataset(Seq((0)))
         df.write
-          .option("charset", charset)
+          .options(Map("charset" -> charset, "lineSep" -> "\n"))
           .format("json").mode("overwrite")
           .save(path.getCanonicalPath)
       }
     }
-    val causedBy = exception.getCause.getCause.getCause
 
-    assert(causedBy.isInstanceOf[java.nio.charset.UnsupportedCharsetException])
-    assert(causedBy.getMessage == charset)
+    assert(exception.getMessage == charset)
   }
 
   test("SPARK-23723: read written json in UTF-16") {
@@ -2223,13 +2219,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         ("a", 1), ("b", 2), ("c", 3))
       ).repartition(2)
       ds.write
-        .option("charset", charset)
+        .options(Map("charset" -> charset, "lineSep" -> "\n"))
         .format("json").mode("overwrite")
         .save(path.getCanonicalPath)
       val savedDf = spark
         .read
         .schema(ds.schema)
-        .option("charset", charset)
         // This option will be replaced by .option("lineSep", "x00 0a")
         // as soon as lineSep allows to specify sequence of bytes in hexadecimal format.
         .option("mode", "DROPMALFORMED")
@@ -2326,4 +2321,17 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     testLineSeparator(lineSep)
   }
   // scalastyle:on nonascii
+
+  test("SPARK-23724: lineSep should be set if charset if different from UTF-8") {
+    val exception = intercept[IllegalArgumentException] {
+      spark.read
+        .options(Map("charset" -> "UTF-16LE"))
+        .json(testFile("json-tests/utf16LE.json"))
+        .count()
+    }
+
+    assert(exception.getMessage.contains(
+      """Please, set the 'lineSep' option for the given charset UTF-16LE"""
+    ))
+  }
 }

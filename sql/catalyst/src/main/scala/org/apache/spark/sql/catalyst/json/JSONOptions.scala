@@ -86,20 +86,28 @@ private[sql] class JSONOptions(
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
   /**
-   * Standard charset name. For example UTF-8, UTF-16 and UTF-32.
-   * If charset is not specified (None), it will be detected automatically.
-   */
-  val charset: Option[String] = parameters.get("charset")
-
-  /**
    * A sequence of bytes between two consecutive json records.
    */
   val lineSeparator: Option[String] = parameters.get("lineSep")
 
+  /**
+   * Standard charset name. For example UTF-8, UTF-16 and UTF-32.
+   * If charset is not specified (None), it will be detected automatically.
+   */
+  val charset: Option[String] = parameters.get("charset").map { cs =>
+    if (cs != "UTF-8" && lineSeparator.isEmpty) {
+      throw new IllegalArgumentException(
+        s"""Please, set the 'lineSep' option for the given charset $cs.
+           |Example: .option("lineSep", "|^|")
+           |Note: lineSep can be detected automatically for UTF-8 only.""".stripMargin
+      )
+    }
+    cs
+  }
+
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
     lineSep.getBytes(charset.getOrElse("UTF-8"))
   }
-  // Note that JSON uses writer with UTF-8 charset. This string will be written out as UTF-8.
   val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
