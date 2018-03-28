@@ -3240,35 +3240,37 @@ class Dataset[T] private[sql](
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
 
     withAction("collectAsArrowToPython", queryExecution) { plan =>
-
       PythonRDD.serveToStream("serve-Arrow") { out =>
         val batchWriter = new ArrowBatchStreamWriter(schema, out, timeZoneId)
-
-        val arrowBatchRDD = toArrowBatches(plan)
+        val arrowBatchRdd = getArrowBatchRdd(plan)
+        val numPartitions = arrowBatchRdd.partitions.length
 
         // Store collection results for worst case of 1 to N-1 partitions
-        val results = new Array[Array[Array[Byte]]](arrowBatchRDD.partitions.size - 1)
+        val results = new Array[Array[Array[Byte]]](numPartitions - 1)
         var lastIndex = -1  // index of last partition written
 
+        // Handler to eagerly write partitions to Python in order
         def handlePartitionBatches(index: Int, arrowBatches: Array[Array[Byte]]): Unit = {
           // If result is from next partition in order
           if (index - 1 == lastIndex) {
             batchWriter.writeBatches(arrowBatches.iterator)
             lastIndex += 1
+            // Write stored partitions that come next in order
             while (lastIndex < results.length && results(lastIndex) != null) {
               batchWriter.writeBatches(results(lastIndex).iterator)
               results(lastIndex) = null
               lastIndex += 1
             }
           } else {
+            // Store partitions received out of order
             results(index - 1) = arrowBatches
           }
         }
 
         sparkSession.sparkContext.runJob(
-          arrowBatchRDD,
+          arrowBatchRdd,
           (ctx: TaskContext, it: Iterator[Array[Byte]]) => it.toArray,
-          0 until arrowBatchRDD.partitions.length,
+          0 until numPartitions,
           handlePartitionBatches)
       }
     }
@@ -3377,8 +3379,8 @@ class Dataset[T] private[sql](
     }
   }
 
-  /** Convert to an RDD of ArrowPayload byte arrays */
-  private[sql] def toArrowBatches(plan: SparkPlan): RDD[Array[Byte]] = {
+  /** Convert to an RDD of Arrow record batch byte arrays */
+  private[sql] def getArrowBatchRdd(plan: SparkPlan): RDD[Array[Byte]] = {
     val schemaCaptured = this.schema
     val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
     val timeZoneId = sparkSession.sessionState.conf.sessionLocalTimeZone
@@ -3390,7 +3392,7 @@ class Dataset[T] private[sql](
   }
 
   // This is only used in tests, for now.
-  private[sql] def toArrowBatches: RDD[Array[Byte]] = {
-    toArrowBatches(queryExecution.executedPlan)
+  private[sql] def getArrowBatchRdd: RDD[Array[Byte]] = {
+    getArrowBatchRdd(queryExecution.executedPlan)
   }
 }

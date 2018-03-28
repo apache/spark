@@ -72,8 +72,8 @@ private[sql] trait ArrowRowIterator extends Iterator[InternalRow] {
 private[sql] object ArrowConverters {
 
   /**
-   * Maps Iterator from InternalRow to Arrow batches. Limit ArrowRecordBatch size in a batch
-   * by setting maxRecordsPerBatch or use 0 to fully consume rowIter.
+   * Maps Iterator from InternalRow to Arrow batches as byte arrays. Limit ArrowRecordBatch size
+   * in a batch by setting maxRecordsPerBatch or use 0 to fully consume rowIter.
    */
   private[sql] def toBatchIterator(
       rowIter: Iterator[InternalRow],
@@ -128,14 +128,18 @@ private[sql] object ArrowConverters {
     }
   }
 
+  /**
+   * Maps iterator from Arrow batches as byte arrays to InternalRows.
+   */
   private[sql] def fromBatchIterator(
       arrowBatchIter: Iterator[Array[Byte]],
       schema: StructType,
+      timeZoneId: String,
       context: TaskContext): Iterator[InternalRow] = {
     val allocator =
-      ArrowUtils.rootAllocator.newChildAllocator("fromStreamIterator", 0, Long.MaxValue)
+      ArrowUtils.rootAllocator.newChildAllocator("fromBatchIterator", 0, Long.MaxValue)
 
-    val arrowSchema = ArrowUtils.toArrowSchema(schema, "***TODO***")
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
 
     new Iterator[InternalRow] {
@@ -176,8 +180,8 @@ private[sql] object ArrowConverters {
   }
 
   /**
-   * Maps Iterator from Arrow batches to InternalRow. Returns an ArrowRowIterator that can iterate
-   * over record batch rows and has the schema from the first batch of Arrow data read.
+   * Maps Iterator from Arrow stream format to InternalRow. Returns an ArrowRowIterator that can
+   * iterate over record batch rows and has the schema from the first batch of Arrow data read.
    */
    private[sql] def fromStreamIterator(
       arrowStreamIter: Iterator[Array[Byte]],

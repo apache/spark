@@ -403,8 +403,21 @@ private[spark] object PythonRDD extends Logging {
     }
   }
 
-  // TODO: scaladoc
-  def serveToStream(threadName: String)(dataWriteBlock: DataOutputStream => Unit): Array[Any] = {
+  /**
+   * Create a socket server and background thread to execute the `dataWriteBlock`
+   * for the given DataOutputStream.
+   *
+   * The socket server can only accept one connection, or close if no connection
+   * in 15 seconds.
+   *
+   * Once a connection comes in, it will execute the `dataWriteBlock` and pass in
+   * the socket output stream.
+   *
+   * The thread will terminate after the `dataWriteBlock` is executed or any
+   * exceptions happen.
+   */
+  private[spark] def serveToStream(
+      threadName: String)(dataWriteBlock: DataOutputStream => Unit): Array[Any] = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
     // Close the socket if no connection in 15 seconds
     serverSocket.setSoTimeout(15000)
