@@ -518,7 +518,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <li>`timestampFormat` (default `yyyy-MM-dd'T'HH:mm:ss.SSSXXX`): sets the string that
    * indicates a timestamp format. Custom date formats follow the formats at
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
-   * <li>`lineSep` (default `\n`): defines the line separator that should
+   * <li>`encoding` (by default it's not set): specifies encoding (charset) of saved json
+   * files. If it is not set, the UTF-8 charset will be used. </li>
+   * <li>lineSep` (default `\n`): defines the line separator that should
    * be used for writing.</li>
    * </ul>
    *

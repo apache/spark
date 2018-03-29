@@ -2093,12 +2093,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
   }
 
-  test("SPARK-23723: Use user's charset in reading of multi-line json in UTF-16LE") {
+  test("SPARK-23723: Use user's encoding in reading of multi-line json in UTF-16LE") {
     val fileName = "json-tests/utf16LE.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
       .option("multiline", "true")
-      .options(Map("charset" -> "UTF-16LE", "lineSep" -> "\n"))
+      .options(Map("encoding" -> "UTF-16LE"))
       .json(testFile(fileName))
 
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
@@ -2121,7 +2121,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
       .option("multiline", "true")
-      .options(Map("charset" -> "uTf-16lE", "lineSep" -> "\n"))
+      .options(Map("charset" -> "uTf-16lE"))
       .json(testFile(fileName))
 
     checkAnswer(jsonDF, Seq(Row("Chris", "Baird")))
@@ -2135,7 +2135,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       spark.read.schema(schema)
         .option("mode", "FAILFAST")
         .option("multiline", "true")
-        .options(Map("charset" -> "UTF-16BE", "lineSep" -> "\n"))
+        .options(Map("charset" -> "UTF-16BE"))
         .json(testFile(fileName))
         .count()
     }
@@ -2165,16 +2165,16 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-23723: save json in UTF-32BE") {
-    val charset = "UTF-32BE"
+    val encoding = "UTF-32BE"
     withTempPath { path =>
       val df = spark.createDataset(Seq(("Dog", 42)))
       df.write
-        .options(Map("charset" -> charset, "lineSep" -> "\n"))
+        .options(Map("charset" -> encoding, "lineSep" -> "\n"))
         .format("json").mode("overwrite")
         .save(path.getCanonicalPath)
 
       checkCharset(
-        expectedCharset = charset,
+        expectedCharset = encoding,
         pathToJsonFiles = path.getCanonicalPath,
         expectedContent = """{"_1":"Dog","_2":42}"""
       )
@@ -2235,8 +2235,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   def checkReadJson(
-    charset: String,
     lineSep: String,
+    charsetOption: String,
+    charset: String,
     inferSchema: Boolean,
     runId: Int
   ): Unit = {
@@ -2267,7 +2268,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           spark.read.schema(schema)
         }
         val savedDf = reader
-          .option("charset", charset)
+          .option(charsetOption, charset)
           .option("lineSep", lineSep)
           .json(path.getCanonicalPath)
         checkAnswer(savedDf, records.map(_.row))
@@ -2277,21 +2278,21 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   // scalastyle:off nonascii
   List(
-    ("|", "UTF-8", false),
-    ("^", "UTF-16BE", true),
-    ("::", "UTF-16", true),
-    ("!!!@3", "UTF-32LE", false),
-    (0x1E.toChar.toString, "UTF-8", true),
-    ("아", "UTF-32BE", false),
-    ("куку", "CP1251", true),
-    ("sep", "UTF-8", false),
-    ("\r\n", "UTF-16LE", false),
-    ("\r\n", "UTF-16BE", true),
-    ("\u000d\u000a", "UTF-32BE", false),
-    ("\u000a\u000d", "UTF-8", true),
-    ("===", "UTF-16", false),
-    ("$^+", "UTF-32LE", true)
-  ).zipWithIndex.foreach{case ((d, c, s), i) => checkReadJson(c, d, s, i)}
+    ("|", "encoding", "UTF-8", false),
+    ("^", "charset", "UTF-16BE", true),
+    ("::", "encoding", "UTF-16", true),
+    ("!!!@3", "charset", "UTF-32LE", false),
+    (0x1E.toChar.toString, "encoding", "UTF-8", true),
+    ("아", "encoding", "UTF-32BE", false),
+    ("куку", "charset", "CP1251", true),
+    ("sep", "charset", "UTF-8", false),
+    ("\r\n", "encoding", "UTF-16LE", false),
+    ("\r\n", "charset", "UTF-16BE", true),
+    ("\u000d\u000a", "encoding", "UTF-32BE", false),
+    ("\u000a\u000d", "charset", "UTF-8", true),
+    ("===", "encoding", "UTF-16", false),
+    ("$^+", "charset", "UTF-32LE", true)
+  ).zipWithIndex.foreach{case ((d, o, c, s), i) => checkReadJson(d, o, c, s, i)}
   // scalastyle:on nonascii
 
   def testLineSeparator(lineSep: String): Unit = {
