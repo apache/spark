@@ -41,11 +41,8 @@ case class OrcBatchDataReaderFactory(
     dataSchema: StructType,
     partitionSchema: StructType,
     readSchema: StructType,
-    enableOffHeapColumnVector: Boolean,
-    copyToSpark: Boolean,
-    capacity: Int,
     broadcastedConf: Broadcast[SerializableConfiguration],
-    isCaseSensitive: Boolean)
+    readerConf: OrcDataReaderFactoryConf)
   extends DataReaderFactory[ColumnarBatch] {
   private val readFunction = (file: PartitionedFile) => {
     val conf = broadcastedConf.value.value
@@ -56,7 +53,7 @@ case class OrcBatchDataReaderFactory(
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     val reader = OrcFile.createReader(filePath, readerOptions)
     val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-      isCaseSensitive, dataSchema, readSchema, reader, conf)
+      readerConf.isCaseSensitive, dataSchema, readSchema, reader, conf)
     if (requestedColIdsOrEmptyFile.isEmpty) {
       Iterator.empty
     } else {
@@ -65,7 +62,8 @@ case class OrcBatchDataReaderFactory(
         "[BUG] requested column IDs do not match required schema")
       val taskContext = Option(TaskContext.get())
       val batchReader = new OrcColumnarBatchReader(
-        enableOffHeapColumnVector && taskContext.isDefined, copyToSpark, capacity)
+        readerConf.enableOffHeapColumnVector && taskContext.isDefined,
+        readerConf.copyToSpark, readerConf.capacity)
 
       // SPARK-23399 Register a task completion listener first to call `close()` in all cases.
       // There is a possibility that `initialize` and `initBatch` hit some errors (like OOM)
@@ -81,7 +79,7 @@ case class OrcBatchDataReaderFactory(
       batchReader.initialize(fileSplit, taskAttemptContext)
 
       val partitionColIds = PartitioningUtils.requestedPartitionColumnIds(
-        partitionSchema, readSchema, isCaseSensitive)
+        partitionSchema, readSchema, readerConf.isCaseSensitive)
       batchReader.initBatch(
         reader.getSchema,
         readSchema.fields,

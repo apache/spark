@@ -55,7 +55,18 @@ class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: Optio
     .getOrElse(SparkSession.getDefaultSession.get)
   private val hadoopConf =
     sparkSession.sessionState.newHadoopConfWithOptions(options.asMap().asScala.toMap)
-  private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+  private val sqlConf = sparkSession.sessionState.conf
+  private val readerConf = OrcDataReaderFactoryConf(
+    capacity = sqlConf.orcVectorizedReaderBatchSize,
+    enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled,
+    copyToSpark = sqlConf.getConf(SQLConf.ORC_COPY_BATCH_TO_SPARK),
+    isCaseSensitive = sqlConf.caseSensitiveAnalysis,
+    ignoreCorruptFiles = sqlConf.ignoreCorruptFiles,
+    ignoreMissingFiles = sqlConf.ignoreMissingFiles
+  )
+
+  private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
+
   private val fileIndex = {
     val filePath = options.get("path")
     if (!filePath.isPresent) {
@@ -113,15 +124,9 @@ class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: Optio
   }
 
   override def createBatchDataReaderFactories(): JList[DataReaderFactory[ColumnarBatch]] = {
-    val sqlConf = sparkSession.sessionState.conf
-    val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
-    val capacity = sqlConf.orcVectorizedReaderBatchSize
-    val copyToSpark = sparkSession.sessionState.conf.getConf(SQLConf.ORC_COPY_BATCH_TO_SPARK)
-
     partitions.map { partitionedFile =>
       new OrcBatchDataReaderFactory(partitionedFile, dataSchema, partitionSchema,
-        readSchema(), enableOffHeapColumnVector,
-        copyToSpark, capacity, broadcastedConf, isCaseSensitive)
+        readSchema(), broadcastedConf, readerConf)
         .asInstanceOf[DataReaderFactory[ColumnarBatch]]
     }.asJava
   }
@@ -129,16 +134,15 @@ class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: Optio
   override def createUnsafeRowReaderFactories: JList[DataReaderFactory[UnsafeRow]] = {
     partitions.map { partitionedFile =>
       new OrcUnsafeRowReaderFactory(partitionedFile, dataSchema, partitionSchema,
-        readSchema(), broadcastedConf, isCaseSensitive)
+        readSchema(), broadcastedConf, readerConf)
         .asInstanceOf[DataReaderFactory[UnsafeRow]]
     }.asJava
   }
 
   override def enableBatchRead(): Boolean = {
-    val conf = sparkSession.sessionState.conf
     val schema = readSchema()
-    conf.orcVectorizedReaderEnabled && conf.wholeStageEnabled &&
-      schema.length <= conf.wholeStageMaxNumFields &&
+    sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
+      schema.length <= sqlConf.wholeStageMaxNumFields &&
       schema.forall(_.dataType.isInstanceOf[AtomicType])
   }
 
@@ -149,7 +153,7 @@ class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: Optio
     }
     this.partitionKeyFilters = partitionKeyFilters
     pushedFiltersArray = partitionKeyFilters
-    if (sparkSession.sessionState.conf.orcFilterPushDown) {
+    if (sqlConf.orcFilterPushDown) {
       val dataFilters = otherFilters.map { f =>
         (DataSourceStrategy.translateFilter(f), f)
       }.collect { case (optionalFilter, catalystFilter) if optionalFilter.isDefined =>
@@ -169,6 +173,15 @@ class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: Optio
     pushedFiltersArray
   }
 }
+
+case class OrcDataReaderFactoryConf(
+    capacity: Int,
+    enableOffHeapColumnVector: Boolean,
+    copyToSpark: Boolean,
+    isCaseSensitive: Boolean,
+    ignoreCorruptFiles: Boolean,
+    ignoreMissingFiles: Boolean
+)
 
 object OrcDataSourceV2 {
   def satisfy(sparkSession: SparkSession, source: String, paths: Seq[String]): Option[String] = {

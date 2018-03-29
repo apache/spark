@@ -44,7 +44,7 @@ case class OrcUnsafeRowReaderFactory(
     partitionSchema: StructType,
     readSchema: StructType,
     broadcastedConf: Broadcast[SerializableConfiguration],
-    isCaseSensitive: Boolean)
+    readerConf: OrcDataReaderFactoryConf)
   extends DataReaderFactory[UnsafeRow] {
   private val readFunction = (file: PartitionedFile) => {
     val conf = broadcastedConf.value.value
@@ -56,9 +56,9 @@ case class OrcUnsafeRowReaderFactory(
     val reader = OrcFile.createReader(filePath, readerOptions)
 
     val requiredSchema =
-      PartitioningUtils.subtractSchema(readSchema, partitionSchema, isCaseSensitive)
+      PartitioningUtils.subtractSchema(readSchema, partitionSchema, readerConf.isCaseSensitive)
     val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-      isCaseSensitive, dataSchema, requiredSchema, reader, conf)
+      readerConf.isCaseSensitive, dataSchema, requiredSchema, reader, conf)
     if (requestedColIdsOrEmptyFile.isEmpty) {
       Iterator.empty
     } else {
@@ -95,7 +95,8 @@ case class OrcUnsafeRowReaderFactory(
 
   override def createDataReader(): DataReader[UnsafeRow] = {
     val taskContext = TaskContext.get()
-    val iter = FilePartitionUtil.compute(file, taskContext, readFunction)
+    val iter = FilePartitionUtil.compute(file, taskContext, readFunction,
+      readerConf.ignoreCorruptFiles, readerConf.ignoreMissingFiles)
     OrcUnsafeRowDataReader(iter)
   }
 
