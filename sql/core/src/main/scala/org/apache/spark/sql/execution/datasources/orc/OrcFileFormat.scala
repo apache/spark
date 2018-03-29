@@ -168,13 +168,13 @@ class OrcFileFormat
       val reader = OrcFile.createReader(filePath, readerOptions)
 
       val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
-        isCaseSensitive, dataSchema, requiredSchema, reader, conf)
+        isCaseSensitive, dataSchema, resultSchema, reader, conf)
 
       if (requestedColIdsOrEmptyFile.isEmpty) {
         Iterator.empty
       } else {
         val requestedColIds = requestedColIdsOrEmptyFile.get
-        assert(requestedColIds.length == requiredSchema.length,
+        assert(requestedColIds.length == resultSchema.length,
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)
         taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute,
@@ -193,13 +193,14 @@ class OrcFileFormat
           // after opening a file.
           val iter = new RecordReaderIterator(batchReader)
           Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
-
+          val requestedPartitionColIds =
+            Array.fill(requiredSchema.length)(-1) ++ Range(0, partitionSchema.length)
           batchReader.initialize(fileSplit, taskAttemptContext)
           batchReader.initBatch(
             reader.getSchema,
+            resultSchema.fields,
             requestedColIds,
-            requiredSchema.fields,
-            partitionSchema,
+            requestedPartitionColIds,
             file.partitionValues)
 
           iter.asInstanceOf[Iterator[InternalRow]]

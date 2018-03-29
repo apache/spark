@@ -93,6 +93,7 @@ case class DataSource(
     DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
+  private val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
   private val equality = sparkSession.sessionState.conf.resolver
 
   bucketSpec.map { bucket =>
@@ -426,7 +427,6 @@ case class DataSource(
         s"got: ${allPaths.mkString(", ")}")
     }
 
-    val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
     PartitioningUtils.validatePartitionColumn(data.schema, partitionColumns, caseSensitive)
 
     val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>

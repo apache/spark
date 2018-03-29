@@ -54,7 +54,7 @@ import org.apache.spark.sql.types._
  * builder methods mentioned above can only be found in test code, where all tested filters are
  * known to be convertible.
  */
-private[orc] object OrcFilters {
+object OrcFilters {
 
   /**
    * Create ORC filter as a SearchArgument instance.
@@ -64,19 +64,23 @@ private[orc] object OrcFilters {
 
     // First, tries to convert each filter individually to see whether it's convertible, and then
     // collect all convertible ones to build the final `SearchArgument`.
-    val convertibleFilters = for {
-      filter <- filters
-      _ <- buildSearchArgument(dataTypeMap, filter, SearchArgumentFactory.newBuilder())
-    } yield filter
+    val convertible = convertibleFilters(schema, filters)
 
     for {
       // Combines all convertible filters using `And` to produce a single conjunction
-      conjunction <- convertibleFilters.reduceOption(org.apache.spark.sql.sources.And)
+      conjunction <- convertible.reduceOption(org.apache.spark.sql.sources.And)
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate
       builder <- buildSearchArgument(dataTypeMap, conjunction, SearchArgumentFactory.newBuilder())
     } yield builder.build()
   }
 
+  def convertibleFilters(schema: StructType, filters: Seq[Filter]): Seq[Filter] = {
+    val dataTypeMap = schema.map(f => f.name -> f.dataType).toMap
+    for {
+      filter <- filters
+      _ <- buildSearchArgument(dataTypeMap, filter, SearchArgumentFactory.newBuilder())
+    } yield filter
+  }
   /**
    * Return true if this is a searchable type in ORC.
    * Both CharType and VarcharType are cleaned at AstBuilder.

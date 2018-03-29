@@ -1229,6 +1229,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val ENABLED_V2_DATA_SOURCE_READERS = buildConf("spark.sql.enabledV2DataSourceReaders")
+    .internal()
+    .doc("A comma-separated list of data source short names for which " +
+      "DataSourceReader is enabled. Reads from these sources will use V2 Sources")
+    .stringConf
+    .createWithDefault("orc")
+
   object PartitionOverwriteMode extends Enumeration {
     val STATIC, DYNAMIC = Value
   }
@@ -1610,6 +1617,8 @@ class SQLConf extends Serializable with Logging {
 
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
+
+  def enabledV2DataSourceReader: String = getConf(ENABLED_V2_DATA_SOURCE_READERS)
 
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 

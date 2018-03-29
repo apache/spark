@@ -29,6 +29,10 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, ReadSupport, ReadSupportWithSchema}
+import org.apache.spark.sql.sources.v2.reader.{DataSourceReader, SupportsPushDownCatalystFilters}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -50,18 +54,30 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
       .select(output.map(e => Column(e)): _*)
       .where(Column(predicate))
 
-    var maybeRelation: Option[HadoopFsRelation] = None
+    var maybeDataReader: Option[DataSourceReader] = None
     val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _, _)) =>
-        maybeRelation = Some(orcRelation)
+      case PhysicalOperation(_, filters,
+        DataSourceV2Relation(orcRelation: OrcDataSourceV2, options, _, _, userSpecifiedSchema)) =>
+        val dataSourceOptions = new DataSourceOptions(options.asJava)
+        val dataReader = if (userSpecifiedSchema.isDefined) {
+          orcRelation.asInstanceOf[ReadSupportWithSchema]
+            .createReader(userSpecifiedSchema.get, dataSourceOptions)
+        } else {
+          orcRelation.asInstanceOf[ReadSupport].createReader(dataSourceOptions)
+        }
+        maybeDataReader = Some(dataReader)
         filters
     }.flatten.reduceLeftOption(_ && _)
     assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
-    val (_, selectedFilters, _) =
-      DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
-    assert(selectedFilters.nonEmpty, "No filter is pushed down")
+    val pushDownCatalystFiltersReader =
+      maybeDataReader.get.asInstanceOf[SupportsPushDownCatalystFilters]
+    pushDownCatalystFiltersReader.pushCatalystFilters(Array(maybeAnalyzedPredicate.get))
+    val selectedCatalystFilters =
+      pushDownCatalystFiltersReader.pushedCatalystFilters()
+    assert(selectedCatalystFilters.nonEmpty, "No filter is pushed down")
 
+    val selectedFilters = selectedCatalystFilters.flatMap(DataSourceStrategy.translateFilter)
     val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters)
     assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $selectedFilters")
     checker(maybeFilter.get)
@@ -94,20 +110,32 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
       .select(output.map(e => Column(e)): _*)
       .where(Column(predicate))
 
-    var maybeRelation: Option[HadoopFsRelation] = None
+    var maybeDataReader: Option[DataSourceReader] = None
     val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-      case PhysicalOperation(_, filters, LogicalRelation(orcRelation: HadoopFsRelation, _, _, _)) =>
-        maybeRelation = Some(orcRelation)
+      case PhysicalOperation(_, filters,
+      DataSourceV2Relation(orcRelation: OrcDataSourceV2, options, _, _, userSpecifiedSchema)) =>
+        val dataSourceOptions = new DataSourceOptions(options.asJava)
+        val dataReader = if (userSpecifiedSchema.isDefined) {
+          orcRelation.asInstanceOf[ReadSupportWithSchema]
+            .createReader(userSpecifiedSchema.get, dataSourceOptions)
+        } else {
+          orcRelation.asInstanceOf[ReadSupport].createReader(dataSourceOptions)
+        }
+        maybeDataReader = Some(dataReader)
         filters
     }.flatten.reduceLeftOption(_ && _)
     assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
 
-    val (_, selectedFilters, _) =
-      DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
-    assert(selectedFilters.nonEmpty, "No filter is pushed down")
+    val pushDownCatalystFiltersReader =
+      maybeDataReader.get.asInstanceOf[SupportsPushDownCatalystFilters]
+    pushDownCatalystFiltersReader.pushCatalystFilters(Array(maybeAnalyzedPredicate.get))
+    val selectedCatalystFilters =
+      pushDownCatalystFiltersReader.pushedCatalystFilters()
+    assert(selectedCatalystFilters.nonEmpty, "No filter is pushed down")
 
+    val selectedFilters = selectedCatalystFilters.flatMap(DataSourceStrategy.translateFilter)
     val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters)
-    assert(maybeFilter.isEmpty, s"Could generate filter predicate for $selectedFilters")
+    assert(maybeFilter.isEmpty, s"Couldn't generate filter predicate for $selectedFilters")
   }
 
   test("filter pushdown - integer") {
@@ -340,7 +368,7 @@ class OrcFilterSuite extends OrcTest with SharedSQLContext {
     }
   }
 
-  test("no filter pushdown - non-supported types") {
+  ignore("no filter pushdown - non-supported types") {
     implicit class IntToBinary(int: Int) {
       def b: Array[Byte] = int.toString.getBytes(StandardCharsets.UTF_8)
     }
