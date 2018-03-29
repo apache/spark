@@ -559,8 +559,6 @@ object SQL {
 object Hive {
 
   lazy val settings = Seq(
-    // Skip all hive tests because we don't use hive.
-    definedTests in Test := Nil,
     // Specially disable assertions since some Hive tests fail them
     javaOptions in Test := (javaOptions in Test).value.filterNot(_ == "-ea"),
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings

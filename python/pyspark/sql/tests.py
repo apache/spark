@@ -2923,6 +2923,7 @@ class SQLTests(ReusedSQLTestCase):
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
+    @unittest.skip("This distrbituion doesn't ship hive")
     def test_hivecontext(self):
         # This test checks that HiveContext is using Hive metastore (SPARK-16224).
         # It sets a metastore url and checks if there is a derby dir created by

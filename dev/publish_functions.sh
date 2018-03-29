@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-PALANTIR_FLAGS=(-Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Phive -Pyarn -Psparkr)
+PALANTIR_FLAGS=(-Phadoop-cloud -Phadoop-palantir -Pkinesis-asl -Pkubernetes -Pyarn -Psparkr)
 
 get_version() {
   git describe --tags --first-parent
