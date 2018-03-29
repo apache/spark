@@ -214,7 +214,6 @@ unsupportedHiveNativeCommands
     | kw1=START kw2=TRANSACTION
     | kw1=COMMIT
     | kw1=ROLLBACK
-    | kw1=DFS
     | kw1=DELETE kw2=FROM
     ;
 
