@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.util
 
+import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
 
 import org.json4s._
@@ -42,7 +43,7 @@ import org.apache.spark.sql.Dataset
 private[spark] class Instrumentation[E <: Estimator[_]] private (
     estimator: E, dataset: RDD[_]) extends Logging {
 
-  private val id = Instrumentation.counter.incrementAndGet()
+  private val id = UUID.randomUUID()
   private val prefix = {
     val className = estimator.getClass.getSimpleName
     s"$className-${estimator.uid}-${dataset.hashCode()}-$id: "
@@ -77,11 +78,11 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   }
 
   def logNumFeatures(num: Long): Unit = {
-    log(compact(render("numFeatures" -> num)))
+    logNamedValue(Instrumentation.loggerTags.numFeatures, num)
   }
 
   def logNumClasses(num: Long): Unit = {
-    log(compact(render("numClasses" -> num)))
+    logNamedValue(Instrumentation.loggerTags.numClasses, num)
   }
 
   /**
@@ -107,7 +108,11 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
  * Some common methods for logging information about a training session.
  */
 private[spark] object Instrumentation {
-  private val counter = new AtomicLong(0)
+
+  object loggerTags {
+    val numFeatures = "numFeatures"
+    val numClasses = "numClasses"
+  }
 
   /**
    * Creates an instrumentation object for a training session.
