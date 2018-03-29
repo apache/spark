@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class PropagateEmptyRelationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -49,7 +49,8 @@ class PropagateEmptyRelationSuite extends PlanTest {
         ReplaceExceptWithAntiJoin,
         ReplaceIntersectWithSemiJoin,
         PushDownPredicate,
-        PruneFilters) :: Nil
+        PruneFilters,
+        CollapseProject) :: Nil
   }
 
   val testRelation1 = LocalRelation.fromExternalRows(Seq('a.int), data = Seq(Row(1)))
@@ -80,9 +81,11 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
       (true, false, Inner, Some(LocalRelation('a.int, 'b.int))),
       (true, false, Cross, Some(LocalRelation('a.int, 'b.int))),
-      (true, false, LeftOuter, Some(Project(Seq('a, Literal(null).as('b)), testRelation1).analyze)),
+      (true, false, LeftOuter,
+        Some(Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze)),
       (true, false, RightOuter, Some(LocalRelation('a.int, 'b.int))),
-      (true, false, FullOuter, Some(Project(Seq('a, Literal(null).as('b)), testRelation1).analyze)),
+      (true, false, FullOuter,
+        Some(Project(Seq('a, Literal(null).cast(IntegerType).as('b)), testRelation1).analyze)),
       (true, false, LeftAnti, Some(testRelation1)),
       (true, false, LeftSemi, Some(LocalRelation('a.int))),
 
@@ -90,8 +93,9 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (false, true, Cross, Some(LocalRelation('a.int, 'b.int))),
       (false, true, LeftOuter, Some(LocalRelation('a.int, 'b.int))),
       (false, true, RightOuter,
-        Some(Project(Seq(Literal(null).as('a), 'b), testRelation2).analyze)),
-      (false, true, FullOuter, Some(Project(Seq(Literal(null).as('a), 'b), testRelation2).analyze)),
+        Some(Project(Seq(Literal(null).cast(IntegerType).as('a), 'b), testRelation2).analyze)),
+      (false, true, FullOuter,
+        Some(Project(Seq(Literal(null).cast(IntegerType).as('a), 'b), testRelation2).analyze)),
       (false, true, LeftAnti, Some(LocalRelation('a.int))),
       (false, true, LeftSemi, Some(LocalRelation('a.int))),
 
@@ -108,7 +112,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       val query = testRelation1
         .where(left)
         .join(testRelation2.where(right), joinType = jt, condition = Some('a.attr == 'b.attr))
-      val optimized = Optimize.execute(query.analyze)
+      val optimized = Optimize.execute(query.analyze).analyze
       val correctAnswer =
         answer.getOrElse(OptimizeWithoutPropagateEmptyRelation.execute(query.analyze))
       comparePlans(optimized, correctAnswer)
