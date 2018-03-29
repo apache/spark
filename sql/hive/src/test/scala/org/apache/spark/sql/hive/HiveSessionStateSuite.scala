@@ -49,8 +49,4 @@ class HiveSessionStateSuite extends SessionStateSuite with TestHiveSingleton {
     assert(oldValue == newValue,
       "cloneSession and then newSession should not affect the Derby directory")
   }
-
-  test("default session is set") {
-    SparkSession.getDefaultSession.contains(activeSession)
-  }
 }
