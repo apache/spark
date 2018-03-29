@@ -36,16 +36,17 @@ public class MemoryBlockSuite {
     memory.putByte(1, (byte)127);
     memory.putShort(2, (short)257);
     memory.putInt(4, 0x20000002);
-    memory.putLong(8, -1L);
+    memory.putLong(8, 0x1234567089ABCDEFL);
     memory.putFloat(16, 1.0F);
-    memory.putDouble(20, 2.0);
-    MemoryBlock.copyMemory(memory, 0L, memory, 28, 4);
+    memory.putLong(20, 0x1234567089ABCDEFL);
+    memory.putDouble(28, 2.0);
+    MemoryBlock.copyMemory(memory, 0L, memory, 36, 4);
     int[] a = new int[2];
     a[0] = 0x12345678;
     a[1] = 0x13579BDF;
-    memory.copyFrom(a, Platform.INT_ARRAY_OFFSET, 32, 8);
+    memory.copyFrom(a, Platform.INT_ARRAY_OFFSET, 40, 8);
     byte[] b = new byte[8];
-    memory.writeTo(32, b, Platform.BYTE_ARRAY_OFFSET, 8);
+    memory.writeTo(40, b, Platform.BYTE_ARRAY_OFFSET, 8);
 
     Assert.assertEquals(obj, memory.getBaseObject());
     Assert.assertEquals(offset, memory.getBaseOffset());
@@ -55,14 +56,15 @@ public class MemoryBlockSuite {
     Assert.assertEquals((byte)127, memory.getByte(1 ));
     Assert.assertEquals((short)257, memory.getShort(2));
     Assert.assertEquals(0x20000002, memory.getInt(4));
-    Assert.assertEquals(-1L, memory.getLong(8));
+    Assert.assertEquals(0x1234567089ABCDEFL, memory.getLong(8));
     Assert.assertEquals(1.0F, memory.getFloat(16), 0);
-    Assert.assertEquals(2.0, memory.getDouble(20), 0);
-    Assert.assertEquals(true, memory.getBoolean(28));
-    Assert.assertEquals((byte)127, memory.getByte(29 ));
-    Assert.assertEquals((short)257, memory.getShort(30));
-    Assert.assertEquals(a[0], memory.getInt(32));
-    Assert.assertEquals(a[1], memory.getInt(36));
+    Assert.assertEquals(0x1234567089ABCDEFL, memory.getLong(20));
+    Assert.assertEquals(2.0, memory.getDouble(28), 0);
+    Assert.assertEquals(true, memory.getBoolean(36));
+    Assert.assertEquals((byte)127, memory.getByte(37 ));
+    Assert.assertEquals((short)257, memory.getShort(38));
+    Assert.assertEquals(a[0], memory.getInt(40));
+    Assert.assertEquals(a[1], memory.getInt(44));
     if (bigEndianPlatform) {
       Assert.assertEquals(a[0],
         ((int)b[0] & 0xff) << 24 | ((int)b[1] & 0xff) << 16 |
@@ -78,7 +80,7 @@ public class MemoryBlockSuite {
         ((int)b[7] & 0xff) << 24 | ((int)b[6] & 0xff) << 16 |
         ((int)b[5] & 0xff) << 8 | ((int)b[4] & 0xff));
     }
-    for (int i = 40; i < memory.size(); i++) {
+    for (int i = 48; i < memory.size(); i++) {
       Assert.assertEquals((byte) -1, memory.getByte(i));
     }
 
@@ -99,7 +101,7 @@ public class MemoryBlockSuite {
 
   @Test
   public void ByteArrayMemoryBlockTest() {
-    byte[] obj = new byte[48];
+    byte[] obj = new byte[56];
     long offset = Platform.BYTE_ARRAY_OFFSET;
     int length = obj.length;
 
@@ -109,14 +111,14 @@ public class MemoryBlockSuite {
     memory = ByteArrayMemoryBlock.fromArray(obj);
     check(memory, obj, offset, length);
 
-    obj = new byte[96];
+    obj = new byte[112];
     memory = new ByteArrayMemoryBlock(obj, offset, length);
     check(memory, obj, offset, length);
   }
 
   @Test
   public void OnHeapMemoryBlockTest() {
-    long[] obj = new long[6];
+    long[] obj = new long[7];
     long offset = Platform.LONG_ARRAY_OFFSET;
     int length = obj.length * 8;
 
@@ -126,7 +128,7 @@ public class MemoryBlockSuite {
     memory = OnHeapMemoryBlock.fromArray(obj);
     check(memory, obj, offset, length);
 
-    obj = new long[12];
+    obj = new long[14];
     memory = new OnHeapMemoryBlock(obj, offset, length);
     check(memory, obj, offset, length);
   }
@@ -134,14 +136,14 @@ public class MemoryBlockSuite {
   @Test
   public void OffHeapArrayMemoryBlockTest() {
     MemoryAllocator memoryAllocator = new UnsafeMemoryAllocator();
-    MemoryBlock memory = memoryAllocator.allocate(48);
+    MemoryBlock memory = memoryAllocator.allocate(56);
     Object obj = memory.getBaseObject();
     long offset = memory.getBaseOffset();
-    int length = 48;
+    int length = 56;
 
     check(memory, obj, offset, length);
 
-    long address = Platform.allocateMemory(96);
+    long address = Platform.allocateMemory(112);
     memory = new OffHeapMemoryBlock(address, length);
     obj = memory.getBaseObject();
     offset = memory.getBaseOffset();

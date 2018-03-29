@@ -101,12 +101,12 @@ public final class OnHeapMemoryBlock extends MemoryBlock {
 
   @Override
   public final long getLong(long offset) {
-    return array[(int)((this.offset + offset - Platform.LONG_ARRAY_OFFSET) / 8)];
+    return Platform.getLong(array, this.offset + offset);
   }
 
   @Override
   public final void putLong(long offset, long value) {
-    array[(int)((this.offset + offset - Platform.LONG_ARRAY_OFFSET) / 8)] = value;
+    Platform.putLong(array, this.offset + offset, value);
   }
 
   @Override
