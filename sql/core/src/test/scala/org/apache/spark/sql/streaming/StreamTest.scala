@@ -444,6 +444,16 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
         }
       }
 
+      // Verify if stateful operators have correct metadata and distribution
+      // This can often catch hard to debug errors when developing stateful operators
+      val executedPlan = currentStream.lastExecution.executedPlan
+      executedPlan.collect { case s: StatefulOperator => s }.foreach { s =>
+        assert(s.stateInfo.isDefined)
+        s.requiredChildDistribution.foreach { d =>
+          assert(d.requiredNumPartitions.isDefined)
+        }
+      }
+
       val (latestBatchData, allData) = sink match {
         case s: MemorySink => (s.latestBatchData, s.allData)
         case s: MemorySinkV2 => (s.latestBatchData, s.allData)
