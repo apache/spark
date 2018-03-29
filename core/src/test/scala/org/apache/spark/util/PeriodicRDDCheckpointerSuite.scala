@@ -233,6 +233,43 @@ class PeriodicRDDCheckpointerSuite extends SparkFunSuite with SharedSparkContext
       Utils.deleteRecursively(tempDir)
     }
   }
+
+  test("deleteAllCheckpoints should remove all the checkpoint files when " +
+    "there is just parent checkpointed RDD") {
+    val tempDir = Utils.createTempDir()
+    try {
+      val checkpointInterval = 2
+      sc.setCheckpointDir(tempDir.toURI.toString)
+
+      val checkpointer = new PeriodicRDDCheckpointer[(Int, Int)](checkpointInterval, sc)
+      val rdd1 = sc.makeRDD((0 until 10).map(i => i -> i)).setName("rdd1")
+
+      // rdd1 is not materialized yet, checkpointer(update=1, checkpointInterval=2)
+      checkpointer.update(rdd1)
+      // rdd2 depends on rdd1
+      val rdd2 = rdd1.filter(_ => true).setName("rdd2")
+
+      // rdd1 is materialized, checkpointer(update=2, checkpointInterval=2)
+      checkpointer.update(rdd1)
+      // rdd3 depends on rdd1
+      val rdd3 = rdd1.filter(_ => true).setName("rdd3")
+
+      // rdd3 is not materialized yet, checkpointer(update=3, checkpointInterval=2)
+      checkpointer.update(rdd3)
+      // rdd3 is materialized, rdd1 is removed, checkpointer(update=4, checkpointInterval=2)
+      checkpointer.update(rdd3)
+
+      // should not fail
+      rdd2.count()
+
+      checkpointer.deleteAllCheckpoints()
+      Seq(rdd1, rdd2, rdd3).foreach { rdd =>
+        confirmCheckpointRemoved(rdd)
+      }
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
 }
 
 private object PeriodicRDDCheckpointerSuite {

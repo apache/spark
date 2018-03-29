@@ -98,7 +98,7 @@ private[spark] class PeriodicRDDCheckpointer[T](
   override protected def unpersist(data: RDD[T]): Unit = data.unpersist(blocking = false)
 
   override protected def getCheckpointFiles(data: RDD[T]): Iterable[String] = {
-    data.getCheckpointFile.map(x => x)
+    PeriodicRDDCheckpointer.rddDeps(data).flatMap(_.getCheckpointFile)
   }
 
   override protected def haveCommonCheckpoint(newData: RDD[T], oldData: RDD[T]): Boolean = {
