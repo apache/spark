@@ -115,8 +115,13 @@ object FileSourceStrategy extends Strategy with Logging {
       .map(f => getExpressionBuckets(f, bucketColumnName, numBuckets))
       .fold(new BitSet(numBuckets))(_ | _)
 
-    val numBucketsSelected = if (matchedBuckets.cardinality() != 0) matchedBuckets.cardinality()
-    else numBuckets
+    val numBucketsSelected = if (matchedBuckets.cardinality() != 0) {
+      matchedBuckets.cardinality()
+    }
+    else {
+      numBuckets
+    }
+
     logInfo {
       s"Pruned ${numBuckets - numBucketsSelected} out of $numBuckets buckets."
     }
