@@ -338,11 +338,13 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
             numFields = 1,
             containsNull = false),
           ordinal = 1) as "a2")
+      .orderBy('id.asc)
 
     val expected = LocalRelation('id.long)
       .select(
         ('id + 1L) as "a1",
         ('id + 1L) as "a2")
+      .orderBy('id.asc)
     checkRule(query, expected)
   }
 
