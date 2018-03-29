@@ -89,7 +89,6 @@ public final class XXH64 {
   }
 
   public static long hashUnsafeBytesBlock(MemoryBlock mb, long seed) {
-    Object base = mb.getBaseObject();
     long offset = 0;
     long length = mb.size();
     assert (length >= 0) : "lengthInBytes cannot be negative";
