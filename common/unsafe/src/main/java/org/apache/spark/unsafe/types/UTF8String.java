@@ -82,7 +82,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public static UTF8String fromBytes(byte[] bytes) {
     if (bytes != null) {
       return new UTF8String(
-        MemoryBlock.allocateFromObject(bytes, BYTE_ARRAY_OFFSET, bytes.length));
+        new ByteArrayMemoryBlock(bytes, BYTE_ARRAY_OFFSET, bytes.length));
     } else {
       return null;
     }
@@ -96,7 +96,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public static UTF8String fromBytes(byte[] bytes, int offset, int numBytes) {
     if (bytes != null) {
       return new UTF8String(
-        MemoryBlock.allocateFromObject(bytes, BYTE_ARRAY_OFFSET + offset, numBytes));
+        new ByteArrayMemoryBlock(bytes, BYTE_ARRAY_OFFSET + offset, numBytes));
     } else {
       return null;
     }
@@ -120,15 +120,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   public UTF8String(MemoryBlock base) {
     this.base = base;
-    if (base != null) {
-      this.numBytes = Ints.checkedCast(base.size());
-    }
+    this.numBytes = Ints.checkedCast(base.size());
   }
 
   // for serialization
-  public UTF8String() {
-    this(null);
-  }
+  public UTF8String() {}
 
   /**
    * Writes the content of this string into a memory address, identified by an object and an offset.
@@ -250,6 +246,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
     }
     p &= ~mask;
+    System.out.println("P: "+Long.toHexString(p)+", obj="+base.getBaseObject()+", offset="+base.getBaseOffset()+", size="+base.size()+", numBytes="+numBytes);
     return p;
   }
 

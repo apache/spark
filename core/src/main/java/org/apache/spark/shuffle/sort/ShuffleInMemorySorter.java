@@ -104,7 +104,7 @@ final class ShuffleInMemorySorter {
 
   public void expandPointerArray(LongArray newArray) {
     assert(newArray.size() > array.size());
-    MemoryBlock.copyMemory(array.memoryBlock(), newArray.memoryBlock(),pos * 8L);
+    MemoryBlock.copyMemory(array.memoryBlock(), newArray.memoryBlock(), pos * 8L);
     consumer.freeArray(array);
     array = newArray;
     usableCapacity = getUsableCapacity();
@@ -173,7 +173,7 @@ final class ShuffleInMemorySorter {
         PackedRecordPointer.PARTITION_ID_START_BYTE_INDEX,
         PackedRecordPointer.PARTITION_ID_END_BYTE_INDEX, false, false);
     } else {
-      MemoryBlock unused = array.memoryBlock().subBlock(pos * 8L,(array.size() - pos) * 8L);
+      MemoryBlock unused = array.memoryBlock().subBlock(pos * 8L, (array.size() - pos) * 8L);
       LongArray buffer = new LongArray(unused);
       Sorter<PackedRecordPointer, LongArray> sorter =
         new Sorter<>(new ShuffleSortDataFormat(buffer));

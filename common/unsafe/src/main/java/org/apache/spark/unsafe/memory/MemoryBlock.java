@@ -136,7 +136,7 @@ public abstract class MemoryBlock {
   public abstract MemoryBlock subBlock(long offset, long size);
 
   protected void checkSubBlockRange(long offset, long size) {
-    if (offset < 0 || size < 0 || this.offset + offset < 0) {
+    if (offset < 0 || size < 0) {
       throw new ArrayIndexOutOfBoundsException(
         "Size " + size + " and offset " + offset + " must be non-negative");
     }

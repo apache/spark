@@ -378,10 +378,10 @@ public final class ArrowColumnVector extends ColumnVector {
       if (stringResult.isSet == 0) {
         return null;
       } else {
-        int size = stringResult.end - stringResult.start;
-        OffHeapMemoryBlock mb = new OffHeapMemoryBlock(
-          stringResult.buffer.memoryAddress() + stringResult.start, size);
-        return new UTF8String(mb);
+        return new UTF8String(new OffHeapMemoryBlock(
+          stringResult.buffer.memoryAddress() + stringResult.start,
+          stringResult.end - stringResult.start
+        ));
       }
     }
   }
