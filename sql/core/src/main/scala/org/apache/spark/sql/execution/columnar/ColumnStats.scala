@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, RowOrdering}
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -323,18 +324,31 @@ private[columnar] final class DecimalColumnStats(precision: Int, scale: Int) ext
 }
 
 private[columnar] final class ObjectColumnStats(dataType: DataType) extends ColumnStats {
+  protected var upper: Any = null
+  protected var lower: Any = null
+
   val columnType = ColumnType(dataType)
+  val ordering = if (RowOrdering.isOrderable(dataType)) {
+    Option(TypeUtils.getInterpretedOrdering(dataType))
+  } else {
+    None
+  }
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
       val size = columnType.actualSize(row, ordinal)
       sizeInBytes += size
       count += 1
+      ordering.foreach { order =>
+        val value = row.get(ordinal, dataType)
+        if (upper == null || order.gt(value, upper)) upper = value
+        if (lower == null || order.lt(value, lower)) lower = value
+      }
     } else {
       gatherNullStats
     }
   }
 
   override def collectedStatistics: Array[Any] =
-    Array[Any](null, null, nullCount, count, sizeInBytes)
+    Array[Any](lower, upper, nullCount, count, sizeInBytes)
 }

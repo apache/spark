@@ -18,18 +18,35 @@
 package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 class ColumnStatsSuite extends SparkFunSuite {
-  testColumnStats(classOf[BooleanColumnStats], BOOLEAN, Array(true, false, 0))
-  testColumnStats(classOf[ByteColumnStats], BYTE, Array(Byte.MaxValue, Byte.MinValue, 0))
-  testColumnStats(classOf[ShortColumnStats], SHORT, Array(Short.MaxValue, Short.MinValue, 0))
-  testColumnStats(classOf[IntColumnStats], INT, Array(Int.MaxValue, Int.MinValue, 0))
-  testColumnStats(classOf[LongColumnStats], LONG, Array(Long.MaxValue, Long.MinValue, 0))
-  testColumnStats(classOf[FloatColumnStats], FLOAT, Array(Float.MaxValue, Float.MinValue, 0))
-  testColumnStats(classOf[DoubleColumnStats], DOUBLE, Array(Double.MaxValue, Double.MinValue, 0))
-  testColumnStats(classOf[StringColumnStats], STRING, Array(null, null, 0))
-  testDecimalColumnStats(Array(null, null, 0))
+  testColumnStats(classOf[BooleanColumnStats], BOOLEAN, Array(true, false, 0, 0, 0))
+  testColumnStats(classOf[ByteColumnStats], BYTE, Array(Byte.MaxValue, Byte.MinValue, 0, 0, 0))
+  testColumnStats(classOf[ShortColumnStats], SHORT, Array(Short.MaxValue, Short.MinValue, 0, 0, 0))
+  testColumnStats(classOf[IntColumnStats], INT, Array(Int.MaxValue, Int.MinValue, 0, 0, 0))
+  testColumnStats(classOf[LongColumnStats], LONG, Array(Long.MaxValue, Long.MinValue, 0, 0, 0))
+  testColumnStats(classOf[FloatColumnStats], FLOAT, Array(Float.MaxValue, Float.MinValue, 0, 0, 0))
+  testColumnStats(
+    classOf[DoubleColumnStats], DOUBLE,
+    Array(Double.MaxValue, Double.MinValue, 0, 0, 0)
+  )
+  testColumnStats(classOf[StringColumnStats], STRING, Array(null, null, 0, 0, 0))
+  testDecimalColumnStats(Array(null, null, 0, 0, 0))
+  testObjectColumnStats(ArrayType(IntegerType), orderable = true, Array(null, null, 0, 0, 0))
+  testObjectColumnStats(
+    StructType(Array(StructField("test", DataTypes.StringType))),
+    orderable = true,
+    Array(null, null, 0, 0, 0)
+  )
+  testObjectColumnStats(
+    MapType(IntegerType, StringType),
+    orderable = false,
+    Array(null, null, 0, 0, 0)
+  )
+
 
   def testColumnStats[T <: AtomicType, U <: ColumnStats](
       columnStatsClass: Class[U],
@@ -94,6 +111,45 @@ class ColumnStatsSuite extends SparkFunSuite {
 
       assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
       assertResult(values.max(ordering), "Wrong upper bound")(stats(1))
+      assertResult(10, "Wrong null count")(stats(2))
+      assertResult(20, "Wrong row count")(stats(3))
+      assertResult(stats(4), "Wrong size in bytes") {
+        rows.map { row =>
+          if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
+        }.sum
+      }
+    }
+  }
+
+  def testObjectColumnStats(
+       dataType: DataType, orderable: Boolean, initialStatistics: Array[Any]): Unit = {
+    assert(!(orderable ^ RowOrdering.isOrderable(dataType)))
+    val columnType = ColumnType(dataType)
+
+    test(s"${dataType.typeName}: empty") {
+      val objectStats = new ObjectColumnStats(dataType)
+      objectStats.collectedStatistics.zip(initialStatistics).foreach {
+        case (actual, expected) => assert(actual === expected)
+      }
+    }
+
+    test(s"${dataType.typeName}: non-empty") {
+      import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
+      val objectStats = new ObjectColumnStats(dataType)
+      val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
+      rows.foreach(objectStats.gatherStats(_, 0))
+
+      val stats = objectStats.collectedStatistics
+      if (orderable) {
+        val values = rows.take(10).map(_.get(0, columnType.dataType))
+        val ordering = TypeUtils.getInterpretedOrdering(dataType)
+
+        assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
+        assertResult(values.max(ordering), "Wrong upper bound")(stats(1))
+      } else {
+        assertResult(null, "Wrong lower bound")(stats(0))
+        assertResult(null, "Wrong upper bound")(stats(1))
+      }
       assertResult(10, "Wrong null count")(stats(2))
       assertResult(20, "Wrong row count")(stats(3))
       assertResult(stats(4), "Wrong size in bytes") {

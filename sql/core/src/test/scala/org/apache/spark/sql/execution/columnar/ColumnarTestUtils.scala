@@ -21,9 +21,9 @@ import scala.collection.immutable.HashSet
 import scala.util.Random
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
-import org.apache.spark.sql.types.{AtomicType, Decimal}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData, UnsafeMapData, UnsafeProjection}
+import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+import org.apache.spark.sql.types.{AtomicType, DataType, Decimal, IntegerType, MapType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ColumnarTestUtils {
@@ -54,12 +54,22 @@ object ColumnarTestUtils {
       case COMPACT_DECIMAL(precision, scale) => Decimal(Random.nextLong() % 100, precision, scale)
       case LARGE_DECIMAL(precision, scale) => Decimal(Random.nextLong(), precision, scale)
       case STRUCT(_) =>
-        new GenericInternalRow(Array[Any](UTF8String.fromString(Random.nextString(10))))
+        val schema = StructType(Array(StructField("test", StringType)))
+        val converter = UnsafeProjection.create(schema)
+        converter(InternalRow(Array(UTF8String.fromString(Random.nextString(10))): _*))
       case ARRAY(_) =>
-        new GenericArrayData(Array[Any](Random.nextInt(), Random.nextInt()))
+        UnsafeArrayData.fromPrimitiveArray(Array(Random.nextInt(), Random.nextInt()))
       case MAP(_) =>
-        ArrayBasedMapData(
-          Map(Random.nextInt() -> UTF8String.fromString(Random.nextString(Random.nextInt(32)))))
+        val unsafeConverter =
+          UnsafeProjection.create(Array[DataType](MapType(IntegerType, StringType)))
+        val row = new GenericInternalRow(1)
+        def toUnsafeMap(map: ArrayBasedMapData): UnsafeMapData = {
+          row.update(0, map)
+          val unsafeRow = unsafeConverter.apply(row)
+          unsafeRow.getMap(0).copy
+        }
+        toUnsafeMap(ArrayBasedMapData(
+          Map(Random.nextInt() -> UTF8String.fromString(Random.nextString(Random.nextInt(32))))))
       case _ => throw new IllegalArgumentException(s"Unknown column type $columnType")
     }).asInstanceOf[JvmType]
   }
