@@ -328,10 +328,10 @@ private[columnar] final class ObjectColumnStats(dataType: DataType) extends Colu
   protected var lower: Any = null
 
   val columnType = ColumnType(dataType)
-  val ordering = if (RowOrdering.isOrderable(dataType)) {
-    Option(TypeUtils.getInterpretedOrdering(dataType))
-  } else {
-    None
+  val ordering = dataType match {
+    case x if RowOrdering.isOrderable(dataType) && x != NullType =>
+      Option(TypeUtils.getInterpretedOrdering(x))
+    case _ => None
   }
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
