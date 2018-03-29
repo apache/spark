@@ -121,4 +121,13 @@ public class JavaUDFSuite implements Serializable {
     Row result = spark.sql("SELECT returnOne()").head();
     Assert.assertEquals(1, result.getInt(0));
   }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void udfV2Test() {
+    spark.udf().registerV2j("udfv2", (Integer a, Integer b) -> a + b,
+      DataTypes.IntegerType, DataTypes.IntegerType, DataTypes.IntegerType, true, true);
+    Row result = spark.sql("SELECT udfv2(2, 3)").head();
+    Assert.assertEquals(5, result.getInt(0));
+  }
 }

@@ -327,12 +327,13 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   }
 
   test("udfv2 test") {
-    spark.udf.register("myUdfV1", (a: Int, b: String) => a.toString + b)
-    spark.udf.register("myUdfV2", (a: Int, b: UTF8String) => {
-      UTF8String.concat(UTF8String.fromString(a.toString), b)
-    }, StringType, IntegerType, StringType, true, true)
-    testData.selectExpr("myUdfV1(a, b)", "myUdfV2(a, b)").as[(String, String)].collect().foreach {
-      case (v1: String, v2: String) => assert(v1 === v2)
+    spark.udf.register("myUdfV1", (a: Int, b: Int) => a + b)
+    spark.udf.registerV2("myUdfV2", (a: Int, b: Int) => {
+      a + b
+    }, IntegerType, IntegerType, IntegerType, true, true)
+    sql("select myUdfV1(key, value), myUdfV2(key, value) from testData")
+      .as[(Int, Int)].collect().foreach {
+      case (v1: Int, v2: Int) => assert(v1 === v2)
     }
   }
 }

@@ -221,7 +221,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * Registers a deterministic Scala closure of 2 arguments as user-defined function (UDF).
    * @since 2.4.0
    */
-  def register(name: String, func: Function2[_, _, _], returnType: DataType,
+  def registerV2(name: String, func: Function2[_, _, _], returnType: DataType,
     input1Type: DataType, input2Type: DataType, nullable: Boolean, deterministic: Boolean)
     : UserDefinedFunctionV2 = {
     val inputTypes = Seq(input1Type, input2Type)
@@ -758,7 +758,7 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
    * Register a deterministic Java UDF2 instance as user-defined function v2 (UDF v2).
    * @since 2.4.0
    */
-  def registerV2(name: String, f: UDF2[_, _, _], returnType: DataType,
+  def registerV2j(name: String, f: UDF2[_, _, _], returnType: DataType,
     input1Type: DataType, input2Type: DataType, nullable: Boolean, deterministic: Boolean)
     : UserDefinedFunctionV2 = {
     val func = f.asInstanceOf[UDF2[Any, Any, Any]].call(_: Any, _: Any)

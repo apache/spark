@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.InternalRow
+
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.types.DataType
 
@@ -67,6 +68,7 @@ private[sql] case class JavaUDF (
     s"Failed to execute user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
   }
 
+  /*
   override def doGenCode(
       ctx: CodegenContext,
       ev: ExprCode): ExprCode = {
@@ -114,7 +116,60 @@ private[sql] case class JavaUDF (
          |}
        """.stripMargin)
   }
+  */
 
+  // scalastyle:on line.size.limit
+  override def doGenCode(
+      ctx: CodegenContext,
+      ev: ExprCode): ExprCode = {
+    val converterClassName = classOf[Any => Any].getName
+
+    val errorMsgTerm = ctx.addReferenceObj("errMsg", udfErrorMessage)
+    val resultTerm = ctx.freshName("result")
+
+    // codegen for children expressions
+    val evals = children.map(_.genCode(ctx))
+
+    // Generate the codes for expressions and calling user-defined function
+    // We need to get the boxedType of dataType's javaType here. Because for the dataType
+    // such as IntegerType, its javaType is `int` and the returned type of user-defined
+    // function is Object. Trying to convert an Object to `int` will cause casting exception.
+    val evalCode = evals.map(_.code).mkString("\n")
+    val (funcArgs, initArgs) = evals.zipWithIndex.map { case (eval, i) =>
+      val argTerm = ctx.freshName("arg")
+      val argBoxedType = CodeGenerator.boxedType(children(i).dataType)
+      val initArg = s"Object $argTerm = ${eval.isNull} ? null : ($argBoxedType)${eval.value};"
+      (argTerm, initArg)
+    }.unzip
+
+    val udf = ctx.addReferenceObj("udf", function, s"scala.Function${children.length}")
+    val getFuncResult = s"$udf.apply(${funcArgs.mkString(", ")})"
+    val boxedType = CodeGenerator.boxedType(dataType)
+
+    // TODO: if UDF return value is type `Option[Any]`, turn it into normal value or null
+    val callFunc =
+      s"""
+         |$boxedType $resultTerm = null;
+         |try {
+         |  $resultTerm = ($boxedType)$getFuncResult;
+         |} catch (Exception e) {
+         |  throw new org.apache.spark.SparkException($errorMsgTerm, e);
+         |}
+       """.stripMargin
+
+    ev.copy(code =
+      s"""
+         |$evalCode
+         |${initArgs.mkString("\n")}
+         |$callFunc
+         |
+         |boolean ${ev.isNull} = $resultTerm == null;
+         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${ev.isNull}) {
+         |  ${ev.value} = $resultTerm;
+         |}
+       """.stripMargin)
+  }
 
   override def eval(input: InternalRow): Any = {
     val result = try {
