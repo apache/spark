@@ -22,19 +22,23 @@ import java.nio.channels.Channels
 import java.nio.file.{Files, Paths}
 
 import scala.collection.JavaConverters._
+
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector._
-import org.apache.arrow.vector.ipc.{ArrowStreamReader, ReadChannel, WriteChannel}
+import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter, ReadChannel, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
+
 import org.apache.spark.TaskContext
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnVector, ColumnarBatch}
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.util.Utils
 
-
+/**
+ * Writes serialized ArrowRecordBatches to a DataOutputStream in the Arrow stream format
+ */
 private[sql] class ArrowBatchStreamWriter(
     schema: StructType,
     out: DataOutputStream,
@@ -122,7 +126,6 @@ private[sql] object ArrowConverters {
           arrowWriter.reset()
         }
 
-        // TODO: ??? writeChannel.close()
         out.toByteArray
       }
     }
@@ -146,8 +149,8 @@ private[sql] object ArrowConverters {
       private var rowIter = if (arrowBatchIter.hasNext) nextBatch() else Iterator.empty
 
       context.addTaskCompletionListener { _ =>
-        allocator.close()
         root.close()
+        allocator.close()
       }
 
       override def hasNext: Boolean = rowIter.hasNext || {
@@ -155,8 +158,8 @@ private[sql] object ArrowConverters {
           rowIter = nextBatch()
           true
         } else {
-          allocator.close()
           root.close()
+          allocator.close()
           false
         }
       }
@@ -167,6 +170,7 @@ private[sql] object ArrowConverters {
         val arrowRecordBatch = ArrowConverters.loadBatch(arrowBatchIter.next(), allocator)
         val vectorLoader = new VectorLoader(root)
         vectorLoader.load(arrowRecordBatch)
+        arrowRecordBatch.close()
 
         val columns = root.getFieldVectors.asScala.map { vector =>
           new ArrowColumnVector(vector).asInstanceOf[ColumnVector]
@@ -175,6 +179,63 @@ private[sql] object ArrowConverters {
         val batch = new ColumnarBatch(columns)
         batch.setNumRows(root.getRowCount)
         batch.rowIterator().asScala
+      }
+    }
+  }
+
+  /**
+   * Maps Iterator from InternalRow to Arrow stream format as a byte array. Each Arrow stream
+   * will have 1 ArrowRecordBatch. Limit ArrowRecordBatch size in a batch by setting
+   * maxRecordsPerBatch or use 0 to fully consume rowIter. Once this limit is reach, a new Arrow
+   * stream will be started.
+   */
+  private[sql] def toStreamIterator(
+      rowIter: Iterator[InternalRow],
+      schema: StructType,
+      maxRecordsPerBatch: Int,
+      timeZoneId: String,
+      context: TaskContext): Iterator[Array[Byte]] = {
+
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
+    val allocator =
+      ArrowUtils.rootAllocator.newChildAllocator("toStreamIterator", 0, Long.MaxValue)
+
+    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+    val arrowWriter = ArrowWriter.create(root)
+
+    context.addTaskCompletionListener { _ =>
+      root.close()
+      allocator.close()
+    }
+
+    new Iterator[Array[Byte]] {
+
+      override def hasNext: Boolean = rowIter.hasNext || {
+        root.close()
+        allocator.close()
+        false
+      }
+
+      override def next(): Array[Byte] = {
+        val out = new ByteArrayOutputStream()
+        val writer = new ArrowStreamWriter(root, null, out)
+        writer.start()
+
+        Utils.tryWithSafeFinally {
+          var rowCount = 0
+          while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch)) {
+            val row = rowIter.next()
+            arrowWriter.write(row)
+            rowCount += 1
+          }
+          arrowWriter.finish()
+          writer.writeBatch()
+        } {
+          writer.close()
+          arrowWriter.reset()
+        }
+
+        out.toByteArray
       }
     }
   }
@@ -192,7 +253,7 @@ private[sql] object ArrowConverters {
     new ArrowRowIterator {
       private var reader: ArrowStreamReader = null
       private var schemaRead = StructType(Seq.empty)
-      private var rowIter = if (arrowStreamIter.hasNext) nextBatch() else Iterator.empty
+      private var rowIter = if (arrowStreamIter.hasNext) nextStream() else Iterator.empty
 
       context.addTaskCompletionListener { _ =>
         closeReader()
@@ -202,11 +263,16 @@ private[sql] object ArrowConverters {
       override def schema: StructType = schemaRead
 
       override def hasNext: Boolean = rowIter.hasNext || {
-        closeReader()
-        if (arrowStreamIter.hasNext) {
-          rowIter = nextBatch()
+        if (reader != null && reader.loadNextBatch()) {
+          rowIter = nextBatch(reader.getVectorSchemaRoot)
+          true
+        }
+        else if (arrowStreamIter.hasNext) {
+          closeReader()
+          rowIter = nextStream()
           true
         } else {
+          closeReader()
           allocator.close()
           false
         }
@@ -221,17 +287,19 @@ private[sql] object ArrowConverters {
         }
       }
 
-      private def nextBatch(): Iterator[InternalRow] = {
+      private def nextStream(): Iterator[InternalRow] = {
         val in = new ByteArrayInputStream(arrowStreamIter.next())
         reader = new ArrowStreamReader(in, allocator)
         reader.loadNextBatch()  // throws IOException
         val root = reader.getVectorSchemaRoot  // throws IOException
         schemaRead = ArrowUtils.fromArrowSchema(root.getSchema)
+        nextBatch(root)
+      }
 
+      private def nextBatch(root: VectorSchemaRoot): Iterator[InternalRow] = {
         val columns = root.getFieldVectors.asScala.map { vector =>
           new ArrowColumnVector(vector).asInstanceOf[ColumnVector]
         }.toArray
-
         val batch = new ColumnarBatch(columns)
         batch.setNumRows(root.getRowCount)
         batch.rowIterator().asScala
@@ -250,6 +318,9 @@ private[sql] object ArrowConverters {
       .asInstanceOf[ArrowRecordBatch]  // throws IOException
   }
 
+  /**
+   * Convert a JavaRDD of Arrow streams as byte arrays to a DataFrame
+   */
   private[sql] def toDataFrame(
       arrowStreamRDD: JavaRDD[Array[Byte]],
       schemaString: String,
@@ -262,6 +333,9 @@ private[sql] object ArrowConverters {
     sqlContext.internalCreateDataFrame(rdd, schema)
   }
 
+  /**
+   * Read files entirely and parallelize into a JavaRDD with 1 partition per file
+   */
   private[sql] def readArrowStreamFromFiles(sqlContext: SQLContext, filenames: Array[String]):
   JavaRDD[Array[Byte]] = {
     val fileData = filenames.map { filename =>

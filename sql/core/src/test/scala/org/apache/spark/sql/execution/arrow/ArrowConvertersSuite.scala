@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.arrow
 
-import java.io.File
+import java.io.{ByteArrayOutputStream, DataOutputStream, File}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
@@ -30,8 +30,8 @@ import org.apache.arrow.vector.util.Validator
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkException, TaskContext}
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -1154,7 +1154,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
        """.stripMargin
 
     val arrowBatches = testData2.getArrowBatchRdd.collect()
-    // NOTE: testData2 should have 2 partitions -> 2 arrow batches in payload
+    // NOTE: testData2 should have 2 partitions -> 2 arrow batches
     assert(arrowBatches.length === 2)
     val schema = testData2.schema
 
@@ -1168,12 +1168,12 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   }
 
   test("empty frame collect") {
-    val arrowPayload = spark.emptyDataFrame.getArrowBatchRdd.collect()
-    assert(arrowPayload.isEmpty)
+    val arrowBatches = spark.emptyDataFrame.getArrowBatchRdd.collect()
+    assert(arrowBatches.isEmpty)
 
     val filteredDF = List[Int](1, 2, 3, 4, 5, 6).toDF("i")
-    val filteredArrowPayload = filteredDF.filter("i < 0").getArrowBatchRdd.collect()
-    assert(filteredArrowPayload.isEmpty)
+    val filteredArrowBatches = filteredDF.filter("i < 0").getArrowBatchRdd.collect()
+    assert(filteredArrowBatches.isEmpty)
   }
 
   test("empty partition collect") {
@@ -1326,7 +1326,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
 
     val ctx = TaskContext.empty()
-    val batchIter = ArrowConverters.toBatchIterator(inputRows.toIterator, schema, 0, null, ctx)
+    val batchIter = ArrowConverters.toBatchIterator(inputRows.toIterator, schema, 5, null, ctx)
     val outputRowIter = ArrowConverters.fromBatchIterator(batchIter, schema, null, ctx)
 
     var count = 0
@@ -1342,7 +1342,6 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     assert(count == inputRows.length)
   }
 
-  /*
   test("roundtrip arrow stream") {
     val inputRows = (0 until 9).map { i =>
       InternalRow(i)
@@ -1351,7 +1350,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
 
     val ctx = TaskContext.empty()
-    val streamIter = ArrowConverters.toStreamIterator(inputRows.toIterator, schema, 0, null, ctx)
+    val streamIter = ArrowConverters.toStreamIterator(inputRows.toIterator, schema, 5, null, ctx)
     val outputRowIter = ArrowConverters.fromStreamIterator(streamIter, ctx)
 
     assert(schema == outputRowIter.schema)
@@ -1368,7 +1367,43 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
 
     assert(count == inputRows.length)
   }
-  */
+
+  test("ArrowBatchStreamWriter roundtrip") {
+    val inputRows = (0 until 9).map { i =>
+      InternalRow(i)
+    } :+ InternalRow(null)
+
+    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
+
+    val ctx = TaskContext.empty()
+    val batchIter = ArrowConverters.toBatchIterator(inputRows.toIterator, schema, 5, null, ctx)
+
+    // Write batches to Arrow stream format as a byte array
+    val out = new ByteArrayOutputStream()
+    val dataOut = new DataOutputStream(out)
+    val writer = new ArrowBatchStreamWriter(schema, dataOut, null)
+    writer.writeBatches(batchIter)
+    writer.close()
+    out.close()
+
+    // Convert Arrow stream format to Rows
+    val streamIter = Iterator(out.toByteArray)
+    val outputRowIter = ArrowConverters.fromStreamIterator(streamIter, ctx)
+
+    assert(schema == outputRowIter.schema)
+
+    var count = 0
+    outputRowIter.zipWithIndex.foreach { case (row, i) =>
+      if (i != 9) {
+        assert(row.getInt(0) == i)
+      } else {
+        assert(row.isNullAt(0))
+      }
+      count += 1
+    }
+
+    assert(count == inputRows.length)
+  }
 
   /** Test that a converted DataFrame to Arrow record batch equals batch read from JSON file */
   private def collectAndValidate(
