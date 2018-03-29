@@ -128,13 +128,33 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-23587: MapObjects should support interpreted execution") {
+    def testMapObjects(collection: Any, collectionCls: Class[_], inputType: DataType): Unit = {
+      val function = (lambda: Expression) => Add(lambda, Literal(1))
+      val elementType = IntegerType
+      val expected = Seq(2, 3, 4)
+
+      val inputObject = BoundReference(0, inputType, nullable = true)
+      val optClass = Option(collectionCls)
+      val mapObj = MapObjects(function, inputObject, elementType, true, optClass)
+      val row = InternalRow.fromSeq(Seq(collection))
+      val result = mapObj.eval(row)
+
+      collectionCls match {
+        case null =>
+          assert(result.asInstanceOf[ArrayData].array.toSeq == expected)
+        case l if classOf[java.util.List[_]].isAssignableFrom(l) =>
+          assert(result.asInstanceOf[java.util.List[_]].asScala.toSeq == expected)
+        case s if classOf[Seq[_]].isAssignableFrom(s) =>
+          assert(result.asInstanceOf[Seq[_]].toSeq == expected)
+        case s if classOf[scala.collection.Set[_]].isAssignableFrom(s) =>
+          assert(result.asInstanceOf[scala.collection.Set[_]] == expected.toSet)
+      }
+    }
+
     val customCollectionClasses = Seq(classOf[Seq[Int]], classOf[scala.collection.Set[Int]],
       classOf[java.util.List[Int]], classOf[java.util.AbstractList[Int]],
       classOf[java.util.AbstractSequentialList[Int]], classOf[java.util.Vector[Int]],
       classOf[java.util.Stack[Int]], null)
-    val function = (lambda: Expression) => Add(lambda, Literal(1))
-    val elementType = IntegerType
-    val expected = Seq(2, 3, 4)
 
     val list = new java.util.ArrayList[Int]()
     list.add(1)
@@ -154,27 +174,15 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (Seq(1, 2, 3), ObjectType(classOf[Seq[Int]])),
       (list, ObjectType(classOf[java.util.List[Int]])),
       (vector, ObjectType(classOf[java.util.Vector[Int]])),
+      (stack, ObjectType(classOf[java.util.Stack[Int]])),
       (arrayData, ArrayType(IntegerType))
     ).foreach { case (collection, inputType) =>
-      val inputObject = BoundReference(0, inputType, nullable = true)
+      customCollectionClasses.foreach(testMapObjects(collection, _, inputType))
 
-      customCollectionClasses.foreach { customCollectionCls =>
-        val optClass = Option(customCollectionCls)
-        val mapObj = MapObjects(function, inputObject, elementType, true, optClass)
-        val row = InternalRow.fromSeq(Seq(collection))
-        val result = mapObj.eval(row)
-
-        customCollectionCls match {
-          case null =>
-            assert(result.asInstanceOf[ArrayData].array.toSeq == expected)
-          case l if classOf[java.util.List[_]].isAssignableFrom(l) =>
-            assert(result.asInstanceOf[java.util.List[_]].asScala.toSeq == expected)
-          case s if classOf[Seq[_]].isAssignableFrom(s) =>
-            assert(result.asInstanceOf[Seq[_]].toSeq == expected)
-          case s if classOf[scala.collection.Set[_]].isAssignableFrom(s) =>
-            assert(result.asInstanceOf[scala.collection.Set[_]] == expected.toSet)
-        }
-      }
+      // Unsupported custom collection class
+      assert(intercept[RuntimeException] {
+        testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
+      }.getMessage().contains("not supported by `MapObjects` as resulting collection."))
     }
   }
 

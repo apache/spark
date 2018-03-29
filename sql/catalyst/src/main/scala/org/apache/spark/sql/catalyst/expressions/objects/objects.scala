@@ -617,68 +617,75 @@ case class MapObjects private(
     case _ => inputData.dataType
   }
 
-  private def executeFuncOnCollection(inputCollection: Seq[_]): Seq[_] = {
-    inputCollection.map { element =>
-      val row = InternalRow.fromSeq(Seq(element))
+  private def executeFuncOnCollection(inputCollection: Seq[_]): Iterator[_] = {
+    val row = new GenericInternalRow(1)
+    inputCollection.toIterator.map { element =>
+      row.update(0, element)
       lambdaFunction.eval(row)
     }
   }
 
-  // Executes lambda function on input collection.
-  private lazy val executeFunc: Any => Seq[_] = inputDataType match {
+  private lazy val convertToSeq: Any => Seq[_] = inputDataType match {
     case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
-      x => executeFuncOnCollection(x.asInstanceOf[Seq[_]])
+      _.asInstanceOf[Seq[_]]
     case ObjectType(cls) if cls.isArray =>
-      x => executeFuncOnCollection(x.asInstanceOf[Array[_]].toSeq)
+      _.asInstanceOf[Array[_]].toSeq
     case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
-      x => executeFuncOnCollection(x.asInstanceOf[java.util.List[_]].asScala)
+      _.asInstanceOf[java.util.List[_]].asScala
     case ObjectType(cls) if cls == classOf[Object] =>
-      if (cls.isArray) {
-        x => executeFuncOnCollection(x.asInstanceOf[Array[_]].toSeq)
-      } else {
-        x => executeFuncOnCollection(x.asInstanceOf[Seq[_]])
+      (inputCollection) => {
+        if (inputCollection.getClass.isArray) {
+          inputCollection.asInstanceOf[Array[_]].toSeq
+        } else {
+          inputCollection.asInstanceOf[Seq[_]]
+        }
       }
     case ArrayType(et, _) =>
-      x => executeFuncOnCollection(x.asInstanceOf[ArrayData].array)
+      _.asInstanceOf[ArrayData].array
   }
 
-  // Converts the processed collection to custom collection class if any.
-  private lazy val getResults: Seq[_] => Any = customCollectionCls match {
+  private lazy val mapElements: Seq[_] => Any = customCollectionCls match {
     case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
       // Scala sequence
-      identity _
+      executeFuncOnCollection(_).toSeq
     case Some(cls) if classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
       // Scala set
-      _.toSet
+      executeFuncOnCollection(_).toSet
     case Some(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
       // Java list
       if (cls == classOf[java.util.List[_]] || cls == classOf[java.util.AbstractList[_]] ||
           cls == classOf[java.util.AbstractSequentialList[_]]) {
         // Specifying non concrete implementations of `java.util.List`
-        _.asJava
+        executeFuncOnCollection(_).toSeq.asJava
       } else {
-        // Specifying concrete implementations of `java.util.List`
-        (results) => {
-          val constructors = cls.getConstructors()
-          val intParamConstructor = constructors.find { constructor =>
-            constructor.getParameterCount == 1 && constructor.getParameterTypes()(0) == classOf[Int]
-          }
-          val noParamConstructor = constructors.find { constructor =>
-            constructor.getParameterCount == 0
-          }
-          val builder = intParamConstructor.map { constructor =>
-            constructor.newInstance(results.length.asInstanceOf[Object])
-          }.getOrElse {
-            noParamConstructor.get.newInstance()
-          }.asInstanceOf[java.util.List[Any]]
+        val constructors = cls.getConstructors()
+        val intParamConstructor = constructors.find { constructor =>
+          constructor.getParameterCount == 1 && constructor.getParameterTypes()(0) == classOf[Int]
+        }
+        val noParamConstructor = constructors.find { constructor =>
+          constructor.getParameterCount == 0
+        }
 
+        val constructor = intParamConstructor.map { intConstructor =>
+          (len: Int) => intConstructor.newInstance(len.asInstanceOf[Object])
+        }.getOrElse {
+          (_: Int) => noParamConstructor.get.newInstance()
+        }
+
+        // Specifying concrete implementations of `java.util.List`
+        (inputs) => {
+          val results = executeFuncOnCollection(inputs)
+          val builder = constructor(inputs.length).asInstanceOf[java.util.List[Any]]
           results.foreach(builder.add(_))
           builder
         }
       }
     case None =>
       // array
-      x => new GenericArrayData(x.toArray)
+      x => new GenericArrayData(executeFuncOnCollection(x).toArray)
+    case Some(cls) =>
+      throw new RuntimeException(s"class `$cls` is not supported by `MapObjects` as " +
+        "resulting collection.")
   }
 
   override def eval(input: InternalRow): Any = {
@@ -687,8 +694,7 @@ case class MapObjects private(
     if (inputCollection == null) {
       return null
     }
-
-    getResults(executeFunc(inputCollection))
+    mapElements(convertToSeq(inputCollection))
   }
 
   override def dataType: DataType =
