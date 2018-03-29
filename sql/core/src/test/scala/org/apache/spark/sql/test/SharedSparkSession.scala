@@ -83,6 +83,7 @@ trait SharedSparkSession
    */
   protected override def beforeAll(): Unit = {
     initializeSession()
+    SparkSession.setDefaultSession(_spark)
 
     // Ensure we have initialized the context before calling parent code
     super.beforeAll()
@@ -94,6 +95,7 @@ trait SharedSparkSession
   protected override def afterAll(): Unit = {
     super.afterAll()
     if (_spark != null) {
+      SparkSession.clearDefaultSession()
       _spark.sessionState.catalog.reset()
       _spark.stop()
       _spark = null

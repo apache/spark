@@ -20,9 +20,8 @@ package org.apache.spark.sql.test
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.SparkSession
 
-class TestSparkSessionSuite extends SparkFunSuite {
-  test("default session is set in constructor") {
-    val session = new TestSparkSession()
-    assert(SparkSession.getDefaultSession.contains(session))
+class TestSparkSessionSuite extends SparkFunSuite with SharedSparkSession {
+  test("default session is set") {
+    assert(SparkSession.getDefaultSession.contains(spark))
   }
 }
