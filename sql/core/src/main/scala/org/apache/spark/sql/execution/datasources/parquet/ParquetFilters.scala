@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
 private[parquet] object ParquetFilters {
 
   private def dateToDays(date: Date): SQLDate = {
-    DateTimeUtils.fromJavaDate(date, DateTimeUtils.getTimeZone(SQLConf.get.sessionLocalTimeZone))
+    DateTimeUtils.fromJavaDate(date)
   }
 
   private val makeEq: PartialFunction[DataType, (String, Any) => FilterPredicate] = {
