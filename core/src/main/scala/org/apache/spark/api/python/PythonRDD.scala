@@ -399,7 +399,7 @@ private[spark] object PythonRDD extends Logging {
    */
   def serveIterator(items: Iterator[_], threadName: String): Array[Any] = {
     serveToStream(threadName) { out =>
-      writeIteratorToStream(items, out)
+      writeIteratorToStream(items, new DataOutputStream(out))
     }
   }
 
@@ -416,8 +416,7 @@ private[spark] object PythonRDD extends Logging {
    * The thread will terminate after the block of code is executed or any
    * exceptions happen.
    */
-  private[spark] def serveToStream(threadName: String)
-                                  (block: DataOutputStream => Unit): Array[Any] = {
+  private[spark] def serveToStream(threadName: String)(block: OutputStream => Unit): Array[Any] = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
     // Close the socket if no connection in 15 seconds
     serverSocket.setSoTimeout(15000)
@@ -429,7 +428,7 @@ private[spark] object PythonRDD extends Logging {
           val sock = serverSocket.accept()
           authHelper.authClient(sock)
 
-          val out = new DataOutputStream(new BufferedOutputStream(sock.getOutputStream))
+          val out = new BufferedOutputStream(sock.getOutputStream)
           Utils.tryWithSafeFinally {
             block(out)
           } {

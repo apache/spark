@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.arrow
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutputStream}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, OutputStream}
 import java.nio.channels.Channels
 import java.nio.file.{Files, Paths}
 
@@ -41,7 +41,7 @@ import org.apache.spark.util.Utils
  */
 private[sql] class ArrowBatchStreamWriter(
     schema: StructType,
-    out: DataOutputStream,
+    out: OutputStream,
     timeZoneId: String) {
 
   val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
