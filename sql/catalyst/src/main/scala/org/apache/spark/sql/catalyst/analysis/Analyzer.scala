@@ -827,7 +827,6 @@ class Analyzer(
         result
       case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
         ExtractValue(child, fieldExpr, resolver)
-      case _ => e.mapChildren(resolve(_, q))
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
