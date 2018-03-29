@@ -105,7 +105,14 @@ private[spark] class PeriodicGraphCheckpointer[VD, ED](
   override protected def unpersist(data: Graph[VD, ED]): Unit = data.unpersist(blocking = false)
 
   override protected def getCheckpointFiles(data: Graph[VD, ED]): Iterable[String] = {
-    data.getCheckpointFiles
+    val verticesFiles = PeriodicRDDCheckpointer
+      .rddDeps(data.vertices)
+      .flatMap(_.getCheckpointFile)
+    val edgesFiles = PeriodicRDDCheckpointer
+      .rddDeps(data.edges)
+      .flatMap(_.getCheckpointFile)
+
+    verticesFiles ++ edgesFiles
   }
 
   override protected def haveCommonCheckpoint(
