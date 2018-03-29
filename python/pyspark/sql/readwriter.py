@@ -961,10 +961,9 @@ def _test():
     filename_pattern = "assembly/target/scala-*/jars/spark-hive_*-*.jar"
     if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
         raise Exception(
-            ("Failed to find Hive assembly jar. ") +
-            "You need to build Spark with "
-            "'build/sbt -Phive package' or "
-            "'build/mvn -DskipTests -Phive package' before running this test.")
+            "Failed to find Hive assembly jar. You need to build Spark with "
+            "'build/sbt -Phive package' or 'build/mvn -DskipTests -Phive package' "
+            "before running this test.")
 
     os.chdir(SPARK_HOME)
 
