@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.execution.datasources.text.{TextFileFormat, TextOptions}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -94,6 +94,7 @@ object TextInputJsonDataSource extends JsonDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType = {
     val json: Dataset[String] = createBaseDataset(sparkSession, inputPaths, parsedOptions)
+
     inferFromDataset(json, parsedOptions)
   }
 

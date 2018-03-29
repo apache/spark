@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
+import java.nio.charset.StandardCharsets
 import java.util.{Locale, TimeZone}
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.json
 
 import java.io.Writer
+import java.nio.charset.StandardCharsets
 
 import com.fasterxml.jackson.core._
 
