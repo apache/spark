@@ -949,13 +949,24 @@ class DataFrameWriter(OptionUtils):
 def _test():
     import doctest
     import os
+    import os.path
+    import glob
     import tempfile
     import py4j
     from pyspark.context import SparkContext
     from pyspark.sql import SparkSession, Row
     import pyspark.sql.readwriter
 
-    os.chdir(os.environ["SPARK_HOME"])
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    filename_pattern = "assembly/target/scala-*/jars/spark-hive_*-*.jar"
+    if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
+        raise Exception(
+            ("Failed to find Hive assembly jar. ") +
+            "You need to build Spark with "
+            "'build/sbt -Phive package' or "
+            "'build/mvn -DskipTests -Phive package' before running this test.")
+
+    os.chdir(SPARK_HOME)
 
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')

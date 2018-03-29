@@ -385,8 +385,19 @@ class UDFRegistration(object):
 
 def _test():
     import doctest
+    import os
+    import os.path
+    import glob
     from pyspark.sql import SparkSession
     import pyspark.sql.udf
+
+    SPARK_HOME = os.environ["SPARK_HOME"]
+    filename_pattern = "sql/core/target/scala-*/test-classes/" + \
+                       "test/org/apache/spark/sql/JavaStringLength.class"
+    if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
+        raise Exception(
+            ("Failed to find test udf classes. ") +
+            "You need to build Spark with 'build/sbt sql/test:compile'")
     globs = pyspark.sql.udf.__dict__.copy()
     spark = SparkSession.builder\
         .master("local[4]")\
