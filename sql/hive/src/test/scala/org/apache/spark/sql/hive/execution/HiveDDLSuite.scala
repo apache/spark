@@ -213,7 +213,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       spark.sql("CREATE VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q")
       checkAnswer(spark.table("v"), Row(Row("a", 1)) :: Nil)
 
-      spark.sql("ALTER VIEW v AS SELECT STRUCT('a' AS `b`, 1 AS b) q1")
+      spark.sql("ALTER VIEW v AS SELECT STRUCT('a' AS `a`, 1 AS b) q1")
       val df = spark.table("v")
       assert("q1".equals(df.schema.fields(0).name))
       checkAnswer(df, Row(Row("a", 1)) :: Nil)
@@ -228,7 +228,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       assert("newcol1".equals(newcol))
 
       spark.sql("CREATE TABLE t2(q STRUCT<`a`:INT, col2:STRING>, i1 INT) USING PARQUET")
-      spark.sql("ALTER TABLE t2 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
+      spark.sql("ALTER TABLE t2 ADD COLUMNS (newcol1 STRUCT<`col1`:STRING, col2:Int>)")
       spark.sql("ALTER TABLE t2 ADD COLUMNS (newcol2 STRUCT<`col1`:STRING, col2:Int>)")
 
       val df2 = spark.table("t2")
@@ -236,8 +236,8 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       assert("newcol1".equals(df2.schema.fields(2).name))
       assert("newcol2".equals(df2.schema.fields(3).name))
 
-      spark.sql("CREATE TABLE t3(q STRUCT<`$a`:INT, col2:STRING>, i1 INT) USING PARQUET")
-      spark.sql("ALTER TABLE t3 ADD COLUMNS (newcol1 STRUCT<`$col1`:STRING, col2:Int>)")
+      spark.sql("CREATE TABLE t3(q STRUCT<`a`:INT, col2:STRING>, i1 INT) USING PARQUET")
+      spark.sql("ALTER TABLE t3 ADD COLUMNS (newcol1 STRUCT<`col1`:STRING, col2:Int>)")
       spark.sql("ALTER TABLE t3 ADD COLUMNS (newcol2 STRUCT<`col1`:STRING, col2:Int>)")
 
       val df3 = spark.table("t3")

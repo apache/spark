@@ -55,6 +55,8 @@ import org.apache.spark.sql.types.{DataType, StructType}
 private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configuration)
   extends ExternalCatalog with Logging {
 
+  HiveUtils.closeHiveSchemaVerification(hadoopConf)
+
   import CatalogTypes.TablePartitionSpec
   import HiveExternalCatalog._
   import CatalogTableType._

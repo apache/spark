@@ -371,7 +371,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
   test("correctly handle ALTER VIEW") {
     withTable("jt2") {
       withView("testView") {
-        sql("CREATE VIEW testView AS SELECT id FROM jt")
+        sql("CREATE VIEW testView AS SELECT 1 as c1 FROM jt")
 
         val df = (1 until 10).map(i => i -> i).toDF("i", "j")
         df.write.format("json").saveAsTable("jt2")

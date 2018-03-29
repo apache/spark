@@ -20,9 +20,8 @@ package org.apache.hive.service.cli;
 
 import java.util.UUID;
 
-import org.apache.hive.service.cli.thrift.TProtocolVersion;
-import org.apache.hive.service.cli.thrift.TSessionHandle;
-
+import org.apache.hive.service.rpc.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TSessionHandle;
 
 /**
  * SessionHandle.
@@ -45,7 +44,10 @@ public class SessionHandle extends Handle {
     super(tSessionHandle.getSessionId());
     this.protocol = protocol;
   }
-
+  public SessionHandle(HandleIdentifier handleId, TProtocolVersion protocol) {
+    super(handleId);
+    this.protocol = protocol;
+  }
   public UUID getSessionId() {
     return getHandleIdentifier().getPublicId();
   }

@@ -18,8 +18,8 @@
 
 package org.apache.hive.service.auth;
 
-import org.apache.hive.service.cli.thrift.TCLIService;
-import org.apache.hive.service.cli.thrift.TCLIService.Iface;
+import org.apache.hive.service.rpc.thrift.TCLIService;
+import org.apache.hive.service.rpc.thrift.TCLIService.Iface;
 import org.apache.thrift.TException;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.transport.TSaslClientTransport;
@@ -92,14 +92,14 @@ public class TSetIpAddressProcessor<I extends Iface> extends TCLIService.Process
 
   private static final ThreadLocal<String> THREAD_LOCAL_IP_ADDRESS = new ThreadLocal<String>() {
     @Override
-    protected synchronized String initialValue() {
+    protected String initialValue() {
       return null;
     }
   };
 
   private static final ThreadLocal<String> THREAD_LOCAL_USER_NAME = new ThreadLocal<String>() {
     @Override
-    protected synchronized String initialValue() {
+    protected String initialValue() {
       return null;
     }
   };

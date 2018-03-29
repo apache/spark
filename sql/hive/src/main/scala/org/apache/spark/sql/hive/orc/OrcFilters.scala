@@ -17,8 +17,14 @@
 
 package org.apache.spark.sql.hive.orc
 
-import org.apache.hadoop.hive.ql.io.sarg.{SearchArgument, SearchArgumentFactory}
+import java.math.{BigDecimal => BigDec}
+import java.sql.Timestamp
+
+import org.apache.commons.lang.StringUtils
+import org.apache.hadoop.hive.common.`type`.{HiveChar, HiveDecimal, HiveVarchar}
+import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument, SearchArgumentFactory}
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
+import org.apache.hadoop.hive.serde2.io.{DateWritable, HiveDecimalWritable}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.sources._
@@ -88,6 +94,41 @@ private[orc] object OrcFilters extends Logging {
       case _ => false
     }
 
+    def boxLiteral(literal: Any): Any = literal match {
+      case _: String | _: Long | _: Double | _: DateWritable | _: Timestamp |
+           _: HiveDecimal | _: Boolean =>
+        literal
+      case _: HiveDecimal | _: BigDec | _: BigDecimal =>
+        new HiveDecimalWritable(literal.toString)
+      case _: HiveChar | _: HiveVarchar =>
+        StringUtils.stripEnd(literal.toString, null)
+      case _: Byte | _: Short | _: Integer =>
+        literal.asInstanceOf[Number].longValue()
+      case _: Float =>
+        java.lang.Double.parseDouble(literal.toString)
+      case _ =>
+        throw new IllegalArgumentException(s"Unknown type for literal $literal")
+    }
+
+    def getType(literal: Any): PredicateLeaf.Type = literal match {
+      case _: Byte | _: Short | _: Integer | _: Long =>
+        PredicateLeaf.Type.LONG
+      case _: Float | _: Double =>
+        PredicateLeaf.Type.FLOAT
+      case _: HiveDecimal |  _: BigDec | _: BigDecimal | _: HiveDecimalWritable =>
+        PredicateLeaf.Type.DECIMAL
+      case _: HiveChar | _: HiveVarchar | _: String =>
+        PredicateLeaf.Type.STRING
+      case _: Boolean =>
+        PredicateLeaf.Type.BOOLEAN
+      case _: DateWritable =>
+        PredicateLeaf.Type.DATE
+      case _: Timestamp =>
+        PredicateLeaf.Type.TIMESTAMP
+      case _ =>
+        throw new IllegalArgumentException(s"Unknown type for literal $literal")
+    }
+
     expression match {
       case And(left, right) =>
         // At here, it is not safe to just convert one side if we do not understand the
@@ -122,32 +163,41 @@ private[orc] object OrcFilters extends Logging {
       // call is mandatory.  ORC `SearchArgument` builder requires that all leaf predicates must be
       // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
 
+      // https://github.com/apache/hive/commit/c178a6e9d12055e5bde634123ca58f243ae39477
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().equals(attribute, value).end())
+        val box = boxLiteral(value)
+        Some(builder.startAnd().equals(attribute, getType(box), box).end())
 
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().nullSafeEquals(attribute, value).end())
+        val box = boxLiteral(value)
+        Some(builder.startAnd().nullSafeEquals(attribute, getType(box), box).end())
 
       case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().lessThan(attribute, value).end())
+        val box = boxLiteral(value)
+        Some(builder.startAnd().lessThan(attribute, getType(box), box).end())
 
       case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().lessThanEquals(attribute, value).end())
+        val box = boxLiteral(value)
+        Some(builder.startAnd().lessThanEquals(attribute, getType(box), box).end())
 
       case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().lessThanEquals(attribute, value).end())
+        val box = boxLiteral(value)
+        Some(builder.startNot().lessThanEquals(attribute, getType(box), box).end())
 
       case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().lessThan(attribute, value).end())
+        val box = boxLiteral(value)
+        Some(builder.startNot().lessThan(attribute, getType(box), box).end())
 
       case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().isNull(attribute).end())
+        Some(builder.startAnd().isNull(attribute, PredicateLeaf.Type.STRING).end())
 
       case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().isNull(attribute).end())
+        Some(builder.startNot().isNull(attribute, PredicateLeaf.Type.STRING).end())
 
       case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().in(attribute, values.map(_.asInstanceOf[AnyRef]): _*).end())
+        val boxes = values.map(boxLiteral(_))
+        Some(builder.startAnd().in(attribute, getType(boxes.head),
+          boxes.map(_.asInstanceOf[AnyRef]): _*).end())
 
       case _ => None
     }

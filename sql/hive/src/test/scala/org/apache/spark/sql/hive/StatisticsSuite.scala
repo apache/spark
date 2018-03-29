@@ -98,8 +98,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             .asInstanceOf[HiveTableRelation]
 
           val properties = relation.tableMeta.ignoredProperties
-          assert(properties("totalSize").toLong <= 0, "external table totalSize must be <= 0")
-          assert(properties("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
+          assert(properties("totalSize").toLong >= 0, "external table totalSize must be >= 0")
+          assert(properties.get("rawDataSize").isEmpty)
 
           val sizeInBytes = relation.stats.sizeInBytes
           assert(sizeInBytes === BigInt(file1.length() + file2.length()))
@@ -762,14 +762,14 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         // ALTER TABLE SET/UNSET TBLPROPERTIES invalidates some Hive specific statistics, but not
         // Spark specific statistics. This is triggered by the Hive alterTable API.
         val numRows = extractStatsPropValues(describeResult, "numRows")
-        assert(numRows.isDefined && numRows.get == -1, "numRows is lost")
+        assert(numRows.isDefined && numRows.get == 500)
         val rawDataSize = extractStatsPropValues(describeResult, "rawDataSize")
-        assert(rawDataSize.isDefined && rawDataSize.get == -1, "rawDataSize is lost")
+        assert(rawDataSize.isDefined && rawDataSize.get == 5312)
 
         if (analyzedBySpark) {
           checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
         } else {
-          checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = None)
+          checkTableStats(tabName, hasSizeInBytes = true, expectedRowCounts = Some(500))
         }
       }
     }

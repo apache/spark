@@ -336,7 +336,7 @@ private[hive] case class HiveUDAFFunction(
       funcWrapper.createFunction[AbstractGenericUDAFResolver]()
     }
 
-    val parameterInfo = new SimpleGenericUDAFParameterInfo(inputInspectors, false, false)
+    val parameterInfo = new SimpleGenericUDAFParameterInfo(inputInspectors, false, false, false)
     resolver.getEvaluator(parameterInfo)
   }
 

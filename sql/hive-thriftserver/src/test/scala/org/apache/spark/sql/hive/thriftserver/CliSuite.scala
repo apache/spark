@@ -201,7 +201,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("Commands using SerDe provided in --jars") {
     val jarFile =
-      "../hive/src/test/resources/hive-hcatalog-core-0.13.1.jar"
+      "../hive/src/test/resources/hive-hcatalog-core-2.3.2.jar"
         .split("/")
         .mkString(File.separator)
 
@@ -210,7 +210,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
     runCliWithin(3.minute, Seq("--jars", s"$jarFile"))(
       """CREATE TABLE t1(key string, val string)
-        |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.DelimitedJSONSerDe';
       """.stripMargin
         -> "",
       "CREATE TABLE sourceTable (key INT, val STRING);"

@@ -19,54 +19,81 @@ package org.apache.hive.service.cli.operation;
 
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.util.EnumSet;
+import java.util.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import com.google.common.collect.Sets;
+import org.apache.hadoop.hive.common.metrics.common.Metrics;
+import org.apache.hadoop.hive.common.metrics.common.MetricsConstant;
+import org.apache.hadoop.hive.common.metrics.common.MetricsFactory;
+import org.apache.hadoop.hive.common.metrics.common.MetricsScope;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.session.OperationLog;
-import org.apache.hive.service.cli.FetchOrientation;
-import org.apache.hive.service.cli.HiveSQLException;
-import org.apache.hive.service.cli.OperationHandle;
-import org.apache.hive.service.cli.OperationState;
-import org.apache.hive.service.cli.OperationStatus;
-import org.apache.hive.service.cli.OperationType;
-import org.apache.hive.service.cli.RowSet;
-import org.apache.hive.service.cli.TableSchema;
+import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hive.service.cli.*;
 import org.apache.hive.service.cli.session.HiveSession;
-import org.apache.hive.service.cli.thrift.TProtocolVersion;
+import org.apache.hive.service.rpc.thrift.TProtocolVersion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public abstract class Operation {
+  // Constants of the key strings for the log4j ThreadContext.
+  public static final String SESSIONID_LOG_KEY = "sessionId";
+  public static final String QUERYID_LOG_KEY = "queryId";
+
   protected final HiveSession parentSession;
-  private OperationState state = OperationState.INITIALIZED;
+  private volatile OperationState state = OperationState.INITIALIZED;
+  private volatile MetricsScope currentStateScope;
   private final OperationHandle opHandle;
-  private HiveConf configuration;
-  public static final Log LOG = LogFactory.getLog(Operation.class.getName());
   public static final FetchOrientation DEFAULT_FETCH_ORIENTATION = FetchOrientation.FETCH_NEXT;
-  public static final long DEFAULT_FETCH_MAX_ROWS = 100;
+  public static final Logger LOG = LoggerFactory.getLogger(Operation.class.getName());
   protected boolean hasResultSet;
   protected volatile HiveSQLException operationException;
-  protected final boolean runAsync;
   protected volatile Future<?> backgroundHandle;
   protected OperationLog operationLog;
   protected boolean isOperationLogEnabled;
+  protected Map<String, String> confOverlay = new HashMap<String, String>();
 
   private long operationTimeout;
-  private long lastAccessTime;
+  private volatile long lastAccessTime;
+  private final long beginTime;
+
+  protected long operationStart;
+  protected long operationComplete;
+
+  protected final QueryState queryState;
 
   protected static final EnumSet<FetchOrientation> DEFAULT_FETCH_ORIENTATION_SET =
-      EnumSet.of(FetchOrientation.FETCH_NEXT,FetchOrientation.FETCH_FIRST);
+      EnumSet.of(FetchOrientation.FETCH_NEXT, FetchOrientation.FETCH_FIRST);
 
-  protected Operation(HiveSession parentSession, OperationType opType, boolean runInBackground) {
+
+  protected Operation(HiveSession parentSession, OperationType opType) {
+    this(parentSession, null, opType);
+  }
+  
+  protected Operation(HiveSession parentSession, Map<String, String> confOverlay,
+                      OperationType opType) {
+    this(parentSession, confOverlay, opType, false);
+  }
+
+  protected Operation(HiveSession parentSession,
+                      Map<String, String> confOverlay, OperationType opType, boolean isAsyncQueryState) {
     this.parentSession = parentSession;
-    this.runAsync = runInBackground;
+    if (confOverlay != null) {
+      this.confOverlay = confOverlay;
+    }
     this.opHandle = new OperationHandle(opType, parentSession.getProtocolVersion());
-    lastAccessTime = System.currentTimeMillis();
+    beginTime = System.currentTimeMillis();
+    lastAccessTime = beginTime;
     operationTimeout = HiveConf.getTimeVar(parentSession.getHiveConf(),
         HiveConf.ConfVars.HIVE_SERVER2_IDLE_OPERATION_TIMEOUT, TimeUnit.MILLISECONDS);
+
+    currentStateScope = updateOperationStateMetrics(null, MetricsConstant.OPERATION_PREFIX,
+        MetricsConstant.COMPLETED_OPERATION_PREFIX, state);
+    queryState = new QueryState(parentSession.getHiveConf(), confOverlay, isAsyncQueryState);
   }
 
   public Future<?> getBackgroundHandle() {
@@ -78,15 +105,7 @@ public abstract class Operation {
   }
 
   public boolean shouldRunAsync() {
-    return runAsync;
-  }
-
-  public void setConfiguration(HiveConf configuration) {
-    this.configuration = new HiveConf(configuration);
-  }
-
-  public HiveConf getConfiguration() {
-    return new HiveConf(configuration);
+    return false; // Most operations cannot run asynchronously.
   }
 
   public HiveSession getParentSession() {
@@ -106,7 +125,13 @@ public abstract class Operation {
   }
 
   public OperationStatus getStatus() {
-    return new OperationStatus(state, operationException);
+    String taskStatus = null;
+    try {
+      taskStatus = getTaskStatus();
+    } catch (HiveSQLException sqlException) {
+      LOG.error("Error getting task status for " + opHandle.toString(), sqlException);
+    }
+    return new OperationStatus(state, taskStatus, operationStart, operationComplete, hasResultSet, operationException);
   }
 
   public boolean hasResultSet() {
@@ -124,7 +149,11 @@ public abstract class Operation {
 
   protected final OperationState setState(OperationState newState) throws HiveSQLException {
     state.validateTransition(newState);
+    OperationState prevState = state;
     this.state = newState;
+    currentStateScope = updateOperationStateMetrics(currentStateScope, MetricsConstant.OPERATION_PREFIX,
+        MetricsConstant.COMPLETED_OPERATION_PREFIX, state);
+    onNewState(state, prevState);
     this.lastAccessTime = System.currentTimeMillis();
     return this.state;
   }
@@ -156,27 +185,16 @@ public abstract class Operation {
     this.operationException = operationException;
   }
 
-  protected final void assertState(OperationState state) throws HiveSQLException {
-    if (this.state != state) {
-      throw new HiveSQLException("Expected state " + state + ", but found " + this.state);
+  protected final void assertState(List<OperationState> states) throws HiveSQLException {
+    if (!states.contains(state)) {
+      throw new HiveSQLException("Expected states: " + states.toString() + ", but found "
+          + this.state);
     }
     this.lastAccessTime = System.currentTimeMillis();
   }
 
-  public boolean isRunning() {
-    return OperationState.RUNNING.equals(state);
-  }
-
-  public boolean isFinished() {
-    return OperationState.FINISHED.equals(state);
-  }
-
-  public boolean isCanceled() {
-    return OperationState.CANCELED.equals(state);
-  }
-
-  public boolean isFailed() {
-    return OperationState.ERROR.equals(state);
+  public boolean isDone() {
+    return state.isTerminal();
   }
 
   protected void createOperationLog() {
@@ -191,6 +209,17 @@ public abstract class Operation {
           LOG.warn("The operation log file should not exist, but it is already there: " +
               operationLogFile.getAbsolutePath());
           operationLogFile.delete();
+        }
+        if (!operationLogFile.getParentFile().exists()) {
+          LOG.warn("Operations log directory for this session does not exist, it could have been deleted " +
+              "externally. Recreating the directory for future queries in this session but the older operation " +
+              "logs for this session are no longer available");
+          if (!operationLogFile.getParentFile().mkdir()) {
+            LOG.warn("Log directory for this session could not be created, disabling " +
+                "operation logs: " + operationLogFile.getParentFile().getAbsolutePath());
+            isOperationLogEnabled = false;
+            return;
+          }
         }
         if (!operationLogFile.createNewFile()) {
           // the log file already exists and cannot be deleted.
@@ -254,28 +283,33 @@ public abstract class Operation {
   public void run() throws HiveSQLException {
     beforeRun();
     try {
+      Metrics metrics = MetricsFactory.getInstance();
+      if (metrics != null) {
+        metrics.incrementCounter(MetricsConstant.OPEN_OPERATIONS);
+      }
       runInternal();
     } finally {
       afterRun();
     }
   }
 
-  protected void cleanupOperationLog() {
+  protected synchronized void cleanupOperationLog() {
     if (isOperationLogEnabled) {
+      if (opHandle == null) {
+        LOG.warn("Operation seems to be in invalid state, opHandle is null");
+        return;
+      }
       if (operationLog == null) {
-        LOG.error("Operation [ " + opHandle.getHandleIdentifier() + " ] "
-          + "logging is enabled, but its OperationLog object cannot be found.");
+        LOG.warn("Operation [ " + opHandle.getHandleIdentifier() + " ] " + "logging is enabled, "
+            + "but its OperationLog object cannot be found. "
+            + "Perhaps the operation has already terminated.");
       } else {
         operationLog.close();
       }
     }
   }
 
-  // TODO: make this abstract and implement in subclasses.
-  public void cancel() throws HiveSQLException {
-    setState(OperationState.CANCELED);
-    throw new UnsupportedOperationException("SQLOperation.cancel()");
-  }
+  public abstract void cancel(OperationState stateAfterCancel) throws HiveSQLException;
 
   public abstract void close() throws HiveSQLException;
 
@@ -283,8 +317,8 @@ public abstract class Operation {
 
   public abstract RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException;
 
-  public RowSet getNextRowSet() throws HiveSQLException {
-    return getNextRowSet(FetchOrientation.FETCH_NEXT, DEFAULT_FETCH_MAX_ROWS);
+  public String getTaskStatus() throws HiveSQLException {
+    return null;
   }
 
   /**
@@ -318,5 +352,76 @@ public abstract class Operation {
       ex.initCause(response.getException());
     }
     return ex;
+  }
+
+  //list of operation states to measure duration of.
+  protected static Set<OperationState> scopeStates = Sets.immutableEnumSet(
+    OperationState.INITIALIZED,
+    OperationState.PENDING,
+    OperationState.RUNNING
+  );
+
+  //list of terminal operation states.  We measure only completed counts for operations in these states.
+  protected static Set<OperationState> terminalStates = Sets.immutableEnumSet(
+    OperationState.CLOSED,
+    OperationState.CANCELED,
+    OperationState.FINISHED,
+    OperationState.ERROR,
+    OperationState.UNKNOWN
+  );
+
+  protected final MetricsScope updateOperationStateMetrics(MetricsScope stateScope, String operationPrefix,
+                                                           String completedOperationPrefix, OperationState state) {
+    Metrics metrics = MetricsFactory.getInstance();
+    if (metrics != null) {
+      if (stateScope != null) {
+        metrics.endScope(stateScope);
+        stateScope = null;
+      }
+      if (scopeStates.contains(state)) {
+        stateScope = metrics.createScope(MetricsConstant.API_PREFIX + operationPrefix + state);
+      }
+      if (terminalStates.contains(state)) {
+        metrics.incrementCounter(completedOperationPrefix + state);
+      }
+    }
+    return stateScope;
+  }
+
+  public long getBeginTime() {
+    return beginTime;
+  }
+
+  protected OperationState getState() {
+    return state;
+  }
+
+  protected void onNewState(OperationState state, OperationState prevState) {
+    switch(state) {
+      case RUNNING:
+        markOperationStartTime();
+        break;
+      case ERROR:
+      case FINISHED:
+      case CANCELED:
+        markOperationCompletedTime();
+        break;
+    }
+  }
+
+  public long getOperationComplete() {
+    return operationComplete;
+  }
+
+  public long getOperationStart() {
+    return operationStart;
+  }
+
+  protected void markOperationStartTime() {
+    operationStart = System.currentTimeMillis();
+  }
+
+  protected void markOperationCompletedTime() {
+    operationComplete = System.currentTimeMillis();
   }
 }

@@ -22,16 +22,13 @@ package org.apache.hive.service.cli.session;
  * Proxy wrapper on HiveSession to execute operations
  * by impersonating given user
  */
-import java.lang.reflect.InvocationHandler;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
-import java.lang.reflect.UndeclaredThrowableException;
-import java.security.PrivilegedActionException;
-import java.security.PrivilegedExceptionAction;
 
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.service.cli.HiveSQLException;
+
+import java.lang.reflect.*;
+import java.security.PrivilegedActionException;
+import java.security.PrivilegedExceptionAction;
 
 public class HiveSessionProxy implements InvocationHandler {
   private final HiveSession base;
@@ -57,7 +54,7 @@ public class HiveSessionProxy implements InvocationHandler {
         return invoke(method, args);
       }
       return ugi.doAs(
-        new PrivilegedExceptionAction<Object>() {
+        new PrivilegedExceptionAction<Object> () {
           @Override
           public Object run() throws HiveSQLException {
             return invoke(method, args);
@@ -79,6 +76,12 @@ public class HiveSessionProxy implements InvocationHandler {
     } catch (InvocationTargetException e) {
       if (e.getCause() instanceof HiveSQLException) {
         throw (HiveSQLException)e.getCause();
+      } else if (e.getCause() instanceof OutOfMemoryError) {
+        throw (OutOfMemoryError)e.getCause();
+      } else if (e.getCause() instanceof Error) {
+        // TODO: maybe we should throw this as-is too. ThriftCLIService currently catches Exception,
+        //       so the combination determines what would kill the HS2 executor thread. For now,
+        //       let's only allow OOM to propagate.
       }
       throw new RuntimeException(e.getCause());
     } catch (IllegalArgumentException e) {

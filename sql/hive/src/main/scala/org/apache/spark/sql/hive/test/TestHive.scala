@@ -191,6 +191,9 @@ private[hive] class TestHiveSparkSession(
     metastoreTempConf.foreach { case (k, v) =>
       sc.hadoopConfiguration.set(k, v)
     }
+
+    sc.hadoopConfiguration.setBoolean("hive.metastore.schema.verification", false)
+    sc.hadoopConfiguration.setBoolean("datanucleus.schema.autoCreateAll", true)
   }
 
   assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
