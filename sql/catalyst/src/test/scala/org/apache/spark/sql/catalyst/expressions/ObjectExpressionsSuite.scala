@@ -172,6 +172,9 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     Seq(
       (Seq(1, 2, 3), ObjectType(classOf[Seq[Int]])),
+      (Array(1, 2, 3), ObjectType(classOf[Array[Int]])),
+      (Seq(1, 2, 3), ObjectType(classOf[Object])),
+      (Array(1, 2, 3), ObjectType(classOf[Object])),
       (list, ObjectType(classOf[java.util.List[Int]])),
       (vector, ObjectType(classOf[java.util.Vector[Int]])),
       (stack, ObjectType(classOf[java.util.Stack[Int]])),
@@ -180,9 +183,11 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       customCollectionClasses.foreach(testMapObjects(collection, _, inputType))
 
       // Unsupported custom collection class
-      assert(intercept[RuntimeException] {
+      val errMsg = intercept[RuntimeException] {
         testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
-      }.getMessage().contains("not supported by `MapObjects` as resulting collection."))
+      }.getMessage()
+      assert(errMsg.contains("`scala.collection.Map` is not supported by `MapObjects` " +
+        "as resulting collection."))
     }
   }
 

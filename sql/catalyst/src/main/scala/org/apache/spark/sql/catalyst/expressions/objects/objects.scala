@@ -684,7 +684,7 @@ case class MapObjects private(
       // array
       x => new GenericArrayData(executeFuncOnCollection(x).toArray)
     case Some(cls) =>
-      throw new RuntimeException(s"class `$cls` is not supported by `MapObjects` as " +
+      throw new RuntimeException(s"class `${cls.getName}` is not supported by `MapObjects` as " +
         "resulting collection.")
   }
 
