@@ -18,10 +18,11 @@ package org.apache.spark.deploy.k8s.submit
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
-import io.fabric8.kubernetes.api.model.{ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod}
+import scala.collection.JavaConverters._
+
+import io.fabric8.kubernetes.api.model.{ContainerStateRunning, ContainerStateTerminated, ContainerStateWaiting, ContainerStatus, Pod, Time}
 import io.fabric8.kubernetes.client.{KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
-import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
@@ -35,13 +36,14 @@ private[k8s] trait LoggingPodStatusWatcher extends Watcher[Pod] {
  * A monitor for the running Kubernetes pod of a Spark application. Status logging occurs on
  * every state change and also at an interval for liveness.
  *
- * @param appId
+ * @param appId application ID.
  * @param maybeLoggingInterval ms between each state request. If provided, must be a positive
  *                             number.
  */
 private[k8s] class LoggingPodStatusWatcherImpl(
-      appId: String, maybeLoggingInterval: Option[Long])
-    extends LoggingPodStatusWatcher with Logging {
+    appId: String,
+    maybeLoggingInterval: Option[Long])
+  extends LoggingPodStatusWatcher with Logging {
 
   private val podCompletedFuture = new CountDownLatch(1)
   // start timer for periodic logging
@@ -57,7 +59,6 @@ private[k8s] class LoggingPodStatusWatcherImpl(
 
   def start(): Unit = {
     maybeLoggingInterval.foreach { interval =>
-      require(interval > 0, s"Logging interval must be a positive time value, got: $interval ms.")
       scheduler.scheduleAtFixedRate(logRunnable, 0, interval, TimeUnit.MILLISECONDS)
     }
   }
@@ -65,10 +66,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(
   override def eventReceived(action: Action, pod: Pod): Unit = {
     this.pod = Option(pod)
     action match {
-      case Action.DELETED =>
-        closeWatch()
-
-      case Action.ERROR =>
+      case Action.DELETED | Action.ERROR =>
         closeWatch()
 
       case _ =>
@@ -89,7 +87,7 @@ private[k8s] class LoggingPodStatusWatcherImpl(
   }
 
   private def logLongStatus() = {
-    logInfo("State changed, new state: " + pod.map(formatPodState(_)).getOrElse("unknown"))
+    logInfo("State changed, new state: " + pod.map(formatPodState).getOrElse("unknown"))
   }
 
   private def hasCompleted(): Boolean = {
@@ -102,37 +100,30 @@ private[k8s] class LoggingPodStatusWatcherImpl(
   }
 
   private def formatPodState(pod: Pod): String = {
-    // TODO include specific container state
     val details = Seq[(String, String)](
       // pod metadata
-      ("pod name", pod.getMetadata.getName()),
-      ("namespace", pod.getMetadata.getNamespace()),
-      ("labels", pod.getMetadata.getLabels().asScala.mkString(", ")),
+      ("pod name", pod.getMetadata.getName),
+      ("namespace", pod.getMetadata.getNamespace),
+      ("labels", pod.getMetadata.getLabels.asScala.mkString(", ")),
       ("pod uid", pod.getMetadata.getUid),
-      ("creation time", pod.getMetadata.getCreationTimestamp.getTime),
+      ("creation time", formatTime(pod.getMetadata.getCreationTimestamp)),
 
       // spec details
-      ("service account name", pod.getSpec.getServiceAccountName()),
-      ("volumes", pod.getSpec.getVolumes().asScala.map(_.getName).mkString(", ")),
-      ("node name", pod.getSpec.getNodeName()),
+      ("service account name", pod.getSpec.getServiceAccountName),
+      ("volumes", pod.getSpec.getVolumes.asScala.map(_.getName).mkString(", ")),
+      ("node name", pod.getSpec.getNodeName),
 
       // status
-      ("start time", Option.apply(pod.getStatus)
-        .flatMap(status => Option.apply(status.getStartTime))
-        .map(_.getTime)
-        .getOrElse("unknown")),
+      ("start time", formatTime(pod.getStatus.getStartTime)),
       ("container images",
-        Option.apply(pod.getStatus)
-          .flatMap(status => Option.apply(status.getContainerStatuses()))
-          .map(_.asScala
-            .map(_.getImage)
-            .mkString(", "))
-          .getOrElse("unknown")),
-      ("phase", Option.apply(pod.getStatus).map(_.getPhase).getOrElse("unknown")),
-      ("status", Option.apply(pod.getStatus)
-        .flatMap(status => Option.apply(status.getContainerStatuses))
-        .map(_.toString)
-        .getOrElse("unknown")))
+        pod.getStatus.getContainerStatuses
+          .asScala
+          .map(_.getImage)
+          .mkString(", ")),
+      ("phase", pod.getStatus.getPhase),
+      ("status", pod.getStatus.getContainerStatuses.toString)
+    )
+
     formatPairsBundle(details)
   }
 
@@ -163,23 +154,27 @@ private[k8s] class LoggingPodStatusWatcherImpl(
       containerStatus: ContainerStatus): Seq[(String, String)] = {
     val state = containerStatus.getState
     Option(state.getRunning)
-        .orElse(Option(state.getTerminated))
-        .orElse(Option(state.getWaiting))
-        .map {
-          case running: ContainerStateRunning =>
-            Seq(
-              ("Container state", "Running"),
-              ("Container started at", running.getStartedAt.getTime))
-          case waiting: ContainerStateWaiting =>
-            Seq(
-              ("Container state", "Waiting"),
-              ("Pending reason", waiting.getReason))
-          case terminated: ContainerStateTerminated =>
-            Seq(
-              ("Container state", "Terminated"),
-              ("Exit code", terminated.getExitCode.toString))
-          case unknown =>
-            throw new SparkException(s"Unexpected container status type ${unknown.getClass}.")
+      .orElse(Option(state.getTerminated))
+      .orElse(Option(state.getWaiting))
+      .map {
+        case running: ContainerStateRunning =>
+          Seq(
+            ("Container state", "Running"),
+            ("Container started at", formatTime(running.getStartedAt)))
+        case waiting: ContainerStateWaiting =>
+          Seq(
+            ("Container state", "Waiting"),
+            ("Pending reason", waiting.getReason))
+        case terminated: ContainerStateTerminated =>
+          Seq(
+            ("Container state", "Terminated"),
+            ("Exit code", terminated.getExitCode.toString))
+        case unknown =>
+          throw new SparkException(s"Unexpected container status type ${unknown.getClass}.")
         }.getOrElse(Seq(("Container state", "N/A")))
+  }
+
+  private def formatTime(time: Time): String = {
+    if (time != null) time.getTime else "N/A"
   }
 }

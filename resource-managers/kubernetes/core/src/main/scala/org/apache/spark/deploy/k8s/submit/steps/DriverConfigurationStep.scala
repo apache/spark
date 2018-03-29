@@ -14,8 +14,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit
+package org.apache.spark.deploy.k8s.submit.steps
 
-private[spark] sealed trait MainAppResource
+import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 
-private[spark] case class JavaMainAppResource(primaryResource: String) extends MainAppResource
+/**
+ * Represents a step in configuring the Spark driver pod.
+ */
+private[spark] trait DriverConfigurationStep {
+
+  /**
+   * Apply some transformation to the previous state of the driver to add a new feature to it.
+   */
+  def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec
+}

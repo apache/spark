@@ -14,8 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit
+package org.apache.spark.deploy.k8s.submit.steps
 
-private[spark] sealed trait MainAppResource
+import org.apache.spark.deploy.k8s.MountSecretsBootstrap
+import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 
-private[spark] case class JavaMainAppResource(primaryResource: String) extends MainAppResource
+/**
+ * A driver configuration step for mounting user-specified secrets onto user-specified paths.
+ *
+ * @param bootstrap a utility actually handling mounting of the secrets.
+ */
+private[spark] class DriverMountSecretsStep(
+    bootstrap: MountSecretsBootstrap) extends DriverConfigurationStep {
+
+  override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
+    val pod = bootstrap.addSecretVolumes(driverSpec.driverPod)
+    val container = bootstrap.mountSecrets(driverSpec.driverContainer)
+    driverSpec.copy(
+      driverPod = pod,
+      driverContainer = container
+    )
+  }
+}

@@ -14,8 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit
+package org.apache.spark.deploy.k8s
 
-private[spark] sealed trait MainAppResource
+import scala.collection.JavaConverters._
 
-private[spark] case class JavaMainAppResource(primaryResource: String) extends MainAppResource
+import io.fabric8.kubernetes.api.model.{Container, Pod}
+
+private[spark] object SecretVolumeUtils {
+
+  def podHasVolume(pod: Pod, volumeName: String): Boolean = {
+    pod.getSpec.getVolumes.asScala.exists { volume =>
+      volume.getName == volumeName
+    }
+  }
+
+  def containerHasVolume(container: Container, volumeName: String, mountPath: String): Boolean = {
+    container.getVolumeMounts.asScala.exists { volumeMount =>
+      volumeMount.getName == volumeName && volumeMount.getMountPath == mountPath
+    }
+  }
+}
