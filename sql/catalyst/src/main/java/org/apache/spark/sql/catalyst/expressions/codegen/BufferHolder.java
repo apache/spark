@@ -30,10 +30,6 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
  * this class per writing program, so that the memory segment/data buffer can be reused.  Note that
  * for each incoming record, we should call `reset` of BufferHolder instance before write the record
  * and reuse the data buffer.
- *
- * Generally we should call `UnsafeRowWriter.setTotalSize` using `BufferHolder.totalSize` to update
- * the size of the result row, after writing a record to the buffer. However, we can skip this step
- * if the fields of row are all fixed-length, as the size of result row is also fixed.
  */
 final class BufferHolder {
 

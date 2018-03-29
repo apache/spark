@@ -34,6 +34,10 @@ import org.apache.spark.unsafe.bitset.BitSetMethods;
  * Note that if this is the outermost writer, which means we will always write from the very
  * beginning of the global row buffer, we don't need to update `startingOffset` and can just call
  * `zeroOutNullBytes` before writing new data.
+ *
+ * Generally we should call `UnsafeRowWriter.setTotalSize` to update the size of the result row,
+ * after writing a record to the buffer. However, we can skip this step if the fields of row are
+ * all fixed-length, as the size of result row is also fixed.
  */
 public final class UnsafeRowWriter extends UnsafeWriter {
 
@@ -130,18 +134,13 @@ public final class UnsafeRowWriter extends UnsafeWriter {
     setNullAt(ordinal);
   }
 
-  @Override
-  protected final long getOffset(int ordinal, int elementSize) {
-    return getFieldOffset(ordinal);
-  }
-
   public long getFieldOffset(int ordinal) {
     return startingOffset + nullBitsSize + 8 * ordinal;
   }
 
   @Override
-  public void setOffsetAndSizeFromMark(int ordinal, int mark) {
-    _setOffsetAndSizeFromMark(ordinal, mark);
+  public void setOffsetAndSizeFromPreviousCursor(int ordinal, int previousCursor) {
+    _setOffsetAndSizeFromPreviousCursor(ordinal, previousCursor);
   }
 
   public void write(int ordinal, boolean value) {

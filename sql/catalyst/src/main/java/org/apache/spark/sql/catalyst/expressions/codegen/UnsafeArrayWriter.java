@@ -73,18 +73,14 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     incrementCursor(headerInBytes + fixedPartInBytes);
   }
 
-  protected long getOffset(int ordinal, int elementSize) {
-    return getElementOffset(ordinal, elementSize);
-  }
-
-  private long getElementOffset(int ordinal, int elementSize) {
+  private long getElementOffset(int ordinal) {
     return startingOffset + headerInBytes + ordinal * elementSize;
   }
 
   @Override
-  public void setOffsetAndSizeFromMark(int ordinal, int mark) {
+  public void setOffsetAndSizeFromPreviousCursor(int ordinal, int mark) {
     assertIndexIsValid(ordinal);
-    _setOffsetAndSizeFromMark(ordinal, mark);
+    _setOffsetAndSizeFromPreviousCursor(ordinal, mark);
   }
 
   private void setNullBit(int ordinal) {
@@ -95,62 +91,62 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
   public void setNull1Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
-    Platform.putByte(buffer(), getElementOffset(ordinal, 1), (byte)0);
+    Platform.putByte(buffer(), getElementOffset(ordinal), (byte)0);
   }
 
   public void setNull2Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
-    Platform.putShort(buffer(), getElementOffset(ordinal, 2), (short)0);
+    Platform.putShort(buffer(), getElementOffset(ordinal), (short)0);
   }
 
   public void setNull4Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
-    Platform.putInt(buffer(), getElementOffset(ordinal, 4), 0);
+    Platform.putInt(buffer(), getElementOffset(ordinal), 0);
   }
 
   public void setNull8Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
-    Platform.putLong(buffer(), getElementOffset(ordinal, 8), (long)0);
+    Platform.putLong(buffer(), getElementOffset(ordinal), (long)0);
   }
 
   public void setNull(int ordinal) { setNull8Bytes(ordinal); }
 
   public void write(int ordinal, boolean value) {
     assertIndexIsValid(ordinal);
-    writeBoolean(getElementOffset(ordinal, 1), value);
+    writeBoolean(getElementOffset(ordinal), value);
   }
 
   public void write(int ordinal, byte value) {
     assertIndexIsValid(ordinal);
-    writeByte(getElementOffset(ordinal, 1), value);
+    writeByte(getElementOffset(ordinal), value);
   }
 
   public void write(int ordinal, short value) {
     assertIndexIsValid(ordinal);
-    writeShort(getElementOffset(ordinal, 2), value);
+    writeShort(getElementOffset(ordinal), value);
   }
 
   public void write(int ordinal, int value) {
     assertIndexIsValid(ordinal);
-    writeInt(getElementOffset(ordinal, 4), value);
+    writeInt(getElementOffset(ordinal), value);
   }
 
   public void write(int ordinal, long value) {
     assertIndexIsValid(ordinal);
-    writeLong(getElementOffset(ordinal, 8), value);
+    writeLong(getElementOffset(ordinal), value);
   }
 
   public void write(int ordinal, float value) {
     assertIndexIsValid(ordinal);
-    writeFloat(getElementOffset(ordinal, 4), value);
+    writeFloat(getElementOffset(ordinal), value);
   }
 
   public void write(int ordinal, double value) {
     assertIndexIsValid(ordinal);
-    writeDouble(getElementOffset(ordinal, 8), value);
+    writeDouble(getElementOffset(ordinal), value);
   }
 
   public void write(int ordinal, Decimal input, int precision, int scale) {

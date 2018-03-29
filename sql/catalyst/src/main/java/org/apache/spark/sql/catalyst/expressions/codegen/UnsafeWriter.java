@@ -67,10 +67,10 @@ public abstract class UnsafeWriter {
     holder.incrementCursor(val);
   }
 
-  public abstract void setOffsetAndSizeFromMark(int ordinal, int mark);
+  public abstract void setOffsetAndSizeFromPreviousCursor(int ordinal, int previousCursor);
 
-  protected void _setOffsetAndSizeFromMark(int ordinal, int mark) {
-    setOffsetAndSize(ordinal, mark, cursor() - mark);
+  protected void _setOffsetAndSizeFromPreviousCursor(int ordinal, int previousCursor) {
+    setOffsetAndSize(ordinal, previousCursor, cursor() - previousCursor);
   }
 
   protected void setOffsetAndSize(int ordinal, int size) {
@@ -89,8 +89,6 @@ public abstract class UnsafeWriter {
       Platform.putLong(buffer(), cursor() + ((numBytes >> 3) << 3), 0L);
     }
   }
-
-  protected abstract long getOffset(int ordinal, int elementSize);
 
   public abstract void setNull1Bytes(int ordinal);
   public abstract void setNull2Bytes(int ordinal);
