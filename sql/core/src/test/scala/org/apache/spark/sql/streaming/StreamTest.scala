@@ -37,6 +37,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{Dataset, Encoder, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.AllTuples
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
@@ -444,13 +445,23 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
         }
       }
 
-      // Verify if stateful operators have correct metadata and distribution
-      // This can often catch hard to debug errors when developing stateful operators
-      val executedPlan = currentStream.lastExecution.executedPlan
-      executedPlan.collect { case s: StatefulOperator => s }.foreach { s =>
-        assert(s.stateInfo.isDefined)
-        s.requiredChildDistribution.foreach { d =>
-          assert(d.requiredNumPartitions.isDefined)
+      if (currentStream.isInstanceOf[MicroBatchExecution]) {
+        // Verify if stateful operators have correct metadata and distribution
+        // This can often catch hard to debug errors when developing stateful operators
+        val executedPlan = currentStream.lastExecution.executedPlan
+        executedPlan.collect { case s: StatefulOperator => s }.foreach { s =>
+          assert(s.stateInfo.isDefined)
+          assert(s.stateInfo.get.numPartitions >= 1)
+
+          s.requiredChildDistribution.foreach { d =>
+            withClue(s"$s specifies incorrect # partitions in requiredChildDistribution $d") {
+              assert(d.requiredNumPartitions.isDefined)
+              assert(d.requiredNumPartitions.get >= 1)
+              if (d != AllTuples) {
+                assert(d.requiredNumPartitions.get == s.stateInfo.get.numPartitions)
+              }
+            }
+          }
         }
       }
 
