@@ -41,12 +41,15 @@ import org.apache.spark.util.PeriodicCheckpointer
  *  - Unpersist RDDs from queue until there are at most 3 persisted RDDs.
  *  - If using checkpointing and the checkpoint interval has been reached,
  *     - Checkpoint the new RDD, and put in a queue of checkpointed RDDs.
- *     - Remove older checkpoints.
+ *     - Remove older checkpoints except for created one and all the checkpoints it depends on.
  *
  * WARNINGS:
  *  - This class should NOT be copied (since copies may conflict on which RDDs should be
  *    checkpointed).
- *  - This class removes checkpoint files once later RDDs have been checkpointed.
+ *  - This class removes checkpoint files once later RDDs have been checkpointed and do not
+ *    have dependencies, the files to remove have been created for (removing checkpoint files
+ *    of prior RDDs, the later ones depend on, may fail with `FileNotFoundException` in case
+ *    the later RDDs are not yet materialized).
  *    However, references to the older RDDs will still return isCheckpointed = true.
  *
  * Example usage:
@@ -95,7 +98,35 @@ private[spark] class PeriodicRDDCheckpointer[T](
   override protected def unpersist(data: RDD[T]): Unit = data.unpersist(blocking = false)
 
   override protected def getCheckpointFiles(data: RDD[T]): Iterable[String] = {
-    data.getCheckpointFile.map(x => x)
+    PeriodicRDDCheckpointer.rddDeps(data).flatMap(_.getCheckpointFile)
+  }
+
+  override protected def haveCommonCheckpoint(newData: RDD[T], oldData: RDD[T]): Boolean = {
+    PeriodicRDDCheckpointer.haveCommonCheckpoint(Set(newData), Set(oldData))
+  }
+
+}
+
+private[spark] object PeriodicRDDCheckpointer {
+
+  def rddDeps(rdd: RDD[_]): Set[RDD[_]] = {
+    val parents = new mutable.HashSet[RDD[_]]
+    def visit(rdd: RDD[_]) {
+      parents.add(rdd)
+      rdd.dependencies.foreach(dep => visit(dep.rdd))
+    }
+    visit(rdd)
+    parents
+  }
+
+  def haveCommonCheckpoint(rdds1: Set[_ <: RDD[_]], rdds2: Set[_ <: RDD[_]]): Boolean = {
+    val deps1 = rdds1.foldLeft(new mutable.HashSet[RDD[_]]()) { (set, rdd) =>
+      set ++= rddDeps(rdd)
+    }
+    val deps2 = rdds2.foldLeft(new mutable.HashSet[RDD[_]]()) { (set, rdd) =>
+      set ++= rddDeps(rdd)
+    }
+    deps1.intersect(deps2).exists(_.isCheckpointed)
   }
 
   override protected def haveCommonCheckpoint(newData: RDD[T], oldData: RDD[T]): Boolean = {
