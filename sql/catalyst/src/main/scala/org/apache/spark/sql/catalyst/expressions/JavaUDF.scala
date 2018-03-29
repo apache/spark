@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException
-
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.types.DataType
 
@@ -37,6 +36,8 @@ private[sql] case class JavaUDF (
     nullable: Boolean = true,
     udfDeterministic: Boolean = true)
   extends Expression with ImplicitCastInputTypes with NonSQLExpression with UserDefinedExpression {
+
+  // TODO: add check for prohibiting UDT dataType, we do not plan to support it for now.
 
   override lazy val deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 

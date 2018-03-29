@@ -18,8 +18,8 @@
 package org.apache.spark.sql.expressions
 
 import org.apache.spark.annotation.InterfaceStability
-import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.expressions.JavaUDF
 import org.apache.spark.sql.types.DataType
 
