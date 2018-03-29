@@ -2099,6 +2099,7 @@ class DataFrame(object):
                     if batch_iter:
                         table = pyarrow.Table.from_batches(batch_iter)
                         pdf = table.to_pandas()
+                        pdf = _check_dataframe_convert_date(pdf, self.schema)
                         return _check_dataframe_localize_timestamps(pdf, timezone)
                     else:
                         return pd.DataFrame.from_records([], columns=self.columns)
