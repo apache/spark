@@ -558,7 +558,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     This configuration limits the number of remote requests to fetch blocks at any given point.
     When the number of hosts in the cluster increase, it might lead to very large number
-    of in-bound connections to one or more nodes, causing the workers to fail under load.
+    of inbound connections to one or more nodes, causing the workers to fail under load.
     By allowing it to limit the number of fetch requests, this scenario can be mitigated.
   </td>
 </tr>
@@ -1288,7 +1288,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>4194304 (4 MB)</td>
   <td>
     The estimated cost to open a file, measured by the number of bytes could be scanned at the same
-    time. This is used when putting multiple files into a partition. It is better to over estimate,
+    time. This is used when putting multiple files into a partition. It is better to overestimate,
     then the partitions with small files will be faster than partitions with bigger files.
   </td>
 </tr>
@@ -1513,7 +1513,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.8 for KUBERNETES mode; 0.8 for YARN mode; 0.0 for standalone mode and Mesos coarse-grained mode</td>
   <td>
     The minimum ratio of registered resources (registered resources / total expected resources)
-    (resources are executors in yarn mode and Kubernetes mode, CPU cores in standalone mode and Mesos coarsed-grained
+    (resources are executors in yarn mode and Kubernetes mode, CPU cores in standalone mode and Mesos coarse-grained
      mode ['spark.cores.max' value is total expected resources for Mesos coarse-grained mode] )
     to wait for before scheduling begins. Specified as a double between 0.0 and 1.0.
     Regardless of whether the minimum ratio of resources has been reached,
@@ -1634,7 +1634,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     (Experimental) If set to "true", Spark will blacklist the executor immediately when a fetch
-    failure happenes. If external shuffle service is enabled, then the whole node will be
+    failure happens. If external shuffle service is enabled, then the whole node will be
     blacklisted.
   </td>
 </tr>
@@ -1722,7 +1722,7 @@ Apart from these, the following properties are also available, and may be useful
     When <code>spark.task.reaper.enabled = true</code>, this setting specifies a timeout after
     which the executor JVM will kill itself if a killed task has not stopped running. The default
     value, -1, disables this mechanism and prevents the executor from self-destructing. The purpose
-    of this setting is to act as a safety-net to prevent runaway uncancellable tasks from rendering
+    of this setting is to act as a safety-net to prevent runaway noncancellable tasks from rendering
     an executor unusable.
   </td>
 </tr>
