@@ -20,10 +20,12 @@ package org.apache.spark.sql.execution.datasources.parquet
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
+import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -380,6 +382,45 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
       assert(message.contains("Failed merging schema"))
     }
+  }
+
+  // =======================================
+  // Tests for parquet schema mismatch error
+  // =======================================
+  def testSchemaMismatch(vectorizedReaderEnabled: Boolean): SparkException = {
+    import testImplicits._
+
+    var e : SparkException = null
+    withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString) {
+      // Create two parquet files with different schemas in the same folder
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        Seq(("bcd", 2)).toDF("a", "b").coalesce(1).write.mode("overwrite").parquet(s"$path/parquet")
+        Seq((1, "abc")).toDF("a", "b").coalesce(1).write.mode("append").parquet(s"$path/parquet")
+
+        e = intercept[SparkException] {
+          spark.read.parquet(s"$path/parquet").collect()
+        }
+      }
+    }
+    return e
+  }
+
+  test("schema mismatch failure error message for parquet reader") {
+    val e = testSchemaMismatch(vectorizedReaderEnabled = false)
+    val expectedMessage = "Encounter error while reading parquet files. " +
+      "One possible cause: Parquet column cannot be converted in the corresponding " +
+      "files. Details:"
+    assert(e.getCause.isInstanceOf[QueryExecutionException])
+    assert(e.getCause.getCause.isInstanceOf[ParquetDecodingException])
+    assert(e.getCause.getMessage.startsWith(expectedMessage))
+  }
+
+  test("schema mismatch failure error message for parquet vectorized reader") {
+    val e = testSchemaMismatch(vectorizedReaderEnabled = true)
+    assert(e.getCause.isInstanceOf[QueryExecutionException])
+    assert(e.getCause.getCause.isInstanceOf[ParquetSchemaColumnConvertNotSupportedException])
+    assert(e.getCause.getMessage.startsWith("Parquet column cannot be converted in file"))
   }
 
   // =======================================================
