@@ -23,7 +23,8 @@ import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
-import org.apache.spark.sql.types.{DataTypes, DoubleType}
+import org.apache.spark.sql.types.{DataTypes, DoubleType, IntegerType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 private case class FunctionResult(f1: String, f2: String)
 
@@ -322,6 +323,16 @@ class UDFSuite extends QueryTest with SharedSQLContext {
         spark.sql("SELECT f(a._1) FROM x").show
       }
       assert(outputStream.toString.contains("UDF:f(a._1 AS `_1`)"))
+    }
+  }
+
+  test("udfv2 test") {
+    spark.udf.register("myUdfV1", (a: Int, b: String) => a.toString + b)
+    spark.udf.register("myUdfV2", (a: Int, b: UTF8String) => {
+      UTF8String.concat(UTF8String.fromString(a.toString), b)
+    }, StringType, IntegerType, StringType, true, true)
+    testData.selectExpr("myUdfV1(a, b)", "myUdfV2(a, b)").as[(String, String)].collect().foreach {
+      case (v1: String, v2: String) => assert(v1 === v2)
     }
   }
 }

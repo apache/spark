@@ -18,12 +18,15 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkException
-import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.types.DataType
 
-
+/*
+ Discussion: the ctor arg `function` need to support both scala and java.
+  so I think the style `(Any, Any, ...) => Any` is easier to use
+  Java function can be passed in using the value `javaFunction.call(_:Any, ...)`
+ */
 private[sql] case class JavaUDF (
     function: AnyRef,
     dataType: DataType,
@@ -40,20 +43,22 @@ private[sql] case class JavaUDF (
     s"${udfName.map(name => s"UDF:$name").getOrElse("UDF")}(${children.mkString(", ")})"
 
   // TODO: generate this method by script
-  private[this] val f = function match {
-    case func: Function0[Any] =>
+  private[this] val f = children.size match {
+    case 0 =>
+      val func = function.asInstanceOf[() => Any]
       (input: InternalRow) => {
-        func.call()
+        func()
       }
-    case func: Function[Any, Any] =>
+    case 1 =>
+      val func = function.asInstanceOf[(Any) => Any]
       (input: InternalRow) => {
-        func.call(children(0).eval(input))
+        func(children(0).eval(input))
       }
-    case func: Function[Any, Any, Any] =>
+    case 2 =>
+      val func = function.asInstanceOf[(Any, Any) => Any]
       (input: InternalRow) => {
-        func.call(children(0).eval(input), children(1).eval(input))
+        func(children(0).eval(input), children(1).eval(input))
       }
-    case _ => throw new IllegalArgumentException("unknown function type.")
   }
 
   lazy val udfErrorMessage = {

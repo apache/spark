@@ -28,10 +28,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
+import org.apache.spark.sql.catalyst.expressions.{Expression, JavaUDF, ScalaUDF}
 import org.apache.spark.sql.execution.aggregate.ScalaUDAF
 import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
-import org.apache.spark.sql.expressions.{UserDefinedAggregateFunction, UserDefinedFunction}
+import org.apache.spark.sql.expressions.{UserDefinedAggregateFunction, UserDefinedFunction, UserDefinedFunctionV2}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
@@ -216,6 +216,27 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
     val udf = UserDefinedFunction(func, dataType, inputTypes).withName(name)
     if (nullable) udf else udf.asNonNullable()
   }
+
+  /**
+   * Registers a deterministic Scala closure of 2 arguments as user-defined function (UDF).
+   * @since 2.4.0
+   */
+  def register(name: String, func: Function2[_, _, _], returnType: DataType,
+    input1Type: DataType, input2Type: DataType, nullable: Boolean, deterministic: Boolean)
+    : UserDefinedFunctionV2 = {
+    val inputTypes = Seq(input1Type, input2Type)
+    def builder(e: Seq[Expression]) = if (e.length == 2) {
+      JavaUDF(func, returnType, e, inputTypes, udfName = Some(name),
+        nullable = nullable, udfDeterministic = deterministic)
+    } else {
+      throw new AnalysisException("Invalid number of arguments for function " + name +
+        ". Expected: 2; Found: " + e.length)
+    }
+    functionRegistry.createOrReplaceTempFunction(name, builder)
+    new UserDefinedFunctionV2(func, returnType, inputTypes, nameOption = Some(name),
+      nullable = nullable, deterministic = deterministic)
+  }
+
 
   /**
    * Registers a deterministic Scala closure of 3 arguments as user-defined function (UDF).
@@ -731,6 +752,27 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         ". Expected: 2; Found: " + e.length)
     }
     functionRegistry.createOrReplaceTempFunction(name, builder)
+  }
+
+  /**
+   * Register a deterministic Java UDF2 instance as user-defined function v2 (UDF v2).
+   * @since 2.4.0
+   */
+  def registerV2(name: String, f: UDF2[_, _, _], returnType: DataType,
+    input1Type: DataType, input2Type: DataType, nullable: Boolean, deterministic: Boolean)
+    : UserDefinedFunctionV2 = {
+    val func = f.asInstanceOf[UDF2[Any, Any, Any]].call(_: Any, _: Any)
+    val inputTypes = Seq(input1Type, input2Type)
+    def builder(e: Seq[Expression]) = if (e.length == 2) {
+      JavaUDF(func, returnType, e, inputTypes, udfName = Some(name),
+        nullable = nullable, udfDeterministic = deterministic)
+    } else {
+      throw new AnalysisException("Invalid number of arguments for function " + name +
+        ". Expected: 2; Found: " + e.length)
+    }
+    functionRegistry.createOrReplaceTempFunction(name, builder)
+    new UserDefinedFunctionV2(func, returnType, inputTypes, nameOption = Some(name),
+      nullable = nullable, deterministic = deterministic)
   }
 
   /**
