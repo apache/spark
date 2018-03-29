@@ -418,7 +418,7 @@ case class FileSourceScanExec(
     }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
 
     val partitions =
-      FilePartitionUtil.getFilePartition(relation.sparkSession, splitFiles, maxSplitBytes)
+      FilePartitionUtil.getFilePartitions(relation.sparkSession, splitFiles, maxSplitBytes)
 
     new FileScanRDD(fsRelation.sparkSession, readFile, partitions)
   }

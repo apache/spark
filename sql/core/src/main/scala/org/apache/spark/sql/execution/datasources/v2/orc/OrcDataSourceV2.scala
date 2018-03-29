@@ -100,7 +100,7 @@ class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: Optio
         )
       }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)
     }
-    FilePartitionUtil.getFilePartition(sparkSession, splitFiles, maxSplitBytes)
+    FilePartitionUtil.getFilePartitions(sparkSession, splitFiles, maxSplitBytes)
   }
 
 

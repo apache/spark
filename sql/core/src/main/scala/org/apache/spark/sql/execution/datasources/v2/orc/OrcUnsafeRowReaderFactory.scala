@@ -100,7 +100,7 @@ case class OrcUnsafeRowReaderFactory(
   }
 
   override def preferredLocations(): Array[String] = {
-    FilePartitionUtil.getPreferredLocations(file).toArray
+    FilePartitionUtil.getPreferredLocations(file)
   }
 }
 

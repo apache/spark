@@ -192,6 +192,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
+    // SPARK-23817 Since datasource V2 didn't support reading multiple files yet,
+    // ORC V2 is only used when loading single file path.
     val allPaths = CaseInsensitiveMap(extraOptions.toMap).get("path") ++ paths
     val orcV2 = OrcDataSourceV2.satisfy(sparkSession, source, allPaths.toSeq)
     if (orcV2.isDefined) {

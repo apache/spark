@@ -215,6 +215,11 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
   }
 }
 
+/**
+ * Replaces [[OrcDataSourceV2]] with [[DataSource]] if parent node is [[InsertIntoTable]].
+ * This is because [[OrcDataSourceV2]] doesn't support writing data yet.
+ * @param sparkSession
+ */
 class FallBackToOrcV1(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def convertToOrcV1(v2Relation: DataSourceV2Relation): LogicalPlan = {
     val v1 = DataSource.apply(
@@ -230,6 +235,7 @@ class FallBackToOrcV1(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       if d.source.isInstanceOf[OrcDataSourceV2] => i.copy(table = convertToOrcV1(d))
   }
 }
+
 /**
  * Replaces [[UnresolvedCatalogRelation]] with concrete relation logical plans.
  *

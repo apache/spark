@@ -99,7 +99,7 @@ case class OrcBatchDataReaderFactory(
   }
 
   override def preferredLocations(): Array[String] = {
-    FilePartitionUtil.getPreferredLocations(file).toArray
+    FilePartitionUtil.getPreferredLocations(file)
   }
 }
 
