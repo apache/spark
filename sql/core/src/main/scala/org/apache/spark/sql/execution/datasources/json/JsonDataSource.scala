@@ -105,7 +105,7 @@ object TextInputJsonDataSource extends JsonDataSource {
     JsonInferSchema.infer[InternalRow](
       rdd,
       parsedOptions,
-      CreateJacksonParser.internalRow(_, _, parsedOptions.charset)
+      CreateJacksonParser.internalRow(_, _, 0, parsedOptions.charset)
     )
   }
 

@@ -65,9 +65,10 @@ private[sql] object CreateJacksonParser extends Serializable {
   def internalRow(
     jsonFactory: JsonFactory,
     row: InternalRow,
+    field: Int,
     charset: Option[String] = None
   ): JsonParser = {
-    val is = new ByteArrayInputStream(row.getBinary(0))
+    val is = new ByteArrayInputStream(row.getBinary(field))
 
     inputStream(jsonFactory, is, charset)
   }

@@ -44,6 +44,7 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
   val charset: Option[String] = Some("UTF-8")
 
   val lineSeparator: Option[Array[Byte]] = parameters.get("lineSep").map { lineSep =>
+    require(lineSep.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
     lineSep.getBytes(charset.getOrElse(
       throw new IllegalArgumentException("Please, set the charset option for the delimiter")))
   }
