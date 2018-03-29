@@ -246,7 +246,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
     }
     p &= ~mask;
-    System.out.println("P: "+Long.toHexString(p)+", obj="+base.getBaseObject()+", offset="+base.getBaseOffset()+", size="+base.size()+", numBytes="+numBytes);
     return p;
   }
 
