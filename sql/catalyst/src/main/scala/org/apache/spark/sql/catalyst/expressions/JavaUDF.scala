@@ -69,56 +69,6 @@ private[sql] case class JavaUDF (
     s"Failed to execute user defined function($funcCls: ($inputTypes) => ${dataType.simpleString})"
   }
 
-  /*
-  override def doGenCode(
-      ctx: CodegenContext,
-      ev: ExprCode): ExprCode = {
-
-    val errorMsgTerm = ctx.addReferenceObj("errMsg", udfErrorMessage)
-    val resultTerm = ctx.freshName("result")
-
-    // codegen for children expressions
-    val evals = children.map(_.genCode(ctx))
-
-    // Generate the codes for expressions and calling user-defined function
-    // We need to get the boxedType of dataType's javaType here. Because for the dataType
-    // such as IntegerType, its javaType is `int` and the returned type of user-defined
-    // function is Object. Trying to convert an Object to `int` will cause casting exception.
-    val evalCode = evals.map(_.code).mkString("\n")
-    val (funcArgs, initArgs) = evals.zipWithIndex.map { case (eval, i) =>
-      val argTerm = ctx.freshName("arg")
-      val initArg = s"Object $argTerm = ${eval.isNull} ? null : ${eval.value};"
-      (argTerm, initArg)
-    }.unzip
-
-    val udf = ctx.addReferenceObj("udf", function, s"scala.Function${children.length}")
-    val getFuncResult = s"$udf.apply(${funcArgs.mkString(", ")})"
-    val boxedType = CodeGenerator.boxedType(dataType)
-    val callFunc =
-      s"""
-         |$boxedType $resultTerm = null;
-         |try {
-         |  $resultTerm = ($boxedType)$getFuncResult;
-         |} catch (Exception e) {
-         |  throw new org.apache.spark.SparkException($errorMsgTerm, e);
-         |}
-       """.stripMargin
-
-    ev.copy(code =
-      s"""
-         |$evalCode
-         |${initArgs.mkString("\n")}
-         |$callFunc
-         |
-         |boolean ${ev.isNull} = $resultTerm == null;
-         |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-         |if (!${ev.isNull}) {
-         |  ${ev.value} = $resultTerm;
-         |}
-       """.stripMargin)
-  }
-  */
-
   // scalastyle:on line.size.limit
   override def doGenCode(
       ctx: CodegenContext,
