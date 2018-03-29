@@ -24,5 +24,6 @@ class TestSparkSessionSuite extends SparkFunSuite {
   test("default session is set in constructor") {
     val session = new TestSparkSession()
     assert(SparkSession.getDefaultSession.contains(session))
+    session.stop()
   }
 }
