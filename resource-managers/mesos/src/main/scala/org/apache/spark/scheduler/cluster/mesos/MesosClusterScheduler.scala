@@ -506,6 +506,10 @@ private[spark] class MesosClusterScheduler(
       options ++= Seq("--class", desc.command.mainClass)
     }
 
+    desc.conf.getOption("spark.mesos.proxyUser").foreach { v =>
+      options ++= Seq("--proxy-user", v)
+    }
+
     desc.conf.getOption("spark.executor.memory").foreach { v =>
       options ++= Seq("--executor-memory", v)
     }
@@ -521,6 +525,7 @@ private[spark] class MesosClusterScheduler(
 
     // --conf
     val replicatedOptionsBlacklist = Set(
+      "spark.mesos.proxyUser",
       "spark.jars", // Avoids duplicate classes in classpath
       "spark.submit.deployMode", // this would be set to `cluster`, but we need client
       "spark.master" // this contains the address of the dispatcher, not master

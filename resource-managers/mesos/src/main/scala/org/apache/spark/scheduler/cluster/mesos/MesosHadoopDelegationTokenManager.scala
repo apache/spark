@@ -60,9 +60,13 @@ private[spark] class MesosHadoopDelegationTokenManager(
 
   private var (tokens: Array[Byte], timeOfNextRenewal: Long) = {
     try {
-      val creds = UserGroupInformation.getCurrentUser.getCredentials
+      val currentUser = UserGroupInformation.getCurrentUser()
+      val creds = currentUser.getCredentials
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
       val rt = tokenManager.obtainDelegationTokens(hadoopConf, creds)
+      if (SparkHadoopUtil.get.isProxyUser(currentUser)) {
+        currentUser.addCredentials(creds)
+      }
       logInfo(s"Initialized tokens: ${SparkHadoopUtil.get.dumpTokens(creds)}")
       (SparkHadoopUtil.get.serialize(creds), SparkHadoopUtil.nextCredentialRenewalTime(rt, conf))
     } catch {

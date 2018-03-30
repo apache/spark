@@ -197,6 +197,7 @@ class HadoopRDD[K, V](
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
     SparkHadoopUtil.get.addCredentials(jobConf)
+    logInfo(s"HadoopRDD credentials: ${SparkHadoopUtil.get.dumpTokens(jobConf.getCredentials)}")
     val allInputSplits = getInputFormat(jobConf).getSplits(jobConf, minPartitions)
     val inputSplits = if (ignoreEmptySplits) {
       allInputSplits.filter(_.getLength > 0)
