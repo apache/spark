@@ -84,7 +84,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
   }
 
   test("executor core request specification") {
-    var factory = new ExecutorPodFactory(baseConf, None, None, None)
+    var factory = new ExecutorPodFactory(baseConf, None)
     var executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
     assert(executor.getSpec.getContainers.size() === 1)
@@ -93,17 +93,17 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
 
     val conf = baseConf.clone()
 
-    conf.set(KUBERNETES_EXECUTOR_CORES, "0.1")
-    factory = new ExecutorPodFactory(conf, None, None, None)
+    conf.set(KUBERNETES_EXECUTOR_REQUEST_CORES, "0.1")
+    factory = new ExecutorPodFactory(conf, None)
     executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
     assert(executor.getSpec.getContainers.size() === 1)
     assert(executor.getSpec.getContainers.get(0).getResources.getRequests.get("cpu").getAmount
       === "0.1")
 
-    conf.set(KUBERNETES_EXECUTOR_CORES, "100m")
-    factory = new ExecutorPodFactory(conf, None, None, None)
-    conf.set(KUBERNETES_EXECUTOR_CORES, "100m")
+    conf.set(KUBERNETES_EXECUTOR_REQUEST_CORES, "100m")
+    factory = new ExecutorPodFactory(conf, None)
+    conf.set(KUBERNETES_EXECUTOR_REQUEST_CORES, "100m")
     executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
     assert(executor.getSpec.getContainers.get(0).getResources.getRequests.get("cpu").getAmount

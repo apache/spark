@@ -84,8 +84,8 @@ private[spark] class ExecutorPodFactory(
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
 
   private val executorCores = sparkConf.getInt("spark.executor.cores", 1)
-  private val kubernetesExecutorCores = if (sparkConf.contains(KUBERNETES_EXECUTOR_CORES)) {
-    sparkConf.get(KUBERNETES_EXECUTOR_CORES).get
+  private val executorCoresRequest = if (sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_CORES)) {
+    sparkConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get
   } else {
     executorCores.toString
   }
@@ -119,7 +119,7 @@ private[spark] class ExecutorPodFactory(
       .withAmount(s"${executorMemoryWithOverhead}Mi")
       .build()
     val executorCpuQuantity = new QuantityBuilder(false)
-      .withAmount(kubernetesExecutorCores)
+      .withAmount(executorCoresRequest)
       .build()
     val executorExtraClasspathEnv = executorExtraClasspath.map { cp =>
       new EnvVarBuilder()

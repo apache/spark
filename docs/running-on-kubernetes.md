@@ -553,10 +553,12 @@ specific to Spark on Kubernetes.
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.executor.cores</code></td>
+  <td><code>spark.kubernetes.executor.request.cores</code></td>
   <td>(none)</td>
   <td>
-    Specify the cpu request for each executor pod. Values conform to the Kubernetes [convention](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu). Takes precendence over <code>spark.executor.cores</code> if set.
+    Specify the cpu request for each executor pod. Values conform to the Kubernetes [convention](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#meaning-of-cpu). 
+    This is distinct from <code>spark.executor.cores</code> and is only used for specifying executor pod cpu request if set. Task parallelism, e.g., number of tasks an executor can
+    run concurrently is not affected by this. 
   </td>
 </tr>
 <tr>
