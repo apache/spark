@@ -75,12 +75,6 @@ trait PredicateHelper {
     }
   }
 
-  // If one expression and its children are null intolerant, it is null intolerant.
-  protected def isNullIntolerant(expr: Expression): Boolean = expr match {
-    case e: NullIntolerant => e.children.forall(isNullIntolerant)
-    case _ => false
-  }
-
   /**
    * Returns true if `expr` can be evaluated using only the output of `plan`.  This method
    * can be used to determine when it is acceptable to move expression evaluation within a query

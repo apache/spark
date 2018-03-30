@@ -126,25 +126,7 @@ case class Generate(
 
 case class Filter(condition: Expression, child: LogicalPlan)
   extends UnaryNode with PredicateHelper {
-
-  // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
-  private lazy val notNullAttributes = splitConjunctivePredicates(condition).flatMap {
-    case isnotnull @ IsNotNull(a)
-        if isNullIntolerant(a) && a.references.subsetOf(child.outputSet) =>
-      isnotnull.references.map(_.exprId)
-    case _ =>
-      Seq.empty[ExprId]
-  }.toSet
-
-  override def output: Seq[Attribute] = {
-    child.output.map { a =>
-      if (a.nullable && notNullAttributes.contains(a.exprId)) {
-        a.withNullability(false)
-      } else {
-        a
-      }
-    }
-  }
+  override def output: Seq[Attribute] = child.output
 
   override def maxRows: Option[Long] = child.maxRows
 

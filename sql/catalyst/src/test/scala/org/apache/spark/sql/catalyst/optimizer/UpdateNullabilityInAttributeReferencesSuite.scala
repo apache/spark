@@ -19,32 +19,39 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.{CreateArray, GetArrayItem}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
 
 
 class UpdateNullabilityInAttributeReferencesSuite extends PlanTest {
 
-  object Optimize extends RuleExecutor[LogicalPlan] {
+  object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches =
-      Batch("InferAndPushDownFilters", FixedPoint(100),
-        InferFiltersFromConstraints) ::
+      Batch("Constant Folding", FixedPoint(10),
+          NullPropagation,
+          ConstantFolding,
+          BooleanSimplification,
+          SimplifyConditionals,
+          SimplifyBinaryComparison,
+          SimplifyExtractValueOps) ::
       Batch("UpdateAttributeReferences", Once,
         UpdateNullabilityInAttributeReferences) :: Nil
   }
 
-  test("update nullability when inferred constraints applied")  {
-    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "true") {
-      val testRelation = LocalRelation('a.int, 'b.int)
-      val logicalPlan = testRelation.where('a =!= 2).select('a).analyze
-      var expectedSchema = new StructType().add("a", "INT", nullable = true)
-      assert(StructType.fromAttributes(logicalPlan.output) === expectedSchema)
-      val optimizedPlan = Optimize.execute(logicalPlan)
-      expectedSchema = new StructType().add("a", "INT", nullable = false)
-      assert(StructType.fromAttributes(optimizedPlan.output) === expectedSchema)
-    }
+  test("update nullability in AttributeReference")  {
+    val rel = LocalRelation('a.long.notNull)
+    // In the 'original' plans below, the Aggregate node produced by groupBy() has a
+    // nullable AttributeReference to `b`, because both array indexing and map lookup are
+    // nullable expressions. After optimization, the same attribute is now non-nullable,
+    // but the AttributeReference is not updated to reflect this. So, we need to update nullability
+    // by the `UpdateNullabilityInAttributeReferences` rule.
+    val original = rel
+      .select(GetArrayItem(CreateArray(Seq('a, 'a + 1L)), 0) as "b")
+      .groupBy($"b")("1")
+    val expected = rel.select('a as "b").groupBy($"b")("1").analyze
+    val optimized = Optimizer.execute(original.analyze)
+    comparePlans(optimized, expected)
   }
 }

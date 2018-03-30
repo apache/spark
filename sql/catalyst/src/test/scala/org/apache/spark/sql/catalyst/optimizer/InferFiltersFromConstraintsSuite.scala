@@ -35,9 +35,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         InferFiltersFromConstraints,
         CombineFilters,
         SimplifyBinaryComparison,
-        BooleanSimplification) ::
-      Batch("UpdateAttributeReferences", Once,
-        UpdateNullabilityInAttributeReferences) :: Nil
+        BooleanSimplification) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -129,10 +127,6 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  private def updateNullability(plan: LogicalPlan): LogicalPlan = {
-    UpdateNullabilityInAttributeReferences.apply(plan)
-  }
-
   test("inner join with alias: alias contains multiple attributes") {
     val t1 = testRelation.subquery('t1)
     val t2 = testRelation.subquery('t2)
@@ -147,7 +141,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         Some("t.a".attr === "t2.a".attr && "t.int_col".attr === "t2.a".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, updateNullability(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   test("inner join with alias: alias contains single attributes") {
@@ -164,7 +158,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         Some("t.a".attr === "t2.a".attr && "t.d".attr === "t2.a".attr))
       .analyze
     val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, updateNullability(correctAnswer))
+    comparePlans(optimized, correctAnswer)
   }
 
   test("generate correct filters for alias that don't produce recursive constraints") {
