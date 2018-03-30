@@ -55,7 +55,7 @@ trait MLTest extends StreamTest with TempDirectory { self: Suite =>
     }
   }
 
-  private[util] def testTransformerOnStreamData[A : Encoder](
+  def testTransformerOnStreamData[A : Encoder](
       dataframe: DataFrame,
       transformer: Transformer,
       firstResultCol: String,
