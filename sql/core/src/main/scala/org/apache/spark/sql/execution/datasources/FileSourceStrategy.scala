@@ -88,46 +88,45 @@ object FileSourceStrategy extends Strategy with Logging {
       case expressions.IsNull(a: Attribute) if a.name == bucketColumnName =>
         getMatchedBucketBitSet(a, null)
       case expressions.And(left, right) =>
-        getExpressionBuckets(left, bucketColumnName, numBuckets) |
+        getExpressionBuckets(left, bucketColumnName, numBuckets) &
           getExpressionBuckets(right, bucketColumnName, numBuckets)
       case expressions.Or(left, right) =>
-        val leftBuckets = getExpressionBuckets(left, bucketColumnName, numBuckets)
-        val rightBuckets = getExpressionBuckets(right, bucketColumnName, numBuckets)
-
-        // if some expression in OR condition requires all buckets, return an empty BitSet
-        if (leftBuckets.cardinality() == 0 || rightBuckets.cardinality() == 0) {
-          new BitSet(numBuckets)
-        } else {
-          // return a BitSet that includes all required buckets
-          leftBuckets | rightBuckets
-        }
-      case _ => new BitSet(numBuckets)
+        getExpressionBuckets(left, bucketColumnName, numBuckets) |
+        getExpressionBuckets(right, bucketColumnName, numBuckets)
+      case _ =>
+        val matchedBuckets = new BitSet(numBuckets)
+        matchedBuckets.setUntil(numBuckets)
+        matchedBuckets
     }
   }
 
   private def getBuckets(normalizedFilters: Seq[Expression],
                          bucketSpec: BucketSpec): Option[BitSet] = {
 
+    if (normalizedFilters.isEmpty) {
+      return None
+    }
+
     val bucketColumnName = bucketSpec.bucketColumnNames.head
     val numBuckets = bucketSpec.numBuckets
 
-    val matchedBuckets = normalizedFilters
-      .map(f => getExpressionBuckets(f, bucketColumnName, numBuckets))
-      .fold(new BitSet(numBuckets))(_ | _)
+    val normalizedFiltersAndExpr = normalizedFilters
+      .reduce(expressions.And)
+    val matchedBuckets = getExpressionBuckets(normalizedFiltersAndExpr, bucketColumnName,
+      numBuckets)
 
-    val numBucketsSelected = if (matchedBuckets.cardinality() != 0) {
-      matchedBuckets.cardinality()
-    }
-    else {
-      numBuckets
-    }
+    val numBucketsSelected = matchedBuckets.cardinality()
 
     logInfo {
       s"Pruned ${numBuckets - numBucketsSelected} out of $numBuckets buckets."
     }
 
     // None means all the buckets need to be scanned
-    if (matchedBuckets.cardinality() == 0) None else Some(matchedBuckets)
+    if (numBucketsSelected == numBuckets) {
+      None
+    } else {
+      Some(matchedBuckets)
+    }
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
