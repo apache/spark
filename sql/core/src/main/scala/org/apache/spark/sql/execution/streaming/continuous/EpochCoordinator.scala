@@ -153,7 +153,7 @@ private[continuous] class EpochCoordinator(
       // If not, add the epoch being currently processed to epochs waiting to be committed,
       // otherwise commit it.
       if (lastCommittedEpoch != epoch - 1) {
-        logDebug(s"Epoch $epoch has received commits from all partitions" +
+        logDebug(s"Epoch $epoch has received commits from all partitions " +
           s"and is waiting for epoch ${epoch - 1} to be committed first.")
         epochsWaitingToBeCommitted.add(epoch)
       } else {
@@ -188,7 +188,7 @@ private[continuous] class EpochCoordinator(
   }
 
   private def commitEpoch(epoch: Long, messages: Iterable[WriterCommitMessage]): Unit = {
-    logDebug(s"Epoch $epoch has received commits from all partitions" +
+    logDebug(s"Epoch $epoch has received commits from all partitions " +
       s"and is ready to be committed. Committing epoch $epoch.")
     // Sequencing is important here. We must commit to the writer before recording the commit
     // in the query, or we will end up dropping the commit if we restart in the middle.
