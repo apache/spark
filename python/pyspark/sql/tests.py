@@ -676,6 +676,23 @@ class SQLTests(ReusedSQLTestCase):
                                             multiLine=True)
         self.assertEqual(people1.collect(), people_array.collect())
 
+    def test_linesep_json(self):
+        df = self.spark.read.json("python/test_support/sql/people.json", lineSep=",")
+        expected = [Row(_corrupt_record=None, name=u'Michael'),
+                    Row(_corrupt_record=u' "age":30}\n{"name":"Justin"', name=None),
+                    Row(_corrupt_record=u' "age":19}\n', name=None)]
+        self.assertEqual(df.collect(), expected)
+
+        tpath = tempfile.mkdtemp()
+        shutil.rmtree(tpath)
+        try:
+            df = self.spark.read.json("python/test_support/sql/people.json")
+            df.write.json(tpath, lineSep="!!")
+            readback = self.spark.read.json(tpath, lineSep="!!")
+            self.assertEqual(readback.collect(), df.collect())
+        finally:
+            shutil.rmtree(tpath)
+
     def test_multiline_csv(self):
         ages_newlines = self.spark.read.csv(
             "python/test_support/sql/ages_newlines.csv", multiLine=True)
@@ -3559,7 +3576,7 @@ class ArrowTests(ReusedSQLTestCase):
                         warn.message for warn in warns if isinstance(warn.message, UserWarning)]
                     self.assertTrue(len(user_warns) > 0)
                     self.assertTrue(
-                        "Attempts non-optimization" in _exception_message(user_warns[-1]))
+                        "Attempting non-optimization" in _exception_message(user_warns[-1]))
                     self.assertPandasEqual(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
 
     def test_toPandas_fallback_disabled(self):
@@ -3682,7 +3699,7 @@ class ArrowTests(ReusedSQLTestCase):
         pdf = self.create_pandas_data_frame()
         wrong_schema = StructType(list(reversed(self.schema)))
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(RuntimeError, ".*No cast.*string.*timestamp.*"):
+            with self.assertRaisesRegexp(Exception, ".*No cast.*string.*timestamp.*"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
@@ -3707,7 +3724,7 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_with_single_data_type(self):
         import pandas as pd
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(RuntimeError, ".*IntegerType.*not supported.*"):
+            with self.assertRaisesRegexp(ValueError, ".*IntegerType.*not supported.*"):
                 self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int")
 
     def test_createDataFrame_does_not_modify_input(self):
@@ -3775,14 +3792,14 @@ class ArrowTests(ReusedSQLTestCase):
                         warn.message for warn in warns if isinstance(warn.message, UserWarning)]
                     self.assertTrue(len(user_warns) > 0)
                     self.assertTrue(
-                        "Attempts non-optimization" in _exception_message(user_warns[-1]))
+                        "Attempting non-optimization" in _exception_message(user_warns[-1]))
                     self.assertEqual(df.collect(), [Row(a={u'a': 1})])
 
     def test_createDataFrame_fallback_disabled(self):
         import pandas as pd
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Unsupported type'):
+            with self.assertRaisesRegexp(TypeError, 'Unsupported type'):
                 self.spark.createDataFrame(
                     pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
 

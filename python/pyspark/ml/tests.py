@@ -1559,6 +1559,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(s.meanSquaredError, 0.0)
         self.assertAlmostEqual(s.rootMeanSquaredError, 0.0)
         self.assertAlmostEqual(s.r2, 1.0, 2)
+        self.assertAlmostEqual(s.r2adj, 1.0, 2)
         self.assertTrue(isinstance(s.residuals, DataFrame))
         self.assertEqual(s.numInstances, 2)
         self.assertEqual(s.degreesOfFreedom, 1)

@@ -192,11 +192,15 @@ class BlockManagerMasterEndpoint(
     val requiredBlockManagers = blockManagerInfo.values.filter { info =>
       removeFromDriver || !info.blockManagerId.isDriver
     }
-    Future.sequence(
-      requiredBlockManagers.map { bm =>
-        bm.slaveEndpoint.ask[Int](removeMsg)
-      }.toSeq
-    )
+    val futures = requiredBlockManagers.map { bm =>
+      bm.slaveEndpoint.ask[Int](removeMsg).recover {
+        case e: IOException =>
+          logWarning(s"Error trying to remove broadcast $broadcastId", e)
+          0 // zero blocks were removed
+      }
+    }.toSeq
+
+    Future.sequence(futures)
   }
 
   private def removeBlockManager(blockManagerId: BlockManagerId) {

@@ -531,6 +531,9 @@ setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 #' @rdname repartition
 setGeneric("repartition", function(x, ...) { standardGeneric("repartition") })
 
+#' @rdname repartitionByRange
+setGeneric("repartitionByRange", function(x, ...) { standardGeneric("repartitionByRange") })
+
 #' @rdname sample
 setGeneric("sample",
            function(x, withReplacement = FALSE, fraction, seed) {
