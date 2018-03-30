@@ -189,7 +189,7 @@ class FileScanRDD(
             case e: ParquetSchemaColumnConvertNotSupportedException =>
               val message = "Parquet column cannot be converted in " +
                 s"file ${currentFile.filePath}. Column: ${e.getColumn}, " +
-                s"Expected: ${e.getPhysicalType}, Found: ${e.getLogicalType}"
+                s"Expected: ${e.getLogicalType}, Found: ${e.getPhysicalType}"
               throw new QueryExecutionException(message, e)
             case e: ParquetDecodingException =>
               if (e.getMessage.contains("Can not read value at")) {

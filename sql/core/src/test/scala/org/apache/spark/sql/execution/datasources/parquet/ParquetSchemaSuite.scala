@@ -387,40 +387,54 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
   // =======================================
   // Tests for parquet schema mismatch error
   // =======================================
-  def testSchemaMismatch(vectorizedReaderEnabled: Boolean): SparkException = {
+  def testSchemaMismatch(path: String, vectorizedReaderEnabled: Boolean): SparkException = {
     import testImplicits._
 
     var e : SparkException = null
+    // Disable databricks' vectorized parquet reader and use open source version.
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString) {
       // Create two parquet files with different schemas in the same folder
-      withTempPath { dir =>
-        val path = dir.getCanonicalPath
-        Seq(("bcd", 2)).toDF("a", "b").coalesce(1).write.mode("overwrite").parquet(s"$path/parquet")
-        Seq((1, "abc")).toDF("a", "b").coalesce(1).write.mode("append").parquet(s"$path/parquet")
+      Seq(("bcd", 2)).toDF("a", "b").coalesce(1).write.mode("overwrite").parquet(s"$path/parquet")
+      Seq((1, "abc")).toDF("a", "b").coalesce(1).write.mode("append").parquet(s"$path/parquet")
 
-        e = intercept[SparkException] {
-          spark.read.parquet(s"$path/parquet").collect()
-        }
+      e = intercept[SparkException] {
+        spark.read.parquet(s"$path/parquet").collect()
       }
     }
     return e
   }
 
   test("schema mismatch failure error message for parquet reader") {
-    val e = testSchemaMismatch(vectorizedReaderEnabled = false)
-    val expectedMessage = "Encounter error while reading parquet files. " +
-      "One possible cause: Parquet column cannot be converted in the corresponding " +
-      "files. Details:"
-    assert(e.getCause.isInstanceOf[QueryExecutionException])
-    assert(e.getCause.getCause.isInstanceOf[ParquetDecodingException])
-    assert(e.getCause.getMessage.startsWith(expectedMessage))
+    withTempPath { dir =>
+      val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = false)
+      val expectedMessage = "Encounter error while reading parquet files. " +
+        "One possible cause: Parquet column cannot be converted in the corresponding " +
+        "files. Details:"
+      assert(e.getCause.isInstanceOf[QueryExecutionException])
+      assert(e.getCause.getCause.isInstanceOf[ParquetDecodingException])
+      assert(e.getCause.getMessage.startsWith(expectedMessage))
+    }
   }
 
   test("schema mismatch failure error message for parquet vectorized reader") {
-    val e = testSchemaMismatch(vectorizedReaderEnabled = true)
-    assert(e.getCause.isInstanceOf[QueryExecutionException])
-    assert(e.getCause.getCause.isInstanceOf[ParquetSchemaColumnConvertNotSupportedException])
-    assert(e.getCause.getMessage.startsWith("Parquet column cannot be converted in file"))
+    withTempPath { dir =>
+      val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = true)
+      assert(e.getCause.isInstanceOf[QueryExecutionException])
+      assert(e.getCause.getCause.isInstanceOf[ParquetSchemaColumnConvertNotSupportedException])
+
+      // Check if the physical type is reporting correctly
+      val errMsg = e.getCause.getMessage
+      assert(errMsg.startsWith("Parquet column cannot be converted in file"))
+      val file = errMsg.substring("Parquet column cannot be converted in file ".length,
+        errMsg.indexOf(". "))
+      val col = spark.read.parquet(file).schema.fields.filter(_.name.equals("a"))
+      assert(col.length == 1)
+      if (col(0).dataType == StringType) {
+        assert(errMsg.contains("Column: [a], Expected: IntegerType, Found: BINARY"))
+      } else {
+        assert(errMsg.endsWith("Column: [a], Expected: StringType, Found: INT32"))
+      }
+    }
   }
 
   // =======================================================
