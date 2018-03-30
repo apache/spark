@@ -358,14 +358,14 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
         .select(
           GetMapValue('m, "r1") as "a1",
           GetMapValue('m, "r32") as "a2")
-        .where('id > 0L)
+        .orderBy('id.asc)
         .select('a1, 'a2)
 
     val expected =
       LocalRelation('id.long).select(
         'id as "a1",
         Literal.create(null, LongType) as "a2")
-        .where('id > 0L)
+        .orderBy('id.asc)
     checkRule(query, expected)
   }
 
