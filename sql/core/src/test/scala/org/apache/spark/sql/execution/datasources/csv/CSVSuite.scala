@@ -513,6 +513,43 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("Save csv with custom charset") {
+    Seq("iso-8859-1", "utf-8", "windows-1250").foreach { encoding =>
+      withTempDir { dir =>
+        val csvDir = new File(dir, "csv").getCanonicalPath
+        // scalastyle:off
+        val originalDF = Seq("µß áâä ÁÂÄ").toDF("_c0")
+        // scalastyle:on
+        originalDF.write
+          .option("header", "false")
+          .option("encoding", encoding)
+          .csv(csvDir)
+
+        val df = spark
+          .read
+          .option("header", "false")
+          .option("encoding", encoding)
+          .csv(csvDir)
+
+        checkAnswer(df, originalDF)
+      }
+    }
+  }
+
+  test("bad encoding name on writer") {
+    val exception = intercept[SparkException] {
+      withTempDir { dir =>
+        val csvDir = new File(dir, "csv").getCanonicalPath
+        Seq("a,A,c,A,b,B").toDF().write
+          .option("header", "false")
+          .option("encoding", "1-9588-osi")
+          .csv(csvDir)
+      }
+    }
+
+    assert(exception.getCause.getMessage.contains("1-9588-osi"))
+  }
+
   test("commented lines in CSV data") {
     Seq("false", "true").foreach { multiLine =>
 
