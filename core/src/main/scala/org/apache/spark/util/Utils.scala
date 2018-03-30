@@ -2428,9 +2428,12 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return the value of a config either through the SparkConf or the Hadoop configuration
-   * if this is Yarn mode. In the latter case, this defaults to the value set through SparkConf
-   * if the key is not set in the Hadoop configuration.
+   * Return the value of a config either through the SparkConf or the Hadoop configuration.
+   * We Check whether the key is set in the SparkConf before look at any Hadoop configuration.
+   * If the key is set in SparkConf, no matter whether it is running on YARN or not,
+   * gets the value from SparkConf.
+   * Only when the key is not set in SparkConf and running on YARN,
+   * gets the value from Hadoop configuration.
    */
   def getSparkOrYarnConfig(conf: SparkConf, key: String, default: String): String = {
     if (conf.contains(key)) {
