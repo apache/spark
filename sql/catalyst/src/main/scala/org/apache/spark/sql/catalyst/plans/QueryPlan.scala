@@ -103,7 +103,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     var changed = false
 
     @inline def transformExpression(e: Expression): Expression = {
-      val newE = f(e)
+      val newE = CurrentOrigin.withOrigin(e.origin) { f(e) }
       if (newE.fastEquals(e)) {
         e
       } else {
@@ -122,7 +122,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       case null => null
     }
 
-    val newArgs = CurrentOrigin.withOrigin(origin) { mapProductIterator(recursiveTransform) }
+    val newArgs = mapProductIterator(recursiveTransform)
 
     if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
   }
