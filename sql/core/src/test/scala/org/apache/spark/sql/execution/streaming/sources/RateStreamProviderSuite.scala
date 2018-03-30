@@ -15,13 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.sources
 
+import java.nio.file.Files
+import java.util.Optional
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.sql.AnalysisException
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
+import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions, MicroBatchReadSupport}
+import org.apache.spark.sql.sources.v2.reader.streaming.Offset
+import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.util.ManualClock
 
 class RateSourceSuite extends StreamTest {
@@ -29,18 +40,40 @@ class RateSourceSuite extends StreamTest {
   import testImplicits._
 
   case class AdvanceRateManualClock(seconds: Long) extends AddData {
-    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+    override def addData(query: Option[StreamExecution]): (BaseStreamingSource, Offset) = {
       assert(query.nonEmpty)
       val rateSource = query.get.logicalPlan.collect {
-        case StreamingExecutionRelation(source, _) if source.isInstanceOf[RateStreamSource] =>
-          source.asInstanceOf[RateStreamSource]
+        case StreamingExecutionRelation(source: RateStreamMicroBatchReader, _) => source
       }.head
+
       rateSource.clock.asInstanceOf[ManualClock].advance(TimeUnit.SECONDS.toMillis(seconds))
-      (rateSource, rateSource.getOffset.get)
+      val offset = LongOffset(TimeUnit.MILLISECONDS.toSeconds(
+        rateSource.clock.getTimeMillis() - rateSource.creationTimeMs))
+      (rateSource, offset)
     }
   }
 
-  test("basic") {
+  test("microbatch in registry") {
+    DataSource.lookupDataSource("rate", spark.sqlContext.conf).newInstance() match {
+      case ds: MicroBatchReadSupport =>
+        val reader = ds.createMicroBatchReader(Optional.empty(), "dummy", DataSourceOptions.empty())
+        assert(reader.isInstanceOf[RateStreamMicroBatchReader])
+      case _ =>
+        throw new IllegalStateException("Could not find read support for rate")
+    }
+  }
+
+  test("compatible with old path in registry") {
+    DataSource.lookupDataSource("org.apache.spark.sql.execution.streaming.RateSourceProvider",
+      spark.sqlContext.conf).newInstance() match {
+      case ds: MicroBatchReadSupport =>
+        assert(ds.isInstanceOf[RateStreamProvider])
+      case _ =>
+        throw new IllegalStateException("Could not find read support for rate")
+    }
+  }
+
+  test("microbatch - basic") {
     val input = spark.readStream
       .format("rate")
       .option("rowsPerSecond", "10")
@@ -57,7 +90,7 @@ class RateSourceSuite extends StreamTest {
     )
   }
 
-  test("uniform distribution of event timestamps") {
+  test("microbatch - uniform distribution of event timestamps") {
     val input = spark.readStream
       .format("rate")
       .option("rowsPerSecond", "1500")
@@ -74,8 +107,74 @@ class RateSourceSuite extends StreamTest {
     )
   }
 
+  test("microbatch - set offset") {
+    val temp = Files.createTempDirectory("dummy").toString
+    val reader = new RateStreamMicroBatchReader(DataSourceOptions.empty(), temp)
+    val startOffset = LongOffset(0L)
+    val endOffset = LongOffset(1L)
+    reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
+    assert(reader.getStartOffset() == startOffset)
+    assert(reader.getEndOffset() == endOffset)
+  }
+
+  test("microbatch - infer offsets") {
+    val tempFolder = Files.createTempDirectory("dummy").toString
+    val reader = new RateStreamMicroBatchReader(
+      new DataSourceOptions(
+        Map("numPartitions" -> "1", "rowsPerSecond" -> "100", "useManualClock" -> "true").asJava),
+      tempFolder)
+    reader.clock.asInstanceOf[ManualClock].advance(100000)
+    reader.setOffsetRange(Optional.empty(), Optional.empty())
+    reader.getStartOffset() match {
+      case r: LongOffset => assert(r.offset === 0L)
+      case _ => throw new IllegalStateException("unexpected offset type")
+    }
+    reader.getEndOffset() match {
+      case r: LongOffset => assert(r.offset >= 100)
+      case _ => throw new IllegalStateException("unexpected offset type")
+    }
+  }
+
+  test("microbatch - predetermined batch size") {
+    val temp = Files.createTempDirectory("dummy").toString
+    val reader = new RateStreamMicroBatchReader(
+      new DataSourceOptions(Map("numPartitions" -> "1", "rowsPerSecond" -> "20").asJava), temp)
+    val startOffset = LongOffset(0L)
+    val endOffset = LongOffset(1L)
+    reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
+    val tasks = reader.createDataReaderFactories()
+    assert(tasks.size == 1)
+    val dataReader = tasks.get(0).createDataReader()
+    val data = ArrayBuffer[Row]()
+    while (dataReader.next()) {
+      data.append(dataReader.get())
+    }
+    assert(data.size === 20)
+  }
+
+  test("microbatch - data read") {
+    val temp = Files.createTempDirectory("dummy").toString
+    val reader = new RateStreamMicroBatchReader(
+      new DataSourceOptions(Map("numPartitions" -> "11", "rowsPerSecond" -> "33").asJava), temp)
+    val startOffset = LongOffset(0L)
+    val endOffset = LongOffset(1L)
+    reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
+    val tasks = reader.createDataReaderFactories()
+    assert(tasks.size == 11)
+
+    val readData = tasks.asScala
+      .map(_.createDataReader())
+      .flatMap { reader =>
+        val buf = scala.collection.mutable.ListBuffer[Row]()
+        while (reader.next()) buf.append(reader.get())
+        buf
+      }
+
+    assert(readData.map(_.getLong(1)).sorted == Range(0, 33))
+  }
+
   test("valueAtSecond") {
-    import RateStreamSource._
+    import RateStreamProvider._
 
     assert(valueAtSecond(seconds = 0, rowsPerSecond = 5, rampUpTimeSeconds = 0) === 0)
     assert(valueAtSecond(seconds = 1, rowsPerSecond = 5, rampUpTimeSeconds = 0) === 5)
@@ -161,7 +260,7 @@ class RateSourceSuite extends StreamTest {
         option: String,
         value: String,
         expectedMessages: Seq[String]): Unit = {
-      val e = intercept[StreamingQueryException] {
+      val e = intercept[IllegalArgumentException] {
         spark.readStream
           .format("rate")
           .option(option, value)
@@ -171,9 +270,8 @@ class RateSourceSuite extends StreamTest {
           .start()
           .awaitTermination()
       }
-      assert(e.getCause.isInstanceOf[IllegalArgumentException])
       for (msg <- expectedMessages) {
-        assert(e.getCause.getMessage.contains(msg))
+        assert(e.getMessage.contains(msg))
       }
     }
 
@@ -190,5 +288,47 @@ class RateSourceSuite extends StreamTest {
     }
     assert(exception.getMessage.contains(
       "rate source does not support a user-specified schema"))
+  }
+
+  test("continuous in registry") {
+    DataSource.lookupDataSource("rate", spark.sqlContext.conf).newInstance() match {
+      case ds: ContinuousReadSupport =>
+        val reader = ds.createContinuousReader(Optional.empty(), "", DataSourceOptions.empty())
+        assert(reader.isInstanceOf[RateStreamContinuousReader])
+      case _ =>
+        throw new IllegalStateException("Could not find read support for continuous rate")
+    }
+  }
+
+  test("continuous data") {
+    val reader = new RateStreamContinuousReader(
+      new DataSourceOptions(Map("numPartitions" -> "2", "rowsPerSecond" -> "20").asJava))
+    reader.setStartOffset(Optional.empty())
+    val tasks = reader.createDataReaderFactories()
+    assert(tasks.size == 2)
+
+    val data = scala.collection.mutable.ListBuffer[Row]()
+    tasks.asScala.foreach {
+      case t: RateStreamContinuousDataReaderFactory =>
+        val startTimeMs = reader.getStartOffset()
+          .asInstanceOf[RateStreamOffset]
+          .partitionToValueAndRunTimeMs(t.partitionIndex)
+          .runTimeMs
+        val r = t.createDataReader().asInstanceOf[RateStreamContinuousDataReader]
+        for (rowIndex <- 0 to 9) {
+          r.next()
+          data.append(r.get())
+          assert(r.getOffset() ==
+            RateStreamPartitionOffset(
+              t.partitionIndex,
+              t.partitionIndex + rowIndex * 2,
+              startTimeMs + (rowIndex + 1) * 100))
+        }
+        assert(System.currentTimeMillis() >= startTimeMs + 1000)
+
+      case _ => throw new IllegalStateException("Unexpected task type")
+    }
+
+    assert(data.map(_.getLong(1)).toSeq.sorted == Range(0, 20))
   }
 }
