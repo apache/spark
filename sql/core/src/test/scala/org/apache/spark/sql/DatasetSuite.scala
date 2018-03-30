@@ -1425,6 +1425,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-23705: Handle non-distinct columns in groupBy") {
+    val kvDataset = ((1 to 3) ++ (1 to 4)).toDF("id")
+    val data = Row(1, 2) :: Row(2, 2) :: Row(3, 2) :: Row(4, 1) :: Nil
+    checkAnswer(kvDataset.groupBy("id", "id").count, data)
+    checkAnswer(kvDataset.groupBy($"id", $"id").count, data)
+  }
+
   test("SPARK-22472: add null check for top-level primitive values") {
     // If the primitive values are from Option, we need to do runtime null check.
     val ds = Seq(Some(1), None).toDS().as[Int]
