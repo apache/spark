@@ -26,7 +26,7 @@ import org.apache.spark.mllib.tree.model.{ImpurityStats, InformationGainStats =>
 /**
  * Decision tree node interface.
  */
-sealed abstract class Node extends Serializable {
+sealed trait Node extends Serializable {
 
   // TODO: Add aggregate stats (once available).  This will happen after we move the DecisionTree
   //       code into the new API and deprecate the old API.  SPARK-3727
@@ -86,7 +86,9 @@ private[ml] object Node {
   /**
    * Create a new Node from the old Node format, recursively creating child nodes as needed.
    */
-  def fromOld(oldNode: OldNode, categoricalFeatures: Map[Int, Int],
+  def fromOld(
+    oldNode: OldNode,
+    categoricalFeatures: Map[Int, Int],
     isClassification: Boolean): Node = {
     if (oldNode.isLeaf) {
       // TODO: Once the implementation has been moved to this API, then include sufficient
@@ -129,13 +131,13 @@ private[ml] object Node {
 trait ClassificationNode extends Node {
 
   /**
-   * Get count for specified label in this node
+   * Get count of training examples for specified label in this node
    * @param label label number in the range [0, numClasses)
    */
   @Since("2.4.0")
   def getLabelCount(label: Int): Double = {
     require(label >= 0 && label < impurityStats.stats.length,
-      "label should be in the rangle between 0 (inclusive) " +
+      "label should be in the range between 0 (inclusive) " +
       s"and ${impurityStats.stats.length} (exclusive).")
     impurityStats.stats(label)
   }
@@ -144,15 +146,15 @@ trait ClassificationNode extends Node {
 @Since("2.4.0")
 trait RegressionNode extends Node {
 
-  /** Number of data points in this node */
+  /** Number of training data points in this node */
   @Since("2.4.0")
   def getCount: Double = impurityStats.stats(0)
 
-  /** Sum of data points labels in this node */
+  /** Sum over training data points of the labels in this node */
   @Since("2.4.0")
   def getSum: Double = impurityStats.stats(1)
 
-  /** Sum of data points label squares in this node */
+  /** Sum over training data points of the square of the labels in this node */
   @Since("2.4.0")
   def getSumOfSquares: Double = impurityStats.stats(2)
 }
@@ -163,7 +165,6 @@ trait LeafNode extends Node {
   /** Prediction this node makes. */
   def prediction: Double
 
-  /** Impurity measure at this node (for training data) */
   def impurity: Double
 
   override def toString: String =
