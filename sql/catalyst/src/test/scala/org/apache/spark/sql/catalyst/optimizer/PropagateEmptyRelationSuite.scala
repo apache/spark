@@ -112,7 +112,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       val query = testRelation1
         .where(left)
         .join(testRelation2.where(right), joinType = jt, condition = Some('a.attr == 'b.attr))
-      val optimized = Optimize.execute(query.analyze).analyze
+      val optimized = Optimize.execute(query.analyze)
       val correctAnswer =
         answer.getOrElse(OptimizeWithoutPropagateEmptyRelation.execute(query.analyze))
       comparePlans(optimized, correctAnswer)
