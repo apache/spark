@@ -40,8 +40,6 @@ import org.apache.spark.util.RedirectThread
  * subprocess and then has it connect back to the JVM to access system properties etc.
  */
 object RRunner extends CondaRunner with Logging {
-  val sparkRBackend = new RBackend()
-
   override def run(args: Array[String], maybeConda: Option[CondaEnvironment]): Unit = {
     val rFile = PythonRunner.formatPath(args(0))
 
@@ -86,6 +84,7 @@ object RRunner extends CondaRunner with Logging {
 
     // Launch a SparkR backend server for the R process to connect to; this will let it see our
     // Java system properties etc.
+    val sparkRBackend = new RBackend()
     @volatile var sparkRBackendPort = 0
     val initialized = new Semaphore(0)
     val sparkRBackendThread = new Thread("SparkR backend") {
