@@ -450,8 +450,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
         // This can often catch hard to debug errors when developing stateful operators
         val executedPlan = currentStream.lastExecution.executedPlan
         executedPlan.collect { case s: StatefulOperator => s }.foreach { s =>
-          assert(s.stateInfo.isDefined)
-          assert(s.stateInfo.get.numPartitions >= 1)
+          assert(
+            s.stateInfo.map(_.numPartitions).contains(currentStream.lastExecution.numStateStores))
 
           s.requiredChildDistribution.foreach { d =>
             withClue(s"$s specifies incorrect # partitions in requiredChildDistribution $d") {
