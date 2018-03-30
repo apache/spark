@@ -445,14 +445,12 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
         }
       }
 
-      if (currentStream.isInstanceOf[MicroBatchExecution]) {
+      val lastExecution = currentStream.lastExecution
+      if (currentStream.isInstanceOf[MicroBatchExecution] && lastExecution != null) {
         // Verify if stateful operators have correct metadata and distribution
         // This can often catch hard to debug errors when developing stateful operators
-        val executedPlan = currentStream.lastExecution.executedPlan
-        executedPlan.collect { case s: StatefulOperator => s }.foreach { s =>
-          assert(
-            s.stateInfo.map(_.numPartitions).contains(currentStream.lastExecution.numStateStores))
-
+        lastExecution.executedPlan.collect { case s: StatefulOperator => s }.foreach { s =>
+          assert(s.stateInfo.map(_.numPartitions).contains(lastExecution.numStateStores))
           s.requiredChildDistribution.foreach { d =>
             withClue(s"$s specifies incorrect # partitions in requiredChildDistribution $d") {
               assert(d.requiredNumPartitions.isDefined)
