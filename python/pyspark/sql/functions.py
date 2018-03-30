@@ -2208,9 +2208,9 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     1. SCALAR
 
        A scalar UDF defines a transformation: One or more `pandas.Series` -> A `pandas.Series`.
-       The returnType should be a primitive data type, e.g., :class:`DoubleType` or
-       arrays of a primitive data type (e.g. :class:`ArrayType`).
        The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
+
+       :class:`MapType`, :class:`StructType`, and nested :class:`ArrayType` are currently not supported as output types.
 
        Scalar UDFs are used with :meth:`pyspark.sql.DataFrame.withColumn` and
        :meth:`pyspark.sql.DataFrame.select`.
