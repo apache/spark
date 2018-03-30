@@ -58,6 +58,16 @@ class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(SparkSession.getActiveSession == Some(session))
   }
 
+  test("get active or default session") {
+    val session = SparkSession.builder().master("local").getOrCreate()
+    assert(SparkSession.active == session)
+    SparkSession.clearActiveSession()
+    assert(SparkSession.active == session)
+    SparkSession.clearDefaultSession()
+    intercept[IllegalStateException](SparkSession.active)
+    session.stop()
+  }
+
   test("config options are propagated to existing SparkSession") {
     val session1 = SparkSession.builder().master("local").config("spark-config1", "a").getOrCreate()
     assert(session1.conf.get("spark-config1") == "a")
