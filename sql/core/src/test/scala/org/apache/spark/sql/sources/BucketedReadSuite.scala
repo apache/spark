@@ -52,6 +52,11 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     s <- Seq(null, "a", "b", "c", "d", "e", "f", null, "g")
   } yield (i % 5, s, i % 13)).toDF("i", "j", "k")
 
+  // number of buckets that doesn't yield empty buckets when bucketing on column j on df/nullDF
+  // empty buckets before filtering might hide bugs in pruning logic
+  private val NumBucketsForPruningDF = 7
+  private val NumBucketsForPruningNullDf = 5
+
   test("read bucketed data") {
     withTable("bucketed_table") {
       df.write
@@ -117,7 +122,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         }.collect()
 
         if (invalidBuckets.nonEmpty) {
-          fail(s"Buckets $invalidBuckets should have been pruned from:\n$plan")
+          fail(s"Buckets ${invalidBuckets.mkString(",")} should have been pruned from:\n$plan")
         }
       }
 
@@ -129,7 +134,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
   test("read partitioning bucketed tables with bucket pruning filters") {
     withTable("bucketed_table") {
-      val numBuckets = 8
+      val numBuckets = NumBucketsForPruningDF
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
       // json does not support predicate push-down, and thus json is used here
       df.write
@@ -165,7 +170,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
   test("read non-partitioning bucketed tables with bucket pruning filters") {
     withTable("bucketed_table") {
-      val numBuckets = 8
+      val numBuckets = NumBucketsForPruningDF
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
       // json does not support predicate push-down, and thus json is used here
       df.write
@@ -185,7 +190,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
   test("read partitioning bucketed tables having null in bucketing key") {
     withTable("bucketed_table") {
-      val numBuckets = 8
+      val numBuckets = NumBucketsForPruningNullDf
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
       // json does not support predicate push-down, and thus json is used here
       nullDF.write
@@ -212,7 +217,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
   test("read partitioning bucketed tables having composite filters") {
     withTable("bucketed_table") {
-      val numBuckets = 8
+      val numBuckets = NumBucketsForPruningDF
       val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
       // json does not support predicate push-down, and thus json is used here
       df.write
@@ -255,6 +260,40 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
           filterCondition = ($"i" === 0 || $"k" > $"j") && $"j" === j,
           df)
       }
+    }
+  }
+
+  test("read bucketed table without filters") {
+    withTable("bucketed_table") {
+      val numBuckets = NumBucketsForPruningDF
+      val bucketSpec = BucketSpec(numBuckets, Seq("j"), Nil)
+      // json does not support predicate push-down, and thus json is used here
+      df.write
+        .format("json")
+        .bucketBy(numBuckets, "j")
+        .saveAsTable("bucketed_table")
+
+      val bucketedDataFrame = spark.table("bucketed_table").select("i", "j", "k")
+      val plan = bucketedDataFrame.queryExecution.executedPlan
+      val rdd = plan.find(_.isInstanceOf[DataSourceScanExec])
+      assert(rdd.isDefined, plan)
+
+      val emptyBuckets = rdd.get.execute().mapPartitionsWithIndex { case (index, iter) =>
+        // return indexes of empty partitions
+        if (iter.isEmpty) {
+          Iterator(index)
+        } else {
+          Iterator()
+        }
+      }.collect()
+
+      if (emptyBuckets.nonEmpty) {
+        fail(s"Buckets ${emptyBuckets.mkString(",")} should not have been pruned from:\n$plan")
+      }
+
+      checkAnswer(
+        bucketedDataFrame.orderBy("i", "j", "k"),
+        df.orderBy("i", "j", "k"))
     }
   }
 
