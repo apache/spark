@@ -18,7 +18,6 @@
 package org.apache.spark.ml.util
 
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicLong
 
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -57,11 +56,23 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   }
 
   /**
-   * Logs a message with a prefix that uniquely identifies the training session.
+   * Logs a warning message with a prefix that uniquely identifies the training session.
    */
-  def log(msg: String): Unit = {
-    logInfo(prefix + msg)
+  override def logWarning(msg: => String): Unit = {
+    super.logWarning(prefix + msg)
   }
+
+  /**
+   * Logs an info message with a prefix that uniquely identifies the training session.
+   */
+  override def logInfo(msg: => String): Unit = {
+    super.logInfo(prefix + msg)
+  }
+
+  /**
+   * Alias for logInfo, see above.
+   */
+  def log(msg: String): Unit = logInfo(msg)
 
   /**
    * Logs the value of the given parameters for the estimator being used in this session.

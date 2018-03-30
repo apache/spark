@@ -518,11 +518,8 @@ class LogisticRegression @Since("1.2.0") (
       )(seqOp, combOp, $(aggregationDepth))
     }
     instr.logNamedValue(Instrumentation.loggerTags.numExamples, summarizer.count)
-    if (labelSummarizer.numClasses == 2) {
-      val b = labelSummarizer.histogram(0) / summarizer.count
-      instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
-      instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.min.toString)
-    }
+    instr.logNamedValue("lowestLabelWeight", labelSummarizer.histogram.min.toString)
+    instr.logNamedValue("highestLabelWeight", labelSummarizer.histogram.min.toString)
 
     val histogram = labelSummarizer.histogram
     val numInvalid = labelSummarizer.countInvalid
@@ -573,8 +570,8 @@ class LogisticRegression @Since("1.2.0") (
       val isConstantLabel = histogram.count(_ != 0.0) == 1
 
       if ($(fitIntercept) && isConstantLabel && !usingBoundConstrainedOptimization) {
-        logWarning(s"All labels are the same value and fitIntercept=true, so the coefficients " +
-          s"will be zeros. Training is not needed.")
+        instr.logWarning(s"All labels are the same value and fitIntercept=true, so the " +
+          s"coefficients will be zeros. Training is not needed.")
         val constantLabelIndex = Vectors.dense(histogram).argmax
         val coefMatrix = new SparseMatrix(numCoefficientSets, numFeatures,
           new Array[Int](numCoefficientSets + 1), Array.empty[Int], Array.empty[Double],
@@ -587,7 +584,7 @@ class LogisticRegression @Since("1.2.0") (
         (coefMatrix, interceptVec, Array.empty[Double])
       } else {
         if (!$(fitIntercept) && isConstantLabel) {
-          logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
+          instr.logWarning(s"All labels belong to a single class and fitIntercept=false. It's a " +
             s"dangerous ground, so the algorithm may not converge.")
         }
 
@@ -596,7 +593,7 @@ class LogisticRegression @Since("1.2.0") (
 
         if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
           featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
-          logWarning("Fitting LogisticRegressionModel without intercept on dataset with " +
+          instr.logWarning("Fitting LogisticRegressionModel without intercept on dataset with " +
             "constant nonzero column, Spark MLlib outputs zero coefficients for constant " +
             "nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.")
         }
@@ -714,7 +711,7 @@ class LogisticRegression @Since("1.2.0") (
               (_initialModel.interceptVector.size == numCoefficientSets) &&
               (_initialModel.getFitIntercept == $(fitIntercept))
             if (!modelIsValid) {
-              logWarning(s"Initial coefficients will be ignored! Its dimensions " +
+              instr.logWarning(s"Initial coefficients will be ignored! Its dimensions " +
                 s"(${providedCoefs.numRows}, ${providedCoefs.numCols}) did not match the " +
                 s"expected size ($numCoefficientSets, $numFeatures)")
             }
