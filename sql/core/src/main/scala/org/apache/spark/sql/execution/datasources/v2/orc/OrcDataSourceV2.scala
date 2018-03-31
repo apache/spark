@@ -185,10 +185,10 @@ case class OrcDataReaderFactoryConf(
 
 object OrcDataSourceV2 {
   def satisfy(sparkSession: SparkSession, source: String, paths: Seq[String]): Option[String] = {
-    val enabledV2Readers = sparkSession.sqlContext.conf.enabledV2DataSourceReader.split(",")
+    val disabledV2Readers = sparkSession.sqlContext.conf.disabledV2DataSourceReader.split(",")
     val isNative = sparkSession.sqlContext.conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native"
     if (source.toLowerCase(Locale.ROOT) == "orc" && isNative &&
-      enabledV2Readers.contains(source) && paths.length == 1) {
+      !disabledV2Readers.contains(source) && paths.length == 1) {
       Some("org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2")
     } else {
       None

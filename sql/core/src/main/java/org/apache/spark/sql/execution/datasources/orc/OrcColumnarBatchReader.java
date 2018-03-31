@@ -66,7 +66,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
    * The column IDs of the ORC file partition schema which are required by this reader.
    * -1 means this required column doesn't exist in the ORC partition columns.
    */
-  private int[] requestedPartitionColds;
+  private int[] requestedPartitionColIds;
 
   // Record reader from ORC row batch.
   private org.apache.orc.RecordReader recordReader;
@@ -149,6 +149,12 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
   /**
    * Initialize columnar batch by setting required schema and partition information.
    * With this information, this creates ColumnarBatch with the full schema.
+   *
+   * @param orcSchema Schema from ORC file reader.
+   * @param requiredFields All the fields that are required to return, including partition fields.
+   * @param requestedColIds Requested column ids from orcSchema. -1 if not existed.
+   * @param requestedPartitionColIds Requested column ids from  partition schema. -1 if not existed.
+   * @param partitionValues Values of partition columns.
    */
   public void initBatch(
       TypeDescription orcSchema,
@@ -160,7 +166,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
     assert(!batch.selectedInUse); // `selectedInUse` should be initialized with `false`.
     this.requiredFields = requiredFields;
     this.requestedColIds = requestedColIds;
-    this.requestedPartitionColds =  requestedPartitionColIds;
+    this.requestedPartitionColIds =  requestedPartitionColIds;
     assert(requiredFields.length == requestedColIds.length);
     assert(requiredFields.length == requestedPartitionColIds.length);
 
@@ -172,7 +178,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         columnVectors = OnHeapColumnVector.allocateColumns(capacity, resultSchema);
       }
 
-      // Initialize the missing columns once.
+      // Initialize the missing columns and partition columns once.
       for (int i = 0; i < requiredFields.length; i++) {
         if (requestedPartitionColIds[i] != -1) {
           ColumnVectorUtils.populate(columnVectors[i],
@@ -228,7 +234,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
     if (!copyToSpark) {
       for (int i = 0; i < requiredFields.length; i++) {
-        if (requestedColIds[i] != -1 && requestedPartitionColds[i] == -1) {
+        if (requestedColIds[i] != -1 && requestedPartitionColIds[i] == -1) {
           ((OrcColumnVector) orcVectorWrappers[i]).setBatchSize(batchSize);
         }
       }
