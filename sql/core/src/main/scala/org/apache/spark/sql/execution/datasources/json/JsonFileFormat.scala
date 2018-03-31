@@ -153,16 +153,13 @@ private[json] class JsonOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
 
-  private val charset = options.encoding match {
+  private val encoding = options.encoding match {
     case Some(charsetName) => Charset.forName(charsetName)
     case _ => StandardCharsets.UTF_8
   }
 
   private val writer = CodecStreams.createOutputStreamWriter(
-    context,
-    new Path(path),
-    charset
-  )
+    context, new Path(path), encoding)
 
   // create the Generator without separator inserted between 2 records
   private[this] val gen = new JacksonGenerator(dataSchema, writer, options)

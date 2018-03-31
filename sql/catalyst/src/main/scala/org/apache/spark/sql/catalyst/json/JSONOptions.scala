@@ -96,8 +96,9 @@ private[sql] class JSONOptions(
    */
   val encoding: Option[String] = parameters.get("encoding")
     .orElse(parameters.get("charset")).map { enc =>
-      val blacklist = List("UTF-16", "UTF-32")
-      require(!(multiLine == false && blacklist.contains(enc)),
+      val blacklist = List("UTF16", "UTF32")
+      val isBlacklisted = blacklist.contains(enc.toUpperCase.replaceAll("-|_", ""))
+      require(multiLine || !isBlacklisted,
         s"""The ${enc} encoding must not be included in the blacklist:
            | ${blacklist.mkString(", ")}""".stripMargin)
 

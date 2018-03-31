@@ -2065,6 +2065,69 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
+  def testLineSeparator(lineSep: String): Unit = {
+    test(s"SPARK-21289: Support line separator - lineSep: '$lineSep'") {
+      // Read
+      val data =
+        s"""
+           |  {"f":
+           |"a", "f0": 1}$lineSep{"f":
+           |
+          |"c",  "f0": 2}$lineSep{"f": "d",  "f0": 3}
+        """.stripMargin
+      val dataWithTrailingLineSep = s"$data$lineSep"
+
+      Seq(data, dataWithTrailingLineSep).foreach { lines =>
+        withTempPath { path =>
+          Files.write(path.toPath, lines.getBytes(StandardCharsets.UTF_8))
+          val df = spark.read.option("lineSep", lineSep).json(path.getAbsolutePath)
+          val expectedSchema =
+            StructType(StructField("f", StringType) :: StructField("f0", LongType) :: Nil)
+          checkAnswer(df, Seq(("a", 1), ("c", 2), ("d", 3)).toDF())
+          assert(df.schema === expectedSchema)
+        }
+      }
+
+      // Write
+      withTempPath { path =>
+        Seq("a", "b", "c").toDF("value").coalesce(1)
+          .write.option("lineSep", lineSep).json(path.getAbsolutePath)
+        val partFile = TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
+        val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
+        assert(
+          readBack === s"""{"value":"a"}$lineSep{"value":"b"}$lineSep{"value":"c"}$lineSep""")
+      }
+
+      // Roundtrip
+      withTempPath { path =>
+        val df = Seq("a", "b", "c").toDF()
+        df.write.option("lineSep", lineSep).json(path.getAbsolutePath)
+        val readBack = spark.read.option("lineSep", lineSep).json(path.getAbsolutePath)
+        checkAnswer(df, readBack)
+      }
+    }
+  }
+
+  // scalastyle:off nonascii
+  Seq("|", "^", "::", "!!!@3", 0x1E.toChar.toString, "아").foreach { lineSep =>
+    testLineSeparator(lineSep)
+  }
+  // scalastyle:on nonascii
+
+  test("""SPARK-21289: Support line separator - default value \r, \r\n and \n""") {
+    val data =
+      "{\"f\": \"a\", \"f0\": 1}\r{\"f\": \"c\",  \"f0\": 2}\r\n{\"f\": \"d\",  \"f0\": 3}\n"
+
+    withTempPath { path =>
+      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
+      val df = spark.read.json(path.getAbsolutePath)
+      val expectedSchema =
+        StructType(StructField("f", StringType) :: StructField("f0", LongType) :: Nil)
+      checkAnswer(df, Seq(("a", 1), ("c", 2), ("d", 3)).toDF())
+      assert(df.schema === expectedSchema)
+    }
+  }
+
   def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
   }
@@ -2290,34 +2353,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   ).zipWithIndex.foreach{case ((d, o, c, s), i) => checkReadJson(d, o, c, s, i)}
   // scalastyle:on nonascii
 
-  def testLineSeparator(lineSep: String): Unit = {
-    test(s"SPARK-23724: Support line separator - lineSep: '$lineSep'") {
-      // Write
-      withTempPath { path =>
-        Seq("a", "b", "c").toDF("value").coalesce(1)
-          .write.option("lineSep", lineSep).json(path.getAbsolutePath)
-        val partFile = TestUtils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
-        val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
-        assert(
-          readBack === s"""{"value":"a"}$lineSep{"value":"b"}$lineSep{"value":"c"}$lineSep""")
-      }
-
-      // Roundtrip
-      withTempPath { path =>
-        val df = Seq("a", "b", "c").toDF()
-        df.write.option("lineSep", lineSep).json(path.getAbsolutePath)
-        val readBack = spark.read.option("lineSep", lineSep).json(path.getAbsolutePath)
-        checkAnswer(df, readBack)
-      }
-    }
-  }
-
-  // scalastyle:off nonascii
-  Seq("|", "^", "::", "!!!@3", 0x1E.toChar.toString, "아").foreach { lineSep =>
-    testLineSeparator(lineSep)
-  }
-  // scalastyle:on nonascii
-
   test("SPARK-23724: lineSep should be set if encoding if different from UTF-8") {
     val encoding = "UTF-16LE"
     val exception = intercept[IllegalArgumentException] {
@@ -2330,19 +2365,5 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(exception.getMessage.contains(
       s"""The lineSep option must be specified for the $encoding encoding"""
     ))
-  }
-
-  test("""SPARK-21289: Support line separator - default value \r, \r\n and \n""") {
-    val data =
-      "{\"f\": \"a\", \"f0\": 1}\r{\"f\": \"c\",  \"f0\": 2}\r\n{\"f\": \"d\",  \"f0\": 3}\n"
-
-    withTempPath { path =>
-      Files.write(path.toPath, data.getBytes(StandardCharsets.UTF_8))
-      val df = spark.read.json(path.getAbsolutePath)
-      val expectedSchema =
-        StructType(StructField("f", StringType) :: StructField("f0", LongType) :: Nil)
-      checkAnswer(df, Seq(("a", 1), ("c", 2), ("d", 3)).toDF())
-      assert(df.schema === expectedSchema)
-    }
   }
 }
