@@ -151,10 +151,10 @@ class CSVOptions(
   val isCommentSet = this.comment != '\u0000'
 
   /**
-   * The option enables checks of headers in csv files. In particular, column names
-   * are matched to field names of provided schema.
+   * Forcibly apply the specified or inferred schema to datasource files.
+   * If the option is enabled, headers of CSV files will be ignored.
    */
-  val checkHeader = getBool("checkHeader", true)
+  val enforceSchema = getBool("enforceSchema", true)
 
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()

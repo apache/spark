@@ -252,11 +252,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           |(yearMade double, makeName string, modelName string, priceTag decimal,
           | comments string, grp string)
           |USING csv
-          |OPTIONS (
-          |  path "${testFile(carsTsvFile)}",
-          |  header "true", checkHeader "false",
-          |   delimiter "\t"
-          |)
+          |OPTIONS (path "${testFile(carsTsvFile)}", header "true", delimiter "\t")
          """.stripMargin.replaceAll("\n", " "))
 
       assert(
@@ -279,7 +275,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   test("test for blank column names on read and select columns") {
     val cars = spark.read
       .format("csv")
-      .options(Map("header" -> "true", "checkHeader" -> "false", "inferSchema" -> "true"))
+      .options(Map("header" -> "true", "inferSchema" -> "true"))
       .load(testFile(carsBlankColName))
 
     assert(cars.select("customer").collect().size == 2)
@@ -352,7 +348,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       spark.sql(
         s"""
           |CREATE TEMPORARY VIEW carsTable
-          |(year double, make string, model string, comment string, blank string)
+          |(yearMade double, makeName string, modelName string, comments string, blank string)
           |USING csv
           |OPTIONS (path "${testFile(carsFile)}", header "true")
          """.stripMargin.replaceAll("\n", " "))
@@ -360,7 +356,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       val cars = spark.table("carsTable")
       verifyCars(cars, withHeader = true, checkHeader = false, checkValues = false)
       assert(
-        cars.schema.fieldNames === Array("year", "make", "model", "comment", "blank"))
+        cars.schema.fieldNames === Array("yearMade", "makeName", "modelName", "comments", "blank"))
     }
   }
 
@@ -1297,7 +1293,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
             .schema(ischema)
             .option("multiLine", multiLine)
             .option("header", "true")
-            .option("checkHeader", "true")
+            .option("enforceSchema", "false")
             .csv(path.getCanonicalPath)
             .collect()
         }
@@ -1311,7 +1307,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
             .schema(shortSchema)
             .option("multiLine", multiLine)
             .option("header", "true")
-            .option("checkHeader", "true")
+            .option("enforceSchema", "false")
             .csv(path.getCanonicalPath)
             .collect()
         }
@@ -1329,7 +1325,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
             .schema(longSchema)
             .option("multiLine", multiLine)
             .option("header", "true")
-            .option("checkHeader", "true")
+            .option("enforceSchema", "false")
             .csv(path.getCanonicalPath)
             .collect()
         }

@@ -201,8 +201,8 @@ object TextInputCSVDataSource extends CSVDataSource {
       // Note: if there are only comments in the first block, the header would probably
       // be not extracted.
       CSVUtils.extractHeader(lines, parser.options).foreach { header =>
-        CSVDataSource.checkHeader(header, parser.tokenizer, dataSchema,
-          file.filePath, parser.options.checkHeader)
+        CSVDataSource.checkHeader(header, parser.tokenizer, dataSchema, file.filePath,
+          checkHeaderFlag = !parser.options.enforceSchema)
       }
     }
 
@@ -277,7 +277,7 @@ object MultiLineCSVDataSource extends CSVDataSource {
       dataSchema: StructType): Iterator[InternalRow] = {
     def checkHeader(header: Array[String]): Unit = {
       CSVDataSource.checkHeaderColumnNames(dataSchema, header, file.filePath,
-        parser.options.checkHeader
+        checkHeaderFlag = !parser.options.enforceSchema
       )
     }
 
