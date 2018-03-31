@@ -111,8 +111,13 @@ private[spark] class BlockStoreShuffleReader[K, C](
       case None =>
         aggregatedIter
     }
-    // Use another interruptible iterator here to support task cancellation as aggregator or(and)
-    // sorter may have consumed previous interruptible iterator.
-    new InterruptibleIterator[Product2[K, C]](context, resultIter)
+
+    resultIter match {
+      case _: InterruptibleIterator[Product2[K, C]] => resultIter
+      case _ =>
+        // Use another interruptible iterator here to support task cancellation as aggregator
+        // or(and) sorter may have consumed previous interruptible iterator.
+        new InterruptibleIterator[Product2[K, C]](context, resultIter)
+    }
   }
 }
