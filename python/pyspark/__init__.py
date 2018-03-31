@@ -54,6 +54,7 @@ from pyspark.status import *
 from pyspark.taskcontext import TaskContext
 from pyspark.profiler import Profiler, BasicProfiler
 from pyspark.version import __version__
+from pyspark._globals import _NoValue
 
 
 def since(version):

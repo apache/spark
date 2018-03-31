@@ -17,6 +17,7 @@
 
 package org.apache.spark.launcher;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,6 +31,7 @@ import static org.junit.Assume.*;
 import static org.mockito.Mockito.*;
 
 import org.apache.spark.SparkContext;
+import org.apache.spark.SparkContext$;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.util.Utils;
 
@@ -133,6 +135,12 @@ public class SparkLauncherSuite extends BaseSuite {
         p.put(e.getKey(), e.getValue());
       }
       System.setProperties(p);
+      // Here DAGScheduler is stopped, while SparkContext.clearActiveContext may not be called yet.
+      // Wait for a reasonable amount of time to avoid creating two active SparkContext in JVM.
+      // See SPARK-23019 and SparkContext.stop() for details.
+      eventually(Duration.ofSeconds(5), Duration.ofMillis(10), () -> {
+        assertTrue("SparkContext is still alive.", SparkContext$.MODULE$.getActive().isEmpty());
+      });
     }
   }
 
@@ -141,26 +149,47 @@ public class SparkLauncherSuite extends BaseSuite {
     SparkAppHandle.Listener listener = mock(SparkAppHandle.Listener.class);
     doAnswer(invocation -> {
       SparkAppHandle h = (SparkAppHandle) invocation.getArguments()[0];
-      transitions.add(h.getState());
+      synchronized (transitions) {
+        transitions.add(h.getState());
+      }
       return null;
     }).when(listener).stateChanged(any(SparkAppHandle.class));
 
-    SparkAppHandle handle = new InProcessLauncher()
-      .setMaster("local")
-      .setAppResource(SparkLauncher.NO_RESOURCE)
-      .setMainClass(InProcessTestApp.class.getName())
-      .addAppArgs("hello")
-      .startApplication(listener);
+    SparkAppHandle handle = null;
+    try {
+      synchronized (InProcessTestApp.LOCK) {
+        handle = new InProcessLauncher()
+          .setMaster("local")
+          .setAppResource(SparkLauncher.NO_RESOURCE)
+          .setMainClass(InProcessTestApp.class.getName())
+          .addAppArgs("hello")
+          .startApplication(listener);
 
-    waitFor(handle);
-    assertEquals(SparkAppHandle.State.FINISHED, handle.getState());
+        // SPARK-23020: see doc for InProcessTestApp.LOCK for a description of the race. Here
+        // we wait until we know that the connection between the app and the launcher has been
+        // established before allowing the app to finish.
+        final SparkAppHandle _handle = handle;
+        eventually(Duration.ofSeconds(5), Duration.ofMillis(10), () -> {
+          assertNotEquals(SparkAppHandle.State.UNKNOWN, _handle.getState());
+        });
 
-    // Matches the behavior of LocalSchedulerBackend.
-    List<SparkAppHandle.State> expected = Arrays.asList(
-      SparkAppHandle.State.CONNECTED,
-      SparkAppHandle.State.RUNNING,
-      SparkAppHandle.State.FINISHED);
-    assertEquals(expected, transitions);
+        InProcessTestApp.LOCK.wait(5000);
+      }
+
+      waitFor(handle);
+      assertEquals(SparkAppHandle.State.FINISHED, handle.getState());
+
+      // Matches the behavior of LocalSchedulerBackend.
+      List<SparkAppHandle.State> expected = Arrays.asList(
+        SparkAppHandle.State.CONNECTED,
+        SparkAppHandle.State.RUNNING,
+        SparkAppHandle.State.FINISHED);
+      assertEquals(expected, transitions);
+    } finally {
+      if (handle != null) {
+        handle.kill();
+      }
+    }
   }
 
   public static class SparkLauncherTestApp {
@@ -176,10 +205,26 @@ public class SparkLauncherSuite extends BaseSuite {
 
   public static class InProcessTestApp {
 
+    /**
+     * SPARK-23020: there's a race caused by a child app finishing too quickly. This would cause
+     * the InProcessAppHandle to dispose of itself even before the child connection was properly
+     * established, so no state changes would be detected for the application and its final
+     * state would be LOST.
+     *
+     * It's not really possible to fix that race safely in the handle code itself without changing
+     * the way in-process apps talk to the launcher library, so we work around that in the test by
+     * synchronizing on this object.
+     */
+    public static final Object LOCK = new Object();
+
     public static void main(String[] args) throws Exception {
       assertNotEquals(0, args.length);
       assertEquals(args[0], "hello");
       new SparkContext().stop();
+
+      synchronized (LOCK) {
+        LOCK.notifyAll();
+      }
     }
 
   }

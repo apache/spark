@@ -756,7 +756,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // exceptional cases
     intercept[java.util.regex.PatternSyntaxException] {
-      evaluate(ParseUrl(Seq(Literal("http://spark.apache.org/path?"),
+      evaluateWithoutCodegen(ParseUrl(Seq(Literal("http://spark.apache.org/path?"),
         Literal("QUERY"), Literal("???"))))
     }
 

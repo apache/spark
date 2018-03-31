@@ -282,10 +282,10 @@ trait HasOutputCols extends Params {
 trait HasCheckpointInterval extends Params {
 
   /**
-   * Param for set checkpoint interval (&gt;= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.
+   * Param for set checkpoint interval (&gt;= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext.
    * @group param
    */
-  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations", (interval: Int) => interval == -1 || interval >= 1)
+  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations. Note: this setting will be ignored if the checkpoint directory is not set in the SparkContext", (interval: Int) => interval == -1 || interval >= 1)
 
   /** @group getParam */
   final def getCheckpointInterval: Int = $(checkpointInterval)
@@ -503,5 +503,24 @@ trait HasLoss extends Params {
 
   /** @group getParam */
   final def getLoss: String = $(loss)
+}
+
+/**
+ * Trait for shared param distanceMeasure (default: org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN). This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasDistanceMeasure extends Params {
+
+  /**
+   * Param for The distance measure. Supported options: 'euclidean' and 'cosine'.
+   * @group param
+   */
+  final val distanceMeasure: Param[String] = new Param[String](this, "distanceMeasure", "The distance measure. Supported options: 'euclidean' and 'cosine'", (value: String) => org.apache.spark.mllib.clustering.DistanceMeasure.validateDistanceMeasure(value))
+
+  setDefault(distanceMeasure, org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN)
+
+  /** @group getParam */
+  final def getDistanceMeasure: String = $(distanceMeasure)
 }
 // scalastyle:on

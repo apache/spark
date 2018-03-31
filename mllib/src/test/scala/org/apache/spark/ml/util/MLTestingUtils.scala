@@ -91,30 +91,6 @@ object MLTestingUtils extends SparkFunSuite {
     }
   }
 
-  def checkNumericTypesALS(
-      estimator: ALS,
-      spark: SparkSession,
-      column: String,
-      baseType: NumericType)
-      (check: (ALSModel, ALSModel) => Unit)
-      (check2: (ALSModel, ALSModel, DataFrame) => Unit): Unit = {
-    val dfs = genRatingsDFWithNumericCols(spark, column)
-    val expected = estimator.fit(dfs(baseType))
-    val actuals = dfs.keys.filter(_ != baseType).map(t => (t, estimator.fit(dfs(t))))
-    actuals.foreach { case (_, actual) => check(expected, actual) }
-    actuals.foreach { case (t, actual) => check2(expected, actual, dfs(t)) }
-
-    val baseDF = dfs(baseType)
-    val others = baseDF.columns.toSeq.diff(Seq(column)).map(col)
-    val cols = Seq(col(column).cast(StringType)) ++ others
-    val strDF = baseDF.select(cols: _*)
-    val thrown = intercept[IllegalArgumentException] {
-      estimator.fit(strDF)
-    }
-    assert(thrown.getMessage.contains(
-      s"$column must be of type NumericType but was actually of type StringType"))
-  }
-
   def checkNumericTypes[T <: Evaluator](evaluator: T, spark: SparkSession): Unit = {
     val dfs = genEvaluatorDFWithNumericLabelCol(spark, "label", "prediction")
     val expected = evaluator.evaluate(dfs(DoubleType))
@@ -173,26 +149,6 @@ object MLTestingUtils extends SparkFunSuite {
       t -> TreeTests.setMetadata(castDF, 0, labelColName, featuresColName)
         .withColumn(censorColName, lit(0.0))
         .withColumn(weightColName, round(rand(seed = 42)).cast(t))
-    }.toMap
-  }
-
-  def genRatingsDFWithNumericCols(
-      spark: SparkSession,
-      column: String): Map[NumericType, DataFrame] = {
-    val df = spark.createDataFrame(Seq(
-      (0, 10, 1.0),
-      (1, 20, 2.0),
-      (2, 30, 3.0),
-      (3, 40, 4.0),
-      (4, 50, 5.0)
-    )).toDF("user", "item", "rating")
-
-    val others = df.columns.toSeq.diff(Seq(column)).map(col)
-    val types: Seq[NumericType] =
-      Seq(ShortType, LongType, IntegerType, FloatType, ByteType, DoubleType, DecimalType(10, 0))
-    types.map { t =>
-      val cols = Seq(col(column).cast(t)) ++ others
-      t -> df.select(cols: _*)
     }.toMap
   }
 

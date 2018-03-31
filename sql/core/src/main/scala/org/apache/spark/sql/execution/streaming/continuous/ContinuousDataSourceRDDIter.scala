@@ -18,43 +18,45 @@
 package org.apache.spark.sql.execution.streaming.continuous
 
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceRDDPartition, RowToUnsafeDataReader}
-import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.streaming.reader.{ContinuousDataReader, PartitionOffset}
-import org.apache.spark.sql.streaming.ProcessingTime
-import org.apache.spark.util.{SystemClock, ThreadUtils}
+import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, PartitionOffset}
+import org.apache.spark.util.ThreadUtils
 
 class ContinuousDataSourceRDD(
     sc: SparkContext,
     sqlContext: SQLContext,
-    @transient private val readTasks: java.util.List[ReadTask[UnsafeRow]])
+    @transient private val readerFactories: Seq[DataReaderFactory[UnsafeRow]])
   extends RDD[UnsafeRow](sc, Nil) {
 
   private val dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize
   private val epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs
 
   override protected def getPartitions: Array[Partition] = {
-    readTasks.asScala.zipWithIndex.map {
-      case (readTask, index) => new DataSourceRDDPartition(index, readTask)
+    readerFactories.zipWithIndex.map {
+      case (readerFactory, index) => new DataSourceRDDPartition(index, readerFactory)
     }.toArray
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {
-    val reader = split.asInstanceOf[DataSourceRDDPartition].readTask.createDataReader()
+    // If attempt number isn't 0, this is a task retry, which we don't support.
+    if (context.attemptNumber() != 0) {
+      throw new ContinuousTaskRetryException()
+    }
 
-    val runId = context.getLocalProperty(ContinuousExecution.RUN_ID_KEY)
+    val reader = split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]]
+      .readerFactory.createDataReader()
+
+    val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
 
     // This queue contains two types of messages:
     // * (null, null) representing an epoch boundary.
@@ -63,7 +65,7 @@ class ContinuousDataSourceRDD(
 
     val epochPollFailed = new AtomicBoolean(false)
     val epochPollExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
-      s"epoch-poll--${runId}--${context.partitionId()}")
+      s"epoch-poll--$coordinatorId--${context.partitionId()}")
     val epochPollRunnable = new EpochPollRunnable(queue, context, epochPollFailed)
     epochPollExecutor.scheduleWithFixedDelay(
       epochPollRunnable, 0, epochPollIntervalMs, TimeUnit.MILLISECONDS)
@@ -77,12 +79,11 @@ class ContinuousDataSourceRDD(
     dataReaderThread.start()
 
     context.addTaskCompletionListener(_ => {
-      reader.close()
       dataReaderThread.interrupt()
       epochPollExecutor.shutdown()
     })
 
-    val epochEndpoint = EpochCoordinatorRef.get(runId, SparkEnv.get)
+    val epochEndpoint = EpochCoordinatorRef.get(coordinatorId, SparkEnv.get)
     new Iterator[UnsafeRow] {
       private val POLL_TIMEOUT_MS = 1000
 
@@ -132,7 +133,7 @@ class ContinuousDataSourceRDD(
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    split.asInstanceOf[DataSourceRDDPartition].readTask.preferredLocations()
+    split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]].readerFactory.preferredLocations()
   }
 }
 
@@ -146,7 +147,7 @@ class EpochPollRunnable(
   private[continuous] var failureReason: Throwable = _
 
   private val epochEndpoint = EpochCoordinatorRef.get(
-    context.getLocalProperty(ContinuousExecution.RUN_ID_KEY), SparkEnv.get)
+    context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY), SparkEnv.get)
   private var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
   override def run(): Unit = {
@@ -173,10 +174,11 @@ class DataReaderThread(
     failedFlag: AtomicBoolean)
   extends Thread(
     s"continuous-reader--${context.partitionId()}--" +
-    s"${context.getLocalProperty(ContinuousExecution.RUN_ID_KEY)}") {
+    s"${context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)}") {
   private[continuous] var failureReason: Throwable = _
 
   override def run(): Unit = {
+    TaskContext.setTaskContext(context)
     val baseReader = ContinuousDataSourceRDD.getBaseReader(reader)
     try {
       while (!context.isInterrupted && !context.isCompleted()) {
@@ -201,6 +203,8 @@ class DataReaderThread(
         failedFlag.set(true)
         // Don't rethrow the exception in this thread. It's not needed, and the default Spark
         // exception handler will kill the executor.
+    } finally {
+      reader.close()
     }
   }
 }

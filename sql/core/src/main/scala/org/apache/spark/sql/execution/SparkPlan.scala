@@ -351,8 +351,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
         if (buf.isEmpty) {
           numPartsToTry = partsScanned * limitScaleUpFactor
         } else {
-          // the left side of max is >=1 whenever partsScanned >= 2
-          numPartsToTry = Math.max((1.5 * n * partsScanned / buf.size).toInt - partsScanned, 1)
+          val left = n - buf.size
+          // As left > 0, numPartsToTry is always >= 1
+          numPartsToTry = Math.ceil(1.5 * left * partsScanned / buf.size).toInt
           numPartsToTry = Math.min(numPartsToTry, partsScanned * limitScaleUpFactor)
         }
       }

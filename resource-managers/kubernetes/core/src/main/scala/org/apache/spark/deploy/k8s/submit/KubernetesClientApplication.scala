@@ -16,14 +16,14 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+import java.io.StringWriter
 import java.util.{Collections, UUID}
-
-import scala.collection.JavaConverters._
-import scala.collection.mutable
-import scala.util.control.NonFatal
+import java.util.Properties
 
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.KubernetesClient
+import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkApplication
@@ -32,6 +32,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory
 import org.apache.spark.deploy.k8s.submit.steps.DriverConfigurationStep
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.ConfigBuilder
 import org.apache.spark.util.Utils
 
 /**
@@ -93,10 +94,8 @@ private[spark] class Client(
     kubernetesClient: KubernetesClient,
     waitForAppCompletion: Boolean,
     appName: String,
-    watcher: LoggingPodStatusWatcher) extends Logging {
-
-  private val driverJavaOptions = sparkConf.get(
-    org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS)
+    watcher: LoggingPodStatusWatcher,
+    kubernetesResourceNamePrefix: String) extends Logging {
 
    /**
     * Run command that initializes a DriverSpec that will be updated after each
@@ -110,33 +109,31 @@ private[spark] class Client(
     for (nextStep <- submissionSteps) {
       currentDriverSpec = nextStep.configureDriver(currentDriverSpec)
     }
-
-    val resolvedDriverJavaOpts = currentDriverSpec
-      .driverSparkConf
-      // Remove this as the options are instead extracted and set individually below using
-      // environment variables with prefix SPARK_JAVA_OPT_.
-      .remove(org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS)
-      .getAll
-      .map {
-        case (confKey, confValue) => s"-D$confKey=$confValue"
-      } ++ driverJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
-    val driverJavaOptsEnvs: Seq[EnvVar] = resolvedDriverJavaOpts.zipWithIndex.map {
-      case (option, index) =>
-        new EnvVarBuilder()
-          .withName(s"$ENV_JAVA_OPT_PREFIX$index")
-          .withValue(option)
-          .build()
-    }
-
+    val configMapName = s"$kubernetesResourceNamePrefix-driver-conf-map"
+    val configMap = buildConfigMap(configMapName, currentDriverSpec.driverSparkConf)
+    // The include of the ENV_VAR for "SPARK_CONF_DIR" is to allow for the
+    // Spark command builder to pickup on the Java Options present in the ConfigMap
     val resolvedDriverContainer = new ContainerBuilder(currentDriverSpec.driverContainer)
-      .addAllToEnv(driverJavaOptsEnvs.asJava)
+      .addNewEnv()
+        .withName(ENV_SPARK_CONF_DIR)
+        .withValue(SPARK_CONF_DIR_INTERNAL)
+        .endEnv()
+      .addNewVolumeMount()
+        .withName(SPARK_CONF_VOLUME)
+        .withMountPath(SPARK_CONF_DIR_INTERNAL)
+        .endVolumeMount()
       .build()
     val resolvedDriverPod = new PodBuilder(currentDriverSpec.driverPod)
       .editSpec()
         .addToContainers(resolvedDriverContainer)
+        .addNewVolume()
+          .withName(SPARK_CONF_VOLUME)
+          .withNewConfigMap()
+            .withName(configMapName)
+            .endConfigMap()
+          .endVolume()
         .endSpec()
       .build()
-
     Utils.tryWithResource(
       kubernetesClient
         .pods()
@@ -145,7 +142,8 @@ private[spark] class Client(
       val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
       try {
         if (currentDriverSpec.otherKubernetesResources.nonEmpty) {
-          val otherKubernetesResources = currentDriverSpec.otherKubernetesResources
+          val otherKubernetesResources =
+            currentDriverSpec.otherKubernetesResources ++ Seq(configMap)
           addDriverOwnerReference(createdDriverPod, otherKubernetesResources)
           kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
         }
@@ -180,6 +178,26 @@ private[spark] class Client(
       originalMetadata.setOwnerReferences(Collections.singletonList(driverPodOwnerReference))
     }
   }
+
+  // Build a Config Map that will house spark conf properties in a single file for spark-submit
+  private def buildConfigMap(configMapName: String, conf: SparkConf): ConfigMap = {
+    val properties = new Properties()
+    conf.getAll.foreach { case (k, v) =>
+      properties.setProperty(k, v)
+    }
+    val propertiesWriter = new StringWriter()
+    properties.store(propertiesWriter,
+      s"Java properties built from Kubernetes config map with name: $configMapName")
+
+    val namespace = conf.get(KUBERNETES_NAMESPACE)
+    new ConfigMapBuilder()
+      .withNewMetadata()
+        .withName(configMapName)
+        .withNamespace(namespace)
+        .endMetadata()
+      .addToData(SPARK_CONF_FILE_NAME, propertiesWriter.toString)
+      .build()
+  }
 }
 
 /**
@@ -202,6 +220,9 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     val launchTime = System.currentTimeMillis()
     val waitForAppCompletion = sparkConf.get(WAIT_FOR_APP_COMPLETION)
     val appName = sparkConf.getOption("spark.app.name").getOrElse("spark")
+    val kubernetesResourceNamePrefix = {
+      s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
+    }
     // The master URL has been checked for validity already in SparkSubmit.
     // We just need to get rid of the "k8s://" prefix here.
     val master = sparkConf.get("spark.master").substring("k8s://".length)
@@ -211,7 +232,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
 
     val orchestrator = new DriverConfigOrchestrator(
       kubernetesAppId,
-      launchTime,
+      kubernetesResourceNamePrefix,
       clientArguments.mainAppResource,
       appName,
       clientArguments.mainClass,
@@ -231,7 +252,8 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
           kubernetesClient,
           waitForAppCompletion,
           appName,
-          watcher)
+          watcher,
+          kubernetesResourceNamePrefix)
         client.run()
     }
   }

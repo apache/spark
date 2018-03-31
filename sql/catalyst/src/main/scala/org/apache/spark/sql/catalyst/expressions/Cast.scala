@@ -259,6 +259,32 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         builder.append("]")
         builder.build()
       })
+    case StructType(fields) =>
+      buildCast[InternalRow](_, row => {
+        val builder = new UTF8StringBuilder
+        builder.append("[")
+        if (row.numFields > 0) {
+          val st = fields.map(_.dataType)
+          val toUTF8StringFuncs = st.map(castToString)
+          if (!row.isNullAt(0)) {
+            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < row.numFields) {
+            builder.append(",")
+            if (!row.isNullAt(i)) {
+              builder.append(" ")
+              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append("]")
+        builder.build()
+      })
+    case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
+    case udt: UserDefinedType[_] =>
+      buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
@@ -643,7 +669,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     result: String, resultIsNull: String, resultType: DataType, cast: CastFunction): String = {
     s"""
       boolean $resultIsNull = $inputIsNull;
-      ${ctx.javaType(resultType)} $result = ${ctx.defaultValue(resultType)};
+      ${CodeGenerator.javaType(resultType)} $result = ${CodeGenerator.defaultValue(resultType)};
       if (!$inputIsNull) {
         ${cast(input, result, resultIsNull)}
       }
@@ -659,7 +685,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val funcName = ctx.freshName("elementToString")
     val elementToStringFunc = ctx.addNewFunction(funcName,
       s"""
-         |private UTF8String $funcName(${ctx.javaType(et)} element) {
+         |private UTF8String $funcName(${CodeGenerator.javaType(et)} element) {
          |  UTF8String elementStr = null;
          |  ${elementToStringCode("element", "elementStr", null /* resultIsNull won't be used */)}
          |  return elementStr;
@@ -671,13 +697,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
        |$buffer.append("[");
        |if ($array.numElements() > 0) {
        |  if (!$array.isNullAt(0)) {
-       |    $buffer.append($elementToStringFunc(${ctx.getValue(array, et, "0")}));
+       |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
        |    $buffer.append(",");
        |    if (!$array.isNullAt($loopIndex)) {
        |      $buffer.append(" ");
-       |      $buffer.append($elementToStringFunc(${ctx.getValue(array, et, loopIndex)}));
+       |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
        |    }
        |  }
        |}
@@ -697,7 +723,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val dataToStringCode = castToStringCode(dataType, ctx)
       ctx.addNewFunction(funcName,
         s"""
-           |private UTF8String $funcName(${ctx.javaType(dataType)} data) {
+           |private UTF8String $funcName(${CodeGenerator.javaType(dataType)} data) {
            |  UTF8String dataStr = null;
            |  ${dataToStringCode("data", "dataStr", null /* resultIsNull won't be used */)}
            |  return dataStr;
@@ -708,26 +734,64 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
     val keyToStringFunc = dataToStringFunc("keyToString", kt)
     val valueToStringFunc = dataToStringFunc("valueToString", vt)
     val loopIndex = ctx.freshName("loopIndex")
+    val getMapFirstKey = CodeGenerator.getValue(s"$map.keyArray()", kt, "0")
+    val getMapFirstValue = CodeGenerator.getValue(s"$map.valueArray()", vt, "0")
+    val getMapKeyArray = CodeGenerator.getValue(s"$map.keyArray()", kt, loopIndex)
+    val getMapValueArray = CodeGenerator.getValue(s"$map.valueArray()", vt, loopIndex)
     s"""
        |$buffer.append("[");
        |if ($map.numElements() > 0) {
-       |  $buffer.append($keyToStringFunc(${ctx.getValue(s"$map.keyArray()", kt, "0")}));
+       |  $buffer.append($keyToStringFunc($getMapFirstKey));
        |  $buffer.append(" ->");
        |  if (!$map.valueArray().isNullAt(0)) {
        |    $buffer.append(" ");
-       |    $buffer.append($valueToStringFunc(${ctx.getValue(s"$map.valueArray()", vt, "0")}));
+       |    $buffer.append($valueToStringFunc($getMapFirstValue));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
        |    $buffer.append(", ");
-       |    $buffer.append($keyToStringFunc(${ctx.getValue(s"$map.keyArray()", kt, loopIndex)}));
+       |    $buffer.append($keyToStringFunc($getMapKeyArray));
        |    $buffer.append(" ->");
        |    if (!$map.valueArray().isNullAt($loopIndex)) {
        |      $buffer.append(" ");
-       |      $buffer.append($valueToStringFunc(
-       |        ${ctx.getValue(s"$map.valueArray()", vt, loopIndex)}));
+       |      $buffer.append($valueToStringFunc($getMapValueArray));
        |    }
        |  }
        |}
+       |$buffer.append("]");
+     """.stripMargin
+  }
+
+  private def writeStructToStringBuilder(
+      st: Seq[DataType],
+      row: String,
+      buffer: String,
+      ctx: CodegenContext): String = {
+    val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
+      val fieldToStringCode = castToStringCode(ft, ctx)
+      val field = ctx.freshName("field")
+      val fieldStr = ctx.freshName("fieldStr")
+      s"""
+         |${if (i != 0) s"""$buffer.append(",");""" else ""}
+         |if (!$row.isNullAt($i)) {
+         |  ${if (i != 0) s"""$buffer.append(" ");""" else ""}
+         |
+         |  // Append $i field into the string buffer
+         |  ${CodeGenerator.javaType(ft)} $field = ${CodeGenerator.getValue(row, ft, s"$i")};
+         |  UTF8String $fieldStr = null;
+         |  ${fieldToStringCode(field, fieldStr, null /* resultIsNull won't be used */)}
+         |  $buffer.append($fieldStr);
+         |}
+       """.stripMargin
+    }
+
+    val writeStructCode = ctx.splitExpressions(
+      expressions = structToStringCode,
+      funcName = "fieldToString",
+      arguments = ("InternalRow", row) :: (classOf[UTF8StringBuilder].getName, buffer) :: Nil)
+
+    s"""
+       |$buffer.append("[");
+       |$writeStructCode
        |$buffer.append("]");
      """.stripMargin
   }
@@ -764,6 +828,25 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
              |$writeMapElemCode;
              |$evPrim = $buffer.build();
            """.stripMargin
+        }
+      case StructType(fields) =>
+        (c, evPrim, evNull) => {
+          val row = ctx.freshName("row")
+          val buffer = ctx.freshName("buffer")
+          val bufferClass = classOf[UTF8StringBuilder].getName
+          val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), row, buffer, ctx)
+          s"""
+             |InternalRow $row = $c;
+             |$bufferClass $buffer = new $bufferClass();
+             |$writeStructCode
+             |$evPrim = $buffer.build();
+           """.stripMargin
+        }
+      case pudt: PythonUserDefinedType => castToStringCode(pudt.sqlType, ctx)
+      case udt: UserDefinedType[_] =>
+        val udtRef = ctx.addReferenceObj("udt", udt)
+        (c, evPrim, evNull) => {
+          s"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
         }
       case _ =>
         (c, evPrim, evNull) => s"$evPrim = UTF8String.fromString(String.valueOf($c));"
@@ -1122,8 +1205,8 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
             $values[$j] = null;
           } else {
             boolean $fromElementNull = false;
-            ${ctx.javaType(fromType)} $fromElementPrim =
-              ${ctx.getValue(c, fromType, j)};
+            ${CodeGenerator.javaType(fromType)} $fromElementPrim =
+              ${CodeGenerator.getValue(c, fromType, j)};
             ${castCode(ctx, fromElementPrim,
               fromElementNull, toElementPrim, toElementNull, toType, elementCast)}
             if ($toElementNull) {
@@ -1179,20 +1262,20 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       val fromFieldNull = ctx.freshName("ffn")
       val toFieldPrim = ctx.freshName("tfp")
       val toFieldNull = ctx.freshName("tfn")
-      val fromType = ctx.javaType(from.fields(i).dataType)
+      val fromType = CodeGenerator.javaType(from.fields(i).dataType)
       s"""
         boolean $fromFieldNull = $tmpInput.isNullAt($i);
         if ($fromFieldNull) {
           $tmpResult.setNullAt($i);
         } else {
           $fromType $fromFieldPrim =
-            ${ctx.getValue(tmpInput, from.fields(i).dataType, i.toString)};
+            ${CodeGenerator.getValue(tmpInput, from.fields(i).dataType, i.toString)};
           ${castCode(ctx, fromFieldPrim,
             fromFieldNull, toFieldPrim, toFieldNull, to.fields(i).dataType, cast)}
           if ($toFieldNull) {
             $tmpResult.setNullAt($i);
           } else {
-            ${ctx.setColumn(tmpResult, to.fields(i).dataType, i, toFieldPrim)};
+            ${CodeGenerator.setColumn(tmpResult, to.fields(i).dataType, i, toFieldPrim)};
           }
         }
        """

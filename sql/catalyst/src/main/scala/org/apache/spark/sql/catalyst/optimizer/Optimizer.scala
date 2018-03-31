@@ -85,9 +85,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         EliminateSerialization,
         RemoveRedundantAliases,
         RemoveRedundantProject,
-        SimplifyCreateStructOps,
-        SimplifyCreateArrayOps,
-        SimplifyCreateMapOps,
+        SimplifyExtractValueOps,
         CombineConcats) ++
         extendedOperatorOptimizationRules
 
@@ -352,7 +350,6 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // on both sides if it is applied multiple times. Therefore:
     //   - If one side is already limited, stack another limit on top if the new limit is smaller.
     //     The redundant limit will be collapsed by the CombineLimits rule.
-    //   - If neither side is limited, limit the side that is estimated to be bigger.
     case LocalLimit(exp, join @ Join(left, right, joinType, _)) =>
       val newJoin = joinType match {
         case RightOuter => join.copy(right = maybePushLocalLimit(exp, right))
@@ -662,7 +659,7 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
     case join @ Join(left, right, joinType, conditionOpt) =>
       // Only consider constraints that can be pushed down completely to either the left or the
       // right child
-      val constraints = join.constraints.filter { c =>
+      val constraints = join.allConstraints.filter { c =>
         c.references.subsetOf(left.outputSet) || c.references.subsetOf(right.outputSet)
       }
       // Remove those constraints that are already enforced by either the left or the right child
@@ -1108,15 +1105,19 @@ object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
    */
   def isCartesianProduct(join: Join): Boolean = {
     val conditions = join.condition.map(splitConjunctivePredicates).getOrElse(Nil)
-    !conditions.map(_.references).exists(refs => refs.exists(join.left.outputSet.contains)
-        && refs.exists(join.right.outputSet.contains))
+
+    conditions match {
+      case Seq(Literal.FalseLiteral) | Seq(Literal(null, BooleanType)) => false
+      case _ => !conditions.map(_.references).exists(refs =>
+        refs.exists(join.left.outputSet.contains) && refs.exists(join.right.outputSet.contains))
+    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan =
     if (SQLConf.get.crossJoinEnabled) {
       plan
     } else plan transform {
-      case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, condition)
+      case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, _)
         if isCartesianProduct(j) =>
           throw new AnalysisException(
             s"""Detected cartesian product for ${j.joinType.sql} join between logical plans
@@ -1222,7 +1223,13 @@ object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
           Alias(new First(attr).toAggregateExpression(), attr.name)(attr.exprId)
         }
       }
-      Aggregate(keys, aggCols, child)
+      // SPARK-22951: Physical aggregate operators distinguishes global aggregation and grouping
+      // aggregations by checking the number of grouping keys. The key difference here is that a
+      // global aggregation always returns at least one row even if there are no input rows. Here
+      // we append a literal when the grouping key list is empty so that the result aggregate
+      // operator is properly treated as a grouping aggregation.
+      val nonemptyKeys = if (keys.isEmpty) Literal(1) :: Nil else keys
+      Aggregate(nonemptyKeys, aggCols, child)
   }
 }
 
@@ -1293,8 +1300,12 @@ object RemoveLiteralFromGroupExpressions extends Rule[LogicalPlan] {
  */
 object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case a @ Aggregate(grouping, _, _) =>
+    case a @ Aggregate(grouping, _, _) if grouping.size > 1 =>
       val newGrouping = ExpressionSet(grouping).toSeq
-      a.copy(groupingExpressions = newGrouping)
+      if (newGrouping.size == grouping.size) {
+        a
+      } else {
+        a.copy(groupingExpressions = newGrouping)
+      }
   }
 }

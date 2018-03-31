@@ -67,6 +67,9 @@ case class HadoopFsRelation(
     }
   }
 
+  // When data and partition schemas have overlapping columns, the output
+  // schema respects the order of the data schema for the overlapping columns, and it
+  // respects the data types of the partition schema.
   val schema: StructType = {
     StructType(dataSchema.map(f => overlappedPartCols.getOrElse(getColName(f), f)) ++
       partitionSchema.filterNot(f => overlappedPartCols.contains(getColName(f))))
@@ -82,7 +85,11 @@ case class HadoopFsRelation(
     }
   }
 
-  override def sizeInBytes: Long = location.sizeInBytes
+  override def sizeInBytes: Long = {
+    val compressionFactor = sqlContext.conf.fileCompressionFactor
+    (location.sizeInBytes * compressionFactor).toLong
+  }
+
 
   override def inputFiles: Array[String] = location.inputFiles
 }

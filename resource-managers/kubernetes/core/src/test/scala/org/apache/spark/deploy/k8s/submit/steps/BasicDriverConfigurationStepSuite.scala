@@ -47,7 +47,7 @@ class BasicDriverConfigurationStepSuite extends SparkFunSuite {
       .set(KUBERNETES_DRIVER_LIMIT_CORES, "4")
       .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "256M")
       .set(org.apache.spark.internal.config.DRIVER_MEMORY_OVERHEAD, 200L)
-      .set(DRIVER_CONTAINER_IMAGE, "spark-driver:latest")
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
       .set(s"$KUBERNETES_DRIVER_ANNOTATION_PREFIX$CUSTOM_ANNOTATION_KEY", CUSTOM_ANNOTATION_VALUE)
       .set(s"$KUBERNETES_DRIVER_ENV_KEY$DRIVER_CUSTOM_ENV_KEY1", "customDriverEnv1")
       .set(s"$KUBERNETES_DRIVER_ENV_KEY$DRIVER_CUSTOM_ENV_KEY2", "customDriverEnv2")
@@ -73,16 +73,13 @@ class BasicDriverConfigurationStepSuite extends SparkFunSuite {
     assert(preparedDriverSpec.driverContainer.getImage === "spark-driver:latest")
     assert(preparedDriverSpec.driverContainer.getImagePullPolicy === CONTAINER_IMAGE_PULL_POLICY)
 
-    assert(preparedDriverSpec.driverContainer.getEnv.size === 7)
+    assert(preparedDriverSpec.driverContainer.getEnv.size === 4)
     val envs = preparedDriverSpec.driverContainer
       .getEnv
       .asScala
       .map(env => (env.getName, env.getValue))
       .toMap
-    assert(envs(ENV_SUBMIT_EXTRA_CLASSPATH) === "/opt/spark/spark-examples.jar")
-    assert(envs(ENV_DRIVER_MEMORY) === "256M")
-    assert(envs(ENV_DRIVER_MAIN_CLASS) === MAIN_CLASS)
-    assert(envs(ENV_DRIVER_ARGS) === "arg1 arg2 \"arg 3\"")
+    assert(envs(ENV_CLASSPATH) === "/opt/spark/spark-examples.jar")
     assert(envs(DRIVER_CUSTOM_ENV_KEY1) === "customDriverEnv1")
     assert(envs(DRIVER_CUSTOM_ENV_KEY2) === "customDriverEnv2")
 
@@ -112,7 +109,8 @@ class BasicDriverConfigurationStepSuite extends SparkFunSuite {
     val expectedSparkConf = Map(
       KUBERNETES_DRIVER_POD_NAME.key -> "spark-driver-pod",
       "spark.app.id" -> APP_ID,
-      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> RESOURCE_NAME_PREFIX)
+      KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key -> RESOURCE_NAME_PREFIX,
+      "spark.kubernetes.submitInDriver" -> "true")
     assert(resolvedSparkConf === expectedSparkConf)
   }
 }

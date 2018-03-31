@@ -46,32 +46,23 @@ import org.apache.spark.sql.types._
  */
 object TypeCoercion {
 
-  def typeCoercionRules(conf: SQLConf): List[Rule[LogicalPlan]] = {
-    val commonTypeCoercionRules =
+  def typeCoercionRules(conf: SQLConf): List[Rule[LogicalPlan]] =
+    InConversion(conf) ::
       WidenSetOperationTypes ::
-        DecimalPrecision ::
-        BooleanEquality ::
-        FunctionArgumentConversion ::
-        ConcatCoercion(conf) ::
-        EltCoercion(conf) ::
-        CaseWhenCoercion ::
-        IfCoercion ::
-        StackCoercion ::
-        Division ::
-        ImplicitTypeCasts ::
-        DateTimeOperations ::
-        WindowFrameCoercion :: Nil
-
-    if (conf.isHiveTypeCoercionMode) {
-      commonTypeCoercionRules :+
-        HiveInConversion :+
-        HivePromoteStrings
-    } else {
-      commonTypeCoercionRules :+
-        NativeInConversion :+
-        NativePromoteStrings
-    }
-  }
+      PromoteStrings(conf) ::
+      DecimalPrecision ::
+      BooleanEquality ::
+      FunctionArgumentConversion ::
+      ConcatCoercion(conf) ::
+      EltCoercion(conf) ::
+      CaseWhenCoercion ::
+      IfCoercion ::
+      StackCoercion ::
+      Division ::
+      ImplicitTypeCasts ::
+      DateTimeOperations ::
+      WindowFrameCoercion ::
+      Nil
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
   // The conversion for integral and floating point types have a linear widening hierarchy:
@@ -131,12 +122,22 @@ object TypeCoercion {
     case _ => None
   }
 
+  private def findCommonTypeForBinaryComparison(
+      dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = {
+    if (conf.isHiveTypeCoercionMode) {
+      findCommonTypeToCompatibleWithHive(dt1, dt2)
+    } else {
+      findCommonTypeForBinaryComparisonNative(dt1, dt2, conf)
+    }
+  }
+
   /**
    * This function determines the target type of a comparison operator when one operand
    * is a String and the other is not. It also handles when one op is a Date and the
    * other is a Timestamp by making the target type to be String.
    */
-  val findCommonTypeForBinaryComparison: (DataType, DataType) => Option[DataType] = {
+  private def findCommonTypeForBinaryComparisonNative(
+      dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
     // We should cast all relative timestamp/date/string comparison into string comparisons
     // This behaves as a user would expect because timestamp strings sort lexicographically.
     // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
@@ -144,10 +145,16 @@ object TypeCoercion {
     case (DateType, StringType) => Some(StringType)
     case (StringType, TimestampType) => Some(StringType)
     case (TimestampType, StringType) => Some(StringType)
-    case (TimestampType, DateType) => Some(StringType)
-    case (DateType, TimestampType) => Some(StringType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
+
+    // Cast to TimestampType when we compare DateType with TimestampType
+    // if conf.compareDateTimestampInTimestamp is true
+    // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
+    case (TimestampType, DateType)
+      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
+    case (DateType, TimestampType)
+      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
 
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
@@ -156,7 +163,7 @@ object TypeCoercion {
     case (s: StringType, n: DecimalType) => Some(DoubleType)
 
     case (l: StringType, r: AtomicType) if r != StringType => Some(r)
-    case (l: AtomicType, r: StringType) if (l != StringType) => Some(l)
+    case (l: AtomicType, r: StringType) if l != StringType => Some(l)
     case (l, r) => None
   }
 
@@ -338,18 +345,17 @@ object TypeCoercion {
     }
   }
 
-  private def castExpr(expr: Expression, targetType: DataType): Expression = {
-    (expr.dataType, targetType) match {
-      case (NullType, dt) => Literal.create(null, targetType)
-      case (l, dt) if (l != dt) => Cast(expr, targetType)
-      case _ => expr
-    }
-  }
-
   /**
    * Promotes strings that appear in arithmetic expressions.
    */
-  object NativePromoteStrings extends TypeCoercionRule {
+  case class PromoteStrings(conf: SQLConf) extends TypeCoercionRule {
+    private def castExpr(expr: Expression, targetType: DataType): Expression = {
+      (expr.dataType, targetType) match {
+        case (NullType, dt) => Literal.create(null, targetType)
+        case (l, dt) if (l != dt) => Cast(expr, targetType)
+        case _ => expr
+      }
+    }
 
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
@@ -371,8 +377,8 @@ object TypeCoercion {
         p.makeCopy(Array(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
-        if findCommonTypeForBinaryComparison(left.dataType, right.dataType).isDefined =>
-        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType).get
+          if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
+        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
 
       case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
@@ -386,55 +392,6 @@ object TypeCoercion {
       case VarianceSamp(e @ StringType()) => VarianceSamp(Cast(e, DoubleType))
       case Skewness(e @ StringType()) => Skewness(Cast(e, DoubleType))
       case Kurtosis(e @ StringType()) => Kurtosis(Cast(e, DoubleType))
-    }
-  }
-
-  /**
-   * Promotes strings that appear in arithmetic expressions to compatible with Hive.
-   */
-  object HivePromoteStrings extends TypeCoercionRule {
-
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      // Skip nodes who's children have not been resolved yet.
-      case e if !e.childrenResolved => e
-
-      case a @ BinaryArithmetic(left @ StringType(), right)
-        if right.dataType != CalendarIntervalType =>
-        a.makeCopy(Array(Cast(left, DoubleType), right))
-      case a @ BinaryArithmetic(left, right @ StringType())
-        if left.dataType != CalendarIntervalType =>
-        a.makeCopy(Array(left, Cast(right, DoubleType)))
-
-      case p @ Equality(left, right)
-        if findCommonTypeToCompatibleWithHive(left.dataType, right.dataType).isDefined =>
-        val commonType = findCommonTypeToCompatibleWithHive(left.dataType, right.dataType).get
-        p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
-      case p @ BinaryComparison(left, right)
-        if findCommonTypeToCompatibleWithHive(left.dataType, right.dataType).isDefined =>
-        val commonType = findCommonTypeToCompatibleWithHive(left.dataType, right.dataType).get
-        p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
-
-      case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
-      case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
-      case Average(e @ StringType()) => Average(Cast(e, DoubleType))
-      case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
-      case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
-      case UnaryMinus(e @ StringType()) => UnaryMinus(Cast(e, DoubleType))
-      case UnaryPositive(e @ StringType()) => UnaryPositive(Cast(e, DoubleType))
-      case VariancePop(e @ StringType()) => VariancePop(Cast(e, DoubleType))
-      case VarianceSamp(e @ StringType()) => VarianceSamp(Cast(e, DoubleType))
-      case Skewness(e @ StringType()) => Skewness(Cast(e, DoubleType))
-      case Kurtosis(e @ StringType()) => Kurtosis(Cast(e, DoubleType))
-    }
-  }
-
-  private def flattenExpr(expr: Expression): Seq[Expression] = {
-    expr match {
-      // Multi columns in IN clause is represented as a CreateNamedStruct.
-      // flatten the named struct to get the list of expressions.
-      case cns: CreateNamedStruct => cns.valExprs
-      case expr => Seq(expr)
     }
   }
 
@@ -452,65 +409,15 @@ object TypeCoercion {
    *    operator type is found the original expression will be returned and an
    *    Analysis Exception will be raised at the type checking phase.
    */
-  object NativeInConversion extends TypeCoercionRule {
-
-    override protected def coerceTypes(
-        plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      // Skip nodes who's children have not been resolved yet.
-      case e if !e.childrenResolved => e
-
-      // Handle type casting required between value expression and subquery output
-      // in IN subquery.
-      case i @ In(a, Seq(ListQuery(sub, children, exprId, _)))
-        if !i.resolved && flattenExpr(a).length == sub.output.length =>
-        // LHS is the value expression of IN subquery.
-        val lhs = flattenExpr(a)
-
-        // RHS is the subquery output.
-        val rhs = sub.output
-
-        val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
-          findCommonTypeForBinaryComparison(l.dataType, r.dataType)
-            .orElse(findTightestCommonType(l.dataType, r.dataType))
-        }
-
-        // The number of columns/expressions must match between LHS and RHS of an
-        // IN subquery expression.
-        if (commonTypes.length == lhs.length) {
-          val castedRhs = rhs.zip(commonTypes).map {
-            case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
-            case (e, _) => e
-          }
-          val castedLhs = lhs.zip(commonTypes).map {
-            case (e, dt) if e.dataType != dt => Cast(e, dt)
-            case (e, _) => e
-          }
-
-          // Before constructing the In expression, wrap the multi values in LHS
-          // in a CreatedNamedStruct.
-          val newLhs = castedLhs match {
-            case Seq(lhs) => lhs
-            case _ => CreateStruct(castedLhs)
-          }
-
-          val newSub = Project(castedRhs, sub)
-          In(newLhs, Seq(ListQuery(newSub, children, exprId, newSub.output)))
-        } else {
-          i
-        }
-
-      case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
-        findWiderCommonType(i.children.map(_.dataType)) match {
-          case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
-          case None => i
-        }
+  case class InConversion(conf: SQLConf) extends TypeCoercionRule {
+    private def flattenExpr(expr: Expression): Seq[Expression] = {
+      expr match {
+        // Multi columns in IN clause is represented as a CreateNamedStruct.
+        // flatten the named struct to get the list of expressions.
+        case cns: CreateNamedStruct => cns.valExprs
+        case expr => Seq(expr)
+      }
     }
-  }
-
-  /**
-   * Handles type coercion for IN expression to compatible with Hive.
-   */
-  object HiveInConversion extends TypeCoercionRule {
 
     override protected def coerceTypes(
         plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
@@ -528,7 +435,7 @@ object TypeCoercion {
         val rhs = sub.output
 
         val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
-          findCommonTypeToCompatibleWithHive(l.dataType, r.dataType)
+          findCommonTypeForBinaryComparison(l.dataType, r.dataType, conf)
             .orElse(findTightestCommonType(l.dataType, r.dataType))
         }
 
