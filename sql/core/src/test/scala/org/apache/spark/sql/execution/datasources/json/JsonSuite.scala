@@ -2073,9 +2073,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val fileName = "json-tests/utf16WithBOM.json"
     val schema = new StructType().add("firstName", StringType).add("lastName", StringType)
     val jsonDF = spark.read.schema(schema)
-      // This option will be replaced by .option("lineSep", "x00 0a")
-      // as soon as lineSep allows to specify sequence of bytes in hexadecimal format.
-      .option("mode", "DROPMALFORMED")
+      .option("multiline", "true")
+      .option("encoding", "UTF-16")
       .json(testFile(fileName))
 
     checkAnswer(jsonDF, Seq(
@@ -2276,18 +2275,18 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   List(
     ("|", "encoding", "UTF-8", false),
     ("^", "charset", "UTF-16BE", true),
-    ("::", "encoding", "UTF-16", true),
+    ("::", "encoding", "ISO-8859-1", true),
     ("!!!@3", "encoding", "UTF-32LE", false),
     (0x1E.toChar.toString, "charset", "UTF-8", true),
     ("아", "encoding", "UTF-32BE", false),
     ("куку", "encoding", "CP1251", true),
-    ("sep", "encoding", "UTF-8", false),
+    ("sep", "encoding", "utf-8", false),
     ("\r\n", "encoding", "UTF-16LE", false),
-    ("\r\n", "encoding", "UTF-16BE", true),
+    ("\r\n", "encoding", "utf-16be", true),
     ("\u000d\u000a", "encoding", "UTF-32BE", false),
     ("\u000a\u000d", "encoding", "UTF-8", true),
-    ("===", "encoding", "UTF-16", false),
-    ("$^+", "encoding", "UTF-32LE", true)
+    ("===", "encoding", "US-ASCII", false),
+    ("$^+", "encoding", "utf-32le", true)
   ).zipWithIndex.foreach{case ((d, o, c, s), i) => checkReadJson(d, o, c, s, i)}
   // scalastyle:on nonascii
 
@@ -2320,15 +2319,16 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   // scalastyle:on nonascii
 
   test("SPARK-23724: lineSep should be set if encoding if different from UTF-8") {
+    val encoding = "UTF-16LE"
     val exception = intercept[IllegalArgumentException] {
       spark.read
-        .options(Map("encoding" -> "UTF-16LE"))
+        .options(Map("encoding" -> encoding))
         .json(testFile("json-tests/utf16LE.json"))
         .count()
     }
 
     assert(exception.getMessage.contains(
-      """Please, set the 'lineSep' option for the given encoding UTF-16LE"""
+      s"""The lineSep option must be specified for the $encoding encoding"""
     ))
   }
 

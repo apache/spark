@@ -96,12 +96,16 @@ private[sql] class JSONOptions(
    */
   val encoding: Option[String] = parameters.get("encoding")
     .orElse(parameters.get("charset")).map { enc =>
-      if (multiLine == false && enc != "UTF-8" && lineSeparator.isEmpty) {
-        throw new IllegalArgumentException(
-          s"""Please, set the 'lineSep' option for the given encoding $enc.
-             |Example: .option("lineSep", "|^|")
-             |Note: lineSep can be detected automatically for UTF-8 only.""".stripMargin)
-      }
+      val blacklist = List("UTF-16", "UTF-32")
+      require(!(multiLine == false && blacklist.contains(enc)),
+        s"""The ${enc} encoding must not be included in the blacklist:
+           | ${blacklist.mkString(", ")}""".stripMargin)
+
+      val forcingLineSep = !(multiLine == false && enc != "UTF-8" && lineSeparator.isEmpty)
+      require(forcingLineSep,
+        s"""The lineSep option must be specified for the $enc encoding.
+           |Example: .option("lineSep", "|^|")
+           |Note: lineSep can be detected automatically for UTF-8 only.""".stripMargin)
       enc
   }
 
