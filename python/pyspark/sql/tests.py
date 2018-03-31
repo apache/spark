@@ -2982,7 +2982,8 @@ class SQLTests(ReusedSQLTestCase):
         schema = StructType([
             StructField('f2', IntegerType(), nullable=True),
             StructField('f1', IntegerType(), nullable=True)])
-        df = self.spark.read.option('header', 'true').schema(schema).csv(tmpPath)
+        df = self.spark.read.option('header', 'true').schema(schema).\
+            csv(tmpPath, enforceSchema=False)
         self.assertRaisesRegexp(
             Exception,
             "CSV file header does not contain the expected fields",

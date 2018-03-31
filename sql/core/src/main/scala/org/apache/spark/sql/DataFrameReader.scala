@@ -524,8 +524,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`comment` (default empty string): sets a single character used for skipping lines
    * beginning with this character. By default, it is disabled.</li>
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
-   * <li>`checkHeader` (default `true`): compares column names in the header with field names
-   * in the schema and outputs an error if names are not matched.</li>
+   * <li>`enforceSchema` (default `true`): Forcibly apply the specified or inferred schema to
+   * datasource files. If it is set, CSV headers are ignored. </li>
    * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
    * requires one extra pass over the data.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `false`): a flag indicating whether or not leading
