@@ -132,6 +132,12 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
         commitUpdates(newVersion, mapToUpdate, compressedStream)
         state = COMMITTED
         logInfo(s"Committed version $newVersion for $this to file $finalDeltaFile")
+        if (unloadAfterCommit) {
+          synchronized {
+            loadedMaps.values.foreach(_.clear())
+            loadedMaps.clear()
+          }
+        }
         newVersion
       } catch {
         case NonFatal(e) =>
@@ -206,6 +212,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     this.storeConf = storeConf
     this.hadoopConf = hadoopConf
     fm.mkdirs(baseDir)
+    this.unloadAfterCommit = storeConf.confs
+      .getOrElse("spark.sql.streaming.stateStore.unloadAfterCommit", "false").toBoolean
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_
@@ -241,6 +249,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   @volatile private var valueSchema: StructType = _
   @volatile private var storeConf: StateStoreConf = _
   @volatile private var hadoopConf: Configuration = _
+  @volatile private var unloadAfterCommit: Boolean = _
 
   private lazy val loadedMaps = new mutable.HashMap[Long, MapType]
   private lazy val baseDir = stateStoreId.storeCheckpointLocation()
