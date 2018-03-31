@@ -29,6 +29,12 @@ private[spark] class DependencyResolutionStep(
     sparkFiles: Seq[String]) extends DriverConfigurationStep {
 
   override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
+<<<<<<< HEAD
+=======
+    val resolvedSparkJars = KubernetesUtils.resolveFileUrisAndPath(sparkJars)
+    val resolvedSparkFiles = KubernetesUtils.resolveFileUrisAndPath(sparkFiles)
+
+>>>>>>> master
     val sparkConf = driverSpec.driverSparkConf.clone()
     val resolvedSparkFiles = KubernetesUtils.resolveFileUrisAndPath(
       sparkFiles, sparkConf.get(FILES_DOWNLOAD_LOCATION))
@@ -36,10 +42,22 @@ private[spark] class DependencyResolutionStep(
     if (resolvedSparkFiles.nonEmpty) {
       sparkConf.set("spark.files", resolvedSparkFiles.mkString(","))
     }
+<<<<<<< HEAD
 
     if (sparkJars.nonEmpty) {
       sparkConf.set("spark.jars",
         sparkJars.map(jar => KubernetesUtils.resolveLocalFile(jar)).mkString(","))
+=======
+    val resolvedDriverContainer = if (resolvedSparkJars.nonEmpty) {
+      new ContainerBuilder(driverSpec.driverContainer)
+        .addNewEnv()
+          .withName(ENV_MOUNTED_CLASSPATH)
+          .withValue(resolvedSparkJars.mkString(File.pathSeparator))
+          .endEnv()
+        .build()
+    } else {
+      driverSpec.driverContainer
+>>>>>>> master
     }
 
     driverSpec.copy(driverSparkConf = sparkConf)

@@ -168,7 +168,7 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
               // Just to be defensive in case anything ever changes in parquet, this test checks
               // the assumption on column stats, and also the end-to-end behavior.
 
-              val hadoopConf = sparkContext.hadoopConfiguration
+              val hadoopConf = spark.sessionState.newHadoopConf()
               val fs = FileSystem.get(hadoopConf)
               val parts = fs.listStatus(new Path(tableDir.getAbsolutePath), new PathFilter {
                 override def accept(path: Path): Boolean = !path.getName.startsWith("_")
@@ -189,11 +189,15 @@ class ParquetInteroperabilitySuite extends ParquetCompatibilityTest with SharedS
                 // when the data is read back as mentioned above, b/c int96 is unsigned.  This
                 // assert makes sure this holds even if we change parquet versions (if eg. there
                 // were ever statistics even on unsigned columns).
+<<<<<<< HEAD
 
                 // Note: This is not true in palantir/parquet-mr and statistics are always returned
                 // and they are always unsigned.
                 assert(!(oneFooter.getFileMetaData.getCreatedBy.contains("impala") ^
                   columnStats.isEmpty))
+=======
+                assert(!columnStats.hasNonNullValue)
+>>>>>>> master
               }
 
               // These queries should return the entire dataset with the conversion applied,

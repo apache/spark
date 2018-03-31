@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport,
@@ -516,9 +516,9 @@ case class SortMergeJoinExec(
     ctx.INPUT_ROW = leftRow
     left.output.zipWithIndex.map { case (a, i) =>
       val value = ctx.freshName("value")
-      val valueCode = ctx.getValue(leftRow, a.dataType, i.toString)
-      val javaType = ctx.javaType(a.dataType)
-      val defaultValue = ctx.defaultValue(a.dataType)
+      val valueCode = CodeGenerator.getValue(leftRow, a.dataType, i.toString)
+      val javaType = CodeGenerator.javaType(a.dataType)
+      val defaultValue = CodeGenerator.defaultValue(a.dataType)
       if (a.nullable) {
         val isNull = ctx.freshName("isNull")
         val code =

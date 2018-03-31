@@ -16,7 +16,6 @@
 #
 
 import sys
-import warnings
 import json
 
 if sys.version >= '3':
@@ -660,7 +659,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

@@ -21,7 +21,10 @@ import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap, Moun
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.steps._
+<<<<<<< HEAD
 import org.apache.spark.deploy.k8s.submit.submitsteps.DriverMountLocalFilesStep
+=======
+>>>>>>> master
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.{SystemClock, Utils}
 
@@ -120,7 +123,13 @@ private[spark] class DriverConfigOrchestrator(
     } else Nil
 
     val dependencyResolutionStep = if (sparkJars.nonEmpty || sparkFiles.nonEmpty) {
+<<<<<<< HEAD
       Seq(new DependencyResolutionStep(sparkJars, sparkFiles))
+=======
+      Seq(new DependencyResolutionStep(
+        sparkJars,
+        sparkFiles))
+>>>>>>> master
     } else {
       Nil
     }

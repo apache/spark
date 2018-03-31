@@ -16,8 +16,11 @@
  */
 package org.apache.spark.deploy.k8s
 
+<<<<<<< HEAD
 import java.nio.file.Paths
 
+=======
+>>>>>>> master
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
@@ -46,6 +49,7 @@ private[spark] object KubernetesUtils {
    * - File URIs with scheme local:// resolve to just the path of the URI.
    * - Otherwise, the URIs are returned resolved to the downloaded path.
    */
+<<<<<<< HEAD
   def resolveFileUrisAndPath(
       fileUris: Iterable[String], downloadPath: String): Iterable[String] = {
     fileUris.map { uri =>
@@ -72,13 +76,25 @@ private[spark] object KubernetesUtils {
   }
 
   private def resolveFileUri(uri: String, downloadPath: String): String = {
+=======
+  def resolveFileUrisAndPath(fileUris: Iterable[String]): Iterable[String] = {
+    fileUris.map { uri =>
+      resolveFileUri(uri)
+    }
+  }
+
+  private def resolveFileUri(uri: String): String = {
+>>>>>>> master
     val fileUri = Utils.resolveURI(uri)
     val fileScheme = Option(fileUri.getScheme).getOrElse("file")
     fileScheme match {
       case "local" => fileUri.getPath
+<<<<<<< HEAD
       case "file" =>
         val fileName = Paths.get(fileUri.getPath).toFile.getName
         s"$downloadPath/$fileName"
+=======
+>>>>>>> master
       case _ => uri
     }
   }

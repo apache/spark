@@ -15,20 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.kafka010
+package org.apache.spark.sql.test
 
-import org.scalatest.PrivateMethodTester
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.SparkSession
 
-import org.apache.spark.sql.test.SharedSQLContext
-
-class CachedKafkaConsumerSuite extends SharedSQLContext with PrivateMethodTester {
-
-  test("SPARK-19886: Report error cause correctly in reportDataLoss") {
-    val cause = new Exception("D'oh!")
-    val reportDataLoss = PrivateMethod[Unit]('reportDataLoss0)
-    val e = intercept[IllegalStateException] {
-      CachedKafkaConsumer.invokePrivate(reportDataLoss(true, "message", cause))
-    }
-    assert(e.getCause === cause)
+class TestSparkSessionSuite extends SparkFunSuite {
+  test("default session is set in constructor") {
+    val session = new TestSparkSession()
+    assert(SparkSession.getDefaultSession.contains(session))
+    session.stop()
   }
 }

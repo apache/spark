@@ -53,7 +53,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val rowClass = classOf[GenericInternalRow].getName
 
     val fieldWriters = schema.map(_.dataType).zipWithIndex.map { case (dt, i) =>
-      val converter = convertToSafe(ctx, ctx.getValue(tmpInput, dt, i.toString), dt)
+      val converter = convertToSafe(ctx, CodeGenerator.getValue(tmpInput, dt, i.toString), dt)
       s"""
         if (!$tmpInput.isNullAt($i)) {
           ${converter.code}
@@ -90,7 +90,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val arrayClass = classOf[GenericArrayData].getName
 
     val elementConverter = convertToSafe(
-      ctx, ctx.getValue(tmpInput, elementType, index), elementType)
+      ctx, CodeGenerator.getValue(tmpInput, elementType, index), elementType)
     val code = s"""
       final ArrayData $tmpInput = $input;
       final int $numElements = $tmpInput.numElements();
@@ -153,7 +153,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
               mutableRow.setNullAt($i);
             } else {
               ${converter.code}
-              ${ctx.setColumn("mutableRow", e.dataType, i, converter.value)};
+              ${CodeGenerator.setColumn("mutableRow", e.dataType, i, converter.value)};
             }
           """
     }

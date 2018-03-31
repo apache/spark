@@ -663,14 +663,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     requireTableExists(db, table)
     val rawTable = getRawTable(db, table)
 
-    // For datasource tables and hive serde tables created by spark 2.1 or higher,
-    // the data schema is stored in the table properties.
-    val schema = restoreTableMetadata(rawTable).schema
-
     // convert table statistics to properties so that we can persist them through hive client
     val statsProperties =
       if (stats.isDefined) {
-        statsToProperties(stats.get, schema)
+        statsToProperties(stats.get)
       } else {
         new mutable.HashMap[String, String]()
       }
@@ -1028,9 +1024,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     currentFullPath
   }
 
-  private def statsToProperties(
-      stats: CatalogStatistics,
-      schema: StructType): Map[String, String] = {
+  private def statsToProperties(stats: CatalogStatistics): Map[String, String] = {
 
     val statsProperties = new mutable.HashMap[String, String]()
     statsProperties += STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString()
@@ -1038,11 +1032,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
     }
 
-    val colNameTypeMap: Map[String, DataType] =
-      schema.fields.map(f => (f.name, f.dataType)).toMap
     stats.colStats.foreach { case (colName, colStat) =>
-      colStat.toMap(colName, colNameTypeMap(colName)).foreach { case (k, v) =>
-        statsProperties += (columnStatKeyPropName(colName, k) -> v)
+      colStat.toMap(colName).foreach { case (k, v) =>
+        // Fully qualified name used in table properties for a particular column stat.
+        // For example, for column "mycol", and "min" stat, this should return
+        // "spark.sql.statistics.colStats.mycol.min".
+        statsProperties += (STATISTICS_COL_STATS_PREFIX + k -> v)
       }
     }
 
@@ -1058,23 +1053,20 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     if (statsProps.isEmpty) {
       None
     } else {
+      val colStats = new mutable.HashMap[String, CatalogColumnStat]
+      val colStatsProps = properties.filterKeys(_.startsWith(STATISTICS_COL_STATS_PREFIX)).map {
+        case (k, v) => k.drop(STATISTICS_COL_STATS_PREFIX.length) -> v
+      }
 
-      val colStats = new mutable.HashMap[String, ColumnStat]
-
-      // For each column, recover its column stats. Note that this is currently a O(n^2) operation,
-      // but given the number of columns it usually not enormous, this is probably OK as a start.
-      // If we want to map this a linear operation, we'd need a stronger contract between the
-      // naming convention used for serialization.
-      schema.foreach { field =>
-        if (statsProps.contains(columnStatKeyPropName(field.name, ColumnStat.KEY_VERSION))) {
-          // If "version" field is defined, then the column stat is defined.
-          val keyPrefix = columnStatKeyPropName(field.name, "")
-          val colStatMap = statsProps.filterKeys(_.startsWith(keyPrefix)).map { case (k, v) =>
-            (k.drop(keyPrefix.length), v)
-          }
-          ColumnStat.fromMap(table, field, colStatMap).foreach { cs =>
-            colStats += field.name -> cs
-          }
+      // Find all the column names by matching the KEY_VERSION properties for them.
+      colStatsProps.keys.filter {
+        k => k.endsWith(CatalogColumnStat.KEY_VERSION)
+      }.map { k =>
+        k.dropRight(CatalogColumnStat.KEY_VERSION.length + 1)
+      }.foreach { fieldName =>
+        // and for each, create a column stat.
+        CatalogColumnStat.fromMap(table, fieldName, colStatsProps).foreach { cs =>
+          colStats += fieldName -> cs
         }
       }
 
@@ -1093,14 +1085,10 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     val rawTable = getRawTable(db, table)
 
-    // For datasource tables and hive serde tables created by spark 2.1 or higher,
-    // the data schema is stored in the table properties.
-    val schema = restoreTableMetadata(rawTable).schema
-
     // convert partition statistics to properties so that we can persist them through hive api
     val withStatsProps = lowerCasedParts.map { p =>
       if (p.stats.isDefined) {
-        val statsProperties = statsToProperties(p.stats.get, schema)
+        val statsProperties = statsToProperties(p.stats.get)
         p.copy(parameters = p.parameters ++ statsProperties)
       } else {
         p
@@ -1309,15 +1297,6 @@ object HiveExternalCatalog {
   // implicit behavior no longer happens. Therefore, we need to do it in Spark ourselves.
   val EMPTY_DATA_SCHEMA = new StructType()
     .add("col", "array<string>", nullable = true, comment = "from deserializer")
-
-  /**
-   * Returns the fully qualified name used in table properties for a particular column stat.
-   * For example, for column "mycol", and "min" stat, this should return
-   * "spark.sql.statistics.colStats.mycol.min".
-   */
-  private def columnStatKeyPropName(columnName: String, statKey: String): String = {
-    STATISTICS_COL_STATS_PREFIX + columnName + "." + statKey
-  }
 
   // A persisted data source table always store its schema in the catalog.
   private def getSchemaFromTableProperties(metadata: CatalogTable): StructType = {

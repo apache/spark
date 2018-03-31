@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import java.nio.charset.StandardCharsets
+import java.sql.Date
 
 import org.apache.parquet.filter2.predicate.{FilterPredicate, Operators}
 import org.apache.parquet.filter2.predicate.FilterApi.{and, gt, lt}
@@ -78,6 +79,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       expected: Seq[Row]): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
 
+<<<<<<< HEAD
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
       ParquetInputFormat.RECORD_FILTERING_ENABLED -> "true") {
@@ -106,6 +108,36 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         maybeFilter.exists(_.getClass === filterClass)
       }
       checker(stripSparkFilter(query), expected)
+=======
+    withSQLConf(
+      SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+      SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
+      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        val query = df
+          .select(output.map(e => Column(e)): _*)
+          .where(Column(predicate))
+
+        var maybeRelation: Option[HadoopFsRelation] = None
+        val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
+          case PhysicalOperation(_, filters,
+                                 LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
+            maybeRelation = Some(relation)
+            filters
+        }.flatten.reduceLeftOption(_ && _)
+        assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
+
+        val (_, selectedFilters, _) =
+          DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
+        assert(selectedFilters.nonEmpty, "No filter is pushed down")
+
+        selectedFilters.foreach { pred =>
+          val maybeFilter = ParquetFilters.createFilter(df.schema, pred)
+          assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
+          // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
+          maybeFilter.exists(_.getClass === filterClass)
+        }
+        checker(stripSparkFilter(query), expected)
+>>>>>>> master
     }
   }
 
@@ -313,6 +345,48 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       checkBinaryFilterPredicate(!('_1 < 4.b), classOf[GtEq[_]], 4.b)
       checkBinaryFilterPredicate(
         '_1 < 2.b || '_1 > 3.b, classOf[Operators.Or], Seq(Row(1.b), Row(4.b)))
+    }
+  }
+
+  test("filter pushdown - date") {
+    implicit class StringToDate(s: String) {
+      def date: Date = Date.valueOf(s)
+    }
+
+    val data = Seq("2018-03-18", "2018-03-19", "2018-03-20", "2018-03-21")
+
+    withParquetDataFrame(data.map(i => Tuple1(i.date))) { implicit df =>
+      checkFilterPredicate('_1.isNull, classOf[Eq[_]], Seq.empty[Row])
+      checkFilterPredicate('_1.isNotNull, classOf[NotEq[_]], data.map(i => Row.apply(i.date)))
+
+      checkFilterPredicate('_1 === "2018-03-18".date, classOf[Eq[_]], "2018-03-18".date)
+      checkFilterPredicate('_1 <=> "2018-03-18".date, classOf[Eq[_]], "2018-03-18".date)
+      checkFilterPredicate('_1 =!= "2018-03-18".date, classOf[NotEq[_]],
+        Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(i.date)))
+
+      checkFilterPredicate('_1 < "2018-03-19".date, classOf[Lt[_]], "2018-03-18".date)
+      checkFilterPredicate('_1 > "2018-03-20".date, classOf[Gt[_]], "2018-03-21".date)
+      checkFilterPredicate('_1 <= "2018-03-18".date, classOf[LtEq[_]], "2018-03-18".date)
+      checkFilterPredicate('_1 >= "2018-03-21".date, classOf[GtEq[_]], "2018-03-21".date)
+
+      checkFilterPredicate(
+        Literal("2018-03-18".date) === '_1, classOf[Eq[_]], "2018-03-18".date)
+      checkFilterPredicate(
+        Literal("2018-03-18".date) <=> '_1, classOf[Eq[_]], "2018-03-18".date)
+      checkFilterPredicate(
+        Literal("2018-03-19".date) > '_1, classOf[Lt[_]], "2018-03-18".date)
+      checkFilterPredicate(
+        Literal("2018-03-20".date) < '_1, classOf[Gt[_]], "2018-03-21".date)
+      checkFilterPredicate(
+        Literal("2018-03-18".date) >= '_1, classOf[LtEq[_]], "2018-03-18".date)
+      checkFilterPredicate(
+        Literal("2018-03-21".date) <= '_1, classOf[GtEq[_]], "2018-03-21".date)
+
+      checkFilterPredicate(!('_1 < "2018-03-21".date), classOf[GtEq[_]], "2018-03-21".date)
+      checkFilterPredicate(
+        '_1 < "2018-03-19".date || '_1 > "2018-03-20".date,
+        classOf[Operators.Or],
+        Seq(Row("2018-03-18".date), Row("2018-03-21".date)))
     }
   }
 

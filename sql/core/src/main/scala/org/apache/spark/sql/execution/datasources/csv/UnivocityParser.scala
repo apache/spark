@@ -203,6 +203,8 @@ class UnivocityParser(
           case _: BadRecordException => None
         }
       }
+      // For records with less or more tokens than the schema, tries to return partial results
+      // if possible.
       throw BadRecordException(
         () => getCurrentInput,
         () => getPartialResult(),
@@ -218,6 +220,9 @@ class UnivocityParser(
         row
       } catch {
         case NonFatal(e) =>
+          // For corrupted records with the number of tokens same as the schema,
+          // CSV reader doesn't support partial results. All fields other than the field
+          // configured by `columnNameOfCorruptRecord` are set to `null`.
           throw BadRecordException(() => getCurrentInput, () => None, e)
       }
     }

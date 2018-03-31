@@ -38,8 +38,12 @@ import org.apache.spark.util.Utils
  */
 private[spark] class ExecutorPodFactory(
     sparkConf: SparkConf,
+<<<<<<< HEAD
     mountSecretsBootstrap: Option[MountSecretsBootstrap],
     mountSmallFilesBootstrap: Option[MountSmallFilesBootstrap]) {
+=======
+    mountSecretsBootstrap: Option[MountSecretsBootstrap]) {
+>>>>>>> master
 
   private val executorExtraClasspath = sparkConf.get(EXECUTOR_CLASS_PATH)
 
@@ -214,6 +218,7 @@ private[spark] class ExecutorPodFactory(
         (bootstrap.addSecretVolumes(executorPod), bootstrap.mountSecrets(containerWithLimitCores))
       }.getOrElse((executorPod, containerWithLimitCores))
 
+<<<<<<< HEAD
     val (maybeSmallFilesMountedPod, maybeSmallFilesMountedContainer) =
       mountSmallFilesBootstrap.map { bootstrap =>
         bootstrap.mountSmallFilesSecret(
@@ -223,6 +228,12 @@ private[spark] class ExecutorPodFactory(
     new PodBuilder(maybeSmallFilesMountedPod)
       .editSpec()
         .addToContainers(maybeSmallFilesMountedContainer)
+=======
+
+    new PodBuilder(maybeSecretsMountedPod)
+      .editSpec()
+        .addToContainers(maybeSecretsMountedContainer)
+>>>>>>> master
         .endSpec()
       .build()
   }
