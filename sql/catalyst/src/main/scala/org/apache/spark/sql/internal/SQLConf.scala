@@ -359,13 +359,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val PARQUET_FILTER_PUSHDOWN_DATE_ENABLED = buildConf("spark.sql.parquet.filterPushdown.date")
-    .doc("If true, enables Parquet filter push-down optimization for Date. " +
-      "This configuration only has an effect when 'spark.sql.parquet.filterPushdown' is enabled.")
-    .internal()
-    .booleanConf
-    .createWithDefault(true)
-
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("Whether to be compatible with the legacy Parquet format adopted by Spark 1.4 and prior " +
       "versions, when converting Parquet schema to Spark SQL schema and vice versa.")
@@ -1327,7 +1320,6 @@ class SQLConf extends Serializable with Logging {
 
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
 
-
   def parquetPartitionPruningEnabled: Boolean = getConf(PARQUET_PARTITION_PRUNING_ENABLED)
 
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
@@ -1349,8 +1341,6 @@ class SQLConf extends Serializable with Logging {
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
   def parquetFilterPushDown: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_ENABLED)
-
-  def parquetFilterPushDownDate: Boolean = getConf(PARQUET_FILTER_PUSHDOWN_DATE_ENABLED)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 

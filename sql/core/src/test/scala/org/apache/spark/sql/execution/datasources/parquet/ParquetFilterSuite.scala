@@ -79,7 +79,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
       expected: Seq[Row]): Unit = {
     val output = predicate.collect { case a: Attribute => a }.distinct
 
-<<<<<<< HEAD
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
       SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
       ParquetInputFormat.RECORD_FILTERING_ENABLED -> "true") {
@@ -108,36 +107,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         maybeFilter.exists(_.getClass === filterClass)
       }
       checker(stripSparkFilter(query), expected)
-=======
-    withSQLConf(
-      SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
-      SQLConf.PARQUET_FILTER_PUSHDOWN_DATE_ENABLED.key -> "true",
-      SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
-        val query = df
-          .select(output.map(e => Column(e)): _*)
-          .where(Column(predicate))
-
-        var maybeRelation: Option[HadoopFsRelation] = None
-        val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters,
-                                 LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
-            maybeRelation = Some(relation)
-            filters
-        }.flatten.reduceLeftOption(_ && _)
-        assert(maybeAnalyzedPredicate.isDefined, "No filter is analyzed from the given query")
-
-        val (_, selectedFilters, _) =
-          DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
-        assert(selectedFilters.nonEmpty, "No filter is pushed down")
-
-        selectedFilters.foreach { pred =>
-          val maybeFilter = ParquetFilters.createFilter(df.schema, pred)
-          assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $pred")
-          // Doesn't bother checking type parameters here (e.g. `Eq[Integer]`)
-          maybeFilter.exists(_.getClass === filterClass)
-        }
-        checker(stripSparkFilter(query), expected)
->>>>>>> master
     }
   }
 

@@ -34,6 +34,7 @@ import array
 import ctypes
 import warnings
 import py4j
+from contextlib import contextmanager
 import unishark
 
 if sys.version_info[:2] <= (2, 6):
@@ -3806,6 +3807,7 @@ class ArrowTests(ReusedSQLTestCase):
                     pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
 
     # Regression test for SPARK-23314
+    @unittest.skip("This test flakes depending on system timezone")
     def test_timestamp_dst(self):
         import pandas as pd
         # Daylight saving time for Los Angeles for 2015 is Sun, Nov 1 at 2:00 am

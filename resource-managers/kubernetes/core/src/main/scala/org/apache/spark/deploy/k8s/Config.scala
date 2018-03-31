@@ -141,7 +141,6 @@ private[spark] object Config extends Logging {
       .checkValue(interval => interval > 0, s"Logging interval must be a positive time value.")
       .createWithDefaultString("1s")
 
-<<<<<<< HEAD
   val FILES_DOWNLOAD_LOCATION =
     ConfigBuilder("spark.kubernetes.mountDependencies.filesDownloadDir")
       .doc("Location to download files to in the driver and executors. When using " +
@@ -166,8 +165,6 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-=======
->>>>>>> master
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 

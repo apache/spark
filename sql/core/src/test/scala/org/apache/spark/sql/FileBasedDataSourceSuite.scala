@@ -26,11 +26,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-<<<<<<< HEAD
-import org.apache.spark.tags.Flaky
-=======
 import org.apache.spark.sql.types._
->>>>>>> master
+import org.apache.spark.tags.Flaky
 
 
 class FileBasedDataSourceSuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {

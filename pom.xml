@@ -3094,16 +3094,6 @@
     </profile>
 
     <profile>
-      <id>kubernetes-integration-tests</id>
-      <modules>
-        <module>resource-managers/kubernetes/docker-minimal-bundle</module>
-        <module>resource-managers/kubernetes/integration-tests</module>
-        <module>resource-managers/kubernetes/integration-tests-spark-jobs</module>
-        <module>resource-managers/kubernetes/integration-tests-spark-jobs-helpers</module>
-      </modules>
-    </profile>
-
-    <profile>
       <id>hive-thriftserver</id>
       <modules>
         <module>sql/hive-thriftserver</module>

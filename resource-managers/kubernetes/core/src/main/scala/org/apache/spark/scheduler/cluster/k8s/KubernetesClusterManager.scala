@@ -71,14 +71,10 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       new MountSmallFilesBootstrap(secretName, secretMountPath)
     }
 
-<<<<<<< HEAD
     val executorPodFactory = new ExecutorPodFactory(
       sparkConf,
       mountSecretBootstrap,
       mountSmallFilesBootstrap)
-=======
-    val executorPodFactory = new ExecutorPodFactory(sc.conf, mountSecretBootstrap)
->>>>>>> master
 
     val allocatorExecutor = ThreadUtils
       .newDaemonSingleThreadScheduledExecutor("kubernetes-pod-allocator")
