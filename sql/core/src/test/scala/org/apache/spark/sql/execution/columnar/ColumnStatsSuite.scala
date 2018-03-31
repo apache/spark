@@ -35,15 +35,14 @@ class ColumnStatsSuite extends SparkFunSuite {
   )
   testColumnStats(classOf[StringColumnStats], STRING, Array(null, null, 0, 0, 0))
   testDecimalColumnStats(Array(null, null, 0, 0, 0))
-  testObjectColumnStats(ArrayType(IntegerType), orderable = true, Array(null, null, 0, 0, 0))
-  testObjectColumnStats(
+  testArrayColumnStats(ArrayType(IntegerType), orderable = true, Array(null, null, 0, 0, 0))
+  testStructColumnStats(
     StructType(Array(StructField("test", DataTypes.StringType))),
     orderable = true,
     Array(null, null, 0, 0, 0)
   )
-  testObjectColumnStats(
+  testMapColumnStats(
     MapType(IntegerType, StringType),
-    orderable = false,
     Array(null, null, 0, 0, 0)
   )
 
@@ -121,13 +120,12 @@ class ColumnStatsSuite extends SparkFunSuite {
     }
   }
 
-  def testObjectColumnStats(
-       dataType: DataType, orderable: Boolean, initialStatistics: Array[Any]): Unit = {
-    assert(!(orderable ^ RowOrdering.isOrderable(dataType)))
+  def testArrayColumnStats(
+      dataType: DataType, orderable: Boolean, initialStatistics: Array[Any]): Unit = {
     val columnType = ColumnType(dataType)
 
     test(s"${dataType.typeName}: empty") {
-      val objectStats = new ObjectColumnStats(dataType)
+      val objectStats = new ArrayColumnStats(dataType)
       objectStats.collectedStatistics.zip(initialStatistics).foreach {
         case (actual, expected) => assert(actual === expected)
       }
@@ -135,7 +133,7 @@ class ColumnStatsSuite extends SparkFunSuite {
 
     test(s"${dataType.typeName}: non-empty") {
       import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
-      val objectStats = new ObjectColumnStats(dataType)
+      val objectStats = new ArrayColumnStats(dataType)
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(objectStats.gatherStats(_, 0))
 
@@ -150,6 +148,73 @@ class ColumnStatsSuite extends SparkFunSuite {
         assertResult(null, "Wrong lower bound")(stats(0))
         assertResult(null, "Wrong upper bound")(stats(1))
       }
+      assertResult(10, "Wrong null count")(stats(2))
+      assertResult(20, "Wrong row count")(stats(3))
+      assertResult(stats(4), "Wrong size in bytes") {
+        rows.map { row =>
+          if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
+        }.sum
+      }
+    }
+  }
+
+  def testStructColumnStats(
+      dataType: DataType, orderable: Boolean, initialStatistics: Array[Any]): Unit = {
+    val columnType = ColumnType(dataType)
+
+    test(s"${dataType.typeName}: empty") {
+      val objectStats = new StructColumnStats(dataType)
+      objectStats.collectedStatistics.zip(initialStatistics).foreach {
+        case (actual, expected) => assert(actual === expected)
+      }
+    }
+
+    test(s"${dataType.typeName}: non-empty") {
+      import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
+      val objectStats = new StructColumnStats(dataType)
+      val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
+      rows.foreach(objectStats.gatherStats(_, 0))
+
+      val stats = objectStats.collectedStatistics
+      if (orderable) {
+        val values = rows.take(10).map(_.get(0, columnType.dataType))
+        val ordering = TypeUtils.getInterpretedOrdering(dataType)
+
+        assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
+        assertResult(values.max(ordering), "Wrong upper bound")(stats(1))
+      } else {
+        assertResult(null, "Wrong lower bound")(stats(0))
+        assertResult(null, "Wrong upper bound")(stats(1))
+      }
+      assertResult(10, "Wrong null count")(stats(2))
+      assertResult(20, "Wrong row count")(stats(3))
+      assertResult(stats(4), "Wrong size in bytes") {
+        rows.map { row =>
+          if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
+        }.sum
+      }
+    }
+  }
+
+  def testMapColumnStats(dataType: DataType, initialStatistics: Array[Any]): Unit = {
+    val columnType = ColumnType(dataType)
+
+    test(s"${dataType.typeName}: empty") {
+      val objectStats = new MapColumnStats(dataType)
+      objectStats.collectedStatistics.zip(initialStatistics).foreach {
+        case (actual, expected) => assert(actual === expected)
+      }
+    }
+
+    test(s"${dataType.typeName}: non-empty") {
+      import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
+      val objectStats = new MapColumnStats(dataType)
+      val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
+      rows.foreach(objectStats.gatherStats(_, 0))
+
+      val stats = objectStats.collectedStatistics
+      assertResult(null, "Wrong lower bound")(stats(0))
+      assertResult(null, "Wrong upper bound")(stats(1))
       assertResult(10, "Wrong null count")(stats(2))
       assertResult(20, "Wrong row count")(stats(3))
       assertResult(stats(4), "Wrong size in bytes") {

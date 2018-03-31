@@ -85,7 +85,7 @@ private[columnar] class BasicColumnBuilder[JvmType](
 }
 
 private[columnar] class NullColumnBuilder
-  extends BasicColumnBuilder[Any](new ObjectColumnStats(NullType), NULL)
+  extends BasicColumnBuilder[Any](new NullColumnStats, NULL)
   with NullableColumnBuilder
 
 private[columnar] abstract class ComplexColumnBuilder[JvmType](
@@ -132,13 +132,13 @@ private[columnar] class DecimalColumnBuilder(dataType: DecimalType)
   extends ComplexColumnBuilder(new DecimalColumnStats(dataType), LARGE_DECIMAL(dataType))
 
 private[columnar] class StructColumnBuilder(dataType: StructType)
-  extends ComplexColumnBuilder(new ObjectColumnStats(dataType), STRUCT(dataType))
+  extends ComplexColumnBuilder(new StructColumnStats(dataType), STRUCT(dataType))
 
 private[columnar] class ArrayColumnBuilder(dataType: ArrayType)
-  extends ComplexColumnBuilder(new ObjectColumnStats(dataType), ARRAY(dataType))
+  extends ComplexColumnBuilder(new ArrayColumnStats(dataType), ARRAY(dataType))
 
 private[columnar] class MapColumnBuilder(dataType: MapType)
-  extends ComplexColumnBuilder(new ObjectColumnStats(dataType), MAP(dataType))
+  extends ComplexColumnBuilder(new MapColumnStats(dataType), MAP(dataType))
 
 private[columnar] object ColumnBuilder {
   val DEFAULT_INITIAL_BUFFER_SIZE = 128 * 1024

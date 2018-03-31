@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, RowOrdering}
-import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.{ArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -81,7 +81,7 @@ private[columnar] final class NoopColumnStats extends ColumnStats {
     if (!row.isNullAt(ordinal)) {
       count += 1
     } else {
-      gatherNullStats
+      gatherNullStats()
     }
   }
 
@@ -97,7 +97,7 @@ private[columnar] final class BooleanColumnStats extends ColumnStats {
       val value = row.getBoolean(ordinal)
       gatherValueStats(value)
     } else {
-      gatherNullStats
+      gatherNullStats()
     }
   }
 
@@ -121,7 +121,7 @@ private[columnar] final class ByteColumnStats extends ColumnStats {
       val value = row.getByte(ordinal)
       gatherValueStats(value)
     } else {
-      gatherNullStats
+      gatherNullStats()
     }
   }
 
@@ -145,7 +145,7 @@ private[columnar] final class ShortColumnStats extends ColumnStats {
       val value = row.getShort(ordinal)
       gatherValueStats(value)
     } else {
-      gatherNullStats
+      gatherNullStats()
     }
   }
 
@@ -169,7 +169,7 @@ private[columnar] final class IntColumnStats extends ColumnStats {
       val value = row.getInt(ordinal)
       gatherValueStats(value)
     } else {
-      gatherNullStats
+      gatherNullStats()
     }
   }
 
@@ -193,7 +193,7 @@ private[columnar] final class LongColumnStats extends ColumnStats {
       val value = row.getLong(ordinal)
       gatherValueStats(value)
     } else {
-      gatherNullStats
+      gatherNullStats()
     }
   }
 
@@ -217,7 +217,7 @@ private[columnar] final class FloatColumnStats extends ColumnStats {
       val value = row.getFloat(ordinal)
       gatherValueStats(value)
     } else {
-      gatherNullStats
+      gatherNullStats()
     }
   }
 
@@ -241,7 +241,7 @@ private[columnar] final class DoubleColumnStats extends ColumnStats {
       val value = row.getDouble(ordinal)
       gatherValueStats(value)
     } else {
-      gatherNullStats
+      gatherNullStats()
     }
   }
 
@@ -266,7 +266,7 @@ private[columnar] final class StringColumnStats extends ColumnStats {
       val size = STRING.actualSize(row, ordinal)
       gatherValueStats(value, size)
     } else {
-      gatherNullStats
+      gatherNullStats()
     }
   }
 
@@ -288,7 +288,7 @@ private[columnar] final class BinaryColumnStats extends ColumnStats {
       sizeInBytes += size
       count += 1
     } else {
-      gatherNullStats
+      gatherNullStats()
     }
   }
 
@@ -308,7 +308,7 @@ private[columnar] final class DecimalColumnStats(precision: Int, scale: Int) ext
       // TODO: this is not right for DecimalType with precision > 18
       gatherValueStats(value)
     } else {
-      gatherNullStats
+      gatherNullStats()
     }
   }
 
@@ -323,32 +323,75 @@ private[columnar] final class DecimalColumnStats(precision: Int, scale: Int) ext
     Array[Any](lower, upper, nullCount, count, sizeInBytes)
 }
 
-private[columnar] final class ObjectColumnStats(dataType: DataType) extends ColumnStats {
-  protected var upper: Any = null
-  protected var lower: Any = null
+private abstract class OrderableSafeColumnStats[T](dataType: DataType) extends ColumnStats {
+  protected var upper: T = _
+  protected var lower: T = _
 
-  val columnType = ColumnType(dataType)
-  val ordering = dataType match {
-    case x if RowOrdering.isOrderable(dataType) && x != NullType =>
+  private val columnType = ColumnType(dataType)
+  private val ordering = dataType match {
+    case x if RowOrdering.isOrderable(dataType) =>
       Option(TypeUtils.getInterpretedOrdering(x))
     case _ => None
   }
 
   override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
     if (!row.isNullAt(ordinal)) {
-      val size = columnType.actualSize(row, ordinal)
-      sizeInBytes += size
+      sizeInBytes += columnType.actualSize(row, ordinal)
       count += 1
       ordering.foreach { order =>
-        val value = row.get(ordinal, dataType)
-        if (upper == null || order.gt(value, upper)) upper = value
-        if (lower == null || order.lt(value, lower)) lower = value
+        val value = getValue(row, ordinal)
+        if (upper == null || order.gt(value, upper)) upper = copy(value)
+        if (lower == null || order.lt(value, lower)) lower = copy(value)
       }
     } else {
-      gatherNullStats
+      gatherNullStats()
+    }
+  }
+
+  def getValue(row: InternalRow, ordinal: Int): T
+
+  def copy(value: T): T
+
+  override def collectedStatistics: Array[Any] =
+    Array[Any](lower, upper, nullCount, count, sizeInBytes)
+}
+
+private[columnar] final class ArrayColumnStats(dataType: DataType)
+  extends OrderableSafeColumnStats[ArrayData](dataType) {
+  override def getValue(row: InternalRow, ordinal: Int): ArrayData = row.getArray(ordinal)
+
+  override def copy(value: ArrayData): ArrayData = value.copy()
+}
+
+private[columnar] final class StructColumnStats(dataType: DataType)
+  extends OrderableSafeColumnStats[InternalRow](dataType) {
+  private val numFields = dataType.asInstanceOf[StructType].fields.length
+
+  override def getValue(row: InternalRow, ordinal: Int): InternalRow =
+    row.getStruct(ordinal, numFields)
+
+  override def copy(value: InternalRow): InternalRow = value.copy()
+}
+
+private[columnar] final class MapColumnStats(dataType: DataType) extends ColumnStats {
+  private val columnType = ColumnType(dataType)
+
+  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
+    if (!row.isNullAt(ordinal)) {
+      sizeInBytes += columnType.actualSize(row, ordinal)
+      count += 1
+    } else {
+      gatherNullStats()
     }
   }
 
   override def collectedStatistics: Array[Any] =
-    Array[Any](lower, upper, nullCount, count, sizeInBytes)
+    Array[Any](null, null, nullCount, count, sizeInBytes)
+}
+
+private[columnar] final class NullColumnStats extends ColumnStats {
+  override def gatherStats(row: InternalRow, ordinal: Int): Unit = gatherNullStats()
+
+  override def collectedStatistics: Array[Any] =
+    Array[Any](null, null, nullCount, count, sizeInBytes)
 }
