@@ -16,6 +16,8 @@
  */
 package org.apache.spark.deploy.k8s
 
+import java.nio.file.Paths
+
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
 
@@ -42,19 +44,41 @@ private[spark] object KubernetesUtils {
   /**
    * For the given collection of file URIs, resolves them as follows:
    * - File URIs with scheme local:// resolve to just the path of the URI.
-   * - Otherwise, the URIs are returned as-is.
+   * - Otherwise, the URIs are returned resolved to the downloaded path.
    */
-  def resolveFileUrisAndPath(fileUris: Iterable[String]): Iterable[String] = {
+  def resolveFileUrisAndPath(
+      fileUris: Iterable[String], downloadPath: String): Iterable[String] = {
     fileUris.map { uri =>
-      resolveFileUri(uri)
+      resolveFileUri(uri, downloadPath)
     }
   }
 
-  private def resolveFileUri(uri: String): String = {
+  /**
+   * Get from a given collection of file URIs the ones that represent submitter-local files.
+   */
+  def getOnlySubmitterLocalFiles(uris: Iterable[String]): Iterable[String] = {
+    uris.filter { uri =>
+      Utils.resolveURI(uri).getScheme == "file"
+    }
+  }
+
+  def resolveLocalFile(uri: String): String = {
     val fileUri = Utils.resolveURI(uri)
     val fileScheme = Option(fileUri.getScheme).getOrElse("file")
     fileScheme match {
       case "local" => fileUri.getPath
+      case _ => uri
+    }
+  }
+
+  private def resolveFileUri(uri: String, downloadPath: String): String = {
+    val fileUri = Utils.resolveURI(uri)
+    val fileScheme = Option(fileUri.getScheme).getOrElse("file")
+    fileScheme match {
+      case "local" => fileUri.getPath
+      case "file" =>
+        val fileName = Paths.get(fileUri.getPath).toFile.getName
+        s"$downloadPath/$fileName"
       case _ => uri
     }
   }

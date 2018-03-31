@@ -17,13 +17,13 @@
 package org.apache.spark.deploy.k8s.submit
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap}
+import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap, MountSmallFilesBootstrap}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.steps._
+import org.apache.spark.deploy.k8s.submit.submitsteps.DriverMountLocalFilesStep
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.util.SystemClock
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SystemClock, Utils}
 
 /**
  * Figures out and returns the complete ordered list of needed DriverConfigurationSteps to
@@ -104,15 +104,23 @@ private[spark] class DriverConfigOrchestrator(
       .getOrElse(Array.empty[String])
 
     // TODO(SPARK-23153): remove once submission client local dependencies are supported.
-    if (existSubmissionLocalFiles(sparkJars) || existSubmissionLocalFiles(sparkFiles)) {
+    if (existSubmissionLocalFiles(sparkJars)) {
       throw new SparkException("The Kubernetes mode does not yet support referencing application " +
         "dependencies in the local file system.")
     }
 
+    val mountLocalFilesStep = if (existSubmissionLocalFiles(sparkFiles)) {
+      val localFilesSecretName = s"$kubernetesResourceNamePrefix-submitted-files"
+      Seq(new DriverMountLocalFilesStep(
+        KubernetesUtils.getOnlySubmitterLocalFiles(sparkFiles),
+        localFilesSecretName,
+        sparkConf.get(FILES_DOWNLOAD_LOCATION),
+        new MountSmallFilesBootstrap(localFilesSecretName, sparkConf.get(FILES_DOWNLOAD_LOCATION))
+      ))
+    } else Nil
+
     val dependencyResolutionStep = if (sparkJars.nonEmpty || sparkFiles.nonEmpty) {
-      Seq(new DependencyResolutionStep(
-        sparkJars,
-        sparkFiles))
+      Seq(new DependencyResolutionStep(sparkJars, sparkFiles))
     } else {
       Nil
     }
@@ -127,6 +135,7 @@ private[spark] class DriverConfigOrchestrator(
       initialSubmissionStep,
       serviceBootstrapStep,
       kubernetesCredentialsStep) ++
+      mountLocalFilesStep ++
       dependencyResolutionStep ++
       mountSecretsStep
   }
@@ -139,7 +148,8 @@ private[spark] class DriverConfigOrchestrator(
 
   private def existNonContainerLocalFiles(files: Seq[String]): Boolean = {
     files.exists { uri =>
-      Utils.resolveURI(uri).getScheme != "local"
+      val resolvedUri = Utils.resolveURI(uri)
+      resolvedUri.getScheme != "local" && resolvedUri.getScheme != "file"
     }
   }
 }

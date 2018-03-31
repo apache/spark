@@ -24,6 +24,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.MountSmallFilesBootstrap
 import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD}
 import org.apache.spark.util.Utils
 
@@ -37,7 +38,8 @@ import org.apache.spark.util.Utils
  */
 private[spark] class ExecutorPodFactory(
     sparkConf: SparkConf,
-    mountSecretsBootstrap: Option[MountSecretsBootstrap]) {
+    mountSecretsBootstrap: Option[MountSecretsBootstrap],
+    mountSmallFilesBootstrap: Option[MountSmallFilesBootstrap]) {
 
   private val executorExtraClasspath = sparkConf.get(EXECUTOR_CLASS_PATH)
 
@@ -212,10 +214,15 @@ private[spark] class ExecutorPodFactory(
         (bootstrap.addSecretVolumes(executorPod), bootstrap.mountSecrets(containerWithLimitCores))
       }.getOrElse((executorPod, containerWithLimitCores))
 
+    val (maybeSmallFilesMountedPod, maybeSmallFilesMountedContainer) =
+      mountSmallFilesBootstrap.map { bootstrap =>
+        bootstrap.mountSmallFilesSecret(
+          maybeSecretsMountedPod, maybeSecretsMountedContainer)
+      }.getOrElse((maybeSecretsMountedPod, maybeSecretsMountedContainer))
 
-    new PodBuilder(maybeSecretsMountedPod)
+    new PodBuilder(maybeSmallFilesMountedPod)
       .editSpec()
-        .addToContainers(maybeSecretsMountedContainer)
+        .addToContainers(maybeSmallFilesMountedContainer)
         .endSpec()
       .build()
   }

@@ -52,6 +52,9 @@ fi
 if [ -n "$SPARK_MOUNTED_FILES_DIR" ]; then
   cp -R "$SPARK_MOUNTED_FILES_DIR/." .
 fi
+if [ -n "$SPARK_MOUNTED_FILES_FROM_SECRET_DIR" ]; then
+  cp -R "$SPARK_MOUNTED_FILES_FROM_SECRET_DIR/." .
+fi
 
 case "$SPARK_K8S_CMD" in
   driver)

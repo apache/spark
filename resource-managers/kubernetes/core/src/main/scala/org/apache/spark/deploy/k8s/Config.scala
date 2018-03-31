@@ -141,6 +141,30 @@ private[spark] object Config extends Logging {
       .checkValue(interval => interval > 0, s"Logging interval must be a positive time value.")
       .createWithDefaultString("1s")
 
+  val FILES_DOWNLOAD_LOCATION =
+    ConfigBuilder("spark.kubernetes.mountDependencies.filesDownloadDir")
+      .doc("Location to download files to in the driver and executors. When using " +
+        "spark-submit, this directory must be empty and will be mounted as an empty directory " +
+        "volume on the driver and executor pods.")
+      .stringConf
+      .createWithDefault("/var/spark-data/spark-files")
+
+  val EXECUTOR_SUBMITTED_SMALL_FILES_SECRET =
+    ConfigBuilder("spark.kubernetes.mountdependencies.smallfiles.executor.secretName")
+      .doc("Name of the secret that should be mounted into the executor containers for" +
+        " distributing submitted small files without the resource staging server.")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val EXECUTOR_SUBMITTED_SMALL_FILES_SECRET_MOUNT_PATH =
+    ConfigBuilder("spark.kubernetes.mountdependencies.smallfiles.executor.secretMountPath")
+      .doc(s"Mount path in the executors for the secret given by" +
+        s" ${EXECUTOR_SUBMITTED_SMALL_FILES_SECRET.key}")
+      .internal()
+      .stringConf
+      .createOptional
+
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
 

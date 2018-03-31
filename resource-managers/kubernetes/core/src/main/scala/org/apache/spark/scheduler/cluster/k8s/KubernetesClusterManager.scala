@@ -24,6 +24,7 @@ import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.deploy.k8s.{KubernetesUtils, MountSecretsBootstrap, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.MountSmallFilesBootstrap
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
 import org.apache.spark.util.ThreadUtils
@@ -61,8 +62,19 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       sc.conf,
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
+    val sparkConf = sc.conf.clone()
 
-    val executorPodFactory = new ExecutorPodFactory(sc.conf, mountSecretBootstrap)
+    val mountSmallFilesBootstrap = for {
+      secretName <- sparkConf.get(EXECUTOR_SUBMITTED_SMALL_FILES_SECRET)
+      secretMountPath <- sparkConf.get(EXECUTOR_SUBMITTED_SMALL_FILES_SECRET_MOUNT_PATH)
+    } yield {
+      new MountSmallFilesBootstrap(secretName, secretMountPath)
+    }
+
+    val executorPodFactory = new ExecutorPodFactory(
+      sparkConf,
+      mountSecretBootstrap,
+      mountSmallFilesBootstrap)
 
     val allocatorExecutor = ThreadUtils
       .newDaemonSingleThreadScheduledExecutor("kubernetes-pod-allocator")

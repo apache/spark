@@ -23,9 +23,9 @@ import org.mockito.MockitoAnnotations
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.k8s.{MountSecretsBootstrap, MountSmallFilesBootstrap}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.MountSecretsBootstrap
 
 class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterEach {
 
@@ -57,7 +57,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
   }
 
   test("basic executor pod has reasonable defaults") {
-    val factory = new ExecutorPodFactory(baseConf, None)
+    val factory = new ExecutorPodFactory(baseConf, None, None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -88,7 +88,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX,
       "loremipsumdolorsitametvimatelitrefficiendisuscipianturvixlegeresple")
 
-    val factory = new ExecutorPodFactory(conf, None)
+    val factory = new ExecutorPodFactory(conf, None, None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -100,7 +100,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     conf.set(org.apache.spark.internal.config.EXECUTOR_JAVA_OPTIONS, "foo=bar")
     conf.set(org.apache.spark.internal.config.EXECUTOR_CLASS_PATH, "bar=baz")
 
-    val factory = new ExecutorPodFactory(conf, None)
+    val factory = new ExecutorPodFactory(conf, None, None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)]("qux" -> "quux"), driverPod, Map[String, Int]())
 
@@ -115,7 +115,10 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     val conf = baseConf.clone()
 
     val secretsBootstrap = new MountSecretsBootstrap(Map("secret1" -> "/var/secret1"))
-    val factory = new ExecutorPodFactory(conf, Some(secretsBootstrap))
+    val factory = new ExecutorPodFactory(
+      conf,
+      Some(secretsBootstrap),
+      None)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -131,6 +134,30 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     assert(executor.getSpec.getVolumes.get(0).getSecret.getSecretName === "secret1")
 
     checkOwnerReferences(executor, driverPodUid)
+  }
+
+  test("Small-files add a secret & secret volume mount to the container") {
+    val conf = baseConf.clone()
+    val smallFiles = new MountSmallFilesBootstrap("secret1", "/var/secret1")
+    val factory = new ExecutorPodFactory(
+      conf,
+      None,
+      Some(smallFiles))
+    val executor = factory.createExecutorPod(
+      "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
+
+    assert(executor.getSpec.getContainers.size() === 1)
+    assert(executor.getSpec.getContainers.get(0).getVolumeMounts.size() === 1)
+    assert(executor.getSpec.getContainers.get(0).getVolumeMounts.get(0)
+      .getName === "submitted-files")
+    assert(executor.getSpec.getContainers.get(0).getVolumeMounts.get(0)
+      .getMountPath === "/var/secret1")
+
+    assert(executor.getSpec.getVolumes.size() === 1)
+    assert(executor.getSpec.getVolumes.get(0).getSecret.getSecretName === "secret1")
+
+    checkOwnerReferences(executor, driverPodUid)
+    checkEnv(executor, Map("SPARK_MOUNTED_FILES_FROM_SECRET_DIR" -> "/var/secret1"))
   }
 
   // There is always exactly one controller reference, and it points to the driver pod.

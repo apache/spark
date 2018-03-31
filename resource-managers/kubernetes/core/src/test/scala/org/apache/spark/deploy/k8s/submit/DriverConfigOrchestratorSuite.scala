@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s.submit
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.submit.steps._
+import org.apache.spark.deploy.k8s.submit.submitsteps.DriverMountLocalFilesStep
 
 class DriverConfigOrchestratorSuite extends SparkFunSuite {
 
@@ -116,9 +117,14 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
       MAIN_CLASS,
       APP_ARGS,
       sparkConf)
-    assertThrows[SparkException] {
-      orchestrator.getAllConfigurationSteps
-    }
+    validateStepTypes(
+      orchestrator,
+      classOf[BasicDriverConfigurationStep],
+      classOf[DriverServiceBootstrapStep],
+      classOf[DriverKubernetesCredentialsStep],
+      classOf[DriverMountLocalFilesStep],
+      classOf[DependencyResolutionStep])
+
   }
 
   private def validateStepTypes(
