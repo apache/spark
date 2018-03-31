@@ -105,7 +105,7 @@ object TextInputJsonDataSource extends JsonDataSource {
     JsonInferSchema.infer[InternalRow](
       rdd,
       parsedOptions,
-      CreateJacksonParser.internalRow(_, _, 0, parsedOptions.charset)
+      CreateJacksonParser.internalRow(_, _, 0, parsedOptions.encoding)
     )
   }
 
@@ -132,7 +132,7 @@ object TextInputJsonDataSource extends JsonDataSource {
       schema: StructType): Iterator[InternalRow] = {
     val linesReader = new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
-    val charset = parser.options.charset
+    val charset = parser.options.encoding
 
     val safeParser = new FailureSafeParser[Text](
       input => parser.parse[Text](input, CreateJacksonParser.text(_, _, charset), textToUTF8String),
@@ -162,7 +162,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
     JsonInferSchema.infer[PortableDataStream](
       sampled,
       parsedOptions,
-      createParser(_, _, parsedOptions.charset)
+      createParser(_, _, parsedOptions.encoding)
     )
   }
 
@@ -210,7 +210,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
         UTF8String.fromBytes(ByteStreams.toByteArray(is))
       }
     }
-    val charset = parser.options.charset
+    val charset = parser.options.encoding
 
     val safeParser = new FailureSafeParser[InputStream](
       input => parser.parse[InputStream](

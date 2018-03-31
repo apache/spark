@@ -361,7 +361,7 @@ class JacksonParser(
         // For such records, all fields other than the field configured by
         // `columnNameOfCorruptRecord` are set to `null`.
         throw BadRecordException(() => recordLiteral(record), () => None, e)
-      case e: CharConversionException if options.charset.isEmpty =>
+      case e: CharConversionException if options.encoding.isEmpty =>
         val msg =
           """Failed to parse a character. Charset was detected automatically.
             |You might want to set it explicitly via the charset option like:

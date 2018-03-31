@@ -153,7 +153,7 @@ private[json] class JsonOutputWriter(
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
 
-  private val charset = options.charset match {
+  private val charset = options.encoding match {
     case Some(charsetName) => Charset.forName(charsetName)
     case _ => StandardCharsets.UTF_8
   }

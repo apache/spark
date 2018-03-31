@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.nio.charset.StandardCharsets
 import java.util.{Locale, TimeZone}
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
@@ -92,23 +91,22 @@ private[sql] class JSONOptions(
   val lineSeparator: Option[String] = parameters.get("lineSep")
 
   /**
-   * Standard charset name. For example UTF-8, UTF-16 and UTF-32.
-   * If charset is not specified (None), it will be detected automatically.
+   * Standard charset name. For example UTF-8, UTF-16LE and UTF-32BE.
+   * If the encoding is not specified (None), it will be detected automatically.
    */
-  val charset: Option[String] = parameters.get("charset")
-    .orElse(parameters.get("encoding")).map { cs =>
-      if (multiLine == false && cs != "UTF-8" && lineSeparator.isEmpty) {
+  val encoding: Option[String] = parameters.get("encoding")
+    .orElse(parameters.get("charset")).map { enc =>
+      if (multiLine == false && enc != "UTF-8" && lineSeparator.isEmpty) {
         throw new IllegalArgumentException(
-          s"""Please, set the 'lineSep' option for the given charset $cs.
+          s"""Please, set the 'lineSep' option for the given encoding $enc.
              |Example: .option("lineSep", "|^|")
-             |Note: lineSep can be detected automatically for UTF-8 only.""".stripMargin
-        )
+             |Note: lineSep can be detected automatically for UTF-8 only.""".stripMargin)
       }
-      cs
+      enc
   }
 
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
-    lineSep.getBytes(charset.getOrElse("UTF-8"))
+    lineSep.getBytes(encoding.getOrElse("UTF-8"))
   }
   val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
 
@@ -125,6 +123,7 @@ private[sql] class JSONOptions(
   }
 
   def getTextOptions: Map[String, String] = {
-    Map[String, String]() ++ charset.map("charset" -> _) ++ lineSeparator.map("lineSep" -> _)
+    Map[String, String]() ++
+      encoding.map("encoding" -> _) ++ lineSeparator.map("lineSep" -> _)
   }
 }

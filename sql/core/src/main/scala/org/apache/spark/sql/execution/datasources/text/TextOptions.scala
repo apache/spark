@@ -41,22 +41,23 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
    */
   val wholeText = parameters.getOrElse(WHOLETEXT, "false").toBoolean
 
-  val charset: Option[String] = Some("UTF-8")
+  val encoding: Option[String] = parameters.get(ENCODING)
 
-  val lineSeparator: Option[Array[Byte]] = parameters.get("lineSep").map { lineSep =>
+  val lineSeparator: Option[Array[Byte]] = parameters.get(LINE_SEPARATOR).map { lineSep =>
     require(lineSep.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
-    lineSep.getBytes(charset.getOrElse(
-      throw new IllegalArgumentException("Please, set the charset option for the delimiter")))
+
+    lineSep.getBytes(encoding.getOrElse("UTF-8"))
   }
 
   // Note that the option 'lineSep' uses a different default value in read and write.
   val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator
   val lineSeparatorInWrite: Array[Byte] =
-    lineSeparatorInRead.getOrElse("\n".getBytes(StandardCharsets.UTF_8))
+    lineSeparatorInRead.getOrElse("\n".getBytes("UTF-8"))
 }
 
 private[datasources] object TextOptions {
   val COMPRESSION = "compression"
   val WHOLETEXT = "wholetext"
+  val ENCODING = "encoding"
   val LINE_SEPARATOR = "lineSep"
 }
