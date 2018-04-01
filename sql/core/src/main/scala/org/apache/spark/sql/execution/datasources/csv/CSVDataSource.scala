@@ -283,10 +283,7 @@ object MultiLineCSVDataSource extends CSVDataSource {
 
     UnivocityParser.parseStream(
       CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))),
-      parser.options.headerFlag,
-      parser,
-      schema,
-      checkHeader)
+      parser.options.headerFlag, parser, schema, file.filePath, checkHeader)
   }
 
   override def infer(
