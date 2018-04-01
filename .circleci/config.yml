@@ -432,6 +432,7 @@ workflows:
             - build-maven
             - build-sbt
             # Tests
+            - run-style-tests
             - run-build-tests
             - run-backcompat-tests
             - run-scala-tests

@@ -202,7 +202,7 @@ fi
 # Only create and copy the dockerfiles directory if the kubernetes artifacts were built.
 if [ -d "$SPARK_HOME"/resource-managers/kubernetes/core/target/ ]; then
   mkdir -p "$DISTDIR/kubernetes/"
-  cp -a "$SPARK_HOME"/resource-managers/kubernetes/docker-minimal-bundle/src/main/docker/ "$DISTDIR/kubernetes"
+  cp -a "$SPARK_HOME"/resource-managers/kubernetes/docker/src/main/dockerfiles "$DISTDIR/kubernetes/"
 fi
 
 # Copy examples and dependencies
@@ -270,7 +270,6 @@ fi
 # Copy other things
 mkdir "$DISTDIR/conf"
 cp "$SPARK_HOME"/conf/*.template "$DISTDIR/conf"
-cp "$SPARK_HOME"/conf/*.yaml "$DISTDIR/conf"
 cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
 cp -r "$SPARK_HOME/python" "$DISTDIR"
