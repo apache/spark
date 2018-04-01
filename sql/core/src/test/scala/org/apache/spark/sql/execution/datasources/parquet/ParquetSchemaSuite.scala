@@ -390,7 +390,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
   def testSchemaMismatch(path: String, vectorizedReaderEnabled: Boolean): SparkException = {
     import testImplicits._
 
-    var e : SparkException = null
+    var e: SparkException = null
     // Disable databricks' vectorized parquet reader and use open source version.
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString) {
       // Create two parquet files with different schemas in the same folder
@@ -401,7 +401,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
         spark.read.parquet(s"$path/parquet").collect()
       }
     }
-    return e
+    e
   }
 
   test("schema mismatch failure error message for parquet reader") {

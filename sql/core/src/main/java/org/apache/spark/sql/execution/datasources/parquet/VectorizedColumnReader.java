@@ -236,12 +236,12 @@ public class VectorizedColumnReader {
    * Helper function to construct exception for parquet schema mismatch.
    */
   private ParquetSchemaColumnConvertNotSupportedException constructConvertNotSupportedException(
-          ColumnDescriptor descriptor,
-          WritableColumnVector column) {
+      ColumnDescriptor descriptor,
+      WritableColumnVector column) {
     return new ParquetSchemaColumnConvertNotSupportedException(
-            Arrays.toString(descriptor.getPath()),
-            descriptor.getType().toString(),
-            column.dataType().toString());
+      Arrays.toString(descriptor.getPath()),
+      descriptor.getType().toString(),
+      column.dataType().toString());
   }
 
   /**

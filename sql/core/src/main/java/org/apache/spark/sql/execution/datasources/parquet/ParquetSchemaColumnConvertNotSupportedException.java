@@ -47,7 +47,9 @@ public class ParquetSchemaColumnConvertNotSupportedException extends RuntimeExce
     return logicalType;
   }
 
-  public ParquetSchemaColumnConvertNotSupportedException(String column, String physicalType,
+  public ParquetSchemaColumnConvertNotSupportedException(
+      String column,
+      String physicalType,
       String logicalType) {
     super();
     this.column = column;
