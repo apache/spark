@@ -103,6 +103,60 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
     }
   }
 
+  test("CTAS a managed table with the existing empty directory") {
+    val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier("tab1")))
+    try {
+      tableLoc.mkdir()
+      withTable("tab1") {
+        sql("CREATE TABLE tab1 USING PARQUET AS SELECT 1, 'a'")
+        checkAnswer(spark.table("tab1"), Row(1, "a"))
+      }
+    } finally {
+      waitForTasksToFinish()
+      Utils.deleteRecursively(tableLoc)
+    }
+  }
+
+  test("create a managed table with the existing empty directory") {
+    val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier("tab1")))
+    try {
+      tableLoc.mkdir()
+      withTable("tab1") {
+        sql("CREATE TABLE tab1 (col1 int, col2 string) USING PARQUET")
+        sql("INSERT INTO tab1 VALUES (1, 'a')")
+        checkAnswer(spark.table("tab1"), Row(1, "a"))
+      }
+    } finally {
+      waitForTasksToFinish()
+      Utils.deleteRecursively(tableLoc)
+    }
+  }
+
+  test("create a managed table with the existing non-empty directory") {
+    withTable("tab1") {
+      val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier("tab1")))
+      try {
+        // create an empty hidden file
+        tableLoc.mkdir()
+        val hiddenGarbageFile = new File(tableLoc.getCanonicalPath, ".garbage")
+        hiddenGarbageFile.createNewFile()
+        var ex = intercept[AnalysisException] {
+          sql("CREATE TABLE tab1 USING PARQUET AS SELECT 1, 'a'")
+        }.getMessage
+        assert(ex.contains("Can not create the managed table('`tab1`'). The associated location"))
+
+        ex = intercept[AnalysisException] {
+          sql("CREATE TABLE tab1 (col1 int, col2 string) USING PARQUET")
+        }.getMessage
+        assert(ex.contains(
+          "Can not create the managed table('`default`.`tab1`'). The associated location"))
+      } finally {
+        waitForTasksToFinish()
+        Utils.deleteRecursively(tableLoc)
+      }
+    }
+  }
+
   test("Create Hive Table As Select") {
     import testImplicits._
     withTable("t", "t1") {
