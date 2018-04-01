@@ -226,7 +226,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
             case map =>
               // preserve 8 bytes to write the key array numBytes later.
               valueArrayWriter.grow(8)
-              valueArrayWriter.incrementCursor(8)
+              valueArrayWriter.increaseCursor(8)
 
               // Write the keys and write the numBytes of key array into the first 8 bytes.
               writeArray(keyArrayWriter, keyWriter, map.keyArray())
@@ -350,6 +350,6 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
       writer.buffer,
       writer.cursor,
       sizeInBytes)
-    writer.incrementCursor(sizeInBytes)
+    writer.increaseCursor(sizeInBytes)
   }
 }

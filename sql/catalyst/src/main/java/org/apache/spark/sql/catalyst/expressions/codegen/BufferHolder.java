@@ -90,7 +90,7 @@ final class BufferHolder {
     return cursor;
   }
 
-  void incrementCursor(int val) {
+  void increaseCursor(int val) {
     cursor += val;
   }
 

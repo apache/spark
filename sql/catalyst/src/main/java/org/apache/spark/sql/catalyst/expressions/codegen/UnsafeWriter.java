@@ -63,13 +63,11 @@ public abstract class UnsafeWriter {
     return holder.getCursor();
   }
 
-  public final void incrementCursor(int val) {
-    holder.incrementCursor(val);
+  public final void increaseCursor(int val) {
+    holder.increaseCursor(val);
   }
 
-  public abstract void setOffsetAndSizeFromPreviousCursor(int ordinal, int previousCursor);
-
-  protected void _setOffsetAndSizeFromPreviousCursor(int ordinal, int previousCursor) {
+  public final void setOffsetAndSizeFromPreviousCursor(int ordinal, int previousCursor) {
     setOffsetAndSize(ordinal, previousCursor, cursor() - previousCursor);
   }
 
@@ -119,7 +117,7 @@ public abstract class UnsafeWriter {
     setOffsetAndSize(ordinal, numBytes);
 
     // move the cursor forward.
-    incrementCursor(roundedSize);
+    increaseCursor(roundedSize);
   }
 
   public final void write(int ordinal, byte[] input) {
@@ -141,7 +139,7 @@ public abstract class UnsafeWriter {
     setOffsetAndSize(ordinal, numBytes);
 
     // move the cursor forward.
-    incrementCursor(roundedSize);
+    increaseCursor(roundedSize);
   }
 
   public final void write(int ordinal, CalendarInterval input) {
@@ -155,7 +153,7 @@ public abstract class UnsafeWriter {
     setOffsetAndSize(ordinal, 16);
 
     // move the cursor forward.
-    incrementCursor(16);
+    increaseCursor(16);
   }
 
   protected final void writeBoolean(long offset, boolean value) {

@@ -276,7 +276,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       } else {
         // preserve 8 bytes to write the key array numBytes later.
         $rowWriter.grow(8);
-        $rowWriter.incrementCursor(8);
+        $rowWriter.increaseCursor(8);
 
         // Remember the current cursor so that we can write numBytes of key array later.
         final int $tmpCursor = $rowWriter.cursor();
@@ -301,7 +301,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       // grow the global buffer before writing data.
       $rowWriter.grow($sizeInBytes);
       $input.writeToMemory($rowWriter.buffer(), $rowWriter.cursor());
-      $rowWriter.incrementCursor($sizeInBytes);
+      $rowWriter.increaseCursor($sizeInBytes);
     """
   }
 

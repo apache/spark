@@ -91,7 +91,7 @@ public final class UnsafeRowWriter extends UnsafeWriter {
 
     // grow the global buffer to make sure it has enough space to write fixed-length data.
     grow(fixedSize);
-    incrementCursor(fixedSize);
+    increaseCursor(fixedSize);
 
     zeroOutNullBytes();
   }
@@ -136,11 +136,6 @@ public final class UnsafeRowWriter extends UnsafeWriter {
 
   public long getFieldOffset(int ordinal) {
     return startingOffset + nullBitsSize + 8 * ordinal;
-  }
-
-  @Override
-  public void setOffsetAndSizeFromPreviousCursor(int ordinal, int previousCursor) {
-    _setOffsetAndSizeFromPreviousCursor(ordinal, previousCursor);
   }
 
   public void write(int ordinal, boolean value) {
@@ -217,7 +212,7 @@ public final class UnsafeRowWriter extends UnsafeWriter {
       }
 
       // move the cursor forward.
-      incrementCursor(16);
+      increaseCursor(16);
     }
   }
 }

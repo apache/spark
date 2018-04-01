@@ -70,17 +70,11 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     for (int i = elementSize * numElements; i < fixedPartInBytes; i++) {
       Platform.putByte(buffer(), startingOffset + headerInBytes + i, (byte) 0);
     }
-    incrementCursor(headerInBytes + fixedPartInBytes);
+    increaseCursor(headerInBytes + fixedPartInBytes);
   }
 
   private long getElementOffset(int ordinal) {
     return startingOffset + headerInBytes + ordinal * elementSize;
-  }
-
-  @Override
-  public void setOffsetAndSizeFromPreviousCursor(int ordinal, int mark) {
-    assertIndexIsValid(ordinal);
-    _setOffsetAndSizeFromPreviousCursor(ordinal, mark);
   }
 
   private void setNullBit(int ordinal) {
@@ -170,7 +164,7 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
         setOffsetAndSize(ordinal, numBytes);
 
         // move the cursor forward with 8-bytes boundary
-        incrementCursor(roundedSize);
+        increaseCursor(roundedSize);
       }
     } else {
       setNull(ordinal);
