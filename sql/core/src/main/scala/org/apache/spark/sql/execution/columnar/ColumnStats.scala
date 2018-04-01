@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, RowOrdering}
-import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -357,7 +357,7 @@ private abstract class OrderableSafeColumnStats[T](dataType: DataType) extends C
     Array[Any](lower, upper, nullCount, count, sizeInBytes)
 }
 
-private[columnar] final class ArrayColumnStats(dataType: DataType)
+private[columnar] final class ArrayColumnStats(dataType: ArrayType)
   extends OrderableSafeColumnStats[UnsafeArrayData](dataType) {
   override def getValue(row: InternalRow, ordinal: Int): UnsafeArrayData =
     row.getArray(ordinal).asInstanceOf[UnsafeArrayData]
@@ -365,7 +365,7 @@ private[columnar] final class ArrayColumnStats(dataType: DataType)
   override def copy(value: UnsafeArrayData): UnsafeArrayData = value.copy()
 }
 
-private[columnar] final class StructColumnStats(dataType: DataType)
+private[columnar] final class StructColumnStats(dataType: StructType)
   extends OrderableSafeColumnStats[UnsafeRow](dataType) {
   private val numFields = dataType.asInstanceOf[StructType].fields.length
 
@@ -375,20 +375,12 @@ private[columnar] final class StructColumnStats(dataType: DataType)
   override def copy(value: UnsafeRow): UnsafeRow = value.copy()
 }
 
-private[columnar] final class MapColumnStats(dataType: DataType) extends ColumnStats {
-  private val columnType = ColumnType(dataType)
+private[columnar] final class MapColumnStats(dataType: MapType)
+  extends OrderableSafeColumnStats[UnsafeMapData](dataType) {
+  override def getValue(row: InternalRow, ordinal: Int): UnsafeMapData =
+    row.getMap(ordinal).asInstanceOf[UnsafeMapData]
 
-  override def gatherStats(row: InternalRow, ordinal: Int): Unit = {
-    if (!row.isNullAt(ordinal)) {
-      sizeInBytes += columnType.actualSize(row, ordinal)
-      count += 1
-    } else {
-      gatherNullStats()
-    }
-  }
-
-  override def collectedStatistics: Array[Any] =
-    Array[Any](null, null, nullCount, count, sizeInBytes)
+  override def copy(value: UnsafeMapData): UnsafeMapData = value.copy()
 }
 
 private[columnar] final class NullColumnStats extends ColumnStats {

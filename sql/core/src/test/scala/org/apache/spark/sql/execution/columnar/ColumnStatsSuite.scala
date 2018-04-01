@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData, UnsafeProjection}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -182,7 +183,7 @@ class ColumnStatsSuite extends SparkFunSuite {
     }
   }
 
-  def testMapColumnStats(dataType: DataType, initialStatistics: Array[Any]): Unit = {
+  def testMapColumnStats(dataType: MapType, initialStatistics: Array[Any]): Unit = {
     val columnType = ColumnType(dataType)
 
     test(s"${dataType.typeName}: empty") {
@@ -222,6 +223,24 @@ class ColumnStatsSuite extends SparkFunSuite {
     val collected = stats.collectedStatistics
     assertResult(UnsafeArrayData.fromPrimitiveArray(Array(1)))(collected(0))
     assertResult(UnsafeArrayData.fromPrimitiveArray(Array(10)))(collected(1))
+    assertResult(0)(collected(2))
+    assertResult(10)(collected(3))
+    assertResult(10 * (4 + unsafeData.getSizeInBytes))(collected(4))
+  }
+
+  test("Reuse UnsafeRow for stats") {
+    val structType = StructType(Array(StructField("int", IntegerType)))
+    val stats = new StructColumnStats(structType)
+    val converter = UnsafeProjection.create(structType)
+    val unsafeData = converter(InternalRow(1))
+    (1 to 10).foreach { value =>
+      val row = new GenericInternalRow(Array[Any](unsafeData))
+      unsafeData.setInt(0, value)
+      stats.gatherStats(row, 0)
+    }
+    val collected = stats.collectedStatistics
+    assertResult(converter(InternalRow(1)))(collected(0))
+    assertResult(converter(InternalRow(10)))(collected(1))
     assertResult(0)(collected(2))
     assertResult(10)(collected(3))
     assertResult(10 * (4 + unsafeData.getSizeInBytes))(collected(4))
