@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, RowOrdering}
-import org.apache.spark.sql.catalyst.util.{ArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeRow}
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -357,20 +358,21 @@ private abstract class OrderableSafeColumnStats[T](dataType: DataType) extends C
 }
 
 private[columnar] final class ArrayColumnStats(dataType: DataType)
-  extends OrderableSafeColumnStats[ArrayData](dataType) {
-  override def getValue(row: InternalRow, ordinal: Int): ArrayData = row.getArray(ordinal)
+  extends OrderableSafeColumnStats[UnsafeArrayData](dataType) {
+  override def getValue(row: InternalRow, ordinal: Int): UnsafeArrayData =
+    row.getArray(ordinal).asInstanceOf[UnsafeArrayData]
 
-  override def copy(value: ArrayData): ArrayData = value.copy()
+  override def copy(value: UnsafeArrayData): UnsafeArrayData = value.copy()
 }
 
 private[columnar] final class StructColumnStats(dataType: DataType)
-  extends OrderableSafeColumnStats[InternalRow](dataType) {
+  extends OrderableSafeColumnStats[UnsafeRow](dataType) {
   private val numFields = dataType.asInstanceOf[StructType].fields.length
 
-  override def getValue(row: InternalRow, ordinal: Int): InternalRow =
-    row.getStruct(ordinal, numFields)
+  override def getValue(row: InternalRow, ordinal: Int): UnsafeRow =
+    row.getStruct(ordinal, numFields).asInstanceOf[UnsafeRow]
 
-  override def copy(value: InternalRow): InternalRow = value.copy()
+  override def copy(value: UnsafeRow): UnsafeRow = value.copy()
 }
 
 private[columnar] final class MapColumnStats(dataType: DataType) extends ColumnStats {

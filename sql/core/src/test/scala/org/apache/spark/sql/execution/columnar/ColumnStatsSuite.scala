@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.RowOrdering
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -35,9 +35,30 @@ class ColumnStatsSuite extends SparkFunSuite {
   )
   testColumnStats(classOf[StringColumnStats], STRING, Array(null, null, 0, 0, 0))
   testDecimalColumnStats(Array(null, null, 0, 0, 0))
-  testArrayColumnStats(ArrayType(IntegerType), orderable = true, Array(null, null, 0, 0, 0))
-  testStructColumnStats(
-    StructType(Array(StructField("test", DataTypes.StringType))),
+
+  private val orderableArrayDataType = ArrayType(IntegerType)
+  testOrderableColumnStats(
+    orderableArrayDataType,
+    () => new ArrayColumnStats(orderableArrayDataType),
+    ARRAY(orderableArrayDataType),
+    orderable = true,
+    Array(null, null, 0, 0, 0)
+  )
+
+  private val unorderableArrayDataType = ArrayType(MapType(IntegerType, StringType))
+  testOrderableColumnStats(
+    unorderableArrayDataType,
+    () => new ArrayColumnStats(unorderableArrayDataType),
+    ARRAY(unorderableArrayDataType),
+    orderable = false,
+    Array(null, null, 0, 0, 0)
+  )
+
+  private val structDataType = StructType(Array(StructField("test", DataTypes.StringType)))
+  testOrderableColumnStats(
+    structDataType,
+    () => new StructColumnStats(structDataType),
+    STRUCT(structDataType),
     orderable = true,
     Array(null, null, 0, 0, 0)
   )
@@ -120,58 +141,23 @@ class ColumnStatsSuite extends SparkFunSuite {
     }
   }
 
-  def testArrayColumnStats(
-      dataType: DataType, orderable: Boolean, initialStatistics: Array[Any]): Unit = {
-    val columnType = ColumnType(dataType)
+  def testOrderableColumnStats[T](
+      dataType: DataType,
+      statsSupplier: () => OrderableSafeColumnStats[T],
+      columnType: ColumnType[T],
+      orderable: Boolean,
+      initialStatistics: Array[Any]): Unit = {
 
-    test(s"${dataType.typeName}: empty") {
-      val objectStats = new ArrayColumnStats(dataType)
+    test(s"${dataType.typeName}, $orderable: empty") {
+      val objectStats = statsSupplier()
       objectStats.collectedStatistics.zip(initialStatistics).foreach {
         case (actual, expected) => assert(actual === expected)
       }
     }
 
-    test(s"${dataType.typeName}: non-empty") {
+    test(s"${dataType.typeName}, $orderable: non-empty") {
       import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
-      val objectStats = new ArrayColumnStats(dataType)
-      val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
-      rows.foreach(objectStats.gatherStats(_, 0))
-
-      val stats = objectStats.collectedStatistics
-      if (orderable) {
-        val values = rows.take(10).map(_.get(0, columnType.dataType))
-        val ordering = TypeUtils.getInterpretedOrdering(dataType)
-
-        assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
-        assertResult(values.max(ordering), "Wrong upper bound")(stats(1))
-      } else {
-        assertResult(null, "Wrong lower bound")(stats(0))
-        assertResult(null, "Wrong upper bound")(stats(1))
-      }
-      assertResult(10, "Wrong null count")(stats(2))
-      assertResult(20, "Wrong row count")(stats(3))
-      assertResult(stats(4), "Wrong size in bytes") {
-        rows.map { row =>
-          if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
-        }.sum
-      }
-    }
-  }
-
-  def testStructColumnStats(
-      dataType: DataType, orderable: Boolean, initialStatistics: Array[Any]): Unit = {
-    val columnType = ColumnType(dataType)
-
-    test(s"${dataType.typeName}: empty") {
-      val objectStats = new StructColumnStats(dataType)
-      objectStats.collectedStatistics.zip(initialStatistics).foreach {
-        case (actual, expected) => assert(actual === expected)
-      }
-    }
-
-    test(s"${dataType.typeName}: non-empty") {
-      import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
-      val objectStats = new StructColumnStats(dataType)
+      val objectStats = statsSupplier()
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(objectStats.gatherStats(_, 0))
 
@@ -223,5 +209,21 @@ class ColumnStatsSuite extends SparkFunSuite {
         }.sum
       }
     }
+  }
+
+  test("Reuse UnsafeArrayData for stats") {
+    val stats = new ArrayColumnStats(ArrayType(IntegerType))
+    val unsafeData = UnsafeArrayData.fromPrimitiveArray(Array(1))
+    (1 to 10).foreach { value =>
+      val row = new GenericInternalRow(Array[Any](unsafeData))
+      unsafeData.setInt(0, value)
+      stats.gatherStats(row, 0)
+    }
+    val collected = stats.collectedStatistics
+    assertResult(UnsafeArrayData.fromPrimitiveArray(Array(1)))(collected(0))
+    assertResult(UnsafeArrayData.fromPrimitiveArray(Array(10)))(collected(1))
+    assertResult(0)(collected(2))
+    assertResult(10)(collected(3))
+    assertResult(10 * (4 + unsafeData.getSizeInBytes))(collected(4))
   }
 }
