@@ -226,7 +226,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       val pmmlClusteringModel = pmml.getModels.get(0).asInstanceOf[ClusteringModel]
       assert(pmmlClusteringModel.getNumberOfClusters === clusterCenters.length)
     }
-    testPMMLWrite(sc, model, checkModel)
+    testPMMLWrite(sc, kmeansModel, checkModel)
   }
 }
 
