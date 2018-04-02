@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
-import java.nio.charset.UnsupportedCharsetException
+import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
+import java.nio.file.{Files, Paths, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -30,7 +31,6 @@ import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, UDT}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.functions.{col, regexp_replace}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
@@ -1278,5 +1278,46 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       df.select(columnNameOfCorruptRecord),
       Row("0,2013-111-11 12:13:14") :: Row(null) :: Nil
     )
+  }
+
+  test("schema inferring touches less data if samplingRation < 1.0") {
+    val predefinedSample = Set[Int](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
+      57, 62, 68, 72)
+    withTempPath { path =>
+      val writer = Files.newBufferedWriter(Paths.get(path.getAbsolutePath),
+        StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW)
+      for (i <- 0 until 100) {
+        if (predefinedSample.contains(i)) {
+          writer.write(i.toString + "\n")
+        } else {
+          writer.write((i.toDouble + 0.1).toString + "\n")
+        }
+      }
+      writer.close()
+
+      val ds = spark.read
+        .option("inferSchema", true)
+        .option("samplingRatio", 0.1)
+        .csv(path.getCanonicalPath)
+      assert(ds.schema == new StructType().add("_c0", LongType))
+    }
+  }
+
+  test("usage of samplingRation while parsing of dataset of strings") {
+    val dstr = spark.sparkContext.parallelize(0 until 100, 1).map { i =>
+      val predefinedSample = Set[Int](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
+        57, 62, 68, 72)
+      if (predefinedSample.contains(i)) {
+        i.toString + "\n"
+      } else {
+        (i.toDouble + 0.1) + "\n"
+      }
+    }.toDS()
+    val ds = spark.read
+      .option("inferSchema", true)
+      .option("samplingRatio", 0.1)
+      .csv(dstr)
+
+    assert(ds.schema == new StructType().add("_c0", LongType))
   }
 }
