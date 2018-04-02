@@ -78,15 +78,15 @@ class VectorAssemblerSuite
   }
 
   test("VectorAssembler") {
-    val df = Seq((1, 2, 0.0, Vectors.dense(1.0, 2.0), "a",
-      Vectors.sparse(2, Array(1), Array(3.0)), 7L, null))
-      .toDF("id1", "id2", "x", "y", "name", "z", "n", "nulls")
+    val df = Seq(
+      (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L)
+    ).toDF("id", "x", "y", "name", "z", "n")
     val assembler = new VectorAssembler()
       .setInputCols(Array("x", "y", "z", "n"))
       .setOutputCol("features")
     assembler.transform(df).select("features").collect().foreach {
       case Row(v: Vector) =>
-        assert(v === Vectors.sparse(6, Array(1, 2, 4, 5), Array(1.0, 2.0, 3.0, 7.0)))
+        assert(v === Vectors.sparse(6, Array(1, 2, 4, 5), Array(1.0, 2.0, 3.0, 10.0)))
     }
   }
 
