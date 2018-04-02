@@ -454,6 +454,32 @@ class Column(object):
     >>> df.select(df.name).orderBy(df.name.asc()).collect()
     [Row(name=u'Alice'), Row(name=u'Tom')]
     """
+    _asc_nulls_first_doc = """
+    Returns a sort expression based on the ascending order of the given column name and null values
+    return before non-null values
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(name=u'Tom', height=80),
+    ...     Row(name=None, height=None),
+    ...     Row(name=u'Alice', height=None)
+    ... ])
+    >>> df.select(df.name).orderBy(df.name.asc_nulls_first()).collect()
+    [Row(name=None), Row(name=u'Alice'), Row(name=u'Tom')]
+    """
+    _asc_nulls_last_doc = """
+    Returns a sort expression based on the ascending order of the given column name and null values
+    return after non-null values
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(name=u'Tom', height=80),
+    ...     Row(name=None, height=None),
+    ...     Row(name=u'Alice', height=None)
+    ... ])
+    >>> df.select(df.name).orderBy(df.name.asc_nulls_last()).collect()
+    [Row(name=u'Alice'), Row(name=u'Tom'), Row(name=None)]
+    """
     _desc_doc = """
     Returns a sort expression based on the descending order of the given column name.
 
@@ -462,9 +488,39 @@ class Column(object):
     >>> df.select(df.name).orderBy(df.name.desc()).collect()
     [Row(name=u'Tom'), Row(name=u'Alice')]
     """
+    _desc_nulls_first_doc = """
+    Returns a sort expression based on the descending order of the given column name and null values
+    return before non-null values
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(name=u'Tom', height=80),
+    ...     Row(name=None, height=None),
+    ...     Row(name=u'Alice', height=None)
+    ... ])
+    >>> df.select(df.name).orderBy(df.name.desc_nulls_first()).collect()
+    [Row(name=None), Row(name=u'Tom'), Row(name=u'Alice')]
+    """
+    _desc_nulls_last_doc = """
+    Returns a sort expression based on the descending order of the given column name and null values
+    appear after non-null values.
+
+    >>> from pyspark.sql import Row
+    >>> df = spark.createDataFrame([
+    ...     Row(name=u'Tom', height=80),
+    ...     Row(name=None, height=None),
+    ...     Row(name=u'Alice', height=None)
+    ... ])
+    >>> df.select(df.name).orderBy(df.name.desc_nulls_last()).collect()
+    [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)]
+    """
 
     asc = ignore_unicode_prefix(_unary_op("asc", _asc_doc))
+    asc_nulls_first = ignore_unicode_prefix(_unary_op("asc_nulls_first", _asc_nulls_first_doc))
+    asc_nulls_last = ignore_unicode_prefix(_unary_op("asc_nulls_last", _asc_nulls_last_doc))
     desc = ignore_unicode_prefix(_unary_op("desc", _desc_doc))
+    desc_nulls_first = ignore_unicode_prefix(_unary_op("desc_nulls_first", _desc_nulls_first_doc))
+    desc_nulls_last = ignore_unicode_prefix(_unary_op("desc_nulls_last", _desc_nulls_last_doc))
 
     _isNull_doc = """
     True if the current expression is null.
