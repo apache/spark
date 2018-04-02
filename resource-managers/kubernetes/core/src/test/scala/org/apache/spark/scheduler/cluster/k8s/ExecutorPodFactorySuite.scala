@@ -67,12 +67,14 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     assert(executor.getMetadata.getLabels.size() === 3)
     assert(executor.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) === "1")
 
-    // There is exactly 1 container with no volume mounts and default memory limits.
-    // Default memory limit is 1024M + 384M (minimum overhead constant).
+    // There is exactly 1 container with no volume mounts and default memory limits and requests.
+    // Default memory limit/request is 1024M + 384M (minimum overhead constant).
     assert(executor.getSpec.getContainers.size() === 1)
     assert(executor.getSpec.getContainers.get(0).getImage === executorImage)
     assert(executor.getSpec.getContainers.get(0).getVolumeMounts.isEmpty)
     assert(executor.getSpec.getContainers.get(0).getResources.getLimits.size() === 1)
+    assert(executor.getSpec.getContainers.get(0).getResources
+      .getRequests.get("memory").getAmount === "1408Mi")
     assert(executor.getSpec.getContainers.get(0).getResources
       .getLimits.get("memory").getAmount === "1408Mi")
 

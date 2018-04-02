@@ -110,9 +110,6 @@ private[spark] class ExecutorPodFactory(
       SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE) ++
       executorLabels
     val executorMemoryQuantity = new QuantityBuilder(false)
-      .withAmount(s"${executorMemoryMiB}Mi")
-      .build()
-    val executorMemoryLimitQuantity = new QuantityBuilder(false)
       .withAmount(s"${executorMemoryWithOverhead}Mi")
       .build()
     val executorCpuQuantity = new QuantityBuilder(false)
@@ -169,7 +166,7 @@ private[spark] class ExecutorPodFactory(
       .withImagePullPolicy(imagePullPolicy)
       .withNewResources()
         .addToRequests("memory", executorMemoryQuantity)
-        .addToLimits("memory", executorMemoryLimitQuantity)
+        .addToLimits("memory", executorMemoryQuantity)
         .addToRequests("cpu", executorCpuQuantity)
         .endResources()
       .addAllToEnv(executorEnv.asJava)
