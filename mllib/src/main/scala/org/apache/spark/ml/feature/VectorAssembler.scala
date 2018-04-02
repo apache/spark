@@ -71,13 +71,12 @@ class VectorAssembler @Since("1.4.0") (@Since("1.4.0") override val uid: String)
    */
   @Since("2.4.0")
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
-    """
-    | Param for how to handle invalid data (NULL values). Options are 'skip' (filter out rows with
-    | invalid data), 'error' (throw an error), or 'keep' (return relevant number of NaN in the
-    | output). Column lengths are taken from the size of ML Attribute Group, which can be set using
-    | `VectorSizeHint` in a pipeline before `VectorAssembler`. Column lengths can also be inferred
-    | from first rows of the data since it is safe to do so but only in case of 'error' or 'skip'.
-    | """.stripMargin.replaceAll("\n", " "),
+    """Param for how to handle invalid data (NULL values). Options are 'skip' (filter out rows with
+      |invalid data), 'error' (throw an error), or 'keep' (return relevant number of NaN in the
+      |output). Column lengths are taken from the size of ML Attribute Group, which can be set using
+      |`VectorSizeHint` in a pipeline before `VectorAssembler`. Column lengths can also be inferred
+      |from first rows of the data since it is safe to do so but only in case of 'error' or 'skip'.
+      |""".stripMargin.replaceAll("\n", " "),
     ParamValidators.inArray(VectorAssembler.supportedHandleInvalids))
 
   setDefault(handleInvalid, VectorAssembler.ERROR_INVALID)
@@ -195,7 +194,8 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
    * @return map of column names to lengths
    */
   private[feature] def getVectorLengthsFromFirstRow(
-      dataset: Dataset[_], columns: Seq[String]): Map[String, Int] = {
+      dataset: Dataset[_],
+      columns: Seq[String]): Map[String, Int] = {
     try {
       val first_row = dataset.toDF().select(columns.map(col): _*).first()
       columns.zip(first_row.toSeq).map {
@@ -204,33 +204,35 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
     } catch {
       case e: NullPointerException => throw new NullPointerException(
         s"""Encountered null value while inferring lengths from the first row. Consider using
-           |VectorSizeHint to add metadata for columns: ${columns.mkString("[", ", ", "]")}.
-           |""".stripMargin.replaceAll("\n", " ") + e.toString)
+           |VectorSizeHint to add metadata for columns: ${columns.mkString("[", ", ", "]")}. """
+          .stripMargin.replaceAll("\n", " ") + e.toString)
       case e: NoSuchElementException => throw new NoSuchElementException(
         s"""Encountered empty dataframe while inferring lengths from the first row. Consider using
-           |VectorSizeHint to add metadata for columns: ${columns.mkString("[", ", ", "]")}.
-           |""".stripMargin.replaceAll("\n", " ") + e.toString)
+           |VectorSizeHint to add metadata for columns: ${columns.mkString("[", ", ", "]")}. """
+          .stripMargin.replaceAll("\n", " ") + e.toString)
     }
   }
 
-  private[feature] def getLengths(dataset: Dataset[_], columns: Seq[String],
-                                  handleInvalid: String) = {
-    val group_sizes = columns.map { c =>
+  private[feature] def getLengths(
+      dataset: Dataset[_],
+      columns: Seq[String],
+      handleInvalid: String): Map[String, Int] = {
+    val groupSizes = columns.map { c =>
       c -> AttributeGroup.fromStructField(dataset.schema(c)).size
     }.toMap
-    val missing_columns: Seq[String] = group_sizes.filter(_._2 == -1).keys.toSeq
-    val first_sizes: Map[String, Int] = (missing_columns.nonEmpty, handleInvalid) match {
+    val missingColumns = groupSizes.filter(_._2 == -1).keys.toSeq
+    val firstSizes = (missingColumns.nonEmpty, handleInvalid) match {
       case (true, VectorAssembler.ERROR_INVALID) =>
-        getVectorLengthsFromFirstRow(dataset, missing_columns)
+        getVectorLengthsFromFirstRow(dataset, missingColumns)
       case (true, VectorAssembler.SKIP_INVALID) =>
-        getVectorLengthsFromFirstRow(dataset.na.drop(missing_columns), missing_columns)
+        getVectorLengthsFromFirstRow(dataset.na.drop(missingColumns), missingColumns)
       case (true, VectorAssembler.KEEP_INVALID) => throw new RuntimeException(
-        s"""Can not infer column lengths for 'keep invalid' mode. Consider using
-           |VectorSizeHint to add metadata for columns: ${columns.mkString("[", ", ", "]")}.
-           |""".stripMargin.replaceAll("\n", " "))
+        s"""Can not infer column lengths with handleInvalid = "keep". Consider using VectorSizeHint
+           |to add metadata for columns: ${columns.mkString("[", ", ", "]")}."""
+          .stripMargin.replaceAll("\n", " "))
       case (_, _) => Map.empty
     }
-    group_sizes ++ first_sizes
+    groupSizes ++ firstSizes
   }
 
 
@@ -253,9 +255,10 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
     vv.foreach {
       case v: Double =>
         if (v.isNaN && !keepInvalid) {
-          throw new SparkException("Encountered NaN while assembling a row in 'error' handle " +
-            "invalid mode. Consider removing NaNs from dataset or using handle invalid modes " +
-            "'keep' or 'skip'.")
+          throw new SparkException(
+            s"""Encountered NaN while assembling a row with handleInvalid = "error". Consider
+               |removing NaNs from dataset or using handleInvalid = "keep" or "skip"."""
+              .stripMargin)
         } else if (v != 0.0) {
           indices += featureIndex
           values += v
@@ -281,9 +284,10 @@ object VectorAssembler extends DefaultParamsReadable[VectorAssembler] {
           inputColumnIndex += 1
           featureIndex += length
         } else {
-          throw new SparkException("Encountered null while assembling a row in 'error' handle " +
-            "invalid mode. Consider removing nulls from dataset or using handle invalid modes " +
-            "'keep' or 'skip'.")
+          throw new SparkException(
+            s"""Encountered null while assembling a row with handleInvalid = "keep". Consider
+               |removing nulls from dataset or using handleInvalid = "keep" or "skip"."""
+              .stripMargin)
         }
       case o =>
         throw new SparkException(s"$o of type ${o.getClass.getName} is not supported.")
