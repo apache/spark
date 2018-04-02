@@ -54,7 +54,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     // the produced join then becomes unresolved and break structural integrity. We should
     // de-duplicate conflicting attributes. We don't use transformation here because we only
     // care about the most top join converted from correlated predicate subquery.
-    case j @ Join(left, right, joinType @ (LeftSemi | LeftAnti | ExistenceJoin(_)), joinCond) =>
+    case j @ Join(left, right, joinType @ (LeftSemi | LeftAnti | ExistenceJoin(_)), joinCond, _) =>
       val duplicates = right.outputSet.intersect(left.outputSet)
       if (duplicates.nonEmpty) {
         val aliasMap = AttributeMap(duplicates.map { dup =>

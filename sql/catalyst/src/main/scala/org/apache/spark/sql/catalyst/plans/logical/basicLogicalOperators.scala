@@ -280,23 +280,29 @@ case class Join(
     left: LogicalPlan,
     right: LogicalPlan,
     joinType: JoinType,
-    condition: Option[Expression])
+    condition: Option[Expression],
+    notNullAttributes: Set[ExprId] = Set.empty)
   extends BinaryNode with PredicateHelper {
+
+  private def updateNullabilityOf(attrs: Seq[Attribute]): Seq[Attribute] = attrs.map {
+    case a if a.nullable && notNullAttributes.contains(a.exprId) => a.withNullability(false)
+    case a => a
+  }
 
   override def output: Seq[Attribute] = {
     joinType match {
       case j: ExistenceJoin =>
-        left.output :+ j.exists
+        updateNullabilityOf(left.output :+ j.exists)
       case LeftExistence(_) =>
-        left.output
+        updateNullabilityOf(left.output)
       case LeftOuter =>
-        left.output ++ right.output.map(_.withNullability(true))
+        updateNullabilityOf(left.output) ++ right.output.map(_.withNullability(true))
       case RightOuter =>
-        left.output.map(_.withNullability(true)) ++ right.output
+        left.output.map(_.withNullability(true)) ++ updateNullabilityOf(right.output)
       case FullOuter =>
         left.output.map(_.withNullability(true)) ++ right.output.map(_.withNullability(true))
       case _ =>
-        left.output ++ right.output
+        updateNullabilityOf(left.output ++ right.output)
     }
   }
 

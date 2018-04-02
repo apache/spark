@@ -63,6 +63,12 @@ trait PredicateHelper {
     }
   }
 
+  // If one expression and its children are null intolerant, it is null intolerant.
+  protected def isNullIntolerant(expr: Expression): Boolean = expr match {
+    case e: NullIntolerant => e.children.forall(isNullIntolerant)
+    case _ => false
+  }
+
   // Substitute any known alias from a map.
   protected def replaceAlias(
       condition: Expression,

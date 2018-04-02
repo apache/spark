@@ -78,7 +78,7 @@ trait PlanTestBase extends PredicateHelper { self: Suite =>
           .reduce(And), child)
       case sample: Sample =>
         sample.copy(seed = 0L)
-      case Join(left, right, joinType, condition) if condition.isDefined =>
+      case Join(left, right, joinType, condition, _) if condition.isDefined =>
         val newCondition =
           splitConjunctivePredicates(condition.get).map(rewriteEqual).sortBy(_.hashCode())
             .reduce(And)

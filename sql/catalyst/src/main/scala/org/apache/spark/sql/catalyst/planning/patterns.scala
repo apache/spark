@@ -102,7 +102,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
     (JoinType, Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
-    case join @ Join(left, right, joinType, condition) =>
+    case join @ Join(left, right, joinType, condition, _) =>
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
@@ -165,11 +165,11 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
    */
   def flattenJoin(plan: LogicalPlan, parentJoinType: InnerLike = Inner)
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
-    case Join(left, right, joinType: InnerLike, cond) =>
+    case Join(left, right, joinType: InnerLike, cond, _) =>
       val (plans, conditions) = flattenJoin(left, joinType)
       (plans ++ Seq((right, joinType)), conditions ++
         cond.toSeq.flatMap(splitConjunctivePredicates))
-    case Filter(filterCondition, j @ Join(left, right, _: InnerLike, joinCondition)) =>
+    case Filter(filterCondition, j @ Join(left, right, _: InnerLike, joinCondition, _)) =>
       val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
@@ -178,9 +178,9 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
 
   def unapply(plan: LogicalPlan): Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]
       = plan match {
-    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _)) =>
+    case f @ Filter(filterCondition, j @ Join(_, _, joinType: InnerLike, _, _)) =>
       Some(flattenJoin(f))
-    case j @ Join(_, _, joinType, _) =>
+    case j @ Join(_, _, joinType, _, _) =>
       Some(flattenJoin(j))
     case _ => None
   }

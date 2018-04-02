@@ -856,7 +856,7 @@ class Analyzer(
         failAnalysis("Invalid usage of '*' in explode/json_tuple/UDTF")
 
       // To resolve duplicate expression IDs for Join and Intersect
-      case j @ Join(left, right, _, _) if !j.duplicateResolved =>
+      case j @ Join(left, right, _, _, _) if !j.duplicateResolved =>
         j.copy(right = dedupRight(left, right))
       case i @ Intersect(left, right) if !i.duplicateResolved =>
         i.copy(right = dedupRight(left, right))
@@ -2087,10 +2087,10 @@ class Analyzer(
    */
   object ResolveNaturalAndUsingJoin extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
-      case j @ Join(left, right, UsingJoin(joinType, usingCols), condition)
+      case j @ Join(left, right, UsingJoin(joinType, usingCols), _, _)
           if left.resolved && right.resolved && j.duplicateResolved =>
         commonNaturalJoinProcessing(left, right, joinType, usingCols, None)
-      case j @ Join(left, right, NaturalJoin(joinType), condition) if j.resolvedExceptNatural =>
+      case j @ Join(left, right, NaturalJoin(joinType), condition, _) if j.resolvedExceptNatural =>
         // find common column names from both sides
         val joinNames = left.output.map(_.name).intersect(right.output.map(_.name))
         commonNaturalJoinProcessing(left, right, joinType, joinNames, condition)

@@ -279,23 +279,23 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       // --- Without joining keys ------------------------------------------------------------
 
       // Pick BroadcastNestedLoopJoin if one side could be broadcast
-      case j @ logical.Join(left, right, joinType, condition)
+      case j @ logical.Join(left, right, joinType, condition, _)
           if canBroadcastByHints(joinType, left, right) =>
         val buildSide = broadcastSideByHints(joinType, left, right)
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
-      case j @ logical.Join(left, right, joinType, condition)
+      case j @ logical.Join(left, right, joinType, condition, _)
           if canBroadcastBySizes(joinType, left, right) =>
         val buildSide = broadcastSideBySizes(joinType, left, right)
         joins.BroadcastNestedLoopJoinExec(
           planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
 
       // Pick CartesianProduct for InnerJoin
-      case logical.Join(left, right, _: InnerLike, condition) =>
+      case logical.Join(left, right, _: InnerLike, condition, _) =>
         joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
 
-      case logical.Join(left, right, joinType, condition) =>
+      case logical.Join(left, right, joinType, condition, _) =>
         val buildSide = broadcastSide(
           left.stats.hints.broadcast, right.stats.hints.broadcast, left, right)
         // This join could be very slow or OOM
@@ -359,7 +359,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           new StreamingSymmetricHashJoinExec(
             leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
 
-        case Join(left, right, _, _) if left.isStreaming && right.isStreaming =>
+        case Join(left, right, _, _, _) if left.isStreaming && right.isStreaming =>
           throw new AnalysisException(
             "Stream stream joins without equality predicate is not supported", plan = Some(plan))
 

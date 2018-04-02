@@ -544,7 +544,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
         // propagating the foldable expressions.
         // TODO(cloud-fan): It seems more reasonable to use new attributes as the output attributes
         // of outer join.
-        case j @ Join(left, right, joinType, _) if foldableMap.nonEmpty =>
+        case j @ Join(left, right, joinType, _, _) if foldableMap.nonEmpty =>
           val newJoin = j.transformExpressions(replaceFoldable)
           val missDerivedAttrsSet: AttributeSet = AttributeSet(joinType match {
             case _: InnerLike | LeftExistence(_) => Nil

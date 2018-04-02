@@ -91,12 +91,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     case _ => false
   }
 
-  // If one expression and its children are null intolerant, it is null intolerant.
-  private def isNullIntolerant(expr: Expression): Boolean = expr match {
-    case e: NullIntolerant => e.children.forall(isNullIntolerant)
-    case _ => false
-  }
-
   // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
   private val notNullAttributes = notNullPreds.flatMap(_.references).distinct.map(_.exprId)
 
