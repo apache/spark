@@ -291,9 +291,6 @@ class SessionCatalog(
     val table = formatTableName(tableDefinition.identifier.table)
     val tableIdentifier = TableIdentifier(table, Some(db))
     validateName(table)
-    if (!ignoreIfExists) {
-      validateTableLocation(tableDefinition, tableIdentifier)
-    }
 
     val newTableDefinition = if (tableDefinition.storage.locationUri.isDefined
       && !tableDefinition.storage.locationUri.get.isAbsolute) {
@@ -308,17 +305,21 @@ class SessionCatalog(
     }
 
     requireDbExists(db)
+    if (!ignoreIfExists) {
+      validateTableLocation(newTableDefinition)
+    }
     externalCatalog.createTable(newTableDefinition, ignoreIfExists)
   }
 
-  def validateTableLocation(table: CatalogTable, tableIdentifier: TableIdentifier): Unit = {
+  def validateTableLocation(table: CatalogTable): Unit = {
     // SPARK-19724: the default location of a managed table should be non-existent or empty.
    if (table.tableType == CatalogTableType.MANAGED) {
-     val tableLocation = new Path(defaultTablePath(tableIdentifier))
+     val tableLocation =
+       new Path(table.storage.locationUri.getOrElse(defaultTablePath(table.identifier)))
      val fs = tableLocation.getFileSystem(hadoopConf)
 
      if (fs.exists(tableLocation) && fs.listStatus(tableLocation).nonEmpty) {
-       throw new AnalysisException(s"Can not create the managed table('${tableIdentifier}')" +
+       throw new AnalysisException(s"Can not create the managed table('${table.identifier}')" +
          s". The associated location('${tableLocation.toString}') already exists.")
      }
    }

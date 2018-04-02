@@ -167,7 +167,7 @@ case class CreateDataSourceTableAsSelectCommand(
         sparkSession, table, table.storage.locationUri, child, SaveMode.Append, tableExists = true)
     } else {
       assert(table.schema.isEmpty)
-      sparkSession.sessionState.catalog.validateTableLocation(table, table.identifier)
+      sparkSession.sessionState.catalog.validateTableLocation(table)
       val tableLocation = if (table.tableType == CatalogTableType.MANAGED) {
         Some(sessionState.catalog.defaultTablePath(table.identifier))
       } else {
