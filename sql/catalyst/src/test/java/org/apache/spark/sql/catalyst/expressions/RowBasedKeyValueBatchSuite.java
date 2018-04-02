@@ -58,7 +58,6 @@ public class RowBasedKeyValueBatchSuite {
     writer.reset();
     writer.write(0, k1);
     writer.write(1, UTF8String.fromString(k2));
-    writer.setTotalSize();
     return writer.getRow();
   }
 
@@ -67,7 +66,6 @@ public class RowBasedKeyValueBatchSuite {
     writer.reset();
     writer.write(0, k1);
     writer.write(1, k2);
-    writer.setTotalSize();
     return writer.getRow();
   }
 
@@ -76,7 +74,6 @@ public class RowBasedKeyValueBatchSuite {
     writer.reset();
     writer.write(0, v1);
     writer.write(1, v2);
-    writer.setTotalSize();
     return writer.getRow();
   }
 

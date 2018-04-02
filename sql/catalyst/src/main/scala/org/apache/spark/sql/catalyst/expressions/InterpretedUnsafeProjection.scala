@@ -80,7 +80,6 @@ class InterpretedUnsafeProjection(expressions: Array[Expression]) extends Unsafe
     // Write the intermediate row to an unsafe row.
     rowWriter.reset()
     writer(intermediate)
-    rowWriter.setTotalSize()
     rowWriter.getRow()
   }
 }

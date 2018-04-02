@@ -44,7 +44,6 @@ private[kafka010] class KafkaRecordToUnsafeRowConverter {
       5,
       DateTimeUtils.fromJavaTimestamp(new java.sql.Timestamp(record.timestamp)))
     rowWriter.write(6, record.timestampType.id)
-    rowWriter.setTotalSize()
     rowWriter.getRow()
   }
 }

@@ -322,17 +322,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val rowWriter = ctx.addMutableState(rowWriterClass, "rowWriter",
       v => s"$v = new $rowWriterClass(${expressions.length}, ${numVarLenFields * 32});")
 
-    val resetBufferHolder = if (numVarLenFields == 0) {
-      ""
-    } else {
-      s"$rowWriter.reset();"
-    }
-    val updateRowSize = if (numVarLenFields == 0) {
-      ""
-    } else {
-      s"$rowWriter.setTotalSize();"
-    }
-
     // Evaluate all the subexpression.
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
@@ -341,10 +330,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val code =
       s"""
-        $resetBufferHolder
+        $rowWriter.reset();
         $evalSubexpr
         $writeExpressions
-        $updateRowSize
       """
     ExprCode(code, "false", s"$rowWriter.getRow()")
   }

@@ -213,7 +213,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           rowWriter.reset();
           rowWriter.zeroOutNullBytes();
           ${extractorCalls}
-          rowWriter.setTotalSize();
           return rowWriter.getRow();
         }
 

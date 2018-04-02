@@ -171,7 +171,6 @@ class RowBasedHashMapGenerator(
        |        agg_rowWriter.reset(); //TODO: investigate if reset or zeroout are actually needed
        |        agg_rowWriter.zeroOutNullBytes();
        |        ${createUnsafeRowForKey};
-       |        agg_rowWriter.setTotalSize();
        |        org.apache.spark.sql.catalyst.expressions.UnsafeRow agg_result
        |          = agg_rowWriter.getRow();
        |        Object kbase = agg_result.getBaseObject();
