@@ -82,10 +82,12 @@ private[spark] class TaskSetManager(
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
 
-  // Set the coresponding index of Boolean var when the task killed by other attempt tasks,
+  // Set the corresponding index of Boolean var when the task killed by other attempt tasks,
   // this happened while we set the `spark.speculation` to true. The task killed by others
   // should not resubmit while executor lost.
   private val killedByOtherAttempt: Array[Boolean] = new Array[Boolean](numTasks)
+
+  private val fetchFailedTaskIndexSet = new HashSet[Int]
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   private[scheduler] var tasksSuccessful = 0
@@ -750,6 +752,10 @@ private[spark] class TaskSetManager(
       if (tasksSuccessful == numTasks) {
         isZombie = true
       }
+    } else if (fetchFailedTaskIndexSet.contains(index)) {
+      logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
+        " because task " + index + " has already failed by FetchFailed")
+      return
     } else {
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
@@ -793,7 +799,7 @@ private[spark] class TaskSetManager(
           blacklistTracker.foreach(_.updateBlacklistForFetchFailure(
             fetchFailed.bmAddress.host, fetchFailed.bmAddress.executorId))
         }
-
+        fetchFailedTaskIndexSet.add(index)
         // Kill any other attempts for this FetchFailed task
         for (attemptInfo <- taskAttempts(index) if attemptInfo.running) {
           logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for task ${attemptInfo.id} " +
