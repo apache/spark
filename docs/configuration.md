@@ -1915,8 +1915,8 @@ showDF(properties, numRows = 200, truncate = FALSE)
   <td><code>spark.streaming.receiver.writeAheadLog.enable</code></td>
   <td>false</td>
   <td>
-    Enable write ahead logs for receivers. All the input data received through receivers
-    will be saved to write ahead logs that will allow it to be recovered after driver failures.
+    Enable write-ahead logs for receivers. All the input data received through receivers
+    will be saved to write-ahead logs that will allow it to be recovered after driver failures.
     See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
     in the Spark Streaming programing guide for more details.
   </td>
@@ -1971,7 +1971,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
   <td><code>spark.streaming.driver.writeAheadLog.closeFileAfterWrite</code></td>
   <td>false</td>
   <td>
-    Whether to close the file after writing a write ahead log record on the driver. Set this to 'true'
+    Whether to close the file after writing a write-ahead log record on the driver. Set this to 'true'
     when you want to use S3 (or any file system that does not support flushing) for the metadata WAL
     on the driver.
   </td>
@@ -1980,7 +1980,7 @@ showDF(properties, numRows = 200, truncate = FALSE)
   <td><code>spark.streaming.receiver.writeAheadLog.closeFileAfterWrite</code></td>
   <td>false</td>
   <td>
-    Whether to close the file after writing a write ahead log record on the receivers. Set this to 'true'
+    Whether to close the file after writing a write-ahead log record on the receivers. Set this to 'true'
     when you want to use S3 (or any file system that does not support flushing) for the data WAL
     on the receivers.
   </td>

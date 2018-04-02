@@ -19,7 +19,7 @@ These models are typically used for [document classification](http://nlp.stanfor
 Within that context, each observation is a document and each
 feature represents a term whose value is the frequency of the term (in multinomial naive Bayes) or
 a zero or one indicating whether the term was found in the document (in Bernoulli naive Bayes).
-Feature values must be nonnegative. The model type is selected with an optional parameter
+Feature values must be non-negative. The model type is selected with an optional parameter
 "multinomial" or "bernoulli" with "multinomial" as the default.
 [Additive smoothing](http://en.wikipedia.org/wiki/Lidstone_smoothing) can be used by
 setting the parameter $\lambda$ (default to $1.0$). For document classification, the input feature
