@@ -2128,7 +2128,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  test("schema inferring touches less data if samplingRation < 1.0") {
+  test("SPARK-23849: schema inferring touches less data if samplingRation < 1.0") {
     val predefinedSample = Set[Int](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
       57, 62, 68, 72)
     withTempPath { path =>
@@ -2148,7 +2148,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  test("usage of samplingRation while parsing of dataset of strings") {
+  test("SPARK-23849: usage of samplingRation while parsing of dataset of strings") {
     val dstr = spark.sparkContext.parallelize(0 until 100, 1).map { i =>
       val predefinedSample = Set[Int](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
         57, 62, 68, 72)
