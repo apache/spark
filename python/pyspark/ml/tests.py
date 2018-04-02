@@ -2096,6 +2096,11 @@ class DefaultValuesTests(PySparkTestCase):
                     # NOTE: disable check_params_exist until there is parity with Scala API
                     ParamTests.check_params(self, cls(), check_params_exist=False)
 
+        # Additional classes that need explicit construction
+        from pyspark.ml.feature import CountVectorizerModel
+        ParamTests.check_params(self, CountVectorizerModel.from_vocabulary(['a'], 'input'),
+                                check_params_exist=False)
+
 
 def _squared_distance(a, b):
     if isinstance(a, Vector):
