@@ -2094,7 +2094,7 @@ def flatten(col):
 
     :param col: name of column or expression
 
-    >>> df = spark.createDataFrame([([[1, 2, 3], [4, 5], [6]],),([None, [4, 5]],)], ['data'])
+    >>> df = spark.createDataFrame([([[1, 2, 3], [4, 5], [6]],), ([None, [4, 5]],)], ['data'])
     >>> df.select(flatten(df.data).alias('r')).collect()
     [Row(r=[1, 2, 3, 4, 5, 6]), Row(r=None)]
     """
