@@ -409,16 +409,22 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         tableLoc.mkdir()
         val hiddenGarbageFile = new File(tableLoc.getCanonicalPath, ".garbage")
         hiddenGarbageFile.createNewFile()
+        val exMsg = "Can not create the managed table('`tab1`'). The associated location"
+        val exMsgWithDefaultDB =
+          "Can not create the managed table('`default`.`tab1`'). The associated location"
         var ex = intercept[AnalysisException] {
           sql(s"CREATE TABLE tab1 USING ${dataSource} AS SELECT 1, 'a'")
         }.getMessage
-        assert(ex.contains("Can not create the managed table('`tab1`'). The associated location"))
+        if (isUsingHiveMetastore) {
+          assert(ex.contains(exMsgWithDefaultDB))
+        } else {
+          assert(ex.contains(exMsg))
+        }
 
         ex = intercept[AnalysisException] {
           sql(s"CREATE TABLE tab1 (col1 int, col2 string) USING ${dataSource}")
         }.getMessage
-        assert(ex.contains(
-          "Can not create the managed table('`default`.`tab1`'). The associated location"))
+        assert(ex.contains(exMsgWithDefaultDB))
       } finally {
         waitForTasksToFinish()
         Utils.deleteRecursively(tableLoc)
