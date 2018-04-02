@@ -99,8 +99,6 @@ object TextInputJsonDataSource extends JsonDataSource {
 
   def inferFromDataset(json: Dataset[String], parsedOptions: JSONOptions): StructType = {
     val sampled: Dataset[String] = JsonUtils.sample(json, parsedOptions)
-    val s = sampled.collect()
-    sampled.show()
     val rdd: RDD[UTF8String] = sampled.queryExecution.toRdd.map(_.getUTF8String(0))
     JsonInferSchema.infer(rdd, parsedOptions, CreateJacksonParser.utf8String)
   }
