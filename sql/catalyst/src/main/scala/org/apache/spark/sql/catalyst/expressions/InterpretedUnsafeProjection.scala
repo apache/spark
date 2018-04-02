@@ -231,7 +231,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
               // Write the keys and write the numBytes of key array into the first 8 bytes.
               writeArray(keyArrayWriter, keyWriter, map.keyArray())
               Platform.putLong(
-                valueArrayWriter.buffer,
+                valueArrayWriter.getBuffer,
                 previousCursor,
                 valueArrayWriter.cursor - previousCursor - 8
               )
@@ -347,7 +347,7 @@ object InterpretedUnsafeProjection extends UnsafeProjectionCreator {
     Platform.copyMemory(
       baseObject,
       baseOffset,
-      writer.buffer,
+      writer.getBuffer,
       writer.cursor,
       sizeInBytes)
     writer.increaseCursor(sizeInBytes)

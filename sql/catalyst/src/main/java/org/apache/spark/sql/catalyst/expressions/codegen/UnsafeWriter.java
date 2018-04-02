@@ -43,8 +43,8 @@ public abstract class UnsafeWriter {
     return holder;
   }
 
-  public final byte[] buffer() {
-    return holder.buffer();
+  public final byte[] getBuffer() {
+    return holder.getBuffer();
   }
 
   public final void reset() {
@@ -84,7 +84,7 @@ public abstract class UnsafeWriter {
 
   protected final void zeroOutPaddingBytes(int numBytes) {
     if ((numBytes & 0x07) > 0) {
-      Platform.putLong(buffer(), cursor() + ((numBytes >> 3) << 3), 0L);
+      Platform.putLong(getBuffer(), cursor() + ((numBytes >> 3) << 3), 0L);
     }
   }
 
@@ -112,7 +112,7 @@ public abstract class UnsafeWriter {
     zeroOutPaddingBytes(numBytes);
 
     // Write the bytes to the variable length portion.
-    input.writeToMemory(buffer(), cursor());
+    input.writeToMemory(getBuffer(), cursor());
 
     setOffsetAndSize(ordinal, numBytes);
 
@@ -134,7 +134,7 @@ public abstract class UnsafeWriter {
 
     // Write the bytes to the variable length portion.
     Platform.copyMemory(
-      input, Platform.BYTE_ARRAY_OFFSET + offset, buffer(), cursor(), numBytes);
+      input, Platform.BYTE_ARRAY_OFFSET + offset, getBuffer(), cursor(), numBytes);
 
     setOffsetAndSize(ordinal, numBytes);
 
@@ -147,8 +147,8 @@ public abstract class UnsafeWriter {
     grow(16);
 
     // Write the months and microseconds fields of Interval to the variable length portion.
-    Platform.putLong(buffer(), cursor(), input.months);
-    Platform.putLong(buffer(), cursor() + 8, input.microseconds);
+    Platform.putLong(getBuffer(), cursor(), input.months);
+    Platform.putLong(getBuffer(), cursor() + 8, input.microseconds);
 
     setOffsetAndSize(ordinal, 16);
 
@@ -157,36 +157,36 @@ public abstract class UnsafeWriter {
   }
 
   protected final void writeBoolean(long offset, boolean value) {
-    Platform.putBoolean(buffer(), offset, value);
+    Platform.putBoolean(getBuffer(), offset, value);
   }
 
   protected final void writeByte(long offset, byte value) {
-    Platform.putByte(buffer(), offset, value);
+    Platform.putByte(getBuffer(), offset, value);
   }
 
   protected final void writeShort(long offset, short value) {
-    Platform.putShort(buffer(), offset, value);
+    Platform.putShort(getBuffer(), offset, value);
   }
 
   protected final void writeInt(long offset, int value) {
-    Platform.putInt(buffer(), offset, value);
+    Platform.putInt(getBuffer(), offset, value);
   }
 
   protected final void writeLong(long offset, long value) {
-    Platform.putLong(buffer(), offset, value);
+    Platform.putLong(getBuffer(), offset, value);
   }
 
   protected final void writeFloat(long offset, float value) {
     if (Float.isNaN(value)) {
       value = Float.NaN;
     }
-    Platform.putFloat(buffer(), offset, value);
+    Platform.putFloat(getBuffer(), offset, value);
   }
 
   protected final void writeDouble(long offset, double value) {
     if (Double.isNaN(value)) {
       value = Double.NaN;
     }
-    Platform.putDouble(buffer(), offset, value);
+    Platform.putDouble(getBuffer(), offset, value);
   }
 }

@@ -82,7 +82,7 @@ final class BufferHolder {
     }
   }
 
-  byte[] buffer() {
+  byte[] getBuffer() {
     return buffer;
   }
 

@@ -61,14 +61,14 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
     holder.grow(headerInBytes + fixedPartInBytes);
 
     // Write numElements and clear out null bits to header
-    Platform.putLong(buffer(), startingOffset, numElements);
+    Platform.putLong(getBuffer(), startingOffset, numElements);
     for (int i = 8; i < headerInBytes; i += 8) {
-      Platform.putLong(buffer(), startingOffset + i, 0L);
+      Platform.putLong(getBuffer(), startingOffset + i, 0L);
     }
 
     // fill 0 into reminder part of 8-bytes alignment in unsafe array
     for (int i = elementSize * numElements; i < fixedPartInBytes; i++) {
-      Platform.putByte(buffer(), startingOffset + headerInBytes + i, (byte) 0);
+      Platform.putByte(getBuffer(), startingOffset + headerInBytes + i, (byte) 0);
     }
     increaseCursor(headerInBytes + fixedPartInBytes);
   }
@@ -79,31 +79,31 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
 
   private void setNullBit(int ordinal) {
     assertIndexIsValid(ordinal);
-    BitSetMethods.set(buffer(), startingOffset + 8, ordinal);
+    BitSetMethods.set(getBuffer(), startingOffset + 8, ordinal);
   }
 
   public void setNull1Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
-    Platform.putByte(buffer(), getElementOffset(ordinal), (byte)0);
+    writeByte(getElementOffset(ordinal), (byte)0);
   }
 
   public void setNull2Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
-    Platform.putShort(buffer(), getElementOffset(ordinal), (short)0);
+    writeShort(getElementOffset(ordinal), (short)0);
   }
 
   public void setNull4Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
-    Platform.putInt(buffer(), getElementOffset(ordinal), 0);
+    writeInt(getElementOffset(ordinal), 0);
   }
 
   public void setNull8Bytes(int ordinal) {
     setNullBit(ordinal);
     // put zero into the corresponding field when set null
-    Platform.putLong(buffer(), getElementOffset(ordinal), (long)0);
+    writeLong(getElementOffset(ordinal), 0);
   }
 
   public void setNull(int ordinal) { setNull8Bytes(ordinal); }
@@ -160,7 +160,7 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
 
         // Write the bytes to the variable length portion.
         Platform.copyMemory(
-          bytes, Platform.BYTE_ARRAY_OFFSET, buffer(), cursor(), numBytes);
+          bytes, Platform.BYTE_ARRAY_OFFSET, getBuffer(), cursor(), numBytes);
         setOffsetAndSize(ordinal, numBytes);
 
         // move the cursor forward with 8-bytes boundary

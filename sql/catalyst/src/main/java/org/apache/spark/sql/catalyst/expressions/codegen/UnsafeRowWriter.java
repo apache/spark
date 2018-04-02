@@ -101,17 +101,17 @@ public final class UnsafeRowWriter extends UnsafeWriter {
    */
   public void zeroOutNullBytes() {
     for (int i = 0; i < nullBitsSize; i += 8) {
-      Platform.putLong(buffer(), startingOffset + i, 0L);
+      Platform.putLong(getBuffer(), startingOffset + i, 0L);
     }
   }
 
   public boolean isNullAt(int ordinal) {
-    return BitSetMethods.isSet(buffer(), startingOffset, ordinal);
+    return BitSetMethods.isSet(getBuffer(), startingOffset, ordinal);
   }
 
   public void setNullAt(int ordinal) {
-    BitSetMethods.set(buffer(), startingOffset, ordinal);
-    Platform.putLong(buffer(), getFieldOffset(ordinal), 0L);
+    BitSetMethods.set(getBuffer(), startingOffset, ordinal);
+    write(ordinal, 0L);
   }
 
   @Override
@@ -140,25 +140,25 @@ public final class UnsafeRowWriter extends UnsafeWriter {
 
   public void write(int ordinal, boolean value) {
     final long offset = getFieldOffset(ordinal);
-    Platform.putLong(buffer(), offset, 0L);
+    writeLong(offset, 0L);
     writeBoolean(offset, value);
   }
 
   public void write(int ordinal, byte value) {
     final long offset = getFieldOffset(ordinal);
-    Platform.putLong(buffer(), offset, 0L);
+    writeLong(offset, 0L);
     writeByte(offset, value);
   }
 
   public void write(int ordinal, short value) {
     final long offset = getFieldOffset(ordinal);
-    Platform.putLong(buffer(), offset, 0L);
+    writeLong(offset, 0L);
     writeShort(offset, value);
   }
 
   public void write(int ordinal, int value) {
     final long offset = getFieldOffset(ordinal);
-    Platform.putLong(buffer(), offset, 0L);
+    writeLong(offset, 0L);
     writeInt(offset, value);
   }
 
@@ -168,7 +168,7 @@ public final class UnsafeRowWriter extends UnsafeWriter {
 
   public void write(int ordinal, float value) {
     final long offset = getFieldOffset(ordinal);
-    Platform.putLong(buffer(), offset, 0L);
+    writeLong(offset, 0);
     writeFloat(offset, value);
   }
 
@@ -179,7 +179,7 @@ public final class UnsafeRowWriter extends UnsafeWriter {
   public void write(int ordinal, Decimal input, int precision, int scale) {
     if (precision <= Decimal.MAX_LONG_DIGITS()) {
       // make sure Decimal object has the same scale as DecimalType
-      if (input.changePrecision(precision, scale)) {
+      if (input != null && input.changePrecision(precision, scale)) {
         write(ordinal, input.toUnscaledLong());
       } else {
         setNullAt(ordinal);
@@ -192,10 +192,10 @@ public final class UnsafeRowWriter extends UnsafeWriter {
       // Note that we may pass in null Decimal object to set null for it.
       if (input == null || !input.changePrecision(precision, scale)) {
         // zero-out the bytes
-        Platform.putLong(buffer(), cursor(), 0L);
-        Platform.putLong(buffer(), cursor() + 8, 0L);
+        Platform.putLong(getBuffer(), cursor(), 0L);
+        Platform.putLong(getBuffer(), cursor() + 8, 0L);
 
-        BitSetMethods.set(buffer(), startingOffset, ordinal);
+        BitSetMethods.set(getBuffer(), startingOffset, ordinal);
         // keep the offset for future update
         setOffsetAndSize(ordinal, 0);
       } else {
@@ -207,7 +207,7 @@ public final class UnsafeRowWriter extends UnsafeWriter {
 
         // Write the bytes to the variable length portion.
         Platform.copyMemory(
-          bytes, Platform.BYTE_ARRAY_OFFSET, buffer(), cursor(), numBytes);
+          bytes, Platform.BYTE_ARRAY_OFFSET, getBuffer(), cursor(), numBytes);
         setOffsetAndSize(ordinal, bytes.length);
       }
 

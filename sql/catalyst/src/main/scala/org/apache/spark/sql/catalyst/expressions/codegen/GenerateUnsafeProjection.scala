@@ -283,7 +283,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
         ${writeArrayToBuffer(ctx, s"$tmpInput.keyArray()", keyType, rowWriter)}
         // Write the numBytes of key array into the first 8 bytes.
-        Platform.putLong($rowWriter.buffer(), $tmpCursor - 8, $rowWriter.cursor() - $tmpCursor);
+        Platform.putLong($rowWriter.getBuffer(), $tmpCursor - 8, $rowWriter.cursor() - $tmpCursor);
 
         ${writeArrayToBuffer(ctx, s"$tmpInput.valueArray()", valueType, rowWriter)}
       }
@@ -300,7 +300,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       final int $sizeInBytes = $input.getSizeInBytes();
       // grow the global buffer before writing data.
       $rowWriter.grow($sizeInBytes);
-      $input.writeToMemory($rowWriter.buffer(), $rowWriter.cursor());
+      $input.writeToMemory($rowWriter.getBuffer(), $rowWriter.cursor());
       $rowWriter.increaseCursor($sizeInBytes);
     """
   }
