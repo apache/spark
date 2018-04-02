@@ -1299,7 +1299,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .option("inferSchema", true)
         .option("samplingRatio", 0.1)
         .csv(path.getCanonicalPath)
-      assert(ds.schema == new StructType().add("_c0", LongType))
+      assert(ds.schema == new StructType().add("_c0", IntegerType))
     }
   }
 
@@ -1318,6 +1318,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .option("samplingRatio", 0.1)
       .csv(dstr)
 
-    assert(ds.schema == new StructType().add("_c0", LongType))
+    assert(ds.schema == new StructType().add("_c0", IntegerType))
   }
 }

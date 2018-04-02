@@ -150,6 +150,9 @@ class CSVOptions(
 
   val isCommentSet = this.comment != '\u0000'
 
+  val samplingRatio =
+    parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
