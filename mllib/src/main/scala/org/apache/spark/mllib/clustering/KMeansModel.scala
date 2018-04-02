@@ -48,7 +48,7 @@ class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
     if (clusterCenters == null) null else clusterCenters.map(new VectorWithNorm(_))
 
   @Since("2.4.0")
-  def this(clusterCenters: Array[Vector], distanceMeasure: String) =
+  private[spark] def this(clusterCenters: Array[Vector], distanceMeasure: String) =
     this(clusterCenters: Array[Vector], distanceMeasure, -1)
 
   @Since("1.1.0")
