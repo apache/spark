@@ -27,6 +27,13 @@ import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
+/**
+ * A [[org.apache.spark.sql.sources.v2.DataSourceV2]] for forwarding data into the specified
+ * [[ForeachWriter]].
+ *
+ * @param writer The [[ForeachWriter]] to process all data.
+ * @tparam T The expected type of the sink.
+ */
 case class ForeachWriterProvider[T: Encoder](writer: ForeachWriter[T]) extends StreamWriteSupport {
   override def createStreamWriter(
       queryId: String,
@@ -61,6 +68,14 @@ case class ForeachWriterFactory[T: Encoder](
   }
 }
 
+/**
+ * A [[DataWriter]] which writes data in this partition to a [[ForeachWriter]].
+ * @param writer The [[ForeachWriter]] to process all data.
+ * @param encoder An encoder which can convert [[InternalRow]] to the required type [[T]]
+ * @param partitionId
+ * @param epochId
+ * @tparam T The type expected by the writer.
+ */
 class ForeachDataWriter[T : Encoder](
     writer: ForeachWriter[T],
     encoder: ExpressionEncoder[T],
