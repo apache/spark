@@ -85,6 +85,33 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     checkOwnerReferences(executor, driverPodUid)
   }
 
+  test("executor core request specification") {
+    var factory = new ExecutorPodFactory(baseConf, None)
+    var executor = factory.createExecutorPod(
+      "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
+    assert(executor.getSpec.getContainers.size() === 1)
+    assert(executor.getSpec.getContainers.get(0).getResources.getRequests.get("cpu").getAmount
+      === "1")
+
+    val conf = baseConf.clone()
+
+    conf.set(KUBERNETES_EXECUTOR_REQUEST_CORES, "0.1")
+    factory = new ExecutorPodFactory(conf, None)
+    executor = factory.createExecutorPod(
+      "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
+    assert(executor.getSpec.getContainers.size() === 1)
+    assert(executor.getSpec.getContainers.get(0).getResources.getRequests.get("cpu").getAmount
+      === "0.1")
+
+    conf.set(KUBERNETES_EXECUTOR_REQUEST_CORES, "100m")
+    factory = new ExecutorPodFactory(conf, None)
+    conf.set(KUBERNETES_EXECUTOR_REQUEST_CORES, "100m")
+    executor = factory.createExecutorPod(
+      "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
+    assert(executor.getSpec.getContainers.get(0).getResources.getRequests.get("cpu").getAmount
+      === "100m")
+  }
+
   test("executor pod hostnames get truncated to 63 characters") {
     val conf = baseConf.clone()
     conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX,
