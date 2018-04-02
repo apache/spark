@@ -235,9 +235,10 @@ class VectorAssemblerSuite
     // behavior when vector size hint is given
     assert(runWithMetadata("keep").count() == 6, "should keep all rows")
     assert(runWithMetadata("skip").count() == 1, "should skip rows with nulls")
-    intercept[SparkException](runWithMetadata("error"), "should throw error with nulls")
-    intercept[SparkException](runWithMetadata("error", additional_filter = "id1 > 4"),
-      "should throw error with NaNs")
+    // should throw error with nulls
+    intercept[SparkException](runWithMetadata("error"))
+    // should throw error with NaNs
+    intercept[SparkException](runWithMetadata("error", additional_filter = "id1 > 4"))
 
     // behavior when first row has information
     assert(intercept[RuntimeException](runWithFirstRow("keep").count())
