@@ -740,8 +740,8 @@ object EliminateSorts extends Rule[LogicalPlan] {
  */
 object RemoveRedundantSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Sort(orders, true, child) if child.sortedOrder.nonEmpty
-        && child.sortedOrder.zip(orders).forall { case (s1, s2) => s1.satisfies(s2) } =>
+    case Sort(orders, true, child) if child.outputOrdering.nonEmpty
+        && SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
       child
   }
 }

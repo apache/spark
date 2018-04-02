@@ -470,7 +470,7 @@ case class Sort(
     child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
   override def maxRows: Option[Long] = child.maxRows
-  override def sortedOrder: Seq[SortOrder] = order
+  override def outputOrdering: Seq[SortOrder] = order
 }
 
 /** Factory for constructing new `Range` nodes. */
@@ -525,7 +525,7 @@ case class Range(
     Statistics(sizeInBytes = LongType.defaultSize * numElements)
   }
 
-  override def sortedOrder: Seq[SortOrder] = output.map(a => SortOrder(a, Descending))
+  override def outputOrdering: Seq[SortOrder] = output.map(a => SortOrder(a, Descending))
 }
 
 case class Aggregate(
@@ -872,8 +872,8 @@ case class RepartitionByExpression(
   override def maxRows: Option[Long] = child.maxRows
   override def shuffle: Boolean = true
 
-  override def sortedOrder: Seq[SortOrder] = partitioning match {
-    case RangePartitioning(sortedOrder, _) => sortedOrder
+  override def outputOrdering: Seq[SortOrder] = partitioning match {
+    case RangePartitioning(ordering, _) => ordering
     case _ => Nil
   }
 }

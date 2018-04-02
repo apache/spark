@@ -221,9 +221,9 @@ abstract class LogicalPlan
   def refresh(): Unit = children.foreach(_.refresh())
 
   /**
-   * If the current plan contains sorted data, it contains the sorted order.
+   * Returns the output ordering that this plan generates.
    */
-  def sortedOrder: Seq[SortOrder] = Nil
+  def outputOrdering: Seq[SortOrder] = Nil
 }
 
 /**
@@ -281,5 +281,5 @@ abstract class BinaryNode extends LogicalPlan {
 }
 
 abstract class KeepOrderUnaryNode extends UnaryNode {
-  override final def sortedOrder: Seq[SortOrder] = child.sortedOrder
+  override final def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }

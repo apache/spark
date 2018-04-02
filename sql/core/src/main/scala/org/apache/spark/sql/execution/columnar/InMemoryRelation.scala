@@ -170,5 +170,5 @@ case class InMemoryRelation(
   override protected def otherCopyArgs: Seq[AnyRef] =
     Seq(_cachedColumnBuffers, sizeInBytesStats, statsOfPlanToCache)
 
-  override def sortedOrder: Seq[SortOrder] = child.outputOrdering
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
