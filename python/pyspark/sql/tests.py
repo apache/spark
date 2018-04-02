@@ -3982,7 +3982,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                               ArrayType(ArrayType(StringType())))
         result = df.select(tokenize("vals").alias("hi"))
         # If we start supporting nested arrays we should update the documentation in functions.py
-        self.assertRaises(ArrowTypeError, result.collect())
+        with QuietTest(self.sc):
+            self.assertRaises(ArrowTypeError, result.collect())
 
     def test_vectorized_udf_basic(self):
         from pyspark.sql.functions import pandas_udf, col, array
