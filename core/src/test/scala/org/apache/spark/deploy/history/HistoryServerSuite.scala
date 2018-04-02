@@ -36,6 +36,7 @@ import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods
 import org.json4s.jackson.JsonMethods._
+import org.mockito.Mockito._
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest.{BeforeAndAfter, Matchers}
@@ -279,6 +280,29 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       "got \"foo\""))
 
     getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
+  }
+
+  test("automatically retrieve uiRoot from request through Knox") {
+    assert(sys.props.get("spark.ui.proxyBase").isEmpty,
+      "spark.ui.proxyBase is defined but it should not for this UT")
+    assert(sys.env.get("APPLICATION_WEB_PROXY_BASE").isEmpty,
+      "APPLICATION_WEB_PROXY_BASE is defined but it should not for this UT")
+    val page = new HistoryPage(server)
+    val requestThroughKnox = mock[HttpServletRequest]
+    val knoxBaseUrl = "/gateway/default/sparkhistoryui"
+    when(requestThroughKnox.getHeader("X-Forwarded-Context")).thenReturn(knoxBaseUrl)
+    val responseThroughKnox = page.render(requestThroughKnox)
+
+    val urlsThroughKnox = responseThroughKnox \\ "@href" map (_.toString)
+    val siteRelativeLinksThroughKnox = urlsThroughKnox filter (_.startsWith("/"))
+    all (siteRelativeLinksThroughKnox) should startWith (knoxBaseUrl)
+
+    val directRequest = mock[HttpServletRequest]
+    val directResponse = page.render(directRequest)
+
+    val directUrls = directResponse \\ "@href" map (_.toString)
+    val directSiteRelativeLinks = directUrls filter (_.startsWith("/"))
+    all (directSiteRelativeLinks) should not startWith (knoxBaseUrl)
   }
 
   test("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
