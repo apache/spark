@@ -93,9 +93,6 @@ private[spark] class BasicDriverConfigurationStep(
       .withAmount(driverCpuCores)
       .build()
     val driverMemoryQuantity = new QuantityBuilder(false)
-      .withAmount(s"${driverMemoryMiB}Mi")
-      .build()
-    val driverMemoryLimitQuantity = new QuantityBuilder(false)
       .withAmount(s"${driverMemoryWithOverheadMiB}Mi")
       .build()
     val maybeCpuLimitQuantity = driverLimitCores.map { limitCores =>
@@ -117,7 +114,7 @@ private[spark] class BasicDriverConfigurationStep(
       .withNewResources()
         .addToRequests("cpu", driverCpuQuantity)
         .addToRequests("memory", driverMemoryQuantity)
-        .addToLimits("memory", driverMemoryLimitQuantity)
+        .addToLimits("memory", driverMemoryQuantity)
         .addToLimits(maybeCpuLimitQuantity.toMap.asJava)
         .endResources()
       .addToArgs("driver")

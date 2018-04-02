@@ -91,7 +91,7 @@ class BasicDriverConfigurationStepSuite extends SparkFunSuite {
     val resourceRequirements = preparedDriverSpec.driverContainer.getResources
     val requests = resourceRequirements.getRequests.asScala
     assert(requests("cpu").getAmount === "2")
-    assert(requests("memory").getAmount === "256Mi")
+    assert(requests("memory").getAmount === "456Mi")
     val limits = resourceRequirements.getLimits.asScala
     assert(limits("memory").getAmount === "456Mi")
     assert(limits("cpu").getAmount === "4")
