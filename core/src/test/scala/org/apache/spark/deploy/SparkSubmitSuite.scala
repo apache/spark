@@ -105,6 +105,9 @@ class SparkSubmitSuite
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
+  private val emptyIvySettings = File.createTempFile("ivy", ".xml")
+  FileUtils.write(emptyIvySettings, "<ivysettings />", StandardCharsets.UTF_8)
+
   override def beforeEach() {
     super.beforeEach()
     System.setProperty("spark.testing", "true")
@@ -520,6 +523,7 @@ class SparkSubmitSuite
         "--repositories", repo,
         "--conf", "spark.ui.enabled=false",
         "--conf", "spark.master.rest.enabled=false",
+        "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath()}",
         unusedJar.toString,
         "my.great.lib.MyLib", "my.great.dep.MyLib")
       runSparkSubmit(args)
@@ -530,7 +534,6 @@ class SparkSubmitSuite
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
-    // Test using "spark.jars.packages" and "spark.jars.repositories" configurations.
     IvyTestUtils.withRepository(main, Some(dep.toString), None) { repo =>
       val args = Seq(
         "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
@@ -540,6 +543,7 @@ class SparkSubmitSuite
         "--conf", s"spark.jars.repositories=$repo",
         "--conf", "spark.ui.enabled=false",
         "--conf", "spark.master.rest.enabled=false",
+        "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath()}",
         unusedJar.toString,
         "my.great.lib.MyLib", "my.great.dep.MyLib")
       runSparkSubmit(args)
@@ -550,7 +554,6 @@ class SparkSubmitSuite
   // See https://gist.github.com/shivaram/3a2fecce60768a603dac for a error log
   ignore("correctly builds R packages included in a jar with --packages") {
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")
-    // Check if the SparkR package is installed
     assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
@@ -563,6 +566,7 @@ class SparkSubmitSuite
         "--master", "local-cluster[2,1,1024]",
         "--packages", main.toString,
         "--repositories", repo,
+        "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath()}",
         "--verbose",
         "--conf", "spark.ui.enabled=false",
         rScriptDir)
@@ -573,7 +577,6 @@ class SparkSubmitSuite
   test("include an external JAR in SparkR") {
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    // Check if the SparkR package is installed
     assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
     val rScriptDir =
       Seq(sparkHome, "R", "pkg", "tests", "fulltests", "jarTest.R").mkString(File.separator)
