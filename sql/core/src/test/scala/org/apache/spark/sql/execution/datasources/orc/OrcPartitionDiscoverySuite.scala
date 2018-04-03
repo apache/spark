@@ -68,13 +68,6 @@ abstract class OrcPartitionDiscoveryTest extends OrcTest {
       spark.read.orc(base.getCanonicalPath).createOrReplaceTempView("t")
 
       withTempTable("t") {
-        checkAnswer(
-          sql("SELECT * FROM t"),
-          for {
-            i <- 1 to 10
-            pi <- Seq(1, 2)
-            ps <- Seq("foo", "bar")
-          } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
           sql("SELECT intField, pi FROM t"),
@@ -84,19 +77,6 @@ abstract class OrcPartitionDiscoveryTest extends OrcTest {
             _ <- Seq("foo", "bar")
           } yield Row(i, pi))
 
-        checkAnswer(
-          sql("SELECT * FROM t WHERE pi = 1"),
-          for {
-            i <- 1 to 10
-            ps <- Seq("foo", "bar")
-          } yield Row(i, i.toString, 1, ps))
-
-        checkAnswer(
-          sql("SELECT * FROM t WHERE ps = 'foo'"),
-          for {
-            i <- 1 to 10
-            pi <- Seq(1, 2)
-          } yield Row(i, i.toString, pi, "foo"))
       }
     }
   }

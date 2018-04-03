@@ -16,17 +16,29 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.orc
 
+import java.net.URI
 import java.util.{List => JList, Locale}
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
+import org.apache.orc.{OrcConf, OrcFile}
+import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.{AnalysisException, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Expression, JoinedRow, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.PartitionedFileUtil
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcUtils}
+import org.apache.spark.sql.execution.datasources.orc.{OrcColumnarBatchReader, OrcDeserializer, OrcFilters, OrcUtils}
+import org.apache.spark.sql.execution.datasources.v2.FileReaderFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, ReadSupport, ReadSupportWithSchema}
 import org.apache.spark.sql.sources.v2.reader._
@@ -56,17 +68,9 @@ class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: Optio
   private val hadoopConf =
     sparkSession.sessionState.newHadoopConfWithOptions(options.asMap().asScala.toMap)
   private val sqlConf = sparkSession.sessionState.conf
-  private val readerConf = OrcDataReaderFactoryConf(
-    capacity = sqlConf.orcVectorizedReaderBatchSize,
-    enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled,
-    copyToSpark = sqlConf.getConf(SQLConf.ORC_COPY_BATCH_TO_SPARK),
-    isCaseSensitive = sqlConf.caseSensitiveAnalysis,
-    ignoreCorruptFiles = sqlConf.ignoreCorruptFiles,
-    ignoreMissingFiles = sqlConf.ignoreMissingFiles
-  )
-
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-
+  private val ignoreCorruptFiles = sqlConf.ignoreCorruptFiles
+  private val ignoreMissingFiles = sqlConf.ignoreMissingFiles
   private val fileIndex = {
     val filePath = options.get("path")
     if (!filePath.isPresent) {
@@ -90,8 +94,6 @@ class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: Optio
   }
   private val (fullSchema, _) =
     PartitioningUtils.mergeDataAndPartitionSchema(dataSchema, partitionSchema, isCaseSensitive)
-  private val broadcastedConf =
-    sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
   private var pushedFiltersArray: Array[Expression] = Array.empty
   private var partitionKeyFilters: Array[Expression] = Array.empty
   private var requiredSchema = fullSchema
@@ -114,7 +116,6 @@ class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: Optio
     FilePartitionUtil.getFilePartitions(sparkSession, splitFiles, maxSplitBytes)
   }
 
-
   override def readSchema(): StructType = {
     requiredSchema
   }
@@ -123,18 +124,99 @@ class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: Optio
     this.requiredSchema = requiredSchema
   }
 
+  private def readFunction: PartitionedFile => Iterator[InternalRow] = {
+    val capacity = sqlConf.orcVectorizedReaderBatchSize
+    val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
+    val copyToSpark = sqlConf.getConf(SQLConf.ORC_COPY_BATCH_TO_SPARK)
+    val isCaseSensitive = this.isCaseSensitive
+    val dataSchema = this.dataSchema
+    val readSchema = this.readSchema()
+    val partitionSchema = this.partitionSchema
+    val broadcastedConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+    val enableVectorizedReader = enableBatchRead()
+    (file: PartitionedFile) => {
+      val conf = broadcastedConf.value.value
+
+      val filePath = new Path(new URI(file.filePath))
+
+      val fs = filePath.getFileSystem(conf)
+      val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
+      val reader = OrcFile.createReader(filePath, readerOptions)
+
+      val requestedColIdsOrEmptyFile = OrcUtils.requestedColumnIds(
+        isCaseSensitive, dataSchema, readSchema, reader, conf)
+
+      if (requestedColIdsOrEmptyFile.isEmpty) {
+        Iterator.empty
+      } else {
+        val requestedColIds = requestedColIdsOrEmptyFile.get
+        assert(requestedColIds.length == readSchema.length,
+          "[BUG] requested column IDs do not match required schema")
+        val taskConf = new Configuration(conf)
+        taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute,
+          requestedColIds.filter(_ != -1).sorted.mkString(","))
+
+        val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
+        val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
+        val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
+
+        val taskContext = Option(TaskContext.get())
+        if (enableVectorizedReader) {
+          val batchReader = new OrcColumnarBatchReader(
+            enableOffHeapColumnVector && taskContext.isDefined, copyToSpark, capacity)
+          // SPARK-23399 Register a task completion listener first to call `close()` in all cases.
+          // There is a possibility that `initialize` and `initBatch` hit some errors (like OOM)
+          // after opening a file.
+          val iter = new RecordReaderIterator(batchReader)
+          Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => iter.close()))
+          batchReader.initialize(fileSplit, taskAttemptContext)
+          val partitionColIds = PartitioningUtils.requestedPartitionColumnIds(
+            partitionSchema, readSchema, isCaseSensitive)
+
+          batchReader.initBatch(
+            reader.getSchema,
+            readSchema.fields,
+            requestedColIds,
+            partitionColIds,
+            file.partitionValues)
+          iter.asInstanceOf[Iterator[InternalRow]]
+        } else {
+          val requiredDataSchema =
+            PartitioningUtils.subtractSchema(readSchema, partitionSchema, isCaseSensitive)
+          val orcRecordReader = new OrcInputFormat[OrcStruct]
+            .createRecordReader(fileSplit, taskAttemptContext)
+          val iter = new RecordReaderIterator[OrcStruct](orcRecordReader)
+          taskContext.foreach(_.addTaskCompletionListener(_ => iter.close()))
+
+          val fullSchema = requiredDataSchema.toAttributes ++ partitionSchema.toAttributes
+          val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+          val deserializer = new OrcDeserializer(dataSchema, requiredDataSchema, requestedColIds)
+
+          if (partitionSchema.length == 0) {
+            iter.map(value => unsafeProjection(deserializer.deserialize(value)))
+          } else {
+            val joinedRow = new JoinedRow()
+            iter.map(value =>
+              unsafeProjection(joinedRow(deserializer.deserialize(value), file.partitionValues)))
+          }
+        }
+      }
+    }
+  }
+
   override def createBatchDataReaderFactories(): JList[DataReaderFactory[ColumnarBatch]] = {
-    partitions.map { partitionedFile =>
-      new OrcBatchDataReaderFactory(partitionedFile, dataSchema, partitionSchema,
-        readSchema(), broadcastedConf, readerConf)
+    partitions.map { filePartition =>
+      new FileReaderFactory[ColumnarBatch](filePartition, readFunction, ignoreCorruptFiles,
+        ignoreMissingFiles)
         .asInstanceOf[DataReaderFactory[ColumnarBatch]]
     }.asJava
   }
 
   override def createUnsafeRowReaderFactories: JList[DataReaderFactory[UnsafeRow]] = {
-    partitions.map { partitionedFile =>
-      new OrcUnsafeRowReaderFactory(partitionedFile, dataSchema, partitionSchema,
-        readSchema(), broadcastedConf, readerConf)
+    partitions.map { filePartition =>
+      new FileReaderFactory[UnsafeRow](filePartition, readFunction, ignoreCorruptFiles,
+        ignoreMissingFiles)
         .asInstanceOf[DataReaderFactory[UnsafeRow]]
     }.asJava
   }
@@ -173,15 +255,6 @@ class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: Optio
     pushedFiltersArray
   }
 }
-
-case class OrcDataReaderFactoryConf(
-    capacity: Int,
-    enableOffHeapColumnVector: Boolean,
-    copyToSpark: Boolean,
-    isCaseSensitive: Boolean,
-    ignoreCorruptFiles: Boolean,
-    ignoreMissingFiles: Boolean
-)
 
 object OrcDataSourceV2 {
   def satisfy(sparkSession: SparkSession, source: String, paths: Seq[String]): Option[String] = {
