@@ -301,17 +301,6 @@ case class Invoke(
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
 
-  override def eval(input: InternalRow): Any = {
-    val obj = targetObject.eval(input)
-    if (obj == null) {
-      // return null if obj is null
-      null
-    } else {
-      val method = obj.getClass.getDeclaredMethod(functionName, argClasses : _*)
-      invoke(obj, method, arguments, input, dataType)
-    }
-  }
-
   private lazy val encodedFunctionName = TermName(functionName).encodedName.toString
 
   @transient lazy val method = targetObject.dataType match {
@@ -323,6 +312,21 @@ case class Invoke(
         m
       }
     case _ => None
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val obj = targetObject.eval(input)
+    if (obj == null) {
+      // return null if obj is null
+      null
+    } else {
+      val invokeMethod = if (method.isDefined) {
+        method.get
+      } else {
+        obj.getClass.getDeclaredMethod(functionName, argClasses: _*)
+      }
+      invoke(obj, invokeMethod, arguments, input, dataType)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

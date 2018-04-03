@@ -35,7 +35,11 @@ import org.apache.spark.sql.types._
 class InvokeTargetClass extends Serializable {
   def filterInt(e: Any): Any = e.asInstanceOf[Int] > 0
   def filterPrimitiveInt(e: Int): Boolean = e > 0
-  def sum(e1: Int, e2: Double): Double = e1 + e2
+  def binOp(e1: Int, e2: Double): Double = e1 + e2
+}
+
+class InvokeTargetSubClass extends InvokeTargetClass {
+  override def binOp(e1: Int, e2: Double): Double = e1 - e2
 }
 
 class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -93,6 +97,8 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val targetObject = new InvokeTargetClass
     val funcClass = classOf[InvokeTargetClass]
     val funcObj = Literal.create(targetObject, ObjectType(funcClass))
+    val targetSubObject = new InvokeTargetSubClass
+    val funcSubObj = Literal.create(targetSubObject, ObjectType(classOf[InvokeTargetSubClass]))
     val funcNullObj = Literal.create(null, ObjectType(funcClass))
 
     val inputInt = Seq(BoundReference(0, ObjectType(classOf[Any]), true))
@@ -116,7 +122,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       null, InternalRow.fromSeq(Seq(Integer.valueOf(1))))
 
     checkObjectExprEvaluation(
-      Invoke(funcObj, "sum", DoubleType, inputSum), 1.25, InternalRow.apply(1, 0.25))
+      Invoke(funcObj, "binOp", DoubleType, inputSum), 1.25, InternalRow.apply(1, 0.25))
+
+    checkObjectExprEvaluation(
+      Invoke(funcSubObj, "binOp", DoubleType, inputSum), 0.75, InternalRow.apply(1, 0.25))
   }
 
   test("SPARK-23585: UnwrapOption should support interpreted execution") {
