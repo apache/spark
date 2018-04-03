@@ -945,7 +945,6 @@ class DataFrameWriter(OptionUtils):
             jprop.setProperty(k, properties[k])
         self.mode(mode)._jwrite.jdbc(url, table, jprop)
 
-
 def _test():
     import doctest
     import os
@@ -957,15 +956,15 @@ def _test():
     from pyspark.sql import SparkSession, Row
     import pyspark.sql.readwriter
 
-    SPARK_HOME = os.environ["SPARK_HOME"]
-    filename_pattern = "assembly/target/scala-*/jars/spark-hive_*-*.jar"
-    if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
-        raise Exception(
-            "Failed to find Hive assembly jar. You need to build Spark with "
-            "'build/sbt -Phive package' or 'build/mvn -DskipTests -Phive package' "
-            "before running this test.")
+    # SPARK_HOME = os.environ["SPARK_HOME"]
+    # filename_pattern = "assembly/target/scala-*/jars/spark-hive_*-*.jar"
+    # if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
+    #     raise Exception(
+    #         "Failed to find Hive assembly jar. You need to build Spark with "
+    #         "'build/sbt -Phive package' or 'build/mvn -DskipTests -Phive package' "
+    #         "before running this test.")
 
-    os.chdir(SPARK_HOME)
+    os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
@@ -973,6 +972,19 @@ def _test():
         spark = SparkSession.builder.enableHiveSupport().getOrCreate()
     except py4j.protocol.Py4JError:
         spark = SparkSession(sc)
+
+    hive_enabled = True
+    try:
+        sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
+    except py4j.protocol.Py4JError:
+        hive_enabled = False
+    except TypeError:
+        hive_enabled = False
+
+    # if hive is not enabled, then skip doctests that will fail
+    if not hive_enabled:
+        m = pyspark.sql.readwriter
+        m.__dict__["DataFrameReader"].__dict__["table"].__doc__ = ""
 
     globs['tempfile'] = tempfile
     globs['os'] = os
