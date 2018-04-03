@@ -26,8 +26,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.{Clock, SystemClock}
 
 private[spark] class DriverServiceFeatureStep(
-  kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf],
-  clock: Clock = new SystemClock)
+    kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf],
+    clock: Clock = new SystemClock)
   extends KubernetesFeatureConfigStep with Logging {
   import DriverServiceFeatureStep._
 

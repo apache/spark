@@ -20,11 +20,11 @@ import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificCo
 import org.apache.spark.deploy.k8s.features.{BasicExecutorFeatureStep, MountSecretsFeatureStep}
 
 private[spark] class KubernetesExecutorBuilder(
-  provideBasicStep: (KubernetesConf[KubernetesExecutorSpecificConf]) => BasicExecutorFeatureStep =
-    new BasicExecutorFeatureStep(_),
-  provideSecretsStep:
-    (KubernetesConf[_ <: KubernetesRoleSpecificConf]) => MountSecretsFeatureStep =
-    new MountSecretsFeatureStep(_)) {
+    provideBasicStep: (KubernetesConf[KubernetesExecutorSpecificConf]) => BasicExecutorFeatureStep =
+      new BasicExecutorFeatureStep(_),
+    provideSecretsStep:
+      (KubernetesConf[_ <: KubernetesRoleSpecificConf]) => MountSecretsFeatureStep =
+      new MountSecretsFeatureStep(_)) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf]): SparkPod = {

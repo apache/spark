@@ -29,7 +29,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 
 private[spark] class BasicDriverFeatureStep(
-  conf: KubernetesConf[KubernetesDriverSpecificConf])
+    conf: KubernetesConf[KubernetesDriverSpecificConf])
   extends KubernetesFeatureConfigStep {
 
   private val driverPodName = conf

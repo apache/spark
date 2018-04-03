@@ -41,9 +41,9 @@ import org.apache.spark.util.Utils
  * @param driverArgs arguments to the driver
  */
 private[spark] case class ClientArguments(
-  mainAppResource: Option[MainAppResource],
-  mainClass: String,
-  driverArgs: Array[String])
+    mainAppResource: Option[MainAppResource],
+    mainClass: String,
+    driverArgs: Array[String])
 
 private[spark] object ClientArguments {
 
@@ -88,13 +88,13 @@ private[spark] object ClientArguments {
  * @param watcher a watcher that monitors and logs the application status
  */
 private[spark] class Client(
-   builder: KubernetesDriverBuilder,
-   kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf],
-   kubernetesClient: KubernetesClient,
-   waitForAppCompletion: Boolean,
-   appName: String,
-   watcher: LoggingPodStatusWatcher,
-   kubernetesResourceNamePrefix: String) extends Logging {
+    builder: KubernetesDriverBuilder,
+    kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf],
+    kubernetesClient: KubernetesClient,
+    waitForAppCompletion: Boolean,
+    appName: String,
+    watcher: LoggingPodStatusWatcher,
+    kubernetesResourceNamePrefix: String) extends Logging {
 
   def run(): Unit = {
     val resolvedDriverSpec = builder.buildFromFeatures(kubernetesConf)

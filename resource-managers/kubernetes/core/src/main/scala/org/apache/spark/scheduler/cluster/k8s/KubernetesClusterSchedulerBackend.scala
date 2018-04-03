@@ -39,12 +39,12 @@ import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, Schedu
 import org.apache.spark.util.Utils
 
 private[spark] class KubernetesClusterSchedulerBackend(
-  scheduler: TaskSchedulerImpl,
-  rpcEnv: RpcEnv,
-  executorBuilder: KubernetesExecutorBuilder,
-  kubernetesClient: KubernetesClient,
-  allocatorExecutor: ScheduledExecutorService,
-  requestExecutorsService: ExecutorService)
+    scheduler: TaskSchedulerImpl,
+    rpcEnv: RpcEnv,
+    executorBuilder: KubernetesExecutorBuilder,
+    kubernetesClient: KubernetesClient,
+    allocatorExecutor: ScheduledExecutorService,
+    requestExecutorsService: ExecutorService)
   extends CoarseGrainedSchedulerBackend(scheduler, rpcEnv) {
 
   import KubernetesClusterSchedulerBackend._

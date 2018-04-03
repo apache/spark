@@ -20,16 +20,16 @@ import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, MountSecretsFeatureStep}
 
 private[spark] class KubernetesDriverBuilder(
-  provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
-    new BasicDriverFeatureStep(_),
-  provideCredentialsStep: (KubernetesConf[KubernetesDriverSpecificConf])
-    => DriverKubernetesCredentialsFeatureStep =
-    new DriverKubernetesCredentialsFeatureStep(_),
-  provideServiceStep: (KubernetesConf[KubernetesDriverSpecificConf]) => DriverServiceFeatureStep =
-    new DriverServiceFeatureStep(_),
-  provideSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
-    => MountSecretsFeatureStep) =
-    new MountSecretsFeatureStep(_)) {
+    provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
+      new BasicDriverFeatureStep(_),
+    provideCredentialsStep: (KubernetesConf[KubernetesDriverSpecificConf])
+      => DriverKubernetesCredentialsFeatureStep =
+      new DriverKubernetesCredentialsFeatureStep(_),
+    provideServiceStep: (KubernetesConf[KubernetesDriverSpecificConf]) => DriverServiceFeatureStep =
+      new DriverServiceFeatureStep(_),
+    provideSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => MountSecretsFeatureStep) =
+      new MountSecretsFeatureStep(_)) {
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesSpec = {
