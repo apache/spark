@@ -48,7 +48,7 @@ class MinMaxScalerSuite extends MLTest with DefaultReadWriteTest {
     val model = scaler.fit(df)
     testTransformer[(Vector, Vector)](df, model, "expected", "scaled") {
       case Row(vector1: Vector, vector2: Vector) =>
-        assert(vector1.equals(vector2), "Transformed vector is different with expected.")
+        assert(vector1 === vector2, "Transformed vector is different with expected.")
     }
 
     MLTestingUtils.checkCopyAndUids(scaler, model)
@@ -112,7 +112,7 @@ class MinMaxScalerSuite extends MLTest with DefaultReadWriteTest {
     val model = scaler.fit(df)
     model.transform(df).select("expected", "scaled").collect()
       .foreach { case Row(vector1: Vector, vector2: Vector) =>
-        assert(vector1.equals(vector2), "Transformed vector is different with expected.")
+        assert(vector1 === vector2, "Transformed vector is different with expected.")
       }
   }
 }

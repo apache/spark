@@ -45,8 +45,9 @@ class MaxAbsScalerSuite extends MLTest with DefaultReadWriteTest {
 
     val model = scaler.fit(df)
     testTransformer[(Vector, Vector)](df, model, "expected", "scaled") {
-      case Row(vector1: Vector, vector2: Vector) =>
-        assert(vector1.equals(vector2), s"MaxAbsScaler error: $vector2 should be $vector1")
+      case Row(expectedVec: Vector, actualVec: Vector) =>
+        assert(expectedVec === actualVec,
+          s"MaxAbsScaler error: Expected $expectedVec but computed $actualVec")
     }
 
     MLTestingUtils.checkCopyAndUids(scaler, model)
