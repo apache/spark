@@ -17,7 +17,9 @@
 package org.apache.spark.deploy.k8s.submit.steps
 
 import scala.collection.JavaConverters._
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, LocalObjectReference, PodBuilder}
+
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, HasMetadata, PodBuilder}
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
