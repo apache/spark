@@ -159,6 +159,10 @@ private[hive] class TestHiveSparkSession(
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
 
+  // TODO(SPARK-23826): TestHiveSparkSession should set default session the same way as
+  // TestSparkSession, but doing this the same way breaks many tests in the package. We need
+  // to investigate and find a different strategy.
+
   def this(sc: SparkContext, loadTestTables: Boolean) {
     this(
       sc,
@@ -518,8 +522,9 @@ private[hive] class TestHiveSparkSession(
       // an HDFS scratch dir: ${hive.exec.scratchdir}/<username> is created, with
       // ${hive.scratch.dir.permission}. To resolve the permission issue, the simplest way is to
       // delete it. Later, it will be re-created with the right permission.
-      val location = new Path(sc.hadoopConfiguration.get(ConfVars.SCRATCHDIR.varname))
-      val fs = location.getFileSystem(sc.hadoopConfiguration)
+      val hadoopConf = sessionState.newHadoopConf()
+      val location = new Path(hadoopConf.get(ConfVars.SCRATCHDIR.varname))
+      val fs = location.getFileSystem(hadoopConf)
       fs.delete(location, true)
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.

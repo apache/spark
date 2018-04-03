@@ -174,8 +174,9 @@ trait CodegenSupport extends SparkPlan {
     //    declaration.
     val confEnabled = SQLConf.get.wholeStageSplitConsumeFuncByOperator
     val requireAllOutput = output.forall(parent.usedInputs.contains(_))
-    val paramLength = ctx.calculateParamLength(output) + (if (row != null) 1 else 0)
-    val consumeFunc = if (confEnabled && requireAllOutput && ctx.isValidParamLength(paramLength)) {
+    val paramLength = CodeGenerator.calculateParamLength(output) + (if (row != null) 1 else 0)
+    val consumeFunc = if (confEnabled && requireAllOutput
+        && CodeGenerator.isValidParamLength(paramLength)) {
       constructDoConsumeFunction(ctx, inputVars, row)
     } else {
       parent.doConsume(ctx, inputVars, rowVar)
@@ -234,7 +235,7 @@ trait CodegenSupport extends SparkPlan {
 
     variables.zipWithIndex.foreach { case (ev, i) =>
       val paramName = ctx.freshName(s"expr_$i")
-      val paramType = ctx.javaType(attributes(i).dataType)
+      val paramType = CodeGenerator.javaType(attributes(i).dataType)
 
       arguments += ev.value
       parameters += s"$paramType $paramName"

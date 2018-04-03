@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.streaming.StreamExecution
+import org.apache.spark.sql.execution.streaming.{MicroBatchExecution, StreamExecution}
 import org.apache.spark.sql.execution.streaming.continuous.{CommitPartitionEpoch, ContinuousExecution, EpochCoordinatorRef, SetWriterPartitions}
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
@@ -132,7 +132,8 @@ object DataWritingSparkTask extends Logging {
     val stageId = context.stageId()
     val partId = context.partitionId()
     val attemptId = context.attemptNumber()
-    val dataWriter = writeTask.createDataWriter(partId, attemptId)
+    val epochId = Option(context.getLocalProperty(MicroBatchExecution.BATCH_ID_KEY)).getOrElse("0")
+    val dataWriter = writeTask.createDataWriter(partId, attemptId, epochId.toLong)
 
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
@@ -172,7 +173,6 @@ object DataWritingSparkTask extends Logging {
       writeTask: DataWriterFactory[InternalRow],
       context: TaskContext,
       iter: Iterator[InternalRow]): WriterCommitMessage = {
-    val dataWriter = writeTask.createDataWriter(context.partitionId(), context.attemptNumber())
     val epochCoordinator = EpochCoordinatorRef.get(
       context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
       SparkEnv.get)
@@ -180,10 +180,15 @@ object DataWritingSparkTask extends Logging {
     var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
     do {
+      var dataWriter: DataWriter[InternalRow] = null
       // write the data and commit this writer.
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         try {
-          iter.foreach(dataWriter.write)
+          dataWriter = writeTask.createDataWriter(
+            context.partitionId(), context.attemptNumber(), currentEpoch)
+          while (iter.hasNext) {
+            dataWriter.write(iter.next())
+          }
           logInfo(s"Writer for partition ${context.partitionId()} is committing.")
           val msg = dataWriter.commit()
           logInfo(s"Writer for partition ${context.partitionId()} committed.")
@@ -196,9 +201,10 @@ object DataWritingSparkTask extends Logging {
             // Continuous shutdown always involves an interrupt. Just finish the task.
         }
       })(catchBlock = {
-        // If there is an error, abort this writer
+        // If there is an error, abort this writer. We enter this callback in the middle of
+        // rethrowing an exception, so runContinuous will stop executing at this point.
         logError(s"Writer for partition ${context.partitionId()} is aborting.")
-        dataWriter.abort()
+        if (dataWriter != null) dataWriter.abort()
         logError(s"Writer for partition ${context.partitionId()} aborted.")
       })
     } while (!context.isInterrupted())
@@ -211,9 +217,12 @@ class InternalRowDataWriterFactory(
     rowWriterFactory: DataWriterFactory[Row],
     schema: StructType) extends DataWriterFactory[InternalRow] {
 
-  override def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
+  override def createDataWriter(
+      partitionId: Int,
+      attemptNumber: Int,
+      epochId: Long): DataWriter[InternalRow] = {
     new InternalRowDataWriter(
-      rowWriterFactory.createDataWriter(partitionId, attemptNumber),
+      rowWriterFactory.createDataWriter(partitionId, attemptNumber, epochId),
       RowEncoder.apply(schema).resolveAndBind())
   }
 }

@@ -78,6 +78,7 @@ unit-tests.log
 work/
 .credentials
 dev/pr-deps
+docs/.jekyll-metadata
 
 # For Hive
 TempStatsStore/

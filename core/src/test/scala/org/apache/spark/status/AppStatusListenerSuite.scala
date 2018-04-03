@@ -1089,6 +1089,42 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  test("skipped stages should be evicted before completed stages") {
+    val testConf = conf.clone().set(MAX_RETAINED_STAGES, 2)
+    val listener = new AppStatusListener(store, testConf, true)
+
+    val stage1 = new StageInfo(1, 0, "stage1", 4, Nil, Nil, "details1")
+    val stage2 = new StageInfo(2, 0, "stage2", 4, Nil, Nil, "details2")
+
+    // Sart job 1
+    time += 1
+    listener.onJobStart(SparkListenerJobStart(1, time, Seq(stage1, stage2), null))
+
+    // Start and stop stage 1
+    time += 1
+    stage1.submissionTime = Some(time)
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage1, new Properties()))
+
+    time += 1
+    stage1.completionTime = Some(time)
+    listener.onStageCompleted(SparkListenerStageCompleted(stage1))
+
+    // Stop job 1 and stage 2 will become SKIPPED
+    time += 1
+    listener.onJobEnd(SparkListenerJobEnd(1, time, JobSucceeded))
+
+    // Submit stage 3 and verify stage 2 is evicted
+    val stage3 = new StageInfo(3, 0, "stage3", 4, Nil, Nil, "details3")
+    time += 1
+    stage3.submissionTime = Some(time)
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage3, new Properties()))
+
+    assert(store.count(classOf[StageDataWrapper]) === 2)
+    intercept[NoSuchElementException] {
+      store.read(classOf[StageDataWrapper], Array(2, 0))
+    }
+  }
+
   test("eviction should respect task completion time") {
     val testConf = conf.clone().set(MAX_RETAINED_TASKS_PER_STAGE, 2)
     val listener = new AppStatusListener(store, testConf, true)
@@ -1119,6 +1155,39 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     intercept[NoSuchElementException] {
       store.read(classOf[TaskDataWrapper], tasks(1).id)
     }
+  }
+
+  test("lastStageAttempt should fail when the stage doesn't exist") {
+    val testConf = conf.clone().set(MAX_RETAINED_STAGES, 1)
+    val listener = new AppStatusListener(store, testConf, true)
+    val appStore = new AppStatusStore(store)
+
+    val stage1 = new StageInfo(1, 0, "stage1", 4, Nil, Nil, "details1")
+    val stage2 = new StageInfo(2, 0, "stage2", 4, Nil, Nil, "details2")
+    val stage3 = new StageInfo(3, 0, "stage3", 4, Nil, Nil, "details3")
+
+    time += 1
+    stage1.submissionTime = Some(time)
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage1, new Properties()))
+    stage1.completionTime = Some(time)
+    listener.onStageCompleted(SparkListenerStageCompleted(stage1))
+
+    // Make stage 3 complete before stage 2 so that stage 3 will be evicted
+    time += 1
+    stage3.submissionTime = Some(time)
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage3, new Properties()))
+    stage3.completionTime = Some(time)
+    listener.onStageCompleted(SparkListenerStageCompleted(stage3))
+
+    time += 1
+    stage2.submissionTime = Some(time)
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stage2, new Properties()))
+    stage2.completionTime = Some(time)
+    listener.onStageCompleted(SparkListenerStageCompleted(stage2))
+
+    assert(appStore.asOption(appStore.lastStageAttempt(1)) === None)
+    assert(appStore.asOption(appStore.lastStageAttempt(2)).map(_.stageId) === Some(2))
+    assert(appStore.asOption(appStore.lastStageAttempt(3)) === None)
   }
 
   test("driver logs") {

@@ -34,6 +34,8 @@ private[spark] class TestSparkSession(sc: SparkContext) extends SparkSession(sc)
     this(new SparkConf)
   }
 
+  SparkSession.setDefaultSession(this)
+
   @transient
   override lazy val sessionState: SessionState = {
     new TestSQLSessionStateBuilder(this, None).build()

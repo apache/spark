@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.sql.Date
+
 import org.apache.parquet.filter2.predicate._
 import org.apache.parquet.filter2.predicate.Operators.{Column, SupportsEqNotEq, SupportsLtGt}
 import org.apache.parquet.hadoop.metadata.ColumnPath

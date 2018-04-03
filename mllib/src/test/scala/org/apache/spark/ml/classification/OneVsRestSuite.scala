@@ -17,26 +17,24 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.feature.StringIndexer
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MetadataUtils, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MetadataUtils, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.Metadata
 
-class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
 
@@ -85,10 +83,6 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val predictionColSchema = transformedDataset.schema(ovaModel.getPredictionCol)
     assert(MetadataUtils.getNumClasses(predictionColSchema) === Some(3))
 
-    val ovaResults = transformedDataset.select("prediction", "label").rdd.map {
-      row => (row.getDouble(0), row.getDouble(1))
-    }
-
     val lr = new LogisticRegressionWithLBFGS().setIntercept(true).setNumClasses(numClasses)
     lr.optimizer.setRegParam(0.1).setNumIterations(100)
 
@@ -97,8 +91,13 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     // determine the #confusion matrix in each class.
     // bound how much error we allow compared to multinomial logistic regression.
     val expectedMetrics = new MulticlassMetrics(results)
-    val ovaMetrics = new MulticlassMetrics(ovaResults)
-    assert(expectedMetrics.confusionMatrix.asML ~== ovaMetrics.confusionMatrix.asML absTol 400)
+
+    testTransformerByGlobalCheckFunc[(Double, Vector)](dataset.toDF(), ovaModel,
+      "prediction", "label") { rows =>
+      val ovaResults = rows.map { row => (row.getDouble(0), row.getDouble(1)) }
+      val ovaMetrics = new MulticlassMetrics(sc.makeRDD(ovaResults))
+      assert(expectedMetrics.confusionMatrix.asML ~== ovaMetrics.confusionMatrix.asML absTol 400)
+    }
   }
 
   test("one-vs-rest: tuning parallelism does not change output") {

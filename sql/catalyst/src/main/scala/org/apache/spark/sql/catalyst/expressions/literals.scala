@@ -277,13 +277,9 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
   override def eval(input: InternalRow): Any = value
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = ctx.javaType(dataType)
+    val javaType = CodeGenerator.javaType(dataType)
     if (value == null) {
-      val defaultValueLiteral = ctx.defaultValue(javaType) match {
-        case "null" => s"(($javaType)null)"
-        case lit => lit
-      }
-      ExprCode(code = "", isNull = "true", value = defaultValueLiteral)
+      ExprCode.forNullValue(dataType)
     } else {
       dataType match {
         case BooleanType | IntegerType | DateType =>

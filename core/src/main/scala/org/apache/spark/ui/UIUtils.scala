@@ -224,6 +224,7 @@ private[spark] object UIUtils extends Logging {
         {commonHeaderNodes}
         {if (showVisualization) vizHeaderNodes else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes else Seq.empty}
+        <link rel="shortcut icon" href={prependBaseUri("/static/spark-logo-77x50px-hd.png")}></link>
         <title>{appName} - {title}</title>
       </head>
       <body>
@@ -265,6 +266,7 @@ private[spark] object UIUtils extends Logging {
       <head>
         {commonHeaderNodes}
         {if (useDataTables) dataTablesHeaderNodes else Seq.empty}
+        <link rel="shortcut icon" href={prependBaseUri("/static/spark-logo-77x50px-hd.png")}></link>
         <title>{title}</title>
       </head>
       <body>

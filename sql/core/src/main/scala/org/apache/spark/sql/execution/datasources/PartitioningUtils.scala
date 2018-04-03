@@ -486,7 +486,8 @@ object PartitioningUtils {
     val equality = columnNameEquality(caseSensitive)
     StructType(partitionColumns.map { col =>
       schema.find(f => equality(f.name, col)).getOrElse {
-        throw new AnalysisException(s"Partition column $col not found in schema $schema")
+        val schemaCatalog = schema.catalogString
+        throw new AnalysisException(s"Partition column `$col` not found in schema $schemaCatalog")
       }
     }).asNullable
   }

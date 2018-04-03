@@ -714,7 +714,7 @@
       <dependency>
         <groupId>commons-net</groupId>
         <artifactId>commons-net</artifactId>
-        <version>2.2</version>
+        <version>3.1</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -2085,6 +2085,10 @@
             <artifactId>hadoop-common</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-mapreduce-client-core</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.apache.orc</groupId>
             <artifactId>orc-core</artifactId>
           </exclusion>
@@ -3086,16 +3090,6 @@
       <id>kubernetes</id>
       <modules>
         <module>resource-managers/kubernetes/core</module>
-      </modules>
-    </profile>
-
-    <profile>
-      <id>kubernetes-integration-tests</id>
-      <modules>
-        <module>resource-managers/kubernetes/docker-minimal-bundle</module>
-        <module>resource-managers/kubernetes/integration-tests</module>
-        <module>resource-managers/kubernetes/integration-tests-spark-jobs</module>
-        <module>resource-managers/kubernetes/integration-tests-spark-jobs-helpers</module>
       </modules>
     </profile>
 
