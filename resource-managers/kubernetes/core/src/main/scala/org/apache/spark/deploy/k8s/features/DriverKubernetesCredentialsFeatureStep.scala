@@ -127,7 +127,7 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
       resolvedMountedCaCertFile.map { file =>
         Map(
           s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX" ->
-            file
+            file)
       }.getOrElse(Map.empty) ++
       resolvedMountedClientKeyFile.map { file =>
         Map(
