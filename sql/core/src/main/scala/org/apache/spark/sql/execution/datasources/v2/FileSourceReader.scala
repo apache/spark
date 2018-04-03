@@ -21,6 +21,8 @@ import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, UnsafeRow}
@@ -36,8 +38,21 @@ trait FileSourceReader extends DataSourceReader
   with SupportsPushDownRequiredColumns {
   def options: DataSourceOptions
   def userSpecifiedSchema: Option[StructType]
+
+  /**
+   * Returns schema of input data
+   */
   def dataSchema: StructType
+
   def readFunction: PartitionedFile => Iterator[InternalRow]
+
+  /**
+   * Returns whether a file with `path` could be split or not.
+   */
+  def isSplitable(path: Path): Boolean = {
+    false
+  }
+
   protected val sparkSession = SparkSession.getActiveSession
     .getOrElse(SparkSession.getDefaultSession.get)
   protected val hadoopConf =
@@ -49,7 +64,7 @@ trait FileSourceReader extends DataSourceReader
   protected val fileIndex = {
     val filePath = options.get("path")
     if (!filePath.isPresent) {
-      throw new AnalysisException("ORC data source requires a" +
+      throw new AnalysisException("Reading data source requires a" +
         " path (e.g. data backed by a local or distributed file system).")
     }
     val rootPathsSpecified =
@@ -69,11 +84,12 @@ trait FileSourceReader extends DataSourceReader
     val maxSplitBytes = PartitionedFileUtil.maxSplitBytes(sparkSession, selectedPartitions)
     val splitFiles = selectedPartitions.flatMap { partition =>
       partition.files.flatMap { file =>
+        val filePath = file.getPath
         PartitionedFileUtil.splitFiles(
           sparkSession = sparkSession,
           file = file,
-          filePath = file.getPath,
-          isSplitable = true,
+          filePath = filePath,
+          isSplitable = isSplitable(filePath),
           maxSplitBytes = maxSplitBytes,
           partitionValues = partition.values
         )
@@ -92,8 +108,8 @@ trait FileSourceReader extends DataSourceReader
 
   override def createUnsafeRowReaderFactories: JList[DataReaderFactory[UnsafeRow]] = {
     partitions.map { filePartition =>
-      new FileReaderFactory[UnsafeRow](filePartition, readFunction, ignoreCorruptFiles,
-        ignoreMissingFiles)
+      new FileReaderFactory[UnsafeRow](filePartition, readFunction,
+        ignoreCorruptFiles, ignoreMissingFiles)
         .asInstanceOf[DataReaderFactory[UnsafeRow]]
     }.asJava
   }
@@ -102,8 +118,8 @@ trait FileSourceReader extends DataSourceReader
 trait ColumnarBatchFileSourceReader extends FileSourceReader with SupportsScanColumnarBatch {
   override def createBatchDataReaderFactories(): JList[DataReaderFactory[ColumnarBatch]] = {
     partitions.map { filePartition =>
-      new FileReaderFactory[ColumnarBatch](filePartition, readFunction, ignoreCorruptFiles,
-        ignoreMissingFiles)
+      new FileReaderFactory[ColumnarBatch](filePartition, readFunction,
+        ignoreCorruptFiles, ignoreMissingFiles)
         .asInstanceOf[DataReaderFactory[ColumnarBatch]]
     }.asJava
   }
