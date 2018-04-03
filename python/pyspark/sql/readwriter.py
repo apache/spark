@@ -949,8 +949,6 @@ class DataFrameWriter(OptionUtils):
 def _test():
     import doctest
     import os
-    import os.path
-    import glob
     import tempfile
     import py4j
     from pyspark.context import SparkContext
