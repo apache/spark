@@ -50,7 +50,7 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
 
   /**
    * Param for the initialization algorithm. This can be either "random" to use a random vector
-   * as vertex properties, or "degree" to use normalized sum of similarities with other vertices.
+   * as vertex properties, or "degree" to use a normalized sum of similarities with other vertices.
    * Default: random.
    * @group expertParam
    */
@@ -58,7 +58,7 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   final val initMode = {
     val allowedParams = ParamValidators.inArray(Array("random", "degree"))
     new Param[String](this, "initMode", "The initialization algorithm. This can be either " +
-      "'random' to use a random vector as vertex properties, or 'degree' to use normalized sum " +
+      "'random' to use a random vector as vertex properties, or 'degree' to use a normalized sum " +
       "of similarities with other vertices.  Supported options: 'random' and 'degree'.",
       allowedParams)
   }
