@@ -50,13 +50,17 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
 
   /**
    * Param for the initialization algorithm. This can be either "random" to use a random vector
-   * as vertex properties, or "degree" to use normalized sum similarities. Default: random.
+   * as vertex properties, or "degree" to use normalized sum of similarities with other vertices.
+   * Default: random.
+   * @group expertParam
    */
   @Since("2.3.0")
   final val initMode = {
     val allowedParams = ParamValidators.inArray(Array("random", "degree"))
-    new Param[String](this, "initMode", "The initialization algorithm. " +
-      "Supported options: 'random' and 'degree'.", allowedParams)
+    new Param[String](this, "initMode", "The initialization algorithm. This can be either " +
+      "'random' to use a random vector as vertex properties, or 'degree' to use normalized sum " +
+      "of similarities with other vertices.  Supported options: 'random' and 'degree'.",
+      allowedParams)
   }
 
   /** @group expertGetParam */
@@ -64,28 +68,29 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   def getInitMode: String = $(initMode)
 
   /**
-   * Param for the column name for ids returned by PowerIterationClustering.transform().
+   * Param for the name of the input column for vertex IDs.
    * Default: "id"
    * @group param
    */
   @Since("2.3.0")
-  val idCol = new Param[String](this, "id", "column name for ids.")
+  val idCol = new Param[String](this, "idCol", "Name of the input column for vertex IDs.")
 
   /** @group getParam */
   @Since("2.3.0")
   def getIdCol: String = $(idCol)
 
   /**
-   * Param for the column name for neighbors required by PowerIterationClustering.transform().
-   * Default: "neighbor"
+   * Param for the name of the input column for neighbors in the adjacency list representation.
+   * Default: "neighbors"
    * @group param
    */
   @Since("2.3.0")
-  val neighborCol = new Param[String](this, "neighbor", "column name for neighbors.")
+  val neighborsCol = new Param[String](this, "neighborsCol",
+    "Name of the input column for neighbors in the adjacency list representation.")
 
   /** @group getParam */
   @Since("2.3.0")
-  def getNeighborCol: String = $(neighborCol)
+  def getNeighborsCol: String = $(neighborsCol)
 
   /**
    * Validates the input schema
@@ -104,8 +109,21 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
  * PIC finds a very low-dimensional embedding of a dataset using truncated power
  * iteration on a normalized pair-wise similarity matrix of the data.
  *
- * Note that we implement [[PowerIterationClustering]] as a transformer. The [[transform]] is an
- * expensive operation, because it uses PIC algorithm to cluster the whole input dataset.
+ * PIC takes an affinity matrix between items (or vertices) as input.  An affinity matrix
+ * is a symmetric matrix whose entries are non-negative similarities between items.
+ * PIC takes this matrix (or graph) as an adjacency matrix.  Specifically, each input row includes:
+ *  - `idCol`: vertex ID
+ *  - `neighborsCol`: neighbors of vertex in `idCol`
+ *  - `neighborWeightsCol`: non-negative weights of edges between the vertex in `idCol` and
+ *                          each neighbor in `neighborsCol`
+ * PIC returns a cluster assignment for each input vertex.  It appends a new column `predictionCol`
+ * containing the cluster assignment in `[0,k)` for each row (vertex).
+ *
+ * Notes:
+ *  - [[PowerIterationClustering]] is a transformer with an expensive [[transform]] operation.
+ *    Transform runs the iterative PIC algorithm to cluster the whole input dataset.
+ *  - Input validation: This validates that weights are non-negative but does NOT validate
+ *    that the input matrix is symmetric.
  *
  * @see <a href=http://en.wikipedia.org/wiki/Spectral_clustering>
  * Spectral clustering (Wikipedia)</a>
@@ -122,7 +140,7 @@ class PowerIterationClustering private[clustering] (
     initMode -> "random",
     idCol -> "id",
     weightCol -> "weight",
-    neighborCol -> "neighbor")
+    neighborsCol -> "neighbors")
 
   @Since("2.3.0")
   override def copy(extra: ParamMap): PowerIterationClustering = defaultCopy(extra)
@@ -164,24 +182,25 @@ class PowerIterationClustering private[clustering] (
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /**
-   * Sets the value of param [[neighborCol]].
-   * Default is "neighbor"
+   * Sets the value of param [[neighborsCol]].
+   * Default is "neighbors"
    *
    * @group setParam
    */
   @Since("2.3.0")
-  def setNeighborCol(value: String): this.type = set(neighborCol, value)
+  def setNeighborsCol(value: String): this.type = set(neighborsCol, value)
 
   @Since("2.3.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val sparkSession = dataset.sparkSession
     val rdd: RDD[(Long, Long, Double)] =
-      dataset.select(col($(idCol)), col($(neighborCol)), col($(weightCol))).rdd.flatMap {
+      dataset.select(col($(idCol)), col($(neighborsCol)), col($(weightCol))).rdd.flatMap {
         case Row(id: Long, nbr: Vector, weight: Vector) =>
-        require(nbr.size == weight.size,
-          "The length of neighbor list must be equal to the the length of the weight list.")
-        nbr.toArray.toIterator.zip(weight.toArray.toIterator)
-          .map(x => (id, x._1.toLong, x._2))}
+          require(nbr.size == weight.size,
+            "The length of neighbor list must be equal to the the length of the weight list.")
+          nbr.toArray.toIterator.zip(weight.toArray.toIterator)
+            .map(x => (id, x._1.toLong, x._2))
+      }
     val algorithm = new MLlibPowerIterationClustering()
       .setK($(k))
       .setInitializationMode($(initMode))

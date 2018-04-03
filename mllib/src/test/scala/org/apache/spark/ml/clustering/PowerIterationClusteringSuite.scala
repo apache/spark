@@ -51,7 +51,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(pic.getPredictionCol === "prediction")
     assert(pic.getIdCol === "id")
     assert(pic.getWeightCol === "weight")
-    assert(pic.getNeighborCol === "neighbor")
+    assert(pic.getNeighborsCol === "neighbors")
   }
 
   test("set parameters") {
@@ -63,7 +63,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setPredictionCol("test_prediction")
       .setIdCol("test_id")
       .setWeightCol("test_weight")
-      .setNeighborCol("test_neighbor")
+      .setNeighborsCol("test_neighbor")
 
     assert(pic.getK === 9)
     assert(pic.getMaxIter === 33)
@@ -72,7 +72,7 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(pic.getPredictionCol === "test_prediction")
     assert(pic.getIdCol === "test_id")
     assert(pic.getWeightCol === "test_weight")
-    assert(pic.getNeighborCol === "test_neighbor")
+    assert(pic.getNeighborsCol === "test_neighbor")
   }
 
   test("parameters validation") {
@@ -129,7 +129,8 @@ class PowerIterationClusteringSuite extends SparkFunSuite
 
 object PowerIterationClusteringSuite {
 
-  case class TestRow2(id: Long, neighbor: Vector, weight: Vector)
+  case class TestRow2(id: Long, neighbors: Vector, weight: Vector)
+
   /** Generates a circle of points. */
   private def genCircle(r: Double, n: Int): Array[(Double, Double)] = {
     Array.tabulate(n) { i =>
@@ -144,27 +145,32 @@ object PowerIterationClusteringSuite {
     math.exp(-dist2 / 2.0)
   }
 
-  def generatePICData(spark: SparkSession, r1: Double, r2: Double,
-    n1: Int, n2: Int): DataFrame = {
+  def generatePICData(
+      spark: SparkSession,
+      r1: Double,
+      r2: Double,
+      n1: Int,
+      n2: Int): DataFrame = {
     // Generate two circles following the example in the PIC paper.
     val n = n1 + n2
     val points = genCircle(r1, n1) ++ genCircle(r2, n2)
 
     val similarities = for (i <- 1 until n) yield {
-      val neighbor = for (j <- 0 until i) yield {
+      val neighbors = for (j <- 0 until i) yield {
         j.toLong
       }
-      val weight = for (j <- 0 until i) yield {
+      val weights = for (j <- 0 until i) yield {
         sim(points(i), points(j))
       }
-      (i.toLong, neighbor.toArray, weight.toArray)
+      (i.toLong, neighbors.toArray, weights.toArray)
     }
 
     val sc = spark.sparkContext
 
-    val rdd = sc.parallelize(similarities).map{
+    val rdd = sc.parallelize(similarities).map {
       case (id: Long, nbr: Array[Long], weight: Array[Double]) =>
-      TestRow2(id, Vectors.dense(nbr.map(i => i.toDouble)), Vectors.dense(weight))}
+        TestRow2(id, Vectors.dense(nbr.map(i => i.toDouble)), Vectors.dense(weight))
+    }
     spark.createDataFrame(rdd)
   }
 
