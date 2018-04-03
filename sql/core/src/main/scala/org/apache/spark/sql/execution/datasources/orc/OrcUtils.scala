@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
-import java.util.Locale
-
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
