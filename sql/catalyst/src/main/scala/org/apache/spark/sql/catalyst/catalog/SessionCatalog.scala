@@ -317,7 +317,7 @@ class SessionCatalog(
       val tableLocation =
         new Path(table.storage.locationUri.getOrElse(defaultTablePath(table.identifier)))
       val fs = tableLocation.getFileSystem(hadoopConf)
-    
+
       if (fs.exists(tableLocation) && fs.listStatus(tableLocation).nonEmpty) {
         throw new AnalysisException(s"Can not create the managed table('${table.identifier}')" +
           s". The associated location('${tableLocation.toString}') already exists.")
