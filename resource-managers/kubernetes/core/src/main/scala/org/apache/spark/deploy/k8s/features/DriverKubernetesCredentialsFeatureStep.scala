@@ -124,22 +124,26 @@ private[spark] class DriverKubernetesCredentialsFeatureStep(kubernetesConf: Kube
       .toMap
       .mapValues( _ => "<present_but_redacted>")
     redactedTokens ++
-      resolvedMountedCaCertFile.map(file =>
+      resolvedMountedCaCertFile.map { file =>
         Map(
           s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX" ->
-          file)).getOrElse(Map.empty) ++
-      resolvedMountedClientKeyFile.map(file =>
+            file
+      }.getOrElse(Map.empty) ++
+      resolvedMountedClientKeyFile.map { file =>
         Map(
           s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CLIENT_KEY_FILE_CONF_SUFFIX" ->
-          file)).getOrElse(Map.empty) ++
-      resolvedMountedClientCertFile.map(file =>
+            file)
+      }.getOrElse(Map.empty) ++
+      resolvedMountedClientCertFile.map { file =>
         Map(
           s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX" ->
-          file)).getOrElse(Map.empty) ++
-      resolvedMountedOAuthTokenFile.map(file =>
+            file)
+      }.getOrElse(Map.empty) ++
+      resolvedMountedOAuthTokenFile.map { file =>
         Map(
           s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$OAUTH_TOKEN_FILE_CONF_SUFFIX" ->
-          file)).getOrElse(Map.empty)
+          file)
+      }.getOrElse(Map.empty)
   }
 
   override def getAdditionalKubernetesResources(): Seq[HasMetadata] = {
