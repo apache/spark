@@ -33,7 +33,8 @@ private[deploy] object DependencyUtils {
       packagesExclusions: String,
       packages: String,
       repositories: String,
-      ivyRepoPath: String): String = {
+      ivyRepoPath: String,
+      ivySettingsPath: Option[String]): String = {
     val exclusions: Seq[String] =
       if (!StringUtils.isBlank(packagesExclusions)) {
         packagesExclusions.split(",")
@@ -41,10 +42,12 @@ private[deploy] object DependencyUtils {
         Nil
       }
     // Create the IvySettings, either load from file or build defaults
-    val ivySettings = sys.props.get("spark.jars.ivySettings").map { ivySettingsFile =>
-      SparkSubmitUtils.loadIvySettings(ivySettingsFile, Option(repositories), Option(ivyRepoPath))
-    }.getOrElse {
-      SparkSubmitUtils.buildIvySettings(Option(repositories), Option(ivyRepoPath))
+    val ivySettings = ivySettingsPath match {
+      case Some(path) =>
+        SparkSubmitUtils.loadIvySettings(path, Option(repositories), Option(ivyRepoPath))
+
+      case None =>
+        SparkSubmitUtils.buildIvySettings(Option(repositories), Option(ivyRepoPath))
     }
 
     SparkSubmitUtils.resolveMavenCoordinates(packages, ivySettings, exclusions = exclusions)
