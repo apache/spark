@@ -278,8 +278,8 @@ for details on the API.
 multiplication. In other words, it scales each column of the dataset by a scalar multiplier. This
 represents the [Hadamard product](https://en.wikipedia.org/wiki/Hadamard_product_%28matrices%29)
 between the input vector, `v` and transforming vector, `scalingVec`, to yield a result vector.
-Qu8T948*1#
-Denoting the `scalingVec` as "`w`," this transformation may be written as:
+
+Denoting the `scalingVec` as "`w`", this transformation may be written as:
 
 `\[ \begin{pmatrix}
 v_1 \\

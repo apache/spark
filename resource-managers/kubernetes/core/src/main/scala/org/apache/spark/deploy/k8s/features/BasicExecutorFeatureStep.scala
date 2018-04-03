@@ -30,7 +30,7 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
 
 private[spark] class BasicExecutorFeatureStep(
-  kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
+    kubernetesConf: KubernetesConf[KubernetesExecutorSpecificConf])
   extends KubernetesFeatureConfigStep {
 
   // Consider moving some of these fields to KubernetesConf or KubernetesExecutorSpecificConf
@@ -44,6 +44,10 @@ private[spark] class BasicExecutorFeatureStep(
 
   private val executorPodNamePrefix = kubernetesConf.appResourceNamePrefix
 
+  private val driverUrl = RpcEndpointAddress(
+    kubernetesConf.sparkConf.get("spark.driver.host"),
+    kubernetesConf.sparkConf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT),
+    CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
   private val executorMemoryMiB = kubernetesConf.get(EXECUTOR_MEMORY)
   private val executorMemoryString = kubernetesConf.get(
     EXECUTOR_MEMORY.key, EXECUTOR_MEMORY.defaultValueString)
@@ -54,15 +58,14 @@ private[spark] class BasicExecutorFeatureStep(
       MEMORY_OVERHEAD_MIN_MIB))
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
 
-  private val executorCores = kubernetesConf.sparkConf.getDouble(
-    "spark.executor.cores", 1)
-  private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
-  private val driverPod = kubernetesConf.roleSpecificConf.driverPod
-
-  private val driverUrl = RpcEndpointAddress(
-    kubernetesConf.sparkConf.get("spark.driver.host"),
-    kubernetesConf.sparkConf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT),
-    CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
+  private val executorCores = kubernetesConf.sparkConf.getInt("spark.executor.cores", 1)
+  private val executorCoresRequest =
+    if (kubernetesConf.sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_CORES)) {
+      kubernetesConf.sparkConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get
+    } else {
+      executorCores.toString
+    }
+  private val executorLimitCores = kubernetesConf.sparkConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val name = s"$executorPodNamePrefix-exec-${kubernetesConf.roleSpecificConf.executorId}"
@@ -72,13 +75,10 @@ private[spark] class BasicExecutorFeatureStep(
     // executorId
     val hostname = name.substring(Math.max(0, name.length - 63))
     val executorMemoryQuantity = new QuantityBuilder(false)
-      .withAmount(s"${executorMemoryMiB}Mi")
-      .build()
-    val executorMemoryLimitQuantity = new QuantityBuilder(false)
       .withAmount(s"${executorMemoryWithOverhead}Mi")
       .build()
     val executorCpuQuantity = new QuantityBuilder(false)
-      .withAmount(executorCores.toString)
+      .withAmount(executorCoresRequest)
       .build()
     val executorExtraClasspathEnv = executorExtraClasspath.map { cp =>
       new EnvVarBuilder()
@@ -97,8 +97,7 @@ private[spark] class BasicExecutorFeatureStep(
       }.getOrElse(Seq.empty[EnvVar])
     val executorEnv = (Seq(
       (ENV_DRIVER_URL, driverUrl),
-      // Executor backend expects integral value for executor cores, so round it up to an int.
-      (ENV_EXECUTOR_CORES, math.ceil(executorCores).toInt.toString),
+      (ENV_EXECUTOR_CORES, executorCores.toString),
       (ENV_EXECUTOR_MEMORY, executorMemoryString),
       (ENV_APPLICATION_ID, kubernetesConf.appId),
       // This is to set the SPARK_CONF_DIR to be /opt/spark/conf
@@ -132,7 +131,7 @@ private[spark] class BasicExecutorFeatureStep(
       .withImagePullPolicy(kubernetesConf.imagePullPolicy())
       .withNewResources()
         .addToRequests("memory", executorMemoryQuantity)
-        .addToLimits("memory", executorMemoryLimitQuantity)
+        .addToLimits("memory", executorMemoryQuantity)
         .addToRequests("cpu", executorCpuQuantity)
         .endResources()
       .addAllToEnv(executorEnv.asJava)
@@ -149,6 +148,7 @@ private[spark] class BasicExecutorFeatureStep(
           .endResources()
         .build()
     }.getOrElse(executorContainer)
+    val driverPod = kubernetesConf.roleSpecificConf.driverPod
     val executorPod = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(name)
