@@ -945,6 +945,7 @@ class DataFrameWriter(OptionUtils):
             jprop.setProperty(k, properties[k])
         self.mode(mode)._jwrite.jdbc(url, table, jprop)
 
+
 def _test():
     import doctest
     import os
@@ -955,14 +956,6 @@ def _test():
     from pyspark.context import SparkContext
     from pyspark.sql import SparkSession, Row
     import pyspark.sql.readwriter
-
-    # SPARK_HOME = os.environ["SPARK_HOME"]
-    # filename_pattern = "assembly/target/scala-*/jars/spark-hive_*-*.jar"
-    # if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
-    #     raise Exception(
-    #         "Failed to find Hive assembly jar. You need to build Spark with "
-    #         "'build/sbt -Phive package' or 'build/mvn -DskipTests -Phive package' "
-    #         "before running this test.")
 
     os.chdir(os.environ["SPARK_HOME"])
 
@@ -981,8 +974,10 @@ def _test():
     except TypeError:
         hive_enabled = False
 
-    # if hive is not enabled, then skip doctests that will fail
     if not hive_enabled:
+        # if hive is not enabled, then skip doctests that need hive
+        # TODO: Need to communicate with outside world that this test
+        # has been skipped.
         m = pyspark.sql.readwriter
         m.__dict__["DataFrameReader"].__dict__["table"].__doc__ = ""
 
