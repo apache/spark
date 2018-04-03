@@ -800,6 +800,36 @@ class FeatureTests(SparkSessionTestCase):
         expected2 = [Row(id=0, indexed=0.0), Row(id=1, indexed=1.0)]
         self.assertEqual(actual2, expected2)
 
+    def test_string_indexer_from_labels(self):
+        model = StringIndexerModel.from_labels(["a", "b", "c"], inputCol="label",
+                                               outputCol="indexed", handleInvalid="keep")
+        self.assertEqual(model.labels, ["a", "b", "c"])
+
+        df = self.spark.createDataFrame([
+            (0, "a"),
+            (1, "c"),
+            (2, None),
+            (3, "b"),
+            (4, "b")], ["id", "label"])
+
+        result = model.transform(df)
+        actual = result.select("id", "indexed").collect()
+        expected = [Row(id=0, indexed=0.0), Row(id=1, indexed=2.0), Row(id=2, indexed=3.0),
+                    Row(id=3, indexed=1.0), Row(id=4, indexed=1.0)]
+        self.assertEqual(actual, expected)
+
+        # Test model with default settings can transform
+        model_default = StringIndexerModel.from_labels(["a", "b", "c"], inputCol="label")
+        df2 = self.spark.createDataFrame([
+            (0, "a"),
+            (1, "c"),
+            (2, "b"),
+            (3, "b"),
+            (4, "b")], ["id", "label"])
+        transformed_list = model_default.transform(df2)\
+            .select(model_default.getOrDefault(model_default.outputCol)).collect()
+        self.assertEqual(len(transformed_list), 5)
+
 
 class HasInducedError(Params):
 
