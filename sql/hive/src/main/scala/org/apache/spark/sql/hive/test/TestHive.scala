@@ -159,9 +159,10 @@ private[hive] class TestHiveSparkSession(
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
 
-  // TODO(SPARK-23826): TestHiveSparkSession should set default session the same way as
-  // TestSparkSession, but doing this the same way breaks many tests in the package. We need
-  // to investigate and find a different strategy.
+  // The base spark session does this in getOrCreate(), here we emulate that behavior for tests.
+  if (SparkSession.getDefaultSession.isEmpty) {
+    SparkSession.setDefaultSession(this)
+  }
 
   def this(sc: SparkContext, loadTestTables: Boolean) {
     this(
