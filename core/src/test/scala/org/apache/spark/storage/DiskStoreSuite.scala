@@ -197,7 +197,7 @@ class DiskStoreSuite extends SparkFunSuite {
     while (region.transfered() < region.count()) {
       region.transferTo(byteChannel, region.transfered())
     }
-
+    region.release()
     byteChannel.close()
     byteChannel.getData
   }
