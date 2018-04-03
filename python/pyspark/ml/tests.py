@@ -369,7 +369,7 @@ class HasThrowableProperty(Params):
         raise RuntimeError("Test property to raise error when invoked")
 
 
-class ParamTests(PySparkTestCase):
+class ParamTests(SparkSessionTestCase):
 
     def test_copy_new_parent(self):
         testParams = TestParams()
@@ -513,6 +513,24 @@ class ParamTests(PySparkTestCase):
             "Logistic Regression getThreshold found inconsistent.*$",
             LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
         )
+
+    def test_preserve_set_state(self):
+        dataset = self.spark.createDataFrame([(0.5,)], ["data"])
+        binarizer = Binarizer(inputCol="data")
+        self.assertFalse(binarizer.isSet("threshold"))
+        binarizer.transform(dataset)
+        binarizer._transfer_params_from_java()
+        self.assertFalse(binarizer.isSet("threshold"),
+                         "Params not explicitly set should remain unset after transform")
+
+    def test_default_params_transferred(self):
+        dataset = self.spark.createDataFrame([(0.5,)], ["data"])
+        binarizer = Binarizer(inputCol="data")
+        # intentionally change the pyspark default, but don't set it
+        binarizer._defaultParamMap[binarizer.outputCol] = "my_default"
+        result = binarizer.transform(dataset).select("my_default").collect()
+        self.assertFalse(binarizer.isSet(binarizer.outputCol))
+        self.assertEqual(result[0][0], 1.0)
 
     @staticmethod
     def check_params(test_self, py_stage, check_params_exist=True):
@@ -676,6 +694,31 @@ class FeatureTests(SparkSessionTestCase):
         transformedList = model.transform(dataset).select("features", "expected").collect()
 
         for r in transformedList:
+            feature, expected = r
+            self.assertEqual(feature, expected)
+
+    def test_count_vectorizer_with_maxDF(self):
+        dataset = self.spark.createDataFrame([
+            (0, "a b c d".split(' '), SparseVector(3, {0: 1.0, 1: 1.0, 2: 1.0}),),
+            (1, "a b c".split(' '), SparseVector(3, {0: 1.0, 1: 1.0}),),
+            (2, "a b".split(' '), SparseVector(3, {0: 1.0}),),
+            (3, "a".split(' '), SparseVector(3,  {}),)], ["id", "words", "expected"])
+        cv = CountVectorizer(inputCol="words", outputCol="features")
+        model1 = cv.setMaxDF(3).fit(dataset)
+        self.assertEqual(model1.vocabulary, ['b', 'c', 'd'])
+
+        transformedList1 = model1.transform(dataset).select("features", "expected").collect()
+
+        for r in transformedList1:
+            feature, expected = r
+            self.assertEqual(feature, expected)
+
+        model2 = cv.setMaxDF(0.75).fit(dataset)
+        self.assertEqual(model2.vocabulary, ['b', 'c', 'd'])
+
+        transformedList2 = model2.transform(dataset).select("features", "expected").collect()
+
+        for r in transformedList2:
             feature, expected = r
             self.assertEqual(feature, expected)
 
@@ -1516,6 +1559,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(s.meanSquaredError, 0.0)
         self.assertAlmostEqual(s.rootMeanSquaredError, 0.0)
         self.assertAlmostEqual(s.r2, 1.0, 2)
+        self.assertAlmostEqual(s.r2adj, 1.0, 2)
         self.assertTrue(isinstance(s.residuals, DataFrame))
         self.assertEqual(s.numInstances, 2)
         self.assertEqual(s.degreesOfFreedom, 1)

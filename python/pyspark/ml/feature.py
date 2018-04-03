@@ -422,6 +422,14 @@ class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
         " If this is an integer >= 1, this specifies the number of documents the term must" +
         " appear in; if this is a double in [0,1), then this specifies the fraction of documents." +
         " Default 1.0", typeConverter=TypeConverters.toFloat)
+    maxDF = Param(
+        Params._dummy(), "maxDF", "Specifies the maximum number of" +
+        " different documents a term could appear in to be included in the vocabulary." +
+        " A term that appears more than the threshold will be ignored. If this is an" +
+        " integer >= 1, this specifies the maximum number of documents the term could appear in;" +
+        " if this is a double in [0,1), then this specifies the maximum" +
+        " fraction of documents the term could appear in." +
+        " Default (2^63) - 1", typeConverter=TypeConverters.toFloat)
     vocabSize = Param(
         Params._dummy(), "vocabSize", "max size of the vocabulary. Default 1 << 18.",
         typeConverter=TypeConverters.toInt)
@@ -433,7 +441,7 @@ class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
 
     def __init__(self, *args):
         super(_CountVectorizerParams, self).__init__(*args)
-        self._setDefault(minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False)
+        self._setDefault(minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False)
 
     @since("1.6.0")
     def getMinTF(self):
@@ -448,6 +456,13 @@ class _CountVectorizerParams(JavaParams, HasInputCol, HasOutputCol):
         Gets the value of minDF or its default value.
         """
         return self.getOrDefault(self.minDF)
+
+    @since("2.4.0")
+    def getMaxDF(self):
+        """
+        Gets the value of maxDF or its default value.
+        """
+        return self.getOrDefault(self.maxDF)
 
     @since("1.6.0")
     def getVocabSize(self):
@@ -513,11 +528,11 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
     """
 
     @keyword_only
-    def __init__(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,
-                 outputCol=None):
+    def __init__(self, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False,
+                 inputCol=None, outputCol=None):
         """
-        __init__(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,\
-                 outputCol=None)
+        __init__(self, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False,\
+                 inputCol=None,outputCol=None)
         """
         super(CountVectorizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.CountVectorizer",
@@ -527,11 +542,11 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
 
     @keyword_only
     @since("1.6.0")
-    def setParams(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,
-                  outputCol=None):
+    def setParams(self, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False,
+                  inputCol=None, outputCol=None):
         """
-        setParams(self, minTF=1.0, minDF=1.0, vocabSize=1 << 18, binary=False, inputCol=None,\
-                  outputCol=None)
+        setParams(self, minTF=1.0, minDF=1.0, maxDF=2 ** 63 - 1, vocabSize=1 << 18, binary=False,\
+                  inputCol=None, outputCol=None)
         Set the params for the CountVectorizer
         """
         kwargs = self._input_kwargs
@@ -550,6 +565,13 @@ class CountVectorizer(JavaEstimator, _CountVectorizerParams, JavaMLReadable, Jav
         Sets the value of :py:attr:`minDF`.
         """
         return self._set(minDF=value)
+
+    @since("2.4.0")
+    def setMaxDF(self, value):
+        """
+        Sets the value of :py:attr:`maxDF`.
+        """
+        return self._set(maxDF=value)
 
     @since("1.6.0")
     def setVocabSize(self, value):

@@ -176,7 +176,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
   }
 
-  private def evaluateWithGeneratedMutableProjection(
+  protected def evaluateWithGeneratedMutableProjection(
       expression: Expression,
       inputRow: InternalRow = EmptyRow): Any = {
     val plan = generateProject(
@@ -220,7 +220,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
   }
 
-  private def evaluateWithUnsafeProjection(
+  protected def evaluateWithUnsafeProjection(
       expression: Expression,
       inputRow: InternalRow = EmptyRow,
       factory: UnsafeProjectionCreator = UnsafeProjection): InternalRow = {
@@ -233,6 +233,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
           Alias(expression, s"Optimized($expression)2")() :: Nil),
       expression)
 
+    plan.initialize(0)
     plan(inputRow)
   }
 
