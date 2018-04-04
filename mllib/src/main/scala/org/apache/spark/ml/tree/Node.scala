@@ -87,9 +87,9 @@ private[ml] object Node {
    * Create a new Node from the old Node format, recursively creating child nodes as needed.
    */
   def fromOld(
-    oldNode: OldNode,
-    categoricalFeatures: Map[Int, Int],
-    isClassification: Boolean): Node = {
+      oldNode: OldNode,
+      categoricalFeatures: Map[Int, Int],
+      isClassification: Boolean): Node = {
     if (oldNode.isLeaf) {
       // TODO: Once the implementation has been moved to this API, then include sufficient
       //       statistics here.
@@ -128,7 +128,7 @@ private[ml] object Node {
 }
 
 @Since("2.4.0")
-trait ClassificationNode extends Node {
+sealed trait ClassificationNode extends Node {
 
   /**
    * Get count of training examples for specified label in this node
@@ -144,7 +144,7 @@ trait ClassificationNode extends Node {
 }
 
 @Since("2.4.0")
-trait RegressionNode extends Node {
+sealed trait RegressionNode extends Node {
 
   /** Number of training data points in this node */
   @Since("2.4.0")
@@ -160,7 +160,7 @@ trait RegressionNode extends Node {
 }
 
 @Since("2.4.0")
-trait LeafNode extends Node {
+sealed trait LeafNode extends Node {
 
   /** Prediction this node makes. */
   def prediction: Double
@@ -224,7 +224,7 @@ class RegressionLeafNode private[ml] (
  * Internal Decision Tree node.
  */
 @Since("2.4.0")
-trait InternalNode extends Node{
+sealed trait InternalNode extends Node {
 
   /**
    * Information gain value. Values less than 0 indicate missing values;
