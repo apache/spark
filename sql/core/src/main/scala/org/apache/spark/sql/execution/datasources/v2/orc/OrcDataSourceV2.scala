@@ -20,7 +20,7 @@ import java.net.URI
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -29,7 +29,7 @@ import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, JoinedRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -56,12 +56,8 @@ case class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: 
   extends ColumnarBatchFileSourceReader
   with SupportsPushDownCatalystFilters {
 
-  lazy val dataSchema: StructType = userSpecifiedSchema.getOrElse {
-    val files = fileIndex.allFiles()
-    OrcUtils.readSchema(sparkSession, files).getOrElse {
-      throw new AnalysisException(
-        s"Unable to infer schema for Orc. It must be specified manually.")
-    }
+  override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
+    OrcUtils.readSchema(sparkSession, files)
   }
 
   private var pushedFiltersArray: Array[Expression] = Array.empty

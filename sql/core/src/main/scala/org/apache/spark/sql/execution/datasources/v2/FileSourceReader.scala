@@ -21,7 +21,7 @@ import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -40,9 +40,11 @@ trait FileSourceReader extends DataSourceReader
   def userSpecifiedSchema: Option[StructType]
 
   /**
-   * Returns schema of input data
+   * When possible, this method should return the schema of the given `files`.  When the format
+   * does not support inference, or no valid files are given should return None.  In these cases
+   * Spark will require that user specify the schema manually.
    */
-  def dataSchema: StructType
+  def inferSchema(files: Seq[FileStatus]): Option[StructType]
 
   def readFunction: PartitionedFile => Iterator[InternalRow]
 
@@ -72,16 +74,23 @@ trait FileSourceReader extends DataSourceReader
   private val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
   protected val partitionSchema = {
     val tempFileIndex = {
-      new InMemoryFileIndex(sparkSession,
-        rootPathsSpecified, options.asMap().asScala.toMap, None, fileStatusCache)
+      new InMemoryFileIndex(sparkSession, rootPathsSpecified,
+        options.asMap().asScala.toMap, None, fileStatusCache)
     }
     PartitioningUtils.combineInferredAndUserSpecifiedPartitionSchema(
       tempFileIndex, userSpecifiedSchema, isCaseSensitive)
   }
 
   protected val fileIndex =
-    new InMemoryFileIndex(sparkSession,
-      rootPathsSpecified, options.asMap().asScala.toMap, Some(partitionSchema), fileStatusCache)
+    new InMemoryFileIndex(sparkSession, rootPathsSpecified,
+      options.asMap().asScala.toMap, Some(partitionSchema), fileStatusCache)
+
+  protected lazy val dataSchema = userSpecifiedSchema.orElse {
+    inferSchema(fileIndex.allFiles())
+  }.getOrElse {
+    throw new AnalysisException(
+      s"Unable to infer schema for $rootPathsSpecified. It must be specified manually.")
+  }
   protected val (fullSchema, _) =
     PartitioningUtils.mergeDataAndPartitionSchema(dataSchema, partitionSchema, isCaseSensitive)
   protected var requiredSchema = fullSchema
