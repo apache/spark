@@ -1152,8 +1152,9 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val ALLOW_NONEMPTY_MANAGED_TABLE_LOCATION =
-    buildConf("spark.sql.allowNonemptyManagedTableLocation")
+  val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
+    buildConf("spark.sql.allowCreatingManagedTableUsingNonemptyLocation")
+    .internal()
     .doc("When this option is set to true, creating managed tables with nonempty location " +
       "is allowed. Otherwise, an analysis exception is thrown. ")
     .booleanConf
@@ -1579,7 +1580,8 @@ class SQLConf extends Serializable with Logging {
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
 
-  def allowNonemptyManagedTableLocation: Boolean = getConf(ALLOW_NONEMPTY_MANAGED_TABLE_LOCATION)
+  def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
+    getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))
