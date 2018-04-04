@@ -61,19 +61,27 @@ trait FileSourceReader extends DataSourceReader
   protected val isCaseSensitive = sqlConf.caseSensitiveAnalysis
   protected val ignoreCorruptFiles = sqlConf.ignoreCorruptFiles
   protected val ignoreMissingFiles = sqlConf.ignoreMissingFiles
-  protected val fileIndex = {
+  private val rootPathsSpecified = {
     val filePath = options.get("path")
     if (!filePath.isPresent) {
       throw new AnalysisException("Reading data source requires a" +
         " path (e.g. data backed by a local or distributed file system).")
     }
-    val rootPathsSpecified =
-      DataSource.checkAndGlobPathIfNecessary(hadoopConf, filePath.get, checkFilesExist = true)
-    new InMemoryFileIndex(sparkSession, rootPathsSpecified, options.asMap().asScala.toMap, None)
+    DataSource.checkAndGlobPathIfNecessary(hadoopConf, filePath.get, checkFilesExist = true)
+  }
+  private val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
+  protected val partitionSchema = {
+    val tempFileIndex = {
+      new InMemoryFileIndex(sparkSession,
+        rootPathsSpecified, options.asMap().asScala.toMap, None, fileStatusCache)
+    }
+    PartitioningUtils.combineInferredAndUserSpecifiedPartitionSchema(
+      tempFileIndex, userSpecifiedSchema, isCaseSensitive)
   }
 
-  protected val partitionSchema = PartitioningUtils.combineInferredAndUserSpecifiedPartitionSchema(
-    fileIndex, userSpecifiedSchema, isCaseSensitive)
+  protected val fileIndex =
+    new InMemoryFileIndex(sparkSession,
+      rootPathsSpecified, options.asMap().asScala.toMap, Some(partitionSchema), fileStatusCache)
   protected val (fullSchema, _) =
     PartitioningUtils.mergeDataAndPartitionSchema(dataSchema, partitionSchema, isCaseSensitive)
   protected var requiredSchema = fullSchema
