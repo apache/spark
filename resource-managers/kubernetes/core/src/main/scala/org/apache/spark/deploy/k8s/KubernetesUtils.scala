@@ -38,8 +38,8 @@ private[spark] object KubernetesUtils {
   }
 
   /**
-    * Parses comma-separated list of imagePullSecrets into K8s-understandable format
-    */
+   * Parses comma-separated list of imagePullSecrets into K8s-understandable format
+   */
   def parseImagePullSecrets(imagePullSecrets: Option[String]): List[LocalObjectReference] = {
     imagePullSecrets match {
       case Some(secretsCommaSeparated) =>
