@@ -871,11 +871,6 @@ case class RepartitionByExpression(
 
   override def maxRows: Option[Long] = child.maxRows
   override def shuffle: Boolean = true
-
-  override def outputOrdering: Seq[SortOrder] = partitioning match {
-    case RangePartitioning(ordering, _) => ordering
-    case _ => Nil
-  }
 }
 
 /**
