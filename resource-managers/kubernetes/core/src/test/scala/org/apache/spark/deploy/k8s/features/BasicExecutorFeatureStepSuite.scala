@@ -73,7 +73,7 @@ class BasicExecutorFeatureStepSuite
 
   test("basic executor pod has reasonable defaults") {
     val step = new BasicExecutorFeatureStep(
-      new KubernetesConf(
+      KubernetesConf(
         baseConf,
         KubernetesExecutorSpecificConf("1", DRIVER_POD),
         RESOURCE_NAME_PREFIX,
@@ -109,7 +109,7 @@ class BasicExecutorFeatureStepSuite
     val longPodNamePrefix = "loremipsumdolorsitametvimatelitrefficiendisuscipianturvixlegeresple"
 
     val step = new BasicExecutorFeatureStep(
-      new KubernetesConf(
+      KubernetesConf(
         conf,
         KubernetesExecutorSpecificConf("1", DRIVER_POD),
         longPodNamePrefix,
@@ -127,7 +127,7 @@ class BasicExecutorFeatureStepSuite
     conf.set(org.apache.spark.internal.config.EXECUTOR_CLASS_PATH, "bar=baz")
 
     val step = new BasicExecutorFeatureStep(
-      new KubernetesConf(
+      KubernetesConf(
         conf,
         KubernetesExecutorSpecificConf("1", DRIVER_POD),
         RESOURCE_NAME_PREFIX,

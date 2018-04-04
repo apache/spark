@@ -45,7 +45,7 @@ private[spark] class BasicExecutorFeatureStep(
   private val executorPodNamePrefix = kubernetesConf.appResourceNamePrefix
 
   private val driverUrl = RpcEndpointAddress(
-    kubernetesConf.sparkConf.get("spark.driver.host"),
+    kubernetesConf.get("spark.driver.host"),
     kubernetesConf.sparkConf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT),
     CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
   private val executorMemoryMiB = kubernetesConf.get(EXECUTOR_MEMORY)
@@ -61,7 +61,7 @@ private[spark] class BasicExecutorFeatureStep(
   private val executorCores = kubernetesConf.sparkConf.getInt("spark.executor.cores", 1)
   private val executorCoresRequest =
     if (kubernetesConf.sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_CORES)) {
-      kubernetesConf.sparkConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get
+      kubernetesConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get
     } else {
       executorCores.toString
     }

@@ -49,7 +49,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "256M")
       .set(org.apache.spark.internal.config.DRIVER_MEMORY_OVERHEAD, 200L)
       .set(CONTAINER_IMAGE, "spark-driver:latest")
-    val kubernetesConf = new KubernetesConf(
+    val kubernetesConf = KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
         None,
@@ -115,7 +115,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .setJars(allJars)
       .set("spark.files", allFiles.mkString(","))
       .set(CONTAINER_IMAGE, "spark-driver:latest")
-    val kubernetesConf = new KubernetesConf(
+    val kubernetesConf = KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
         None,

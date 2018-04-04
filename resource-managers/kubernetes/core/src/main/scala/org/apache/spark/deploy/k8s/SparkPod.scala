@@ -23,7 +23,12 @@ private[spark] case class SparkPod(pod: Pod, container: Container)
 private[spark] object SparkPod {
   def initialPod(): SparkPod = {
     SparkPod(
-      new PodBuilder().withNewMetadata().endMetadata().withNewSpec().endSpec().build(),
+      new PodBuilder()
+        .withNewMetadata()
+        .endMetadata()
+        .withNewSpec()
+        .endSpec()
+        .build(),
       new ContainerBuilder().build())
   }
 }

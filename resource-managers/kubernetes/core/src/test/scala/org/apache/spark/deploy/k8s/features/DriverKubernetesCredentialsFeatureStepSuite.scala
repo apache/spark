@@ -51,7 +51,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with Bef
   }
 
   test("Don't set any credentials") {
-    val kubernetesConf = new KubernetesConf(
+    val kubernetesConf = KubernetesConf(
       new SparkConf(false),
       driverSpecificConf,
       KUBERNETES_RESOURCE_NAME_PREFIX,
@@ -80,7 +80,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with Bef
       .set(
         s"$KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX",
         "/mnt/secrets/my-ca.pem")
-    val kubernetesConf = new KubernetesConf(
+    val kubernetesConf = KubernetesConf(
       submissionSparkConf,
       driverSpecificConf,
       KUBERNETES_RESOURCE_NAME_PREFIX,
@@ -116,7 +116,7 @@ class DriverKubernetesCredentialsFeatureStepSuite extends SparkFunSuite with Bef
       .set(
         s"$KUBERNETES_AUTH_DRIVER_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX",
         caCertFile.getAbsolutePath)
-    val kubernetesConf = new KubernetesConf(
+    val kubernetesConf = KubernetesConf(
       submissionSparkConf,
       driverSpecificConf,
       KUBERNETES_RESOURCE_NAME_PREFIX,

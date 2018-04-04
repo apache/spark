@@ -47,7 +47,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       _ => secretsStep)
 
   test("Apply fundamental steps all the time.") {
-    val conf = new KubernetesConf(
+    val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesDriverSpecificConf(
         None,
@@ -68,7 +68,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   }
 
   test("Apply secrets step if secrets are present.") {
-    val conf = new KubernetesConf(
+    val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesDriverSpecificConf(
         None,
@@ -93,7 +93,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
     assert(resolvedSpec.systemProperties.size === stepTypes.size)
     stepTypes.foreach { stepType =>
       assert(resolvedSpec.pod.pod.getMetadata.getLabels.get(stepType) === stepType)
-      assert(resolvedSpec.additionalDriverKubernetesResources.containsSlice(
+      assert(resolvedSpec.driverKubernetesResources.containsSlice(
         KubernetesFeaturesTestUtils.getSecretsForStepType(stepType)))
       assert(resolvedSpec.systemProperties(stepType) === stepType)
     }

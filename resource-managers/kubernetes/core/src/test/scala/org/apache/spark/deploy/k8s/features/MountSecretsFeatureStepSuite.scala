@@ -33,7 +33,7 @@ class MountSecretsFeatureStepSuite extends SparkFunSuite {
       SECRET_FOO -> SECRET_MOUNT_PATH,
       SECRET_BAR -> SECRET_MOUNT_PATH)
     val sparkConf = new SparkConf(false)
-    val kubernetesConf = new KubernetesConf(
+    val kubernetesConf = KubernetesConf(
       sparkConf,
       KubernetesExecutorSpecificConf("1", new PodBuilder().build()),
       "resource-name-prefix",

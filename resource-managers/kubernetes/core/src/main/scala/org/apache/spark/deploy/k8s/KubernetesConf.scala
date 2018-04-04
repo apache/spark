@@ -26,17 +26,26 @@ import org.apache.spark.internal.config.ConfigEntry
 
 private[spark] sealed trait KubernetesRoleSpecificConf
 
+/*
+ * Structure containing metadata for Kubernetes logic that builds a Spark driver.
+ */
 private[spark] case class KubernetesDriverSpecificConf(
     mainAppResource: Option[MainAppResource],
     mainClass: String,
     appName: String,
     appArgs: Seq[String]) extends KubernetesRoleSpecificConf
 
+/*
+ * Structure containing metadata for Kubernetes logic that builds a Spark executor.
+ */
 private[spark] case class KubernetesExecutorSpecificConf(
     executorId: String,
     driverPod: Pod)
   extends KubernetesRoleSpecificConf
 
+/**
+ * Structure containing metadata for Kubernetes logic to build Spark pods.
+ */
 private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     sparkConf: SparkConf,
     roleSpecificConf: T,
@@ -66,12 +75,12 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
 
   def get[T](config: ConfigEntry[T]): T = sparkConf.get(config)
 
+  def get(conf: String): String = sparkConf.get(conf)
+
   def get(conf: String, defaultValue: String): String = sparkConf.get(conf, defaultValue)
 
   def getOption(key: String): Option[String] = sparkConf.getOption(key)
-
 }
-
 
 private[spark] object KubernetesConf {
   def createDriverConf(
@@ -113,7 +122,7 @@ private[spark] object KubernetesConf {
     val driverEnvs = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_ENV_PREFIX)
 
-    new KubernetesConf(
+    KubernetesConf(
       sparkConfWithMainAppJar,
       KubernetesDriverSpecificConf(mainAppResource, mainClass, appName, appArgs),
       appResourceNamePrefix,
@@ -153,7 +162,7 @@ private[spark] object KubernetesConf {
       KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
     val executorEnv = sparkConf.getExecutorEnv.toMap
 
-    new KubernetesConf(
+    KubernetesConf(
       sparkConf.clone(),
       KubernetesExecutorSpecificConf(executorId, driverPod),
       sparkConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX),

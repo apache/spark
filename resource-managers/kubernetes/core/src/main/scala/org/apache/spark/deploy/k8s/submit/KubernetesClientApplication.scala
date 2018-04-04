@@ -131,7 +131,7 @@ private[spark] class Client(
       val createdDriverPod = kubernetesClient.pods().create(resolvedDriverPod)
       try {
         val otherKubernetesResources =
-          resolvedDriverSpec.additionalDriverKubernetesResources ++ Seq(configMap)
+          resolvedDriverSpec.driverKubernetesResources ++ Seq(configMap)
         addDriverOwnerReference(createdDriverPod, otherKubernetesResources)
         kubernetesClient.resourceList(otherKubernetesResources: _*).createOrReplace()
       } catch {

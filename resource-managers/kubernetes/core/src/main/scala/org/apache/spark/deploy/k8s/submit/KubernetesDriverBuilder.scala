@@ -48,7 +48,7 @@ private[spark] class KubernetesDriverBuilder(
       val addedResources = feature.getAdditionalKubernetesResources()
       spec = KubernetesSpec(
         configuredPod,
-        spec.additionalDriverKubernetesResources ++ addedResources,
+        spec.driverKubernetesResources ++ addedResources,
         spec.systemProperties ++ addedSystemProperties)
     }
     spec

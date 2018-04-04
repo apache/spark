@@ -56,7 +56,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       .set("spark.driver.port", "9000")
       .set(org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT, 8080)
     val configurationStep = new DriverServiceFeatureStep(
-      new KubernetesConf(
+      KubernetesConf(
         sparkConf,
         KubernetesDriverSpecificConf(
           None, "main", "app", Seq.empty),
@@ -82,7 +82,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("Hostname and ports are set according to the service name.") {
     val configurationStep = new DriverServiceFeatureStep(
-      new KubernetesConf(
+      KubernetesConf(
         sparkConf
           .set("spark.driver.port", "9000")
           .set(org.apache.spark.internal.config.DRIVER_BLOCK_MANAGER_PORT, 8080)
@@ -104,7 +104,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("Ports should resolve to defaults in SparkConf and in the service.") {
     val configurationStep = new DriverServiceFeatureStep(
-      new KubernetesConf(
+      KubernetesConf(
         sparkConf,
         KubernetesDriverSpecificConf(
           None, "main", "app", Seq.empty),
@@ -132,7 +132,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   test("Long prefixes should switch to using a generated name.") {
     when(clock.getTimeMillis()).thenReturn(10000)
     val configurationStep = new DriverServiceFeatureStep(
-      new KubernetesConf(
+      KubernetesConf(
         sparkConf.set(KUBERNETES_NAMESPACE, "my-namespace"),
         KubernetesDriverSpecificConf(
           None, "main", "app", Seq.empty),
@@ -157,7 +157,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
   test("Disallow bind address and driver host to be set explicitly.") {
     try {
       new DriverServiceFeatureStep(
-        new KubernetesConf(
+        KubernetesConf(
           sparkConf.set(org.apache.spark.internal.config.DRIVER_BIND_ADDRESS, "host"),
           KubernetesDriverSpecificConf(
             None, "main", "app", Seq.empty),
@@ -180,7 +180,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     sparkConf.set(org.apache.spark.internal.config.DRIVER_HOST_ADDRESS, "host")
     try {
       new DriverServiceFeatureStep(
-        new KubernetesConf(
+        KubernetesConf(
           sparkConf,
           KubernetesDriverSpecificConf(
             None, "main", "app", Seq.empty),

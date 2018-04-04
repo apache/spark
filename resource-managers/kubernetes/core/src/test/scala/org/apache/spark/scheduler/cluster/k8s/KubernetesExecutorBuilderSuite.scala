@@ -36,7 +36,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
     _ => mountSecretsStep)
 
   test("Basic steps are consistently applied.") {
-    val conf = new KubernetesConf(
+    val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesExecutorSpecificConf(
         "executor-id", new PodBuilder().build()),
@@ -50,7 +50,7 @@ class KubernetesExecutorBuilderSuite extends SparkFunSuite {
   }
 
   test("Apply secrets step if secrets are present.") {
-    val conf = new KubernetesConf(
+    val conf = KubernetesConf(
       new SparkConf(false),
       KubernetesExecutorSpecificConf(
         "executor-id", new PodBuilder().build()),

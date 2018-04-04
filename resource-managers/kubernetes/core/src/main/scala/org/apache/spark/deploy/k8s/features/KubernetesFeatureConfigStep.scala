@@ -20,10 +20,52 @@ import io.fabric8.kubernetes.api.model.HasMetadata
 
 import org.apache.spark.deploy.k8s.SparkPod
 
+/**
+ * A collection of functions that together represent a "feature" in pods that are launched for
+ * Spark drivers and executors.
+ */
 private[spark] trait KubernetesFeatureConfigStep {
+
+  /**
+   * Apply modifications on the given pod in accordance to this feature. This can include attaching
+   * volumes, adding environment variables, and adding labels/annotations.
+   * <p>
+   * Note that we should return a SparkPod that keeps all of the properties of the passed SparkPod
+   * object. So this is correct:
+   * <pre>
+   * {@code val configuredPod = new PodBuilder(pod.pod)
+   *     .editSpec()
+   *     ...
+   *     .build()
+   *   val configuredContainer = new ContainerBuilder(pod.container)
+   *     ...
+   *     .build()
+   *   SparkPod(configuredPod, configuredContainer)
+   *  }
+   * </pre>
+   * This is incorrect:
+   * <pre>
+   * {@code val configuredPod = new PodBuilder() // Loses the original state
+   *     .editSpec()
+   *     ...
+   *     .build()
+   *   val configuredContainer = new ContainerBuilder() // Loses the original state
+   *     ...
+   *     .build()
+   *   SparkPod(configuredPod, configuredContainer)
+   *  }
+   * </pre>
+   */
   def configurePod(pod: SparkPod): SparkPod
 
+  /**
+   * Return any system properties that should be set on the JVM in accordance to this feature.
+   */
   def getAdditionalPodSystemProperties(): Map[String, String]
 
+  /**
+   * Return any additional Kubernetes resources that should be added to support this feature. Only
+   * applicable when creating the driver in cluster mode.
+   */
   def getAdditionalKubernetesResources(): Seq[HasMetadata]
 }

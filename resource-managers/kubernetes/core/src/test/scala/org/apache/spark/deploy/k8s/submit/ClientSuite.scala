@@ -134,7 +134,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   before {
     MockitoAnnotations.initMocks(this)
     sparkConf = new SparkConf(false)
-    kubernetesConf = new KubernetesConf[KubernetesDriverSpecificConf](
+    kubernetesConf = KubernetesConf[KubernetesDriverSpecificConf](
       sparkConf,
       KubernetesDriverSpecificConf(None, MAIN_CLASS, APP_NAME, APP_ARGS),
       KUBERNETES_RESOURCE_PREFIX,
