@@ -159,11 +159,6 @@ private[hive] class TestHiveSparkSession(
     private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
 
-  // The base spark session does this in getOrCreate(), here we emulate that behavior for tests.
-  if (SparkSession.getDefaultSession.isEmpty) {
-    SparkSession.setDefaultSession(this)
-  }
-
   def this(sc: SparkContext, loadTestTables: Boolean) {
     this(
       sc,
