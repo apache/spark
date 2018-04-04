@@ -2359,4 +2359,42 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       s"""The lineSep option must be specified for the $encoding encoding"""
     ))
   }
+
+  private val badJson = "\u0000\u0000\u0000A\u0001AAA"
+
+  test("SPARK-23094: invalid json with leading nulls - from file (multiLine=true)") {
+    import testImplicits._
+    withTempDir { tempDir =>
+      val path = tempDir.getAbsolutePath
+      Seq(badJson + """{"a":1}""").toDS().write.mode("overwrite").text(path)
+      val expected = s"""${badJson}{"a":1}\n"""
+      val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
+      val df = spark.read.format("json")
+        .option("multiLine", true)
+        .option("encoding", "UTF-8")
+        .schema(schema).load(path)
+      checkAnswer(df, Row(null, expected))
+    }
+  }
+
+  test("SPARK-23094: invalid json with leading nulls - from file (multiLine=false)") {
+    import testImplicits._
+    withTempDir { tempDir =>
+      val path = tempDir.getAbsolutePath
+      Seq(badJson, """{"a":1}""").toDS().write.mode("overwrite").text(path)
+      val schema = new StructType().add("a", IntegerType).add("_corrupt_record", StringType)
+      val df = spark.read.format("json")
+        .option("multiLine", false)
+        .option("encoding", "UTF-8")
+        .schema(schema).load(path)
+      checkAnswer(df, Seq(Row(1, null), Row(null, badJson)))
+    }
+  }
+
+  test("SPARK-23094: invalid json with leading nulls - from dataset") {
+    import testImplicits._
+    checkAnswer(
+      spark.read.option("encoding", "UTF-8").json(Seq(badJson).toDS()),
+      Row(badJson))
+  }
 }
