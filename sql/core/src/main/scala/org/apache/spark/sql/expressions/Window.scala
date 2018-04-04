@@ -33,6 +33,10 @@ import org.apache.spark.sql.catalyst.expressions._
  *   Window.partitionBy("country").orderBy("date").rowsBetween(-3, 3)
  * }}}
  *
+ * @note The default frame boundaries for window are (rowFrame, unboundedPreceding,
+ *       unboundedFollowing). When a ordering is defined, the default frame boundaries
+ *       for window are (rangeFrame, unboundedPreceding, currentRow).
+ *
  * @since 1.4.0
  */
 @InterfaceStability.Stable

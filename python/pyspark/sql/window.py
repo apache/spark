@@ -44,6 +44,10 @@ class Window(object):
     >>> # PARTITION BY country ORDER BY date RANGE BETWEEN 3 PRECEDING AND 3 FOLLOWING
     >>> window = Window.orderBy("date").partitionBy("country").rangeBetween(-3, 3)
 
+    .. note:: The default frame boundaries for window are (rowFrame, unboundedPreceding,
+         unboundedFollowing). When a ordering is defined, the default frame boundaries
+         for window are (rangeFrame, unboundedPreceding, currentRow).
+
     .. note:: Experimental
 
     .. versionadded:: 1.4
