@@ -814,7 +814,7 @@ class Analyzer(
       }
     }
 
-    private def resolve(e: Expression, q: LogicalPlan): Expression = e match {
+    private def resolve(e: Expression, q: LogicalPlan): Expression = e.transformUp {
       case u @ UnresolvedAttribute(nameParts) =>
         // Leave unchanged if resolution fails. Hopefully will be resolved next round.
         val result =
@@ -827,7 +827,6 @@ class Analyzer(
         result
       case UnresolvedExtractValue(child, fieldExpr) if child.resolved =>
         ExtractValue(child, fieldExpr, resolver)
-      case _ => e.mapChildren(resolve(_, q))
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
