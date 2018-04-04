@@ -115,8 +115,7 @@ private[spark] object KubernetesConf {
     }
 
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
-      sparkConf,
-      KUBERNETES_DRIVER_LABEL_PREFIX)
+      sparkConf, KUBERNETES_DRIVER_LABEL_PREFIX)
     require(!driverCustomLabels.contains(SPARK_APP_ID_LABEL), "Label with key " +
       s"$SPARK_APP_ID_LABEL is not allowed as it is reserved for Spark bookkeeping " +
       "operations.")
@@ -126,10 +125,10 @@ private[spark] object KubernetesConf {
     val driverLabels = driverCustomLabels ++ Map(
       SPARK_APP_ID_LABEL -> appId,
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
-    val driverAnnotations =
-      KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_ANNOTATION_PREFIX)
-    val driverSecretNamesToMountPaths =
-      KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_SECRETS_PREFIX)
+    val driverAnnotations = KubernetesUtils.parsePrefixedKeyValuePairs(
+      sparkConf, KUBERNETES_DRIVER_ANNOTATION_PREFIX)
+    val driverSecretNamesToMountPaths = KubernetesUtils.parsePrefixedKeyValuePairs(
+      sparkConf, KUBERNETES_DRIVER_SECRETS_PREFIX)
     val driverEnvs = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_ENV_PREFIX)
 
@@ -150,8 +149,7 @@ private[spark] object KubernetesConf {
       appId: String,
       driverPod: Pod): KubernetesConf[KubernetesExecutorSpecificConf] = {
     val executorCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
-      sparkConf,
-      KUBERNETES_EXECUTOR_LABEL_PREFIX)
+      sparkConf, KUBERNETES_EXECUTOR_LABEL_PREFIX)
     require(
       !executorCustomLabels.contains(SPARK_APP_ID_LABEL),
       s"Custom executor labels cannot contain $SPARK_APP_ID_LABEL as it is reserved for Spark.")
@@ -167,10 +165,10 @@ private[spark] object KubernetesConf {
       SPARK_APP_ID_LABEL -> appId,
       SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE) ++
       executorCustomLabels
-    val executorAnnotations =
-      KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_ANNOTATION_PREFIX)
-    val executorSecrets =
-      KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
+    val executorAnnotations = KubernetesUtils.parsePrefixedKeyValuePairs(
+      sparkConf, KUBERNETES_EXECUTOR_ANNOTATION_PREFIX)
+    val executorSecrets = KubernetesUtils.parsePrefixedKeyValuePairs(
+      sparkConf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
     val executorEnv = sparkConf.getExecutorEnv.toMap
 
     KubernetesConf(
