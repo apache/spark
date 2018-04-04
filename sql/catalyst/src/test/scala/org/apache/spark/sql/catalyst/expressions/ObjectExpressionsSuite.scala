@@ -17,17 +17,30 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+class InvokeTargetClass extends Serializable {
+  def filterInt(e: Any): Any = e.asInstanceOf[Int] > 0
+  def filterPrimitiveInt(e: Int): Boolean = e > 0
+  def binOp(e1: Int, e2: Double): Double = e1 + e2
+}
+
+class InvokeTargetSubClass extends InvokeTargetClass {
+  override def binOp(e1: Int, e2: Double): Double = e1 - e2
+}
 
 class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -80,6 +93,41 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       UnsafeProjection) // TODO(hvanhovell) revert this when SPARK-23587 is fixed
   }
 
+  test("SPARK-23583: Invoke should support interpreted execution") {
+    val targetObject = new InvokeTargetClass
+    val funcClass = classOf[InvokeTargetClass]
+    val funcObj = Literal.create(targetObject, ObjectType(funcClass))
+    val targetSubObject = new InvokeTargetSubClass
+    val funcSubObj = Literal.create(targetSubObject, ObjectType(classOf[InvokeTargetSubClass]))
+    val funcNullObj = Literal.create(null, ObjectType(funcClass))
+
+    val inputInt = Seq(BoundReference(0, ObjectType(classOf[Any]), true))
+    val inputPrimitiveInt = Seq(BoundReference(0, IntegerType, false))
+    val inputSum = Seq(BoundReference(0, IntegerType, false), BoundReference(1, DoubleType, false))
+
+    checkObjectExprEvaluation(
+      Invoke(funcObj, "filterInt", ObjectType(classOf[Any]), inputInt),
+      java.lang.Boolean.valueOf(true), InternalRow.fromSeq(Seq(Integer.valueOf(1))))
+
+    checkObjectExprEvaluation(
+      Invoke(funcObj, "filterPrimitiveInt", BooleanType, inputPrimitiveInt),
+      false, InternalRow.fromSeq(Seq(-1)))
+
+    checkObjectExprEvaluation(
+      Invoke(funcObj, "filterInt", ObjectType(classOf[Any]), inputInt),
+      null, InternalRow.fromSeq(Seq(null)))
+
+    checkObjectExprEvaluation(
+      Invoke(funcNullObj, "filterInt", ObjectType(classOf[Any]), inputInt),
+      null, InternalRow.fromSeq(Seq(Integer.valueOf(1))))
+
+    checkObjectExprEvaluation(
+      Invoke(funcObj, "binOp", DoubleType, inputSum), 1.25, InternalRow.apply(1, 0.25))
+
+    checkObjectExprEvaluation(
+      Invoke(funcSubObj, "binOp", DoubleType, inputSum), 0.75, InternalRow.apply(1, 0.25))
+  }
+
   test("SPARK-23585: UnwrapOption should support interpreted execution") {
     val cls = classOf[Option[Int]]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
@@ -102,6 +150,24 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val schema = new StructType().add("a", IntegerType).add("b", StringType)
     val createExternalRow = CreateExternalRow(Seq(Literal(1), Literal("x")), schema)
     checkEvaluation(createExternalRow, Row.fromSeq(Seq(1, "x")), InternalRow.fromSeq(Seq()))
+  }
+
+  // by scala values instead of catalyst values.
+  private def checkObjectExprEvaluation(
+      expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
+    val serializer = new JavaSerializer(new SparkConf()).newInstance
+    val resolver = ResolveTimeZone(new SQLConf)
+    val expr = resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
+    checkEvaluationWithoutCodegen(expr, expected, inputRow)
+    checkEvaluationWithGeneratedMutableProjection(expr, expected, inputRow)
+    if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
+      checkEvaluationWithUnsafeProjection(
+        expr,
+        expected,
+        inputRow,
+        UnsafeProjection) // TODO(hvanhovell) revert this when SPARK-23587 is fixed
+    }
+    checkEvaluationWithOptimization(expr, expected, inputRow)
   }
 
   test("SPARK-23594 GetExternalRowField should support interpreted execution") {
@@ -132,6 +198,70 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val encodeUsingSerializer = EncodeUsingSerializer(inputObject, useKryo)
       checkEvaluation(encodeUsingSerializer, expected, InternalRow.fromSeq(Seq(1)))
       checkEvaluation(encodeUsingSerializer, null, InternalRow.fromSeq(Seq(null)))
+    }
+  }
+
+  test("SPARK-23587: MapObjects should support interpreted execution") {
+    def testMapObjects(collection: Any, collectionCls: Class[_], inputType: DataType): Unit = {
+      val function = (lambda: Expression) => Add(lambda, Literal(1))
+      val elementType = IntegerType
+      val expected = Seq(2, 3, 4)
+
+      val inputObject = BoundReference(0, inputType, nullable = true)
+      val optClass = Option(collectionCls)
+      val mapObj = MapObjects(function, inputObject, elementType, true, optClass)
+      val row = InternalRow.fromSeq(Seq(collection))
+      val result = mapObj.eval(row)
+
+      collectionCls match {
+        case null =>
+          assert(result.asInstanceOf[ArrayData].array.toSeq == expected)
+        case l if classOf[java.util.List[_]].isAssignableFrom(l) =>
+          assert(result.asInstanceOf[java.util.List[_]].asScala.toSeq == expected)
+        case s if classOf[Seq[_]].isAssignableFrom(s) =>
+          assert(result.asInstanceOf[Seq[_]].toSeq == expected)
+        case s if classOf[scala.collection.Set[_]].isAssignableFrom(s) =>
+          assert(result.asInstanceOf[scala.collection.Set[_]] == expected.toSet)
+      }
+    }
+
+    val customCollectionClasses = Seq(classOf[Seq[Int]], classOf[scala.collection.Set[Int]],
+      classOf[java.util.List[Int]], classOf[java.util.AbstractList[Int]],
+      classOf[java.util.AbstractSequentialList[Int]], classOf[java.util.Vector[Int]],
+      classOf[java.util.Stack[Int]], null)
+
+    val list = new java.util.ArrayList[Int]()
+    list.add(1)
+    list.add(2)
+    list.add(3)
+    val arrayData = new GenericArrayData(Array(1, 2, 3))
+    val vector = new java.util.Vector[Int]()
+    vector.add(1)
+    vector.add(2)
+    vector.add(3)
+    val stack = new java.util.Stack[Int]()
+    stack.add(1)
+    stack.add(2)
+    stack.add(3)
+
+    Seq(
+      (Seq(1, 2, 3), ObjectType(classOf[Seq[Int]])),
+      (Array(1, 2, 3), ObjectType(classOf[Array[Int]])),
+      (Seq(1, 2, 3), ObjectType(classOf[Object])),
+      (Array(1, 2, 3), ObjectType(classOf[Object])),
+      (list, ObjectType(classOf[java.util.List[Int]])),
+      (vector, ObjectType(classOf[java.util.Vector[Int]])),
+      (stack, ObjectType(classOf[java.util.Stack[Int]])),
+      (arrayData, ArrayType(IntegerType))
+    ).foreach { case (collection, inputType) =>
+      customCollectionClasses.foreach(testMapObjects(collection, _, inputType))
+
+      // Unsupported custom collection class
+      val errMsg = intercept[RuntimeException] {
+        testMapObjects(collection, classOf[scala.collection.Map[Int, Int]], inputType)
+      }.getMessage()
+      assert(errMsg.contains("`scala.collection.Map` is not supported by `MapObjects` " +
+        "as resulting collection."))
     }
   }
 

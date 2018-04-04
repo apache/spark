@@ -38,8 +38,17 @@ private[spark] class BasicExecutorFeatureStep(
   private val executorContainerImage = kubernetesConf
     .get(EXECUTOR_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException("Must specify the executor container image"))
+<<<<<<< HEAD:resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/features/BasicExecutorFeatureStep.scala
   private val blockManagerPort = kubernetesConf
     .sparkConf
+||||||| merged common ancestors
+  private val imagePullPolicy = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
+  private val blockManagerPort = sparkConf
+=======
+  private val imagePullPolicy = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
+  private val imagePullSecrets = sparkConf.get(IMAGE_PULL_SECRETS)
+  private val blockManagerPort = sparkConf
+>>>>>>> apache/master:resource-managers/kubernetes/core/src/main/scala/org/apache/spark/scheduler/cluster/k8s/ExecutorPodFactory.scala
     .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
 
   private val executorPodNamePrefix = kubernetesConf.appResourceNamePrefix
@@ -69,6 +78,8 @@ private[spark] class BasicExecutorFeatureStep(
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val name = s"$executorPodNamePrefix-exec-${kubernetesConf.roleSpecificConf.executorId}"
+
+    val parsedImagePullSecrets = KubernetesUtils.parseImagePullSecrets(imagePullSecrets)
 
     // hostname must be no longer than 63 characters, so take the last 63 characters of the pod
     // name as the hostname.  This preserves uniqueness since the end of name contains
@@ -138,6 +149,55 @@ private[spark] class BasicExecutorFeatureStep(
       .withPorts(requiredPorts.asJava)
       .addToArgs("executor")
       .build()
+<<<<<<< HEAD:resource-managers/kubernetes/core/src/main/scala/org/apache/spark/deploy/k8s/features/BasicExecutorFeatureStep.scala
+||||||| merged common ancestors
+
+    val executorPod = new PodBuilder()
+      .withNewMetadata()
+        .withName(name)
+        .withLabels(resolvedExecutorLabels.asJava)
+        .withAnnotations(executorAnnotations.asJava)
+        .withOwnerReferences()
+          .addNewOwnerReference()
+            .withController(true)
+            .withApiVersion(driverPod.getApiVersion)
+            .withKind(driverPod.getKind)
+            .withName(driverPod.getMetadata.getName)
+            .withUid(driverPod.getMetadata.getUid)
+            .endOwnerReference()
+        .endMetadata()
+      .withNewSpec()
+        .withHostname(hostname)
+        .withRestartPolicy("Never")
+        .withNodeSelector(nodeSelector.asJava)
+        .endSpec()
+      .build()
+
+=======
+
+    val executorPod = new PodBuilder()
+      .withNewMetadata()
+        .withName(name)
+        .withLabels(resolvedExecutorLabels.asJava)
+        .withAnnotations(executorAnnotations.asJava)
+        .withOwnerReferences()
+          .addNewOwnerReference()
+            .withController(true)
+            .withApiVersion(driverPod.getApiVersion)
+            .withKind(driverPod.getKind)
+            .withName(driverPod.getMetadata.getName)
+            .withUid(driverPod.getMetadata.getUid)
+            .endOwnerReference()
+        .endMetadata()
+      .withNewSpec()
+        .withHostname(hostname)
+        .withRestartPolicy("Never")
+        .withNodeSelector(nodeSelector.asJava)
+        .withImagePullSecrets(parsedImagePullSecrets.asJava)
+        .endSpec()
+      .build()
+
+>>>>>>> apache/master:resource-managers/kubernetes/core/src/main/scala/org/apache/spark/scheduler/cluster/k8s/ExecutorPodFactory.scala
     val containerWithLimitCores = executorLimitCores.map { limitCores =>
       val executorCpuLimitQuantity = new QuantityBuilder(false)
         .withAmount(limitCores)
