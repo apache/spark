@@ -134,6 +134,16 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(conf.roleSpecificConf.driverPod === DRIVER_POD)
   }
 
+  test("Image pull secrets.") {
+    val conf = KubernetesConf.createExecutorConf(
+      new SparkConf(false)
+        .set(IMAGE_PULL_SECRETS, "my-secret-1,my-secret-2 "),
+      EXECUTOR_ID,
+      APP_ID,
+      DRIVER_POD)
+    assert(conf.imagePullSecrets() === Seq("my-secret-1", "my-secret-2"))
+  }
+
   test("Set executor labels, annotations, and secrets") {
     val sparkConf = new SparkConf(false)
     CUSTOM_LABELS.foreach { case (key, value) =>

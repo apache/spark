@@ -46,6 +46,11 @@ class BasicExecutorFeatureStepSuite
   private val EXECUTOR_IMAGE = "executor-image"
   private val LABELS = Map("label1key" -> "label1value")
   private val ANNOTATIONS = Map("annotation1key" -> "annotation1value")
+  private val TEST_IMAGE_PULL_SECRETS = Seq("my-1secret-1", "my-secret-2")
+  private val TEST_IMAGE_PULL_SECRET_OBJECTS =
+    TEST_IMAGE_PULL_SECRETS.map { secret =>
+      new LocalObjectReferenceBuilder().withName(secret).build()
+    }
   private val DRIVER_POD = new PodBuilder()
     .withNewMetadata()
       .withName(DRIVER_POD_NAME)
@@ -69,6 +74,7 @@ class BasicExecutorFeatureStepSuite
       .set(KUBERNETES_DRIVER_SUBMIT_CHECK, true)
       .set("spark.driver.host", DRIVER_HOSTNAME)
       .set("spark.driver.port", DRIVER_PORT.toString)
+      .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS.mkString(","))
   }
 
   test("basic executor pod has reasonable defaults") {
@@ -87,6 +93,7 @@ class BasicExecutorFeatureStepSuite
     // The executor pod name and default labels.
     assert(executor.pod.getMetadata.getName === s"$RESOURCE_NAME_PREFIX-exec-1")
     assert(executor.pod.getMetadata.getLabels.asScala === LABELS)
+    assert(executor.pod.getSpec.getImagePullSecrets.asScala === TEST_IMAGE_PULL_SECRET_OBJECTS)
 
     // There is exactly 1 container with no volume mounts and default memory limits.
     // Default memory limit is 1024M + 384M (minimum overhead constant).

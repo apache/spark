@@ -18,6 +18,8 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
+import io.fabric8.kubernetes.api.model.LocalObjectReferenceBuilder
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
@@ -40,6 +42,11 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   private val DRIVER_ENVS = Map(
     DRIVER_CUSTOM_ENV1 -> DRIVER_CUSTOM_ENV1,
     DRIVER_CUSTOM_ENV2 -> DRIVER_CUSTOM_ENV2)
+  private val TEST_IMAGE_PULL_SECRETS = Seq("my-secret-1", "my-secret-2")
+  private val TEST_IMAGE_PULL_SECRET_OBJECTS =
+    TEST_IMAGE_PULL_SECRETS.map { secret =>
+      new LocalObjectReferenceBuilder().withName(secret).build()
+    }
 
   test("Check the pod respects all configurations from the user.") {
     val sparkConf = new SparkConf()
@@ -49,6 +56,7 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .set(org.apache.spark.internal.config.DRIVER_MEMORY.key, "256M")
       .set(org.apache.spark.internal.config.DRIVER_MEMORY_OVERHEAD, 200L)
       .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(IMAGE_PULL_SECRETS, TEST_IMAGE_PULL_SECRETS.mkString(","))
     val kubernetesConf = KubernetesConf(
       sparkConf,
       KubernetesDriverSpecificConf(
@@ -79,6 +87,9 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       .toMap
     assert(envs(DRIVER_CUSTOM_ENV1) === DRIVER_ENVS(DRIVER_CUSTOM_ENV1))
     assert(envs(DRIVER_CUSTOM_ENV2) === DRIVER_ENVS(DRIVER_CUSTOM_ENV2))
+
+    assert(configuredPod.pod.getSpec().getImagePullSecrets.asScala ===
+      TEST_IMAGE_PULL_SECRET_OBJECTS)
 
     assert(configuredPod.container.getEnv.asScala.exists(envVar =>
       envVar.getName.equals(ENV_DRIVER_BIND_ADDRESS) &&

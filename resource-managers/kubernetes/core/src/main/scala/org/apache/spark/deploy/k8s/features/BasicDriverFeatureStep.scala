@@ -19,7 +19,7 @@ package org.apache.spark.deploy.k8s.features
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, PodBuilder, QuantityBuilder}
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, LocalObjectReferenceBuilder, PodBuilder, QuantityBuilder}
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesUtils, SparkPod}
@@ -106,6 +106,11 @@ private[spark] class BasicDriverFeatureStep(
       .withNewSpec()
         .withRestartPolicy("Never")
         .withNodeSelector(conf.nodeSelector().asJava)
+        .addAllToImagePullSecrets(conf.imagePullSecrets().map { secret =>
+          new LocalObjectReferenceBuilder()
+            .withName(secret)
+            .build()
+        }.asJava)
         .endSpec()
       .build()
     SparkPod(driverPod, driverContainer)

@@ -70,6 +70,14 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
 
   def imagePullPolicy(): String = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
 
+  def imagePullSecrets(): Seq[String] = {
+    sparkConf
+      .get(IMAGE_PULL_SECRETS)
+      .map(_.split(","))
+      .getOrElse(Array.empty[String])
+      .map(_.trim)
+  }
+
   def nodeSelector(): Map[String, String] =
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_NODE_SELECTOR_PREFIX)
 
