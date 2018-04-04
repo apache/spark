@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.planning
 
+import org.apache.avro.hadoop.file.HadoopCodecFactory
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -102,7 +104,8 @@ object PhysicalOperation extends PredicateHelper {
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild) */
   type ReturnType =
-    (JoinType, Seq[Expression], Seq[Expression], Seq[Expression], Option[Expression], LogicalPlan, LogicalPlan)
+    (JoinType, Seq[Expression], Seq[Expression], Seq[Expression],
+      Option[Expression], LogicalPlan, LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
     case join @ Join(left, right, joinType, condition) =>
@@ -162,7 +165,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
           }
         }
         val (leftKeys, rightKeys) = joinKeys.unzip
-        logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
+
         Some((joinType, leftKeys, rightKeys, rangeConditions,
           otherPredicates.filterNot(rangePreds.contains(_)).reduceOption(And), left, right))
       } else {
@@ -170,7 +173,6 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       }
     case _ => None
   }
-
 
   private def isValidRangeCondition(l:Expression, r:Expression, left:LogicalPlan, right:LogicalPlan,
                                     joinKeys:Seq[(Expression, Expression)]) = {

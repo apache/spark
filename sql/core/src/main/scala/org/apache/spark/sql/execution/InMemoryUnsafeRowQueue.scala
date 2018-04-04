@@ -122,6 +122,10 @@ private[sql] class InMemoryUnsafeRowQueue(
     }
   }
 
+  def get(idx:Int): UnsafeRow = {
+    inMemoryQueue(idx)
+  }
+
   override def add(unsafeRow: UnsafeRow): Unit = {
     if (numRows < numRowsInMemoryBufferThreshold) {
       inMemoryQueue += unsafeRow.copy()

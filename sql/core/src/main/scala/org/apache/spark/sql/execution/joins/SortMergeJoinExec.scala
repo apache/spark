@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -41,6 +42,10 @@ case class SortMergeJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan) extends BinaryExecNode with CodegenSupport {
+
+  logDebug(s"SortMergeJoinExec args: leftKeys: $leftKeys, rightKeys: $rightKeys, joinType: $joinType," +
+    s" rangeConditions: $rangeConditions, " +
+    s"condition: $condition, left: $left, right: $right")
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -145,16 +150,24 @@ case class SortMergeJoinExec(
   }
 
   private val lowerRangeExpression : Option[Expression] = {
-    rangeConditions.find(p => p.isInstanceOf[GreaterThan] || p.isInstanceOf[GreaterThanOrEqual])
+    logDebug(s"Finding greaterThan expressions in $rangeConditions")
+    val thefind = rangeConditions.find(p => p.isInstanceOf[GreaterThan] || p.isInstanceOf[GreaterThanOrEqual])
+    logDebug(s"Found greaterThan expression: $thefind")
+    thefind
   }
   private val upperRangeExpression : Option[Expression] = {
-    rangeConditions.find(p => p.isInstanceOf[LessThan] || p.isInstanceOf[LessThanOrEqual])
+    logDebug(s"Finding lowerThan expressions in $rangeConditions")
+    val thefind = rangeConditions.find(p => p.isInstanceOf[LessThan] || p.isInstanceOf[LessThanOrEqual])
+    logDebug(s"Found lowerThan expression: $thefind")
+    thefind
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val spillThreshold = getSpillThreshold
     val inMemoryThreshold = getInMemoryThreshold
+    if(lowerRangeExpression.isDefined || upperRangeExpression.isDefined)
+      logDebug("Should be using SortMergeJoinInnerRangeScanner")
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       val boundCondition: (InternalRow) => Boolean = {
         condition.map { cond =>
@@ -458,88 +471,270 @@ case class SortMergeJoinExec(
    * matched one row from left side and buffered rows from right side.
    */
   private def genScanner(ctx: CodegenContext): (String, String) = {
-    // Create class member for next row from both sides.
-    // Inline mutable state since not many join operations in a task
-    val leftRow = ctx.addMutableState("InternalRow", "leftRow", forceInline = true)
-    val rightRow = ctx.addMutableState("InternalRow", "rightRow", forceInline = true)
+    if(lowerRangeExpression.isDefined || upperRangeExpression.isDefined) {
+      logInfo("SortMergeJoinExec: generating inner range join scanner")
+      // Create class member for next row from both sides.
+      // Inline mutable state since not many join operations in a task
+      val leftRow = ctx.addMutableState("InternalRow", "leftRow", forceInline = true)
+      val rightRow = ctx.addMutableState("InternalRow", "rightRow", forceInline = true)
+      val rightTmpRow = ctx.addMutableState("InternalRow", "rightTmpRow", forceInline = true)
 
-    // Create variables for join keys from both sides.
-    val leftKeyVars = createJoinKey(ctx, leftRow, leftKeys, left.output)
-    val leftAnyNull = leftKeyVars.map(_.isNull).mkString(" || ")
-    val rightKeyTmpVars = createJoinKey(ctx, rightRow, rightKeys, right.output)
-    val rightAnyNull = rightKeyTmpVars.map(_.isNull).mkString(" || ")
-    // Copy the right key as class members so they could be used in next function call.
-    val rightKeyVars = copyKeys(ctx, rightKeyTmpVars)
+      // Create variables for join keys from both sides.
+      val leftKeyVars = createJoinKey(ctx, leftRow, leftKeys, left.output)
+      val leftAnyNull = leftKeyVars.map(_.isNull).mkString(" || ")
+      val rightKeyTmpVars = createJoinKey(ctx, rightRow, rightKeys, right.output)
+      val rightAnyNull = rightKeyTmpVars.map(_.isNull).mkString(" || ")
+      // Copy the right key as class members so they could be used in next function call.
+      val rightKeyVars = copyKeys(ctx, rightKeyTmpVars)
 
-    // A list to hold all matched rows from right side.
-    val clsName = classOf[ExternalAppendOnlyUnsafeRowArray].getName
+      val rangeKeys = rangeConditions.map{
+        case GreaterThan(l, r) => (Some(l), None, Some(r), None)
+        case GreaterThanOrEqual(l, r) => (Some(l), None, Some(r), None)
+        case LessThan(l, r) => (None, Some(l), None, Some(r))
+        case LessThanOrEqual(l, r) => (None, Some(l), None, Some(r))
+      }
+      val (leftLowerKeys, leftUpperKeys, rightLowerKeys, rightUpperKeys) =
+        (rangeKeys.map(_._1).flatMap(x => x),
+          rangeKeys.map(_._2).flatMap(x => x),
+          rangeKeys.map(_._3).flatMap(x => x),
+          rangeKeys.map(_._4).flatMap(x => x))
 
-    val spillThreshold = getSpillThreshold
-    val inMemoryThreshold = getInMemoryThreshold
+      // Variables for range expressions=
+      val leftLowerKeyVars = createJoinKey(ctx, leftRow, leftLowerKeys, left.output)
+      val leftUpperKeyVars = createJoinKey(ctx, leftRow, leftUpperKeys, left.output)
+      val rightLowerKeyVars = createJoinKey(ctx, rightRow, rightLowerKeys, right.output)
+      val rightUpperKeyVars = createJoinKey(ctx, rightRow, rightUpperKeys, right.output)
 
-    // Inline mutable state since not many join operations in a task
-    val matches = ctx.addMutableState(clsName, "matches",
-      v => s"$v = new $clsName($inMemoryThreshold, $spillThreshold);", forceInline = true)
-    // Copy the left keys as class members so they could be used in next function call.
-    val matchedKeyVars = copyKeys(ctx, leftKeyVars)
+      val dataType = if(leftLowerKeys.size > 0) leftLowerKeys(0).dataType
+        else leftUpperKeys(0).dataType
+      val initValue = CodeGenerator.defaultValue(dataType)
+      val leftLowerRangeKey = ctx.addBufferedState(dataType, "leftLowerRangeKey", initValue)
+      val leftUpperRangeKey = ctx.addBufferedState(dataType, "leftUpperRangeKey", initValue)
+      val rightLowerRangeKey = ctx.addBufferedState(dataType, "rightLowerRangeKey", initValue)
+      val rightUpperRangeKey = ctx.addBufferedState(dataType, "rightUpperRangeKey", initValue)
 
-    ctx.addNewFunction("findNextInnerJoinRows",
-      s"""
-         |private boolean findNextInnerJoinRows(
-         |    scala.collection.Iterator leftIter,
-         |    scala.collection.Iterator rightIter) {
-         |  $leftRow = null;
-         |  int comp = 0;
-         |  while ($leftRow == null) {
-         |    if (!leftIter.hasNext()) return false;
-         |    $leftRow = (InternalRow) leftIter.next();
-         |    ${leftKeyVars.map(_.code).mkString("\n")}
-         |    if ($leftAnyNull) {
-         |      $leftRow = null;
-         |      continue;
-         |    }
-         |    if (!$matches.isEmpty()) {
-         |      ${genComparison(ctx, leftKeyVars, matchedKeyVars)}
-         |      if (comp == 0) {
-         |        return true;
-         |      }
-         |      $matches.clear();
-         |    }
-         |
-         |    do {
-         |      if ($rightRow == null) {
-         |        if (!rightIter.hasNext()) {
-         |          ${matchedKeyVars.map(_.code).mkString("\n")}
-         |          return !$matches.isEmpty();
-         |        }
-         |        $rightRow = (InternalRow) rightIter.next();
-         |        ${rightKeyTmpVars.map(_.code).mkString("\n")}
-         |        if ($rightAnyNull) {
-         |          $rightRow = null;
-         |          continue;
-         |        }
-         |        ${rightKeyVars.map(_.code).mkString("\n")}
-         |      }
-         |      ${genComparison(ctx, leftKeyVars, rightKeyVars)}
-         |      if (comp > 0) {
-         |        $rightRow = null;
-         |      } else if (comp < 0) {
-         |        if (!$matches.isEmpty()) {
-         |          ${matchedKeyVars.map(_.code).mkString("\n")}
-         |          return true;
-         |        }
-         |        $leftRow = null;
-         |      } else {
-         |        $matches.add((UnsafeRow) $rightRow);
-         |        $rightRow = null;;
-         |      }
-         |    } while ($leftRow != null);
-         |  }
-         |  return false; // unreachable
-         |}
+      // A queue to hold all matched rows from right side.
+      val clsName = classOf[InMemoryUnsafeRowQueue].getName
+
+      val spillThreshold = getSpillThreshold
+      val inMemoryThreshold = getInMemoryThreshold
+
+      val matches = ctx.addMutableState(clsName, "matches",
+        v => s"$v = new $clsName($inMemoryThreshold, $spillThreshold);", forceInline = true)
+      val matchedKeyVars = copyKeys(ctx, leftKeyVars)
+
+      val lowerCompop = lowerRangeExpression.get match {
+        case GreaterThanOrEqual(_, _) => "<"
+        case GreaterThan(_, _) => "<="
+        case _ => ""
+      }
+      val upperCompop = upperRangeExpression.get match {
+        case LessThanOrEqual(_, _) => ">"
+        case LessThan(_, _) => ">="
+        case _ => ""
+      }
+      val lowerCompExp = if(lowerRangeExpression.isEmpty) ""
+        else s" || (comp == 0 && ${leftLowerRangeKey.value} $lowerCompop ${rightLowerRangeKey.value})"
+      val upperCompExp = if(upperRangeExpression.isEmpty) ""
+        else s" || (comp == 0 && ${leftUpperRangeKey.value} $upperCompop ${rightUpperRangeKey.value})"
+
+      logDebug(s"lowerCompExp: $lowerCompExp")
+      logDebug(s"upperCompExp: $upperCompExp")
+
+      if(lowerRangeExpression.isEmpty || rightLowerKeys.size == 0) {
+        ctx.addNewFunction("dequeueUntilLowerConditionHolds",
+          "private void dequeueUntilLowerConditionHolds() { }",
+          inlineToOuterClass = true)
+      }
+      else {
+        val rightRngTmpKeyVars = createJoinKey(ctx, rightTmpRow, rightUpperKeys.slice(0, 1), right.output)
+        val rightRngTmpKeyVarsDecl = rightRngTmpKeyVars.map(_.code).mkString("\n")
+        rightRngTmpKeyVars.foreach(_.code = "")
+        val javaType = CodeGenerator.javaType(rightLowerKeys(0).dataType)
+
+        ctx.addNewFunction("getRightTmpRangeValue",
+          s"""
+             |private $javaType getRightTmpRangeValue() {
+             |  $rightRngTmpKeyVarsDecl
+             |  return ${rightRngTmpKeyVars(0).value};
+             |}
+           """.stripMargin)
+
+        ctx.addNewFunction("dequeueUntilLowerConditionHolds",
+          s"""
+             |private void dequeueUntilLowerConditionHolds() {
+             |  if($matches.isEmpty())
+             |    return;
+             |  $rightTmpRow = $matches.get(0);
+             |  $javaType tempVal = getRightTmpRangeValue();
+             |  while(!$matches.isEmpty() && ${leftLowerRangeKey.value} $upperCompop tempVal) {
+             |    $matches.dequeue();
+             |    $rightTmpRow = $matches.get(0);
+             |    tempVal = getRightTmpRangeValue();
+             |  }
+             |}
+           """.stripMargin, inlineToOuterClass = true)
+      }
+
+      val (leftLowAssignCode, rightLowAssignCode) = lowerRangeExpression.map(_ =>
+        (s"${leftLowerRangeKey.value} = ${leftLowerKeyVars(0).value};", s"${rightLowerRangeKey.value} = ${rightLowerKeyVars(0).value};")).
+        getOrElse(("", ""))
+      val (leftUpperAssignCode, rightUpperAssignCode) = lowerRangeExpression.map(_ =>
+        (s"${leftUpperRangeKey.value} = ${leftUpperKeyVars(0).value};", s"${rightUpperRangeKey.value} = ${rightUpperKeyVars(0).value};")).
+        getOrElse(("", ""))
+
+      ctx.addNewFunction("findNextInnerJoinRows",
+        s"""
+           |private boolean findNextInnerJoinRows(
+           |    scala.collection.Iterator leftIter,
+           |    scala.collection.Iterator rightIter) {
+           |  $leftRow = null;
+           |  int comp = 0;
+           |  while ($leftRow == null) {
+           |    if (!leftIter.hasNext()) return false;
+           |    $leftRow = (InternalRow) leftIter.next();
+           |    ${leftKeyVars.map(_.code).mkString("\n")}
+           |    if ($leftAnyNull) {
+           |      $leftRow = null;
+           |      continue;
+           |    }
+           |    ${leftLowerKeyVars.map(_.code).mkString("\n")}
+           |    ${leftUpperKeyVars.map(_.code).mkString("\n")}
+           |    $leftLowAssignCode
+           |    $leftUpperAssignCode
+           |    if (!$matches.isEmpty()) {
+           |      ${genComparison(ctx, leftKeyVars, matchedKeyVars)}
+           |      if (comp == 0) {
+           |        dequeueUntilLowerConditionHolds();
+           |      }
+           |      else {
+           |        $matches.clear();
+           |      }
+           |    }
+           |
+           |    do {
+           |      if ($rightRow == null) {
+           |        if (!rightIter.hasNext()) {
+           |          ${matchedKeyVars.map(_.code).mkString("\n")}
+           |          return !$matches.isEmpty();
+           |        }
+           |        $rightRow = (InternalRow) rightIter.next();
+           |        ${rightKeyTmpVars.map(_.code).mkString("\n")}
+           |        if ($rightAnyNull) {
+           |          $rightRow = null;
+           |          continue;
+           |        }
+           |        ${rightKeyVars.map(_.code).mkString("\n")}
+           |        ${rightLowerKeyVars.map(_.code).mkString("\n")}
+           |        ${rightUpperKeyVars.map(_.code).mkString("\n")}
+           |        $rightLowAssignCode
+           |        $rightUpperAssignCode
+           |      }
+           |      ${genComparison(ctx, leftKeyVars, rightKeyVars)}
+           |      if (comp > 0 $upperCompExp) {
+           |        $rightRow = null;
+           |      } else if (comp < 0 $lowerCompExp) {
+           |        if (!$matches.isEmpty()) {
+           |          ${matchedKeyVars.map(_.code).mkString("\n")}
+           |          return true;
+           |        }
+           |        $leftRow = null;
+           |      } else {
+           |        $matches.add((UnsafeRow) $rightRow);
+           |        $rightRow = null;
+           |      }
+           |    } while ($leftRow != null);
+           |  }
+           |  return false; // unreachable
+           |}
        """.stripMargin, inlineToOuterClass = true)
 
-    (leftRow, matches)
+      (leftRow, matches)
+    }
+    else {
+      // Create class member for next row from both sides.
+      // Inline mutable state since not many join operations in a task
+      val leftRow = ctx.addMutableState("InternalRow", "leftRow", forceInline = true)
+      val rightRow = ctx.addMutableState("InternalRow", "rightRow", forceInline = true)
+
+      // Create variables for join keys from both sides.
+      val leftKeyVars = createJoinKey(ctx, leftRow, leftKeys, left.output)
+      val leftAnyNull = leftKeyVars.map(_.isNull).mkString(" || ")
+      val rightKeyTmpVars = createJoinKey(ctx, rightRow, rightKeys, right.output)
+      val rightAnyNull = rightKeyTmpVars.map(_.isNull).mkString(" || ")
+      // Copy the right key as class members so they could be used in next function call.
+      val rightKeyVars = copyKeys(ctx, rightKeyTmpVars)
+
+      // A list to hold all matched rows from right side.
+      val clsName = classOf[ExternalAppendOnlyUnsafeRowArray].getName
+
+      val spillThreshold = getSpillThreshold
+      val inMemoryThreshold = getInMemoryThreshold
+
+      // Inline mutable state since not many join operations in a task
+      val matches = ctx.addMutableState(clsName, "matches",
+        v => s"$v = new $clsName($inMemoryThreshold, $spillThreshold);", forceInline = true)
+      // Copy the left keys as class members so they could be used in next function call.
+      val matchedKeyVars = copyKeys(ctx, leftKeyVars)
+
+      ctx.addNewFunction("findNextInnerJoinRows",
+        s"""
+           |private boolean findNextInnerJoinRows(
+           |    scala.collection.Iterator leftIter,
+           |    scala.collection.Iterator rightIter) {
+           |  $leftRow = null;
+           |  int comp = 0;
+           |  while ($leftRow == null) {
+           |    if (!leftIter.hasNext()) return false;
+           |    $leftRow = (InternalRow) leftIter.next();
+           |    ${leftKeyVars.map(_.code).mkString("\n")}
+           |    if ($leftAnyNull) {
+           |      $leftRow = null;
+           |      continue;
+           |    }
+           |    if (!$matches.isEmpty()) {
+           |      ${genComparison(ctx, leftKeyVars, matchedKeyVars)}
+           |      if (comp == 0) {
+           |        return true;
+           |      }
+           |      $matches.clear();
+           |    }
+           |
+           |    do {
+           |      if ($rightRow == null) {
+           |        if (!rightIter.hasNext()) {
+           |          ${matchedKeyVars.map(_.code).mkString("\n")}
+           |          return !$matches.isEmpty();
+           |        }
+           |        $rightRow = (InternalRow) rightIter.next();
+           |        ${rightKeyTmpVars.map(_.code).mkString("\n")}
+           |        if ($rightAnyNull) {
+           |          $rightRow = null;
+           |          continue;
+           |        }
+           |        ${rightKeyVars.map(_.code).mkString("\n")}
+           |      }
+           |      ${genComparison(ctx, leftKeyVars, rightKeyVars)}
+           |      if (comp > 0) {
+           |        $rightRow = null;
+           |      } else if (comp < 0) {
+           |        if (!$matches.isEmpty()) {
+           |          ${matchedKeyVars.map(_.code).mkString("\n")}
+           |          return true;
+           |        }
+           |        $leftRow = null;
+           |      } else {
+           |        $matches.add((UnsafeRow) $rightRow);
+           |        $rightRow = null;;
+           |      }
+           |    } while ($leftRow != null);
+           |  }
+           |  return false; // unreachable
+           |}
+         """.stripMargin, inlineToOuterClass = true)
+
+      (leftRow, matches)
+    }
   }
 
   /**
@@ -598,9 +793,10 @@ case class SortMergeJoinExec(
    */
   private def splitVarsByCondition(
       attributes: Seq[Attribute],
-      variables: Seq[ExprCode]): (String, String) = {
-    if (condition.isDefined) {
-      val condRefs = condition.get.references
+      variables: Seq[ExprCode],
+      cond: Option[Expression]): (String, String) = {
+    if (cond.isDefined) {
+      val condRefs = cond.get.references
       val (used, notUsed) = attributes.zip(variables).partition{ case (a, ev) =>
         condRefs.contains(a)
       }
@@ -633,8 +829,8 @@ case class SortMergeJoinExec(
     val (beforeLoop, condCheck) = if (condition.isDefined) {
       // Split the code of creating variables based on whether it's used by condition or not.
       val loaded = ctx.freshName("loaded")
-      val (leftBefore, leftAfter) = splitVarsByCondition(left.output, leftVars)
-      val (rightBefore, rightAfter) = splitVarsByCondition(right.output, rightVars)
+      val (leftBefore, leftAfter) = splitVarsByCondition(left.output, leftVars, condition)
+      val (rightBefore, rightAfter) = splitVarsByCondition(right.output, rightVars, condition)
       // Generate code for condition
       ctx.currentVars = leftVars ++ rightVars
       val cond = BindReferences.bindReference(condition.get, output).genCode(ctx)
@@ -922,6 +1118,7 @@ private[joins] class SortMergeJoinInnerRangeScanner(
     */
   private[this] var matchJoinKey: InternalRow = _
   /** Buffered rows from the buffered side of the join. This is empty if there are no matches. */
+
   private[this] val bufferedMatches =
     new InMemoryUnsafeRowQueue(inMemoryThreshold, spillThreshold)//ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
 

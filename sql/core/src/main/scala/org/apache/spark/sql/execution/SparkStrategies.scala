@@ -279,6 +279,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, rangeConds, condition, left, right)
         if RowOrdering.isOrderable(leftKeys) =>
 //        val cond = (rangeConds ++ condition.map(x => Seq(x)).getOrElse(Nil)).reduceOption(And)
+        logDebug(s"SMJExecJoinType: $joinType")
+        //TODO check if left and right are reading from bucketed tables and those are bucketed by join key
+        // and sorted by keys in range conditions
         joins.SortMergeJoinExec(
           leftKeys, rightKeys, joinType, rangeConds, condition, planLater(left), planLater(right)) :: Nil
 
