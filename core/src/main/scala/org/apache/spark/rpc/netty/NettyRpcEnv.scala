@@ -652,7 +652,12 @@ private[netty] class NettyRpcHandler(
       client: TransportClient,
       message: ByteBuffer): Unit = {
     val messageToDispatch = internalReceive(client, message)
-    dispatcher.postOneWayMessage(messageToDispatch)
+    try {
+      dispatcher.postOneWayMessage(messageToDispatch)
+    } catch {
+      case e: RpcEnvStoppedException => logWarning(e.getMessage)
+      case e: RpcEndpointStoppedException => logWarning(e.getMessage)
+    }
   }
 
   private def internalReceive(client: TransportClient, message: ByteBuffer): RequestMessage = {
