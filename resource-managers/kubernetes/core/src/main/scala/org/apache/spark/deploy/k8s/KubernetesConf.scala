@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.Pod
+import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
@@ -70,12 +70,15 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
 
   def imagePullPolicy(): String = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
 
-  def imagePullSecrets(): Seq[String] = {
+  def imagePullSecrets(): Seq[LocalObjectReference] = {
     sparkConf
       .get(IMAGE_PULL_SECRETS)
       .map(_.split(","))
       .getOrElse(Array.empty[String])
       .map(_.trim)
+      .map { secret =>
+        new LocalObjectReferenceBuilder().withName(secret).build()
+      }
   }
 
   def nodeSelector(): Map[String, String] =

@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.PodBuilder
+import io.fabric8.kubernetes.api.model.{LocalObjectReferenceBuilder, PodBuilder}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
@@ -141,7 +141,10 @@ class KubernetesConfSuite extends SparkFunSuite {
       EXECUTOR_ID,
       APP_ID,
       DRIVER_POD)
-    assert(conf.imagePullSecrets() === Seq("my-secret-1", "my-secret-2"))
+    assert(conf.imagePullSecrets() ===
+      Seq(
+        new LocalObjectReferenceBuilder().withName("my-secret-1").build(),
+        new LocalObjectReferenceBuilder().withName("my-secret-2").build()))
   }
 
   test("Set executor labels, annotations, and secrets") {

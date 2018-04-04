@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, ContainerPortBuilder, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, LocalObjectReferenceBuilder, PodBuilder, QuantityBuilder}
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, ContainerPortBuilder, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, PodBuilder, QuantityBuilder}
 
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, SparkPod}
@@ -167,11 +167,7 @@ private[spark] class BasicExecutorFeatureStep(
         .withHostname(hostname)
         .withRestartPolicy("Never")
         .withNodeSelector(kubernetesConf.nodeSelector().asJava)
-        .addAllToImagePullSecrets(kubernetesConf.imagePullSecrets().map { secret =>
-          new LocalObjectReferenceBuilder()
-            .withName(secret)
-            .build()
-        }.asJava)
+        .addToImagePullSecrets(kubernetesConf.imagePullSecrets(): _*)
         .endSpec()
       .build()
     SparkPod(executorPod, containerWithLimitCores)
