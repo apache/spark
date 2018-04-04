@@ -133,14 +133,15 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
         val emptyUnsafeRow = new UnsafeRow(0)
         reader.map(_ => emptyUnsafeRow)
       } else {
-        val unsafeRow = new UnsafeRow(1)
+        val unsafeRow = new UnsafeRow(2)
         val bufferHolder = new BufferHolder(unsafeRow)
-        val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
+        val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 2)
 
         reader.map { line =>
           // Writes to an UnsafeRow directly
           bufferHolder.reset()
           unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
+          unsafeRowWriter.write(1, wholeTextMode)
           unsafeRow.setTotalSize(bufferHolder.totalSize())
           unsafeRow
         }
@@ -162,7 +163,7 @@ class TextOutputWriter(
       val utf8string = row.getUTF8String(0)
       utf8string.writeTo(writer)
     }
-    writer.write('\n')
+    if (row.numFields == 1 || !row.getBoolean(1)) writer.write('\n')
   }
 
   override def close(): Unit = {
