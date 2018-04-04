@@ -1028,17 +1028,6 @@ object SparkSession {
    */
   def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
 
-  /**
-   * Returns the currently active SparkSession, otherwise the default one. If there is no default
-   * SparkSession, throws an exception.
-   *
-   * @since 2.4.0
-   */
-  def active: SparkSession = {
-    getActiveSession.getOrElse(getDefaultSession.getOrElse(
-      throw new IllegalStateException("No active or default Spark session found")))
-  }
-
   ////////////////////////////////////////////////////////////////////////////////////////
   // Private methods from now on
   ////////////////////////////////////////////////////////////////////////////////////////
