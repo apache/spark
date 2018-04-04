@@ -905,7 +905,7 @@ trait Params extends Identifiable with Serializable {
   }
 }
 
-object Params {
+private[ml] object Params {
   /**
    * Sets a default param value for a `Params`.
    */

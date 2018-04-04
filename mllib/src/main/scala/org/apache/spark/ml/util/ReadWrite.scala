@@ -416,7 +416,7 @@ private[ml] object DefaultParamsReader {
 
       // For metadata file prior to Spark 2.4, there is no default section.
       val (major, minor) = VersionUtils.majorMinorVersion(sparkVersion)
-      if (major >= 2 && minor >= 4) {
+      if (major > 2 || (major == 2 && minor >= 4)) {
         setParams(instance, skipParams, isDefault = true)
       }
     }

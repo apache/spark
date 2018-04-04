@@ -217,16 +217,27 @@ class DefaultReadWriteSuite extends SparkFunSuite with MLlibTestSparkContext
     assert(myParams.isSet(myParams.intParamWithDefault))
   }
 
-  test("Should raise error when read metadata without default field") {
-    val metadata = """{"class":"org.apache.spark.ml.util.MyParams",
+  test("Should raise error when read metadata without default field after Spark 2.4") {
+    val myParams = new MyParams("my_params")
+
+    val metadata1 = """{"class":"org.apache.spark.ml.util.MyParams",
       |"timestamp":1518852502761,"sparkVersion":"2.4.0",
       |"uid":"my_params",
       |"paramMap":{"intParamWithDefault":0}}""".stripMargin
-    val parsedMetadata = DefaultParamsReader.parseMetadata(metadata)
-    val myParams = new MyParams("my_params")
-    val err = intercept[IllegalArgumentException] {
-      parsedMetadata.getAndSetParams(myParams)
+    val parsedMetadata1 = DefaultParamsReader.parseMetadata(metadata1)
+    val err1 = intercept[IllegalArgumentException] {
+      parsedMetadata1.getAndSetParams(myParams)
     }
-    assert(err.getMessage().contains("Cannot recognize JSON metadata"))
+    assert(err1.getMessage().contains("Cannot recognize JSON metadata"))
+
+    val metadata2 = """{"class":"org.apache.spark.ml.util.MyParams",
+      |"timestamp":1518852502761,"sparkVersion":"3.0.0",
+      |"uid":"my_params",
+      |"paramMap":{"intParamWithDefault":0}}""".stripMargin
+    val parsedMetadata2 = DefaultParamsReader.parseMetadata(metadata2)
+    val err2 = intercept[IllegalArgumentException] {
+      parsedMetadata2.getAndSetParams(myParams)
+    }
+    assert(err2.getMessage().contains("Cannot recognize JSON metadata"))
   }
 }
