@@ -609,8 +609,8 @@ class RFormulaSuite extends MLTest with DefaultReadWriteTest {
       formula.fit(dataset).transform(dataset).select("features", "label")
     }
 
-    intercept[SparkException](get_output("error").collect())
-      .getMessage contains "Encountered null while assembling a row"
+    assert(intercept[SparkException](get_output("error").collect())
+      .getMessage.contains("Encountered null while assembling a row"))
     assert(get_output("skip").count() == 4)
     assert(get_output("keep").count() == 6)
   }
