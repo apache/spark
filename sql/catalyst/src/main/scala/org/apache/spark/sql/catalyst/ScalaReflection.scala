@@ -260,6 +260,14 @@ object ScalaReflection extends ScalaReflection {
           getPath :: Nil,
           returnNullable = false)
 
+      case t if t <:< localTypeOf[java.lang.Enum[_]] =>
+        StaticInvoke(
+          getClassFromType(t),
+          ObjectType(getClassFromType(t)),
+          "valueOf",
+          Invoke(getPath, "toString", ObjectType(classOf[String]), returnNullable = false) :: Nil,
+          returnNullable = false)
+
       case t if t <:< localTypeOf[java.lang.String] =>
         Invoke(getPath, "toString", ObjectType(classOf[String]), returnNullable = false)
 
@@ -582,6 +590,14 @@ object ScalaReflection extends ScalaReflection {
           inputObject :: Nil,
           returnNullable = false)
 
+      case t if t <:< localTypeOf[java.lang.Enum[_]] =>
+        StaticInvoke(
+          classOf[UTF8String],
+          StringType,
+          "fromString",
+          Invoke(inputObject, "name", ObjectType(classOf[String]), returnNullable = false) :: Nil,
+          returnNullable = false)
+
       case t if t <:< localTypeOf[java.lang.Integer] =>
         Invoke(inputObject, "intValue", IntegerType)
       case t if t <:< localTypeOf[java.lang.Long] =>
@@ -762,6 +778,7 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< localTypeOf[java.lang.Short] => Schema(ShortType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Byte] => Schema(ByteType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Boolean] => Schema(BooleanType, nullable = true)
+      case t if t <:< localTypeOf[java.lang.Enum[_]] => Schema(StringType, nullable = true)
       case t if t <:< definitions.IntTpe => Schema(IntegerType, nullable = false)
       case t if t <:< definitions.LongTpe => Schema(LongType, nullable = false)
       case t if t <:< definitions.DoubleTpe => Schema(DoubleType, nullable = false)

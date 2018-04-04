@@ -108,6 +108,10 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
   /** @since 2.0.0 */
   implicit def newBoxedBooleanEncoder: Encoder[java.lang.Boolean] = Encoders.BOOLEAN
 
+  /** @since 2.4.0 */
+  implicit def newJavaEnumEncoder[A <: java.lang.Enum[_] : TypeTag]: Encoder[T] =
+    ExpressionEncoder()
+
   // Seqs
 
   /**

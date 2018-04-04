@@ -1453,6 +1453,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val group2 = cached.groupBy("x").agg(min(col("z")) as "value")
     checkAnswer(group1.union(group2), Row(4, 5) :: Row(1, 2) :: Row(4, 6) :: Row(1, 3) :: Nil)
   }
+
+  test("SPARK-23862: Spark ExpressionEncoder should support java enum type in scala") {
+    // it is not possible to define a java enum in scala directly, since the defined enum
+    // class in scala will miss method like valueOf which is added by java compiler
+    // we use the Spark SQL public java enum API(SaveMode.java) in this test
+    val saveModeSeq = Seq(SaveMode.Append, SaveMode.Overwrite, SaveMode.ErrorIfExists,
+      SaveMode.Ignore)
+    assert(saveModeSeq.toDS.collect.toSeq sameElements saveModeSeq)
+
+    val saveModeCaseSeq = Seq(SaveModeCase(SaveMode.Append), SaveModeCase(SaveMode.Overwrite),
+      SaveModeCase(SaveMode.ErrorIfExists), SaveModeCase(SaveMode.Ignore))
+    assert(saveModeCaseSeq.toDS.collect.toSeq sameElements saveModeCaseSeq)
+  }
 }
 
 case class TestDataUnion(x: Int, y: Int, z: Int)
@@ -1546,3 +1559,6 @@ case class CircularReferenceClassD(map: Map[String, CircularReferenceClassE])
 case class CircularReferenceClassE(id: String, list: List[CircularReferenceClassD])
 
 case class SpecialCharClass(`field.1`: String, `field 2`: String)
+
+/** Used to test java enum in scala case class */
+case class SaveModeCase(sm: SaveMode)
