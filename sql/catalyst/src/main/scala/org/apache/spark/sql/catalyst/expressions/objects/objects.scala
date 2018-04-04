@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.objects
 
-import java.lang.reflect.Modifier
+import java.lang.reflect.{Method, Modifier}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.Builder
@@ -28,7 +28,7 @@ import scala.util.Try
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -103,6 +103,38 @@ trait InvokeLike extends Expression with NonSQLExpression {
     val argCode = ctx.splitExpressionsWithCurrentInputs(argCodes)
 
     (argCode, argValues.mkString(", "), resultIsNull)
+  }
+
+  /**
+   * Evaluate each argument with a given row, invoke a method with a given object and arguments,
+   * and cast a return value if the return type can be mapped to a Java Boxed type
+   *
+   * @param obj the object for the method to be called. If null, perform s static method call
+   * @param method the method object to be called
+   * @param arguments the arguments used for the method call
+   * @param input the row used for evaluating arguments
+   * @param dataType the data type of the return object
+   * @return the return object of a method call
+   */
+  def invoke(
+      obj: Any,
+      method: Method,
+      arguments: Seq[Expression],
+      input: InternalRow,
+      dataType: DataType): Any = {
+    val args = arguments.map(e => e.eval(input).asInstanceOf[Object])
+    if (needNullCheck && args.exists(_ == null)) {
+      // return null if one of arguments is null
+      null
+    } else {
+      val ret = method.invoke(obj, args: _*)
+      val boxedClass = ScalaReflection.typeBoxedJavaMapping.get(dataType)
+      if (boxedClass.isDefined) {
+        boxedClass.get.cast(ret)
+      } else {
+        ret
+      }
+    }
   }
 }
 
@@ -264,11 +296,10 @@ case class Invoke(
     propagateNull: Boolean = true,
     returnNullable : Boolean = true) extends InvokeLike {
 
+  lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
+
   override def nullable: Boolean = targetObject.nullable || needNullCheck || returnNullable
   override def children: Seq[Expression] = targetObject +: arguments
-
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
   private lazy val encodedFunctionName = TermName(functionName).encodedName.toString
 
@@ -281,6 +312,21 @@ case class Invoke(
         m
       }
     case _ => None
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val obj = targetObject.eval(input)
+    if (obj == null) {
+      // return null if obj is null
+      null
+    } else {
+      val invokeMethod = if (method.isDefined) {
+        method.get
+      } else {
+        obj.getClass.getDeclaredMethod(functionName, argClasses: _*)
+      }
+      invoke(obj, invokeMethod, arguments, input, dataType)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
