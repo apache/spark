@@ -92,7 +92,7 @@ above) and "drop". Further strategies may be supported in future.
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-In the following example, we load rating data from the
+In the following example, we load ratings data from the
 [MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
 consisting of a user, a movie, a rating and a timestamp.
 We then train an ALS model which assumes, by default, that the ratings are
@@ -123,7 +123,7 @@ val als = new ALS()
 
 <div data-lang="java" markdown="1">
 
-In the following example, we load rating data from the
+In the following example, we load ratings data from the
 [MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
 consisting of a user, a movie, a rating and a timestamp.
 We then train an ALS model which assumes, by default, that the ratings are
@@ -154,7 +154,7 @@ ALS als = new ALS()
 
 <div data-lang="python" markdown="1">
 
-In the following example, we load rating data from the
+In the following example, we load ratings data from the
 [MovieLens dataset](http://grouplens.org/datasets/movielens/), each row
 consisting of a user, a movie, a rating and a timestamp.
 We then train an ALS model which assumes, by default, that the ratings are
