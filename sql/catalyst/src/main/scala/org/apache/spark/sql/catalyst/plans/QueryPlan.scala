@@ -103,7 +103,9 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     var changed = false
 
     @inline def transformExpression(e: Expression): Expression = {
-      val newE = CurrentOrigin.withOrigin(e.origin) { f(e) }
+      val newE = CurrentOrigin.withOrigin(e.origin) {
+        f(e)
+      }
       if (newE.fastEquals(e)) {
         e
       } else {
