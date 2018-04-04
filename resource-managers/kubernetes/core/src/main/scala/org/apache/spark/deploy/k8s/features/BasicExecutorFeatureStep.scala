@@ -65,7 +65,7 @@ private[spark] class BasicExecutorFeatureStep(
     } else {
       executorCores.toString
     }
-  private val executorLimitCores = kubernetesConf.sparkConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
+  private val executorLimitCores = kubernetesConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
   override def configurePod(pod: SparkPod): SparkPod = {
     val name = s"$executorPodNamePrefix-exec-${kubernetesConf.roleSpecificConf.executorId}"
