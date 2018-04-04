@@ -202,12 +202,11 @@ object MultiLineJsonDataSource extends JsonDataSource {
       file: PartitionedFile,
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
-    def createInputStream() = {
-      CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath)))
-    }
     def partitionedFileString(ignored: Any): UTF8String = {
-      Utils.tryWithResource(createInputStream()) { is =>
-        UTF8String.fromBytes(ByteStreams.toByteArray(is))
+      Utils.tryWithResource {
+        CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath)))
+      } { inputStream =>
+        UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
       }
     }
     val charset = parser.options.encoding
@@ -222,6 +221,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       schema,
       parser.options.columnNameOfCorruptRecord)
 
-    safeParser.parse(createInputStream())
+    safeParser.parse(
+      CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))))
   }
 }

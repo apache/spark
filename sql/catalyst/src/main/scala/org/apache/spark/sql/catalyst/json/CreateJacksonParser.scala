@@ -40,34 +40,26 @@ private[sql] object CreateJacksonParser extends Serializable {
     jsonFactory.createParser(new InputStreamReader(bain, "UTF-8"))
   }
 
-  def text(jsonFactory: JsonFactory, record: Text, encoding: Option[String] = None): JsonParser = {
+  def text(jsonFactory: JsonFactory, record: Text, encoding: Option[String]): JsonParser = {
     encoding match {
       case Some(enc) =>
         val bain = new ByteArrayInputStream(record.getBytes, 0, record.getLength)
         jsonFactory.createParser(new InputStreamReader(bain, enc))
-      case _ =>
+      case None =>
         jsonFactory.createParser(record.getBytes, 0, record.getLength)
     }
   }
 
-  def inputStream(
-      jsonFactory: JsonFactory,
-      is: InputStream,
-      encoding: Option[String] = None): JsonParser = {
+  def inputStream(jsonFactory: JsonFactory, is: InputStream,
+      encoding: Option[String]): JsonParser = {
     encoding match {
-      case Some(enc) =>
-        jsonFactory.createParser(new InputStreamReader(is, enc))
-      case _ =>
-        jsonFactory.createParser(is)
+      case Some(enc) => jsonFactory.createParser(new InputStreamReader(is, enc))
+      case None => jsonFactory.createParser(is)
     }
   }
 
-  def internalRow(
-    jsonFactory: JsonFactory,
-    row: InternalRow,
-    field: Int,
-    encoding: Option[String] = None
-  ): JsonParser = {
+  def internalRow(jsonFactory: JsonFactory, row: InternalRow, field: Int,
+      encoding: Option[String]): JsonParser = {
     val is = new ByteArrayInputStream(row.getBinary(field))
 
     inputStream(jsonFactory, is, encoding)

@@ -2206,8 +2206,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(errMsg.contains("Malformed records are detected in record parsing"))
   }
 
-  def checkCharset(
-    expectedCharset: String,
+  def checkEncoding(
+    expectedEncoding: String,
     pathToJsonFiles: String,
     expectedContent: String
   ): Unit = {
@@ -2215,15 +2215,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       .listFiles()
       .filter(_.isFile)
       .filter(_.getName.endsWith("json"))
-    val jsonContent = jsonFiles.map { file =>
-      scala.io.Source.fromFile(file, expectedCharset).mkString
-    }
-    val cleanedContent = jsonContent
-      .mkString
-      .trim
-      .replaceAll(" ", "")
+    val actualContent = jsonFiles.map { file =>
+      new String(Files.readAllBytes(file.toPath), expectedEncoding)
+    }.mkString.trim.replaceAll(" ", "")
 
-    assert(cleanedContent == expectedContent)
+    assert(actualContent == expectedContent)
   }
 
   test("SPARK-23723: save json in UTF-32BE") {
@@ -2235,8 +2231,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .format("json").mode("overwrite")
         .save(path.getCanonicalPath)
 
-      checkCharset(
-        expectedCharset = encoding,
+      checkEncoding(
+        expectedEncoding = encoding,
         pathToJsonFiles = path.getCanonicalPath,
         expectedContent = """{"_1":"Dog","_2":42}"""
       )
@@ -2250,8 +2246,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .format("json").mode("overwrite")
         .save(path.getCanonicalPath)
 
-      checkCharset(
-        expectedCharset = "UTF-8",
+      checkEncoding(
+        expectedEncoding = "UTF-8",
         pathToJsonFiles = path.getCanonicalPath,
         expectedContent = """{"_1":"Dog","_2":42}"""
       )
@@ -2283,12 +2279,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .options(options)
         .format("json").mode("overwrite")
         .save(path.getCanonicalPath)
-      val savedDf = spark
+      val readBack = spark
         .read
         .options(options)
         .json(path.getCanonicalPath)
 
-      checkAnswer(savedDf.toDF(), ds.toDF())
+      checkAnswer(readBack.toDF(), ds.toDF())
     }
   }
 
@@ -2300,7 +2296,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     runId: Int
   ): Unit = {
     test(s"SPARK-23724: checks reading json in ${encoding} #${runId}") {
-      val delimInBytes = {
+      val lineSepInBytes = {
         if (lineSep.startsWith("x")) {
           lineSep.replaceAll("[^0-9A-Fa-f]", "")
             .sliding(2, 2).toArray.map(Integer.parseInt(_, 16).toByte)
@@ -2308,15 +2304,12 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           lineSep.getBytes(encoding)
         }
       }
-      case class Rec(f1: String, f2: Int) {
-        def json = s"""{"f1":"${f1}", "f2":$f2}"""
-        def bytes = json.getBytes(encoding)
-        def row = Row(f1, f2)
-      }
       val schema = new StructType().add("f1", StringType).add("f2", IntegerType)
       withTempPath { path =>
-        val records = List(Rec("a", 1), Rec("b", 2))
-        val data = records.map(_.bytes).reduce((a1, a2) => a1 ++ delimInBytes ++ a2)
+        val records = List(("a", 1), ("b", 2))
+        val data = records
+          .map(rec => s"""{"f1":"${rec._1}", "f2":${rec._2}}""".getBytes(encoding))
+          .reduce((a1, a2) => a1 ++ lineSepInBytes ++ a2)
         val os = new FileOutputStream(path)
         os.write(data)
         os.close()
@@ -2325,11 +2318,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         } else {
           spark.read.schema(schema)
         }
-        val savedDf = reader
+        val readBack = reader
           .option(encodingOption, encoding)
           .option("lineSep", lineSep)
           .json(path.getCanonicalPath)
-        checkAnswer(savedDf, records.map(_.row))
+        checkAnswer(readBack, records.map(rec => Row(rec._1, rec._2)))
       }
     }
   }
