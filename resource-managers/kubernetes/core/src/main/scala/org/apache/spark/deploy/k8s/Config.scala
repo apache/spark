@@ -54,9 +54,10 @@ private[spark] object Config extends Logging {
       .checkValues(Set("Always", "Never", "IfNotPresent"))
       .createWithDefault("IfNotPresent")
 
-  val IMAGE_PULL_SECRET =
-    ConfigBuilder("spark.kubernetes.container.image.pullSecret")
-      .doc("Specifies the Kubernetes secret used to access private image registry.")
+  val IMAGE_PULL_SECRETS =
+    ConfigBuilder("spark.kubernetes.container.image.pullSecrets")
+      .doc("Comma separated list of the Kubernetes secrets used " +
+        "to access private image registries.")
       .stringConf
       .createOptional
 

@@ -68,7 +68,7 @@ private[spark] class ExecutorPodFactory(
     .get(EXECUTOR_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException("Must specify the executor container image"))
   private val imagePullPolicy = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
-  private val imagePullSecret = sparkConf.get(IMAGE_PULL_SECRET)
+  private val imagePullSecrets = sparkConf.get(IMAGE_PULL_SECRETS)
   private val blockManagerPort = sparkConf
     .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
 
@@ -99,7 +99,7 @@ private[spark] class ExecutorPodFactory(
       nodeToLocalTaskCount: Map[String, Int]): Pod = {
     val name = s"$executorPodNamePrefix-exec-$executorId"
 
-    val imagePullSecrets = imagePullSecret.map(new LocalObjectReference(_)).toList
+    val parsedImagePullSecrets = KubernetesUtils.parseImagePullSecrets(imagePullSecrets)
 
     // hostname must be no longer than 63 characters, so take the last 63 characters of the pod
     // name as the hostname.  This preserves uniqueness since the end of name contains
@@ -196,7 +196,7 @@ private[spark] class ExecutorPodFactory(
         .withHostname(hostname)
         .withRestartPolicy("Never")
         .withNodeSelector(nodeSelector.asJava)
-        .withImagePullSecrets(imagePullSecrets.asJava)
+        .withImagePullSecrets(parsedImagePullSecrets.asJava)
         .endSpec()
       .build()
 

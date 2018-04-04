@@ -51,7 +51,7 @@ private[spark] class BasicDriverConfigurationStep(
     .get(DRIVER_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException("Must specify the driver container image"))
 
-  private val imagePullSecret = sparkConf.get(IMAGE_PULL_SECRET)
+  private val imagePullSecrets = sparkConf.get(IMAGE_PULL_SECRETS)
 
   // CPU settings
   private val driverCpuCores = sparkConf.getOption("spark.driver.cores").getOrElse("1")
@@ -134,7 +134,7 @@ private[spark] class BasicDriverConfigurationStep(
       case _ => driverContainerWithoutArgs.addToArgs(appArgs: _*).build()
     }
 
-    val imagePullSecrets = imagePullSecret.map(new LocalObjectReference(_)).toList
+    val parsedImagePullSecrets = KubernetesUtils.parseImagePullSecrets(imagePullSecrets)
 
     val baseDriverPod = new PodBuilder(driverSpec.driverPod)
       .editOrNewMetadata()
@@ -145,7 +145,7 @@ private[spark] class BasicDriverConfigurationStep(
       .withNewSpec()
         .withRestartPolicy("Never")
         .withNodeSelector(nodeSelector.asJava)
-        .withImagePullSecrets(imagePullSecrets.asJava)
+        .withImagePullSecrets(parsedImagePullSecrets.asJava)
         .endSpec()
       .build()
 
