@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.{DataType, LongType}
       within each partition. The assumption is that the data frame has less than 1 billion
       partitions, and each partition has less than 8 billion records.
   """)
-case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterministic {
+case class MonotonicallyIncreasingID() extends LeafExpression with Stateful {
 
   /**
    * Record ID within each partition. By being transient, count's value is reset to 0 every time
@@ -79,4 +79,6 @@ case class MonotonicallyIncreasingID() extends LeafExpression with Nondeterminis
   override def prettyName: String = "monotonically_increasing_id"
 
   override def sql: String = s"$prettyName()"
+
+  override def freshCopy(): MonotonicallyIncreasingID = MonotonicallyIncreasingID()
 }

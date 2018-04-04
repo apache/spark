@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions.objects
 
 import java.lang.reflect.Modifier
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable.Builder
 import scala.language.existentials
 import scala.reflect.ClassTag
@@ -102,6 +103,61 @@ trait InvokeLike extends Expression with NonSQLExpression {
     val argCode = ctx.splitExpressionsWithCurrentInputs(argCodes)
 
     (argCode, argValues.mkString(", "), resultIsNull)
+  }
+}
+
+/**
+ * Common trait for [[DecodeUsingSerializer]] and [[EncodeUsingSerializer]]
+ */
+trait SerializerSupport {
+  /**
+   * If true, Kryo serialization is used, otherwise the Java one is used
+   */
+  val kryo: Boolean
+
+  /**
+   * The serializer instance to be used for serialization/deserialization in interpreted execution
+   */
+  lazy val serializerInstance: SerializerInstance = SerializerSupport.newSerializer(kryo)
+
+  /**
+   * Adds a immutable state to the generated class containing a reference to the serializer.
+   * @return a string containing the name of the variable referencing the serializer
+   */
+  def addImmutableSerializerIfNeeded(ctx: CodegenContext): String = {
+    val (serializerInstance, serializerInstanceClass) = {
+      if (kryo) {
+        ("kryoSerializer",
+          classOf[KryoSerializerInstance].getName)
+      } else {
+        ("javaSerializer",
+          classOf[JavaSerializerInstance].getName)
+      }
+    }
+    val newSerializerMethod = s"${classOf[SerializerSupport].getName}$$.MODULE$$.newSerializer"
+    // Code to initialize the serializer
+    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializerInstance, v =>
+      s"""
+         |$v = ($serializerInstanceClass) $newSerializerMethod($kryo);
+       """.stripMargin)
+    serializerInstance
+  }
+}
+
+object SerializerSupport {
+  /**
+   * It creates a new `SerializerInstance` which is either a `KryoSerializerInstance` (is
+   * `useKryo` is set to `true`) or a `JavaSerializerInstance`.
+   */
+  def newSerializer(useKryo: Boolean): SerializerInstance = {
+    // try conf from env, otherwise create a new one
+    val conf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
+    val s = if (useKryo) {
+      new KryoSerializer(conf)
+    } else {
+      new JavaSerializer(conf)
+    }
+    s.newInstance()
   }
 }
 
@@ -382,8 +438,14 @@ case class UnwrapOption(
 
   override def inputTypes: Seq[AbstractDataType] = ObjectType :: Nil
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  override def eval(input: InternalRow): Any = {
+    val inputObject = child.eval(input)
+    if (inputObject == null) {
+      null
+    } else {
+      inputObject.asInstanceOf[Option[_]].orNull
+    }
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
@@ -416,8 +478,7 @@ case class WrapOption(child: Expression, optType: DataType)
 
   override def inputTypes: Seq[AbstractDataType] = optType :: Nil
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  override def eval(input: InternalRow): Any = Option(child.eval(input))
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val inputObject = child.genCode(ctx)
@@ -441,8 +502,14 @@ case class LambdaVariable(
     value: String,
     isNull: String,
     dataType: DataType,
-    nullable: Boolean = true) extends LeafExpression
-  with Unevaluable with NonSQLExpression {
+    nullable: Boolean = true) extends LeafExpression with NonSQLExpression {
+
+  // Interpreted execution of `LambdaVariable` always get the 0-index element from input row.
+  override def eval(input: InternalRow): Any = {
+    assert(input.numFields == 1,
+      "The input row of interpreted LambdaVariable should have only 1 field.")
+    input.get(0, dataType)
+  }
 
   override def genCode(ctx: CodegenContext): ExprCode = {
     val isNullValue = if (nullable) {
@@ -453,6 +520,10 @@ case class LambdaVariable(
     ExprCode(code = "", value = VariableValue(value, CodeGenerator.javaType(dataType)),
       isNull = isNullValue)
   }
+
+  // This won't be called as `genCode` is overrided, just overriding it to make
+  // `LambdaVariable` non-abstract.
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev
 }
 
 /**
@@ -545,8 +616,92 @@ case class MapObjects private(
 
   override def children: Seq[Expression] = lambdaFunction :: inputData :: Nil
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  // The data with UserDefinedType are actually stored with the data type of its sqlType.
+  // When we want to apply MapObjects on it, we have to use it.
+  lazy private val inputDataType = inputData.dataType match {
+    case u: UserDefinedType[_] => u.sqlType
+    case _ => inputData.dataType
+  }
+
+  private def executeFuncOnCollection(inputCollection: Seq[_]): Iterator[_] = {
+    val row = new GenericInternalRow(1)
+    inputCollection.toIterator.map { element =>
+      row.update(0, element)
+      lambdaFunction.eval(row)
+    }
+  }
+
+  private lazy val convertToSeq: Any => Seq[_] = inputDataType match {
+    case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
+      _.asInstanceOf[Seq[_]]
+    case ObjectType(cls) if cls.isArray =>
+      _.asInstanceOf[Array[_]].toSeq
+    case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
+      _.asInstanceOf[java.util.List[_]].asScala
+    case ObjectType(cls) if cls == classOf[Object] =>
+      (inputCollection) => {
+        if (inputCollection.getClass.isArray) {
+          inputCollection.asInstanceOf[Array[_]].toSeq
+        } else {
+          inputCollection.asInstanceOf[Seq[_]]
+        }
+      }
+    case ArrayType(et, _) =>
+      _.asInstanceOf[ArrayData].array
+  }
+
+  private lazy val mapElements: Seq[_] => Any = customCollectionCls match {
+    case Some(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
+      // Scala sequence
+      executeFuncOnCollection(_).toSeq
+    case Some(cls) if classOf[scala.collection.Set[_]].isAssignableFrom(cls) =>
+      // Scala set
+      executeFuncOnCollection(_).toSet
+    case Some(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
+      // Java list
+      if (cls == classOf[java.util.List[_]] || cls == classOf[java.util.AbstractList[_]] ||
+          cls == classOf[java.util.AbstractSequentialList[_]]) {
+        // Specifying non concrete implementations of `java.util.List`
+        executeFuncOnCollection(_).toSeq.asJava
+      } else {
+        val constructors = cls.getConstructors()
+        val intParamConstructor = constructors.find { constructor =>
+          constructor.getParameterCount == 1 && constructor.getParameterTypes()(0) == classOf[Int]
+        }
+        val noParamConstructor = constructors.find { constructor =>
+          constructor.getParameterCount == 0
+        }
+
+        val constructor = intParamConstructor.map { intConstructor =>
+          (len: Int) => intConstructor.newInstance(len.asInstanceOf[Object])
+        }.getOrElse {
+          (_: Int) => noParamConstructor.get.newInstance()
+        }
+
+        // Specifying concrete implementations of `java.util.List`
+        (inputs) => {
+          val results = executeFuncOnCollection(inputs)
+          val builder = constructor(inputs.length).asInstanceOf[java.util.List[Any]]
+          results.foreach(builder.add(_))
+          builder
+        }
+      }
+    case None =>
+      // array
+      x => new GenericArrayData(executeFuncOnCollection(x).toArray)
+    case Some(cls) =>
+      throw new RuntimeException(s"class `${cls.getName}` is not supported by `MapObjects` as " +
+        "resulting collection.")
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val inputCollection = inputData.eval(input)
+
+    if (inputCollection == null) {
+      return null
+    }
+    mapElements(convertToSeq(inputCollection))
+  }
 
   override def dataType: DataType =
     customCollectionCls.map(ObjectType.apply).getOrElse(
@@ -591,13 +746,6 @@ case class MapObjects private(
           }
          """
       case _ => ""
-    }
-
-    // The data with PythonUserDefinedType are actually stored with the data type of its sqlType.
-    // When we want to apply MapObjects on it, we have to use it.
-    val inputDataType = inputData.dataType match {
-      case p: PythonUserDefinedType => p.sqlType
-      case _ => inputData.dataType
     }
 
     // `MapObjects` generates a while loop to traverse the elements of the input collection. We
@@ -1112,8 +1260,10 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
 
   override def nullable: Boolean = false
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  override def eval(input: InternalRow): Any = {
+    val values = children.map(_.eval(input)).toArray
+    new GenericRowWithSchema(values, schema)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericRowWithSchema].getName
@@ -1153,36 +1303,14 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
  * @param kryo if true, use Kryo. Otherwise, use Java.
  */
 case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
-  extends UnaryExpression with NonSQLExpression {
+  extends UnaryExpression with NonSQLExpression with SerializerSupport {
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  override def nullSafeEval(input: Any): Any = {
+    serializerInstance.serialize(input).array()
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // Code to initialize the serializer.
-    val (serializer, serializerClass, serializerInstanceClass) = {
-      if (kryo) {
-        ("kryoSerializer",
-          classOf[KryoSerializer].getName,
-          classOf[KryoSerializerInstance].getName)
-      } else {
-        ("javaSerializer",
-          classOf[JavaSerializer].getName,
-          classOf[JavaSerializerInstance].getName)
-      }
-    }
-    // try conf from env, otherwise create a new one
-    val env = s"${classOf[SparkEnv].getName}.get()"
-    val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializer, v =>
-      s"""
-         |if ($env == null) {
-         |  $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-         |} else {
-         |  $v = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
-         |}
-       """.stripMargin)
-
+    val serializer = addImmutableSerializerIfNeeded(ctx)
     // Code to serialize.
     val input = child.genCode(ctx)
     val javaType = CodeGenerator.javaType(dataType)
@@ -1206,33 +1334,15 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
  * @param kryo if true, use Kryo. Otherwise, use Java.
  */
 case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: Boolean)
-  extends UnaryExpression with NonSQLExpression {
+  extends UnaryExpression with NonSQLExpression with SerializerSupport {
+
+  override def nullSafeEval(input: Any): Any = {
+    val inputBytes = java.nio.ByteBuffer.wrap(input.asInstanceOf[Array[Byte]])
+    serializerInstance.deserialize(inputBytes)
+  }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    // Code to initialize the serializer.
-    val (serializer, serializerClass, serializerInstanceClass) = {
-      if (kryo) {
-        ("kryoSerializer",
-          classOf[KryoSerializer].getName,
-          classOf[KryoSerializerInstance].getName)
-      } else {
-        ("javaSerializer",
-          classOf[JavaSerializer].getName,
-          classOf[JavaSerializerInstance].getName)
-      }
-    }
-    // try conf from env, otherwise create a new one
-    val env = s"${classOf[SparkEnv].getName}.get()"
-    val sparkConf = s"new ${classOf[SparkConf].getName}()"
-    ctx.addImmutableStateIfNotExists(serializerInstanceClass, serializer, v =>
-      s"""
-         |if ($env == null) {
-         |  $v = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
-         |} else {
-         |  $v = ($serializerInstanceClass) new $serializerClass($env.conf()).newInstance();
-         |}
-       """.stripMargin)
-
+    val serializer = addImmutableSerializerIfNeeded(ctx)
     // Code to deserialize.
     val input = child.genCode(ctx)
     val javaType = CodeGenerator.javaType(dataType)
@@ -1359,10 +1469,18 @@ case class GetExternalRowField(
 
   override def dataType: DataType = ObjectType(classOf[Object])
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
-
   private val errMsg = s"The ${index}th field '$fieldName' of input row cannot be null."
+
+  override def eval(input: InternalRow): Any = {
+    val inputRow = child.eval(input).asInstanceOf[Row]
+    if (inputRow == null) {
+      throw new RuntimeException("The input external row cannot be null.")
+    }
+    if (inputRow.isNullAt(index)) {
+      throw new RuntimeException(errMsg)
+    }
+    inputRow.get(index)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     // Use unnamed reference that doesn't create a local field here to reduce the number of fields

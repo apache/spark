@@ -17,7 +17,9 @@
 
 package org.apache.spark.ml.evaluation
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.TestingUtils._
@@ -100,4 +102,23 @@ class ClusteringEvaluatorSuite
     }
   }
 
+  test("SPARK-23568: we should use metadata to determine features number") {
+    val attributesNum = irisDataset.select("features").rdd.first().getAs[Vector](0).size
+    val attrGroup = new AttributeGroup("features", attributesNum)
+    val df = irisDataset.select($"features".as("features", attrGroup.toMetadata()), $"label")
+    require(AttributeGroup.fromStructField(df.schema("features"))
+      .numAttributes.isDefined, "numAttributes metadata should be defined")
+    val evaluator = new ClusteringEvaluator()
+      .setFeaturesCol("features")
+      .setPredictionCol("label")
+
+    // with the proper metadata we compute correctly the result
+    assert(evaluator.evaluate(df) ~== 0.6564679231 relTol 1e-5)
+
+    val wrongAttrGroup = new AttributeGroup("features", attributesNum + 1)
+    val dfWrong = irisDataset.select($"features".as("features", wrongAttrGroup.toMetadata()),
+      $"label")
+    // with wrong metadata the evaluator throws an Exception
+    intercept[SparkException](evaluator.evaluate(dfWrong))
+  }
 }

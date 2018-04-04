@@ -18,12 +18,14 @@
 User-defined function related classes and functions
 """
 import functools
+import sys
 
 from pyspark import SparkContext, since
 from pyspark.rdd import _prepare_for_python_RDD, PythonEvalType, ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_java_column, _to_seq
-from pyspark.sql.types import StringType, DataType, ArrayType, StructType, MapType, \
-    _parse_datatype_string, to_arrow_type, to_arrow_schema
+from pyspark.sql.types import StringType, DataType, StructType, _parse_datatype_string,\
+    to_arrow_type, to_arrow_schema
+from pyspark.util import _get_argspec
 
 __all__ = ["UDFRegistration"]
 
@@ -41,18 +43,10 @@ def _create_udf(f, returnType, evalType):
                     PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
                     PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF):
 
-        import inspect
-        import sys
         from pyspark.sql.utils import require_minimum_pyarrow_version
-
         require_minimum_pyarrow_version()
 
-        if sys.version_info[0] < 3:
-            # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
-            # See SPARK-23569.
-            argspec = inspect.getargspec(f)
-        else:
-            argspec = inspect.getfullargspec(f)
+        argspec = _get_argspec(f)
 
         if evalType == PythonEvalType.SQL_SCALAR_PANDAS_UDF and len(argspec.args) == 0 and \
                 argspec.varargs is None:
@@ -61,11 +55,11 @@ def _create_udf(f, returnType, evalType):
                 "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
             )
 
-        if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF and len(argspec.args) != 1:
+        if evalType == PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF \
+                and len(argspec.args) not in (1, 2):
             raise ValueError(
                 "Invalid function: pandas_udfs with function type GROUPED_MAP "
-                "must take a single arg that is a pandas DataFrame."
-            )
+                "must take either one argument (data) or two arguments (key, data).")
 
     # Set the name of the UserDefinedFunction object to be the name of function f
     udf_obj = UserDefinedFunction(
@@ -402,7 +396,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

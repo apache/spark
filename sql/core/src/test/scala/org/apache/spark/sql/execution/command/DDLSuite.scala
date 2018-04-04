@@ -154,10 +154,15 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       Seq(4 -> "d").toDF("i", "j").write.saveAsTable("t1")
 
       val e = intercept[AnalysisException] {
-        Seq(5 -> "e").toDF("i", "j").write.mode("append").format("json").saveAsTable("t1")
+        val format = if (spark.sessionState.conf.defaultDataSourceName.equalsIgnoreCase("json")) {
+          "orc"
+        } else {
+          "json"
+        }
+        Seq(5 -> "e").toDF("i", "j").write.mode("append").format(format).saveAsTable("t1")
       }
-      assert(e.message.contains("The format of the existing table default.t1 is " +
-        "`ParquetFileFormat`. It doesn't match the specified format `JsonFileFormat`."))
+      assert(e.message.contains("The format of the existing table default.t1 is "))
+      assert(e.message.contains("It doesn't match the specified format"))
     }
   }
 }
@@ -1597,6 +1602,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     // Ensure that change column will preserve other metadata fields.
     sql("ALTER TABLE dbx.tab1 CHANGE COLUMN col1 col1 INT COMMENT 'this is col1'")
     assert(getMetadata("col1").getString("key") == "value")
+    assert(getMetadata("col1").getString("comment") == "this is col1")
   }
 
   test("drop build-in function") {

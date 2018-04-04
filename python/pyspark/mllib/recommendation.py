@@ -16,6 +16,7 @@
 #
 
 import array
+import sys
 from collections import namedtuple
 
 from pyspark import SparkContext, since
@@ -326,7 +327,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

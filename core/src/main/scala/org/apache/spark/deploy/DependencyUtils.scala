@@ -18,12 +18,13 @@
 package org.apache.spark.deploy
 
 import java.io.File
+import java.net.URI
 
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 private[deploy] object DependencyUtils {
@@ -32,7 +33,8 @@ private[deploy] object DependencyUtils {
       packagesExclusions: String,
       packages: String,
       repositories: String,
-      ivyRepoPath: String): String = {
+      ivyRepoPath: String,
+      ivySettingsPath: Option[String]): String = {
     val exclusions: Seq[String] =
       if (!StringUtils.isBlank(packagesExclusions)) {
         packagesExclusions.split(",")
@@ -40,10 +42,12 @@ private[deploy] object DependencyUtils {
         Nil
       }
     // Create the IvySettings, either load from file or build defaults
-    val ivySettings = sys.props.get("spark.jars.ivySettings").map { ivySettingsFile =>
-      SparkSubmitUtils.loadIvySettings(ivySettingsFile, Option(repositories), Option(ivyRepoPath))
-    }.getOrElse {
-      SparkSubmitUtils.buildIvySettings(Option(repositories), Option(ivyRepoPath))
+    val ivySettings = ivySettingsPath match {
+      case Some(path) =>
+        SparkSubmitUtils.loadIvySettings(path, Option(repositories), Option(ivyRepoPath))
+
+      case None =>
+        SparkSubmitUtils.buildIvySettings(Option(repositories), Option(ivyRepoPath))
     }
 
     SparkSubmitUtils.resolveMavenCoordinates(packages, ivySettings, exclusions = exclusions)
@@ -137,16 +141,31 @@ private[deploy] object DependencyUtils {
   def resolveGlobPaths(paths: String, hadoopConf: Configuration): String = {
     require(paths != null, "paths cannot be null.")
     Utils.stringToSeq(paths).flatMap { path =>
-      val uri = Utils.resolveURI(path)
-      uri.getScheme match {
-        case "local" | "http" | "https" | "ftp" => Array(path)
-        case _ =>
-          val fs = FileSystem.get(uri, hadoopConf)
-          Option(fs.globStatus(new Path(uri))).map { status =>
-            status.filter(_.isFile).map(_.getPath.toUri.toString)
-          }.getOrElse(Array(path))
+      val (base, fragment) = splitOnFragment(path)
+      (resolveGlobPath(base, hadoopConf), fragment) match {
+        case (resolved, Some(_)) if resolved.length > 1 => throw new SparkException(
+            s"${base.toString} resolves ambiguously to multiple files: ${resolved.mkString(",")}")
+        case (resolved, Some(namedAs)) => resolved.map(_ + "#" + namedAs)
+        case (resolved, _) => resolved
       }
     }.mkString(",")
+  }
+
+  private def splitOnFragment(path: String): (URI, Option[String]) = {
+    val uri = Utils.resolveURI(path)
+    val withoutFragment = new URI(uri.getScheme, uri.getSchemeSpecificPart, null)
+    (withoutFragment, Option(uri.getFragment))
+  }
+
+  private def resolveGlobPath(uri: URI, hadoopConf: Configuration): Array[String] = {
+    uri.getScheme match {
+      case "local" | "http" | "https" | "ftp" => Array(uri.toString)
+      case _ =>
+        val fs = FileSystem.get(uri, hadoopConf)
+        Option(fs.globStatus(new Path(uri))).map { status =>
+          status.filter(_.isFile).map(_.getPath.toUri.toString)
+        }.getOrElse(Array(uri.toString))
+    }
   }
 
 }

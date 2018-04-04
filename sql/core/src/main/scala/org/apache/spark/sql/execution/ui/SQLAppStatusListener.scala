@@ -334,7 +334,10 @@ class SQLAppStatusListener(
 
     val view = kvstore.view(classOf[SQLExecutionUIData]).index("completionTime").first(0L)
     val toDelete = KVUtils.viewToSeq(view, countToDelete.toInt)(_.completionTime.isDefined)
-    toDelete.foreach { e => kvstore.delete(e.getClass(), e.executionId) }
+    toDelete.foreach { e =>
+      kvstore.delete(e.getClass(), e.executionId)
+      kvstore.delete(classOf[SparkPlanGraphWrapper], e.executionId)
+    }
   }
 
 }

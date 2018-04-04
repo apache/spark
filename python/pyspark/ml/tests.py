@@ -173,6 +173,45 @@ class MockModel(MockTransformer, Model, HasFake):
     pass
 
 
+class JavaWrapperMemoryTests(SparkSessionTestCase):
+
+    def test_java_object_gets_detached(self):
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["label", "weight", "features"])
+        lr = LinearRegression(maxIter=1, regParam=0.0, solver="normal", weightCol="weight",
+                              fitIntercept=False)
+
+        model = lr.fit(df)
+        summary = model.summary
+
+        self.assertIsInstance(model, JavaWrapper)
+        self.assertIsInstance(summary, JavaWrapper)
+        self.assertIsInstance(model, JavaParams)
+        self.assertNotIsInstance(summary, JavaParams)
+
+        error_no_object = 'Target Object ID does not exist for this gateway'
+
+        self.assertIn("LinearRegression_", model._java_obj.toString())
+        self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
+
+        model.__del__()
+
+        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            model._java_obj.toString()
+        self.assertIn("LinearRegressionTrainingSummary", summary._java_obj.toString())
+
+        try:
+            summary.__del__()
+        except:
+            pass
+
+        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            model._java_obj.toString()
+        with self.assertRaisesRegexp(py4j.protocol.Py4JError, error_no_object):
+            summary._java_obj.toString()
+
+
 class ParamTypeConversionTests(PySparkTestCase):
     """
     Test that param type conversion happens.
@@ -330,7 +369,7 @@ class HasThrowableProperty(Params):
         raise RuntimeError("Test property to raise error when invoked")
 
 
-class ParamTests(PySparkTestCase):
+class ParamTests(SparkSessionTestCase):
 
     def test_copy_new_parent(self):
         testParams = TestParams()
@@ -474,6 +513,24 @@ class ParamTests(PySparkTestCase):
             "Logistic Regression getThreshold found inconsistent.*$",
             LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
         )
+
+    def test_preserve_set_state(self):
+        dataset = self.spark.createDataFrame([(0.5,)], ["data"])
+        binarizer = Binarizer(inputCol="data")
+        self.assertFalse(binarizer.isSet("threshold"))
+        binarizer.transform(dataset)
+        binarizer._transfer_params_from_java()
+        self.assertFalse(binarizer.isSet("threshold"),
+                         "Params not explicitly set should remain unset after transform")
+
+    def test_default_params_transferred(self):
+        dataset = self.spark.createDataFrame([(0.5,)], ["data"])
+        binarizer = Binarizer(inputCol="data")
+        # intentionally change the pyspark default, but don't set it
+        binarizer._defaultParamMap[binarizer.outputCol] = "my_default"
+        result = binarizer.transform(dataset).select("my_default").collect()
+        self.assertFalse(binarizer.isSet(binarizer.outputCol))
+        self.assertEqual(result[0][0], 1.0)
 
     @staticmethod
     def check_params(test_self, py_stage, check_params_exist=True):
@@ -639,6 +696,59 @@ class FeatureTests(SparkSessionTestCase):
         for r in transformedList:
             feature, expected = r
             self.assertEqual(feature, expected)
+
+    def test_count_vectorizer_with_maxDF(self):
+        dataset = self.spark.createDataFrame([
+            (0, "a b c d".split(' '), SparseVector(3, {0: 1.0, 1: 1.0, 2: 1.0}),),
+            (1, "a b c".split(' '), SparseVector(3, {0: 1.0, 1: 1.0}),),
+            (2, "a b".split(' '), SparseVector(3, {0: 1.0}),),
+            (3, "a".split(' '), SparseVector(3,  {}),)], ["id", "words", "expected"])
+        cv = CountVectorizer(inputCol="words", outputCol="features")
+        model1 = cv.setMaxDF(3).fit(dataset)
+        self.assertEqual(model1.vocabulary, ['b', 'c', 'd'])
+
+        transformedList1 = model1.transform(dataset).select("features", "expected").collect()
+
+        for r in transformedList1:
+            feature, expected = r
+            self.assertEqual(feature, expected)
+
+        model2 = cv.setMaxDF(0.75).fit(dataset)
+        self.assertEqual(model2.vocabulary, ['b', 'c', 'd'])
+
+        transformedList2 = model2.transform(dataset).select("features", "expected").collect()
+
+        for r in transformedList2:
+            feature, expected = r
+            self.assertEqual(feature, expected)
+
+    def test_count_vectorizer_from_vocab(self):
+        model = CountVectorizerModel.from_vocabulary(["a", "b", "c"], inputCol="words",
+                                                     outputCol="features", minTF=2)
+        self.assertEqual(model.vocabulary, ["a", "b", "c"])
+        self.assertEqual(model.getMinTF(), 2)
+
+        dataset = self.spark.createDataFrame([
+            (0, "a a a b b c".split(' '), SparseVector(3, {0: 3.0, 1: 2.0}),),
+            (1, "a a".split(' '), SparseVector(3, {0: 2.0}),),
+            (2, "a b".split(' '), SparseVector(3, {}),)], ["id", "words", "expected"])
+
+        transformed_list = model.transform(dataset).select("features", "expected").collect()
+
+        for r in transformed_list:
+            feature, expected = r
+            self.assertEqual(feature, expected)
+
+        # Test an empty vocabulary
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, "vocabSize.*invalid.*0"):
+                CountVectorizerModel.from_vocabulary([], inputCol="words")
+
+        # Test model with default settings can transform
+        model_default = CountVectorizerModel.from_vocabulary(["a", "b", "c"], inputCol="words")
+        transformed_list = model_default.transform(dataset)\
+            .select(model_default.getOrDefault(model_default.outputCol)).collect()
+        self.assertEqual(len(transformed_list), 3)
 
     def test_rformula_force_index_label(self):
         df = self.spark.createDataFrame([
@@ -1449,6 +1559,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(s.meanSquaredError, 0.0)
         self.assertAlmostEqual(s.rootMeanSquaredError, 0.0)
         self.assertAlmostEqual(s.r2, 1.0, 2)
+        self.assertAlmostEqual(s.r2adj, 1.0, 2)
         self.assertTrue(isinstance(s.residuals, DataFrame))
         self.assertEqual(s.numInstances, 2)
         self.assertEqual(s.degreesOfFreedom, 1)
@@ -1980,10 +2091,15 @@ class DefaultValuesTests(PySparkTestCase):
                    pyspark.ml.regression]
         for module in modules:
             for name, cls in inspect.getmembers(module, inspect.isclass):
-                if not name.endswith('Model') and issubclass(cls, JavaParams)\
-                        and not inspect.isabstract(cls):
+                if not name.endswith('Model') and not name.endswith('Params')\
+                        and issubclass(cls, JavaParams) and not inspect.isabstract(cls):
                     # NOTE: disable check_params_exist until there is parity with Scala API
                     ParamTests.check_params(self, cls(), check_params_exist=False)
+
+        # Additional classes that need explicit construction
+        from pyspark.ml.feature import CountVectorizerModel
+        ParamTests.check_params(self, CountVectorizerModel.from_vocabulary(['a'], 'input'),
+                                check_params_exist=False)
 
 
 def _squared_distance(a, b):

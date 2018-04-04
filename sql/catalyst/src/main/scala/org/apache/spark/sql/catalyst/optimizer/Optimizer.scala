@@ -85,9 +85,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
         EliminateSerialization,
         RemoveRedundantAliases,
         RemoveRedundantProject,
-        SimplifyCreateStructOps,
-        SimplifyCreateArrayOps,
-        SimplifyCreateMapOps,
+        SimplifyExtractValueOps,
         CombineConcats) ++
         extendedOperatorOptimizationRules
 
@@ -155,7 +153,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       RewritePredicateSubquery,
       ColumnPruning,
       CollapseProject,
-      RemoveRedundantProject)
+      RemoveRedundantProject) :+
+    Batch("UpdateAttributeReferences", Once,
+      UpdateNullabilityInAttributeReferences)
   }
 
   /**
@@ -1308,6 +1308,21 @@ object RemoveRepetitionFromGroupExpressions extends Rule[LogicalPlan] {
         a
       } else {
         a.copy(groupingExpressions = newGrouping)
+      }
+  }
+}
+
+/**
+ * Updates nullability in [[AttributeReference]]s if nullability is different between
+ * non-leaf plan's expressions and the children output.
+ */
+object UpdateNullabilityInAttributeReferences extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case p if !p.isInstanceOf[LeafNode] =>
+      val nullabilityMap = AttributeMap(p.children.flatMap(_.output).map { x => x -> x.nullable })
+      p transformExpressions {
+        case ar: AttributeReference if nullabilityMap.contains(ar) =>
+          ar.withNullability(nullabilityMap(ar))
       }
   }
 }
