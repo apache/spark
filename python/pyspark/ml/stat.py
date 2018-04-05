@@ -138,8 +138,10 @@ class KolmogorovSmirnovTest(object):
     """
     .. note:: Experimental
 
-    Conduct the two-sided Kolmogorov Smirnov (KS) test for data sampled from a
-    continuous distribution. By comparing the largest difference between the empirical cumulative
+    Conduct the two-sided Kolmogorov Smirnov (KS) test for data sampled from a continuous
+    distribution.
+
+    By comparing the largest difference between the empirical cumulative
     distribution of the sample data and the theoretical distribution we can provide a test for the
     the null hypothesis that the sample data comes from that theoretical distribution.
 
