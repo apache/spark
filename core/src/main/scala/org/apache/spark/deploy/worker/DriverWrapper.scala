@@ -79,12 +79,17 @@ object DriverWrapper extends Logging {
     val secMgr = new SecurityManager(sparkConf)
     val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
 
-    val Seq(packagesExclusions, packages, repositories, ivyRepoPath) =
-      Seq("spark.jars.excludes", "spark.jars.packages", "spark.jars.repositories", "spark.jars.ivy")
-        .map(sys.props.get(_).orNull)
+    val Seq(packagesExclusions, packages, repositories, ivyRepoPath, ivySettingsPath) =
+      Seq(
+        "spark.jars.excludes",
+        "spark.jars.packages",
+        "spark.jars.repositories",
+        "spark.jars.ivy",
+        "spark.jars.ivySettings"
+      ).map(sys.props.get(_).orNull)
 
     val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(packagesExclusions,
-      packages, repositories, ivyRepoPath)
+      packages, repositories, ivyRepoPath, Option(ivySettingsPath))
     val jars = {
       val jarsProp = sys.props.get("spark.jars").orNull
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {

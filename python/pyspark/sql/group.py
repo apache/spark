@@ -15,11 +15,12 @@
 # limitations under the License.
 #
 
+import sys
+
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
-from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
+from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import *
 
 __all__ = ["GroupedData"]
@@ -299,7 +300,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

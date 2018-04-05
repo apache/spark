@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode, LeafNode}
+import org.apache.spark.ml.tree.LeafNode
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
@@ -262,6 +262,21 @@ class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
 
     ProbabilisticClassifierSuite.testPredictMethods[
       Vector, DecisionTreeClassificationModel](this, newTree, newData)
+  }
+
+  test("prediction on single instance") {
+    val rdd = continuousDataPointsForMulticlassRDD
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(4)
+      .setMaxBins(100)
+    val categoricalFeatures = Map(0 -> 3)
+    val numClasses = 3
+
+    val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val newTree = dt.fit(newData)
+
+    testPredictionModelSinglePrediction(newTree, newData)
   }
 
   test("training with 1-category categorical feature") {

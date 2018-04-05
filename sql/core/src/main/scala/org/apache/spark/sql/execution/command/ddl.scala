@@ -314,8 +314,8 @@ case class AlterTableChangeColumnCommand(
     val resolver = sparkSession.sessionState.conf.resolver
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
 
-    // Find the origin column from schema by column name.
-    val originColumn = findColumnByName(table.schema, columnName, resolver)
+    // Find the origin column from dataSchema by column name.
+    val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
       throw new AnalysisException(
@@ -324,7 +324,7 @@ case class AlterTableChangeColumnCommand(
           s"'${newColumn.name}' with type '${newColumn.dataType}'")
     }
 
-    val newSchema = table.schema.fields.map { field =>
+    val newDataSchema = table.dataSchema.fields.map { field =>
       if (field.name == originColumn.name) {
         // Create a new column from the origin column with the new comment.
         addComment(field, newColumn.getComment)
@@ -332,8 +332,7 @@ case class AlterTableChangeColumnCommand(
         field
       }
     }
-    val newTable = table.copy(schema = StructType(newSchema))
-    catalog.alterTable(newTable)
+    catalog.alterTableDataSchema(tableName, StructType(newDataSchema))
 
     Seq.empty[Row]
   }
@@ -345,7 +344,8 @@ case class AlterTableChangeColumnCommand(
     schema.fields.collectFirst {
       case field if resolver(field.name, name) => field
     }.getOrElse(throw new AnalysisException(
-      s"Invalid column reference '$name', table schema is '${schema}'"))
+      s"Can't find column `$name` given table data columns " +
+        s"${schema.fieldNames.mkString("[`", "`, `", "`]")}"))
   }
 
   // Add the comment to a column, if comment is empty, return the original column.

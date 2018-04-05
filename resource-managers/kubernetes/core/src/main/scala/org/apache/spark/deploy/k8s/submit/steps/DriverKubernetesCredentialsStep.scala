@@ -99,7 +99,7 @@ private[spark] class DriverKubernetesCredentialsStep(
       }.getOrElse(driverSpec.driverPod)
     )
 
-    val driverContainerWithMountedSecretVolume = kubernetesCredentialsSecret.map { secret =>
+    val driverContainerWithMountedSecretVolume = kubernetesCredentialsSecret.map { _ =>
       new ContainerBuilder(driverSpec.driverContainer)
         .addNewVolumeMount()
           .withName(DRIVER_CREDENTIALS_SECRET_VOLUME_NAME)

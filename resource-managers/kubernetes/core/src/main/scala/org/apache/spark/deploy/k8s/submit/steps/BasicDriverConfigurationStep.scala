@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s.submit.steps
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, EnvVarSourceBuilder, PodBuilder, QuantityBuilder}
+import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
@@ -26,6 +26,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesUtils
 import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
 import org.apache.spark.internal.config.{DRIVER_CLASS_PATH, DRIVER_MEMORY, DRIVER_MEMORY_OVERHEAD}
+import org.apache.spark.launcher.SparkLauncher
 
 /**
  * Performs basic configuration for the driver pod.
@@ -50,14 +51,14 @@ private[spark] class BasicDriverConfigurationStep(
     .get(DRIVER_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException("Must specify the driver container image"))
 
+  private val imagePullSecrets = sparkConf.get(IMAGE_PULL_SECRETS)
+
   // CPU settings
   private val driverCpuCores = sparkConf.getOption("spark.driver.cores").getOrElse("1")
   private val driverLimitCores = sparkConf.get(KUBERNETES_DRIVER_LIMIT_CORES)
 
   // Memory settings
   private val driverMemoryMiB = sparkConf.get(DRIVER_MEMORY)
-  private val driverMemoryString = sparkConf.get(
-    DRIVER_MEMORY.key, DRIVER_MEMORY.defaultValueString)
   private val memoryOverheadMiB = sparkConf
     .get(DRIVER_MEMORY_OVERHEAD)
     .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * driverMemoryMiB).toInt, MEMORY_OVERHEAD_MIN_MIB))
@@ -94,33 +95,18 @@ private[spark] class BasicDriverConfigurationStep(
       .withAmount(driverCpuCores)
       .build()
     val driverMemoryQuantity = new QuantityBuilder(false)
-      .withAmount(s"${driverMemoryMiB}Mi")
-      .build()
-    val driverMemoryLimitQuantity = new QuantityBuilder(false)
       .withAmount(s"${driverMemoryWithOverheadMiB}Mi")
       .build()
     val maybeCpuLimitQuantity = driverLimitCores.map { limitCores =>
       ("cpu", new QuantityBuilder(false).withAmount(limitCores).build())
     }
 
-    val driverContainer = new ContainerBuilder(driverSpec.driverContainer)
+    val driverContainerWithoutArgs = new ContainerBuilder(driverSpec.driverContainer)
       .withName(DRIVER_CONTAINER_NAME)
       .withImage(driverContainerImage)
       .withImagePullPolicy(imagePullPolicy)
       .addAllToEnv(driverCustomEnvs.asJava)
       .addToEnv(driverExtraClasspathEnv.toSeq: _*)
-      .addNewEnv()
-        .withName(ENV_DRIVER_MEMORY)
-        .withValue(driverMemoryString)
-        .endEnv()
-      .addNewEnv()
-        .withName(ENV_DRIVER_MAIN_CLASS)
-        .withValue(mainClass)
-        .endEnv()
-      .addNewEnv()
-        .withName(ENV_DRIVER_ARGS)
-        .withValue(appArgs.mkString(" "))
-        .endEnv()
       .addNewEnv()
         .withName(ENV_DRIVER_BIND_ADDRESS)
         .withValueFrom(new EnvVarSourceBuilder()
@@ -130,11 +116,22 @@ private[spark] class BasicDriverConfigurationStep(
       .withNewResources()
         .addToRequests("cpu", driverCpuQuantity)
         .addToRequests("memory", driverMemoryQuantity)
-        .addToLimits("memory", driverMemoryLimitQuantity)
+        .addToLimits("memory", driverMemoryQuantity)
         .addToLimits(maybeCpuLimitQuantity.toMap.asJava)
         .endResources()
       .addToArgs("driver")
-      .build()
+      .addToArgs("--properties-file", SPARK_CONF_PATH)
+      .addToArgs("--class", mainClass)
+      // The user application jar is merged into the spark.jars list and managed through that
+      // property, so there is no need to reference it explicitly here.
+      .addToArgs(SparkLauncher.NO_RESOURCE)
+
+    val driverContainer = appArgs.toList match {
+      case "" :: Nil | Nil => driverContainerWithoutArgs.build()
+      case _ => driverContainerWithoutArgs.addToArgs(appArgs: _*).build()
+    }
+
+    val parsedImagePullSecrets = KubernetesUtils.parseImagePullSecrets(imagePullSecrets)
 
     val baseDriverPod = new PodBuilder(driverSpec.driverPod)
       .editOrNewMetadata()
@@ -145,6 +142,7 @@ private[spark] class BasicDriverConfigurationStep(
       .withNewSpec()
         .withRestartPolicy("Never")
         .withNodeSelector(nodeSelector.asJava)
+        .withImagePullSecrets(parsedImagePullSecrets.asJava)
         .endSpec()
       .build()
 
@@ -152,10 +150,14 @@ private[spark] class BasicDriverConfigurationStep(
       .setIfMissing(KUBERNETES_DRIVER_POD_NAME, driverPodName)
       .set("spark.app.id", kubernetesAppId)
       .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, resourceNamePrefix)
+      // to set the config variables to allow client-mode spark-submit from driver
+      .set(KUBERNETES_DRIVER_SUBMIT_CHECK, true)
 
     driverSpec.copy(
       driverPod = baseDriverPod,
       driverSparkConf = resolvedSparkConf,
       driverContainer = driverContainer)
   }
+
 }
+

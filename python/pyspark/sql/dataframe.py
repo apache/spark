@@ -1992,55 +1992,92 @@ class DataFrame(object):
             timezone = None
 
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
+            use_arrow = True
             try:
-                from pyspark.sql.types import _check_dataframe_convert_date, \
-                    _check_dataframe_localize_timestamps, to_arrow_schema
+                from pyspark.sql.types import to_arrow_schema
                 from pyspark.sql.utils import require_minimum_pyarrow_version
+
                 require_minimum_pyarrow_version()
-                import pyarrow
                 to_arrow_schema(self.schema)
-                tables = self._collectAsArrow()
-                if tables:
-                    table = pyarrow.concat_tables(tables)
-                    pdf = table.to_pandas()
-                    pdf = _check_dataframe_convert_date(pdf, self.schema)
-                    return _check_dataframe_localize_timestamps(pdf, timezone)
-                else:
-                    return pd.DataFrame.from_records([], columns=self.columns)
             except Exception as e:
-                msg = (
-                    "Note: toPandas attempted Arrow optimization because "
-                    "'spark.sql.execution.arrow.enabled' is set to true. Please set it to false "
-                    "to disable this.")
-                raise RuntimeError("%s\n%s" % (_exception_message(e), msg))
+
+                if self.sql_ctx.getConf("spark.sql.execution.arrow.fallback.enabled", "true") \
+                        .lower() == "true":
+                    msg = (
+                        "toPandas attempted Arrow optimization because "
+                        "'spark.sql.execution.arrow.enabled' is set to true; however, "
+                        "failed by the reason below:\n  %s\n"
+                        "Attempting non-optimization as "
+                        "'spark.sql.execution.arrow.fallback.enabled' is set to "
+                        "true." % _exception_message(e))
+                    warnings.warn(msg)
+                    use_arrow = False
+                else:
+                    msg = (
+                        "toPandas attempted Arrow optimization because "
+                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                        "the error below and will not continue because automatic fallback "
+                        "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
+                        "false.\n  %s" % _exception_message(e))
+                    warnings.warn(msg)
+                    raise
+
+            # Try to use Arrow optimization when the schema is supported and the required version
+            # of PyArrow is found, if 'spark.sql.execution.arrow.enabled' is enabled.
+            if use_arrow:
+                try:
+                    from pyspark.sql.types import _check_dataframe_convert_date, \
+                        _check_dataframe_localize_timestamps
+                    import pyarrow
+
+                    tables = self._collectAsArrow()
+                    if tables:
+                        table = pyarrow.concat_tables(tables)
+                        pdf = table.to_pandas()
+                        pdf = _check_dataframe_convert_date(pdf, self.schema)
+                        return _check_dataframe_localize_timestamps(pdf, timezone)
+                    else:
+                        return pd.DataFrame.from_records([], columns=self.columns)
+                except Exception as e:
+                    # We might have to allow fallback here as well but multiple Spark jobs can
+                    # be executed. So, simply fail in this case for now.
+                    msg = (
+                        "toPandas attempted Arrow optimization because "
+                        "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                        "the error below and can not continue. Note that "
+                        "'spark.sql.execution.arrow.fallback.enabled' does not have an effect "
+                        "on failures in the middle of computation.\n  %s" % _exception_message(e))
+                    warnings.warn(msg)
+                    raise
+
+        # Below is toPandas without Arrow optimization.
+        pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
+        dtype = {}
+        for field in self.schema:
+            pandas_type = _to_corrected_pandas_type(field.dataType)
+            # SPARK-21766: if an integer field is nullable and has null values, it can be
+            # inferred by pandas as float column. Once we convert the column with NaN back
+            # to integer type e.g., np.int16, we will hit exception. So we use the inferred
+            # float type, not the corrected type from the schema in this case.
+            if pandas_type is not None and \
+                not(isinstance(field.dataType, IntegralType) and field.nullable and
+                    pdf[field.name].isnull().any()):
+                dtype[field.name] = pandas_type
+
+        for f, t in dtype.items():
+            pdf[f] = pdf[f].astype(t, copy=False)
+
+        if timezone is None:
+            return pdf
         else:
-            pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
-
-            dtype = {}
+            from pyspark.sql.types import _check_series_convert_timestamps_local_tz
             for field in self.schema:
-                pandas_type = _to_corrected_pandas_type(field.dataType)
-                # SPARK-21766: if an integer field is nullable and has null values, it can be
-                # inferred by pandas as float column. Once we convert the column with NaN back
-                # to integer type e.g., np.int16, we will hit exception. So we use the inferred
-                # float type, not the corrected type from the schema in this case.
-                if pandas_type is not None and \
-                    not(isinstance(field.dataType, IntegralType) and field.nullable and
-                        pdf[field.name].isnull().any()):
-                    dtype[field.name] = pandas_type
-
-            for f, t in dtype.items():
-                pdf[f] = pdf[f].astype(t, copy=False)
-
-            if timezone is None:
-                return pdf
-            else:
-                from pyspark.sql.types import _check_series_convert_timestamps_local_tz
-                for field in self.schema:
-                    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-                    if isinstance(field.dataType, TimestampType):
-                        pdf[field.name] = \
-                            _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
-                return pdf
+                # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+                if isinstance(field.dataType, TimestampType):
+                    pdf[field.name] = \
+                        _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
+            return pdf
 
     def _collectAsArrow(self):
         """
@@ -2195,7 +2232,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

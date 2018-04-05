@@ -264,7 +264,7 @@ def _test():
     SparkContext('local[4]', 'PythonTest')
     (failure_count, test_count) = doctest.testmod(optionflags=doctest.NORMALIZE_WHITESPACE)
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
