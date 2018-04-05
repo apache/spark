@@ -63,6 +63,13 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   }
 
   /**
+   * Logs a error message with a prefix that uniquely identifies the training session.
+   */
+  override def logError(msg: => String): Unit = {
+    super.logError(prefix + msg)
+  }
+
+  /**
    * Logs an info message with a prefix that uniquely identifies the training session.
    */
   override def logInfo(msg: => String): Unit = {
