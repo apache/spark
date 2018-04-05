@@ -1416,8 +1416,8 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
     val ObjectType(beanClass) = beanInstance.dataType
     setters.map {
       case (name, expr) =>
-        // Looking for known type mapping first, then using Class attached in `ObjectType`.
-        // Finally also looking for general `Object`-type parameter for generic methods.
+        // Looking for known type mapping.
+        // But also looking for general `Object`-type parameter for generic methods.
         val paramTypes = ScalaReflection.expressionJavaClasses(Seq(expr)) ++ Seq(classOf[Object])
         val methods = paramTypes.flatMap { fieldClass =>
           try {
