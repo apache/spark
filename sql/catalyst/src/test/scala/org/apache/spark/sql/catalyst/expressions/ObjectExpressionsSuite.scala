@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.{Date, Timestamp}
+
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
@@ -28,9 +30,11 @@ import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{SQLDate, SQLTimestamp}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class InvokeTargetClass extends Serializable {
   def filterInt(e: Any): Any = e.asInstanceOf[Int] > 0
@@ -91,6 +95,66 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       mapExpected,
       mapInputRow,
       UnsafeProjection) // TODO(hvanhovell) revert this when SPARK-23587 is fixed
+  }
+
+  test("SPARK-23582: StaticInvoke should support interpreted execution") {
+    Seq((classOf[java.lang.Boolean], "true", true),
+      (classOf[java.lang.Byte], "1", 1.toByte),
+      (classOf[java.lang.Short], "257", 257.toShort),
+      (classOf[java.lang.Integer], "12345", 12345),
+      (classOf[java.lang.Long], "12345678", 12345678.toLong),
+      (classOf[java.lang.Float], "12.34", 12.34.toFloat),
+      (classOf[java.lang.Double], "1.2345678", 1.2345678)
+    ).foreach { case (cls, arg, expected) =>
+      checkObjectExprEvaluation(StaticInvoke(cls, ObjectType(cls), "valueOf",
+        Seq(BoundReference(0, ObjectType(classOf[java.lang.String]), true))),
+        expected, InternalRow.fromSeq(Seq(arg)))
+    }
+
+    // Return null when null argument is passed with propagateNull = true
+    val stringCls = classOf[java.lang.String]
+    checkObjectExprEvaluation(StaticInvoke(stringCls, ObjectType(stringCls), "valueOf",
+      Seq(BoundReference(0, ObjectType(classOf[Object]), true)), propagateNull = true),
+      null, InternalRow.fromSeq(Seq(null)))
+    checkObjectExprEvaluation(StaticInvoke(stringCls, ObjectType(stringCls), "valueOf",
+      Seq(BoundReference(0, ObjectType(classOf[Object]), true)), propagateNull = false),
+      "null", InternalRow.fromSeq(Seq(null)))
+
+    // test no argument
+    val clCls = classOf[java.lang.ClassLoader]
+    checkObjectExprEvaluation(StaticInvoke(clCls, ObjectType(clCls), "getSystemClassLoader", Nil),
+      ClassLoader.getSystemClassLoader, InternalRow.empty)
+    // test more than one argument
+    val intCls = classOf[java.lang.Integer]
+    checkObjectExprEvaluation(StaticInvoke(intCls, ObjectType(intCls), "compare",
+      Seq(BoundReference(0, IntegerType, false), BoundReference(1, IntegerType, false))),
+      0, InternalRow.fromSeq(Seq(7, 7)))
+
+    Seq((DateTimeUtils.getClass, TimestampType, "fromJavaTimestamp", ObjectType(classOf[Timestamp]),
+      new Timestamp(77777), DateTimeUtils.fromJavaTimestamp(new Timestamp(77777))),
+      (DateTimeUtils.getClass, DateType, "fromJavaDate", ObjectType(classOf[Date]),
+        new Date(88888888), DateTimeUtils.fromJavaDate(new Date(88888888))),
+      (classOf[UTF8String], StringType, "fromString", ObjectType(classOf[String]),
+        "abc", UTF8String.fromString("abc")),
+      (Decimal.getClass, DecimalType(38, 0), "fromDecimal", ObjectType(classOf[Any]),
+        BigInt(88888888), Decimal.fromDecimal(BigInt(88888888))),
+      (Decimal.getClass, DecimalType.SYSTEM_DEFAULT,
+        "apply", ObjectType(classOf[java.math.BigInteger]),
+        new java.math.BigInteger("88888888"), Decimal.apply(new java.math.BigInteger("88888888"))),
+      (classOf[ArrayData], ArrayType(IntegerType), "toArrayData", ObjectType(classOf[Any]),
+        Array[Int](1, 2, 3), ArrayData.toArrayData(Array[Int](1, 2, 3))),
+      (classOf[UnsafeArrayData], ArrayType(IntegerType, false),
+        "fromPrimitiveArray", ObjectType(classOf[Array[Int]]),
+        Array[Int](1, 2, 3), UnsafeArrayData.fromPrimitiveArray(Array[Int](1, 2, 3))),
+      (DateTimeUtils.getClass, ObjectType(classOf[Date]),
+        "toJavaDate", ObjectType(classOf[SQLDate]), 77777, DateTimeUtils.toJavaDate(77777)),
+      (DateTimeUtils.getClass, ObjectType(classOf[Timestamp]),
+        "toJavaTimestamp", ObjectType(classOf[SQLTimestamp]),
+        88888888.toLong, DateTimeUtils.toJavaTimestamp(88888888))
+    ).foreach { case (cls, dataType, methodName, argType, arg, expected) =>
+      checkObjectExprEvaluation(StaticInvoke(cls, dataType, methodName,
+        Seq(BoundReference(0, argType, true))), expected, InternalRow.fromSeq(Seq(arg)))
+    }
   }
 
   test("SPARK-23583: Invoke should support interpreted execution") {

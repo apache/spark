@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Common base class for [[StaticInvoke]], [[Invoke]], and [[NewInstance]].
@@ -217,12 +218,21 @@ case class StaticInvoke(
     returnNullable: Boolean = true) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
+  val cls = if (staticObject.getName == objectName) {
+    staticObject
+  } else {
+    Utils.classForName(objectName)
+  }
 
   override def nullable: Boolean = needNullCheck || returnNullable
   override def children: Seq[Expression] = arguments
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+  lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
+  @transient lazy val method = cls.getDeclaredMethod(functionName, argClasses : _*)
+
+  override def eval(input: InternalRow): Any = {
+    invoke(null, method, arguments, input, dataType)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
