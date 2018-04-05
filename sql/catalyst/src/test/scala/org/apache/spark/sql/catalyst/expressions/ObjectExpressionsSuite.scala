@@ -158,7 +158,18 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val initializeBean = InitializeJavaBean(
       Literal.fromObject(new TestBean),
       Map("setNonPrimitive" -> Literal(null)))
-    evaluateWithoutCodegen(initializeBean, InternalRow.fromSeq(Seq()))
+    intercept[NullPointerException] {
+      evaluateWithoutCodegen(initializeBean, InternalRow.fromSeq(Seq()))
+    }.getMessage.contains("The parameter value for setters in `InitializeJavaBean` can not be null")
+    intercept[NullPointerException] {
+      evaluateWithGeneratedMutableProjection(initializeBean, InternalRow.fromSeq(Seq()))
+    }.getMessage.contains("The parameter value for setters in `InitializeJavaBean` can not be null")
+
+    val initializeBean2 = InitializeJavaBean(
+      Literal.fromObject(new TestBean),
+      Map("setNonPrimitive" -> Literal("string")))
+    evaluateWithoutCodegen(initializeBean2, InternalRow.fromSeq(Seq()))
+    evaluateWithGeneratedMutableProjection(initializeBean2, InternalRow.fromSeq(Seq()))
   }
 
   test("SPARK-23585: UnwrapOption should support interpreted execution") {
