@@ -38,8 +38,8 @@ private[spark] object KubernetesUtils {
   }
 
   /**
-    * Parse a comma-delimited list of volume specs, each of which
-    * takes the form hostPath:containerPath:name and add to pod.
+    * Parse a comma-delimited list of volume specs, each of which takes the form
+    * hostPath:containerPath[:ro|rw]; and add volume to pod and volume mount to container.
     *
     * @param pod original specification of the pod
     * @param container original specification of the container
@@ -49,16 +49,44 @@ private[spark] object KubernetesUtils {
   def addVolumes(pod: Pod, container : Container, volumes: String): (Pod, Container) = {
     val podBuilder = new PodBuilder(pod).editOrNewSpec()
     val containerBuilder = new ContainerBuilder(container)
+    var volumeCount = 0
     volumes.split(",").map(_.split(":")).map { spec =>
       spec match {
-        case Array(hostPath, containerPath, name) =>
+        case Array(hostPath, containerPath) =>
           podBuilder
             .withVolumes(new VolumeBuilder()
-              .withHostPath(new HostPathVolumeSource(hostPath)).withName(name).build())
+              .withHostPath(new HostPathVolumeSource(hostPath))
+              .withName(s"executor-volume-$volumeCount")
+              .build())
           containerBuilder.addToVolumeMounts(new VolumeMountBuilder()
             .withMountPath(containerPath)
-            .withName(name)
+            .withName(s"executor-volume-$volumeCount")
             .build())
+          volumeCount += 1
+        case Array(hostPath, containerPath, "ro") =>
+          podBuilder
+            .withVolumes(new VolumeBuilder()
+              .withHostPath(new HostPathVolumeSource(hostPath))
+              .withName(s"executor-volume-$volumeCount")
+              .build())
+          containerBuilder.addToVolumeMounts(new VolumeMountBuilder()
+            .withMountPath(containerPath)
+            .withName(s"executor-volume-$volumeCount")
+            .withReadOnly(true)
+            .build())
+          volumeCount += 1
+        case Array(hostPath, containerPath, "rw") =>
+          podBuilder
+            .withVolumes(new VolumeBuilder()
+              .withHostPath(new HostPathVolumeSource(hostPath))
+              .withName(s"executor-volume-$volumeCount")
+              .build())
+          containerBuilder.addToVolumeMounts(new VolumeMountBuilder()
+            .withMountPath(containerPath)
+            .withName(s"executor-volume-$volumeCount")
+            .withReadOnly(false)
+            .build())
+          volumeCount += 1
         case spec =>
           None
       }
