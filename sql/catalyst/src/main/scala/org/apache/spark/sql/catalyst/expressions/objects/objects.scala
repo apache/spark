@@ -687,7 +687,7 @@ case class MapObjects private(
         }
       }
     case ArrayType(et, _) =>
-      _.asInstanceOf[ArrayData].array
+      _.asInstanceOf[ArrayData].toSeq[Any](et)
   }
 
   private lazy val mapElements: Seq[_] => Any = customCollectionCls match {

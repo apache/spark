@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeArrayData}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 
 object ArrayData {
   def toArrayData(input: Any): ArrayData = input match {
@@ -41,6 +41,9 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
   def copy(): ArrayData
 
   def array: Array[Any]
+
+  def toSeq[T](dataType: DataType): IndexedSeq[T] =
+    new ArrayDataIndexedSeq[T](this, dataType)
 
   def setNullAt(i: Int): Unit
 
@@ -163,4 +166,33 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
       i += 1
     }
   }
+}
+
+class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends IndexedSeq[T] {
+
+  private lazy val accessor: (Int) => Any = dataType match {
+    case BooleanType => (idx: Int) => arrayData.getBoolean(idx)
+    case ByteType => (idx: Int) => arrayData.getByte(idx)
+    case ShortType => (idx: Int) => arrayData.getShort(idx)
+    case IntegerType => (idx: Int) => arrayData.getInt(idx)
+    case LongType => (idx: Int) => arrayData.getLong(idx)
+    case FloatType => (idx: Int) => arrayData.getFloat(idx)
+    case DoubleType => (idx: Int) => arrayData.getDouble(idx)
+    case d: DecimalType => (idx: Int) => arrayData.getDecimal(idx, d.precision, d.scale)
+    case CalendarIntervalType => (idx: Int) => arrayData.getInterval(idx)
+    case StringType => (idx: Int) => arrayData.getUTF8String(idx)
+    case BinaryType => (idx: Int) => arrayData.getBinary(idx)
+    case s: StructType => (idx: Int) => arrayData.getStruct(idx, s.length)
+    case _: ArrayType => (idx: Int) => arrayData.getArray(idx)
+    case _: MapType => (idx: Int) => arrayData.getMap(idx)
+    case _ => (idx: Int) => arrayData.get(idx, dataType)
+  }
+
+  override def apply(idx: Int): T = if (idx < arrayData.numElements()) {
+    accessor(idx).asInstanceOf[T]
+  } else {
+    throw new IndexOutOfBoundsException(s"Index $idx is greater than the length of the ArrayData.")
+  }
+
+  override def length: Int = arrayData.numElements()
 }
