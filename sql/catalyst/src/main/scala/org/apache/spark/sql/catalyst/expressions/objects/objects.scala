@@ -1420,8 +1420,45 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
   override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
   override def dataType: DataType = beanInstance.dataType
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+  private lazy val resolvedSetters = {
+    assert(beanInstance.dataType.isInstanceOf[ObjectType])
+
+    val ObjectType(beanClass) = beanInstance.dataType
+    setters.map {
+      case (name, expr) =>
+        // Looking for known type mapping.
+        // But also looking for general `Object`-type parameter for generic methods.
+        val paramTypes = ScalaReflection.expressionJavaClasses(Seq(expr)) ++ Seq(classOf[Object])
+        val methods = paramTypes.flatMap { fieldClass =>
+          try {
+            Some(beanClass.getDeclaredMethod(name, fieldClass))
+          } catch {
+            case e: NoSuchMethodException => None
+          }
+        }
+        if (methods.isEmpty) {
+          throw new NoSuchMethodException(s"""A method named "$name" is not declared """ +
+            "in any enclosing class nor any supertype")
+        }
+        methods.head -> expr
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val instance = beanInstance.eval(input)
+    if (instance != null) {
+      val bean = instance.asInstanceOf[Object]
+      resolvedSetters.foreach {
+        case (setter, expr) =>
+          val paramVal = expr.eval(input)
+          // We don't call setter if input value is null.
+          if (paramVal != null) {
+            setter.invoke(bean, paramVal.asInstanceOf[AnyRef])
+          }
+      }
+    }
+    instance
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val instanceGen = beanInstance.genCode(ctx)
@@ -1434,7 +1471,9 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
         val fieldGen = fieldValue.genCode(ctx)
         s"""
            |${fieldGen.code}
-           |$javaBeanInstance.$setterMethod(${fieldGen.value});
+           |if (!${fieldGen.isNull}) {
+           |  $javaBeanInstance.$setterMethod(${fieldGen.value});
+           |}
          """.stripMargin
     }
     val initializeCode = ctx.splitExpressionsWithCurrentInputs(
