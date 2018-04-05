@@ -26,6 +26,7 @@ import org.apache.parquet.schema.{MessageType, MessageTypeParser}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -391,7 +392,6 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     import testImplicits._
 
     var e: SparkException = null
-    // Disable databricks' vectorized parquet reader and use open source version.
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString) {
       // Create two parquet files with different schemas in the same folder
       Seq(("bcd", 2)).toDF("a", "b").coalesce(1).write.mode("overwrite").parquet(s"$path/parquet")
@@ -420,7 +420,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     withTempPath { dir =>
       val e = testSchemaMismatch(dir.getCanonicalPath, vectorizedReaderEnabled = true)
       assert(e.getCause.isInstanceOf[QueryExecutionException])
-      assert(e.getCause.getCause.isInstanceOf[ParquetSchemaColumnConvertNotSupportedException])
+      assert(e.getCause.getCause.isInstanceOf[SchemaColumnConvertNotSupportedException])
 
       // Check if the physical type is reporting correctly
       val errMsg = e.getCause.getMessage

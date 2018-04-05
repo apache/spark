@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.parquet;
+package org.apache.spark.sql.execution.datasources;
 
 import org.apache.spark.annotation.InterfaceStability;
 
@@ -23,7 +23,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * Exception thrown when the parquet reader find column type mismatches.
  */
 @InterfaceStability.Unstable
-public class ParquetSchemaColumnConvertNotSupportedException extends RuntimeException {
+public class SchemaColumnConvertNotSupportedException extends RuntimeException {
 
   /**
    * Name of the column which cannot be converted.
@@ -50,7 +50,7 @@ public class ParquetSchemaColumnConvertNotSupportedException extends RuntimeExce
     return logicalType;
   }
 
-  public ParquetSchemaColumnConvertNotSupportedException(
+  public SchemaColumnConvertNotSupportedException(
       String column,
       String physicalType,
       String logicalType) {

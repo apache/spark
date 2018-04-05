@@ -29,7 +29,6 @@ import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaColumnConvertNotSupportedException
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.NextIterator
 
@@ -186,7 +185,7 @@ class FileScanRDD(
           try {
             hasNext
           } catch {
-            case e: ParquetSchemaColumnConvertNotSupportedException =>
+            case e: SchemaColumnConvertNotSupportedException =>
               val message = "Parquet column cannot be converted in " +
                 s"file ${currentFile.filePath}. Column: ${e.getColumn}, " +
                 s"Expected: ${e.getLogicalType}, Found: ${e.getPhysicalType}"
