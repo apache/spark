@@ -44,8 +44,8 @@ private[spark] object KubernetesUtils {
   }
 
   /**
-    * Parse a comma-delimited list of volume specs, each of which
-    * takes the form hostPath:containerPath:name and add to pod.
+    * Parse a comma-delimited list of volume specs, each of which takes the form
+    * hostPath:containerPath:name; and add volume to pod and mount volume mount to container.
     *
     * @param pod original specification of the pod
     * @param container original specification of the container
@@ -60,12 +60,15 @@ private[spark] object KubernetesUtils {
         case Array(hostPath, containerPath, name) =>
           podBuilder
             .withVolumes(new VolumeBuilder()
-              .withHostPath(new HostPathVolumeSource(hostPath)).withName(name).build())
+              .withHostPath(new HostPathVolumeSource(hostPath))
+              .withName(name)
+              .build())
           containerBuilder.addToVolumeMounts(new VolumeMountBuilder()
             .withMountPath(containerPath)
             .withName(name)
             .build())
         case spec =>
+          // TODO(adit): log warming
           None
       }
     }
