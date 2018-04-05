@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.LocalObjectReference
+import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
@@ -38,7 +38,36 @@ private[spark] object KubernetesUtils {
   }
 
   /**
-   * Parses comma-separated list of imagePullSecrets into K8s-understandable format
+    * Parse a comma-delimited list of volume specs, each of which
+    * takes the form hostPath:containerPath:name and add to pod.
+    *
+    * @param pod original specification of the pod
+    * @param container original specification of the container
+    * @param volumes list of volume specs
+    * @return the pod with the init-container added to the list of InitContainers
+   */
+  def addVolumes(pod: Pod, container : Container, volumes: String): (Pod, Container) = {
+    val podBuilder = new PodBuilder(pod).editOrNewSpec()
+    val containerBuilder = new ContainerBuilder(container)
+    volumes.split(",").map(_.split(":")).map { spec =>
+      spec match {
+        case Array(hostPath, containerPath, name) =>
+          podBuilder
+            .withVolumes(new VolumeBuilder()
+              .withHostPath(new HostPathVolumeSource(hostPath)).withName(name).build())
+          containerBuilder.addToVolumeMounts(new VolumeMountBuilder()
+            .withMountPath(containerPath)
+            .withName(name)
+            .build())
+        case spec =>
+          None
+      }
+    }
+    (podBuilder.endSpec().build(), containerBuilder.build())
+  }
+
+  /**
+    * Parses comma-separated list of imagePullSecrets into K8s-understandable format
    */
   def parseImagePullSecrets(imagePullSecrets: Option[String]): List[LocalObjectReference] = {
     imagePullSecrets match {
