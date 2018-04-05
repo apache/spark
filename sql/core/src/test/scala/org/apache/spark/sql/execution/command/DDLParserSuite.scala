@@ -861,7 +861,8 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     assertUnsupported(sql2_view)
 
     val tableIdent = TableIdentifier("table_name", None)
-    val expected1_table = AlterTableDropPartitionCommand(
+
+    val expected1_table = AlterTableDropPartitionCommand.fromSpecs(
       tableIdent,
       Seq(
         Map("dt" -> "2008-08-08", "country" -> "us"),

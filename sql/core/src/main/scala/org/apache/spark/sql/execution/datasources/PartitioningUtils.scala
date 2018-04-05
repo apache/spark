@@ -296,9 +296,7 @@ object PartitioningUtils {
       tblName: String,
       resolver: Resolver): Map[String, T] = {
     val normalizedPartSpec = partitionSpec.toSeq.map { case (key, value) =>
-      val normalizedKey = partColNames.find(resolver(_, key)).getOrElse {
-        throw new AnalysisException(s"$key is not a valid partition column in table $tblName.")
-      }
+      val normalizedKey = normalizePartitionColumn(key, partColNames, tblName, resolver)
       normalizedKey -> value
     }
 
@@ -306,6 +304,16 @@ object PartitioningUtils {
       normalizedPartSpec.map(_._1), "in the partition schema", resolver)
 
     normalizedPartSpec.toMap
+  }
+
+  def normalizePartitionColumn(
+      partition: String,
+      partColNames: Seq[String],
+      tblName: String,
+      resolver: Resolver): String = {
+    partColNames.find(resolver(_, partition)).getOrElse {
+      throw new AnalysisException(s"$partition is not a valid partition column in table $tblName.")
+    }
   }
 
   /**

@@ -29,10 +29,10 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.{PartitionFiltersSpec, TablePartitionSpec}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualNullSafe, EqualTo, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, Not}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
@@ -521,7 +521,7 @@ case class AlterTableRenamePartitionCommand(
  */
 case class AlterTableDropPartitionCommand(
     tableName: TableIdentifier,
-    specs: Seq[TablePartitionSpec],
+    partitionsFilters: Seq[PartitionFiltersSpec],
     ifExists: Boolean,
     purge: Boolean,
     retainData: Boolean)
@@ -529,20 +529,36 @@ case class AlterTableDropPartitionCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
+    val timeZone = Option(sparkSession.sessionState.conf.sessionLocalTimeZone)
     val table = catalog.getTableMetadata(tableName)
+    val partitionColumns = table.partitionColumnNames
+    val partitionAttributes = table.partitionSchema.toAttributes.map(a => a.name -> a).toMap
     DDLUtils.verifyAlterTableType(catalog, table, isView = false)
     DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "ALTER TABLE DROP PARTITION")
 
-    val normalizedSpecs = specs.map { spec =>
-      PartitioningUtils.normalizePartitionSpec(
-        spec,
-        table.partitionColumnNames,
-        table.identifier.quotedString,
-        sparkSession.sessionState.conf.resolver)
+    val resolvedSpecs = partitionsFilters.flatMap { filtersSpec =>
+      if (hasComplexFilters(filtersSpec)) {
+        generatePartitionSpec(filtersSpec,
+          partitionColumns,
+          partitionAttributes,
+          table.identifier,
+          catalog,
+          sparkSession.sessionState.conf.resolver,
+          timeZone)
+      } else {
+        val partitionSpec = filtersSpec.map {
+          case (key, _, value) => key -> value
+        }.toMap
+        PartitioningUtils.normalizePartitionSpec(
+          partitionSpec,
+          partitionColumns,
+          table.identifier.quotedString,
+          sparkSession.sessionState.conf.resolver) :: Nil
+      }
     }
 
     catalog.dropPartitions(
-      table.identifier, normalizedSpecs, ignoreIfNotExists = ifExists, purge = purge,
+      table.identifier, resolvedSpecs, ignoreIfNotExists = ifExists, purge = purge,
       retainData = retainData)
 
     CommandUtils.updateTableStats(sparkSession, table)
@@ -550,6 +566,69 @@ case class AlterTableDropPartitionCommand(
     Seq.empty[Row]
   }
 
+  def hasComplexFilters(partitionFilterSpec: PartitionFiltersSpec): Boolean = {
+    !partitionFilterSpec.forall(_._2 == "EQ")
+  }
+
+  def generatePartitionSpec(
+      partitionFilterSpec: PartitionFiltersSpec,
+      partitionColumns: Seq[String],
+      partitionAttributes: Map[String, Attribute],
+      tableIdentifier: TableIdentifier,
+      catalog: SessionCatalog,
+      resolver: Resolver,
+      timeZone: Option[String]): Seq[TablePartitionSpec] = {
+    val filters = partitionFilterSpec.map { case (partitionColumn, operator, value) =>
+      val normalizedPartition = PartitioningUtils.normalizePartitionColumn(
+        partitionColumn,
+        partitionColumns,
+        tableIdentifier.quotedString,
+        resolver)
+      val partitionAttr = partitionAttributes(normalizedPartition)
+      val castedLiteralValue = Cast(Literal(value), partitionAttr.dataType, timeZone)
+      operator match {
+        case "EQ" =>
+          EqualTo(partitionAttr, castedLiteralValue)
+        case "NSEQ" =>
+          EqualNullSafe(partitionAttr, castedLiteralValue)
+        case "NEQ" | "NEQJ" =>
+          Not(EqualTo(partitionAttr, castedLiteralValue))
+        case "LT" =>
+          LessThan(partitionAttr, castedLiteralValue)
+        case "LTE" =>
+          LessThanOrEqual(partitionAttr, castedLiteralValue)
+        case "GT" =>
+          GreaterThan(partitionAttr, castedLiteralValue)
+        case "GTE" =>
+          GreaterThanOrEqual(partitionAttr, castedLiteralValue)
+      }
+    }
+    val partitions = catalog.listPartitionsByFilter(tableIdentifier, filters)
+    partitions.map(_.spec)
+  }
+}
+
+
+object AlterTableDropPartitionCommand {
+
+  def fromSpecs(
+      tableName: TableIdentifier,
+      specs: Seq[TablePartitionSpec],
+      ifExists: Boolean,
+      purge: Boolean,
+      retainData: Boolean): AlterTableDropPartitionCommand = {
+    AlterTableDropPartitionCommand(tableName,
+      specs.map(tablePartitionToPartitionFiltersSpec),
+      ifExists,
+      purge,
+      retainData)
+  }
+
+  def tablePartitionToPartitionFiltersSpec(spec: TablePartitionSpec): PartitionFiltersSpec = {
+    spec.map {
+      case (key, value) => (key, "EQ", value)
+    }.toSeq
+  }
 }
 
 

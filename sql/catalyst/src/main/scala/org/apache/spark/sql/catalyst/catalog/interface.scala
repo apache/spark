@@ -553,6 +553,11 @@ object CatalogTypes {
   type TablePartitionSpec = Map[String, String]
 
   /**
+   * Specifications of table partition filters. Seq of column name, comparison operator and value.
+   */
+  type PartitionFiltersSpec = Seq[(String, String, String)]
+
+  /**
    * Initialize an empty spec.
    */
   lazy val emptyTablePartitionSpec: TablePartitionSpec = Map.empty[String, String]

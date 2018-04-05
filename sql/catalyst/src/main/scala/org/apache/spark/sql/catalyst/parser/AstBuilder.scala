@@ -294,6 +294,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Create a partition specification map with filters.
+   */
+  override def visitDropPartitionSpec(
+      ctx: DropPartitionSpecContext): Seq[(String, String, String)] = {
+    withOrigin(ctx) {
+      ctx.dropPartitionVal().asScala.map { pFilter =>
+        val partition = pFilter.identifier().getText
+        val value = visitStringConstant(pFilter.constant())
+        val operator = pFilter.comparisonOperator().getChild(0).asInstanceOf[TerminalNode]
+        val stringOperator = SqlBaseParser.VOCABULARY.getSymbolicName(operator.getSymbol.getType)
+        (partition, stringOperator, value)
+      }
+    }
+  }
+
+  /**
    * Convert a constant of any type into a string. This is typically used in DDL commands, and its
    * main purpose is to prevent slight differences due to back to back conversions i.e.:
    * String -> Literal -> String.
