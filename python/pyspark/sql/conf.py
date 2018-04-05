@@ -67,7 +67,6 @@ class RuntimeConfig(object):
 def _test():
     import os
     import doctest
-    from pyspark.context import SparkContext
     from pyspark.sql.session import SparkSession
     import pyspark.sql.conf
 
