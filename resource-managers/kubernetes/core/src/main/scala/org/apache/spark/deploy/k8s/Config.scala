@@ -120,7 +120,7 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_VOLUMES =
     ConfigBuilder("spark.kubernetes.executor.volumes")
       .doc("List of volumes mounted into the executor container. The format of this property is " +
-        "a comma-separated list of mappings following the form hostPath:containerPath:name")
+        "a comma-separated list of mappings following the form hostPath:containerPath[:ro|rw]")
       .stringConf
       .createWithDefault("")
 
