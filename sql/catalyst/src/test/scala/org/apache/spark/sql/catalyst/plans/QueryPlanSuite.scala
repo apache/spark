@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.IntegerType
 
 class QueryPlanSuite extends SparkFunSuite {
 
-  test("origin remains the same after mapExpressions") {
+  test("origin remains the same after mapExpressions (SPARK-23823)") {
     CurrentOrigin.setPosition(0, 0)
     val column = AttributeReference("column", IntegerType)(NamedExpression.newExprId)
     val query = plans.DslLogicalPlan(plans.table("table")).select(column)
