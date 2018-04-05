@@ -19,12 +19,6 @@ package org.apache.spark.unsafe.memory;
 
 import org.apache.spark.unsafe.Platform;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.nio.ByteBuffer;
-
-import sun.nio.ch.DirectBuffer;
-
 /**
  * A simple {@link MemoryAllocator} that uses {@code Unsafe} to allocate off-heap memory.
  */

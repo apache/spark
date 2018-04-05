@@ -61,7 +61,7 @@ public abstract class MemoryBlock {
 
   protected MemoryBlock(@Nullable Object obj, long offset, long length) {
     if (offset < 0 || length < 0) {
-      throw new ArrayIndexOutOfBoundsException(
+      throw new IllegalArgumentException(
         "Length " + length + " and offset " + offset + "must be non-negative");
     }
     this.obj = obj;
@@ -130,8 +130,8 @@ public abstract class MemoryBlock {
   }
 
   /**
-   * Just instantiate the same type of MemoryBlock with new offset and size. The data is not
-   * copied. If parameters are invalid, an exception is thrown
+   * Just instantiate the same type of MemoryBlock with the new absolute offset and size. The data
+   * is not copied. If parameters are invalid, an exception is thrown
    */
   public abstract MemoryBlock subBlock(long offset, long size);
 
@@ -183,24 +183,26 @@ public abstract class MemoryBlock {
 
   public static final void copyMemory(
       MemoryBlock src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
-    assert(length <= src.length && length <= dst.length);
+    assert(length <= (src.length - src.getBaseOffset()) &&
+           length <= (dst.length - dst.getBaseOffset()));
     Platform.copyMemory(src.getBaseObject(), src.getBaseOffset() + srcOffset,
       dst.getBaseObject(), dst.getBaseOffset() + dstOffset, length);
   }
 
   public static final void copyMemory(MemoryBlock src, MemoryBlock dst, long length) {
-    assert(length <= src.length && length <= dst.length);
+    assert(length <= (src.length - src.getBaseOffset()) &&
+           length <= (dst.length - dst.getBaseOffset()));
     Platform.copyMemory(src.getBaseObject(), src.getBaseOffset(),
       dst.getBaseObject(), dst.getBaseOffset(), length);
   }
 
   public final void copyFrom(Object src, long srcOffset, long dstOffset, long length) {
-    assert(length <= this.length);
+    assert(length <= this.length - srcOffset);
     Platform.copyMemory(src, srcOffset, obj, offset + dstOffset, length);
   }
 
   public final void writeTo(long srcOffset, Object dst, long dstOffset, long length) {
-    assert(length <= this.length);
+    assert(length <= this.length - srcOffset);
     Platform.copyMemory(obj, offset + srcOffset, dst, dstOffset, length);
   }
 }
