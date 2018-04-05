@@ -2239,6 +2239,23 @@ class Dataset[T] private[sql](
     }
   }
 
+   /**
+    * Returns a new Dataset with altered column names.
+    * This is a no-op if schema doesn't contain existingName.
+    *
+    * @param convert conversion function from the old to the new name
+    *
+    * @group untypedrel
+    * @since 2.0.0
+    */
+  def withAllColumnsRenamed(convert: String => String): DataFrame = {
+    val output = queryExecution.analyzed.output
+    val columns = output.map { col =>
+      Column(col).as(convert(col.name))
+    }
+    select(columns : _*)
+  }
+
   /**
    * Returns a new Dataset with a column dropped. This is a no-op if schema doesn't contain
    * column name.
