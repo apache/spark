@@ -154,16 +154,12 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "nor any supertype")
   }
 
-  test("Can not pass in null into setters in InitializeJavaBean") {
+  test("InitializeJavaBean doesn't call setters if input in null") {
     val initializeBean = InitializeJavaBean(
       Literal.fromObject(new TestBean),
       Map("setNonPrimitive" -> Literal(null)))
-    intercept[NullPointerException] {
-      evaluateWithoutCodegen(initializeBean, InternalRow.fromSeq(Seq()))
-    }.getMessage.contains("The parameter value for setters in `InitializeJavaBean` can not be null")
-    intercept[NullPointerException] {
-      evaluateWithGeneratedMutableProjection(initializeBean, InternalRow.fromSeq(Seq()))
-    }.getMessage.contains("The parameter value for setters in `InitializeJavaBean` can not be null")
+    evaluateWithoutCodegen(initializeBean, InternalRow.fromSeq(Seq()))
+    evaluateWithGeneratedMutableProjection(initializeBean, InternalRow.fromSeq(Seq()))
 
     val initializeBean2 = InitializeJavaBean(
       Literal.fromObject(new TestBean),
