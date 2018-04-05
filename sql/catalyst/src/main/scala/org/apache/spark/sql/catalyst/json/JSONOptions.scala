@@ -86,12 +86,12 @@ private[sql] class JSONOptions(
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
   /**
-   * A sequence of bytes between two consecutive json records.
+   * A string between two consecutive JSON records.
    */
   val lineSeparator: Option[String] = parameters.get("lineSep")
 
   /**
-   * Standard charset name. For example UTF-8, UTF-16LE and UTF-32BE.
+   * Standard encoding (charset) name. For example UTF-8, UTF-16LE and UTF-32BE.
    * If the encoding is not specified (None), it will be detected automatically.
    */
   val encoding: Option[String] = parameters.get("encoding")
