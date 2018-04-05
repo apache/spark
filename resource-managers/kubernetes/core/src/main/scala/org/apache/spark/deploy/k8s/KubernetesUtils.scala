@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s
 
 import java.io.File
 
-import io.fabric8.kubernetes.api.model.{Container, Pod, PodBuilder}
+import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
@@ -41,6 +41,35 @@ private[spark] object KubernetesUtils {
 
   def requireNandDefined(opt1: Option[_], opt2: Option[_], errMessage: String): Unit = {
     opt1.foreach { _ => require(opt2.isEmpty, errMessage) }
+  }
+
+  /**
+    * Parse a comma-delimited list of volume specs, each of which
+    * takes the form hostPath:containerPath:name and add to pod.
+    *
+    * @param pod original specification of the pod
+    * @param container original specification of the container
+    * @param volumes list of volume specs
+    * @return the pod with the init-container added to the list of InitContainers
+   */
+  def addVolumes(pod: Pod, container : Container, volumes: String): (Pod, Container) = {
+    val podBuilder = new PodBuilder(pod).editOrNewSpec()
+    val containerBuilder = new ContainerBuilder(container)
+    volumes.split(",").map(_.split(":")).map { spec =>
+      spec match {
+        case Array(hostPath, containerPath, name) =>
+          podBuilder
+            .withVolumes(new VolumeBuilder()
+              .withHostPath(new HostPathVolumeSource(hostPath)).withName(name).build())
+          containerBuilder.addToVolumeMounts(new VolumeMountBuilder()
+            .withMountPath(containerPath)
+            .withName(name)
+            .build())
+        case spec =>
+          None
+      }
+    }
+    (podBuilder.endSpec().build(), containerBuilder.build())
   }
 
   /**
