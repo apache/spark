@@ -143,7 +143,7 @@ public abstract class MemoryBlock {
     }
     if (offset + size > length) {
       throw new ArrayIndexOutOfBoundsException("The sum of size " + size + " and offset " +
-        offset + " should be equal to or subset of the original MemoryBlock");
+        offset + " should not be larger than the length " + length + " in the MemoryBlock");
     }
   }
 
@@ -184,7 +184,7 @@ public abstract class MemoryBlock {
 
   public static final void copyMemory(
       MemoryBlock src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
-    assert(length <= src.length && length <= dst.length);
+    assert(srcOffset + length <= src.length && dstOffset + length <= dst.length);
     Platform.copyMemory(src.getBaseObject(), src.getBaseOffset() + srcOffset,
       dst.getBaseObject(), dst.getBaseOffset() + dstOffset, length);
   }
