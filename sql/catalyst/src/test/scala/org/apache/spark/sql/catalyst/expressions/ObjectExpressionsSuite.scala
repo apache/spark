@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
+import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
@@ -275,6 +276,33 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val decodeUsingSerializer = DecodeUsingSerializer(inputObject, ClassTag(cls), useKryo)
       checkEvaluation(decodeUsingSerializer, new Integer(1), InternalRow.fromSeq(Seq(input)))
       checkEvaluation(decodeUsingSerializer, null, InternalRow.fromSeq(Seq(null)))
+    }
+  }
+
+  test("LambdaVariable should support interpreted execution") {
+    val elementTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
+      DoubleType, DecimalType.USER_DEFAULT, StringType, BinaryType, DateType, TimestampType,
+      CalendarIntervalType)
+    val arrayTypes = elementTypes.flatMap { elementType =>
+      Seq(ArrayType(elementType, containsNull = false), ArrayType(elementType, containsNull = true))
+    }
+    val mapTypes = elementTypes.flatMap { elementType =>
+      Seq(MapType(elementType, elementType, false), MapType(elementType, elementType, true))
+    }
+    val structTypes = elementTypes.flatMap { elementType =>
+      Seq(StructType(StructField("col1", elementType, false) :: Nil),
+        StructType(StructField("col1", elementType, true) :: Nil))
+    }
+
+    val acceptedTypes = elementTypes ++ arrayTypes ++ mapTypes ++ structTypes
+    val random = new Random()
+    (0 until 100).foreach { _ =>
+      val schema = RandomDataGenerator.randomSchema(random, 1, acceptedTypes)
+      val row = RandomDataGenerator.randomRow(random, schema)
+      val rowConverter = RowEncoder(schema)
+      val internalRow = rowConverter.toRow(row)
+      val lambda = LambdaVariable("dummy", "dummuIsNull", schema(0).dataType, schema(0).nullable)
+      checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)
     }
   }
 }
