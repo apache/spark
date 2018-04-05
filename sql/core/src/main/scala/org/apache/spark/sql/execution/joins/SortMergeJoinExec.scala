@@ -523,16 +523,16 @@ case class SortMergeJoinExec(
         v => s"$v = new $clsName($inMemoryThreshold, $spillThreshold);", forceInline = true)
       val matchedKeyVars = copyKeys(ctx, leftKeyVars)
 
-      val lowerCompop = lowerRangeExpression.get match {
+      val lowerCompop = lowerRangeExpression.map {
         case GreaterThanOrEqual(_, _) => "<"
         case GreaterThan(_, _) => "<="
         case _ => ""
-      }
-      val upperCompop = upperRangeExpression.get match {
+      }.getOrElse("")
+      val upperCompop = upperRangeExpression.map {
         case LessThanOrEqual(_, _) => ">"
         case LessThan(_, _) => ">="
         case _ => ""
-      }
+      }.getOrElse("")
       val lowerCompExp = if(lowerRangeExpression.isEmpty) ""
         else s" || (comp == 0 && ${leftLowerRangeKey.value} $lowerCompop ${rightLowerRangeKey.value})"
       val upperCompExp = if(upperRangeExpression.isEmpty) ""
@@ -567,8 +567,10 @@ case class SortMergeJoinExec(
              |    return;
              |  $rightTmpRow = $matches.get(0);
              |  $javaType tempVal = getRightTmpRangeValue();
-             |  while(!$matches.isEmpty() && ${leftLowerRangeKey.value} $upperCompop tempVal) {
+             |  while(${leftLowerRangeKey.value} $upperCompop tempVal) {
              |    $matches.dequeue();
+             |    if($matches.isEmpty())
+             |      break;
              |    $rightTmpRow = $matches.get(0);
              |    tempVal = getRightTmpRangeValue();
              |  }

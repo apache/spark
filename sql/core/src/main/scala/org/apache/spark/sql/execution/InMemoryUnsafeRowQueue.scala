@@ -85,6 +85,8 @@ private[sql] class InMemoryUnsafeRowQueue(
 //  private var spillableArray: UnsafeExternalSorter = _
   private var numRows = 0
 
+  override def isEmpty: Boolean = numRows == 0
+
   // A counter to keep track of total modifications done to this array since its creation.
   // This helps to invalidate iterators when there are changes done to the backing array.
   private var modificationsCount: Long = 0
