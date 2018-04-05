@@ -205,12 +205,10 @@ private[spark] class ExecutorPodFactory(
         .endSpec()
       .build()
 
-    val executorPodAndContainerWithVolumes =
+    val (executorPodWithVolumes, executorContainerWithVolumes) =
       KubernetesUtils.addVolumes(executorPod,
         executorContainer,
         sparkConf.get(KUBERNETES_EXECUTOR_VOLUMES))
-    val executorPodWithVolumes = executorPodAndContainerWithVolumes._1
-    val executorContainerWithVolumes = executorPodAndContainerWithVolumes._2
 
     val containerWithLimitCores = executorLimitCores.map { limitCores =>
       val executorCpuLimitQuantity = new QuantityBuilder(false)
