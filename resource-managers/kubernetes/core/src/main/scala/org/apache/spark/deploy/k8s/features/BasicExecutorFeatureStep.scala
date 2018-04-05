@@ -17,10 +17,11 @@
 package org.apache.spark.deploy.k8s.features
 
 import scala.collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD}
@@ -172,11 +173,11 @@ private[spark] class BasicExecutorFeatureStep(
         .endSpec()
       .build()
 
-    val volumes = kubernetesConf.get(KUBERNETES_EXECUTOR_VOLUMES)
-    val executorPodAndContainerWithVolumes =
-      KubernetesUtils.addVolumes(executorPod, containerWithLimitCores, volumes)
-    val executorPodWithVolumes = executorPodAndContainerWithVolumes._1
-    val executorContainerWithVolumes = executorPodAndContainerWithVolumes._2
+    val (executorPodWithVolumes, executorContainerWithVolumes) =
+      KubernetesVolumeUtils.addVolumes(executorPod,
+        containerWithLimitCores,
+        kubernetesConf.sparkConf,
+        KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
 
     SparkPod(executorPodWithVolumes, executorContainerWithVolumes)
   }
