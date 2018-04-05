@@ -1292,7 +1292,13 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
       val bean = instance.asInstanceOf[Object]
       resolvedSetters.foreach {
         case (setter, expr) =>
-          setter.invoke(bean, expr.eval(input).asInstanceOf[AnyRef])
+          val paramVal = expr.eval(input)
+          if (paramVal == null) {
+            throw new NullPointerException("The parameter value for setters in " +
+              "`InitializeJavaBean` can not be null")
+          } else {
+            setter.invoke(bean, paramVal.asInstanceOf[AnyRef])
+          }
       }
     }
     instance
@@ -1309,6 +1315,10 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
         val fieldGen = fieldValue.genCode(ctx)
         s"""
            |${fieldGen.code}
+           |if (${fieldGen.isNull}) {
+           |  throw new NullPointerException("The parameter value for setters in " +
+           |    "`InitializeJavaBean` can not be null");
+           |}
            |$javaBeanInstance.$setterMethod(${fieldGen.value});
          """.stripMargin
     }

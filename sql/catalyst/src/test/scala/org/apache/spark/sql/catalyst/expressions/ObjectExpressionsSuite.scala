@@ -94,6 +94,13 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "nor any supertype")
   }
 
+  test("Can not pass in null into setters in InitializeJavaBean") {
+    val initializeBean = InitializeJavaBean(
+      Literal.fromObject(new TestBean),
+      Map("setNonPrimitive" -> Literal(null)))
+    evaluateWithoutCodegen(initializeBean, InternalRow.fromSeq(Seq()))
+  }
+
   test("SPARK-23585: UnwrapOption should support interpreted execution") {
     val cls = classOf[Option[Int]]
     val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
@@ -141,4 +148,6 @@ class TestBean extends Serializable {
   private var x: Int = 0
 
   def setX(i: Int): Unit = x = i
+  def setNonPrimitive(i: AnyRef): Unit =
+    assert(i != null, "this setter should not be called with null.")
 }
