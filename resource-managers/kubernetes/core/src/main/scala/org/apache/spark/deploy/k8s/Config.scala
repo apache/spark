@@ -117,6 +117,13 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault("spark")
 
+  val KUBERNETES_EXECUTOR_VOLUMES =
+    ConfigBuilder("spark.kubernetes.executor.volumes")
+      .doc("List of volumes mounted into the executor container. The format of this property is " +
+        "a comma-separated list of mappings following the form hostPath:containerPath:name")
+      .stringConf
+      .createWithDefault("")
+
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
       .doc("Number of pods to launch at once in each round of executor allocation.")
