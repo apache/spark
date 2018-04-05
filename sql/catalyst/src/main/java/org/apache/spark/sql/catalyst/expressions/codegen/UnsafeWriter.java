@@ -118,10 +118,10 @@ public abstract class UnsafeWriter {
   }
 
   private void writeUnalignedBytes(
-          int ordinal,
-          Object baseObject,
-          long baseOffset,
-          int numBytes) {
+      int ordinal,
+      Object baseObject,
+      long baseOffset,
+      int numBytes) {
     final int roundedSize = ByteArrayMethods.roundNumberOfBytesToNearestWord(numBytes);
     grow(roundedSize);
     zeroOutPaddingBytes(numBytes);
@@ -153,13 +153,13 @@ public abstract class UnsafeWriter {
   }
 
   public final void write(UnsafeArrayData array) {
-    // Unsafe arrays both can be written as a regular array field or as part ofa  map. This makes
+    // Unsafe arrays both can be written as a regular array field or as part of a map. This makes
     // updating the offset and size dependent on the code path, this is why we currently do not
     // provide an method for writing unsafe arrays that also updates the size and offset.
     int numBytes = array.getSizeInBytes();
     grow(numBytes);
     Platform.copyMemory(
-            array.getBaseOffset(),
+            array.getBaseObject(),
             array.getBaseOffset(),
             getBuffer(),
             cursor(),
@@ -168,10 +168,10 @@ public abstract class UnsafeWriter {
   }
 
   private void writeAlignedBytes(
-          int ordinal,
-          Object baseObject,
-          long baseOffset,
-          int numBytes) {
+      int ordinal,
+      Object baseObject,
+      long baseOffset,
+      int numBytes) {
     grow(numBytes);
     Platform.copyMemory(baseObject, baseOffset, getBuffer(), cursor(), numBytes);
     setOffsetAndSize(ordinal, numBytes);
