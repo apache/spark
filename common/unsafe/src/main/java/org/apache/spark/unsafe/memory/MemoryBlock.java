@@ -130,8 +130,9 @@ public abstract class MemoryBlock {
   }
 
   /**
-   * Just instantiate the same type of MemoryBlock with the new absolute offset and size. The data
-   * is not copied. If parameters are invalid, an exception is thrown
+   * Just instantiate the sub-block with the same type of MemoryBlock with the new size and relative
+   * offset from the original offset. The data is not copied.
+   * If parameters are invalid, an exception is thrown.
    */
   public abstract MemoryBlock subBlock(long offset, long size);
 
@@ -142,7 +143,7 @@ public abstract class MemoryBlock {
     }
     if (offset + size > length) {
       throw new ArrayIndexOutOfBoundsException("The sum of size " + size + " and offset " +
-        offset + " should not be larger than the length " + length + " in the MemoryBlock");
+        offset + " should be equal to or subset of the original MemoryBlock");
     }
   }
 
@@ -183,15 +184,13 @@ public abstract class MemoryBlock {
 
   public static final void copyMemory(
       MemoryBlock src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
-    assert(length <= (src.length - src.getBaseOffset()) &&
-           length <= (dst.length - dst.getBaseOffset()));
+    assert(length <= src.length && length <= dst.length);
     Platform.copyMemory(src.getBaseObject(), src.getBaseOffset() + srcOffset,
       dst.getBaseObject(), dst.getBaseOffset() + dstOffset, length);
   }
 
   public static final void copyMemory(MemoryBlock src, MemoryBlock dst, long length) {
-    assert(length <= (src.length - src.getBaseOffset()) &&
-           length <= (dst.length - dst.getBaseOffset()));
+    assert(length <= src.length && length <= dst.length);
     Platform.copyMemory(src.getBaseObject(), src.getBaseOffset(),
       dst.getBaseObject(), dst.getBaseOffset(), length);
   }

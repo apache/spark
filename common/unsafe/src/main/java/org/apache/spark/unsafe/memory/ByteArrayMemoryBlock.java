@@ -43,6 +43,7 @@ public final class ByteArrayMemoryBlock extends MemoryBlock {
   @Override
   public MemoryBlock subBlock(long offset, long size) {
     checkSubBlockRange(offset, size);
+    if (offset == 0 && size == this.size()) return this;
     return new ByteArrayMemoryBlock(array, this.offset + offset, size);
   }
 

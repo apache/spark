@@ -84,18 +84,41 @@ public class MemoryBlockSuite {
       Assert.assertEquals((byte) -1, memory.getByte(i));
     }
 
+    assert(memory.subBlock(0, memory.size()) == memory);
+
     try {
-      memory.subBlock(-1, -1);
+      memory.subBlock(-8, 8);
       Assert.fail();
     } catch (Exception expected) {
       Assert.assertThat(expected.getMessage(), containsString("non-negative"));
     }
 
     try {
-      memory.subBlock(16, length - 8);
+      memory.subBlock(0, -8);
       Assert.fail();
     } catch (Exception expected) {
-      Assert.assertThat(expected.getMessage(), containsString("should not be larger than"));
+      Assert.assertThat(expected.getMessage(), containsString("non-negative"));
+    }
+
+    try {
+      memory.subBlock(0, length + 8);
+      Assert.fail();
+    } catch (Exception expected) {
+      Assert.assertThat(expected.getMessage(), containsString("subset"));
+    }
+
+    try {
+      memory.subBlock(8, length - 4);
+      Assert.fail();
+    } catch (Exception expected) {
+      Assert.assertThat(expected.getMessage(), containsString("subset"));
+    }
+
+    try {
+      memory.subBlock(length + 8, 4);
+      Assert.fail();
+    } catch (Exception expected) {
+      Assert.assertThat(expected.getMessage(), containsString("subset"));
     }
   }
 

@@ -43,6 +43,7 @@ public final class OnHeapMemoryBlock extends MemoryBlock {
   @Override
   public MemoryBlock subBlock(long offset, long size) {
     checkSubBlockRange(offset, size);
+    if (offset == 0 && size == this.size()) return this;
     return new OnHeapMemoryBlock(array, this.offset + offset, size);
   }
 
