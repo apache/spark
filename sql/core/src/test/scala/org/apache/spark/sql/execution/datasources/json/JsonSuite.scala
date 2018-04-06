@@ -2231,8 +2231,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       checkEncoding(
         expectedEncoding = encoding,
         pathToJsonFiles = path.getCanonicalPath,
-        expectedContent = """{"_1":"Dog","_2":42}"""
-      )
+        expectedContent = """{"_1":"Dog","_2":42}""")
     }
   }
 
@@ -2246,8 +2245,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       checkEncoding(
         expectedEncoding = "UTF-8",
         pathToJsonFiles = path.getCanonicalPath,
-        expectedContent = """{"_1":"Dog","_2":42}"""
-      )
+        expectedContent = """{"_1":"Dog","_2":42}""")
     }
   }
 
@@ -2348,8 +2346,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
 
     assert(exception.getMessage.contains(
-      s"""The lineSep option must be specified for the $encoding encoding"""
-    ))
+      s"""The lineSep option must be specified for the $encoding encoding"""))
   }
 
   private val badJson = "\u0000\u0000\u0000A\u0001AAA"
