@@ -2283,9 +2283,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  def checkReadJson(lineSep: String, encodingOption: String, encoding: String,
-      inferSchema: Boolean, runId: Int): Unit = {
-    test(s"SPARK-23724: checks reading json in ${encoding} #${runId}") {
+  def checkReadJson(lineSep: String, encoding: String, inferSchema: Boolean, id: Int): Unit = {
+    test(s"SPARK-23724: checks reading json in ${encoding} #${id}") {
       val lineSepInBytes = {
         if (lineSep.startsWith("x")) {
           lineSep.replaceAll("[^0-9A-Fa-f]", "")
@@ -2309,7 +2308,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           spark.read.schema(schema)
         }
         val readBack = reader
-          .option(encodingOption, encoding)
+          .option("encoding", encoding)
           .option("lineSep", lineSep)
           .json(path.getCanonicalPath)
         checkAnswer(readBack, records.map(rec => Row(rec._1, rec._2)))
@@ -2319,21 +2318,21 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   // scalastyle:off nonascii
   List(
-    ("|", "encoding", "UTF-8", false),
-    ("^", "charset", "UTF-16BE", true),
-    ("::", "encoding", "ISO-8859-1", true),
-    ("!!!@3", "encoding", "UTF-32LE", false),
-    (0x1E.toChar.toString, "charset", "UTF-8", true),
-    ("아", "encoding", "UTF-32BE", false),
-    ("куку", "encoding", "CP1251", true),
-    ("sep", "encoding", "utf-8", false),
-    ("\r\n", "encoding", "UTF-16LE", false),
-    ("\r\n", "encoding", "utf-16be", true),
-    ("\u000d\u000a", "encoding", "UTF-32BE", false),
-    ("\u000a\u000d", "encoding", "UTF-8", true),
-    ("===", "encoding", "US-ASCII", false),
-    ("$^+", "encoding", "utf-32le", true)
-  ).zipWithIndex.foreach{case ((d, o, c, s), i) => checkReadJson(d, o, c, s, i)}
+    (0, "|", "UTF-8", false),
+    (1, "^", "UTF-16BE", true),
+    (2, "::", "ISO-8859-1", true),
+    (3, "!!!@3", "UTF-32LE", false),
+    (4, 0x1E.toChar.toString, "UTF-8", true),
+    (5, "아", "UTF-32BE", false),
+    (6, "куку", "CP1251", true),
+    (7, "sep", "utf-8", false),
+    (8, "\r\n", "UTF-16LE", false),
+    (9, "\r\n", "utf-16be", true),
+    (10, "\u000d\u000a", "UTF-32BE", false),
+    (11, "\u000a\u000d", "UTF-8", true),
+    (12, "===", "US-ASCII", false),
+    (13, "$^+", "utf-32le", true)
+  ).foreach{case (i, d, c, s) => checkReadJson(d, c, s, i)}
   // scalastyle:on nonascii
 
   test("SPARK-23724: lineSep should be set if encoding if different from UTF-8") {
