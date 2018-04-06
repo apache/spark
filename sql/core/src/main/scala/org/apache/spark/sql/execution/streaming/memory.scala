@@ -51,6 +51,9 @@ object MemoryStream {
     new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
 }
 
+/**
+ * A base class for memory stream implementations. Supports adding data and resetting.
+ */
 abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends BaseStreamingSource {
   protected val encoder = encoderFor[A]
   protected val attributes = encoder.schema.toAttributes
