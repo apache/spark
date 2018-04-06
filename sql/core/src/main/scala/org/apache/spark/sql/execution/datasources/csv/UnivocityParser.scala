@@ -45,15 +45,6 @@ class UnivocityParser(
   // A `ValueConverter` is responsible for converting the given value to a desired type.
   private type ValueConverter = String => Any
 
-  private val tokenizer = new CsvParser(options.asParserSettings)
-
-  private val row = new GenericInternalRow(requiredSchema.length)
-
-  // Retrieve the raw record string.
-  private def getCurrentInput: UTF8String = {
-    UTF8String.fromString(tokenizer.getContext.currentParsedContent().stripLineEnd)
-  }
-
   // This parser first picks some tokens from the input tokens, according to the required schema,
   // then parse these tokens and put the values in a row, with the order specified by the required
   // schema.
