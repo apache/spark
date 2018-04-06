@@ -152,6 +152,61 @@ class BasicExecutorFeatureStepSuite
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
   }
 
+  test("single executor hostPath volume gets mounted") {
+    val conf = baseConf.clone()
+    conf.set(KUBERNETES_EXECUTOR_VOLUMES, "/tmp/mount:/opt/mount")
+
+    val step = new BasicExecutorFeatureStep(
+      KubernetesConf(
+        conf,
+        KubernetesExecutorSpecificConf("1", DRIVER_POD),
+        RESOURCE_NAME_PREFIX,
+        APP_ID,
+        LABELS,
+        ANNOTATIONS,
+        Map.empty,
+        Map.empty))
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    assert(executor.container.getImage === EXECUTOR_IMAGE)
+    assert(executor.container.getVolumeMounts.size() === 1)
+    assert(executor.container.getVolumeMounts.get(0).getName === "hostPath-volume-1")
+    assert(executor.container.getVolumeMounts.get(0).getMountPath === "/opt/mount")
+
+    assert(executor.pod.getSpec.getVolumes.size() === 1)
+    assert(executor.pod.getSpec.getVolumes.get(0).getHostPath === "/tmp/mount")
+
+    checkOwnerReferences(executor.pod, DRIVER_POD_UID)
+  }
+
+  test("multiple executor hostPath volumes get mounted") {
+    val conf = baseConf.clone()
+    conf.set(KUBERNETES_EXECUTOR_VOLUMES, "/tmp/mount1:/opt/mount1,/tmp/mount2:/opt/mount2")
+    val step = new BasicExecutorFeatureStep(
+      KubernetesConf(
+        conf,
+        KubernetesExecutorSpecificConf("1", DRIVER_POD),
+        RESOURCE_NAME_PREFIX,
+        APP_ID,
+        LABELS,
+        ANNOTATIONS,
+        Map.empty,
+        Map.empty))
+    val executor = step.configurePod(SparkPod.initialPod())
+
+    assert(executor.container.getImage === EXECUTOR_IMAGE)
+    assert(executor.container.getVolumeMounts.size() === 2)
+    assert(executor.container.getVolumeMounts.get(0).getName === "hostPath-volume-1")
+    assert(executor.container.getVolumeMounts.get(0).getMountPath === "/opt/mount1")
+    assert(executor.container.getVolumeMounts.get(1).getName === "hostPath-volume-2")
+    assert(executor.container.getVolumeMounts.get(1).getMountPath === "/opt/mount2")
+
+    assert(executor.pod.getSpec.getVolumes.size() === 2)
+    assert(executor.pod.getSpec.getVolumes.get(0).getHostPath === "/tmp/mount1")
+    assert(executor.pod.getSpec.getVolumes.get(1).getHostPath === "/tmp/mount2")
+    checkOwnerReferences(executor.pod, DRIVER_POD_UID)
+  }
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)
