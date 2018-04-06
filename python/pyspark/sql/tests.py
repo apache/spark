@@ -3976,14 +3976,14 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         result = df.select(tokenize("vals").alias("hi"))
         self.assertEqual([Row(hi=[u'hi', u'boo']), Row(hi=[u'bye', u'boo'])], result.collect())
 
-    def test_pandas_udf_nested_arrays_does_not_work(self):
+    def test_pandas_udf_nested_arrays(self):
         from pyspark.sql.functions import pandas_udf
         tokenize = pandas_udf(lambda s: s.apply(lambda str: [str.split(' ')]),
                               ArrayType(ArrayType(StringType())))
+        self.assertEqual(tokenize.returnType, ArrayType(StringType()))
+        df = self.spark.createDataFrame([("hi boo",), ("bye boo",)], ["vals"])
         result = df.select(tokenize("vals").alias("hi"))
-        # If we start supporting nested arrays we should update the documentation in functions.py
-        with QuietTest(self.sc):
-            self.assertRaises(ArrowTypeError, result.collect())
+        self.assertEqual([Row(hi=[[u'hi', u'boo']]), Row(hi=[[u'bye', u'boo']])], result.collect())
 
     def test_vectorized_udf_basic(self):
         from pyspark.sql.functions import pandas_udf, col, array
