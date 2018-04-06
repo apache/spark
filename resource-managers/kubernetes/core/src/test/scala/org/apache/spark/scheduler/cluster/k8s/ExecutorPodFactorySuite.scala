@@ -178,12 +178,12 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     assert(executor.getSpec.getContainers.size() === 1)
     assert(executor.getSpec.getContainers.get(0).getVolumeMounts.size() === 1)
     assert(executor.getSpec.getContainers.get(0).getVolumeMounts.get(0).getName
-      === "hostPath-volume-1")
+      === "hostPath-volume-0")
     assert(executor.getSpec.getContainers.get(0).getVolumeMounts.get(0)
       .getMountPath === "/opt/mount")
 
     assert(executor.getSpec.getVolumes.size() === 1)
-    assert(executor.getSpec.getVolumes.get(0).getHostPath === "/tmp/mount")
+    assert(executor.getSpec.getVolumes.get(0).getHostPath.getPath === "/tmp/mount")
 
     checkOwnerReferences(executor, driverPodUid)
   }
@@ -199,17 +199,17 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     assert(executor.getSpec.getContainers.size() === 1)
     assert(executor.getSpec.getContainers.get(0).getVolumeMounts.size() === 2)
     assert(executor.getSpec.getContainers.get(0).getVolumeMounts.get(0).getName
-      === "hostPath-volume-1")
+      === "hostPath-volume-0")
     assert(executor.getSpec.getContainers.get(0).getVolumeMounts.get(1).getName
-      === "hostPath-volume-2")
+      === "hostPath-volume-1")
     assert(executor.getSpec.getContainers.get(0).getVolumeMounts.get(0)
       .getMountPath === "/opt/mount1")
     assert(executor.getSpec.getContainers.get(0).getVolumeMounts.get(1)
       .getMountPath === "/opt/mount2")
 
     assert(executor.getSpec.getVolumes.size() === 2)
-    assert(executor.getSpec.getVolumes.get(0).getHostPath === "/tmp/mount1")
-    assert(executor.getSpec.getVolumes.get(1).getHostPath === "/tmp/mount2")
+    assert(executor.getSpec.getVolumes.get(0).getHostPath.getPath === "/tmp/mount1")
+    assert(executor.getSpec.getVolumes.get(1).getHostPath.getPath === "/tmp/mount2")
 
     checkOwnerReferences(executor, driverPodUid)
   }
