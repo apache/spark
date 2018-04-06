@@ -27,7 +27,6 @@ import java.util.*;
 import com.google.common.collect.ImmutableMap;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
-import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.OnHeapMemoryBlock;
 import org.junit.Test;
 
