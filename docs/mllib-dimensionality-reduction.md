@@ -91,7 +91,7 @@ The same code applies to `IndexedRowMatrix` if `U` is defined as an
 
 [Principal component analysis (PCA)](http://en.wikipedia.org/wiki/Principal_component_analysis) is a
 statistical method to find a rotation such that the first coordinate has the largest variance
-possible, and each succeeding coordinate in turn has the largest variance possible. The columns of
+possible, and each succeeding coordinate, in turn, has the largest variance possible. The columns of
 the rotation matrix are called principal components. PCA is used widely in dimensionality reduction.
 
 `spark.mllib` supports PCA for tall-and-skinny matrices stored in row-oriented format and any Vectors.

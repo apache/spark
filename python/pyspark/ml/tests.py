@@ -1559,6 +1559,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(s.meanSquaredError, 0.0)
         self.assertAlmostEqual(s.rootMeanSquaredError, 0.0)
         self.assertAlmostEqual(s.r2, 1.0, 2)
+        self.assertAlmostEqual(s.r2adj, 1.0, 2)
         self.assertTrue(isinstance(s.residuals, DataFrame))
         self.assertEqual(s.numInstances, 2)
         self.assertEqual(s.degreesOfFreedom, 1)
@@ -2094,6 +2095,11 @@ class DefaultValuesTests(PySparkTestCase):
                         and issubclass(cls, JavaParams) and not inspect.isabstract(cls):
                     # NOTE: disable check_params_exist until there is parity with Scala API
                     ParamTests.check_params(self, cls(), check_params_exist=False)
+
+        # Additional classes that need explicit construction
+        from pyspark.ml.feature import CountVectorizerModel
+        ParamTests.check_params(self, CountVectorizerModel.from_vocabulary(['a'], 'input'),
+                                check_params_exist=False)
 
 
 def _squared_distance(a, b):
