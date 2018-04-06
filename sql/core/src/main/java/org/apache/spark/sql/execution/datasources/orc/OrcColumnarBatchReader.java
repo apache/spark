@@ -58,7 +58,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
   /**
    * The column IDs of the physical ORC file schema which are required by this reader.
-   * -1 means this required column doesn't exist in the ORC file.
+   * -1 means this required column is partition column, or it doesn't exist in the ORC file.
    */
   private int[] requestedColIds;
 
@@ -164,11 +164,17 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       InternalRow partitionValues) {
     batch = orcSchema.createRowBatch(capacity);
     assert(!batch.selectedInUse); // `selectedInUse` should be initialized with `false`.
-    this.requiredFields = requiredFields;
-    this.requestedColIds = requestedColIds;
-    this.requestedPartitionColIds =  requestedPartitionColIds;
     assert(requiredFields.length == requestedColIds.length);
     assert(requiredFields.length == requestedPartitionColIds.length);
+    // If a required column is also partition column, use partition value and don't read from file.
+    for (int i = 0; i < requiredFields.length; i++) {
+      if (requestedPartitionColIds[i] != -1) {
+        requestedColIds[i] = -1;
+      }
+    }
+    this.requestedPartitionColIds =  requestedPartitionColIds;
+    this.requiredFields = requiredFields;
+    this.requestedColIds = requestedColIds;
 
     StructType resultSchema = new StructType(requiredFields);
     if (copyToSpark) {
@@ -234,7 +240,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
     if (!copyToSpark) {
       for (int i = 0; i < requiredFields.length; i++) {
-        if (requestedColIds[i] != -1 && requestedPartitionColIds[i] == -1) {
+        // It is possible that..
+        if (requestedColIds[i] != -1) {
           ((OrcColumnVector) orcVectorWrappers[i]).setBatchSize(batchSize);
         }
       }
@@ -249,7 +256,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       StructField field = requiredFields[i];
       WritableColumnVector toColumn = columnVectors[i];
 
-      if (requestedColIds[i] >= 0) {
+      if (requestedColIds[i] != -1) {
         ColumnVector fromColumn = batch.cols[requestedColIds[i]];
 
         if (fromColumn.isRepeating) {
