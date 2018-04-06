@@ -2070,9 +2070,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       // Read
       val data =
         s"""
-           |  {"f":
-           |"a", "f0": 1}$lineSep{"f":
-           |
+          |  {"f":
+          |"a", "f0": 1}$lineSep{"f":
+          |
           |"c",  "f0": 2}$lineSep{"f": "d",  "f0": 3}
         """.stripMargin
       val dataWithTrailingLineSep = s"$data$lineSep"
@@ -2140,9 +2140,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       .option("encoding", "UTF-16")
       .json(testFile(fileName))
 
-    checkAnswer(jsonDF, Seq(
-      Row("Chris", "Baird"), Row("Doug", "Rood")
-    ))
+    checkAnswer(jsonDF, Seq(Row("Chris", "Baird"), Row("Doug", "Rood")))
   }
 
   test("SPARK-23723: multi-line json in UTF-32BE with BOM") {
@@ -2207,10 +2205,9 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   def checkEncoding(
-    expectedEncoding: String,
-    pathToJsonFiles: String,
-    expectedContent: String
-  ): Unit = {
+      expectedEncoding: String,
+      pathToJsonFiles: String,
+      expectedContent: String): Unit = {
     val jsonFiles = new File(pathToJsonFiles)
       .listFiles()
       .filter(_.isFile)
@@ -2288,13 +2285,8 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  def checkReadJson(
-    lineSep: String,
-    encodingOption: String,
-    encoding: String,
-    inferSchema: Boolean,
-    runId: Int
-  ): Unit = {
+  def checkReadJson(lineSep: String, encodingOption: String, encoding: String,
+      inferSchema: Boolean, runId: Int): Unit = {
     test(s"SPARK-23724: checks reading json in ${encoding} #${runId}") {
       val lineSepInBytes = {
         if (lineSep.startsWith("x")) {

@@ -111,15 +111,18 @@ object TextInputJsonDataSource extends JsonDataSource {
   private def createBaseDataset(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: JSONOptions
-  ): Dataset[String] = {
+      parsedOptions: JSONOptions): Dataset[String] = {
     val paths = inputPaths.map(_.getPath.toString)
+    val textOptions = Map.empty[String, String] ++
+      parsedOptions.encoding.map("encoding" -> _) ++
+      parsedOptions.lineSeparator.map("lineSep" -> _)
+
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
         paths = paths,
         className = classOf[TextFileFormat].getName,
-        options = parsedOptions.getTextOptions
+        options = textOptions
       ).resolveRelation(checkFilesExist = false))
       .select("value").as(Encoders.STRING)
   }
@@ -163,8 +166,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
     JsonInferSchema.infer[PortableDataStream](
       sampled,
       parsedOptions,
-      createParser(_, _, parsedOptions.encoding)
-    )
+      createParser(_, _, parsedOptions.encoding))
   }
 
   private def createBaseRdd(

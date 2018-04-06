@@ -363,11 +363,11 @@ class JacksonParser(
         throw BadRecordException(() => recordLiteral(record), () => None, e)
       case e: CharConversionException if options.encoding.isEmpty =>
         val msg =
-          """Failed to parse a character. Charset was detected automatically.
-            |You might want to set it explicitly via the charset option like:
-            |  .option("charset", "UTF-8")
-            |Example of supported charsets:
-            |  UTF-8, UTF-16, UTF-16BE, UTF-16LE, UTF-32, UTF-32BE, UTF-32LE
+          """Failed to parse a character. Encoding was detected automatically.
+            |You might want to set it explicitly via the encoding option like:
+            |  .option("encoding", "UTF-8")
+            |Example of supported encodings:
+            |  UTF-8, UTF-16BE, UTF-16LE, UTF-32BE, UTF-32LE
             |""".stripMargin + e.getMessage
         throw new CharConversionException(msg)
     }

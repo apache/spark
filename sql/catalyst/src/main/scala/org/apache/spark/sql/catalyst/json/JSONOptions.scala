@@ -126,9 +126,4 @@ private[sql] class JSONOptions(
       allowBackslashEscapingAnyCharacter)
     factory.configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, allowUnquotedControlChars)
   }
-
-  def getTextOptions: Map[String, String] = {
-    Map[String, String]() ++
-      encoding.map("encoding" -> _) ++ lineSeparator.map("lineSep" -> _)
-  }
 }

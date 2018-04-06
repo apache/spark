@@ -155,7 +155,7 @@ private[json] class JsonOutputWriter(
 
   private val encoding = options.encoding match {
     case Some(charsetName) => Charset.forName(charsetName)
-    case _ => StandardCharsets.UTF_8
+    case None => StandardCharsets.UTF_8
   }
 
   private val writer = CodecStreams.createOutputStreamWriter(
