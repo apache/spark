@@ -36,7 +36,7 @@ import org.apache.spark.sql.{Dataset, Encoder, Row, SQLContext}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.execution.streaming.continuous.ContinuousMemoryStreamRecordBuffer.GetRecord
+import org.apache.spark.sql.execution.streaming.continuous.ContinuousMemoryStream.GetRecord
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions}
 import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory, SupportsScanUnsafeRow}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
@@ -132,37 +132,33 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     records.foreach(_.clear())
     startOffset = ContinuousMemoryStreamOffset((0 until NUM_PARTITIONS).map(i => (i, 0)).toMap)
   }
+
+  /**
+   * Endpoint for executors to poll for records.
+   */
+  private class ContinuousMemoryStreamRecordBuffer extends ThreadSafeRpcEndpoint {
+    override val rpcEnv: RpcEnv = SparkEnv.get.rpcEnv
+
+    override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+      case GetRecord(ContinuousMemoryStreamPartitionOffset(part, index)) =>
+        ContinuousMemoryStream.this.synchronized {
+          val buf = records(part)
+
+          val record =
+            if (buf.size <= index) {
+              None
+            } else {
+              Some(buf(index))
+            }
+          context.reply(record.map(Row(_)))
+        }
+    }
+  }
 }
 
 object ContinuousMemoryStream {
   def recordBufferName(memoryStreamId: Int): String =
     s"ContinuousMemoryStreamRecordReceiver-$memoryStreamId"
-}
-
-/**
- * Endpoint for executors to poll for records.
- */
-private class ContinuousMemoryStreamRecordBuffer[A](
-    stream: ContinuousMemoryStream[A],
-    partitionBuffers: Seq[ListBuffer[A]]) extends ThreadSafeRpcEndpoint {
-  override val rpcEnv: RpcEnv = SparkEnv.get.rpcEnv
-
-  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case GetRecord(ContinuousMemoryStreamPartitionOffset(part, index)) => stream.synchronized {
-      val buf = partitionBuffers(part)
-
-      val record =
-        if (buf.size <= index) {
-          None
-        } else {
-          Some(buf(index))
-        }
-      context.reply(record.map(Row(_)))
-    }
-  }
-}
-
-object ContinuousMemoryStreamRecordBuffer {
   case class GetRecord(offset: ContinuousMemoryStreamPartitionOffset)
 }
 
