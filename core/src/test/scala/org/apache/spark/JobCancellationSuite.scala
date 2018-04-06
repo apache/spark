@@ -373,7 +373,8 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     // 2. task in reduce stage is blocked as taskCancelledSemaphore is not released until
     //    JobCancelled event is posted.
     // After job being cancelled, task in reduce stage will be cancelled asynchronously, thus
-    // partial of the inputs should not get processed.
+    // partial of the inputs should not get processed (It's very unlikely that Spark can process
+    // 10000 elements between JobCancelled is posted and task is really killed).
     f.cancel()
 
     val e = intercept[SparkException](f.get()).getCause
