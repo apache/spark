@@ -108,7 +108,8 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
       startOffset.partitionNums.map {
         case (part, index) =>
-          new ContinuousMemoryStreamDataReaderFactory(id, part, index): DataReaderFactory[Row]
+          val name = ContinuousMemoryStream.recordBufferName(id)
+          new ContinuousMemoryStreamDataReaderFactory(name, part, index): DataReaderFactory[Row]
       }.toList.asJava
     }
   }
@@ -166,11 +167,11 @@ object ContinuousMemoryStream {
  * Data reader factory for continuous memory stream.
  */
 class ContinuousMemoryStreamDataReaderFactory(
-    memoryStreamId: Int,
+    driverEndpointName: String,
     partition: Int,
     startOffset: Int) extends DataReaderFactory[Row] {
   override def createDataReader: ContinuousMemoryStreamDataReader =
-    new ContinuousMemoryStreamDataReader(memoryStreamId, partition, startOffset)
+    new ContinuousMemoryStreamDataReader(driverEndpointName, partition, startOffset)
 }
 
 /**
@@ -179,11 +180,11 @@ class ContinuousMemoryStreamDataReaderFactory(
  * Polls the driver endpoint for new records.
  */
 class ContinuousMemoryStreamDataReader(
-    memoryStreamId: Int,
+    driverEndpointName: String,
     partition: Int,
     startOffset: Int) extends ContinuousDataReader[Row] {
   private val endpoint = RpcUtils.makeDriverRef(
-    ContinuousMemoryStream.recordBufferName(memoryStreamId),
+    driverEndpointName,
     SparkEnv.get.conf,
     SparkEnv.get.rpcEnv)
 
