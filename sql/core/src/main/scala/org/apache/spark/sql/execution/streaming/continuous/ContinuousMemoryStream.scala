@@ -199,7 +199,7 @@ class ContinuousMemoryStreamDataReader(
   override def next(): Boolean = {
     current = None
     while (current.isEmpty) {
-      Thread.sleep(100)
+      Thread.sleep(10)
       current = endpoint.askSync[Option[Row]](
           GetRecord(ContinuousMemoryStreamPartitionOffset(partition, currentOffset)))
     }
