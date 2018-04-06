@@ -54,7 +54,7 @@ public class ByteArrayMethods {
    * @return true if the arrays are equal, false otherwise
    */
   public static boolean arrayEqualsBlock(
-      MemoryBlock leftBase, long leftOffset, MemoryBlock rightBase, long rightOffset, final long length) {
+      MemoryBlock leftBase, long leftOffset, MemoryBlock rightBase, long rightOffset, long length) {
     return arrayEquals(leftBase.getBaseObject(), leftBase.getBaseOffset() + leftOffset,
       rightBase.getBaseObject(), rightBase.getBaseOffset() + rightOffset, length);
   }
