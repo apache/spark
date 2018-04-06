@@ -129,4 +129,12 @@ package object config {
         "when launching drivers. Default is to accept all offers with sufficient resources.")
       .stringConf
       .createWithDefault("")
+
+  private[spark] val DRIVER_MEMORY_OVERHEAD =
+    ConfigBuilder("spark.mesos.driver.memoryOverhead")
+      .doc("The amount of additional memory, specified in MB, to be allocated to the driver. " +
+        "By default, the overhead will be larger of either 384 or 10% of spark.driver.memory. " +
+        "Only applies to cluster mode.")
+      .intConf
+      .createOptional
 }
