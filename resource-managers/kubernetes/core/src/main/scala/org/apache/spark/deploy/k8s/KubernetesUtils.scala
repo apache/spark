@@ -77,11 +77,11 @@ private[spark] object KubernetesUtils {
         podBuilder
           .withVolumes(new VolumeBuilder()
             .withHostPath(new HostPathVolumeSource(hostPath.get))
-            .withName(s"executor-volume-$volumeCount")
+            .withName(s"hostPath-volume-$volumeCount")
             .build())
         val volumeBuilder = new VolumeMountBuilder()
           .withMountPath(containerPath.get)
-          .withName(s"executor-volume-$volumeCount")
+          .withName(s"hostPath-volume-$volumeCount")
         if (readOnly.isDefined) {
           containerBuilder.addToVolumeMounts(volumeBuilder.withReadOnly(readOnly.get).build())
         } else {
