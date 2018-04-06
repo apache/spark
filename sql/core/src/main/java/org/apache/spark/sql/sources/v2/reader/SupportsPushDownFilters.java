@@ -32,7 +32,7 @@ import org.apache.spark.sql.sources.Filter;
 public interface SupportsPushDownFilters extends DataSourceReader {
 
   /**
-   * Pushes down filters, and returns unsupported filters.
+   * Pushes down filters, and returns filters that need to be evaluated after scanning.
    */
   Filter[] pushFilters(Filter[] filters);
 

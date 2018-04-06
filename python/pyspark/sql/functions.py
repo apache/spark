@@ -18,7 +18,6 @@
 """
 A collections of builtin functions
 """
-import math
 import sys
 import functools
 import warnings
@@ -28,10 +27,10 @@ if sys.version < "3":
 
 from pyspark import since, SparkContext
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import StringType, DataType
+# Keep UserDefinedFunction import for backwards compatible import; moved in SPARK-22409
 from pyspark.sql.udf import UserDefinedFunction, _create_udf
 
 
@@ -2155,6 +2154,8 @@ def udf(f=None, returnType=StringType()):
         in boolean expressions and it ends up with being executed all internally. If the functions
         can fail on special rows, the workaround is to incorporate the condition into the functions.
 
+    .. note:: The user-defined functions do not take keyword arguments on the calling side.
+
     :param f: python function if used as a standalone function
     :param returnType: the return type of the user-defined function. The value can be either a
         :class:`pyspark.sql.types.DataType` object or a DDL-formatted type string.
@@ -2338,6 +2339,8 @@ def pandas_udf(f=None, returnType=None, functionType=None):
     .. note:: The user-defined functions do not support conditional expressions or short circuiting
         in boolean expressions and it ends up with being executed all internally. If the functions
         can fail on special rows, the workaround is to incorporate the condition into the functions.
+
+    .. note:: The user-defined functions do not take keyword arguments on the calling side.
     """
     # decorator @pandas_udf(returnType, functionType)
     is_decorator = f is None or isinstance(f, (str, DataType))
