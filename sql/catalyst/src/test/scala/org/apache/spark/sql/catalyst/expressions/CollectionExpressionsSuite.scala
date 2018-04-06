@@ -106,7 +106,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
   }
 
-  test("Concat Arrays") {
+  test("Concat") {
     val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
     val a1 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType))
     val a2 = Literal.create(Seq(4, null, 6), ArrayType(IntegerType))
@@ -115,20 +115,19 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a5 = Literal.create(Seq.empty[String], ArrayType(StringType))
     val an = Literal.create(null, ArrayType(StringType))
 
-    checkEvaluation(ConcatArrays(Seq(a0)), Seq(1, 2, 3))
-    checkEvaluation(ConcatArrays(Seq(a0, a2)), Seq(1, 2, 3, 4, null, 6))
-    checkEvaluation(ConcatArrays(Seq(a0, a1, a2)), Seq(1, 2, 3, 4, null, 6))
+    checkEvaluation(Concat(Seq(a0)), Seq(1, 2, 3))
+    checkEvaluation(Concat(Seq(a0, a2)), Seq(1, 2, 3, 4, null, 6))
+    checkEvaluation(Concat(Seq(a0, a1, a2)), Seq(1, 2, 3, 4, null, 6))
 
-    checkEvaluation(ConcatArrays(Seq(a3, a4)), Seq("a", "b", "c", "e", null))
-    checkEvaluation(ConcatArrays(Seq(a3, a4, a5)), Seq("a", "b", "c", "e", null))
-    checkEvaluation(ConcatArrays(Seq(a5)), Seq())
+    checkEvaluation(Concat(Seq(a3, a4)), Seq("a", "b", "c", "e", null))
+    checkEvaluation(Concat(Seq(a3, a4, a5)), Seq("a", "b", "c", "e", null))
+    checkEvaluation(Concat(Seq(a5)), Seq())
 
-    checkEvaluation(ConcatArrays(Seq()), Seq())
-    checkEvaluation(ConcatArrays(Seq(a0, a0)), Seq(1, 2, 3, 1, 2, 3))
+    checkEvaluation(Concat(Seq(a0, a0)), Seq(1, 2, 3, 1, 2, 3))
 
-    checkEvaluation(ConcatArrays(Seq(an)), null)
-    checkEvaluation(ConcatArrays(Seq(a3, an)), null)
-    checkEvaluation(ConcatArrays(Seq(an, a3)), null)
-    checkEvaluation(ConcatArrays(Seq(a3, an, a4)), null)
+    checkEvaluation(Concat(Seq(an)), null)
+    checkEvaluation(Concat(Seq(a3, an)), null)
+    checkEvaluation(Concat(Seq(an, a3)), null)
+    checkEvaluation(Concat(Seq(a3, an, a4)), null)
   }
 }

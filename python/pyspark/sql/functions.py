@@ -1823,7 +1823,7 @@ def array_contains(col, value):
 def concat(*cols):
     """
     Concatenates multiple input columns together into a single column.
-    The function works with strings, binary columns and arrays of the same time.
+    The function works with strings, binary and compatible array columns.
 
     >>> df = spark.createDataFrame([('abcd','123')], ['s', 'd'])
     >>> df.select(concat(df.s, df.d).alias('s')).collect()

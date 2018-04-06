@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData,
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
+import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 /**
  * Given an array or map, returns its size. Returns -1 if null.
@@ -291,99 +292,123 @@ case class ArrayContains(left: Expression, right: Expression)
 }
 
 /**
- * Replaces [[org.apache.spark.sql.catalyst.analysis.UnresolvedConcat UnresolvedConcat]]s
- * with concrete concate expressions.
- */
-object ResolveConcat
-{
-  def apply(children: Seq[Expression]): Expression = {
-    if (children.nonEmpty && ArrayType.acceptsType(children(0).dataType)) {
-      ConcatArrays(children)
-    } else {
-      Concat(children)
-    }
-  }
-}
-
-/**
- * Concatenates multiple arrays into one.
+ * Concatenates multiple input columns together into a single column.
+ * The function works with strings, binary and compatible array columns.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr, ...) - Concatenates multiple arrays of the same type into one.",
+  usage = "_FUNC_(col1, col2, ..., colN) - Returns the concatenation of col1, col2, ..., colN.",
   examples = """
     Examples:
+      > SELECT _FUNC_('Spark', 'SQL');
+       SparkSQL
       > SELECT _FUNC_(array(1, 2, 3), array(4, 5), array(6));
-       [1,2,3,4,5,6]
-  """,
-  since = "2.4.0")
-case class ConcatArrays(children: Seq[Expression]) extends Expression with NullSafeEvaluation {
+ |     [1,2,3,4,5,6]
+  """)
+case class Concat(children: Seq[Expression]) extends Expression {
+
+  val allowedTypes = Seq(StringType, BinaryType, ArrayType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    val arrayCheck = checkInputDataTypesAreArrays
-    if(arrayCheck.isFailure) {
-      arrayCheck
-    } else {
-      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
-    }
-  }
-
-  private def checkInputDataTypesAreArrays(): TypeCheckResult = {
-    val mismatches = children.zipWithIndex.collect {
-      case (child, idx) if !ArrayType.acceptsType(child.dataType) =>
-        s"argument ${idx + 1} has to be ${ArrayType.simpleString} type, " +
-          s"however, '${child.sql}' is of ${child.dataType.simpleString} type."
-    }
-
-    if (mismatches.isEmpty) {
+    if (children.isEmpty) {
       TypeCheckResult.TypeCheckSuccess
     } else {
-      TypeCheckResult.TypeCheckFailure(mismatches.mkString(" "))
+      val childTypes = children.map(_.dataType)
+      if (childTypes.exists(tpe => !allowedTypes.exists(_.acceptsType(tpe)))) {
+        return TypeCheckResult.TypeCheckFailure(
+          s"input to function $prettyName should have been StringType, BinaryType or ArrayType," +
+            s" but it's " + childTypes.map(_.simpleString).mkString("[", ", ", "]"))
+      }
+      TypeUtils.checkForSameTypeInputExpr(childTypes, s"function $prettyName")
     }
   }
 
-  override def dataType: ArrayType = {
-    children
-      .headOption.map(_.dataType.asInstanceOf[ArrayType])
-      .getOrElse(ArrayType(StringType))
-  }
+  override def dataType: DataType = children.map(_.dataType).headOption.getOrElse(StringType)
 
-  override protected def nullSafeEval(inputs: Seq[Any]): Any = {
-    val elements = inputs.flatMap(_.asInstanceOf[ArrayData].toObjectArray(dataType.elementType))
-    new GenericArrayData(elements)
-  }
+  override def nullable: Boolean = children.exists(_.nullable)
+  override def foldable: Boolean = children.forall(_.foldable)
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, arrays => {
-      val elementType = dataType.elementType
-      if (CodeGenerator.isPrimitiveType(elementType)) {
-        genCodeForConcatOfPrimitiveElements(ctx, elementType, arrays, ev.value)
+  override def eval(input: InternalRow): Any = dataType match {
+    case BinaryType =>
+      val inputs = children.map(_.eval(input).asInstanceOf[Array[Byte]])
+      ByteArray.concat(inputs: _*)
+    case StringType =>
+      val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
+      UTF8String.concat(inputs : _*)
+    case ArrayType(elementType, _) =>
+      val inputs = children.toStream.map(_.eval(input))
+      if (inputs.contains(null)) {
+        null
       } else {
-        genCodeForConcatOfComplexElements(ctx, arrays, ev.value)
+        val elements = inputs.flatMap(_.asInstanceOf[ArrayData].toObjectArray(elementType))
+        new GenericArrayData(elements)
       }
-    })
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val evals = children.map(_.genCode(ctx))
+    val args = ctx.freshName("args")
+
+    val inputs = evals.zipWithIndex.map { case (eval, index) =>
+      s"""
+        ${eval.code}
+        if (!${eval.isNull}) {
+          $args[$index] = ${eval.value};
+        }
+      """
+    }
+
+    val (concatenator, initCode) = dataType match {
+      case BinaryType =>
+        (classOf[ByteArray].getName, s"byte[][] $args = new byte[${evals.length}][];")
+      case StringType =>
+        ("UTF8String", s"UTF8String[] $args = new UTF8String[${evals.length}];")
+      case ArrayType(elementType, _) =>
+        val arrayConcatClass = if (CodeGenerator.isPrimitiveType(elementType)) {
+          genCodeForPrimitiveArrayConcat(ctx, elementType, evals.length)
+        } else {
+          genCodeForComplexArrayConcat(ctx, evals.length)
+        }
+        (arrayConcatClass, s"ArrayData[] $args = new ArrayData[${evals.length}];")
+    }
+    val codes = ctx.splitExpressionsWithCurrentInputs(
+      expressions = inputs,
+      funcName = "valueConcat",
+      extraArguments = (s"${CodeGenerator.javaType(dataType)}[]", args) :: Nil)
+    ev.copy(s"""
+      $initCode
+      $codes
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = $concatenator.concat($args);
+      boolean ${ev.isNull} = ${ev.value} == null;
+    """)
   }
 
   private def genCodeForNumberOfElements(
       ctx: CodegenContext,
-      elements: Seq[String]) : (String, String) = {
+      argsLength: Int) : (String, String) = {
     val variableName = ctx.freshName("numElements")
-    val code = elements
-      .map(el => s"$variableName += $el.numElements();")
+    val code = (0 until argsLength)
+      .map(idx => s"$variableName += args[$idx].numElements();")
       .foldLeft(s"int $variableName = 0;")((acc, s) => acc + "\n" + s)
     (code, variableName)
   }
 
-  private def genCodeForConcatOfPrimitiveElements(
+  private def nullArgumentProtection(argsLength: Int) : String =
+  {
+    (0 until argsLength)
+      .map(idx => s"if (args[$idx] == null) return null;")
+      .mkString("\n")
+  }
+
+  private def genCodeForPrimitiveArrayConcat(
       ctx: CodegenContext,
       elementType: DataType,
-      elements: Seq[String],
-      arrayDataName: String): String = {
+      argsLength: Int): String = {
     val arrayName = ctx.freshName("array")
     val arraySizeName = ctx.freshName("size")
     val counter = ctx.freshName("counter")
-    val tempArrayDataName = ctx.freshName("tempArrayData")
+    val arrayDataName = ctx.freshName("arrayData")
 
-    val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, elements)
+    val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, argsLength)
 
     val unsafeArraySizeInBytes = s"""
       |int $arraySizeName = UnsafeArrayData.calculateHeaderPortionInBytes($numElemName) +
@@ -394,61 +419,70 @@ case class ConcatArrays(children: Seq[Expression]) extends Expression with NullS
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
 
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-    val assignments = elements.map { el =>
+    val assignments = (0 until argsLength).map { idx =>
       s"""
-        |for (int z = 0; z < $el.numElements(); z++) {
-        |  if ($el.isNullAt(z)) {
-        |    $tempArrayDataName.setNullAt($counter);
-        |  } else {
-        |    $tempArrayDataName.set$primitiveValueTypeName(
-        |      $counter,
-        |      $el.get$primitiveValueTypeName(z)
-        |    );
-        |  }
-        |  $counter++;
-        |}
+         |for (int z = 0; z < args[$idx].numElements(); z++) {
+         |  if (args[$idx].isNullAt(z)) {
+         |    $arrayDataName.setNullAt($counter);
+         |  } else {
+         |    $arrayDataName.set$primitiveValueTypeName(
+         |      $counter,
+         |      args[$idx].get$primitiveValueTypeName(z)
+         |    );
+         |  }
+         |  $counter++;
+         |}
         """.stripMargin
     }.mkString("\n")
 
-    s"""
-      |$numElemCode
-      |$unsafeArraySizeInBytes
-      |byte[] $arrayName = new byte[$arraySizeName];
-      |UnsafeArrayData $tempArrayDataName = new UnsafeArrayData();
-      |Platform.putLong($arrayName, $baseOffset, $numElemName);
-      |$tempArrayDataName.pointTo($arrayName, $baseOffset, $arraySizeName);
-      |int $counter = 0;
-      |$assignments
-      |$arrayDataName = $tempArrayDataName;
-      """.stripMargin
+    s"""new Object() {
+       |  public ArrayData concat(${CodeGenerator.javaType(dataType)}[] args) {
+       |    ${nullArgumentProtection(argsLength)}
+       |    $numElemCode
+       |    $unsafeArraySizeInBytes
+       |    byte[] $arrayName = new byte[$arraySizeName];
+       |    UnsafeArrayData $arrayDataName = new UnsafeArrayData();
+       |    Platform.putLong($arrayName, $baseOffset, $numElemName);
+       |    $arrayDataName.pointTo($arrayName, $baseOffset, $arraySizeName);
+       |    int $counter = 0;
+       |    $assignments
+       |    return $arrayDataName;
+       |  }
+       |}""".stripMargin
   }
 
-  private def genCodeForConcatOfComplexElements(
-      ctx: CodegenContext,
-      elements: Seq[String],
-      arrayDataName: String): String = {
+  private def genCodeForComplexArrayConcat(
+    ctx: CodegenContext,
+    argsLength: Int): String = {
     val genericArrayClass = classOf[GenericArrayData].getName
     val arrayName = ctx.freshName("arrayObject")
     val counter = ctx.freshName("counter")
-    val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, elements)
+    val className = ctx.freshName("ComplexArrayConcat")
+    val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, argsLength)
 
-    val assignments = elements.map { el =>
+    val assignments = (0 until argsLength).map { idx =>
       s"""
-        |for (int z = 0; z < $el.numElements(); z++) {
-        |  $arrayName[$counter] = $el.array()[z];
-        |  $counter++;
-        |}
+         |for (int z = 0; z < args[$idx].numElements(); z++) {
+         |  $arrayName[$counter] = args[$idx].array()[z];
+         |  $counter++;
+         |}
         """.stripMargin
     }.mkString("\n")
 
-    s"""
-      |$numElemCode
-      |Object[] $arrayName = new Object[$numElemName];
-      |int $counter = 0;
-      |$assignments
-      |$arrayDataName = new $genericArrayClass($arrayName);
-      """.stripMargin
+    s"""new Object() {
+       |  public ArrayData concat(${CodeGenerator.javaType(dataType)}[] args) {
+       |    ${nullArgumentProtection(argsLength)}
+       |    $numElemCode
+       |    Object[] $arrayName = new Object[$numElemName];
+       |    int $counter = 0;
+       |    $assignments
+       |    return new $genericArrayClass($arrayName);
+       |  }
+       |}""".stripMargin
   }
 
-  override def prettyName: String = "concat"
+
+  override def toString: String = s"concat(${children.mkString(", ")})"
+
+  override def sql: String = s"concat(${children.map(_.sql).mkString(", ")})"
 }

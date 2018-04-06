@@ -417,18 +417,27 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val nseqi : Seq[Int] = null
     val nseqs : Seq[String] = null
     val df = Seq(
-      (Seq(1), Seq(2, 3, 4), Seq(5, 6), nseqi, Seq("a", "b", "c"), Seq("d", "e"), Seq("f"), nseqs),
-      (Seq(1, 0), Seq.empty[Int], Seq(2), nseqi, Seq("a"), Seq.empty[String], Seq(null), nseqs)
+      (Seq(1), Seq(2, 3), Seq(5L, 6L), nseqi, Seq("a", "b", "c"), Seq("d", "e"), Seq("f"), nseqs),
+      (Seq(1, 0), Seq.empty[Int], Seq(2L), nseqi, Seq("a"), Seq.empty[String], Seq(null), nseqs)
     ).toDF("i1", "i2", "i3", "in", "s1", "s2", "s3", "sn")
 
     // Simple test cases
     checkAnswer(
+      df.selectExpr("array(1, 2, 3L)"),
+      Seq(Row(Seq(1L, 2L, 3L)), Row(Seq(1L, 2L, 3L)))
+    )
+
+    checkAnswer (
+      df.select(concat($"i1", $"s1")),
+      Seq(Row(Seq("1", "a", "b", "c")), Row(Seq("1", "0", "a")))
+    )
+    checkAnswer(
       df.select(concat($"i1", $"i2", $"i3")),
-      Seq(Row(Seq(1, 2, 3, 4, 5, 6)), Row(Seq(1, 0, 2)))
+      Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
     )
     checkAnswer(
       df.selectExpr("concat(array(1, null), i2, i3)"),
-      Seq(Row(Seq(1, null, 2, 3, 4, 5, 6)), Row(Seq(1, null, 2)))
+      Seq(Row(Seq(1, null, 2, 3, 5, 6)), Row(Seq(1, null, 2)))
     )
     checkAnswer(
       df.select(concat($"s1", $"s2", $"s3")),
@@ -458,9 +467,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
 
     // Type error test cases
-    intercept[AnalysisException] {
-      df.select(concat($"i1", $"s1"))
-    }
     intercept[AnalysisException] {
       df.selectExpr("concat(i1, i2, null)")
     }
