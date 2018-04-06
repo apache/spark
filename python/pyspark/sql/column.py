@@ -447,7 +447,7 @@ class Column(object):
 
     # order
     _asc_doc = """
-    Returns a sort expression based on the ascending order of the given column name
+    Returns a sort expression based on ascending order of the column.
 
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), ('Alice', None)], ["name", "height"])
@@ -455,8 +455,8 @@ class Column(object):
     [Row(name=u'Alice'), Row(name=u'Tom')]
     """
     _asc_nulls_first_doc = """
-    Returns a sort expression based on the ascending order of the given column name and null values
-    return before non-null values
+    Returns a sort expression based on ascending order of the column, and null values
+    return before non-null values.
 
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
@@ -466,8 +466,8 @@ class Column(object):
     .. versionadded:: 2.4
     """
     _asc_nulls_last_doc = """
-    Returns a sort expression based on the ascending order of the given column name and null values
-    return after non-null values
+    Returns a sort expression based on ascending order of the column, and null values
+    appear after non-null values.
 
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
@@ -477,7 +477,7 @@ class Column(object):
     .. versionadded:: 2.4
     """
     _desc_doc = """
-    Returns a sort expression based on the descending order of the given column name.
+    Returns a sort expression based on the descending order of the column.
 
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), ('Alice', None)], ["name", "height"])
@@ -485,8 +485,8 @@ class Column(object):
     [Row(name=u'Tom'), Row(name=u'Alice')]
     """
     _desc_nulls_first_doc = """
-    Returns a sort expression based on the descending order of the given column name and null values
-    return before non-null values
+    Returns a sort expression based on the descending order of the column, and null values
+    appear before non-null values.
 
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([('Tom', 80), (None, 60), ('Alice', None)], ["name", "height"])
@@ -496,7 +496,7 @@ class Column(object):
     .. versionadded:: 2.4
     """
     _desc_nulls_last_doc = """
-    Returns a sort expression based on the descending order of the given column name and null values
+    Returns a sort expression based on the descending order of the column, and null values
     appear after non-null values.
 
     >>> from pyspark.sql import Row
