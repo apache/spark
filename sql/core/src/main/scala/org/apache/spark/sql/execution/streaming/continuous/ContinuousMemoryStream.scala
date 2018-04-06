@@ -68,7 +68,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   private var startOffset: ContinuousMemoryStreamOffset = _
 
-  var endpointRef: RpcEndpointRef = _
+  @volatile private var endpointRef: RpcEndpointRef = _
 
   def addData(data: TraversableOnce[A]): Offset = synchronized {
     // Distribute data evenly among partition lists.
