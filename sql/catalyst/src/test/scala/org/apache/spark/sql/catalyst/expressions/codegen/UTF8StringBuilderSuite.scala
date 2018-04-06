@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.unsafe.types.UTF8String
 
-class UTF8StringBufferSuite extends SparkFunSuite {
+class UTF8StringBuilderSuite extends SparkFunSuite {
 
   test("basic test") {
     val sb = new UTF8StringBuilder()
