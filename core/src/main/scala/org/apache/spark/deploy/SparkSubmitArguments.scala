@@ -282,7 +282,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     if (master.startsWith("yarn")) {
       val hasHadoopEnv = env.contains("HADOOP_CONF_DIR") || env.contains("YARN_CONF_DIR")
       if (!hasHadoopEnv && !Utils.isTesting) {
-        throw new Exception(s"When running with master '$master' " +
+        error(s"When running with master '$master' " +
           "either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.")
       }
     }

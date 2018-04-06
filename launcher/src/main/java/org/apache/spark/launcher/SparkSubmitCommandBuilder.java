@@ -120,7 +120,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     this.parsedArgs = new ArrayList<>();
     boolean isExample = false;
     List<String> submitArgs = args;
-    this.userArgs = null;
+    this.userArgs = Collections.emptyList();
 
     if (args.size() > 0) {
       switch (args.get(0)) {
@@ -170,7 +170,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     // If the user args array is not empty, we need to parse it to detect exactly what
     // the user is trying to run, so that checks below are correct.
-    if (userArgs != null && !userArgs.isEmpty()) {
+    if (!userArgs.isEmpty()) {
       parser.parse(userArgs);
       isStartingApp = parser.isAppResourceReq;
     }
@@ -419,7 +419,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   private class OptionParser extends SparkSubmitOptionParser {
 
     boolean isAppResourceReq = true;
-    boolean errorOnUnknownArgs;
+    private final boolean errorOnUnknownArgs;
 
     OptionParser(boolean errorOnUnknownArgs) {
       this.errorOnUnknownArgs = errorOnUnknownArgs;
