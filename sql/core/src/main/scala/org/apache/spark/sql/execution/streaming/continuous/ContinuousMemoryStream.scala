@@ -56,12 +56,19 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   private implicit val formats = Serialization.formats(NoTypeHints)
   val NUM_PARTITIONS = 2
 
+  protected val logicalPlan =
+    StreamingRelationV2(this, "memory", Map(), attributes, None)(sqlContext.sparkSession)
+
   // ContinuousReader implementation
 
   @GuardedBy("this")
   private val records = Seq.fill(NUM_PARTITIONS)(new ListBuffer[A])
 
   private val recordBuffer = new ContinuousMemoryStreamRecordBuffer(this, records)
+
+  private var startOffset: ContinuousMemoryStreamOffset = _
+
+  var endpointRef: RpcEndpointRef = _
 
   def addData(data: TraversableOnce[A]): Offset = synchronized {
     // Distribute data evenly among partition lists.
@@ -72,8 +79,6 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     // The new target offset is the offset where all records in all partitions have been processed.
     ContinuousMemoryStreamOffset((0 until NUM_PARTITIONS).map(i => (i, records(i).size)).toMap)
   }
-
-  private var startOffset: ContinuousMemoryStreamOffset = _
 
   override def setStartOffset(start: Optional[Offset]): Unit = synchronized {
     // Inferred initial offset is position 0 in each partition.
@@ -96,7 +101,6 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     }
   }
 
-  var endpointRef: RpcEndpointRef = _
   override def createDataReaderFactories(): ju.List[DataReaderFactory[Row]] = {
     synchronized {
       endpointRef =
@@ -117,18 +121,12 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   // ContinuousReadSupport implementation
   // This is necessary because of how StreamTest finds the source for AddDataMemory steps.
-
   def createContinuousReader(
       schema: Optional[StructType],
       checkpointLocation: String,
       options: DataSourceOptions): ContinuousReader = {
     this
   }
-
-  // MemoryStreamBase implementation
-
-  protected val logicalPlan =
-    StreamingRelationV2(this, "memory", Map(), attributes, None)(sqlContext.sparkSession)
 
   override def reset(): Unit = synchronized {
     records.foreach(_.clear())
