@@ -214,7 +214,7 @@ incomplete attempt or the final successful attempt.
 
 2. Incomplete applications are only updated intermittently. The time between updates is defined
 by the interval between checks for changed files (`spark.history.fs.update.interval`).
-On larger clusters the update interval may be set to large values.
+On larger clusters, the update interval may be set to large values.
 The way to view a running application is actually to view its own web UI.
 
 3. Applications which exited without registering themselves as completed will be listed
@@ -422,7 +422,7 @@ configuration property.
 If, say, users wanted to set the metrics namespace to the name of the application, they
 can set the `spark.metrics.namespace` property to a value like `${spark.app.name}`. This value is
 then expanded appropriately by Spark and is used as the root namespace of the metrics system. 
-Non driver and executor metrics are never prefixed with `spark.app.id`, nor does the 
+Non-driver and executor metrics are never prefixed with `spark.app.id`, nor does the
 `spark.metrics.namespace` property have any such affect on such metrics.
 
 Spark's metrics are decoupled into different
