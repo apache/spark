@@ -23,11 +23,13 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
 
+import com.google.common.reflect.TypeToken
+
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
-import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer, UnresolvedDeserializer}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedDeserializer}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -473,6 +475,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkObjectExprEvaluation(deserializer, expected = data)
   }
 
+<<<<<<< f3c35bf1540eeb90bd0e75aa34139333ede280c4
 <<<<<<< c48085aa91c60615a4de3b391f019f46f3fcdbe3
   test("SPARK-23595 ValidateExternalType should support interpreted execution") {
     val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
@@ -503,12 +506,34 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       "java.lang.Integer is not a valid external type for schema of double")
   }
 
+  private def javaSerializerFor(beanClass: Class[_])(inputObject: Expression): CreateNamedStruct = {
+    JavaTypeInference.serializerFor(inputObject, TypeToken.of(beanClass)) match {
+      case e => CreateNamedStruct(Literal("value") :: e :: Nil)
+    }
+  }
+
   test("SPARK-23589 ExternalMapToCatalyst should support interpreted execution") {
-    val data = Map[Int, String](0 -> "v0", 1 -> "v1", 2 -> null, 3 -> "v3")
-    val serializer = GetStructField(
-      ScalaReflection.serializerFor[Map[Int, String]](Literal.fromObject(data)), 0)
-    val catalystValue = CatalystTypeConverters.convertToCatalyst(data)
-    checkEvaluation(serializer, catalystValue)
+    val scalaMap = scala.collection.Map[Int, String](0 -> "v0", 1 -> "v1", 2 -> null, 3 -> "v3")
+    val javaMap = new java.util.HashMap[java.lang.Integer, java.lang.String]() {
+      {
+        put(0, "v0")
+        put(1, "v1")
+        put(2, null)
+        put(3, "v3")
+      }
+    }
+    val expected = CatalystTypeConverters.convertToCatalyst(scalaMap)
+
+    // Java Map
+    val serializer1 = GetStructField(
+      javaSerializerFor(javaMap.getClass)(Literal.fromObject(javaMap)), 0)
+    checkEvaluation(serializer1, expected)
+
+    // Scala Map
+    val serializer2 = GetStructField(
+      ScalaReflection.serializerFor[scala.collection.Map[Int, String]](
+        Literal.fromObject(scalaMap)), 0)
+    checkEvaluation(serializer2, expected)
   }
 }
 
