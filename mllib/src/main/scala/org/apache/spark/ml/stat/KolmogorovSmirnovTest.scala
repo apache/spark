@@ -83,7 +83,8 @@ object KolmogorovSmirnovTest {
   @Since("2.4.0")
   def test(dataset: DataFrame, sampleCol: String,
     cdf: Function[java.lang.Double, java.lang.Double]): DataFrame = {
-    test(dataset, sampleCol, (x: Double) => cdf.call(x))
+    val f: Double => Double = x => cdf.call(x)
+    test(dataset, sampleCol, f)
   }
 
   /**
