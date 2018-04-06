@@ -41,22 +41,18 @@ public class UTF8StringBuilder {
 
   // Grows the buffer by at least `neededSize`
   private void grow(int neededSize) {
-    if (neededSize > ARRAY_MAX - totalSize()) {
+    if (neededSize > ARRAY_MAX - length) {
       throw new UnsupportedOperationException(
         "Cannot grow internal buffer by size " + neededSize + " because the size after growing " +
           "exceeds size limitation " + ARRAY_MAX);
     }
-    final int length = totalSize() + neededSize;
-    if (buffer.size() < length) {
-      int newLength = length < ARRAY_MAX / 2 ? length * 2 : ARRAY_MAX;
+    final int requestedSize = length + neededSize;
+    if (buffer.size() < requestedSize) {
+      int newLength = requestedSize < ARRAY_MAX / 2 ? requestedSize * 2 : ARRAY_MAX;
       final ByteArrayMemoryBlock tmp = new ByteArrayMemoryBlock(newLength);
-      MemoryBlock.copyMemory(buffer, tmp, totalSize());
+      MemoryBlock.copyMemory(buffer, tmp, length);
       buffer = tmp;
     }
-  }
-
-  private int totalSize() {
-    return length;
   }
 
   public void append(UTF8String value) {
@@ -70,6 +66,6 @@ public class UTF8StringBuilder {
   }
 
   public UTF8String build() {
-    return UTF8String.fromBytes(buffer.getByteArray(), 0, totalSize());
+    return UTF8String.fromBytes(buffer.getByteArray(), 0, length);
   }
 }
