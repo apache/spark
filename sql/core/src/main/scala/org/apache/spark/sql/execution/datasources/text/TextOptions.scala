@@ -43,14 +43,16 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
 
   val encoding: Option[String] = parameters.get(ENCODING)
 
-  val lineSeparator: Option[Array[Byte]] = parameters.get(LINE_SEPARATOR).map { lineSep =>
+  val lineSeparator: Option[String] = parameters.get(LINE_SEPARATOR).map { lineSep =>
     require(lineSep.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
 
-    lineSep.getBytes(encoding.getOrElse("UTF-8"))
+    lineSep
   }
 
   // Note that the option 'lineSep' uses a different default value in read and write.
-  val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator
+  val lineSeparatorInRead: Option[Array[Byte]] = lineSeparator.map { lineSep =>
+    lineSep.getBytes(encoding.getOrElse("UTF-8"))
+  }
   val lineSeparatorInWrite: Array[Byte] =
     lineSeparatorInRead.getOrElse("\n".getBytes("UTF-8"))
 }
