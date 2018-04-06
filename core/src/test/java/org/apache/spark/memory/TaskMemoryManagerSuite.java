@@ -23,6 +23,8 @@ import org.junit.Test;
 import org.apache.spark.SparkConf;
 import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.unsafe.memory.OffHeapMemoryBlock;
+import org.apache.spark.unsafe.memory.OnHeapMemoryBlock;
 
 public class TaskMemoryManagerSuite {
 
@@ -49,12 +51,10 @@ public class TaskMemoryManagerSuite {
     final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.OFF_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
-    // In off-heap mode, an offset is an absolute address that may require more than 51 bits to
-    // encode. This test exercises that corner-case:
-    final long offset = ((1L << TaskMemoryManager.OFFSET_BITS) + 10);
-    final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, offset);
-    Assert.assertEquals(null, manager.getPage(encodedAddress));
-    Assert.assertEquals(offset, manager.getOffsetInPage(encodedAddress));
+    final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 10);
+    Assert.assertTrue(manager.getPage(encodedAddress) instanceof OffHeapMemoryBlock);
+    Assert.assertEquals(null, manager.getPage(encodedAddress).getBaseObject());
+    Assert.assertEquals(10, manager.getOffsetInPage(encodedAddress));
     manager.freePage(dataPage, c);
   }
 
@@ -65,7 +65,8 @@ public class TaskMemoryManagerSuite {
     final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
     final MemoryBlock dataPage = manager.allocatePage(256, c);
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 64);
-    Assert.assertEquals(dataPage.getBaseObject(), manager.getPage(encodedAddress));
+    Assert.assertTrue(manager.getPage(encodedAddress) instanceof OnHeapMemoryBlock);
+    Assert.assertEquals(dataPage.getBaseObject(), manager.getPage(encodedAddress).getBaseObject());
     Assert.assertEquals(64, manager.getOffsetInPage(encodedAddress));
   }
 

@@ -33,7 +33,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.unsafe.KVIterator;
-import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
 import org.apache.spark.unsafe.memory.MemoryBlock;
@@ -136,7 +135,7 @@ public final class UnsafeKVExternalSorter {
       UnsafeRow row = new UnsafeRow(numKeyFields);
       while (iter.hasNext()) {
         final BytesToBytesMap.Location loc = iter.next();
-        final Object baseObject = loc.getKeyBase();
+        final MemoryBlock baseMemoryBlock = loc.getKeyMemoryBlock();
         final long baseOffset = loc.getKeyOffset();
 
         // Get encoded memory address
@@ -146,7 +145,7 @@ public final class UnsafeKVExternalSorter {
         long address = taskMemoryManager.encodePageNumberAndOffset(page, baseOffset - 8);
 
         // Compute prefix
-        row.pointTo(baseObject, baseOffset, loc.getKeyLength());
+        row.pointTo(baseMemoryBlock, baseOffset, loc.getKeyLength());
         final UnsafeExternalRowSorter.PrefixComputer.Prefix prefix =
           prefixComputer.computePrefix(row);
 
@@ -257,16 +256,16 @@ public final class UnsafeKVExternalSorter {
 
     @Override
     public int compare(
-        Object baseObj1,
+        MemoryBlock baseMb1,
         long baseOff1,
         int baseLen1,
-        Object baseObj2,
+        MemoryBlock baseMb2,
         long baseOff2,
         int baseLen2) {
       // Note that since ordering doesn't need the total length of the record, we just pass 0
       // into the row.
-      row1.pointTo(baseObj1, baseOff1 + 4, 0);
-      row2.pointTo(baseObj2, baseOff2 + 4, 0);
+      row1.pointTo(baseMb1, baseOff1 + 4, 0);
+      row2.pointTo(baseMb2, baseOff2 + 4, 0);
       return ordering.compare(row1, row2);
     }
   }
@@ -286,15 +285,15 @@ public final class UnsafeKVExternalSorter {
         if (underlying.hasNext()) {
           underlying.loadNext();
 
-          Object baseObj = underlying.getBaseObject();
+          MemoryBlock mb = underlying.getMemoryBlock();
           long recordOffset = underlying.getBaseOffset();
           int recordLen = underlying.getRecordLength();
 
           // Note that recordLen = keyLen + valueLen + 4 bytes (for the keyLen itself)
-          int keyLen = Platform.getInt(baseObj, recordOffset);
+          int keyLen = mb.getInt(recordOffset);
           int valueLen = recordLen - keyLen - 4;
-          key.pointTo(baseObj, recordOffset + 4, keyLen);
-          value.pointTo(baseObj, recordOffset + 4 + keyLen, valueLen);
+          key.pointTo(mb, recordOffset + 4, keyLen);
+          value.pointTo(mb, recordOffset + 4 + keyLen, valueLen);
 
           return true;
         } else {

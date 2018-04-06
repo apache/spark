@@ -60,13 +60,13 @@ public final class UnsafeInMemorySorter {
       final int prefixComparisonResult = prefixComparator.compare(r1.keyPrefix, r2.keyPrefix);
       int uaoSize = UnsafeAlignedOffset.getUaoSize();
       if (prefixComparisonResult == 0) {
-        final Object baseObject1 = memoryManager.getPage(r1.recordPointer);
+        final MemoryBlock mb1 = memoryManager.getPage(r1.recordPointer);
         final long baseOffset1 = memoryManager.getOffsetInPage(r1.recordPointer) + uaoSize;
-        final int baseLength1 = UnsafeAlignedOffset.getSize(baseObject1, baseOffset1 - uaoSize);
-        final Object baseObject2 = memoryManager.getPage(r2.recordPointer);
+        final int baseLength1 = UnsafeAlignedOffset.getSize(mb1, baseOffset1 - uaoSize);
+        final MemoryBlock mb2 = memoryManager.getPage(r2.recordPointer);
         final long baseOffset2 = memoryManager.getOffsetInPage(r2.recordPointer) + uaoSize;
-        final int baseLength2 = UnsafeAlignedOffset.getSize(baseObject2, baseOffset2 - uaoSize);
-        return recordComparator.compare(baseObject1, baseOffset1, baseLength1, baseObject2,
+        final int baseLength2 = UnsafeAlignedOffset.getSize(mb2, baseOffset2 - uaoSize);
+        return recordComparator.compare(mb1, baseOffset1, baseLength1, mb2,
           baseOffset2, baseLength2);
       } else {
         return prefixComparisonResult;
@@ -256,7 +256,7 @@ public final class UnsafeInMemorySorter {
     private final int numRecords;
     private int position;
     private int offset;
-    private Object baseObject;
+    private MemoryBlock baseMemoryBlock;
     private long baseOffset;
     private long keyPrefix;
     private int recordLength;
@@ -272,7 +272,7 @@ public final class UnsafeInMemorySorter {
     public SortedIterator clone() {
       SortedIterator iter = new SortedIterator(numRecords, offset);
       iter.position = position;
-      iter.baseObject = baseObject;
+      iter.baseMemoryBlock = baseMemoryBlock;
       iter.baseOffset = baseOffset;
       iter.keyPrefix = keyPrefix;
       iter.recordLength = recordLength;
@@ -304,16 +304,16 @@ public final class UnsafeInMemorySorter {
       final long recordPointer = array.get(offset + position);
       currentPageNumber = TaskMemoryManager.decodePageNumber(recordPointer);
       int uaoSize = UnsafeAlignedOffset.getUaoSize();
-      baseObject = memoryManager.getPage(recordPointer);
+      baseMemoryBlock = memoryManager.getPage(recordPointer);
       // Skip over record length
       baseOffset = memoryManager.getOffsetInPage(recordPointer) + uaoSize;
-      recordLength = UnsafeAlignedOffset.getSize(baseObject, baseOffset - uaoSize);
+      recordLength = UnsafeAlignedOffset.getSize(baseMemoryBlock, baseOffset - uaoSize);
       keyPrefix = array.get(offset + position + 1);
       position += 2;
     }
 
     @Override
-    public Object getBaseObject() { return baseObject; }
+    public MemoryBlock getMemoryBlock() { return baseMemoryBlock; }
 
     @Override
     public long getBaseOffset() { return baseOffset; }

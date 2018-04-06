@@ -42,9 +42,9 @@ public class ShuffleInMemorySorterSuite {
   final TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 0);
   final TestMemoryConsumer consumer = new TestMemoryConsumer(taskMemoryManager);
 
-  private static String getStringFromDataPage(Object baseObject, long baseOffset, int strLength) {
+  private static String getStringFromDataPage(MemoryBlock mb, long baseOffset, int strLength) {
     final byte[] strBytes = new byte[strLength];
-    Platform.copyMemory(baseObject, baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, strLength);
+    mb.writeTo(baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, strLength);
     return new String(strBytes, StandardCharsets.UTF_8);
   }
 
@@ -74,13 +74,12 @@ public class ShuffleInMemorySorterSuite {
       new TaskMemoryManager(new TestMemoryManager(conf), 0);
     final MemoryConsumer c = new TestMemoryConsumer(memoryManager);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048, c);
-    final Object baseObject = dataPage.getBaseObject();
     final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(
       consumer, 4, shouldUseRadixSort());
     final HashPartitioner hashPartitioner = new HashPartitioner(4);
 
     // Write the records into the data page and store pointers into the sorter
-    long position = dataPage.getBaseOffset();
+    long position = 0;
     for (String str : dataToSort) {
       if (!sorter.hasSpaceForAnotherRecord()) {
         sorter.expandPointerArray(
@@ -88,10 +87,10 @@ public class ShuffleInMemorySorterSuite {
       }
       final long recordAddress = memoryManager.encodePageNumberAndOffset(dataPage, position);
       final byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
-      Platform.putInt(baseObject, position, strBytes.length);
+      dataPage.putInt(position, strBytes.length);
       position += 4;
-      Platform.copyMemory(
-        strBytes, Platform.BYTE_ARRAY_OFFSET, baseObject, position, strBytes.length);
+      dataPage.copyFrom(
+        strBytes, Platform.BYTE_ARRAY_OFFSET, position, strBytes.length);
       position += strBytes.length;
       sorter.insertRecord(recordAddress, hashPartitioner.getPartition(str));
     }
@@ -108,8 +107,8 @@ public class ShuffleInMemorySorterSuite {
       Assert.assertTrue("Partition id " + partitionId + " should be >= prev id " + prevPartitionId,
         partitionId >= prevPartitionId);
       final long recordAddress = iter.packedRecordPointer.getRecordPointer();
-      final int recordLength = Platform.getInt(
-        memoryManager.getPage(recordAddress), memoryManager.getOffsetInPage(recordAddress));
+      final int recordLength = memoryManager.getPage(recordAddress)
+        .getInt(memoryManager.getOffsetInPage(recordAddress));
       final String str = getStringFromDataPage(
         memoryManager.getPage(recordAddress),
         memoryManager.getOffsetInPage(recordAddress) + 4, // skip over record length

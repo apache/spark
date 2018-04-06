@@ -19,8 +19,8 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import com.google.common.primitives.Ints;
 
-import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class RadixSort {
 
@@ -84,14 +84,14 @@ public class RadixSort {
       boolean desc, boolean signed) {
     assert counts.length == 256;
     long[] offsets = transformCountsToOffsets(
-      counts, numRecords, array.getBaseOffset() + outIndex * 8L, 8, desc, signed);
-    Object baseObject = array.getBaseObject();
-    long baseOffset = array.getBaseOffset() + inIndex * 8L;
+      counts, numRecords, outIndex * 8L, 8, desc, signed);
+    MemoryBlock mb = array.memoryBlock();
+    long baseOffset = inIndex * 8L;
     long maxOffset = baseOffset + numRecords * 8L;
     for (long offset = baseOffset; offset < maxOffset; offset += 8) {
-      long value = Platform.getLong(baseObject, offset);
+      long value = mb.getLong(offset);
       int bucket = (int)((value >>> (byteIdx * 8)) & 0xff);
-      Platform.putLong(baseObject, offsets[bucket], value);
+      mb.putLong(offsets[bucket], value);
       offsets[bucket] += 8;
     }
   }
@@ -114,10 +114,10 @@ public class RadixSort {
     // If all the byte values at a particular index are the same we don't need to count it.
     long bitwiseMax = 0;
     long bitwiseMin = -1L;
-    long maxOffset = array.getBaseOffset() + numRecords * 8L;
-    Object baseObject = array.getBaseObject();
-    for (long offset = array.getBaseOffset(); offset < maxOffset; offset += 8) {
-      long value = Platform.getLong(baseObject, offset);
+    long maxOffset = numRecords * 8L;
+    MemoryBlock mb = array.memoryBlock();
+    for (long offset = 0; offset < maxOffset; offset += 8) {
+      long value = mb.getLong(offset);
       bitwiseMax |= value;
       bitwiseMin &= value;
     }
@@ -127,8 +127,8 @@ public class RadixSort {
       if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
         counts[i] = new long[256];
         // TODO(ekl) consider computing all the counts in one pass.
-        for (long offset = array.getBaseOffset(); offset < maxOffset; offset += 8) {
-          counts[i][(int)((Platform.getLong(baseObject, offset) >>> (i * 8)) & 0xff)]++;
+        for (long offset = 0; offset < maxOffset; offset += 8) {
+          counts[i][(int)((mb.getLong(offset) >>> (i * 8)) & 0xff)]++;
         }
       }
     }
@@ -216,11 +216,11 @@ public class RadixSort {
     long[][] counts = new long[8][];
     long bitwiseMax = 0;
     long bitwiseMin = -1L;
-    long baseOffset = array.getBaseOffset() + startIndex * 8L;
+    long baseOffset = startIndex * 8L;
     long limit = baseOffset + numRecords * 16L;
-    Object baseObject = array.getBaseObject();
+    MemoryBlock mb = array.memoryBlock();
     for (long offset = baseOffset; offset < limit; offset += 16) {
-      long value = Platform.getLong(baseObject, offset + 8);
+      long value = mb.getLong(offset + 8);
       bitwiseMax |= value;
       bitwiseMin &= value;
     }
@@ -229,7 +229,7 @@ public class RadixSort {
       if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
         counts[i] = new long[256];
         for (long offset = baseOffset; offset < limit; offset += 16) {
-          counts[i][(int)((Platform.getLong(baseObject, offset + 8) >>> (i * 8)) & 0xff)]++;
+          counts[i][(int)((mb.getLong(offset + 8) >>> (i * 8)) & 0xff)]++;
         }
       }
     }
@@ -244,17 +244,17 @@ public class RadixSort {
       boolean desc, boolean signed) {
     assert counts.length == 256;
     long[] offsets = transformCountsToOffsets(
-      counts, numRecords, array.getBaseOffset() + outIndex * 8L, 16, desc, signed);
-    Object baseObject = array.getBaseObject();
-    long baseOffset = array.getBaseOffset() + inIndex * 8L;
+      counts, numRecords, outIndex * 8L, 16, desc, signed);
+    MemoryBlock mb = array.memoryBlock();
+    long baseOffset = inIndex * 8L;
     long maxOffset = baseOffset + numRecords * 16L;
     for (long offset = baseOffset; offset < maxOffset; offset += 16) {
-      long key = Platform.getLong(baseObject, offset);
-      long prefix = Platform.getLong(baseObject, offset + 8);
+      long key = mb.getLong(offset);
+      long prefix = mb.getLong(offset + 8);
       int bucket = (int)((prefix >>> (byteIdx * 8)) & 0xff);
       long dest = offsets[bucket];
-      Platform.putLong(baseObject, dest, key);
-      Platform.putLong(baseObject, dest + 8, prefix);
+      mb.putLong(dest, key);
+      mb.putLong(dest + 8, prefix);
       offsets[bucket] += 16;
     }
   }

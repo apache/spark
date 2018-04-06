@@ -26,18 +26,23 @@ import org.apache.spark.unsafe.Platform;
  */
 public final class OnHeapMemoryBlock extends MemoryBlock {
 
-  private final long[] array;
+  private long[] array;
 
   public OnHeapMemoryBlock(long[] obj, long offset, long size) {
     super(obj, offset, size);
     this.array = obj;
-    assert(offset + size <= obj.length * 8L + Platform.LONG_ARRAY_OFFSET) :
+    assert(obj == null || offset + size <= obj.length * 8L + Platform.LONG_ARRAY_OFFSET) :
       "The sum of size " + size + " and offset " + offset + " should not be larger than " +
         "the size of the given memory space " + (obj.length * 8L + Platform.LONG_ARRAY_OFFSET);
   }
 
   public OnHeapMemoryBlock(long size) {
     this(new long[Ints.checkedCast((size + 7) / 8)], Platform.LONG_ARRAY_OFFSET, size);
+  }
+
+  public void set(Object obj, long offset, long size) {
+    super.set(obj, offset, size);
+    this.array = (long[])obj;
   }
 
   @Override

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
+import org.apache.spark.unsafe.memory.{ByteArrayMemoryBlock, MemoryBlock}
 import org.apache.spark.util.{KnownSizeEstimation, Utils}
 
 /**
@@ -151,7 +152,7 @@ private[joins] class UnsafeHashedRelation(
         private var _hasNext = true
         override def hasNext: Boolean = _hasNext
         override def next(): UnsafeRow = {
-          resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
+          resultRow.pointTo(loc.getValueMemoryBlock, loc.getValueOffset, loc.getValueLength)
           _hasNext = loc.nextValue()
           resultRow
         }
@@ -168,7 +169,7 @@ private[joins] class UnsafeHashedRelation(
     binaryMap.safeLookup(unsafeKey.getBaseObject, unsafeKey.getBaseOffset,
       unsafeKey.getSizeInBytes, loc, unsafeKey.hashCode())
     if (loc.isDefined) {
-      resultRow.pointTo(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
+      resultRow.pointTo(loc.getValueMemoryBlock, loc.getValueOffset, loc.getValueLength)
       resultRow
     } else {
       null
@@ -197,11 +198,11 @@ private[joins] class UnsafeHashedRelation(
     writeLong(binaryMap.numValues())
 
     var buffer = new Array[Byte](64)
-    def write(base: Object, offset: Long, length: Int): Unit = {
+    def write(mb: MemoryBlock, offset: Long, length: Int): Unit = {
       if (buffer.length < length) {
         buffer = new Array[Byte](length)
       }
-      Platform.copyMemory(base, offset, buffer, Platform.BYTE_ARRAY_OFFSET, length)
+      mb.writeTo(offset, buffer, Platform.BYTE_ARRAY_OFFSET, length)
       writeBuffer(buffer, 0, length)
     }
 
@@ -211,8 +212,8 @@ private[joins] class UnsafeHashedRelation(
       // [key size] [values size] [key bytes] [value bytes]
       writeInt(loc.getKeyLength)
       writeInt(loc.getValueLength)
-      write(loc.getKeyBase, loc.getKeyOffset, loc.getKeyLength)
-      write(loc.getValueBase, loc.getValueOffset, loc.getValueLength)
+      write(loc.getKeyMemoryBlock, loc.getKeyOffset, loc.getKeyLength)
+      write(loc.getValueMemoryBlock, loc.getValueOffset, loc.getValueLength)
     }
   }
 
@@ -252,23 +253,24 @@ private[joins] class UnsafeHashedRelation(
       true)
 
     var i = 0
-    var keyBuffer = new Array[Byte](1024)
-    var valuesBuffer = new Array[Byte](1024)
+    var keyBufferMb = new ByteArrayMemoryBlock(1024)
+    var valuesBufferMb = new ByteArrayMemoryBlock(1024)
     while (i < nValues) {
       val keySize = readInt()
       val valuesSize = readInt()
-      if (keySize > keyBuffer.length) {
-        keyBuffer = new Array[Byte](keySize)
+      if (keySize > keyBufferMb.size()) {
+        keyBufferMb = new ByteArrayMemoryBlock(keySize)
       }
-      readBuffer(keyBuffer, 0, keySize)
-      if (valuesSize > valuesBuffer.length) {
-        valuesBuffer = new Array[Byte](valuesSize)
+      readBuffer(keyBufferMb.getByteArray, 0, keySize)
+      keyBufferMb.setLength(keySize)
+      if (valuesSize > valuesBufferMb.size()) {
+        valuesBufferMb = new ByteArrayMemoryBlock(valuesSize)
       }
-      readBuffer(valuesBuffer, 0, valuesSize)
+      readBuffer(valuesBufferMb.getByteArray, 0, valuesSize)
+      valuesBufferMb.setLength(valuesSize)
 
-      val loc = binaryMap.lookup(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize)
-      val putSuceeded = loc.append(keyBuffer, Platform.BYTE_ARRAY_OFFSET, keySize,
-        valuesBuffer, Platform.BYTE_ARRAY_OFFSET, valuesSize)
+      val loc = binaryMap.lookup(keyBufferMb)
+      val putSuceeded = loc.append(keyBufferMb, valuesBufferMb)
       if (!putSuceeded) {
         binaryMap.free()
         throw new IOException("Could not allocate memory to grow BytesToBytesMap")
@@ -305,15 +307,18 @@ private[joins] object UnsafeHashedRelation {
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
+    // keyMb and rowMb are reused in a loop to avoid object allocations
+    val keyMb = new ByteArrayMemoryBlock(null, 0, 0)
+    val rowMb = new ByteArrayMemoryBlock(null, 0, 0)
     while (input.hasNext) {
       val row = input.next().asInstanceOf[UnsafeRow]
       numFields = row.numFields()
       val key = keyGenerator(row)
       if (!key.anyNull) {
-        val loc = binaryMap.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
-        val success = loc.append(
-          key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
-          row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
+        keyMb.set(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
+        rowMb.set(row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
+        val loc = binaryMap.lookup(keyMb)
+        val success = loc.append(keyMb, rowMb)
         if (!success) {
           binaryMap.free()
           throw new SparkException("There is no enough memory to build hash map")

@@ -17,6 +17,8 @@
 
 package org.apache.spark.unsafe;
 
+import org.apache.spark.unsafe.memory.MemoryBlock;
+
 /**
  * Class to make changes to record length offsets uniform through out
  * various areas of Apache Spark core and unsafe.  The SPARC platform
@@ -32,24 +34,24 @@ public class UnsafeAlignedOffset {
     return UAO_SIZE;
   }
 
-  public static int getSize(Object object, long offset) {
+  public static int getSize(MemoryBlock mb, long offset) {
     switch (UAO_SIZE) {
       case 4:
-        return Platform.getInt(object, offset);
+        return mb.getInt(offset);
       case 8:
-        return (int)Platform.getLong(object, offset);
+        return (int)mb.getLong(offset);
       default:
         throw new AssertionError("Illegal UAO_SIZE");
     }
   }
 
-  public static void putSize(Object object, long offset, int value) {
+  public static void putSize(MemoryBlock mb, long offset, int value) {
     switch (UAO_SIZE) {
       case 4:
-        Platform.putInt(object, offset, value);
+        mb.putInt(offset, value);
         break;
       case 8:
-        Platform.putLong(object, offset, value);
+        mb.putLong(offset, value);
         break;
       default:
         throw new AssertionError("Illegal UAO_SIZE");

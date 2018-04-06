@@ -36,7 +36,6 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TooLargePageException;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockManager;
-import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UnsafeAlignedOffset;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
@@ -186,7 +185,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   @VisibleForTesting
   public void closeCurrentPage() {
     if (currentPage != null) {
-      pageCursor = currentPage.getBaseOffset() + currentPage.size();
+      pageCursor = currentPage.size();
     }
   }
 
@@ -378,10 +377,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    */
   private void acquireNewPageIfNecessary(int required) {
     if (currentPage == null ||
-      pageCursor + required > currentPage.getBaseOffset() + currentPage.size()) {
+      pageCursor + required > currentPage.size()) {
       // TODO: try to find space on previous pages
       currentPage = allocatePage(required);
-      pageCursor = currentPage.getBaseOffset();
+      pageCursor = 0;
       allocatedPages.add(currentPage);
     }
   }
@@ -406,11 +405,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     final int required = length + uaoSize;
     acquireNewPageIfNecessary(required);
 
-    final Object base = currentPage.getBaseObject();
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
-    UnsafeAlignedOffset.putSize(base, pageCursor, length);
+    UnsafeAlignedOffset.putSize(currentPage, pageCursor, length);
     pageCursor += uaoSize;
-    Platform.copyMemory(recordBase, recordOffset, base, pageCursor, length);
+    currentPage.copyFrom(recordBase, recordOffset, pageCursor, length);
     pageCursor += length;
     inMemSorter.insertRecord(recordAddress, prefix, prefixIsNull);
   }
@@ -432,15 +430,14 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     final int required = keyLen + valueLen + (2 * uaoSize);
     acquireNewPageIfNecessary(required);
 
-    final Object base = currentPage.getBaseObject();
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
-    UnsafeAlignedOffset.putSize(base, pageCursor, keyLen + valueLen + uaoSize);
+    UnsafeAlignedOffset.putSize(currentPage, pageCursor, keyLen + valueLen + uaoSize);
     pageCursor += uaoSize;
-    UnsafeAlignedOffset.putSize(base, pageCursor, keyLen);
+    UnsafeAlignedOffset.putSize(currentPage, pageCursor, keyLen);
     pageCursor += uaoSize;
-    Platform.copyMemory(keyBase, keyOffset, base, pageCursor, keyLen);
+    currentPage.copyFrom(keyBase, keyOffset, pageCursor, keyLen);
     pageCursor += keyLen;
-    Platform.copyMemory(valueBase, valueOffset, base, pageCursor, valueLen);
+    currentPage.copyFrom(valueBase, valueOffset, pageCursor, valueLen);
     pageCursor += valueLen;
 
     assert(inMemSorter != null);
@@ -492,10 +489,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       UnsafeSorterSpillWriter spillWriter) throws IOException {
     while (inMemIterator.hasNext()) {
       inMemIterator.loadNext();
-      final Object baseObject = inMemIterator.getBaseObject();
+      final MemoryBlock baseMemoryBlock = inMemIterator.getMemoryBlock();
       final long baseOffset = inMemIterator.getBaseOffset();
       final int recordLength = inMemIterator.getRecordLength();
-      spillWriter.write(baseObject, baseOffset, recordLength, inMemIterator.getKeyPrefix());
+      spillWriter.write(baseMemoryBlock, baseOffset, recordLength, inMemIterator.getKeyPrefix());
     }
     spillWriter.close();
   }
@@ -592,8 +589,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
 
     @Override
-    public Object getBaseObject() {
-      return upstream.getBaseObject();
+    public MemoryBlock getMemoryBlock() {
+      return upstream.getMemoryBlock();
     }
 
     @Override
@@ -702,7 +699,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
 
     @Override
-    public Object getBaseObject() { return current.getBaseObject(); }
+    public MemoryBlock getMemoryBlock() { return current.getMemoryBlock(); }
 
     @Override
     public long getBaseOffset() { return current.getBaseOffset(); }

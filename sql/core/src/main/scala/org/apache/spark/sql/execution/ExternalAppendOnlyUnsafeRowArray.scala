@@ -216,7 +216,7 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
     override def next(): UnsafeRow = {
       throwExceptionIfModified()
       iterator.loadNext()
-      currentRow.pointTo(iterator.getBaseObject, iterator.getBaseOffset, iterator.getRecordLength)
+      currentRow.pointTo(iterator.getMemoryBlock, iterator.getBaseOffset, iterator.getRecordLength)
       currentRow
     }
   }

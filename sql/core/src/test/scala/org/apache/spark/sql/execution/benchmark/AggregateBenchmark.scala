@@ -30,6 +30,7 @@ import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock
 import org.apache.spark.util.Benchmark
 
 /**
@@ -577,21 +578,19 @@ class AggregateBenchmark extends BenchmarkBase {
             1),
           0)
         val map = new BytesToBytesMap(taskMemoryManager, 1024, 64L<<20)
-        val keyBytes = new Array[Byte](16)
-        val valueBytes = new Array[Byte](16)
+        val keyMb = new ByteArrayMemoryBlock(16)
+        val valueMb = new ByteArrayMemoryBlock(16)
         val key = new UnsafeRow(1)
-        key.pointTo(keyBytes, Platform.BYTE_ARRAY_OFFSET, 16)
+        key.pointTo(keyMb, keyMb.getBaseOffset, 16)
         val value = new UnsafeRow(1)
-        value.pointTo(valueBytes, Platform.BYTE_ARRAY_OFFSET, 16)
+        value.pointTo(valueMb, valueMb.getBaseOffset, 16)
         var i = 0
         val numKeys = 65536
         while (i < numKeys) {
           key.setInt(0, i % 65536)
-          val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
-            Murmur3_x86_32.hashLong(i % 65536, 42))
+          val loc = map.lookup(keyMb, Murmur3_x86_32.hashLong(i % 65536, 42))
           if (!loc.isDefined) {
-            loc.append(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
-              value.getBaseObject, value.getBaseOffset, value.getSizeInBytes)
+            loc.append(keyMb, valueMb)
           }
           i += 1
         }
@@ -599,8 +598,7 @@ class AggregateBenchmark extends BenchmarkBase {
         var s = 0
         while (i < N) {
           key.setInt(0, i % 100000)
-          val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
-            Murmur3_x86_32.hashLong(i % 100000, 42))
+          val loc = map.lookup(keyMb, Murmur3_x86_32.hashLong(i % 100000, 42))
           if (loc.isDefined) {
             s += 1
           }

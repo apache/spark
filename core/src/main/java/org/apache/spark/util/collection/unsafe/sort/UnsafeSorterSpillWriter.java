@@ -31,6 +31,7 @@ import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
 import org.apache.spark.storage.TempLocalBlockId;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.internal.config.package$;
 
 /**
@@ -101,13 +102,13 @@ public final class UnsafeSorterSpillWriter {
   /**
    * Write a record to a spill file.
    *
-   * @param baseObject the base object / memory page containing the record
+   * @param baseMemoryBlock the base memory page containing the record
    * @param baseOffset the base offset which points directly to the record data.
    * @param recordLength the length of the record.
    * @param keyPrefix a sort key prefix
    */
   public void write(
-      Object baseObject,
+      MemoryBlock baseMemoryBlock,
       long baseOffset,
       int recordLength,
       long keyPrefix) throws IOException {
@@ -124,8 +125,7 @@ public final class UnsafeSorterSpillWriter {
     long recordReadPosition = baseOffset;
     while (dataRemaining > 0) {
       final int toTransfer = Math.min(freeSpaceInWriteBuffer, dataRemaining);
-      Platform.copyMemory(
-        baseObject,
+      baseMemoryBlock.writeTo(
         recordReadPosition,
         writeBuffer,
         Platform.BYTE_ARRAY_OFFSET + (diskWriteBufferSize - freeSpaceInWriteBuffer),

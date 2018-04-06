@@ -42,9 +42,9 @@ public class UnsafeInMemorySorterSuite {
 
   protected boolean shouldUseRadixSort() { return false; }
 
-  private static String getStringFromDataPage(Object baseObject, long baseOffset, int length) {
+  private static String getStringFromDataPage(MemoryBlock mb, long baseOffset, int length) {
     final byte[] strBytes = new byte[length];
-    Platform.copyMemory(baseObject, baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, length);
+    mb.writeTo(baseOffset, strBytes, Platform.BYTE_ARRAY_OFFSET, length);
     return new String(strBytes, StandardCharsets.UTF_8);
   }
 
@@ -80,15 +80,14 @@ public class UnsafeInMemorySorterSuite {
       new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
     final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
     final MemoryBlock dataPage = memoryManager.allocatePage(2048, consumer);
-    final Object baseObject = dataPage.getBaseObject();
     // Write the records into the data page:
-    long position = dataPage.getBaseOffset();
+    long position = 0;
     for (String str : dataToSort) {
       final byte[] strBytes = str.getBytes(StandardCharsets.UTF_8);
-      Platform.putInt(baseObject, position, strBytes.length);
+      dataPage.putInt(position, strBytes.length);
       position += 4;
-      Platform.copyMemory(
-        strBytes, Platform.BYTE_ARRAY_OFFSET, baseObject, position, strBytes.length);
+      dataPage.copyFrom(
+        strBytes, Platform.BYTE_ARRAY_OFFSET, position, strBytes.length);
       position += strBytes.length;
     }
     // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
@@ -96,10 +95,10 @@ public class UnsafeInMemorySorterSuite {
     final RecordComparator recordComparator = new RecordComparator() {
       @Override
       public int compare(
-        Object leftBaseObject,
+        MemoryBlock leftBaseObject,
         long leftBaseOffset,
         int leftBaseLength,
-        Object rightBaseObject,
+        MemoryBlock rightBaseObject,
         long rightBaseOffset,
         int rightBaseLength) {
         return 0;
@@ -112,16 +111,16 @@ public class UnsafeInMemorySorterSuite {
     UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer, memoryManager,
       recordComparator, prefixComparator, dataToSort.length, shouldUseRadixSort());
     // Given a page of records, insert those records into the sorter one-by-one:
-    position = dataPage.getBaseOffset();
+    position = 0;
     for (int i = 0; i < dataToSort.length; i++) {
       if (!sorter.hasSpaceForAnotherRecord()) {
         sorter.expandPointerArray(
           consumer.allocateArray(sorter.getMemoryUsage() / 8 * 2));
       }
       // position now points to the start of a record (which holds its length).
-      final int recordLength = Platform.getInt(baseObject, position);
+      final int recordLength = dataPage.getInt(position);
       final long address = memoryManager.encodePageNumberAndOffset(dataPage, position);
-      final String str = getStringFromDataPage(baseObject, position + 4, recordLength);
+      final String str = getStringFromDataPage(dataPage, position + 4, recordLength);
       final int partitionId = hashPartitioner.getPartition(str);
       sorter.insertRecord(address, partitionId, false);
       position += 4 + recordLength;
@@ -133,7 +132,7 @@ public class UnsafeInMemorySorterSuite {
     while (iter.hasNext()) {
       iter.loadNext();
       final String str =
-        getStringFromDataPage(iter.getBaseObject(), iter.getBaseOffset(), iter.getRecordLength());
+        getStringFromDataPage(iter.getMemoryBlock(), iter.getBaseOffset(), iter.getRecordLength());
       final long keyPrefix = iter.getKeyPrefix();
       assertThat(str, isIn(Arrays.asList(dataToSort)));
       assertThat(keyPrefix, greaterThanOrEqualTo(prevPrefix));
@@ -164,10 +163,10 @@ public class UnsafeInMemorySorterSuite {
     final RecordComparator recordComparator = new RecordComparator() {
       @Override
       public int compare(
-              Object leftBaseObject,
+              MemoryBlock leftBaseObject,
               long leftBaseOffset,
               int leftBaseLength,
-              Object rightBaseObject,
+              MemoryBlock rightBaseObject,
               long rightBaseOffset,
               int rightBaseLength) {
         return 0;

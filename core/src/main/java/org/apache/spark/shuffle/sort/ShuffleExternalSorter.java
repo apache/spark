@@ -198,14 +198,14 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       }
 
       final long recordPointer = sortedRecords.packedRecordPointer.getRecordPointer();
-      final Object recordPage = taskMemoryManager.getPage(recordPointer);
+      final MemoryBlock recordPage = taskMemoryManager.getPage(recordPointer);
       final long recordOffsetInPage = taskMemoryManager.getOffsetInPage(recordPointer);
-      int dataRemaining = Platform.getInt(recordPage, recordOffsetInPage);
+      int dataRemaining = recordPage.getInt(recordOffsetInPage);
       long recordReadPosition = recordOffsetInPage + 4; // skip over record length
       while (dataRemaining > 0) {
         final int toTransfer = Math.min(diskWriteBufferSize, dataRemaining);
-        Platform.copyMemory(
-          recordPage, recordReadPosition, writeBuffer, Platform.BYTE_ARRAY_OFFSET, toTransfer);
+        recordPage.writeTo(
+          recordReadPosition, writeBuffer, Platform.BYTE_ARRAY_OFFSET, toTransfer);
         writer.write(writeBuffer, 0, toTransfer);
         recordReadPosition += toTransfer;
         dataRemaining -= toTransfer;
@@ -365,11 +365,10 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    *                      special overflow pages).
    */
   private void acquireNewPageIfNecessary(int required) {
-    if (currentPage == null ||
-      pageCursor + required > currentPage.getBaseOffset() + currentPage.size() ) {
+    if (currentPage == null || pageCursor + required > currentPage.size() ) {
       // TODO: try to find space in previous pages
       currentPage = allocatePage(required);
-      pageCursor = currentPage.getBaseOffset();
+      pageCursor = 0;
       allocatedPages.add(currentPage);
     }
   }
@@ -394,11 +393,10 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     acquireNewPageIfNecessary(required);
 
     assert(currentPage != null);
-    final Object base = currentPage.getBaseObject();
     final long recordAddress = taskMemoryManager.encodePageNumberAndOffset(currentPage, pageCursor);
-    Platform.putInt(base, pageCursor, length);
+    currentPage.putInt(pageCursor, length);
     pageCursor += 4;
-    Platform.copyMemory(recordBase, recordOffset, base, pageCursor, length);
+    currentPage.copyFrom(recordBase, recordOffset, pageCursor, length);
     pageCursor += length;
     inMemSorter.insertRecord(recordAddress, partitionId);
   }

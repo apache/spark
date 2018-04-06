@@ -44,6 +44,7 @@ import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
 
 import static org.hamcrest.Matchers.greaterThan;
@@ -70,10 +71,10 @@ public class UnsafeExternalSorterSuite {
   final RecordComparator recordComparator = new RecordComparator() {
     @Override
     public int compare(
-      Object leftBaseObject,
+      MemoryBlock leftBaseObject,
       long leftBaseOffset,
       int leftBaseLength,
-      Object rightBaseObject,
+      MemoryBlock rightBaseObject,
       long rightBaseOffset,
       int rightBaseLength) {
       return 0;
@@ -186,7 +187,7 @@ public class UnsafeExternalSorterSuite {
       iter.loadNext();
       assertEquals(i, iter.getKeyPrefix());
       assertEquals(4, iter.getRecordLength());
-      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+      assertEquals(i, iter.getMemoryBlock().getInt(iter.getBaseOffset()));
     }
 
     sorter.cleanupResources();
@@ -257,7 +258,7 @@ public class UnsafeExternalSorterSuite {
       iter.loadNext();
       assertEquals(i, iter.getKeyPrefix());
       assertEquals(4, iter.getRecordLength());
-      assertEquals(i, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+      assertEquals(i, iter.getMemoryBlock().getInt(iter.getBaseOffset()));
       i++;
     }
     assertEquals(numRecords + 1, i);
@@ -297,25 +298,25 @@ public class UnsafeExternalSorterSuite {
     iter.loadNext();
     assertEquals(123, iter.getKeyPrefix());
     assertEquals(smallRecord.length * 4, iter.getRecordLength());
-    assertEquals(123, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    assertEquals(123, iter.getMemoryBlock().getInt(iter.getBaseOffset()));
     // Small record
     assertTrue(iter.hasNext());
     iter.loadNext();
     assertEquals(123, iter.getKeyPrefix());
     assertEquals(smallRecord.length * 4, iter.getRecordLength());
-    assertEquals(123, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    assertEquals(123, iter.getMemoryBlock().getInt(iter.getBaseOffset()));
     // Large record
     assertTrue(iter.hasNext());
     iter.loadNext();
     assertEquals(456, iter.getKeyPrefix());
     assertEquals(largeRecord.length * 4, iter.getRecordLength());
-    assertEquals(456, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    assertEquals(456, iter.getMemoryBlock().getInt(iter.getBaseOffset()));
     // Large record
     assertTrue(iter.hasNext());
     iter.loadNext();
     assertEquals(456, iter.getKeyPrefix());
     assertEquals(largeRecord.length * 4, iter.getRecordLength());
-    assertEquals(456, Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()));
+    assertEquals(456, iter.getMemoryBlock().getInt(iter.getBaseOffset()));
 
     assertFalse(iter.hasNext());
     sorter.cleanupResources();
@@ -339,16 +340,16 @@ public class UnsafeExternalSorterSuite {
     for (int i = 0; i < n / 3; i++) {
       iter.hasNext();
       iter.loadNext();
-      assertTrue(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == i);
+      assertTrue(iter.getMemoryBlock().getLong(iter.getBaseOffset()) == i);
       lastv = i;
     }
     assertTrue(iter.spill() > 0);
     assertEquals(0, iter.spill());
-    assertTrue(Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()) == lastv);
+    assertTrue(iter.getMemoryBlock().getLong(iter.getBaseOffset()) == lastv);
     for (int i = n / 3; i < n; i++) {
       iter.hasNext();
       iter.loadNext();
-      assertEquals(i, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
+      assertEquals(i, iter.getMemoryBlock().getLong(iter.getBaseOffset()));
     }
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
@@ -372,7 +373,7 @@ public class UnsafeExternalSorterSuite {
     for (int i = 0; i < n; i++) {
       iter.hasNext();
       iter.loadNext();
-      assertEquals(i, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
+      assertEquals(i, iter.getMemoryBlock().getLong(iter.getBaseOffset()));
     }
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
@@ -406,7 +407,7 @@ public class UnsafeExternalSorterSuite {
     for (int i = 0; i < n; i++) {
       iter.hasNext();
       iter.loadNext();
-      assertEquals(i, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
+      assertEquals(i, iter.getMemoryBlock().getLong(iter.getBaseOffset()));
     }
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
@@ -550,7 +551,7 @@ public class UnsafeExternalSorterSuite {
     for (int i = start; i < end; i++) {
       assert (iter.hasNext());
       iter.loadNext();
-      assert (Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()) == i);
+      assert (iter.getMemoryBlock().getInt(iter.getBaseOffset()) == i);
     }
   }
 }

@@ -21,6 +21,8 @@ import java.io.IOException;
 import java.util.Comparator;
 import java.util.PriorityQueue;
 
+import org.apache.spark.unsafe.memory.MemoryBlock;
+
 final class UnsafeSorterSpillMerger {
 
   private int numRecords = 0;
@@ -35,8 +37,8 @@ final class UnsafeSorterSpillMerger {
         prefixComparator.compare(left.getKeyPrefix(), right.getKeyPrefix());
       if (prefixComparisonResult == 0) {
         return recordComparator.compare(
-          left.getBaseObject(), left.getBaseOffset(), left.getRecordLength(),
-          right.getBaseObject(), right.getBaseOffset(), right.getRecordLength());
+          left.getMemoryBlock(), left.getBaseOffset(), left.getRecordLength(),
+          right.getMemoryBlock(), right.getBaseOffset(), right.getRecordLength());
       } else {
         return prefixComparisonResult;
       }
@@ -87,7 +89,7 @@ final class UnsafeSorterSpillMerger {
       }
 
       @Override
-      public Object getBaseObject() { return spillReader.getBaseObject(); }
+      public MemoryBlock getMemoryBlock() { return spillReader.getMemoryBlock(); }
 
       @Override
       public long getBaseOffset() { return spillReader.getBaseOffset(); }

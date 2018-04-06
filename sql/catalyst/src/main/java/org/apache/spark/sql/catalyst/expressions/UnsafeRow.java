@@ -170,6 +170,10 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     this.sizeInBytes = sizeInBytes;
   }
 
+  public void pointTo(MemoryBlock mb, long baseOffset, int sizeInBytes) {
+    pointTo(mb.getBaseObject(), mb.getBaseOffset() + baseOffset, sizeInBytes);
+  }
+
   /**
    * Update this UnsafeRow to point to the underlying byte array.
    *

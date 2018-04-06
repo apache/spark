@@ -30,6 +30,8 @@ import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.KVIterator;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.map.BytesToBytesMap;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
  * Unsafe-based HashMap for performing aggregations where the aggregated values are fixed-width.
@@ -122,22 +124,15 @@ public final class UnsafeFixedWidthAggregationMap {
 
   public UnsafeRow getAggregationBufferFromUnsafeRow(UnsafeRow key, int hash) {
     // Probe our map using the serialized key
-    final BytesToBytesMap.Location loc = map.lookup(
-      key.getBaseObject(),
-      key.getBaseOffset(),
-      key.getSizeInBytes(),
-      hash);
+    MemoryBlock mbKey = MemoryBlock.allocateFromObject(
+      key.getBaseObject(), key.getBaseOffset(), key.getSizeInBytes());
+    final BytesToBytesMap.Location loc = map.lookup(mbKey, hash);
     if (!loc.isDefined()) {
       // This is the first time that we've seen this grouping key, so we'll insert a copy of the
       // empty aggregation buffer into the map:
-      boolean putSucceeded = loc.append(
-        key.getBaseObject(),
-        key.getBaseOffset(),
-        key.getSizeInBytes(),
-        emptyAggregationBuffer,
-        Platform.BYTE_ARRAY_OFFSET,
-        emptyAggregationBuffer.length
-      );
+      MemoryBlock mbValue = new ByteArrayMemoryBlock(
+        emptyAggregationBuffer, Platform.BYTE_ARRAY_OFFSET, emptyAggregationBuffer.length);
+      boolean putSucceeded = loc.append(mbKey, mbValue);
       if (!putSucceeded) {
         return null;
       }
@@ -145,7 +140,7 @@ public final class UnsafeFixedWidthAggregationMap {
 
     // Reset the pointer to point to the value that we just stored or looked up:
     currentAggregationBuffer.pointTo(
-      loc.getValueBase(),
+      loc.getValueMemoryBlock(),
       loc.getValueOffset(),
       loc.getValueLength()
     );
@@ -172,12 +167,12 @@ public final class UnsafeFixedWidthAggregationMap {
         if (mapLocationIterator.hasNext()) {
           final BytesToBytesMap.Location loc = mapLocationIterator.next();
           key.pointTo(
-            loc.getKeyBase(),
+            loc.getKeyMemoryBlock(),
             loc.getKeyOffset(),
             loc.getKeyLength()
           );
           value.pointTo(
-            loc.getValueBase(),
+            loc.getValueMemoryBlock(),
             loc.getValueOffset(),
             loc.getValueLength()
           );

@@ -137,7 +137,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
         val iter = array.getIterator(0)
         while (iter.hasNext) {
           iter.loadNext()
-          unsafeRow.pointTo(iter.getBaseObject, iter.getBaseOffset, iter.getRecordLength)
+          unsafeRow.pointTo(iter.getMemoryBlock, iter.getBaseOffset, iter.getRecordLength)
           sum = sum + unsafeRow.getLong(0)
         }
         array.cleanupResources()

@@ -17,6 +17,11 @@
 
 package org.apache.spark.util.collection.unsafe.sort;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.*;
+
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
 import org.apache.spark.SparkEnv;
@@ -25,11 +30,8 @@ import org.apache.spark.io.NioBufferedFileInputStream;
 import org.apache.spark.io.ReadAheadInputStream;
 import org.apache.spark.serializer.SerializerManager;
 import org.apache.spark.storage.BlockId;
-import org.apache.spark.unsafe.Platform;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.*;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
  * Reads spill files written by {@link UnsafeSorterSpillWriter} (see that class for a description
@@ -49,9 +51,8 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
   private int numRecords;
   private int numRecordsRemaining;
 
-  private byte[] arr = new byte[1024 * 1024];
-  private Object baseObject = arr;
-  private final long baseOffset = Platform.BYTE_ARRAY_OFFSET;
+  private ByteArrayMemoryBlock baseMemoryBlock = new ByteArrayMemoryBlock(1024 * 1024);
+  private final long baseOffset = 0;
   private final TaskContext taskContext = TaskContext.get();
 
   public UnsafeSorterSpillReader(
@@ -114,11 +115,10 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     }
     recordLength = din.readInt();
     keyPrefix = din.readLong();
-    if (recordLength > arr.length) {
-      arr = new byte[recordLength];
-      baseObject = arr;
+    if (recordLength > baseMemoryBlock.size()) {
+      baseMemoryBlock = new ByteArrayMemoryBlock(recordLength);
     }
-    ByteStreams.readFully(in, arr, 0, recordLength);
+    ByteStreams.readFully(in, baseMemoryBlock.getByteArray(), 0, recordLength);
     numRecordsRemaining--;
     if (numRecordsRemaining == 0) {
       close();
@@ -126,8 +126,8 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
   }
 
   @Override
-  public Object getBaseObject() {
-    return baseObject;
+  public MemoryBlock getMemoryBlock() {
+    return baseMemoryBlock;
   }
 
   @Override

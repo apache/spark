@@ -81,6 +81,16 @@ public abstract class MemoryBlock {
     return offset;
   }
 
+  public void set(@Nullable Object obj, long offset, long length) {
+    this.obj = obj;
+    this.offset = offset;
+    this.length = length;
+  }
+
+  public final void setLength(long length) {
+    this.length = length;
+  }
+
   public void resetObjAndOffset() {
     this.obj = null;
     this.offset = 0;

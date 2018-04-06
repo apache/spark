@@ -26,18 +26,23 @@ import org.apache.spark.unsafe.Platform;
  */
 public final class ByteArrayMemoryBlock extends MemoryBlock {
 
-  private final byte[] array;
+  private byte[] array;
 
   public ByteArrayMemoryBlock(byte[] obj, long offset, long size) {
     super(obj, offset, size);
     this.array = obj;
-    assert(offset + size <= Platform.BYTE_ARRAY_OFFSET + obj.length) :
+    assert(obj == null || offset + size <= Platform.BYTE_ARRAY_OFFSET + obj.length) :
       "The sum of size " + size + " and offset " + offset + " should not be larger than " +
         "the size of the given memory space " + (obj.length + Platform.BYTE_ARRAY_OFFSET);
   }
 
   public ByteArrayMemoryBlock(long length) {
     this(new byte[Ints.checkedCast(length)], Platform.BYTE_ARRAY_OFFSET, length);
+  }
+
+  public void set(Object obj, long offset, long size) {
+    super.set(obj, offset, size);
+    this.array = (byte[])obj;
   }
 
   @Override

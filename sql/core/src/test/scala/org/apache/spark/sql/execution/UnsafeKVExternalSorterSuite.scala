@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{InterpretedOrdering, UnsafePro
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.map.BytesToBytesMap
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock
 
 /**
  * Test suite for [[UnsafeKVExternalSorter]], with randomly generated test data.
@@ -215,17 +216,17 @@ class UnsafeKVExternalSorterSuite extends SparkFunSuite with SharedSQLContext {
     // Key/value are a unsafe rows with a single int column
     val schema = new StructType().add("i", IntegerType)
     val key = new UnsafeRow(1)
-    key.pointTo(new Array[Byte](32), 32)
+    val keyMb = new ByteArrayMemoryBlock(32)
+    key.pointTo(keyMb, keyMb.getBaseOffset, 32)
     key.setInt(0, 1)
     val value = new UnsafeRow(1)
-    value.pointTo(new Array[Byte](32), 32)
+    val valueMb = new ByteArrayMemoryBlock(32)
+    value.pointTo(valueMb, valueMb.getBaseOffset, 32)
     value.setInt(0, 2)
 
     for (_ <- 1 to 65) {
-      val loc = map.lookup(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
-      loc.append(
-        key.getBaseObject, key.getBaseOffset, key.getSizeInBytes,
-        value.getBaseObject, value.getBaseOffset, value.getSizeInBytes)
+      val loc = map.lookup(keyMb)
+      loc.append(keyMb, valueMb)
     }
 
     // Make sure we can successfully create a UnsafeKVExternalSorter with a `BytesToBytesMap`

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 
 public final class RecordBinaryComparator extends RecordComparator {
@@ -25,7 +26,12 @@ public final class RecordBinaryComparator extends RecordComparator {
   // TODO(jiangxb) Add test suite for this.
   @Override
   public int compare(
-      Object leftObj, long leftOff, int leftLen, Object rightObj, long rightOff, int rightLen) {
+      MemoryBlock leftMb,
+      long leftOff,
+      int leftLen,
+      MemoryBlock rightMb,
+      long rightOff,
+      int rightLen) {
     int i = 0;
     int res = 0;
 
@@ -40,8 +46,8 @@ public final class RecordBinaryComparator extends RecordComparator {
     // check if stars align and we can get both offsets to be aligned
     if ((leftOff % 8) == (rightOff % 8)) {
       while ((leftOff + i) % 8 != 0 && i < leftLen) {
-        res = (Platform.getByte(leftObj, leftOff + i) & 0xff) -
-                (Platform.getByte(rightObj, rightOff + i) & 0xff);
+        res = (leftMb.getByte(leftOff + i) & 0xff) -
+                (rightMb.getByte(rightOff + i) & 0xff);
         if (res != 0) return res;
         i += 1;
       }
@@ -49,8 +55,8 @@ public final class RecordBinaryComparator extends RecordComparator {
     // for architectures that support unaligned accesses, chew it up 8 bytes at a time
     if (Platform.unaligned() || (((leftOff + i) % 8 == 0) && ((rightOff + i) % 8 == 0))) {
       while (i <= leftLen - 8) {
-        res = (int) ((Platform.getLong(leftObj, leftOff + i) -
-                Platform.getLong(rightObj, rightOff + i)) % Integer.MAX_VALUE);
+        res = (int) ((leftMb.getLong(leftOff + i) -
+                rightMb.getLong(rightOff + i)) % Integer.MAX_VALUE);
         if (res != 0) return res;
         i += 8;
       }
@@ -58,8 +64,8 @@ public final class RecordBinaryComparator extends RecordComparator {
     // this will finish off the unaligned comparisons, or do the entire aligned comparison
     // whichever is needed.
     while (i < leftLen) {
-      res = (Platform.getByte(leftObj, leftOff + i) & 0xff) -
-              (Platform.getByte(rightObj, rightOff + i) & 0xff);
+      res = (leftMb.getByte(leftOff + i) & 0xff) -
+              (rightMb.getByte(rightOff + i) & 0xff);
       if (res != 0) return res;
       i += 1;
     }

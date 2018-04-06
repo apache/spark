@@ -25,6 +25,8 @@ import java.util.LinkedList;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.io.Closeables;
+import com.google.common.primitives.Ints;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -154,7 +156,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   private int mask;
 
   /**
-   * Return value of {@link BytesToBytesMap#lookup(Object, long, int)}.
+   * Return value of {@link BytesToBytesMap#lookup(MemoryBlock, int)}.
    */
   private final Location loc;
 
@@ -244,7 +246,6 @@ public final class BytesToBytesMap extends MemoryConsumer {
 
     private MemoryBlock currentPage = null;
     private int recordsInPage = 0;
-    private Object pageBaseObject;
     private long offsetInPage;
 
     // If this iterator destructive or not. When it is true, it frees each page as it moves onto
@@ -276,9 +277,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
         }
         if (dataPages.size() > nextIdx) {
           currentPage = dataPages.get(nextIdx);
-          pageBaseObject = currentPage.getBaseObject();
-          offsetInPage = currentPage.getBaseOffset();
-          recordsInPage = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
+          offsetInPage = 0;
+          recordsInPage = UnsafeAlignedOffset.getSize(currentPage, offsetInPage);
           offsetInPage += UnsafeAlignedOffset.getUaoSize();
         } else {
           currentPage = null;
@@ -314,7 +314,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       }
       numRecords--;
       if (currentPage != null) {
-        int totalLength = UnsafeAlignedOffset.getSize(pageBaseObject, offsetInPage);
+        int totalLength = UnsafeAlignedOffset.getSize(currentPage, offsetInPage);
         loc.with(currentPage, offsetInPage);
         // [total size] [key size] [key] [value] [pointer to next]
         offsetInPage += UnsafeAlignedOffset.getUaoSize() + totalLength + 8;
@@ -336,7 +336,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
           // Scala iterator does not handle exception
           Platform.throwException(e);
         }
-        loc.with(reader.getBaseObject(), reader.getBaseOffset(), reader.getRecordLength());
+        loc.with(reader.getMemoryBlock(), 0, reader.getRecordLength());
         return loc;
       }
     }
@@ -360,16 +360,15 @@ public final class BytesToBytesMap extends MemoryConsumer {
             break;
           }
 
-          Object base = block.getBaseObject();
-          long offset = block.getBaseOffset();
-          int numRecords = UnsafeAlignedOffset.getSize(base, offset);
+          long offset = 0;
+          int numRecords = UnsafeAlignedOffset.getSize(block, offset);
           int uaoSize = UnsafeAlignedOffset.getUaoSize();
           offset += uaoSize;
           final UnsafeSorterSpillWriter writer =
             new UnsafeSorterSpillWriter(blockManager, 32 * 1024, writeMetrics, numRecords);
           while (numRecords > 0) {
-            int length = UnsafeAlignedOffset.getSize(base, offset);
-            writer.write(base, offset + uaoSize, length, 0);
+            int length = UnsafeAlignedOffset.getSize(block, offset);
+            writer.write(block, offset + uaoSize, length, 0);
             offset += uaoSize + length + 8;
             numRecords--;
           }
@@ -436,9 +435,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This function always return the same {@link Location} instance to avoid object allocation.
    */
-  public Location lookup(Object keyBase, long keyOffset, int keyLength) {
-    safeLookup(keyBase, keyOffset, keyLength, loc,
-      Murmur3_x86_32.hashUnsafeWords(keyBase, keyOffset, keyLength, 42));
+  public Location lookup(MemoryBlock key) {
+    safeLookup(key, loc, Murmur3_x86_32.hashUnsafeWordsBlock(key, 42));
     return loc;
   }
 
@@ -448,8 +446,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This function always return the same {@link Location} instance to avoid object allocation.
    */
-  public Location lookup(Object keyBase, long keyOffset, int keyLength, int hash) {
-    safeLookup(keyBase, keyOffset, keyLength, loc, hash);
+  public Location lookup(MemoryBlock key, int hash) {
+    safeLookup(key, loc, hash);
     return loc;
   }
 
@@ -458,6 +456,10 @@ public final class BytesToBytesMap extends MemoryConsumer {
    *
    * This is a thread-safe version of `lookup`, could be used by multiple threads.
    */
+  public void safeLookup(MemoryBlock key, Location loc, int hash) {
+    safeLookup(key.getBaseObject(), key.getBaseOffset(), Ints.checkedCast(key.size()), loc, hash);
+  }
+
   public void safeLookup(Object keyBase, long keyOffset, int keyLength, Location loc, int hash) {
     assert(longArray != null);
 
@@ -483,8 +485,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
             final boolean areEqual = ByteArrayMethods.arrayEquals(
               keyBase,
               keyOffset,
-              loc.getKeyBase(),
-              loc.getKeyOffset(),
+              loc.getKeyMemoryBlock().getBaseObject(),
+              loc.getKeyMemoryBlock().getBaseOffset() + loc.getKeyOffset(),
               keyLength
             );
             if (areEqual) {
@@ -499,7 +501,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
   }
 
   /**
-   * Handle returned by {@link BytesToBytesMap#lookup(Object, long, int)} function.
+   * Handle returned by {@link BytesToBytesMap#lookup(MemoryBlock)} function.
    */
   public final class Location {
     /** An index into the hash map's Long array */
@@ -508,11 +510,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private boolean isDefined;
     /**
      * The hashcode of the most recent key passed to
-     * {@link BytesToBytesMap#lookup(Object, long, int, int)}. Caching this hashcode here allows us
+     * {@link BytesToBytesMap#lookup(MemoryBlock, int)}. Caching this hashcode here allows us
      * to avoid re-hashing the key when storing a value for that key.
      */
     private int keyHashcode;
-    private Object baseObject;  // the base object for key and value
+    private MemoryBlock baseMemoryBlock;  // the base MemoryBlock for key and value
     private long keyOffset;
     private int keyLength;
     private long valueOffset;
@@ -529,12 +531,12 @@ public final class BytesToBytesMap extends MemoryConsumer {
         taskMemoryManager.getOffsetInPage(fullKeyAddress));
     }
 
-    private void updateAddressesAndSizes(final Object base, long offset) {
-      baseObject = base;
-      final int totalLength = UnsafeAlignedOffset.getSize(base, offset);
+    private void updateAddressesAndSizes(final MemoryBlock mb, long offset) {
+      baseMemoryBlock = mb;
+      final int totalLength = UnsafeAlignedOffset.getSize(mb, offset);
       int uaoSize = UnsafeAlignedOffset.getUaoSize();
       offset += uaoSize;
-      keyLength = UnsafeAlignedOffset.getSize(base, offset);
+      keyLength = UnsafeAlignedOffset.getSize(mb, offset);
       offset += uaoSize;
       keyOffset = offset;
       valueOffset = offset + keyLength;
@@ -556,17 +558,17 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private Location with(MemoryBlock page, long offsetInPage) {
       this.isDefined = true;
       this.memoryPage = page;
-      updateAddressesAndSizes(page.getBaseObject(), offsetInPage);
+      updateAddressesAndSizes(page, offsetInPage);
       return this;
     }
 
     /**
      * This is only used for spilling
      */
-    private Location with(Object base, long offset, int length) {
+    private Location with(MemoryBlock base, long offset, int length) {
       this.isDefined = true;
       this.memoryPage = null;
-      baseObject = base;
+      baseMemoryBlock = base;
       int uaoSize = UnsafeAlignedOffset.getUaoSize();
       keyOffset = offset + uaoSize;
       keyLength = UnsafeAlignedOffset.getSize(base, offset);
@@ -580,7 +582,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
      */
     public boolean nextValue() {
       assert isDefined;
-      long nextAddr = Platform.getLong(baseObject, valueOffset + valueLength);
+      long nextAddr = baseMemoryBlock.getLong(valueOffset + valueLength);
       if (nextAddr == 0) {
         return false;
       } else {
@@ -605,11 +607,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
 
     /**
-     * Returns the base object for key.
+     * Returns the memory block for key.
      */
-    public Object getKeyBase() {
+    public MemoryBlock getKeyMemoryBlock() {
       assert (isDefined);
-      return baseObject;
+      return baseMemoryBlock;
     }
 
     /**
@@ -621,11 +623,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
     }
 
     /**
-     * Returns the base object for value.
+     * Returns the memory block for value.
      */
-    public Object getValueBase() {
+    public MemoryBlock getValueMemoryBlock() {
       assert (isDefined);
-      return baseObject;
+      return baseMemoryBlock;
     }
 
     /**
@@ -686,7 +688,9 @@ public final class BytesToBytesMap extends MemoryConsumer {
      * @return true if the put() was successful and false if the put() failed because memory could
      *         not be acquired.
      */
-    public boolean append(Object kbase, long koff, int klen, Object vbase, long voff, int vlen) {
+    public boolean append(MemoryBlock mbKey, MemoryBlock mbValue) {
+      final long klen = mbKey.size();
+      final long vlen = mbValue.size();
       assert (klen % 8 == 0);
       assert (vlen % 8 == 0);
       assert (longArray != null);
@@ -711,22 +715,22 @@ public final class BytesToBytesMap extends MemoryConsumer {
       }
 
       // --- Append the key and value data to the current data page --------------------------------
-      final Object base = currentPage.getBaseObject();
-      long offset = currentPage.getBaseOffset() + pageCursor;
+      MemoryBlock mb = currentPage;
+      long offset = pageCursor;
       final long recordOffset = offset;
-      UnsafeAlignedOffset.putSize(base, offset, klen + vlen + uaoSize);
-      UnsafeAlignedOffset.putSize(base, offset + uaoSize, klen);
+      UnsafeAlignedOffset.putSize(mb, offset, Ints.checkedCast(klen + vlen + uaoSize));
+      UnsafeAlignedOffset.putSize(mb, offset + uaoSize, Ints.checkedCast(klen));
       offset += (2 * uaoSize);
-      Platform.copyMemory(kbase, koff, base, offset, klen);
+      MemoryBlock.copyMemory(mbKey, 0, mb, offset, klen);
       offset += klen;
-      Platform.copyMemory(vbase, voff, base, offset, vlen);
+      MemoryBlock.copyMemory(mbValue, 0, mb, offset, vlen);
       offset += vlen;
       // put this value at the beginning of the list
-      Platform.putLong(base, offset, isDefined ? longArray.get(pos * 2) : 0);
+      mb.putLong(offset, isDefined ? longArray.get(pos * 2) : 0);
 
       // --- Update bookkeeping data structures ----------------------------------------------------
-      offset = currentPage.getBaseOffset();
-      UnsafeAlignedOffset.putSize(base, offset, UnsafeAlignedOffset.getSize(base, offset) + 1);
+      offset = 0;
+      UnsafeAlignedOffset.putSize(mb, offset, UnsafeAlignedOffset.getSize(mb, offset) + 1);
       pageCursor += recordLength;
       final long storedKeyAddress = taskMemoryManager.encodePageNumberAndOffset(
         currentPage, recordOffset);
@@ -761,7 +765,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       return false;
     }
     dataPages.add(currentPage);
-    UnsafeAlignedOffset.putSize(currentPage.getBaseObject(), currentPage.getBaseOffset(), 0);
+    UnsafeAlignedOffset.putSize(currentPage, 0, 0);
     pageCursor = UnsafeAlignedOffset.getUaoSize();
     return true;
   }

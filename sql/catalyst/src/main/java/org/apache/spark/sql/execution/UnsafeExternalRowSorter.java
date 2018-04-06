@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.unsafe.sort.PrefixComparator;
 import org.apache.spark.util.collection.unsafe.sort.RecordComparator;
 import org.apache.spark.util.collection.unsafe.sort.UnsafeExternalSorter;
@@ -186,7 +187,7 @@ public final class UnsafeExternalRowSorter {
           try {
             sortedIterator.loadNext();
             row.pointTo(
-              sortedIterator.getBaseObject(),
+              sortedIterator.getMemoryBlock(),
               sortedIterator.getBaseOffset(),
               sortedIterator.getRecordLength());
             if (!hasNext()) {
@@ -232,16 +233,16 @@ public final class UnsafeExternalRowSorter {
 
     @Override
     public int compare(
-        Object baseObj1,
+        MemoryBlock baseMb1,
         long baseOff1,
         int baseLen1,
-        Object baseObj2,
+        MemoryBlock baseMb2,
         long baseOff2,
         int baseLen2) {
       // Note that since ordering doesn't need the total length of the record, we just pass 0
       // into the row.
-      row1.pointTo(baseObj1, baseOff1, 0);
-      row2.pointTo(baseObj2, baseOff2, 0);
+      row1.pointTo(baseMb1, baseOff1, 0);
+      row2.pointTo(baseMb2, baseOff2, 0);
       return ordering.compare(row1, row2);
     }
   }
