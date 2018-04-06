@@ -72,10 +72,11 @@ private[spark] object KubernetesUtils {
           hostPath = Some(hostPathV)
           containerPath = Some(containerPathV)
           readOnly = Some(false)
+        case spec =>
+          None
       }
       if (hostPath.isDefined && containerPath.isDefined) {
-        podBuilder
-          .withVolumes(new VolumeBuilder()
+        podBuilder.addToVolumes(new VolumeBuilder()
             .withHostPath(new HostPathVolumeSource(hostPath.get))
             .withName(s"hostPath-volume-$volumeCount")
             .build())
