@@ -515,7 +515,7 @@ public class UTF8StringSuite {
     assertEquals(fromString("世界千世").soundex(), fromString("世界千世"));
   }
 
-  @Test
+  @Ignore
   public void writeToOutputStreamUnderflow() throws IOException {
     // offset underflow is apparently supported?
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
