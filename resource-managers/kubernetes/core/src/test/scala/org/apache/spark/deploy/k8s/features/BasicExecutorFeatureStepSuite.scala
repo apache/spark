@@ -170,7 +170,7 @@ class BasicExecutorFeatureStepSuite
 
     assert(executor.container.getImage === EXECUTOR_IMAGE)
     assert(executor.container.getVolumeMounts.size() === 1)
-    assert(executor.container.getVolumeMounts.get(0).getName === "hostPath-volume-1")
+    assert(executor.container.getVolumeMounts.get(0).getName === "hostPath-volume-0")
     assert(executor.container.getVolumeMounts.get(0).getMountPath === "/opt/mount")
 
     assert(executor.pod.getSpec.getVolumes.size() === 1)
@@ -196,9 +196,9 @@ class BasicExecutorFeatureStepSuite
 
     assert(executor.container.getImage === EXECUTOR_IMAGE)
     assert(executor.container.getVolumeMounts.size() === 2)
-    assert(executor.container.getVolumeMounts.get(0).getName === "hostPath-volume-1")
+    assert(executor.container.getVolumeMounts.get(0).getName === "hostPath-volume-0")
     assert(executor.container.getVolumeMounts.get(0).getMountPath === "/opt/mount1")
-    assert(executor.container.getVolumeMounts.get(1).getName === "hostPath-volume-2")
+    assert(executor.container.getVolumeMounts.get(1).getName === "hostPath-volume-1")
     assert(executor.container.getVolumeMounts.get(1).getMountPath === "/opt/mount2")
 
     assert(executor.pod.getSpec.getVolumes.size() === 2)
