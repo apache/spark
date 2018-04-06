@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.execution.{FileSourceScanExec, LogicalRDD}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.streaming.{MemoryStream, MemoryStreamBase, StatefulOperatorStateInfo, StreamingSymmetricHashJoinHelper}
+import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -422,7 +422,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     StateStore.stop()
   }
 
-  private def setupStream(prefix: String, multiplier: Int): (MemoryStreamBase[Int], DataFrame) = {
+  private def setupStream(prefix: String, multiplier: Int): (MemoryStream[Int], DataFrame) = {
     val input = MemoryStream[Int]
     val df = input.toDF
       .select(
@@ -435,7 +435,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
   }
 
   private def setupWindowedJoin(joinType: String):
-  (MemoryStreamBase[Int], MemoryStreamBase[Int], DataFrame) = {
+  (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
     val (input1, df1) = setupStream("left", 2)
     val (input2, df2) = setupStream("right", 3)
     val windowed1 = df1.select('key, window('leftTime, "10 second"), 'leftValue)

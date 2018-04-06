@@ -54,7 +54,7 @@ class ContinuousSuiteBase extends StreamTest {
   // This allows clean testing with manual epoch advancement.
   protected val longContinuousTrigger = Trigger.Continuous("1 hour")
 
-  override protected implicit val defaultTrigger = Trigger.Continuous(100)
+  override protected val defaultTrigger = Trigger.Continuous(100)
   override protected val defaultUseV2Sink = true
 }
 
@@ -62,7 +62,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
   import testImplicits._
 
   test("basic") {
-    val input = MemoryStream[Int]
+    val input = new ContinuousMemoryStream[Int](0, spark.sqlContext)
 
     testStream(input.toDF())(
       AddData(input, 0, 1, 2),

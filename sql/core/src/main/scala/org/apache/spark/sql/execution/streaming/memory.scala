@@ -47,12 +47,8 @@ object MemoryStream {
 
   def apply[A : Encoder](
       implicit sqlContext: SQLContext,
-      trigger: Trigger = Trigger.ProcessingTime(0)): MemoryStreamBase[A] = trigger match {
-    case _: ContinuousTrigger =>
-      new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
-    case _ =>
-      new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
-  }
+      trigger: Trigger = Trigger.ProcessingTime(0)): MemoryStream[A] =
+    new MemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
 }
 
 abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends BaseStreamingSource {

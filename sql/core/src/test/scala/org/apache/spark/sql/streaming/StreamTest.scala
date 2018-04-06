@@ -110,8 +110,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
    */
   object MultiAddData {
     def apply[A]
-      (source1: MemoryStreamBase[A], data1: A*)
-      (source2: MemoryStreamBase[A], data2: A*): StreamAction = {
+      (source1: MemoryStream[A], data1: A*)(source2: MemoryStream[A], data2: A*): StreamAction = {
       val actions = Seq(AddDataMemory(source1, data1), AddDataMemory(source2, data2))
       StreamProgressLockedActions(actions, desc = actions.mkString("[ ", " | ", " ]"))
     }
@@ -651,7 +650,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
                 .collect {
                   case r: StreamingExecutionRelation => r.source
                   case r: StreamingDataSourceV2Relation => r.reader
-                  case r: StreamingRelationV2 => r.dataSource
                 }
                 .zipWithIndex
                 .find(_._1 == source)
