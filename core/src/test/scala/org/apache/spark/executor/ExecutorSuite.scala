@@ -188,7 +188,14 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     assert(failReason.isInstanceOf[TaskKilled])
   }
 
-  def testFetchFailureHandling(oom: Boolean): (TaskFailedReason, UncaughtExceptionHandler) = {
+  /**
+   * Helper for testing some cases where a FetchFailure should *not* get sent back, because its
+   * superceded by another error, either an OOM or intentionally killing a task.
+   * @param oom if true, throw an OOM after the FetchFailure; else, interrupt the task after the
+    *            FetchFailure
+   */
+  private def testFetchFailureHandling(
+      oom: Boolean): (TaskFailedReason, UncaughtExceptionHandler) = {
     // when there is a fatal error like an OOM, we don't do normal fetch failure handling, since it
     // may be a false positive.  And we should call the uncaught exception handler.
     // SPARK-23816 also handle interrupts the same way, as killing an obsolete speculative task
@@ -198,8 +205,8 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     val serializer = SparkEnv.get.closureSerializer.newInstance()
     val resultFunc = (context: TaskContext, itr: Iterator[Int]) => itr.size
 
-    // Submit a job where a fetch failure is thrown, but then there is an OOM.  We should treat
-    // the fetch failure as a false positive, and just do normal OOM handling.
+    // Submit a job where a fetch failure is thrown, but then there is an OOM or interrupt.  We
+    // should treat the fetch failure as a false positive, and do normal OOM or interrupt handling.
     val inputRDD = new FetchFailureThrowingRDD(sc)
     if (!oom) {
       // we are trying to setup a case where a task is killed after a fetch failure -- this
