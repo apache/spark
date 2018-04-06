@@ -28,14 +28,15 @@ import scala.reflect.ClassTag
 
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
-
 import org.apache.spark.SparkEnv
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.{Dataset, Encoder, Row, SQLContext}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.continuous.ContinuousMemoryStreamRecordBuffer.GetRecord
 import org.apache.spark.sql.sources.v2.{ContinuousReadSupport, DataSourceOptions}
 import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory, SupportsScanUnsafeRow}
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
@@ -46,35 +47,12 @@ import org.apache.spark.util.RpcUtils
  * The overall strategy here is:
  *  * ContinuousMemoryStream maintains a list of records for each partition. addData() will
  *    distribute records evenly-ish across partitions.
- *  * ContinuousMemoryStreamRecordBuffer is set up as an endpoint for partition-level
+ *  * ContinuousMemoryStreamRecordBuffer is set up as an endpoint for executor-side
  *    ContinuousMemoryStreamDataReader instances to poll. It returns the record at the specified
  *    offset within the list, or null if that offset doesn't yet have a record.
  */
-
-private case class GetRecord(offset: ContinuousMemoryStreamPartitionOffset)
-
-private class ContinuousMemoryStreamRecordBuffer[A](
-    stream: ContinuousMemoryStream[A],
-    partitionBuffers: Seq[ListBuffer[A]]) extends ThreadSafeRpcEndpoint {
-  override val rpcEnv: RpcEnv = SparkEnv.get.rpcEnv
-
-  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-    case GetRecord(ContinuousMemoryStreamPartitionOffset(part, index)) => stream.synchronized {
-      val buf = partitionBuffers(part)
-
-      val record =
-        if (buf.size <= index) {
-          None
-        } else {
-          Some(buf(index))
-        }
-      context.reply(record.map(Row(_)))
-    }
-  }
-}
-
 class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
-    extends MemoryStreamBase[A](sqlContext) with ContinuousReader with ContinuousReadSupport {
+  extends MemoryStreamBase[A](sqlContext) with ContinuousReader with ContinuousReadSupport {
   private implicit val formats = Serialization.formats(NoTypeHints)
   val NUM_PARTITIONS = 2
 
@@ -158,6 +136,41 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 }
 
+object ContinuousMemoryStream {
+  def recordBufferName(memoryStreamId: Int): String =
+    s"ContinuousMemoryStreamRecordReceiver-$memoryStreamId"
+}
+
+/**
+ * Endpoint for executors to poll for records.
+ */
+private class ContinuousMemoryStreamRecordBuffer[A](
+    stream: ContinuousMemoryStream[A],
+    partitionBuffers: Seq[ListBuffer[A]]) extends ThreadSafeRpcEndpoint {
+  override val rpcEnv: RpcEnv = SparkEnv.get.rpcEnv
+
+  override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+    case GetRecord(ContinuousMemoryStreamPartitionOffset(part, index)) => stream.synchronized {
+      val buf = partitionBuffers(part)
+
+      val record =
+        if (buf.size <= index) {
+          None
+        } else {
+          Some(buf(index))
+        }
+      context.reply(record.map(Row(_)))
+    }
+  }
+}
+
+object ContinuousMemoryStreamRecordBuffer {
+  case class GetRecord(offset: ContinuousMemoryStreamPartitionOffset)
+}
+
+/**
+ * Data reader factory for continuous memory stream.
+ */
 class ContinuousMemoryStreamDataReaderFactory(
     memoryStreamId: Int,
     partition: Int,
@@ -166,6 +179,11 @@ class ContinuousMemoryStreamDataReaderFactory(
     new ContinuousMemoryStreamDataReader(memoryStreamId, partition, startOffset)
 }
 
+/**
+ * Data reader for continuous memory stream.
+ *
+ * Polls the driver endpoint for new records.
+ */
 class ContinuousMemoryStreamDataReader(
     memoryStreamId: Int,
     partition: Int,
@@ -205,8 +223,3 @@ case class ContinuousMemoryStreamOffset(partitionNums: Map[Int, Int])
 
 case class ContinuousMemoryStreamPartitionOffset(partition: Int, numProcessed: Int)
   extends PartitionOffset
-
-object ContinuousMemoryStream {
-  def recordBufferName(memoryStreamId: Int): String =
-    s"ContinuousMemoryStreamRecordReceiver-$memoryStreamId"
-}
