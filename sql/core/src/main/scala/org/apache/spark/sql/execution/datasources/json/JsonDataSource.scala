@@ -101,12 +101,11 @@ object TextInputJsonDataSource extends JsonDataSource {
   def inferFromDataset(json: Dataset[String], parsedOptions: JSONOptions): StructType = {
     val sampled: Dataset[String] = JsonUtils.sample(json, parsedOptions)
     val rdd: RDD[InternalRow] = sampled.queryExecution.toRdd
+    val rowParser = parsedOptions.encoding.map { enc =>
+      CreateJacksonParser.internalRow(enc, _: JsonFactory, _: InternalRow, 0)
+    }.getOrElse(CreateJacksonParser.internalRow(_: JsonFactory, _: InternalRow, 0))
 
-    JsonInferSchema.infer[InternalRow](
-      rdd,
-      parsedOptions,
-      CreateJacksonParser.internalRow(_, _, 0, parsedOptions.encoding)
-    )
+    JsonInferSchema.infer(rdd, parsedOptions, rowParser)
   }
 
   private def createBaseDataset(
@@ -132,10 +131,12 @@ object TextInputJsonDataSource extends JsonDataSource {
       schema: StructType): Iterator[InternalRow] = {
     val linesReader = new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
-    val charset = parser.options.encoding
+    val textParser = parser.options.encoding
+      .map(enc => CreateJacksonParser.text(enc, _: JsonFactory, _: Text))
+      .getOrElse(CreateJacksonParser.text(_: JsonFactory, _: Text))
 
     val safeParser = new FailureSafeParser[Text](
-      input => parser.parse[Text](input, CreateJacksonParser.text(_, _, charset), textToUTF8String),
+      input => parser.parse(input, textParser, textToUTF8String),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)
@@ -188,13 +189,12 @@ object MultiLineJsonDataSource extends JsonDataSource {
   private def createParser(
       jsonFactory: JsonFactory,
       record: PortableDataStream,
-      charset: Option[String] = None): JsonParser = {
+      encoding: Option[String] = None): JsonParser = {
     val path = new Path(record.getPath())
-    CreateJacksonParser.inputStream(
-      jsonFactory,
-      CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, path),
-      charset
-    )
+    val is = CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, path)
+
+    encoding.map(enc => CreateJacksonParser.inputStream(enc, jsonFactory, is))
+      .getOrElse(CreateJacksonParser.inputStream(jsonFactory, is))
   }
 
   override def readFile(
@@ -209,14 +209,12 @@ object MultiLineJsonDataSource extends JsonDataSource {
         UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
       }
     }
-    val charset = parser.options.encoding
+    val streamParser = parser.options.encoding
+      .map(enc => CreateJacksonParser.inputStream(enc, _: JsonFactory, _: InputStream))
+      .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
 
     val safeParser = new FailureSafeParser[InputStream](
-      input => parser.parse[InputStream](
-        input,
-        CreateJacksonParser.inputStream(_, _, charset),
-        partitionedFileString
-      ),
+      input => parser.parse[InputStream](input, streamParser, partitionedFileString),
       parser.options.parseMode,
       schema,
       parser.options.columnNameOfCorruptRecord)

@@ -40,28 +40,33 @@ private[sql] object CreateJacksonParser extends Serializable {
     jsonFactory.createParser(new InputStreamReader(bain, "UTF-8"))
   }
 
-  def text(jsonFactory: JsonFactory, record: Text, encoding: Option[String]): JsonParser = {
-    encoding match {
-      case Some(enc) =>
-        val bain = new ByteArrayInputStream(record.getBytes, 0, record.getLength)
-        jsonFactory.createParser(new InputStreamReader(bain, enc))
-      case None =>
-        jsonFactory.createParser(record.getBytes, 0, record.getLength)
-    }
+  def text(jsonFactory: JsonFactory, record: Text): JsonParser = {
+    jsonFactory.createParser(record.getBytes, 0, record.getLength)
   }
 
-  def inputStream(jsonFactory: JsonFactory, is: InputStream,
-      encoding: Option[String]): JsonParser = {
-    encoding match {
-      case Some(enc) => jsonFactory.createParser(new InputStreamReader(is, enc))
-      case None => jsonFactory.createParser(is)
-    }
+  def text(enc: String, jsonFactory: JsonFactory, record: Text): JsonParser = {
+    val bain = new ByteArrayInputStream(record.getBytes, 0, record.getLength)
+    jsonFactory.createParser(new InputStreamReader(bain, enc))
   }
 
-  def internalRow(jsonFactory: JsonFactory, row: InternalRow, field: Int,
-      encoding: Option[String]): JsonParser = {
+  def inputStream(jsonFactory: JsonFactory, is: InputStream): JsonParser = {
+    jsonFactory.createParser(is)
+  }
+
+  def inputStream(enc: String, jsonFactory: JsonFactory, is: InputStream): JsonParser = {
+    jsonFactory.createParser(new InputStreamReader(is, enc))
+  }
+
+  def internalRow(jsonFactory: JsonFactory, row: InternalRow, field: Int): JsonParser = {
     val is = new ByteArrayInputStream(row.getBinary(field))
 
-    inputStream(jsonFactory, is, encoding)
+    inputStream(jsonFactory, is)
+  }
+
+  def internalRow(enc: String, jsonFactory: JsonFactory,
+      row: InternalRow, field: Int): JsonParser = {
+    val is = new ByteArrayInputStream(row.getBinary(field))
+
+    inputStream(enc, jsonFactory, is)
   }
 }
