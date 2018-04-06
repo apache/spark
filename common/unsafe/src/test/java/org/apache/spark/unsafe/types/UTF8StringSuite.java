@@ -516,22 +516,6 @@ public class UTF8StringSuite {
   }
 
   @Test
-  public void writeToOutputStreamUnderflow() throws IOException {
-    // offset underflow is apparently supported?
-    final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    final byte[] test = "01234567".getBytes(StandardCharsets.UTF_8);
-
-    for (int i = 1; i <= Platform.BYTE_ARRAY_OFFSET; ++i) {
-      new UTF8String(
-        new ByteArrayMemoryBlock(test, Platform.BYTE_ARRAY_OFFSET - i, test.length + i))
-          .writeTo(outputStream);
-      final ByteBuffer buffer = ByteBuffer.wrap(outputStream.toByteArray(), i, test.length);
-      assertEquals("01234567", StandardCharsets.UTF_8.decode(buffer).toString());
-      outputStream.reset();
-    }
-  }
-
-  @Test
   public void writeToOutputStreamSlice() throws IOException {
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     final byte[] test = "01234567".getBytes(StandardCharsets.UTF_8);
