@@ -28,8 +28,8 @@ import scala.reflect.ClassTag
 
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
-import org.apache.spark.SparkEnv
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.{Dataset, Encoder, Row, SQLContext}
@@ -64,7 +64,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   @GuardedBy("this")
   private val records = Seq.fill(NUM_PARTITIONS)(new ListBuffer[A])
 
-  private val recordBuffer = new ContinuousMemoryStreamRecordBuffer(this, records)
+  private val recordBuffer = new ContinuousMemoryStreamRecordBuffer()
 
   private var startOffset: ContinuousMemoryStreamOffset = _
 
