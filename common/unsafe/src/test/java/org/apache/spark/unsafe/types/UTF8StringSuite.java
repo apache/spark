@@ -29,6 +29,7 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.OnHeapMemoryBlock;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
