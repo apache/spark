@@ -64,7 +64,7 @@ public class ByteArrayMethods {
    * @return true if the arrays are equal, false otherwise
    */
   public static boolean arrayEquals(
-      Object leftBase, long leftOffset, Object rightBase, long rightOffset, final long length) {
+      Object leftBase, long leftOffset, Object rightBase, long rightOffset, long length) {
     int i = 0;
 
     // check if starts align and we can get both offsets to be aligned
