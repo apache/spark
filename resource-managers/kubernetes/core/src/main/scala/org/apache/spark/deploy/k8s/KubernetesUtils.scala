@@ -44,57 +44,50 @@ private[spark] object KubernetesUtils {
   }
 
   /**
-    * Parse a comma-delimited list of volume specs, each of which takes the form
-    * hostPath:containerPath[:ro|rw]; and add volume to pod and volume mount to container.
-    *
-    * @param pod original specification of the pod
-    * @param container original specification of the container
-    * @param volumes list of volume specs
-    * @return the pod with the init-container added to the list of InitContainers
+   * Parse a comma-delimited list of volume specs, each of which takes the form
+   * hostPath:containerPath[:ro|rw]; and add volume to pod and volume mount to container.
+   *
+   * @param pod original specification of the pod
+   * @param container original specification of the container
+   * @param volumes list of volume specs
+   * @return the pod with the init-container added to the list of InitContainers
    */
   def addVolumes(pod: Pod, container : Container, volumes: String): (Pod, Container) = {
     val podBuilder = new PodBuilder(pod).editOrNewSpec()
     val containerBuilder = new ContainerBuilder(container)
     var volumeCount = 0
     volumes.split(",").map(_.split(":")).map { spec =>
+      var hostPath: Option[String] = None
+      var containerPath: Option[String] = None
+      var readOnly: Option[Boolean] = None
       spec match {
-        case Array(hostPath, containerPath) =>
-          podBuilder
-            .withVolumes(new VolumeBuilder()
-              .withHostPath(new HostPathVolumeSource(hostPath))
-              .withName(s"executor-volume-$volumeCount")
-              .build())
-          containerBuilder.addToVolumeMounts(new VolumeMountBuilder()
-            .withMountPath(containerPath)
+        case Array(hostPathV, containerPathV) =>
+          hostPath = Some(hostPathV)
+          containerPath = Some(containerPathV)
+        case Array(hostPathV, containerPathV, "ro") =>
+          hostPath = Some(hostPathV)
+          containerPath = Some(containerPathV)
+          readOnly = Some(true)
+        case Array(hostPathV, containerPathV, "rw") =>
+          hostPath = Some(hostPathV)
+          containerPath = Some(containerPathV)
+          readOnly = Some(false)
+      }
+      if (hostPath.isDefined && containerPath.isDefined) {
+        podBuilder
+          .withVolumes(new VolumeBuilder()
+            .withHostPath(new HostPathVolumeSource(hostPath.get))
             .withName(s"executor-volume-$volumeCount")
             .build())
-          volumeCount += 1
-        case Array(hostPath, containerPath, "ro") =>
-          podBuilder
-            .withVolumes(new VolumeBuilder()
-              .withHostPath(new HostPathVolumeSource(hostPath))
-              .withName(s"executor-volume-$volumeCount")
-              .build())
-          containerBuilder.addToVolumeMounts(new VolumeMountBuilder()
-            .withMountPath(containerPath)
-            .withName(s"executor-volume-$volumeCount")
-            .withReadOnly(true)
-            .build())
-          volumeCount += 1
-        case Array(hostPath, containerPath, "rw") =>
-          podBuilder
-            .withVolumes(new VolumeBuilder()
-              .withHostPath(new HostPathVolumeSource(hostPath))
-              .withName(s"executor-volume-$volumeCount")
-              .build())
-          containerBuilder.addToVolumeMounts(new VolumeMountBuilder()
-            .withMountPath(containerPath)
-            .withName(s"executor-volume-$volumeCount")
-            .withReadOnly(false)
-            .build())
-          volumeCount += 1
-        case spec =>
-          None
+        val volumeBuilder = new VolumeMountBuilder()
+          .withMountPath(containerPath.get)
+          .withName(s"executor-volume-$volumeCount")
+        if (readOnly.isDefined) {
+          containerBuilder.addToVolumeMounts(volumeBuilder.withReadOnly(readOnly.get).build())
+        } else {
+          containerBuilder.addToVolumeMounts(volumeBuilder.build())
+        }
+        volumeCount += 1
       }
     }
     (podBuilder.endSpec().build(), containerBuilder.build())
