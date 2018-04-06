@@ -2342,7 +2342,7 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
         return self._call_java("mean")
 
 
-class _StringIndexerParams(JavaParams, HasInputCol, HasOutputCol):
+class _StringIndexerParams(JavaParams, HasHandleInvalid, HasInputCol, HasOutputCol):
     """
     Params for :py:attr:`StringIndexer` and :py:attr:`StringIndexerModel`.
     """
@@ -2373,8 +2373,7 @@ class _StringIndexerParams(JavaParams, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class StringIndexer(JavaEstimator, _StringIndexerParams, HasHandleInvalid, JavaMLReadable,
-                    JavaMLWritable):
+class StringIndexer(JavaEstimator, _StringIndexerParams, JavaMLReadable, JavaMLWritable):
     """
     A label indexer that maps a string column of labels to an ML column of label indices.
     If the input column is numeric, we cast it to string and index the string values.
