@@ -50,7 +50,7 @@ private[spark] object KubernetesUtils {
    * @param pod original specification of the pod
    * @param container original specification of the container
    * @param volumes list of volume specs
-   * @return the pod with the init-container added to the list of InitContainers
+   * @return a tuple of (pod with the volume(s) added, container with mount(s) added)
    */
   def addVolumes(pod: Pod, container : Container, volumes: String): (Pod, Container) = {
     val podBuilder = new PodBuilder(pod).editOrNewSpec()
