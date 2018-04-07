@@ -364,9 +364,9 @@ case class Concat(children: Seq[Expression]) extends Expression {
         ("UTF8String", s"UTF8String[] $args = new UTF8String[${evals.length}];")
       case ArrayType(elementType, _) =>
         val arrayConcatClass = if (CodeGenerator.isPrimitiveType(elementType)) {
-          genCodeForPrimitiveArrayConcat(ctx, elementType, evals.length)
+          genCodeForPrimitiveArrayConcat(ctx, elementType)
         } else {
-          genCodeForComplexArrayConcat(ctx, evals.length)
+          genCodeForComplexArrayConcat(ctx)
         }
         (arrayConcatClass, s"ArrayData[] $args = new ArrayData[${evals.length}];")
     }
@@ -382,35 +382,28 @@ case class Concat(children: Seq[Expression]) extends Expression {
     """)
   }
 
-  private def genCodeForNumberOfElements(
-      ctx: CodegenContext,
-      argsLength: Int) : (String, String) = {
+  private def genCodeForNumberOfElements(ctx: CodegenContext) : (String, String) = {
     val variableName = ctx.freshName("numElements")
-    val code = (0 until argsLength)
+    val code = (0 until children.length)
       .map(idx => s"$variableName += args[$idx].numElements();")
       .foldLeft(s"int $variableName = 0;")((acc, s) => acc + "\n" + s)
     (code, variableName)
   }
 
-  private def nullArgumentProtection(argsLength: Int) : String =
-  {
-    if (nullable) {
-      (0 until argsLength).map(idx => s"if (args[$idx] == null) return null;").mkString("\n")
-    } else {
-      ""
-    }
+  private def nullArgumentProtection() : String = {
+    children.zipWithIndex
+      .filter(_._1.nullable)
+      .map(ci => s"if (args[${ci._2}] == null) return null;")
+      .mkString("\n")
   }
 
-  private def genCodeForPrimitiveArrayConcat(
-      ctx: CodegenContext,
-      elementType: DataType,
-      argsLength: Int): String = {
+  private def genCodeForPrimitiveArrayConcat(ctx: CodegenContext, elementType: DataType): String = {
     val arrayName = ctx.freshName("array")
     val arraySizeName = ctx.freshName("size")
     val counter = ctx.freshName("counter")
     val arrayDataName = ctx.freshName("arrayData")
 
-    val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, argsLength)
+    val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
     val unsafeArraySizeInBytes = s"""
       |int $arraySizeName = UnsafeArrayData.calculateHeaderPortionInBytes($numElemName) +
@@ -421,7 +414,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
 
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-    val assignments = (0 until argsLength).map { idx =>
+    val assignments = (0 until children.length).map { idx =>
       s"""
          |for (int z = 0; z < args[$idx].numElements(); z++) {
          |  if (args[$idx].isNullAt(z)) {
@@ -439,7 +432,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
 
     s"""new Object() {
        |  public ArrayData concat(${CodeGenerator.javaType(dataType)}[] args) {
-       |    ${nullArgumentProtection(argsLength)}
+       |    ${nullArgumentProtection()}
        |    $numElemCode
        |    $unsafeArraySizeInBytes
        |    byte[] $arrayName = new byte[$arraySizeName];
@@ -453,16 +446,14 @@ case class Concat(children: Seq[Expression]) extends Expression {
        |}""".stripMargin
   }
 
-  private def genCodeForComplexArrayConcat(
-    ctx: CodegenContext,
-    argsLength: Int): String = {
+  private def genCodeForComplexArrayConcat(ctx: CodegenContext): String = {
     val genericArrayClass = classOf[GenericArrayData].getName
     val arrayName = ctx.freshName("arrayObject")
     val counter = ctx.freshName("counter")
 
-    val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, argsLength)
+    val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
-    val assignments = (0 until argsLength).map { idx =>
+    val assignments = (0 until children.length).map { idx =>
       s"""
          |for (int z = 0; z < args[$idx].numElements(); z++) {
          |  $arrayName[$counter] = args[$idx].array()[z];
@@ -473,7 +464,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
 
     s"""new Object() {
        |  public ArrayData concat(${CodeGenerator.javaType(dataType)}[] args) {
-       |    ${nullArgumentProtection(argsLength)}
+       |    ${nullArgumentProtection()}
        |    $numElemCode
        |    Object[] $arrayName = new Object[$numElemName];
        |    int $counter = 0;
@@ -482,7 +473,6 @@ case class Concat(children: Seq[Expression]) extends Expression {
        |  }
        |}""".stripMargin
   }
-
 
   override def toString: String = s"concat(${children.mkString(", ")})"
 
