@@ -188,12 +188,13 @@ class HadoopMapReduceCommitProtocol(
           val finalPartPath = new Path(path, part)
           if (!fs.delete(finalPartPath, true) && !fs.exists(finalPartPath.getParent)) {
             // According to the official hadoop FileSystem API spec, delete op should assume
-            // the destination is no longer present regardless of return value, and in our case,
-            // it should return false only when finalPartPath does not exist.
-            // When finalPartPath does not exist, we need to take action only when the parent of
-            // finalPartPath does not exist(e.g. the scenario described on SPARK-23815), because
-            // FileSystem API spec on rename op says the rename destination must have a parent
-            // that exists, otherwise we may get unexpected result on the rename.
+            // the destination is no longer present regardless of return value, thus we do not
+            // need to double check if finalPartPath exists before rename.
+            // Also, in our case, delete should return false only when finalPartPath does not
+            // exist. When this happens, we need to take action only if parent of finalPartPath
+            // also does not exist(e.g. the scenario described on SPARK-23815), because
+            // FileSystem API spec on rename op says the rename dest(finalPartPath) must have
+            // a parent that exists, otherwise we may get unexpected result on the rename.
             fs.mkdirs(finalPartPath.getParent)
           }
           fs.rename(new Path(stagingDir, part), finalPartPath)
