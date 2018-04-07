@@ -196,7 +196,7 @@ public abstract class MemoryBlock {
   }
 
   public final void copyFrom(Object src, long srcOffset, long dstOffset, long length) {
-    assert(length <= this.length - srcOffset);
+    assert(length <= this.length - dstOffset);
     Platform.copyMemory(src, srcOffset, obj, offset + dstOffset, length);
   }
 
