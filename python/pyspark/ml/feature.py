@@ -2761,6 +2761,7 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInva
         """
         super(VectorAssembler, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.VectorAssembler", self.uid)
+        self._setDefault(handleInvalid="error")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
