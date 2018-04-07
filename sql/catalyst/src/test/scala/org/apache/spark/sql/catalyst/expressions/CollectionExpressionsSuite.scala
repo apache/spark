@@ -107,27 +107,43 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("Concat") {
-    val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
-    val a1 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType))
-    val a2 = Literal.create(Seq(4, null, 6), ArrayType(IntegerType))
-    val a3 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType))
-    val a4 = Literal.create(Seq("e", null), ArrayType(StringType))
-    val a5 = Literal.create(Seq.empty[String], ArrayType(StringType))
-    val an = Literal.create(null, ArrayType(StringType))
+    // Primitive-type elements
+    val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val ai1 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType))
+    val ai2 = Literal.create(Seq(4, null, 5), ArrayType(IntegerType))
+    val ai3 = Literal.create(Seq(null, null), ArrayType(IntegerType))
+    val ai4 = Literal.create(null, ArrayType(IntegerType))
 
-    checkEvaluation(Concat(Seq(a0)), Seq(1, 2, 3))
-    checkEvaluation(Concat(Seq(a0, a2)), Seq(1, 2, 3, 4, null, 6))
-    checkEvaluation(Concat(Seq(a0, a1, a2)), Seq(1, 2, 3, 4, null, 6))
+    checkEvaluation(Concat(Seq(ai0)), Seq(1, 2, 3))
+    checkEvaluation(Concat(Seq(ai0, ai1)), Seq(1, 2, 3))
+    checkEvaluation(Concat(Seq(ai1, ai0)), Seq(1, 2, 3))
+    checkEvaluation(Concat(Seq(ai0, ai0)), Seq(1, 2, 3, 1, 2, 3))
+    checkEvaluation(Concat(Seq(ai0, ai2)), Seq(1, 2, 3, 4, null, 5))
+    checkEvaluation(Concat(Seq(ai0, ai3, ai2)), Seq(1, 2, 3, null, null, 4, null, 5))
+    checkEvaluation(Concat(Seq(ai4)), null)
+    checkEvaluation(Concat(Seq(ai0, ai4)), null)
+    checkEvaluation(Concat(Seq(ai4, ai0)), null)
 
-    checkEvaluation(Concat(Seq(a3, a4)), Seq("a", "b", "c", "e", null))
-    checkEvaluation(Concat(Seq(a3, a4, a5)), Seq("a", "b", "c", "e", null))
-    checkEvaluation(Concat(Seq(a5)), Seq())
+    // Complex-type elements
+    val as0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType))
+    val as1 = Literal.create(Seq.empty[String], ArrayType(StringType))
+    val as2 = Literal.create(Seq("d", null, "e"), ArrayType(StringType))
+    val as3 = Literal.create(Seq(null, null), ArrayType(StringType))
+    val as4 = Literal.create(null, ArrayType(StringType))
 
-    checkEvaluation(Concat(Seq(a0, a0)), Seq(1, 2, 3, 1, 2, 3))
+    val aa0 = Literal.create(Seq(Seq("a", "b"), Seq("c")), ArrayType(ArrayType(StringType)))
+    val aa1 = Literal.create(Seq(Seq("d"), Seq("e", "f")), ArrayType(ArrayType(StringType)))
 
-    checkEvaluation(Concat(Seq(an)), null)
-    checkEvaluation(Concat(Seq(a3, an)), null)
-    checkEvaluation(Concat(Seq(an, a3)), null)
-    checkEvaluation(Concat(Seq(a3, an, a4)), null)
+    checkEvaluation(Concat(Seq(as0)), Seq("a", "b", "c"))
+    checkEvaluation(Concat(Seq(as0, as1)), Seq("a", "b", "c"))
+    checkEvaluation(Concat(Seq(as1, as0)), Seq("a", "b", "c"))
+    checkEvaluation(Concat(Seq(as0, as0)), Seq("a", "b", "c", "a", "b", "c"))
+    checkEvaluation(Concat(Seq(as0, as2)), Seq("a", "b", "c", "d", null, "e"))
+    checkEvaluation(Concat(Seq(as0, as3, as2)), Seq("a", "b", "c", null, null, "d", null, "e"))
+    checkEvaluation(Concat(Seq(as4)), null)
+    checkEvaluation(Concat(Seq(as0, as4)), null)
+    checkEvaluation(Concat(Seq(as4, as0)), null)
+
+    checkEvaluation(Concat(Seq(aa0, aa1)), Seq(Seq("a", "b"), Seq("c"), Seq("d"), Seq("e", "f")))
   }
 }

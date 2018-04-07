@@ -417,6 +417,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val nseqi : Seq[Int] = null
     val nseqs : Seq[String] = null
     val df = Seq(
+
       (Seq(1), Seq(2, 3), Seq(5L, 6L), nseqi, Seq("a", "b", "c"), Seq("d", "e"), Seq("f"), nseqs),
       (Seq(1, 0), Seq.empty[Int], Seq(2L), nseqi, Seq("a"), Seq.empty[String], Seq(null), nseqs)
     ).toDF("i1", "i2", "i3", "in", "s1", "s2", "s3", "sn")
@@ -469,6 +470,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     // Type error test cases
     intercept[AnalysisException] {
       df.selectExpr("concat(i1, i2, null)")
+    }
+
+    intercept[AnalysisException] {
+      df.selectExpr("concat(i1, array(i1, i2))")
     }
   }
 

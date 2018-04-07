@@ -394,9 +394,11 @@ case class Concat(children: Seq[Expression]) extends Expression {
 
   private def nullArgumentProtection(argsLength: Int) : String =
   {
-    (0 until argsLength)
-      .map(idx => s"if (args[$idx] == null) return null;")
-      .mkString("\n")
+    if (nullable) {
+      (0 until argsLength).map(idx => s"if (args[$idx] == null) return null;").mkString("\n")
+    } else {
+      ""
+    }
   }
 
   private def genCodeForPrimitiveArrayConcat(
@@ -457,7 +459,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
     val genericArrayClass = classOf[GenericArrayData].getName
     val arrayName = ctx.freshName("arrayObject")
     val counter = ctx.freshName("counter")
-    val className = ctx.freshName("ComplexArrayConcat")
+
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, argsLength)
 
     val assignments = (0 until argsLength).map { idx =>
