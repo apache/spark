@@ -340,7 +340,8 @@ jobs:
           name: Merge cached test results with results provided by circle (if any)
           command: |
             CIRCLE_TEST_RESULTS_FILE="$CIRCLE_INTERNAL_TASK_DATA/circle-test-results/results.json"
-            [[ -f "$CIRCLE_TEST_RESULTS_FILE" ]] && circle_exists=1
+            # Using -s (file exists and has positive size) as this file might be empty
+            [[ -s "$CIRCLE_TEST_RESULTS_FILE" ]] && circle_exists=1
             [[ -f "$TEST_RESULTS_FILE" ]] && cached_exists=1
             if [[ -z "$circle_exists" ]] || [[ -z "$cached_exists" ]]; then
               # Only one exists, CirclePlugin will try to look for both so we're good.
