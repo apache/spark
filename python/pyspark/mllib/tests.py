@@ -1451,6 +1451,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
             self.assertTrue(
                 self.calculate_accuracy_error(true, predicted) < 0.4)
 
+    @unittest.skip("Super flaky test")
     def test_training_and_prediction(self):
         """Test that the model improves on toy data with no. of batches"""
         input_batches = [
