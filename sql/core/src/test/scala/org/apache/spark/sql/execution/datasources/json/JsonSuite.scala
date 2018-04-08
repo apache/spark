@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.json
 
 import java.io.{File, FileOutputStream, StringWriter}
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
-import java.nio.file.Files
+import java.nio.file.{Files, Paths, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.util.Locale
 
