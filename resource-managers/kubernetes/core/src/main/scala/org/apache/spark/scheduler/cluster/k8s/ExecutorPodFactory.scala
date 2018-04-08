@@ -68,6 +68,7 @@ private[spark] class ExecutorPodFactory(
     .get(EXECUTOR_CONTAINER_IMAGE)
     .getOrElse(throw new SparkException("Must specify the executor container image"))
   private val imagePullPolicy = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
+  private val imagePullSecrets = sparkConf.get(IMAGE_PULL_SECRETS)
   private val blockManagerPort = sparkConf
     .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
 
@@ -83,7 +84,12 @@ private[spark] class ExecutorPodFactory(
       MEMORY_OVERHEAD_MIN_MIB))
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
 
-  private val executorCores = sparkConf.getDouble("spark.executor.cores", 1)
+  private val executorCores = sparkConf.getInt("spark.executor.cores", 1)
+  private val executorCoresRequest = if (sparkConf.contains(KUBERNETES_EXECUTOR_REQUEST_CORES)) {
+    sparkConf.get(KUBERNETES_EXECUTOR_REQUEST_CORES).get
+  } else {
+    executorCores.toString
+  }
   private val executorLimitCores = sparkConf.get(KUBERNETES_EXECUTOR_LIMIT_CORES)
 
   /**
@@ -98,6 +104,8 @@ private[spark] class ExecutorPodFactory(
       nodeToLocalTaskCount: Map[String, Int]): Pod = {
     val name = s"$executorPodNamePrefix-exec-$executorId"
 
+    val parsedImagePullSecrets = KubernetesUtils.parseImagePullSecrets(imagePullSecrets)
+
     // hostname must be no longer than 63 characters, so take the last 63 characters of the pod
     // name as the hostname.  This preserves uniqueness since the end of name contains
     // executorId
@@ -108,13 +116,10 @@ private[spark] class ExecutorPodFactory(
       SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE) ++
       executorLabels
     val executorMemoryQuantity = new QuantityBuilder(false)
-      .withAmount(s"${executorMemoryMiB}Mi")
-      .build()
-    val executorMemoryLimitQuantity = new QuantityBuilder(false)
       .withAmount(s"${executorMemoryWithOverhead}Mi")
       .build()
     val executorCpuQuantity = new QuantityBuilder(false)
-      .withAmount(executorCores.toString)
+      .withAmount(executorCoresRequest)
       .build()
     val executorExtraClasspathEnv = executorExtraClasspath.map { cp =>
       new EnvVarBuilder()
@@ -133,8 +138,7 @@ private[spark] class ExecutorPodFactory(
       }.getOrElse(Seq.empty[EnvVar])
     val executorEnv = (Seq(
       (ENV_DRIVER_URL, driverUrl),
-      // Executor backend expects integral value for executor cores, so round it up to an int.
-      (ENV_EXECUTOR_CORES, math.ceil(executorCores).toInt.toString),
+      (ENV_EXECUTOR_CORES, executorCores.toString),
       (ENV_EXECUTOR_MEMORY, executorMemoryString),
       (ENV_APPLICATION_ID, applicationId),
       // This is to set the SPARK_CONF_DIR to be /opt/spark/conf
@@ -167,7 +171,7 @@ private[spark] class ExecutorPodFactory(
       .withImagePullPolicy(imagePullPolicy)
       .withNewResources()
         .addToRequests("memory", executorMemoryQuantity)
-        .addToLimits("memory", executorMemoryLimitQuantity)
+        .addToLimits("memory", executorMemoryQuantity)
         .addToRequests("cpu", executorCpuQuantity)
         .endResources()
       .addAllToEnv(executorEnv.asJava)
@@ -193,6 +197,7 @@ private[spark] class ExecutorPodFactory(
         .withHostname(hostname)
         .withRestartPolicy("Never")
         .withNodeSelector(nodeSelector.asJava)
+        .withImagePullSecrets(parsedImagePullSecrets.asJava)
         .endSpec()
       .build()
 
