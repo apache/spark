@@ -181,7 +181,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     assert(exceptionCaptor.getAllValues().get(0).isInstanceOf[OutOfMemoryError])
   }
 
-  test(s"SPARK-23816: interrupts are not masked by a FetchFailure") {
+  test("SPARK-23816: interrupts are not masked by a FetchFailure") {
     // If killing the task causes a fetch failure, we still treat it as a task that was killed,
     // as the fetch failure could easily be caused by interrupting the thread.
     val (failReason, _) = testFetchFailureHandling(false)
@@ -290,19 +290,22 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     val mockBackend = mock[ExecutorBackend]
     val mockUncaughtExceptionHandler = mock[UncaughtExceptionHandler]
     var executor: Executor = null
-    var killingThread: Thread = null
+    var timedOut = false
     try {
       executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true,
         uncaughtExceptionHandler = mockUncaughtExceptionHandler)
       // the task will be launched in a dedicated worker thread
       executor.launchTask(mockBackend, taskDescription)
       if (killTask) {
-        killingThread = new Thread("kill-task") {
+        val killingThread = new Thread("kill-task") {
           override def run(): Unit = {
             // wait to kill the task until it has thrown a fetch failure
-            ExecutorSuiteHelper.latches.latch1.await()
-            // now we can kill the task
-            executor.killAllTasks(true, "Killed task, eg. because of speculative execution")
+            if (ExecutorSuiteHelper.latches.latch1.await(10, TimeUnit.SECONDS)) {
+              // now we can kill the task
+              executor.killAllTasks(true, "Killed task, eg. because of speculative execution")
+            } else {
+              timedOut = true
+            }
           }
         }
         killingThread.start()
@@ -310,6 +313,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       eventually(timeout(5.seconds), interval(10.milliseconds)) {
         assert(executor.numRunningTasks === 0)
       }
+      assert(!timedOut, "timed out waiting to be ready to kill tasks")
     } finally {
       if (executor != null) {
         executor.stop()
@@ -376,8 +380,8 @@ class FetchFailureHidingRDD(
           ExecutorSuiteHelper.latches.latch1.countDown()
           // then wait for another thread in the test to kill the task -- this latch
           // is never actually decremented, we just wait to get killed.
-          ExecutorSuiteHelper.latches.latch2.await()
-          throw new IllegalStateException("impossible")
+          ExecutorSuiteHelper.latches.latch2.await(10, TimeUnit.SECONDS)
+          throw new IllegalStateException("timed out waiting to be interrupted")
         } else {
           throw new RuntimeException("User Exception that hides the original exception", t)
         }
