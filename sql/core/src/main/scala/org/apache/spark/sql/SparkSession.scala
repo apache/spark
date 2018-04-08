@@ -951,7 +951,8 @@ object SparkSession {
 
         session = new SparkSession(sparkContext, None, None, extensions)
         options.foreach { case (k, v) => session.initialSessionOptions.put(k, v) }
-        defaultSession.set(session)
+        setDefaultSession(session)
+        setActiveSession(session)
 
         // Register a successfully instantiated context to the singleton. This should be at the
         // end of the class definition so that the singleton is updated only if there is no
