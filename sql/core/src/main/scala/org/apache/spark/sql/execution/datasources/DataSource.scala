@@ -104,24 +104,6 @@ case class DataSource(
   }
 
   /**
-   * In the read path, only managed tables by Hive provide the partition columns properly when
-   * initializing this class. All other file based data sources will try to infer the partitioning,
-   * and then cast the inferred types to user specified dataTypes if the partition columns exist
-   * inside `userSpecifiedSchema`, otherwise we can hit data corruption bugs like SPARK-18510, or
-   * inconsistent data types as reported in SPARK-21463.
-   * @param fileIndex A FileIndex that will perform partition inference
-   * @return The PartitionSchema resolved from inference and cast according to `userSpecifiedSchema`
-   */
-  private def combineInferredAndUserSpecifiedPartitionSchema(fileIndex: FileIndex): StructType = {
-    val resolved = fileIndex.partitionSchema.map { partitionField =>
-      // SPARK-18510: try to get schema from userSpecifiedSchema, otherwise fallback to inferred
-      userSpecifiedSchema.flatMap(_.find(f => equality(f.name, partitionField.name))).getOrElse(
-        partitionField)
-    }
-    StructType(resolved)
-  }
-
-  /**
    * Get the schema of the given FileFormat, if provided by `userSpecifiedSchema`, or try to infer
    * it. In the read path, only managed tables by Hive provide the partition columns properly when
    * initializing this class. All other file based data sources will try to infer the partitioning,
@@ -140,31 +122,22 @@ case class DataSource(
    *     be any further inference in any triggers.
    *
    * @param format the file format object for this DataSource
-   * @param fileStatusCache the shared cache for file statuses to speed up listing
+   * @param fileIndex optional [[InMemoryFileIndex]] for getting partition schema and file list
    * @return A pair of the data schema (excluding partition columns) and the schema of the partition
    *         columns.
    */
   private def getOrInferFileFormatSchema(
       format: FileFormat,
-      fileStatusCache: FileStatusCache = NoopCache): (StructType, StructType) = {
+      fileIndex: Option[InMemoryFileIndex] = None): (StructType, StructType) = {
     // the operations below are expensive therefore try not to do them if we don't need to, e.g.,
     // in streaming mode, we have already inferred and registered partition columns, we will
     // never have to materialize the lazy val below
-    lazy val tempFileIndex = {
-      val allPaths = caseInsensitiveOptions.get("path") ++ paths
-      val hadoopConf = sparkSession.sessionState.newHadoopConf()
-      val globbedPaths = allPaths.toSeq.flatMap { path =>
-        val hdfsPath = new Path(path)
-        val fs = hdfsPath.getFileSystem(hadoopConf)
-        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
-      }.toArray
-      new InMemoryFileIndex(sparkSession, globbedPaths, options, None, fileStatusCache)
-    }
+    lazy val tempFileIndex = fileIndex.getOrElse(
+      createInMemoryFileIndex(withFileStatusCache = false))
     val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource
-      combineInferredAndUserSpecifiedPartitionSchema(tempFileIndex)
+      tempFileIndex.partitionSchema
     } else {
       // maintain old behavior before SPARK-18510. If userSpecifiedSchema is empty used inferred
       // partitioning
@@ -223,6 +196,25 @@ case class DataSource(
     }
 
     (dataSchema, partitionSchema)
+  }
+
+  /** Returns an [[InMemoryFileIndex]] that can be used to get partition schema and file list. */
+  private def createInMemoryFileIndex(
+      withFileStatusCache: Boolean,
+      checkEmptyGlobPath: Boolean = false,
+      checkFilesExist: Boolean = false): InMemoryFileIndex = {
+    val allPaths = caseInsensitiveOptions.get("path") ++ paths
+    val hadoopConf = sparkSession.sessionState.newHadoopConf()
+    val globbedPaths = allPaths.flatMap(
+      DataSource.checkAndGlobPathIfNecessary(
+        hadoopConf, _, checkEmptyGlobPath, checkFilesExist)).toArray
+    val fileStatusCache = if (withFileStatusCache) {
+      FileStatusCache.getOrCreate(sparkSession)
+    } else {
+      NoopCache
+    }
+    new InMemoryFileIndex(
+      sparkSession, globbedPaths, options, userSpecifiedSchema, fileStatusCache)
   }
 
   /** Returns the name and schema of the source that can be used to continually read data. */
@@ -356,13 +348,7 @@ case class DataSource(
             caseInsensitiveOptions.get("path").toSeq ++ paths,
             sparkSession.sessionState.newHadoopConf()) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
-        val tempFileCatalog = new MetadataLogFileIndex(sparkSession, basePath, None)
-        val fileCatalog = if (userSpecifiedSchema.nonEmpty) {
-          val partitionSchema = combineInferredAndUserSpecifiedPartitionSchema(tempFileCatalog)
-          new MetadataLogFileIndex(sparkSession, basePath, Option(partitionSchema))
-        } else {
-          tempFileCatalog
-        }
+        val fileCatalog = new MetadataLogFileIndex(sparkSession, basePath, userSpecifiedSchema)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,
@@ -384,13 +370,10 @@ case class DataSource(
 
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
-        val allPaths = caseInsensitiveOptions.get("path") ++ paths
-        val hadoopConf = sparkSession.sessionState.newHadoopConf()
-        val globbedPaths = allPaths.flatMap(
-          DataSource.checkAndGlobPathIfNecessary(hadoopConf, _, checkFilesExist)).toArray
-
-        val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
-        val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format, fileStatusCache)
+        val inMemoryFileIndex = createInMemoryFileIndex(withFileStatusCache = true,
+          checkEmptyGlobPath = true, checkFilesExist = true)
+        val (dataSchema, partitionSchema) =
+          getOrInferFileFormatSchema(format, Some(inMemoryFileIndex))
 
         val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
             catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog) {
@@ -400,8 +383,7 @@ case class DataSource(
             catalogTable.get,
             catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
         } else {
-          new InMemoryFileIndex(
-            sparkSession, globbedPaths, options, Some(partitionSchema), fileStatusCache)
+          inMemoryFileIndex
         }
 
         HadoopFsRelation(
@@ -706,13 +688,14 @@ object DataSource extends Logging {
   private def checkAndGlobPathIfNecessary(
       hadoopConf: Configuration,
       path: String,
+      checkEmptyGlobPath: Boolean,
       checkFilesExist: Boolean): Seq[Path] = {
     val hdfsPath = new Path(path)
     val fs = hdfsPath.getFileSystem(hadoopConf)
     val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
     val globPath = SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
 
-    if (globPath.isEmpty) {
+    if (checkEmptyGlobPath && globPath.isEmpty) {
       throw new AnalysisException(s"Path does not exist: $qualified")
     }
     // Sufficient to check head of the globPath seq for non-glob scenario
