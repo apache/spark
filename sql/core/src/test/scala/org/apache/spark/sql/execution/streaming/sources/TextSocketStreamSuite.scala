@@ -21,6 +21,7 @@ import java.io.IOException
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.ServerSocketChannel
+import java.nio.file.Files
 import java.sql.Timestamp
 import java.util.Optional
 import java.util.concurrent.LinkedBlockingQueue
@@ -35,7 +36,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, MicroBatchReadSupport}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
-import org.apache.spark.sql.streaming.StreamTest
+import org.apache.spark.sql.streaming.{StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
 
@@ -255,6 +256,58 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
       )
     }
   }
+
+  test("fail on recovery - true") {
+    val checkpointDir = Files.createTempDirectory("checkpoint").toFile.getAbsolutePath
+    runSocketStream(checkpointDir, true, Seq(("hello", "hello"), ("world", "world")))
+
+    // Rerun socket stream will throw an exception, because it wrongly honors the recovered offsets.
+    val exception = intercept[StreamingQueryException](
+      runSocketStream(checkpointDir, true, Seq(("hello", "hello"), ("world", "world"))))
+    assert(exception.getMessage.contains(
+      "terminated with exception: Offsets committed out of order"))
+  }
+
+  test("fail on recovery - false") {
+    val checkpointDir = Files.createTempDirectory("checkpoint").toFile.getAbsolutePath
+    runSocketStream(checkpointDir, false, Seq(("hello", "hello"), ("world", "world")))
+
+    // Rerun socket stream will not throw exception
+    runSocketStream(checkpointDir, false, Seq(("hello", "hello"), ("world", "world")))
+  }
+
+  private def runSocketStream(
+      chkpointDir: String,
+      failOnRecovery: Boolean,
+      inputAndRets: Seq[(String, String)]): Unit = withSQLConf(
+    "spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+      serverThread = new ServerThread()
+      serverThread.start()
+
+      try {
+        val ref = spark
+        import ref.implicits._
+        val socket = spark
+          .readStream
+          .format("socket")
+          .options(Map("host" -> "localhost", "port" -> serverThread.port.toString))
+          .option("failonrecovery", failOnRecovery.toString)
+          .load()
+          .as[String]
+
+        val actions = Seq(StartStream(checkpointLocation = chkpointDir)) ++
+          inputAndRets.flatMap {
+            case (input, ret) => Seq(AddSocketData(input), CheckLastBatch(ret))
+          } ++ Seq(StopStream)
+        testStream(socket)(actions : _*)
+      } finally {
+        if (serverThread != null) {
+          serverThread.interrupt()
+          serverThread.join()
+          serverThread = null
+        }
+      }
+    }
 
   private class ServerThread extends Thread with Logging {
     private val serverSocketChannel = ServerSocketChannel.open()

@@ -56,6 +56,7 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
 
   private val host: String = options.get("host").get()
   private val port: Int = options.get("port").get().toInt
+  private val failOnRecovery: Boolean = options.getBoolean("failonrecovery", true)
 
   @GuardedBy("this")
   private var socket: Socket = null
@@ -193,10 +194,10 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
     val offsetDiff = (newOffset.offset - lastOffsetCommitted.offset).toInt
 
     if (offsetDiff < 0) {
-      sys.error(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
+      reportRecoveryError(s"Offsets committed out of order: $lastOffsetCommitted followed by $end")
+    } else {
+      batches.trimStart(offsetDiff)
     }
-
-    batches.trimStart(offsetDiff)
     lastOffsetCommitted = newOffset
   }
 
@@ -215,6 +216,17 @@ class TextSocketMicroBatchReader(options: DataSourceOptions) extends MicroBatchR
   }
 
   override def toString: String = s"TextSocket[host: $host, port: $port]"
+
+  private def reportRecoveryError(msg: String = ""): Unit = {
+    if (failOnRecovery) {
+      throw new IllegalStateException(s"$msg. Socket source doesn't support recovery, " +
+        s"using recovered offset will get unexpected result, if you want to continue the " +
+        "query by tolerating data loss, please set \"failonrecovery\" to \"false\".")
+    } else {
+      logWarning(s"$msg. Socket source doesn't support recovery, using recovered offset " +
+        s"will lose data.")
+    }
+  }
 }
 
 class TextSocketSourceProvider extends DataSourceV2
