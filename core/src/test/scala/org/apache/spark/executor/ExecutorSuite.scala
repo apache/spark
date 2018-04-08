@@ -22,6 +22,7 @@ import java.lang.Thread.UncaughtExceptionHandler
 import java.nio.ByteBuffer
 import java.util.Properties
 import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.Map
 import scala.concurrent.duration._
@@ -290,7 +291,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     val mockBackend = mock[ExecutorBackend]
     val mockUncaughtExceptionHandler = mock[UncaughtExceptionHandler]
     var executor: Executor = null
-    var timedOut = false
+    val timedOut = new AtomicBoolean(false)
     try {
       executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true,
         uncaughtExceptionHandler = mockUncaughtExceptionHandler)
@@ -304,7 +305,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
               // now we can kill the task
               executor.killAllTasks(true, "Killed task, eg. because of speculative execution")
             } else {
-              timedOut = true
+              timedOut.set(true)
             }
           }
         }
@@ -313,7 +314,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
       eventually(timeout(5.seconds), interval(10.milliseconds)) {
         assert(executor.numRunningTasks === 0)
       }
-      assert(!timedOut, "timed out waiting to be ready to kill tasks")
+      assert(!timedOut.get(), "timed out waiting to be ready to kill tasks")
     } finally {
       if (executor != null) {
         executor.stop()
