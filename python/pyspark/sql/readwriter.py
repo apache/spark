@@ -238,7 +238,7 @@ class DataFrameReader(OptionUtils):
                                           characters (ASCII characters with value less than 32,
                                           including tab and line feed characters) or not.
         :param encoding: standard encoding (charset) name, for example UTF-8, UTF-16LE and UTF-32BE.
-                        If None is set, the encoding of input JSON will be detected automatically.
+                         If None is set, the encoding of input JSON will be detected automatically.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
 

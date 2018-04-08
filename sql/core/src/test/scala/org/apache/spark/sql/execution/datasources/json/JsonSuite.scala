@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.{File, FileOutputStream, StringWriter}
-import java.nio.charset.StandardCharsets
+import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.util.Locale
@@ -2166,7 +2166,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-23723: Unsupported encoding name") {
     val invalidCharset = "UTF-128"
-    val exception = intercept[java.io.UnsupportedEncodingException] {
+    val exception = intercept[UnsupportedCharsetException] {
       spark.read
         .options(Map("encoding" -> invalidCharset, "lineSep" -> "\n"))
         .json(testFile("json-tests/utf16LE.json"))
@@ -2251,7 +2251,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-23723: wrong output encoding") {
     val encoding = "UTF-128"
-    val exception = intercept[java.io.UnsupportedEncodingException] {
+    val exception = intercept[UnsupportedCharsetException] {
       withTempPath { path =>
         val df = spark.createDataset(Seq((0)))
         df.write
@@ -2351,7 +2351,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   private val badJson = "\u0000\u0000\u0000A\u0001AAA"
 
   test("SPARK-23094: invalid json with leading nulls - from file (multiLine=true)") {
-    import testImplicits._
     withTempDir { tempDir =>
       val path = tempDir.getAbsolutePath
       Seq(badJson + """{"a":1}""").toDS().write.mode("overwrite").text(path)
@@ -2366,7 +2365,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-23094: invalid json with leading nulls - from file (multiLine=false)") {
-    import testImplicits._
     withTempDir { tempDir =>
       val path = tempDir.getAbsolutePath
       Seq(badJson, """{"a":1}""").toDS().write.mode("overwrite").text(path)
@@ -2380,7 +2378,6 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("SPARK-23094: invalid json with leading nulls - from dataset") {
-    import testImplicits._
     checkAnswer(
       spark.read.option("encoding", "UTF-8").json(Seq(badJson).toDS()),
       Row(badJson))

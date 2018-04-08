@@ -191,7 +191,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
   private def createParser(
       jsonFactory: JsonFactory,
       record: PortableDataStream,
-      encoding: Option[String] = None): JsonParser = {
+      encoding: Option[String]): JsonParser = {
     val path = new Path(record.getPath())
     val is = CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, path)
 

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
+import java.nio.charset.Charset
 import java.util.{Locale, TimeZone}
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
@@ -88,7 +89,10 @@ private[sql] class JSONOptions(
   /**
    * A string between two consecutive JSON records.
    */
-  val lineSeparator: Option[String] = parameters.get("lineSep")
+  val lineSeparator: Option[String] = parameters.get("lineSep").map { sep =>
+    require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
+    sep
+  }
 
   /**
    * Standard encoding (charset) name. For example UTF-8, UTF-16LE and UTF-32BE.
@@ -96,10 +100,16 @@ private[sql] class JSONOptions(
    */
   val encoding: Option[String] = parameters.get("encoding")
     .orElse(parameters.get("charset")).map { enc =>
-      val blacklist = List("UTF16", "UTF32")
-      val isBlacklisted = blacklist.contains(enc.toUpperCase.replaceAll("-|_", ""))
+      // The following encodings are not supported in per-line mode (multiline is false)
+      // because they cause some problems in reading files with BOM which is supposed to
+      // present in the files with such encodings. After splitting input files by lines,
+      // only the first lines will have the BOM which leads to impossibility for reading
+      // the rest lines. Besides of that, the lineSep option must have the BOM in such
+      // encodings which can never present between lines.
+      val blacklist = Seq(Charset.forName("UTF-16"), Charset.forName("UTF-32"))
+      val isBlacklisted = blacklist.contains(Charset.forName(enc))
       require(multiLine || !isBlacklisted,
-        s"""The ${enc} encoding must not be included in the blacklist:
+        s"""The ${enc} encoding must not be included in the blacklist when multiLine is disabled:
            | ${blacklist.mkString(", ")}""".stripMargin)
 
       val forcingLineSep = !(multiLine == false && enc != "UTF-8" && lineSeparator.isEmpty)
