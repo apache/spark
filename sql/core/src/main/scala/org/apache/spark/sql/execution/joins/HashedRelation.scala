@@ -315,8 +315,11 @@ private[joins] object UnsafeHashedRelation {
       numFields = row.numFields()
       val key = keyGenerator(row)
       if (!key.anyNull) {
-        keyMb.set(key.getBaseObject, key.getBaseOffset, key.getSizeInBytes)
-        rowMb.set(row.getBaseObject, row.getBaseOffset, row.getSizeInBytes)
+        // TODO(kiszk) pass MemoryBlock of UnsafeRow to lookup() and append()
+        keyMb.set(
+          key.getBaseObject.asInstanceOf[Array[Byte]], key.getBaseOffset, key.getSizeInBytes)
+        rowMb.set(
+          row.getBaseObject.asInstanceOf[Array[Byte]], row.getBaseOffset, row.getSizeInBytes)
         val loc = binaryMap.lookup(keyMb)
         val success = loc.append(keyMb, rowMb)
         if (!success) {

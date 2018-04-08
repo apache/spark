@@ -81,13 +81,11 @@ public abstract class MemoryBlock {
     return offset;
   }
 
-  public void set(@Nullable Object obj, long offset, long length) {
-    this.obj = obj;
-    this.offset = offset;
-    this.length = length;
-  }
-
-  public final void setLength(long length) {
+  /**
+   * Change length of this MemoryBlock. The length should be fit into the existing memory region
+   * This is mainly used for performance to reuse one MemoryBlock in a loop
+   */
+  public void setLength(long length) {
     this.length = length;
   }
 

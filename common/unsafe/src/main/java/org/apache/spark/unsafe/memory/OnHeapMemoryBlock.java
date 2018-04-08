@@ -40,9 +40,10 @@ public final class OnHeapMemoryBlock extends MemoryBlock {
     this(new long[Ints.checkedCast((size + 7) / 8)], Platform.LONG_ARRAY_OFFSET, size);
   }
 
-  public void set(Object obj, long offset, long size) {
-    super.set(obj, offset, size);
-    this.array = (long[])obj;
+  @Override
+  public void setLength(long length) {
+    super.setLength(length);
+    assert(length >= 0 && offset + length <= Platform.LONG_ARRAY_OFFSET + array.length);
   }
 
   @Override

@@ -40,9 +40,21 @@ public final class ByteArrayMemoryBlock extends MemoryBlock {
     this(new byte[Ints.checkedCast(length)], Platform.BYTE_ARRAY_OFFSET, length);
   }
 
-  public void set(Object obj, long offset, long size) {
-    super.set(obj, offset, size);
-    this.array = (byte[])obj;
+  // TODO(kiszk) This method should be removed when UnsafeRow uses MemoryBlock
+  // this method is tentatively introduced to alleviate overhead to pass UnsafeRow to MemoryBlock
+  // in a loop at UnsafeHashedRelation.apply().
+  public void set(byte[] obj, long offset, long size) {
+    this.obj = obj;
+    this.offset = offset;
+    this.length = size;
+    this.array = obj;
+    assert(offset + length <= Platform.BYTE_ARRAY_OFFSET + array.length);
+  }
+
+  @Override
+  public void setLength(long length) {
+    super.setLength(length);
+    assert(length >= 0 && offset + length <= Platform.BYTE_ARRAY_OFFSET + array.length);
   }
 
   @Override
