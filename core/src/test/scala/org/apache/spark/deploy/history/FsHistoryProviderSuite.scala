@@ -382,8 +382,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       val log = newLogFile("downloadApp1", Some(s"attempt$i"), inProgress = false)
       writeFile(log, true, None,
         SparkListenerApplicationStart(
-          "downloadApp1", Some("downloadApp1"), 5000 * i, "test", Some(s"attempt$i")),
-        SparkListenerApplicationEnd(5001 * i)
+          "downloadApp1", Some("downloadApp1"), 5000L * i, "test", Some(s"attempt$i")),
+        SparkListenerApplicationEnd(5001L * i)
       )
       log
     }
