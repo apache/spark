@@ -371,7 +371,7 @@ case class DataSource(
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
         val inMemoryFileIndex = createInMemoryFileIndex(withFileStatusCache = true,
-          checkEmptyGlobPath = true, checkFilesExist = true)
+          checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
         val (dataSchema, partitionSchema) =
           getOrInferFileFormatSchema(format, Some(inMemoryFileIndex))
 
