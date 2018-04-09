@@ -62,7 +62,7 @@ object ArrowWriter {
       case (ArrayType(_, _), vector: ListVector) =>
         val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)
-      case (StructType(_), vector: NullableMapVector) =>
+      case (StructType(_), vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
           createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
@@ -323,7 +323,7 @@ private[arrow] class ArrayWriter(
 }
 
 private[arrow] class StructWriter(
-    val valueVector: NullableMapVector,
+    val valueVector: StructVector,
     children: Array[ArrowFieldWriter]) extends ArrowFieldWriter {
 
   override def setNull(): Unit = {
