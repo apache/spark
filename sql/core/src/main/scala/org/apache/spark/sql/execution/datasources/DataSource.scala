@@ -39,6 +39,7 @@ import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.{RateStreamProvider, TextSocketSourceProvider}
 import org.apache.spark.sql.internal.SQLConf
@@ -605,11 +606,21 @@ object DataSource extends Logging {
     "org.apache.spark.Logging")
 
   /** Given a provider name, look up the data source class definition. */
-  def lookupDataSource(provider: String, conf: SQLConf): Class[_] = {
+  def lookupDataSource(
+      provider: String,
+      conf: SQLConf,
+      paths: Seq[String] = Seq.empty): Class[_] = {
+    val disabledV2Readers = conf.disabledV2DataSourceReader.split(",")
     val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native" =>
-        classOf[OrcFileFormat].getCanonicalName
+        // SPARK-23817 Since datasource V2 didn't support reading multiple files yet,
+        // ORC V2 is only used when loading single file path.
+        if (paths.length == 1 && !disabledV2Readers.contains("orc")) {
+          classOf[OrcDataSourceV2].getCanonicalName
+        } else {
+          classOf[OrcFileFormat].getCanonicalName
+        }
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "hive" =>
         "org.apache.spark.sql.hive.orc.OrcFileFormat"

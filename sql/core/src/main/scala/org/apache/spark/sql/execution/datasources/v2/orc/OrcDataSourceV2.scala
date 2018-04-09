@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.datasources.v2.orc
 
 import java.net.URI
-import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
@@ -29,7 +28,6 @@ import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, JoinedRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -178,17 +176,4 @@ case class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: 
   }
 
   override def isSplitable(path: Path): Boolean = true
-}
-
-object OrcDataSourceV2 {
-  def satisfy(sparkSession: SparkSession, source: String, paths: Seq[String]): Option[String] = {
-    val disabledV2Readers = sparkSession.sqlContext.conf.disabledV2DataSourceReader.split(",")
-    val isNative = sparkSession.sqlContext.conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native"
-    if (source.toLowerCase(Locale.ROOT) == "orc" && isNative &&
-      !disabledV2Readers.contains(source) && paths.length == 1) {
-      Some("org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2")
-    } else {
-      None
-    }
-  }
 }

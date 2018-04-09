@@ -37,7 +37,6 @@ import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, ReadSupport, ReadSupportWithSchema}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -192,15 +191,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    // SPARK-23817 Since datasource V2 didn't support reading multiple files yet,
-    // ORC V2 is only used when loading single file path.
-    val allPaths = CaseInsensitiveMap(extraOptions.toMap).get("path") ++ paths
-    val orcV2 = OrcDataSourceV2.satisfy(sparkSession, source, allPaths.toSeq)
-    if (orcV2.isDefined) {
-      option("path", allPaths.head)
-      source = orcV2.get
-    }
-    val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
+    val allPaths = (CaseInsensitiveMap(extraOptions.toMap).get("path") ++ paths).toSeq
+    option("path", allPaths.mkString(","))
+    val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf, allPaths)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
       val ds = cls.newInstance().asInstanceOf[DataSourceV2]
       if (ds.isInstanceOf[ReadSupport] || ds.isInstanceOf[ReadSupportWithSchema]) {
