@@ -96,12 +96,14 @@ class KryoSerializer(conf: SparkConf)
   import com.esotericsoftware.kryo.Kryo
   import com.esotericsoftware.kryo.pool.KryoFactory
 
-  private val factory: KryoFactory = new KryoFactory() {
+  @transient
+  private lazy val factory: KryoFactory = new KryoFactory() {
     override def create: Kryo = {
       newKryo()
     }
   }
 
+  @transient
   lazy val pool = new KryoPool.Builder(factory).softReferences.build
 
   def newKryo(): Kryo = {
