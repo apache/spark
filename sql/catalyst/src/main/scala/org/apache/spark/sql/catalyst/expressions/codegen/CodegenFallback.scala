@@ -59,7 +59,7 @@ trait CodegenFallback extends Expression {
         $placeHolder
         Object $objectTerm = ((Expression) references[$idx]).eval($input);
         $javaType ${ev.value} = (${CodeGenerator.boxedType(this.dataType)}) $objectTerm;
-        """, isNull = "false")
+        """, isNull = FalseLiteral)
     }
   }
 }
