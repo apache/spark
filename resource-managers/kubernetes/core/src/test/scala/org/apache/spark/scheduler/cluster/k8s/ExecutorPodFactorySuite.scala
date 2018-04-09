@@ -33,6 +33,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
   private val driverPodUid: String = "driver-uid"
   private val executorPrefix: String = "base"
   private val executorImage: String = "executor-image"
+  private val imagePullSecrets: String = "imagePullSecret1, imagePullSecret2"
   private val driverPod = new PodBuilder()
     .withNewMetadata()
     .withName(driverPodName)
@@ -54,6 +55,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, executorPrefix)
       .set(CONTAINER_IMAGE, executorImage)
       .set(KUBERNETES_DRIVER_SUBMIT_CHECK, true)
+      .set(IMAGE_PULL_SECRETS, imagePullSecrets)
   }
 
   test("basic executor pod has reasonable defaults") {
@@ -66,14 +68,19 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     assert(executor.getMetadata.getLabels.size() === 3)
     assert(executor.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) === "1")
 
-    // There is exactly 1 container with no volume mounts and default memory limits.
-    // Default memory limit is 1024M + 384M (minimum overhead constant).
+    // There is exactly 1 container with no volume mounts and default memory limits and requests.
+    // Default memory limit/request is 1024M + 384M (minimum overhead constant).
     assert(executor.getSpec.getContainers.size() === 1)
     assert(executor.getSpec.getContainers.get(0).getImage === executorImage)
     assert(executor.getSpec.getContainers.get(0).getVolumeMounts.isEmpty)
     assert(executor.getSpec.getContainers.get(0).getResources.getLimits.size() === 1)
     assert(executor.getSpec.getContainers.get(0).getResources
+      .getRequests.get("memory").getAmount === "1408Mi")
+    assert(executor.getSpec.getContainers.get(0).getResources
       .getLimits.get("memory").getAmount === "1408Mi")
+    assert(executor.getSpec.getImagePullSecrets.size() === 2)
+    assert(executor.getSpec.getImagePullSecrets.get(0).getName === "imagePullSecret1")
+    assert(executor.getSpec.getImagePullSecrets.get(1).getName === "imagePullSecret2")
 
     // The pod has no node selector, volumes.
     assert(executor.getSpec.getNodeSelector.isEmpty)
@@ -81,6 +88,33 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
 
     checkEnv(executor, Map())
     checkOwnerReferences(executor, driverPodUid)
+  }
+
+  test("executor core request specification") {
+    var factory = new ExecutorPodFactory(baseConf, None)
+    var executor = factory.createExecutorPod(
+      "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
+    assert(executor.getSpec.getContainers.size() === 1)
+    assert(executor.getSpec.getContainers.get(0).getResources.getRequests.get("cpu").getAmount
+      === "1")
+
+    val conf = baseConf.clone()
+
+    conf.set(KUBERNETES_EXECUTOR_REQUEST_CORES, "0.1")
+    factory = new ExecutorPodFactory(conf, None)
+    executor = factory.createExecutorPod(
+      "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
+    assert(executor.getSpec.getContainers.size() === 1)
+    assert(executor.getSpec.getContainers.get(0).getResources.getRequests.get("cpu").getAmount
+      === "0.1")
+
+    conf.set(KUBERNETES_EXECUTOR_REQUEST_CORES, "100m")
+    factory = new ExecutorPodFactory(conf, None)
+    conf.set(KUBERNETES_EXECUTOR_REQUEST_CORES, "100m")
+    executor = factory.createExecutorPod(
+      "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
+    assert(executor.getSpec.getContainers.get(0).getResources.getRequests.get("cpu").getAmount
+      === "100m")
   }
 
   test("executor pod hostnames get truncated to 63 characters") {

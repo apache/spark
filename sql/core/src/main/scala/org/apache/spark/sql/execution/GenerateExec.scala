@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
@@ -170,9 +170,10 @@ case class GenerateExec(
     // Add position
     val position = if (e.position) {
       if (outer) {
-        Seq(ExprCode("", s"$index == -1", index))
+        Seq(ExprCode("", StatementValue(s"$index == -1", CodeGenerator.JAVA_BOOLEAN),
+          VariableValue(index, CodeGenerator.JAVA_INT)))
       } else {
-        Seq(ExprCode("", "false", index))
+        Seq(ExprCode("", FalseLiteral, VariableValue(index, CodeGenerator.JAVA_INT)))
       }
     } else {
       Seq.empty
@@ -315,9 +316,11 @@ case class GenerateExec(
            |boolean $isNull = ${checks.mkString(" || ")};
            |$javaType $value = $isNull ? ${CodeGenerator.defaultValue(dt)} : $getter;
          """.stripMargin
-      ExprCode(code, isNull, value)
+      ExprCode(code, VariableValue(isNull, CodeGenerator.JAVA_BOOLEAN),
+        VariableValue(value, javaType))
     } else {
-      ExprCode(s"$javaType $value = $getter;", "false", value)
+      ExprCode(s"$javaType $value = $getter;", FalseLiteral,
+        VariableValue(value, javaType))
     }
   }
 

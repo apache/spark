@@ -51,6 +51,7 @@ class BasicDriverConfigurationStepSuite extends SparkFunSuite {
       .set(s"$KUBERNETES_DRIVER_ANNOTATION_PREFIX$CUSTOM_ANNOTATION_KEY", CUSTOM_ANNOTATION_VALUE)
       .set(s"$KUBERNETES_DRIVER_ENV_KEY$DRIVER_CUSTOM_ENV_KEY1", "customDriverEnv1")
       .set(s"$KUBERNETES_DRIVER_ENV_KEY$DRIVER_CUSTOM_ENV_KEY2", "customDriverEnv2")
+      .set(IMAGE_PULL_SECRETS, "imagePullSecret1, imagePullSecret2")
 
     val submissionStep = new BasicDriverConfigurationStep(
       APP_ID,
@@ -91,7 +92,7 @@ class BasicDriverConfigurationStepSuite extends SparkFunSuite {
     val resourceRequirements = preparedDriverSpec.driverContainer.getResources
     val requests = resourceRequirements.getRequests.asScala
     assert(requests("cpu").getAmount === "2")
-    assert(requests("memory").getAmount === "256Mi")
+    assert(requests("memory").getAmount === "456Mi")
     val limits = resourceRequirements.getLimits.asScala
     assert(limits("memory").getAmount === "456Mi")
     assert(limits("cpu").getAmount === "4")
@@ -103,7 +104,12 @@ class BasicDriverConfigurationStepSuite extends SparkFunSuite {
       CUSTOM_ANNOTATION_KEY -> CUSTOM_ANNOTATION_VALUE,
       SPARK_APP_NAME_ANNOTATION -> APP_NAME)
     assert(driverPodMetadata.getAnnotations.asScala === expectedAnnotations)
-    assert(preparedDriverSpec.driverPod.getSpec.getRestartPolicy === "Never")
+
+    val driverPodSpec = preparedDriverSpec.driverPod.getSpec
+    assert(driverPodSpec.getRestartPolicy === "Never")
+    assert(driverPodSpec.getImagePullSecrets.size() === 2)
+    assert(driverPodSpec.getImagePullSecrets.get(0).getName === "imagePullSecret1")
+    assert(driverPodSpec.getImagePullSecrets.get(1).getName === "imagePullSecret2")
 
     val resolvedSparkConf = preparedDriverSpec.driverSparkConf.getAll.toMap
     val expectedSparkConf = Map(
