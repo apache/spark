@@ -550,23 +550,7 @@ case class LambdaVariable(
     dataType: DataType,
     nullable: Boolean = true) extends LeafExpression with NonSQLExpression {
 
-  private lazy val accessor: InternalRow => Any = dataType match {
-    case BooleanType => (inputRow) => inputRow.getBoolean(0)
-    case ByteType => (inputRow) => inputRow.getByte(0)
-    case ShortType => (inputRow) => inputRow.getShort(0)
-    case IntegerType => (inputRow) => inputRow.getInt(0)
-    case LongType => (inputRow) => inputRow.getLong(0)
-    case FloatType => (inputRow) => inputRow.getFloat(0)
-    case DoubleType => (inputRow) => inputRow.getDouble(0)
-    case d: DecimalType => (inputRow) => inputRow.getDecimal(0, d.precision, d.scale)
-    case CalendarIntervalType => (inputRow) => inputRow.getInterval(0)
-    case StringType => (inputRow) => inputRow.getUTF8String(0)
-    case BinaryType => (inputRow) => inputRow.getBinary(0)
-    case s: StructType => (inputRow) => inputRow.getStruct(0, s.length)
-    case _: ArrayType => (inputRow) => inputRow.getArray(0)
-    case _: MapType => (inputRow) => inputRow.getMap(0)
-    case _ => (inputRow) => inputRow.get(0, dataType)
-  }
+  private lazy val accessor: InternalRow => Any = InternalRow.getAccessor(dataType, 0)
 
   // Interpreted execution of `LambdaVariable` always get the 0-index element from input row.
   override def eval(input: InternalRow): Any = {

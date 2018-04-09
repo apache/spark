@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
-import org.apache.spark.sql.types.{DataType, Decimal, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -118,5 +118,26 @@ object InternalRow {
     case v: ArrayData => v.copy()
     case v: MapData => v.copy()
     case _ => value
+  }
+
+  /**
+   * Returns an accessor for an InternalRow with given data type and ordinal.
+   */
+  def getAccessor(dataType: DataType, ordinal: Int): (InternalRow) => Any = dataType match {
+    case BooleanType => (input) => input.getBoolean(ordinal)
+    case ByteType => (input) => input.getByte(ordinal)
+    case ShortType => (input) => input.getShort(ordinal)
+    case IntegerType | DateType => (input) => input.getInt(ordinal)
+    case LongType | TimestampType => (input) => input.getLong(ordinal)
+    case FloatType => (input) => input.getFloat(ordinal)
+    case DoubleType => (input) => input.getDouble(ordinal)
+    case StringType => (input) => input.getUTF8String(ordinal)
+    case BinaryType => (input) => input.getBinary(ordinal)
+    case CalendarIntervalType => (input) => input.getInterval(ordinal)
+    case t: DecimalType => (input) => input.getDecimal(ordinal, t.precision, t.scale)
+    case t: StructType => (input) => input.getStruct(ordinal, t.size)
+    case _: ArrayType => (input) => input.getArray(ordinal)
+    case _: MapType => (input) => input.getMap(ordinal)
+    case _ => (input) => input.get(ordinal, dataType)
   }
 }

@@ -295,7 +295,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     val acceptedTypes = elementTypes ++ arrayTypes ++ mapTypes ++ structTypes
-    val random = new Random()
+    val random = new Random(100)
     (0 until 100).foreach { _ =>
       val schema = RandomDataGenerator.randomSchema(random, 1, acceptedTypes)
       val row = RandomDataGenerator.randomRow(random, schema)
