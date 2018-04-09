@@ -59,7 +59,7 @@ object KolmogorovSmirnovTest {
    * distribution of the sample data and the theoretical distribution we can provide a test for the
    * the null hypothesis that the sample data comes from that theoretical distribution.
    *
-   * @param dataset A dataset or a dataframe containing the sample of data to test
+   * @param dataset A `Dataset` or a `DataFrame` containing the sample of data to test
    * @param sampleCol Name of sample column in dataset, of any numerical type
    * @param cdf a `Double => Double` function to calculate the theoretical CDF at a given value
    * @return DataFrame containing the test result for the input sampled data.
@@ -81,8 +81,10 @@ object KolmogorovSmirnovTest {
    * Java-friendly version of `test(dataset: DataFrame, sampleCol: String, cdf: Double => Double)`
    */
   @Since("2.4.0")
-  def test(dataset: Dataset[_], sampleCol: String,
-    cdf: Function[java.lang.Double, java.lang.Double]): DataFrame = {
+  def test(
+      dataset: Dataset[_],
+      sampleCol: String,
+      cdf: Function[java.lang.Double, java.lang.Double]): DataFrame = {
     test(dataset, sampleCol, (x: Double) => cdf.call(x))
   }
 
@@ -91,10 +93,11 @@ object KolmogorovSmirnovTest {
    * distribution equality. Currently supports the normal distribution, taking as parameters
    * the mean and standard deviation.
    *
-   * @param dataset A dataset or a dataframe containing the sample of data to test
+   * @param dataset A `Dataset` or a `DataFrame` containing the sample of data to test
    * @param sampleCol Name of sample column in dataset, of any numerical type
    * @param distName a `String` name for a theoretical distribution, currently only support "norm".
-   * @param params `Double*` specifying the parameters to be used for the theoretical distribution
+   * @param params `Double*` specifying the parameters to be used for the theoretical distribution.
+    *              For "norm" distribution, the parameters includes mean and variance.
    * @return DataFrame containing the test result for the input sampled data.
    *         This DataFrame will contain a single Row with the following fields:
    *          - `pValue: Double`
@@ -102,8 +105,10 @@ object KolmogorovSmirnovTest {
    */
   @Since("2.4.0")
   @varargs
-  def test(dataset: Dataset[_], sampleCol: String, distName: String, params: Double*)
-    : DataFrame = {
+  def test(
+      dataset: Dataset[_],
+      sampleCol: String, distName: String,
+      params: Double*): DataFrame = {
     val spark = dataset.sparkSession
 
     val rdd = getSampleRDD(dataset.toDF(), sampleCol)

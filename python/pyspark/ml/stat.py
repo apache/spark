@@ -32,21 +32,6 @@ class ChiSquareTest(object):
 
     The null hypothesis is that the occurrence of the outcomes is statistically independent.
 
-    :param dataset:
-      DataFrame of categorical labels and categorical features.
-      Real-valued features will be treated as categorical for each distinct value.
-    :param featuresCol:
-      Name of features column in dataset, of type `Vector` (`VectorUDT`).
-    :param labelCol:
-      Name of label column in dataset, of any numerical type.
-    :return:
-      DataFrame containing the test result for every feature against the label.
-      This DataFrame will contain a single Row with the following fields:
-      - `pValues: Vector`
-      - `degreesOfFreedom: Array[Int]`
-      - `statistics: Vector`
-      Each of these fields has one value per feature.
-
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.stat import ChiSquareTest
     >>> dataset = [[0, Vectors.dense([0, 0, 1])],
@@ -66,6 +51,21 @@ class ChiSquareTest(object):
     def test(dataset, featuresCol, labelCol):
         """
         Perform a Pearson's independence test using dataset.
+
+        :param dataset:
+          DataFrame of categorical labels and categorical features.
+          Real-valued features will be treated as categorical for each distinct value.
+        :param featuresCol:
+          Name of features column in dataset, of type `Vector` (`VectorUDT`).
+        :param labelCol:
+          Name of label column in dataset, of any numerical type.
+        :return:
+          DataFrame containing the test result for every feature against the label.
+          This DataFrame will contain a single Row with the following fields:
+          - `pValues: Vector`
+          - `degreesOfFreedom: Array[Int]`
+          - `statistics: Vector`
+          Each of these fields has one value per feature.
         """
         sc = SparkContext._active_spark_context
         javaTestObj = _jvm().org.apache.spark.ml.stat.ChiSquareTest
@@ -84,20 +84,6 @@ class Correlation(object):
       and sort it in order to retrieve the ranks and then join the columns back into an RDD[Vector],
       which is fairly costly. Cache the input Dataset before calling corr with `method = 'spearman'`
       to avoid recomputing the common lineage.
-
-    :param dataset:
-      A dataset or a dataframe.
-    :param column:
-      The name of the column of vectors for which the correlation coefficient needs
-      to be computed. This must be a column of the dataset, and it must contain
-      Vector objects.
-    :param method:
-      String specifying the method to use for computing correlation.
-      Supported: `pearson` (default), `spearman`.
-    :return:
-      A dataframe that contains the correlation matrix of the column of vectors. This
-      dataframe contains a single row and a single column of name
-      '$METHODNAME($COLUMN)'.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.stat import Correlation
@@ -127,6 +113,20 @@ class Correlation(object):
     def corr(dataset, column, method="pearson"):
         """
         Compute the correlation matrix with specified method using dataset.
+
+        :param dataset:
+          A Dataset or a DataFrame.
+        :param column:
+          The name of the column of vectors for which the correlation coefficient needs
+          to be computed. This must be a column of the dataset, and it must contain
+          Vector objects.
+        :param method:
+          String specifying the method to use for computing correlation.
+          Supported: `pearson` (default), `spearman`.
+        :return:
+          A DataFrame that contains the correlation matrix of the column of vectors. This
+          DataFrame contains a single row and a single column of name
+          '$METHODNAME($COLUMN)'.
         """
         sc = SparkContext._active_spark_context
         javaCorrObj = _jvm().org.apache.spark.ml.stat.Correlation
@@ -145,32 +145,17 @@ class KolmogorovSmirnovTest(object):
     distribution of the sample data and the theoretical distribution we can provide a test for the
     the null hypothesis that the sample data comes from that theoretical distribution.
 
-    :param dataset:
-      a dataset or a dataframe containing the sample of data to test.
-    :param sampleCol:
-      Name of sample column in dataset, of any numerical type.
-    :param distName:
-      a `string` name for a theoretical distribution, currently only support "norm".
-    :param params:
-      a list of `Double` values specifying the parameters to be used for the theoretical
-      distribution
-    :return:
-      A dataframe that contains the Kolmogorov-Smirnov test result for the input sampled data.
-      This DataFrame will contain a single Row with the following fields:
-      - `pValue: Double`
-      - `statistic: Double`
-
     >>> from pyspark.ml.stat import KolmogorovSmirnovTest
     >>> dataset = [[-1.0], [0.0], [1.0]]
     >>> dataset = spark.createDataFrame(dataset, ['sample'])
-    >>> ksResult = KolmogorovSmirnovTest.test(dataset, 'sample', 'norm', 0.0, 1.0).collect()[0]
+    >>> ksResult = KolmogorovSmirnovTest.test(dataset, 'sample', 'norm', 0.0, 1.0).first()
     >>> round(ksResult.pValue, 3)
     1.0
     >>> round(ksResult.statistic, 3)
     0.175
     >>> dataset = [[2.0], [3.0], [4.0]]
     >>> dataset = spark.createDataFrame(dataset, ['sample'])
-    >>> ksResult = KolmogorovSmirnovTest.test(dataset, 'sample', 'norm', 3.0, 1.0).collect()[0]
+    >>> ksResult = KolmogorovSmirnovTest.test(dataset, 'sample', 'norm', 3.0, 1.0).first()
     >>> round(ksResult.pValue, 3)
     1.0
     >>> round(ksResult.statistic, 3)
@@ -184,6 +169,21 @@ class KolmogorovSmirnovTest(object):
     def test(dataset, sampleCol, distName, *params):
         """
         Perform a Kolmogorov-Smirnov test using dataset.
+
+        :param dataset:
+          a Dataset or a DataFrame containing the sample of data to test.
+        :param sampleCol:
+          Name of sample column in dataset, of any numerical type.
+        :param distName:
+          a `string` name for a theoretical distribution, currently only support "norm".
+        :param params:
+          a list of `Double` values specifying the parameters to be used for the theoretical
+          distribution. For "norm" distribution, the parameters includes mean and variance.
+        :return:
+          A DataFrame that contains the Kolmogorov-Smirnov test result for the input sampled data.
+          This DataFrame will contain a single Row with the following fields:
+          - `pValue: Double`
+          - `statistic: Double`
         """
         sc = SparkContext._active_spark_context
         javaTestObj = _jvm().org.apache.spark.ml.stat.KolmogorovSmirnovTest
