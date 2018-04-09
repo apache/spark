@@ -81,7 +81,7 @@ class PartitionProviderCompatibilitySuite
           HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test where partCol < 2").count() == 2)
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 2)
-          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 2)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 7)
         }
       }
     }
