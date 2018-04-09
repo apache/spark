@@ -43,6 +43,14 @@ class MinHashLSHSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     ParamsSuite.checkParams(model)
   }
 
+  test("setters") {
+    val model = new MinHashLSHModel("mh", randCoefficients = Array((1, 0)))
+      .setInputCol("testkeys")
+      .setOutputCol("testvalues")
+    assert(model.getInputCol  === "testkeys")
+    assert(model.getOutputCol === "testvalues")
+  }
+
   test("MinHashLSH: default params") {
     val rp = new MinHashLSH
     assert(rp.getNumHashTables === 1.0)
