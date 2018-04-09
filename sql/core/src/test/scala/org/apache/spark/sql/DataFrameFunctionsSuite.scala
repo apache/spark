@@ -436,15 +436,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Seq.empty),
       Row(null),
       Row(null),
-      Row(null)
-    )
+      Row(null))
 
     checkAnswer(intDF.select(flatten($"i")), intDFResult)
     checkAnswer(intDF.selectExpr("flatten(i)"), intDFResult)
     checkAnswer(
       oneRowDF.selectExpr("flatten(array(arr, array(null, 5), array(6, null)))"),
-      Seq(Row(Seq(1, 2, 3, null, 5, 6, null)))
-    )
+      Seq(Row(Seq(1, 2, 3, null, 5, 6, null))))
 
     // Test cases with complex types
     val strDF = Seq(
@@ -468,15 +466,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Seq.empty),
       Row(null),
       Row(null),
-      Row(null)
-    )
+      Row(null))
 
     checkAnswer(strDF.select(flatten($"s")), strDFResult)
     checkAnswer(strDF.selectExpr("flatten(s)"), strDFResult)
     checkAnswer(
       oneRowDF.selectExpr("flatten(array(array(arr, arr), array(arr)))"),
-      Seq(Row(Seq(Seq(1, 2, 3), Seq(1, 2, 3), Seq(1, 2, 3))))
-    )
+      Seq(Row(Seq(Seq(1, 2, 3), Seq(1, 2, 3), Seq(1, 2, 3)))))
 
     // Error test cases
     intercept[AnalysisException] {

@@ -299,7 +299,8 @@ case class ArrayContains(left: Expression, right: Expression)
     Examples:
       > SELECT _FUNC_(array(array(1, 2), array(3, 4));
        [1,2,3,4]
-  """)
+  """,
+  since = "2.4.0")
 case class Flatten(child: Expression) extends UnaryExpression {
 
   override def nullable: Boolean = child.nullable || dataType.containsNull
@@ -310,18 +311,14 @@ case class Flatten(child: Expression) extends UnaryExpression {
       .elementType.asInstanceOf[ArrayType]
   }
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (
-      ArrayType.acceptsType(child.dataType) &&
-      ArrayType.acceptsType(child.dataType.asInstanceOf[ArrayType].elementType)
-    ) {
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case ArrayType(_: ArrayType, _) =>
       TypeCheckResult.TypeCheckSuccess
-    } else {
+    case _ =>
       TypeCheckResult.TypeCheckFailure(
         s"The argument should be an array of arrays, " +
         s"but '${child.sql}' is of ${child.dataType.simpleString} type."
       )
-    }
   }
 
   override def nullSafeEval(array: Any): Any = {
@@ -339,8 +336,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
-      val code =
-        if (CodeGenerator.isPrimitiveType(dataType.elementType)) {
+      val code = if (CodeGenerator.isPrimitiveType(dataType.elementType)) {
           genCodeForConcatOfPrimitiveElements(ctx, c, ev.value)
         } else {
           genCodeForConcatOfComplexElements(ctx, c, ev.value)
@@ -354,26 +350,25 @@ case class Flatten(child: Expression) extends UnaryExpression {
       childVariableName: String,
       coreLogic: String): String = {
     s"""
-       |for(int z=0; z < $childVariableName.numElements(); z++) {
-       |  ${ev.isNull} |= $childVariableName.isNullAt(z);
-       |}
-       |if(!${ev.isNull}) {
-       |  $coreLogic
-       |}
-       """.stripMargin
+    |for(int z=0; z < $childVariableName.numElements(); z++) {
+    |  ${ev.isNull} |= $childVariableName.isNullAt(z);
+    |}
+    |if(!${ev.isNull}) {
+    |  $coreLogic
+    |}
+    """.stripMargin
   }
 
   private def genCodeForNumberOfElements(
       ctx: CodegenContext,
       childVariableName: String) : (String, String) = {
     val variableName = ctx.freshName("numElements")
-    val code =
-      s"""
-         |int $variableName = 0;
-         |for(int z=0; z < $childVariableName.numElements(); z++) {
-         |  $variableName += $childVariableName.getArray(z).numElements();
-         |}
-         """.stripMargin
+    val code = s"""
+      |int $variableName = 0;
+      |for(int z=0; z < $childVariableName.numElements(); z++) {
+      |  $variableName += $childVariableName.getArray(z).numElements();
+      |}
+      """.stripMargin
     (code, variableName)
   }
 
@@ -400,28 +395,28 @@ case class Flatten(child: Expression) extends UnaryExpression {
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
 
     s"""
-       |$numElemCode
-       |$unsafeArraySizeInBytes
-       |byte[] $arrayName = new byte[$arraySizeName];
-       |UnsafeArrayData $tempArrayDataName = new UnsafeArrayData();
-       |Platform.putLong($arrayName, $baseOffset, $numElemName);
-       |$tempArrayDataName.pointTo($arrayName, $baseOffset, $arraySizeName);
-       |int $counter = 0;
-       |for(int k=0; k < $childVariableName.numElements(); k++) {
-       |  ArrayData arr = $childVariableName.getArray(k);
-       |  for(int l = 0; l < arr.numElements(); l++) {
-       |   if(arr.isNullAt(l)) {
-       |     $tempArrayDataName.setNullAt($counter);
-       |   } else {
-       |     $tempArrayDataName.set$primitiveValueTypeName(
-       |       $counter,
-       |       arr.get$primitiveValueTypeName(l)
-       |     );
-       |   }
-       |   $counter++;
-       | }
-       |}
-       |$arrayDataName = $tempArrayDataName;
+    |$numElemCode
+    |$unsafeArraySizeInBytes
+    |byte[] $arrayName = new byte[$arraySizeName];
+    |UnsafeArrayData $tempArrayDataName = new UnsafeArrayData();
+    |Platform.putLong($arrayName, $baseOffset, $numElemName);
+    |$tempArrayDataName.pointTo($arrayName, $baseOffset, $arraySizeName);
+    |int $counter = 0;
+    |for(int k=0; k < $childVariableName.numElements(); k++) {
+    |  ArrayData arr = $childVariableName.getArray(k);
+    |  for(int l = 0; l < arr.numElements(); l++) {
+    |   if(arr.isNullAt(l)) {
+    |     $tempArrayDataName.setNullAt($counter);
+    |   } else {
+    |     $tempArrayDataName.set$primitiveValueTypeName(
+    |       $counter,
+    |       arr.get$primitiveValueTypeName(l)
+    |     );
+    |   }
+    |   $counter++;
+    | }
+    |}
+    |$arrayDataName = $tempArrayDataName;
     """.stripMargin
   }
 
@@ -435,18 +430,18 @@ case class Flatten(child: Expression) extends UnaryExpression {
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
 
     s"""
-       |$numElemCode
-       |Object[] $arrayName = new Object[$numElemName];
-       |int $counter = 0;
-       |for(int k=0; k < $childVariableName.numElements(); k++) {
-       |  Object[] arr = $childVariableName.getArray(k).array();
-       |  for(int l = 0; l < arr.length; l++) {
-       |    $arrayName[$counter] = arr[l];
-       |    $counter++;
-       |  }
-       |}
-       |$arrayDataName = new $genericArrayClass($arrayName);
-     """.stripMargin
+    |$numElemCode
+    |Object[] $arrayName = new Object[$numElemName];
+    |int $counter = 0;
+    |for(int k=0; k < $childVariableName.numElements(); k++) {
+    |  Object[] arr = $childVariableName.getArray(k).array();
+    |  for(int l = 0; l < arr.length; l++) {
+    |    $arrayName[$counter] = arr[l];
+    |    $counter++;
+    |  }
+    |}
+    |$arrayDataName = new $genericArrayClass($arrayName);
+    """.stripMargin
   }
 
   override def prettyName: String = "flatten"

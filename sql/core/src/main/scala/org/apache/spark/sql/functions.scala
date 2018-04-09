@@ -3306,7 +3306,7 @@ object functions {
    * @group collection_funcs
    * @since 2.4.0
    */
-  def flatten(e: Column): Column = withExpr{ Flatten(e.expr) }
+  def flatten(e: Column): Column = withExpr { Flatten(e.expr) }
 
   /**
    * Returns an unordered array containing the keys of the map.
