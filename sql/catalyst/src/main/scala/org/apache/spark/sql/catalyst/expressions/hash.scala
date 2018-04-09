@@ -270,7 +270,7 @@ abstract class HashExpression[E] extends Expression {
   protected def computeHash(value: Any, dataType: DataType, seed: E): E
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = "false"
+    ev.isNull = FalseLiteral
 
     val childrenHash = children.map { child =>
       val childGen = child.genCode(ctx)
@@ -644,7 +644,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = "false"
+    ev.isNull = FalseLiteral
 
     val childHash = ctx.freshName("childHash")
     val childrenHash = children.map { child =>
