@@ -130,9 +130,9 @@ abstract class BinaryArithmetic extends BinaryOperator with NullIntolerant {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case _: DecimalType =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
-    // byte and short are casted into int when add, minus, times or divide
     case CalendarIntervalType =>
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$calendarIntervalMethod($eval2)")
+    // byte and short are casted into int when add, minus, times or divide
     case ByteType | ShortType =>
       defineCodeGen(ctx, ev,
         (eval1, eval2) => s"(${CodeGenerator.javaType(dataType)})($eval1 $symbol $eval2)")
