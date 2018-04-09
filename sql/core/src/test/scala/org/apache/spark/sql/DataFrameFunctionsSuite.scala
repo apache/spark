@@ -413,6 +413,83 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("reverse function") {
+    // String test cases
+    val oneRowDF = Seq(("Spark", 3215)).toDF("s", "i")
+
+    checkAnswer(
+      oneRowDF.select(reverse('s)),
+      Seq(Row("krapS"))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(s)"),
+      Seq(Row("krapS"))
+    )
+    checkAnswer(
+      oneRowDF.select(reverse('i)),
+      Seq(Row("5123"))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(i)"),
+      Seq(Row("5123"))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(null)"),
+      Seq(Row(null))
+    )
+
+
+    // Array test cases (primitive-type elements)
+    val idf = Seq(
+      Seq(1, 9, 8, 7),
+      Seq(5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    checkAnswer(
+      idf.select(reverse('i)),
+      Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      idf.selectExpr("reverse(i)"),
+      Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(array(1, null, 2, null))"),
+      Seq(Row(Seq(null, 2, null, 1)))
+    )
+
+    // Array test cases (complex-type elements)
+    val sdf = Seq(
+      Seq("c", "a", "b"),
+      Seq("b", null, "c", null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    checkAnswer(
+      sdf.select(reverse('s)),
+      Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      sdf.selectExpr("reverse(s)"),
+      Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(array(array(1, 2), array(3, 4)))"),
+      Seq(Row(Seq(Seq(3, 4), Seq(1, 2))))
+    )
+
+    // Error test cases
+    intercept[AnalysisException] {
+      oneRowDF.selectExpr("reverse(struct(1, 'a'))")
+    }
+    intercept[AnalysisException] {
+      oneRowDF.selectExpr("reverse(map(1, 'a'))")
+    }
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {

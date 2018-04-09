@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Given an array or map, returns its size. Returns -1 if null.
@@ -210,6 +211,96 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   }
 
   override def prettyName: String = "sort_array"
+}
+
+/**
+ * Returns a reversed string or an array with reverse order of elements.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Returns a reversed string or an array with reverse order of elements.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL');
+       LQS krapS
+      > SELECT _FUNC_(array(2, 1, 4, 3));
+       [3, 4, 1, 2]
+  """,
+  since = "2.4.0")
+case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  // Input types are utilized by type coercion in ImplicitTypeCasts.
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
+
+  val allowedTypes = Seq(StringType, ArrayType)
+
+  override def dataType: DataType = child.dataType
+
+  lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (allowedTypes.exists(_.acceptsType(child.dataType))) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      TypeCheckResult.TypeCheckFailure(
+        s"The argument of function $prettyName should be StringType or ArrayType," +
+        s" but it's " + child.dataType.simpleString)
+    }
+  }
+
+  override def nullSafeEval(input: Any): Any = input match {
+    case a: ArrayData => new GenericArrayData(a.toObjectArray(elementType).reverse)
+    case s: UTF8String => s.reverse()
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => dataType match {
+      case _: StringType => stringCodeGen(ev, c)
+      case _: ArrayType => arrayCodeGen(ctx, ev, c)
+    })
+  }
+
+  private def stringCodeGen(ev: ExprCode, childName: String): String = {
+    s"${ev.value} = ($childName).reverse();"
+  }
+
+  private def arrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {
+    val length = ctx.freshName("length")
+    val javaElementType = CodeGenerator.javaType(elementType)
+    val getCall = (index: String) => CodeGenerator.getValue(ev.value, elementType, index)
+
+    val swapAssigments = if (CodeGenerator.isPrimitiveType(elementType)) {
+      val setFunc = "set" + CodeGenerator.primitiveTypeName(elementType)
+      s"""|boolean isNullAtK = ${ev.value}.isNullAt(k);
+          |boolean isNullAtL = ${ev.value}.isNullAt(l);
+          |if(!isNullAtK) {
+          |  $javaElementType el = ${getCall("k")};
+          |  if(!isNullAtL) {
+          |    ${ev.value}.$setFunc(k, ${getCall("l")});
+          |  } else {
+          |    ${ev.value}.setNullAt(k);
+          |  }
+          |  ${ev.value}.$setFunc(l, el);
+          |} else if (!isNullAtL) {
+          |  ${ev.value}.$setFunc(k, ${getCall("l")});
+          |  ${ev.value}.setNullAt(l);
+          |}""".stripMargin
+    } else {
+      s"""|Object el = ${getCall("k")};
+          |${ev.value}.update(k, ${getCall("l")});
+          |${ev.value}.update(l, el);""".stripMargin
+    }
+
+    s"""
+       |${ev.value} = $childName.copy();
+       |final int $length = ${ev.value}.numElements();
+       |for(int k = 0; k < $length / 2; k++) {
+       |  int l = $length - k - 1;
+       |  $swapAssigments
+       |}
+      """.stripMargin
+  }
+
+  override def prettyName: String = "reverse"
 }
 
 /**
