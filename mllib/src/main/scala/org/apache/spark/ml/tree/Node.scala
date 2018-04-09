@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.tree
 
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{ImpurityStats, InformationGainStats => OldInformationGainStats, Node => OldNode, Predict => OldPredict}
 
@@ -122,8 +122,9 @@ class LeafNode private[ml] (
   override private[tree] def numDescendants: Int = 0
 
   override private[tree] def subtreeToString(indentFactor: Int = 0): String = {
+    val stats: String = Vectors.dense(impurityStats.stats).toString
     val prefix: String = " " * indentFactor
-    prefix + s"Predict: $prediction\n"
+    prefix + s"Predict: $prediction, Stats: $stats \n"
   }
 
   override private[tree] def subtreeDepth: Int = 0
