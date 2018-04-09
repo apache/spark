@@ -208,9 +208,11 @@ class TextSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  Seq("|", "^", "::", "!!!@3", 0x1E.toChar.toString).foreach { lineSep =>
+  // scalastyle:off nonascii
+  Seq("|", "^", "::", "!!!@3", 0x1E.toChar.toString, "아").foreach { lineSep =>
     testLineSeparator(lineSep)
   }
+  // scalastyle:on nonascii
 
   private def testFile: String = {
     Thread.currentThread().getContextClassLoader.getResource("test-data/text-suite.txt").toString

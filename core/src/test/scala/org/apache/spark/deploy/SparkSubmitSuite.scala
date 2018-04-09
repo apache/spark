@@ -106,6 +106,9 @@ class SparkSubmitSuite
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
+  private val emptyIvySettings = File.createTempFile("ivy", ".xml")
+  FileUtils.write(emptyIvySettings, "<ivysettings />", StandardCharsets.UTF_8)
+
   override def beforeEach() {
     super.beforeEach()
   }
@@ -520,6 +523,7 @@ class SparkSubmitSuite
         "--repositories", repo,
         "--conf", "spark.ui.enabled=false",
         "--conf", "spark.master.rest.enabled=false",
+        "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath()}",
         unusedJar.toString,
         "my.great.lib.MyLib", "my.great.dep.MyLib")
       runSparkSubmit(args)
@@ -530,7 +534,6 @@ class SparkSubmitSuite
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val dep = MavenCoordinate("my.great.dep", "mylib", "0.1")
-    // Test using "spark.jars.packages" and "spark.jars.repositories" configurations.
     IvyTestUtils.withRepository(main, Some(dep.toString), None) { repo =>
       val args = Seq(
         "--class", JarCreationTest.getClass.getName.stripSuffix("$"),
@@ -540,6 +543,7 @@ class SparkSubmitSuite
         "--conf", s"spark.jars.repositories=$repo",
         "--conf", "spark.ui.enabled=false",
         "--conf", "spark.master.rest.enabled=false",
+        "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath()}",
         unusedJar.toString,
         "my.great.lib.MyLib", "my.great.dep.MyLib")
       runSparkSubmit(args)
@@ -550,7 +554,6 @@ class SparkSubmitSuite
   // See https://gist.github.com/shivaram/3a2fecce60768a603dac for a error log
   ignore("correctly builds R packages included in a jar with --packages") {
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")
-    // Check if the SparkR package is installed
     assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
     val main = MavenCoordinate("my.great.lib", "mylib", "0.1")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
@@ -563,6 +566,7 @@ class SparkSubmitSuite
         "--master", "local-cluster[2,1,1024]",
         "--packages", main.toString,
         "--repositories", repo,
+        "--conf", s"spark.jars.ivySettings=${emptyIvySettings.getAbsolutePath()}",
         "--verbose",
         "--conf", "spark.ui.enabled=false",
         rScriptDir)
@@ -573,7 +577,6 @@ class SparkSubmitSuite
   test("include an external JAR in SparkR") {
     assume(RUtils.isRInstalled, "R isn't installed on this machine.")
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    // Check if the SparkR package is installed
     assume(RUtils.isSparkRInstalled, "SparkR is not installed in this build.")
     val rScriptDir =
       Seq(sparkHome, "R", "pkg", "tests", "fulltests", "jarTest.R").mkString(File.separator)
@@ -959,25 +962,28 @@ class SparkSubmitSuite
   }
 
   test("download remote resource if it is not supported by yarn service") {
-    testRemoteResources(isHttpSchemeBlacklisted = false, supportMockHttpFs = false)
+    testRemoteResources(enableHttpFs = false, blacklistHttpFs = false)
   }
 
   test("avoid downloading remote resource if it is supported by yarn service") {
-    testRemoteResources(isHttpSchemeBlacklisted = false, supportMockHttpFs = true)
+    testRemoteResources(enableHttpFs = true, blacklistHttpFs = false)
   }
 
   test("force download from blacklisted schemes") {
-    testRemoteResources(isHttpSchemeBlacklisted = true, supportMockHttpFs = true)
+    testRemoteResources(enableHttpFs = true, blacklistHttpFs = true)
   }
 
-  private def testRemoteResources(isHttpSchemeBlacklisted: Boolean,
-      supportMockHttpFs: Boolean): Unit = {
+  private def testRemoteResources(
+      enableHttpFs: Boolean,
+      blacklistHttpFs: Boolean): Unit = {
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
-    if (supportMockHttpFs) {
+    if (enableHttpFs) {
       hadoopConf.set("fs.http.impl", classOf[TestFileSystem].getCanonicalName)
-      hadoopConf.set("fs.http.impl.disable.cache", "true")
+    } else {
+      hadoopConf.set("fs.http.impl", getClass().getName() + ".DoesNotExist")
     }
+    hadoopConf.set("fs.http.impl.disable.cache", "true")
 
     val tmpDir = Utils.createTempDir()
     val mainResource = File.createTempFile("tmpPy", ".py", tmpDir)
@@ -986,20 +992,19 @@ class SparkSubmitSuite
     val tmpHttpJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpDir)
     val tmpHttpJarPath = s"http://${new File(tmpHttpJar.toURI).getAbsolutePath}"
 
+    val forceDownloadArgs = if (blacklistHttpFs) {
+      Seq("--conf", "spark.yarn.dist.forceDownloadSchemes=http")
+    } else {
+      Nil
+    }
+
     val args = Seq(
       "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
       "--name", "testApp",
       "--master", "yarn",
       "--deploy-mode", "client",
-      "--jars", s"$tmpS3JarPath,$tmpHttpJarPath",
-      s"s3a://$mainResource"
-    ) ++ (
-      if (isHttpSchemeBlacklisted) {
-        Seq("--conf", "spark.yarn.dist.forceDownloadSchemes=http,https")
-      } else {
-        Nil
-      }
-    )
+      "--jars", s"$tmpS3JarPath,$tmpHttpJarPath"
+    ) ++ forceDownloadArgs ++ Seq(s"s3a://$mainResource")
 
     val appArgs = new SparkSubmitArguments(args)
     val (_, _, conf, _) = SparkSubmit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))
@@ -1009,7 +1014,7 @@ class SparkSubmitSuite
     // The URI of remote S3 resource should still be remote.
     assert(jars.contains(tmpS3JarPath))
 
-    if (supportMockHttpFs) {
+    if (enableHttpFs && !blacklistHttpFs) {
       // If Http FS is supported by yarn service, the URI of remote http resource should
       // still be remote.
       assert(jars.contains(tmpHttpJarPath))

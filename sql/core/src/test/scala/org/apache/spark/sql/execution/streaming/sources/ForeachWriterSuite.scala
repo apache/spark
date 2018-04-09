@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.streaming
+package org.apache.spark.sql.execution.streaming.sources
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -25,11 +25,12 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.ForeachWriter
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQueryException, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
 
-class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
+class ForeachWriterSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
 
   import testImplicits._
 
@@ -47,9 +48,9 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
         .start()
 
       def verifyOutput(expectedVersion: Int, expectedData: Seq[Int]): Unit = {
-        import ForeachSinkSuite._
+        import ForeachWriterSuite._
 
-        val events = ForeachSinkSuite.allEvents()
+        val events = ForeachWriterSuite.allEvents()
         assert(events.size === 2) // one seq of events for each of the 2 partitions
 
         // Verify both seq of events have an Open event as the first event
@@ -64,13 +65,13 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
       }
 
       // -- batch 0 ---------------------------------------
-      ForeachSinkSuite.clear()
+      ForeachWriterSuite.clear()
       input.addData(1, 2, 3, 4)
       query.processAllAvailable()
       verifyOutput(expectedVersion = 0, expectedData = 1 to 4)
 
       // -- batch 1 ---------------------------------------
-      ForeachSinkSuite.clear()
+      ForeachWriterSuite.clear()
       input.addData(5, 6, 7, 8)
       query.processAllAvailable()
       verifyOutput(expectedVersion = 1, expectedData = 5 to 8)
@@ -95,27 +96,27 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
       input.addData(1, 2, 3, 4)
       query.processAllAvailable()
 
-      var allEvents = ForeachSinkSuite.allEvents()
+      var allEvents = ForeachWriterSuite.allEvents()
       assert(allEvents.size === 1)
       var expectedEvents = Seq(
-        ForeachSinkSuite.Open(partition = 0, version = 0),
-        ForeachSinkSuite.Process(value = 4),
-        ForeachSinkSuite.Close(None)
+        ForeachWriterSuite.Open(partition = 0, version = 0),
+        ForeachWriterSuite.Process(value = 4),
+        ForeachWriterSuite.Close(None)
       )
       assert(allEvents === Seq(expectedEvents))
 
-      ForeachSinkSuite.clear()
+      ForeachWriterSuite.clear()
 
       // -- batch 1 ---------------------------------------
       input.addData(5, 6, 7, 8)
       query.processAllAvailable()
 
-      allEvents = ForeachSinkSuite.allEvents()
+      allEvents = ForeachWriterSuite.allEvents()
       assert(allEvents.size === 1)
       expectedEvents = Seq(
-        ForeachSinkSuite.Open(partition = 0, version = 1),
-        ForeachSinkSuite.Process(value = 8),
-        ForeachSinkSuite.Close(None)
+        ForeachWriterSuite.Open(partition = 0, version = 1),
+        ForeachWriterSuite.Process(value = 8),
+        ForeachWriterSuite.Close(None)
       )
       assert(allEvents === Seq(expectedEvents))
 
@@ -131,7 +132,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
         .foreach(new TestForeachWriter() {
           override def process(value: Int): Unit = {
             super.process(value)
-            throw new RuntimeException("error")
+            throw new RuntimeException("ForeachSinkSuite error")
           }
         }).start()
       input.addData(1, 2, 3, 4)
@@ -141,18 +142,18 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
         query.processAllAvailable()
       }
       assert(e.getCause.isInstanceOf[SparkException])
-      assert(e.getCause.getCause.getMessage === "error")
+      assert(e.getCause.getCause.getCause.getMessage === "ForeachSinkSuite error")
       assert(query.isActive === false)
 
-      val allEvents = ForeachSinkSuite.allEvents()
+      val allEvents = ForeachWriterSuite.allEvents()
       assert(allEvents.size === 1)
-      assert(allEvents(0)(0) === ForeachSinkSuite.Open(partition = 0, version = 0))
-      assert(allEvents(0)(1) === ForeachSinkSuite.Process(value = 1))
+      assert(allEvents(0)(0) === ForeachWriterSuite.Open(partition = 0, version = 0))
+      assert(allEvents(0)(1) === ForeachWriterSuite.Process(value = 1))
 
       // `close` should be called with the error
-      val errorEvent = allEvents(0)(2).asInstanceOf[ForeachSinkSuite.Close]
+      val errorEvent = allEvents(0)(2).asInstanceOf[ForeachWriterSuite.Close]
       assert(errorEvent.error.get.isInstanceOf[RuntimeException])
-      assert(errorEvent.error.get.getMessage === "error")
+      assert(errorEvent.error.get.getMessage === "ForeachSinkSuite error")
     }
   }
 
@@ -177,12 +178,12 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
       inputData.addData(10, 11, 12)
       query.processAllAvailable()
 
-      val allEvents = ForeachSinkSuite.allEvents()
+      val allEvents = ForeachWriterSuite.allEvents()
       assert(allEvents.size === 1)
       val expectedEvents = Seq(
-        ForeachSinkSuite.Open(partition = 0, version = 0),
-        ForeachSinkSuite.Process(value = 3),
-        ForeachSinkSuite.Close(None)
+        ForeachWriterSuite.Open(partition = 0, version = 0),
+        ForeachWriterSuite.Process(value = 3),
+        ForeachWriterSuite.Close(None)
       )
       assert(allEvents === Seq(expectedEvents))
     } finally {
@@ -216,21 +217,21 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
       query.processAllAvailable()
 
       // There should be 3 batches and only does the last batch contain a value.
-      val allEvents = ForeachSinkSuite.allEvents()
+      val allEvents = ForeachWriterSuite.allEvents()
       assert(allEvents.size === 3)
       val expectedEvents = Seq(
         Seq(
-          ForeachSinkSuite.Open(partition = 0, version = 0),
-          ForeachSinkSuite.Close(None)
+          ForeachWriterSuite.Open(partition = 0, version = 0),
+          ForeachWriterSuite.Close(None)
         ),
         Seq(
-          ForeachSinkSuite.Open(partition = 0, version = 1),
-          ForeachSinkSuite.Close(None)
+          ForeachWriterSuite.Open(partition = 0, version = 1),
+          ForeachWriterSuite.Close(None)
         ),
         Seq(
-          ForeachSinkSuite.Open(partition = 0, version = 2),
-          ForeachSinkSuite.Process(value = 3),
-          ForeachSinkSuite.Close(None)
+          ForeachWriterSuite.Open(partition = 0, version = 2),
+          ForeachWriterSuite.Process(value = 3),
+          ForeachWriterSuite.Close(None)
         )
       )
       assert(allEvents === expectedEvents)
@@ -258,7 +259,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
 }
 
 /** A global object to collect events in the executor */
-object ForeachSinkSuite {
+object ForeachWriterSuite {
 
   trait Event
 
@@ -285,21 +286,21 @@ object ForeachSinkSuite {
 
 /** A [[ForeachWriter]] that writes collected events to ForeachSinkSuite */
 class TestForeachWriter extends ForeachWriter[Int] {
-  ForeachSinkSuite.clear()
+  ForeachWriterSuite.clear()
 
-  private val events = mutable.ArrayBuffer[ForeachSinkSuite.Event]()
+  private val events = mutable.ArrayBuffer[ForeachWriterSuite.Event]()
 
   override def open(partitionId: Long, version: Long): Boolean = {
-    events += ForeachSinkSuite.Open(partition = partitionId, version = version)
+    events += ForeachWriterSuite.Open(partition = partitionId, version = version)
     true
   }
 
   override def process(value: Int): Unit = {
-    events += ForeachSinkSuite.Process(value)
+    events += ForeachWriterSuite.Process(value)
   }
 
   override def close(errorOrNull: Throwable): Unit = {
-    events += ForeachSinkSuite.Close(error = Option(errorOrNull))
-    ForeachSinkSuite.addEvents(events)
+    events += ForeachWriterSuite.Close(error = Option(errorOrNull))
+    ForeachWriterSuite.addEvents(events)
   }
 }
