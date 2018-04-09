@@ -36,7 +36,7 @@ class FPGrowthSuite extends MLTest with DefaultReadWriteTest {
 
   test("FPGrowth fit and transform with different data types") {
       class DataTypeWithEncoder[A](val dataType: DataType)
-                                  (implicit val encoder: Encoder[(Int, Array[A], Array[A])])
+                                  (implicit val encoder: Encoder[(Array[A], Array[A])])
 
       Array(
         new DataTypeWithEncoder[Int](IntegerType),
@@ -61,11 +61,11 @@ class FPGrowthSuite extends MLTest with DefaultReadWriteTest {
           generatedRules.sort("antecedent").rdd.collect()))
 
         val expectedTransformed = Seq(
-          (0, Array("1", "2"), Array.emptyIntArray),
-          (0, Array("1", "2"), Array.emptyIntArray),
-          (0, Array("1", "2"), Array.emptyIntArray),
-          (0, Array("1", "3"), Array(2))
-        ).toDF("id", "items", "expected")
+          (Array("1", "2"), Array.emptyIntArray),
+          (Array("1", "2"), Array.emptyIntArray),
+          (Array("1", "2"), Array.emptyIntArray),
+          (Array("1", "3"), Array(2))
+        ).toDF("items", "expected")
           .withColumn("items", col("items").cast(ArrayType(dt.dataType)))
           .withColumn("expected", col("expected").cast(ArrayType(dt.dataType)))
 
