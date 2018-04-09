@@ -218,32 +218,6 @@ class LauncherServer implements Closeable {
       }
     }
 
-    // If there is a live connection for this handle, we need to wait for it to finish before
-    // returning, otherwise there might be a race between the connection thread processing
-    // buffered data and the handle cleaning up after itself, leading to potentially the wrong
-    // state being reported for the handle.
-    ServerConnection conn = null;
-    synchronized (clients) {
-      for (ServerConnection c : clients) {
-        if (c.handle == handle) {
-          conn = c;
-          break;
-        }
-      }
-    }
-
-    if (conn != null) {
-      synchronized (conn) {
-        if (conn.isOpen()) {
-          try {
-            conn.wait();
-          } catch (InterruptedException ie) {
-            // Ignore.
-          }
-        }
-      }
-    }
-
     unref();
   }
 
@@ -264,6 +238,7 @@ class LauncherServer implements Closeable {
         };
         ServerConnection clientConnection = new ServerConnection(client, timeout);
         Thread clientThread = factory.newThread(clientConnection);
+        clientConnection.setConnectionThread(clientThread);
         synchronized (clients) {
           clients.add(clientConnection);
         }
@@ -312,14 +287,19 @@ class LauncherServer implements Closeable {
     }
   }
 
-  private class ServerConnection extends LauncherConnection {
+  class ServerConnection extends LauncherConnection {
 
     private TimerTask timeout;
-    volatile AbstractAppHandle handle;
+    private volatile Thread connectionThread;
+    private volatile AbstractAppHandle handle;
 
     ServerConnection(Socket socket, TimerTask timeout) throws IOException {
       super(socket);
       this.timeout = timeout;
+    }
+
+    void setConnectionThread(Thread t) {
+      this.connectionThread = t;
     }
 
     @Override
@@ -376,9 +356,34 @@ class LauncherServer implements Closeable {
         clients.remove(this);
       }
 
-      synchronized (this) {
-        super.close();
-        notifyAll();
+      super.close();
+    }
+
+    /**
+     * Wait for the remote side to close the connection so that any pending data is processed.
+     * This ensures any changes reported by the child application take effect.
+     *
+     * This method allows a short period for the above to happen (same amount of time as the
+     * connection timeout, which is configurable). This should be fine for well-behaved
+     * applications, where they close the connection arond the same time the app handle detects the
+     * app has finished.
+     *
+     * In case the connection is not closed within the grace period, this method forcefully closes
+     * it and any subsequent data that may arrive will be ignored.
+     */
+    public void waitForClose() throws IOException {
+      Thread connThread = this.connectionThread;
+      if (Thread.currentThread() != connThread) {
+        try {
+          connThread.join(getConnectionTimeout());
+        } catch (InterruptedException ie) {
+          // Ignore.
+        }
+
+        if (connThread.isAlive()) {
+          LOG.log(Level.WARNING, "Timed out waiting for child connection to close.");
+          close();
+        }
       }
     }
 

@@ -36,6 +36,10 @@ class JavaWrapper(object):
         super(JavaWrapper, self).__init__()
         self._java_obj = java_obj
 
+    def __del__(self):
+        if SparkContext._active_spark_context and self._java_obj is not None:
+            SparkContext._active_spark_context._gateway.detach(self._java_obj)
+
     @classmethod
     def _create_from_java_class(cls, java_class, *args):
         """
@@ -100,10 +104,6 @@ class JavaParams(JavaWrapper, Params):
 
     __metaclass__ = ABCMeta
 
-    def __del__(self):
-        if SparkContext._active_spark_context:
-            SparkContext._active_spark_context._gateway.detach(self._java_obj)
-
     def _make_java_param_pair(self, param, value):
         """
         Makes a Java param pair.
@@ -118,11 +118,18 @@ class JavaParams(JavaWrapper, Params):
         """
         Transforms the embedded params to the companion Java object.
         """
-        paramMap = self.extractParamMap()
+        pair_defaults = []
         for param in self.params:
-            if param in paramMap:
-                pair = self._make_java_param_pair(param, paramMap[param])
+            if self.isSet(param):
+                pair = self._make_java_param_pair(param, self._paramMap[param])
                 self._java_obj.set(pair)
+            if self.hasDefault(param):
+                pair = self._make_java_param_pair(param, self._defaultParamMap[param])
+                pair_defaults.append(pair)
+        if len(pair_defaults) > 0:
+            sc = SparkContext._active_spark_context
+            pair_defaults_seq = sc._jvm.PythonUtils.toSeq(pair_defaults)
+            self._java_obj.setDefault(pair_defaults_seq)
 
     def _transfer_param_map_to_java(self, pyParamMap):
         """

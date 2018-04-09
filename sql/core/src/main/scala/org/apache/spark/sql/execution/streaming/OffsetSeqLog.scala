@@ -28,7 +28,7 @@ import org.apache.spark.sql.SparkSession
 /**
  * This class is used to log offsets to persistent files in HDFS.
  * Each file corresponds to a specific batch of offsets. The file
- * format contain a version string in the first line, followed
+ * format contains a version string in the first line, followed
  * by a the JSON string representation of the offsets separated
  * by a newline character. If a source offset is missing, then
  * that line will contain a string value defined in the

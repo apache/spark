@@ -126,7 +126,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
         ev.copy(code = s"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
           }
@@ -134,7 +134,7 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
       } else {
         ev.copy(code = s"""
           boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         """)
       }
     } else {
@@ -201,7 +201,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
         ev.copy(code = s"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = $pattern.matcher(${eval.value}.toString()).find(0);
           }
@@ -209,7 +209,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       } else {
         ev.copy(code = s"""
           boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         """)
       }
     } else {

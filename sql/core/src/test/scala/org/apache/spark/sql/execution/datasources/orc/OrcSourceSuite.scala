@@ -39,8 +39,8 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
 
-    orcTableAsDir = Utils.createTempDir("orctests", "sparksql")
-    orcTableDir = Utils.createTempDir("orctests", "sparksql")
+    orcTableAsDir = Utils.createTempDir(namePrefix = "orctests")
+    orcTableDir = Utils.createTempDir(namePrefix = "orctests")
 
     sparkContext
       .makeRDD(1 to 10)
@@ -157,6 +157,15 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
         val expected = if (c == "UNCOMPRESSED") "NONE" else c
         assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
+      }
+    }
+  }
+
+  test("SPARK-23340 Empty float/double array columns raise EOFException") {
+    Seq(Seq(Array.empty[Float]).toDF(), Seq(Array.empty[Double]).toDF()).foreach { df =>
+      withTempPath { path =>
+        df.write.format("orc").save(path.getCanonicalPath)
+        checkAnswer(spark.read.orc(path.getCanonicalPath), df)
       }
     }
   }
