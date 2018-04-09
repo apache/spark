@@ -59,10 +59,10 @@ import org.apache.spark.util.kvstore._
  *
  * == How new and updated attempts are detected ==
  *
- * - New attempts are detected in [[checkForLogs]]: the log dir is scanned, and any
- * entries in the log dir whose modification time is greater than the last scan time
- * are considered new or updated. These are replayed to create a new attempt info entry
- * and update or create a matching application info element in the list of applications.
+ * - New attempts are detected in [[checkForLogs]]: the log dir is scanned, and any entries in the
+ * log dir whose size changed since the last scan time are considered new or updated. These are
+ * replayed to create a new attempt info entry and update or create a matching application info
+ * element in the list of applications.
  * - Updated attempts are also found in [[checkForLogs]] -- if the attempt's log file has grown, the
  * attempt is replaced by another one with a larger log size.
  *
@@ -422,8 +422,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
             if (info.appId.isDefined) {
               // If the SHS view has a valid application, update the time the file was last seen so
-              // that the entry is not deleted from the SHS listing.
-              listing.write(info.copy(lastProcessed = newLastScanTime))
+              // that the entry is not deleted from the SHS listing. Also update the file size, in
+              // case the code below decides we don't need to parse the log.
+              listing.write(info.copy(lastProcessed = newLastScanTime, fileSize = entry.getLen()))
             }
 
             if (info.fileSize < entry.getLen()) {
