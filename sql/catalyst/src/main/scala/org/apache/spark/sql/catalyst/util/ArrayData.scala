@@ -188,10 +188,15 @@ class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends I
     case _ => (idx: Int) => arrayData.get(idx, dataType)
   }
 
-  override def apply(idx: Int): T = if (idx < arrayData.numElements()) {
-    accessor(idx).asInstanceOf[T]
+  override def apply(idx: Int): T = if (0 <= idx && idx < arrayData.numElements()) {
+    if (arrayData.isNullAt(idx)) {
+      null.asInstanceOf[T]
+    } else {
+      accessor(idx).asInstanceOf[T]
+    }
   } else {
-    throw new IndexOutOfBoundsException(s"Index $idx is greater than the length of the ArrayData.")
+    throw new IndexOutOfBoundsException(
+      s"Index $idx must be between 0 and the length of the ArrayData.")
   }
 
   override def length: Int = arrayData.numElements()
