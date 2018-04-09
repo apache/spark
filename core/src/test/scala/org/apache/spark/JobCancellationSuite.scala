@@ -332,6 +332,7 @@ class JobCancellationSuite extends SparkFunSuite with Matchers with BeforeAndAft
     import JobCancellationSuite._
     sc = new SparkContext("local[2]", "test interruptible iterator")
 
+    // Increase the number of elements to be proceeded to avoid this test being flaky.
     val numElements = 10000
     val taskCompletedSem = new Semaphore(0)
 
