@@ -21,6 +21,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.util.{List => JList}
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -47,7 +48,7 @@ import org.apache.spark.util.Utils
 trait MesosSchedulerUtils extends Logging {
   // Lock used to wait for scheduler to be registered
   private final val registerLatch = new CountDownLatch(1)
-
+  private final val schedulerDriverStopped = new AtomicBoolean(false)
   private final val ANY_ROLE = "*"
 
   /**
@@ -160,7 +161,10 @@ trait MesosSchedulerUtils extends Logging {
               logError("driver.run() failed", e)
               error = Some(e)
               markErr()
-          }
+          } finally {
+            logWarning("schedulerDriver stopped")
+            schedulerDriverStopped.set(true)
+        }
         }
       }.start()
 
@@ -171,6 +175,8 @@ trait MesosSchedulerUtils extends Logging {
       error.foreach(throw _)
     }
   }
+
+  def isSchedulerDriverStopped(): Boolean = schedulerDriverStopped.get()
 
   def getResource(res: JList[Resource], name: String): Double = {
     // A resource can have multiple values in the offer since it can either be from

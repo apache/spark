@@ -83,3 +83,15 @@ private[rest] class ErrorResponse extends SubmitRestProtocolResponse {
     assertFieldIsSet(message, "message")
   }
 }
+
+private[rest] class ServerStatusResponse extends SubmitRestProtocolResponse {
+  var queuedDrivers: java.lang.Integer = null
+  var launchedDrivers: java.lang.Integer = null
+  var pendingRetryDrivers: java.lang.Integer = null
+  var schedulerDriverStopped: Boolean = null
+
+  protected override def doValidate(): Unit = {
+    super.doValidate()
+    assertFieldIsSet(message, "message")
+  }
+}

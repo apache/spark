@@ -208,6 +208,26 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(statusResponse.submissionId === doesNotExist)
   }
 
+  test("server health ok") {
+    val masterUrl = startSmartServer()
+    val httpUrl = masterUrl.replace("spark://", "http://")
+    val (response, code) = sendHttpRequestWithResponse(s"${httpUrl}/health", "GET")
+    val serverStatusResponse = getServerStatusResponse(response)
+    assert(code === HttpServletResponse.SC_OK)
+    assert(serverStatusResponse.message === "iamok")
+    assert(serverStatusResponse.success === true)
+  }
+
+  test("server health not ok") {
+    val masterUrl = startFaultyServer()
+    val httpUrl = masterUrl.replace("spark://", "http://")
+    val (response, code) = sendHttpRequestWithResponse(s"${httpUrl}/health", "GET")
+    val serverStatusResponse = getServerStatusResponse(response)
+    assert(code === HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+    assert(serverStatusResponse.message === "notok")
+    assert(serverStatusResponse.success === false)
+  }
+
   /* ---------------------------------------- *
    |     Aberrant client / server behavior    |
    * ---------------------------------------- */
@@ -468,6 +488,15 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
+  private def getServerStatusResponse(response: SubmitRestProtocolResponse):
+  ServerStatusResponse = {
+    response match {
+      case s: ServerStatusResponse => s
+      case e: ErrorResponse => fail(s"Server returned error: ${e.message}")
+      case r => fail(s"Expected status response. Actual: ${r.toJson}")
+    }
+  }
+
   /** Return the response as a status response, or fail with error otherwise. */
   private def getStatusResponse(response: SubmitRestProtocolResponse): SubmissionStatusResponse = {
     response match {
@@ -593,6 +622,15 @@ private class FaultyStandaloneRestServer(
   protected override val submitRequestServlet = new MalformedSubmitServlet
   protected override val killRequestServlet = new InvalidKillServlet
   protected override val statusRequestServlet = new ExplodingStatusServlet
+
+  override def isServerHealthy(): Boolean = false
+  override def serverStatus(): ServerStatusResponse = {
+    val s = new ServerStatusResponse
+    s.success = false
+    s.serverSparkVersion = SPARK_VERSION
+    s.message = "notok"
+    s
+  }
 
   /** A faulty servlet that produces malformed responses. */
   class MalformedSubmitServlet

@@ -50,6 +50,24 @@ private[spark] class MesosRestServer(
     new MesosKillRequestServlet(scheduler, masterConf)
   protected override val statusRequestServlet =
     new MesosStatusRequestServlet(scheduler, masterConf)
+
+  override def isServerHealthy(): Boolean = !scheduler.isSchedulerDriverStopped()
+
+  override def serverStatus(): ServerStatusResponse = {
+    val s = new ServerStatusResponse
+    s.schedulerDriverStopped = scheduler.isSchedulerDriverStopped()
+    s.queuedDrivers = scheduler.getQueuedDriversSize
+    s.launchedDrivers = scheduler.getLaunchedDriversSize
+    s.pendingRetryDrivers = scheduler.getPendingRetryDriversSize
+    s.success = true
+    s.message = "iamok"
+    s.serverSparkVersion = sparkVersion
+    if (scheduler.isSchedulerDriverStopped()) {
+      s.success = false
+      s.message = "notok: scheduler driver stopped"
+    }
+    s
+  }
 }
 
 private[mesos] class MesosSubmitRequestServlet(

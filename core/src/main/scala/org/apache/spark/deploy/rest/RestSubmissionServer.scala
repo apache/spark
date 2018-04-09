@@ -63,6 +63,8 @@ private[spark] abstract class RestSubmissionServer(
     s"$baseContext/create/*" -> submitRequestServlet,
     s"$baseContext/kill/*" -> killRequestServlet,
     s"$baseContext/status/*" -> statusRequestServlet,
+    "/health" -> new ServerStatusServlet(this),
+    "/status" -> new ServerStatusServlet(this),
     "/*" -> new ErrorServlet // default handler
   )
 
@@ -110,6 +112,18 @@ private[spark] abstract class RestSubmissionServer(
 
   def stop(): Unit = {
     _server.foreach(_.stop())
+  }
+
+  /** Default implementation, subclasses should override */
+  def isServerHealthy(): Boolean = true
+
+  /** Default implementation, subclasses should override */
+  def serverStatus(): ServerStatusResponse = {
+    val s = new ServerStatusResponse
+    s.success = true
+    s.serverSparkVersion = sparkVersion
+    s.message = "iamok"
+    s
   }
 }
 
@@ -329,5 +343,17 @@ private class ErrorServlet extends RestServlet {
       response.setStatus(HttpServletResponse.SC_BAD_REQUEST)
     }
     sendResponse(error, response)
+  }
+}
+
+private class ServerStatusServlet(server: RestSubmissionServer) extends RestServlet {
+  override def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+    val path = req.getRequestURI
+    if (!server.isServerHealthy() && path == "/health") {
+      // for monitors that only look at status codes
+      resp.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+    }
+
+    sendResponse(server.serverStatus(), resp)
   }
 }
