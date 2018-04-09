@@ -47,7 +47,11 @@ class ObjectHashAggregateSuite
   }
 
   protected override def afterAll(): Unit = {
-    sql(s"DROP TEMPORARY FUNCTION IF EXISTS hive_max")
+    try {
+      sql(s"DROP TEMPORARY FUNCTION IF EXISTS hive_max")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("typed_count without grouping keys") {

@@ -301,7 +301,6 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
       intercept[AnalysisException] {
         spark.range(10).write.format("csv").mode("overwrite").partitionBy("id").save(path)
       }
-      spark.emptyDataFrame.write.format("parquet").mode("overwrite").save(path)
     }
   }
 
@@ -563,7 +562,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     "and a same-name temp view exist") {
     withTable("same_name") {
       withTempView("same_name") {
-        sql("CREATE TABLE same_name(id LONG) USING parquet")
+        val format = spark.sessionState.conf.defaultDataSourceName
+        sql(s"CREATE TABLE same_name(id LONG) USING $format")
         spark.range(10).createTempView("same_name")
         spark.range(20).write.mode(SaveMode.Append).saveAsTable("same_name")
         checkAnswer(spark.table("same_name"), spark.range(10).toDF())

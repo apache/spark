@@ -94,7 +94,7 @@ trait StateStore {
   def abort(): Unit
 
   /**
-   * Return an iterator containing all the key-value pairs in the SateStore. Implementations must
+   * Return an iterator containing all the key-value pairs in the StateStore. Implementations must
    * ensure that updates (puts, removes) can be made while iterating over this iterator.
    */
   def iterator(): Iterator[UnsafeRowPair]

@@ -22,9 +22,7 @@ package org.apache.spark.util
  * through all the elements.
  */
 private[spark]
-// scalastyle:off
 abstract class CompletionIterator[ +A, +I <: Iterator[A]](sub: I) extends Iterator[A] {
-// scalastyle:on
 
   private[this] var completed = false
   def next(): A = sub.next()

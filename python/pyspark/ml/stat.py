@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import sys
+
 from pyspark import since, SparkContext
 from pyspark.ml.common import _java2py, _py2java
 from pyspark.ml.wrapper import _jvm
@@ -151,4 +153,4 @@ if __name__ == "__main__":
     failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

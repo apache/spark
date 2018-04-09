@@ -57,6 +57,16 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
   val timeZone = TimeZone.getDefault()
   val timeZoneId = timeZone.getID
 
+  protected override def beforeAll(): Unit = {
+    super.beforeAll()
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "parquet")
+  }
+
+  protected override def afterAll(): Unit = {
+    spark.conf.unset(SQLConf.DEFAULT_DATA_SOURCE_NAME.key)
+    super.afterAll()
+  }
+
   test("column type inference") {
     def check(raw: String, literal: Literal, timeZone: TimeZone = timeZone): Unit = {
       assert(inferPartitionColumnValue(raw, true, timeZone) === literal)
@@ -1118,6 +1128,20 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         Row(1, BigDecimal("1")) ::
           Row(2, BigDecimal("3")) ::
           Row(3, BigDecimal("2" * 30)) :: Nil)
+    }
+  }
+
+  test("SPARK-23436: invalid Dates should be inferred as String in partition inference") {
+    withTempPath { path =>
+      val data = Seq(("1", "2018-01", "2018-01-01-04", "test"))
+        .toDF("id", "date_month", "date_hour", "data")
+
+      data.write.partitionBy("date_month", "date_hour").parquet(path.getAbsolutePath)
+      val input = spark.read.parquet(path.getAbsolutePath).select("id",
+        "date_month", "date_hour", "data")
+
+      assert(input.schema.sameType(input.schema))
+      checkAnswer(input, data)
     }
   }
 }

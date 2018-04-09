@@ -18,6 +18,7 @@ package org.apache.spark.sql.vectorized;
 
 import java.util.*;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.vectorized.MutableColumnarRow;
 
@@ -26,6 +27,7 @@ import org.apache.spark.sql.execution.vectorized.MutableColumnarRow;
  * batch so that Spark can access the data row by row. Instance of it is meant to be reused during
  * the entire data loading process.
  */
+@InterfaceStability.Evolving
 public final class ColumnarBatch {
   private int numRows;
   private final ColumnVector[] columns;
