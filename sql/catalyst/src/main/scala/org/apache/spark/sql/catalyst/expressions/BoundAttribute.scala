@@ -33,7 +33,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
-  private lazy val accessor: InternalRow => Any = InternalRow.getAccessor(dataType, ordinal)
+  private val accessor: InternalRow => Any = InternalRow.getAccessor(dataType, ordinal)
 
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {

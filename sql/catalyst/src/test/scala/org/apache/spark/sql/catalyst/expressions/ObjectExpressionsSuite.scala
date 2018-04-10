@@ -26,7 +26,7 @@ import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
-import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
@@ -282,7 +282,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("LambdaVariable should support interpreted execution") {
     val elementTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
       DoubleType, DecimalType.USER_DEFAULT, StringType, BinaryType, DateType, TimestampType,
-      CalendarIntervalType)
+      CalendarIntervalType, new ExamplePointUDT())
     val arrayTypes = elementTypes.flatMap { elementType =>
       Seq(ArrayType(elementType, containsNull = false), ArrayType(elementType, containsNull = true))
     }

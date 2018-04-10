@@ -138,6 +138,7 @@ object InternalRow {
     case t: StructType => (input) => input.getStruct(ordinal, t.size)
     case _: ArrayType => (input) => input.getArray(ordinal)
     case _: MapType => (input) => input.getMap(ordinal)
+    case u: UserDefinedType[_] => getAccessor(u.sqlType, ordinal)
     case _ => (input) => input.get(ordinal, dataType)
   }
 }
