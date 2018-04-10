@@ -167,7 +167,10 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
         DataFrameRangeSuite.stageToKill = DataFrameRangeSuite.INVALID_STAGE_ID
         val ex = intercept[SparkException] {
           spark.range(0, 100000000000L, 1, 1).map { x =>
-            DataFrameRangeSuite.stageToKill = TaskContext.get().stageId()
+            val taskContext = TaskContext.get()
+            if (!taskContext.isInterrupted()) {
+              DataFrameRangeSuite.stageToKill = taskContext.stageId()
+            }
             x
           }.toDF("id").agg(sum("id")).collect()
         }
