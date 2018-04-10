@@ -407,6 +407,7 @@ object FunctionRegistry {
     expression[MapKeys]("map_keys"),
     expression[MapValues]("map_values"),
     expression[Size]("size"),
+    expression[Slice]("slice"),
     expression[SortArray]("sort_array"),
     CreateStruct.registryEntry,
 
