@@ -35,11 +35,6 @@ import org.apache.spark.unsafe.types.CalendarInterval
 class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  private def sortWrappedArrayInRow(d: DataFrame) = d.map {
-      case Row(key: String, unsorted: mutable.WrappedArray[String]) =>
-        (key, unsorted.sorted)
-    }.toDF("key", "sorted")
-
   test("reuse window partitionBy") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     val w = Window.partitionBy("key").orderBy("value")
@@ -191,9 +186,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       ("h", "p3", "20"),
       ("i", "p4", null)).toDF("key", "partition", "value")
     checkAnswer(
-      sortWrappedArrayInRow(
-        df.select(
-          $"key",
+      df.select(
+        $"key",
+        sort_array(
           collect_list("value").over(Window.partitionBy($"partition").orderBy($"value")
             .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)))),
       Seq(
@@ -220,9 +215,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       ("h", "p3", "20"),
       ("i", "p4", null)).toDF("key", "partition", "value")
     checkAnswer(
-      sortWrappedArrayInRow(
-        df.select(
-          $"key",
+      df.select(
+        $"key",
+        sort_array(
           collect_list("value").over(Window.partitionBy($"partition").orderBy($"value".desc)
             .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)))),
       Seq(
@@ -248,9 +243,9 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       ("g", "p2", "11"),
       ("h", "p3", "20")).toDF("key", "partition", "value")
     checkAnswer(
-      sortWrappedArrayInRow(
-        df.select(
-          $"key",
+      df.select(
+        $"key",
+        sort_array(
           collect_set("value").over(Window.partitionBy($"partition").orderBy($"value")
             .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)))),
       Seq(
