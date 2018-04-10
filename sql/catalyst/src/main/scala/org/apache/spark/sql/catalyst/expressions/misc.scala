@@ -124,6 +124,7 @@ case class CurrentDatabase() extends LeafExpression with Unevaluable {
        46707d92-02f4-4817-8116-a4c3b23e6266
   """)
 // scalastyle:on line.size.limit
+@deprecated
 case class Uuid(randomSeed: Option[Long] = None) extends LeafExpression with Stateful {
 
   def this() = this(None)

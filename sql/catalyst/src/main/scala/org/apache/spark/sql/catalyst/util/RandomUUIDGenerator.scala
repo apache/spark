@@ -29,6 +29,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * For the algorithm, see RFC 4122: A Universally Unique IDentifier (UUID) URN Namespace,
  * section 4.4 "Algorithms for Creating a UUID from Truly Random or Pseudo-Random Numbers".
  */
+@deprecated
 case class RandomUUIDGenerator(randomSeed: Long) {
   private val random = new MersenneTwister(randomSeed)
 

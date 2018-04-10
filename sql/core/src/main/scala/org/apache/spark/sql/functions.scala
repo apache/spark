@@ -1128,6 +1128,24 @@ object functions {
   def monotonically_increasing_id(): Column = withExpr { MonotonicallyIncreasingID() }
 
   /**
+    * A column expression that generates time-based
+    * <a href="https://en.wikipedia.org/wiki/Universally_unique_identifier">UUIDs</a>
+    * (universally unique identifiers).
+    *
+    * The generated UUIDs are time-based (variant 1).
+    * UUID values are in the standard string format with total 36 characters, for example:
+    * {{{
+    * 8919d47c-34bb-11e8-b81c-6cc2172fd3c0
+    * }}}
+    *
+    * @group normal_funcs
+    * @since 2.4.0
+    */
+  def time_based_uuid(): Column = withExpr {
+    TimeBasedUuid()
+  }
+
+  /**
    * Returns col1 if it is not NaN, or col2 if col1 is NaN.
    *
    * Both inputs should be floating point columns (DoubleType or FloatType).

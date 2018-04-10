@@ -519,6 +519,24 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("time_based_uuid") {
+    // Make sure we have 2 partitions, each with 2 records.
+    val df = sparkContext.parallelize(Seq[Int](), 2)
+      .mapPartitions(_ => Iterator(1, 2))
+      .toDF("value")
+    val dataSize = df.count()
+
+    val uuids = df.select(time_based_uuid())
+      .distinct()
+      .collect()
+    assert(uuids.length === dataSize,
+      "Number of unique identifiers must be equal to the number of records in the dataset")
+    uuids.foreach { uuidRow =>
+      val uuid = uuidRow.getAs[String](0)
+      assert(uuid.length === 36, s"Length of uuid $uuid")
+    }
+  }
+
   test("spark_partition_id") {
     // Make sure we have 2 partitions, each with 2 records.
     val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
