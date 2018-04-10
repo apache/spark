@@ -293,8 +293,8 @@ case class ArrayContains(left: Expression, right: Expression)
  * Returns the maximum value in the array.
  */
 @ExpressionDescription(
-usage = "_FUNC_(array) - Returns the maximum value in the array.",
-examples = """
+  usage = "_FUNC_(array) - Returns the maximum value in the array.",
+  examples = """
     Examples:
       > SELECT _FUNC_(array(1, 20, null, 3));
        20

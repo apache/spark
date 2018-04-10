@@ -2090,7 +2090,7 @@ def array_max(col):
     >>> df = spark.createDataFrame([([2, 1, 3],), ([None, 10, -1],)], ['data'])
     >>> df.select(array_max(df.data).alias('max')).collect()
     [Row(max=3), Row(max=10)]
-     """
+    """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_max(_to_java_column(col)))
 
