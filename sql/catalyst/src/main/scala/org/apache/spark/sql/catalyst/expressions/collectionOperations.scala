@@ -123,7 +123,8 @@ trait ArraySortUtil extends ExpectsInputTypes with CodegenFallback {
   protected def arrayExpression: Expression
 
   // If -1, place null element at the end of the array
-  protected def placeNullAtEnd: Int = 1
+  // If 1, place null element at the start of the array
+  protected def placeNullAtEnd: Int
 
   @transient
   private lazy val lt: Comparator[Any] = {
@@ -205,6 +206,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, BooleanType)
 
   override def arrayExpression: Expression = base
+  override def placeNullAtEnd: Int = 1
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
@@ -216,8 +218,9 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
             "Sort order in second argument requires a boolean literal.")
       }
     case ArrayType(dt, _) =>
+      val dtSimple = dt.simpleString
       TypeCheckResult.TypeCheckFailure(
-        s"$prettyName does not support sorting array of type ${dt.simpleString}")
+        s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
     case _ =>
       TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
   }
@@ -329,7 +332,8 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
     Examples:
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
        ["a","b","c","d",null]
-  """)
+  """,
+  since = "2.4.0")
 // scalastyle:on line.size.limit
 case class ArraySort(child: Expression) extends UnaryExpression with ArraySortUtil {
 
@@ -343,8 +347,9 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortUt
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
       TypeCheckResult.TypeCheckSuccess
     case ArrayType(dt, _) =>
+      val dtSimple = dt.simpleString
       TypeCheckResult.TypeCheckFailure(
-        s"$prettyName does not support sorting array of type ${dt.simpleString}")
+        s"$prettyName does not support sorting array of type $dtSimple which is not orderable")
     case _ =>
       TypeCheckResult.TypeCheckFailure(s"$prettyName only supports array input.")
   }

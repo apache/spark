@@ -286,28 +286,28 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(sort_array($"a"), sort_array($"b")),
       Seq(
         Row(Seq(1, 2, 3), Seq("a", "b", "c")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
     checkAnswer(
       df.select(sort_array($"a", false), sort_array($"b", false)),
       Seq(
         Row(Seq(3, 2, 1), Seq("c", "b", "a")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
     checkAnswer(
       df.selectExpr("sort_array(a)", "sort_array(b)"),
       Seq(
         Row(Seq(1, 2, 3), Seq("a", "b", "c")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
     checkAnswer(
       df.selectExpr("sort_array(a, true)", "sort_array(b, false)"),
       Seq(
         Row(Seq(1, 2, 3), Seq("c", "b", "a")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
 
@@ -329,14 +329,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(array_sort($"a"), array_sort($"b")),
       Seq(
         Row(Seq(1, 2, 3), Seq("a", "b", "c")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
     checkAnswer(
       df.selectExpr("array_sort(a)", "array_sort(b)"),
       Seq(
         Row(Seq(1, 2, 3), Seq("a", "b", "c")),
-        Row(Seq[Int](), Seq[String]()),
+        Row(Seq.empty[Int], Seq.empty[String]),
         Row(null, null))
     )
 
