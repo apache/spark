@@ -573,7 +573,7 @@ case class LambdaVariable(
     } else {
       FalseLiteral
     }
-    ExprCode(code = "", value = JavaCode.variable(value, dataType), isNull = isNullValue)
+    ExprCode(value = JavaCode.variable(value, dataType), isNull = isNullValue)
   }
 
   // This won't be called as `genCode` is overrided, just overriding it to make

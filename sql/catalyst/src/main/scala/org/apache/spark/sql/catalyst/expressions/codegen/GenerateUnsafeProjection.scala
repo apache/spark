@@ -144,7 +144,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           case _ => s"$rowWriter.write($index, ${input.value});"
         }
 
-        if (input.isNull == "false") {
+        if (input.isNull == FalseLiteral) {
           s"""
             ${input.code}
             ${writeField.trim}

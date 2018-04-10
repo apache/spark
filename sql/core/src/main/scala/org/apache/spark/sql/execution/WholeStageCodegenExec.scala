@@ -111,7 +111,7 @@ trait CodegenSupport extends SparkPlan {
 
   private def prepareRowVar(ctx: CodegenContext, row: String, colVars: Seq[ExprCode]): ExprCode = {
     if (row != null) {
-      ExprCode("", FalseLiteral, VariableValue(row, classOf[UnsafeRow]))
+      ExprCode.forNonNullValue(VariableValue(row, classOf[UnsafeRow]))
     } else {
       if (colVars.nonEmpty) {
         val colExprs = output.zipWithIndex.map { case (attr, i) =>
@@ -128,8 +128,8 @@ trait CodegenSupport extends SparkPlan {
          """.stripMargin.trim
         ExprCode(code, FalseLiteral, ev.value)
       } else {
-        // There is no columns
-        ExprCode(FalseLiteral, VariableValue("unsafeRow", classOf[UnsafeRow]))
+        // There are no columns
+        ExprCode.forNonNullValue(VariableValue("unsafeRow", classOf[UnsafeRow]))
       }
     }
   }

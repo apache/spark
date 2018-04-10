@@ -143,7 +143,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     case ArrayType(elementType, _) => createCodeForArray(ctx, input, elementType)
     case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
     case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
-    case _ => ExprCode("", FalseLiteral, input)
+    case _ => ExprCode(FalseLiteral, input)
   }
 
   protected def create(expressions: Seq[Expression]): Projection = {
