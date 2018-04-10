@@ -74,6 +74,34 @@ class EpochCoordinatorSuite
     verifyCommit(1)
   }
 
+  test("single epoch, all but one writer partition has committed") {
+    setWriterPartitions(3)
+    setReaderPartitions(2)
+
+    commitPartitionEpoch(0, 1)
+    commitPartitionEpoch(1, 1)
+    reportPartitionOffset(0, 1)
+    reportPartitionOffset(1, 1)
+
+    makeSynchronousCall()
+
+    verifyCommitHasntHappened(1)
+  }
+
+  test("single epoch, all but one reader partition has reported an offset") {
+    setWriterPartitions(3)
+    setReaderPartitions(2)
+
+    commitPartitionEpoch(0, 1)
+    commitPartitionEpoch(1, 1)
+    commitPartitionEpoch(2, 1)
+    reportPartitionOffset(0, 1)
+
+    makeSynchronousCall()
+
+    verifyCommitHasntHappened(1)
+  }
+
   test("consequent epochs, messages for epoch (k + 1) arrive after messages for epoch k") {
     setWriterPartitions(2)
     setReaderPartitions(2)
@@ -184,6 +212,11 @@ class EpochCoordinatorSuite
   private def verifyCommit(epoch: Long): Unit = {
     orderVerifier.verify(writer).commit(eqTo(epoch), any())
     orderVerifier.verify(query).commit(epoch)
+  }
+
+  private def verifyCommitHasntHappened(epoch: Long): Unit = {
+    verify(writer, never()).commit(eqTo(epoch), any())
+    verify(query, never()).commit(epoch)
   }
 
   private def verifyCommitsInOrderOf(epochs: Seq[Long]): Unit = {
