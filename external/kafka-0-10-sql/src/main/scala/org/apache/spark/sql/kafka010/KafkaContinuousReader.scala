@@ -28,6 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
+import org.apache.spark.sql.sources.v2.DataFormat
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
 import org.apache.spark.sql.types.StructType
@@ -53,7 +54,7 @@ class KafkaContinuousReader(
     metadataPath: String,
     initialOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends ContinuousReader with SupportsScanUnsafeRow with Logging {
+  extends ContinuousReader with Logging {
 
   private lazy val session = SparkSession.getActiveSession.get
   private lazy val sc = session.sparkContext
@@ -86,7 +87,7 @@ class KafkaContinuousReader(
     KafkaSourceOffset(JsonUtils.partitionOffsets(json))
   }
 
-  override def createUnsafeRowReaderFactories(): ju.List[DataReaderFactory[UnsafeRow]] = {
+  override def createDataReaderFactories(): ju.List[DataReaderFactory] = {
     import scala.collection.JavaConverters._
 
     val oldStartPartitionOffsets = KafkaSourceOffset.getPartitionOffsets(offset)
@@ -108,7 +109,7 @@ class KafkaContinuousReader(
       case (topicPartition, start) =>
         KafkaContinuousDataReaderFactory(
           topicPartition, start, kafkaParams, pollTimeoutMs, failOnDataLoss)
-          .asInstanceOf[DataReaderFactory[UnsafeRow]]
+          .asInstanceOf[DataReaderFactory]
     }.asJava
   }
 
@@ -161,17 +162,11 @@ case class KafkaContinuousDataReaderFactory(
     startOffset: Long,
     kafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
-    failOnDataLoss: Boolean) extends ContinuousDataReaderFactory[UnsafeRow] {
+    failOnDataLoss: Boolean) extends ContinuousDataReaderFactory {
 
-  override def createDataReaderWithOffset(offset: PartitionOffset): DataReader[UnsafeRow] = {
-    val kafkaOffset = offset.asInstanceOf[KafkaSourcePartitionOffset]
-    require(kafkaOffset.topicPartition == topicPartition,
-      s"Expected topicPartition: $topicPartition, but got: ${kafkaOffset.topicPartition}")
-    new KafkaContinuousDataReader(
-      topicPartition, kafkaOffset.partitionOffset, kafkaParams, pollTimeoutMs, failOnDataLoss)
-  }
+  override def dataFormat(): DataFormat = DataFormat.UNSAFE_ROW
 
-  override def createDataReader(): KafkaContinuousDataReader = {
+  override def createUnsafeRowDataReader(): KafkaContinuousDataReader = {
     new KafkaContinuousDataReader(
       topicPartition, startOffset, kafkaParams, pollTimeoutMs, failOnDataLoss)
   }

@@ -31,7 +31,7 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.sources.v2.DataSourceOptions
+import org.apache.spark.sql.sources.v2.{DataFormat, DataSourceOptions}
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.StructType
@@ -134,7 +134,7 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
     LongOffset(json.toLong)
   }
 
-  override def createDataReaderFactories(): java.util.List[DataReaderFactory[Row]] = {
+  override def createDataReaderFactories(): java.util.List[DataReaderFactory] = {
     val startSeconds = LongOffset.convert(start).map(_.offset).getOrElse(0L)
     val endSeconds = LongOffset.convert(end).map(_.offset).getOrElse(0L)
     assert(startSeconds <= endSeconds, s"startSeconds($startSeconds) > endSeconds($endSeconds)")
@@ -169,7 +169,7 @@ class RateStreamMicroBatchReader(options: DataSourceOptions, checkpointLocation:
     (0 until numPartitions).map { p =>
       new RateStreamMicroBatchDataReaderFactory(
         p, numPartitions, rangeStart, rangeEnd, localStartTimeMs, relativeMsPerValue)
-        : DataReaderFactory[Row]
+        : DataReaderFactory
     }.toList.asJava
   }
 
@@ -188,9 +188,11 @@ class RateStreamMicroBatchDataReaderFactory(
     rangeStart: Long,
     rangeEnd: Long,
     localStartTimeMs: Long,
-    relativeMsPerValue: Double) extends DataReaderFactory[Row] {
+    relativeMsPerValue: Double) extends DataReaderFactory {
 
-  override def createDataReader(): DataReader[Row] = new RateStreamMicroBatchDataReader(
+  override def dataFormat(): DataFormat = DataFormat.ROW;
+
+  override def createRowDataReader(): DataReader[Row] = new RateStreamMicroBatchDataReader(
     partitionId, numPartitions, rangeStart, rangeEnd, localStartTimeMs, relativeMsPerValue)
 }
 

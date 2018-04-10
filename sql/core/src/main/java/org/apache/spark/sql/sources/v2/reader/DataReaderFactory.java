@@ -20,6 +20,10 @@ package org.apache.spark.sql.sources.v2.reader;
 import java.io.Serializable;
 
 import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.sources.v2.DataFormat;
+import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 /**
  * A reader factory returned by {@link DataSourceReader#createDataReaderFactories()} and is
@@ -32,7 +36,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * serializable and {@link DataReader} doesn't need to be.
  */
 @InterfaceStability.Evolving
-public interface DataReaderFactory<T> extends Serializable {
+public interface DataReaderFactory extends Serializable {
 
   /**
    * The preferred locations where the data reader returned by this reader factory can run faster,
@@ -52,10 +56,46 @@ public interface DataReaderFactory<T> extends Serializable {
   }
 
   /**
-   * Returns a data reader to do the actual reading work.
+   * The output data format of this factory's data reader. Spark will invoke the corresponding
+   * create data reader method w.r.t. the return value of this method:
+   * <ul>
+   *   <li>{@link DataFormat#ROW}: {@link #createRowDataReader()}</li>
+   *   <li>{@link DataFormat#UNSAFE_ROW}: {@link #createUnsafeRowDataReader()}</li>
+   *   <li>@{@link DataFormat#COLUMNAR_BATCH}: {@link #createColumnarBatchDataReader()}</li>
+   * </ul>
+   */
+  DataFormat dataFormat();
+
+  /**
+   * Returns a row-formatted data reader to do the actual reading work.
    *
    * If this method fails (by throwing an exception), the corresponding Spark task would fail and
    * get retried until hitting the maximum retry times.
    */
-  DataReader<T> createDataReader();
+  default DataReader<Row> createRowDataReader() {
+    throw new IllegalStateException(
+      "createRowDataReader must be implemented if the data format is ROW.");
+  }
+
+  /**
+   * Returns a unsafe-row-formatted data reader to do the actual reading work.
+   *
+   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
+   * get retried until hitting the maximum retry times.
+   */
+  default DataReader<UnsafeRow> createUnsafeRowDataReader() {
+    throw new IllegalStateException(
+      "createUnsafeRowDataReader must be implemented if the data format is UNSAFE_ROW.");
+  }
+
+  /**
+   * Returns a columnar-batch-formatted data reader to do the actual reading work.
+   *
+   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
+   * get retried until hitting the maximum retry times.
+   */
+  default DataReader<ColumnarBatch> createColumnarBatchDataReader() {
+    throw new IllegalStateException(
+      "createColumnarBatchDataReader must be implemented if the data format is COLUMNAR_BATCH.");
+  }
 }

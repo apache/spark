@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.sources.v2.reader.streaming;
 
+import java.util.Optional;
+
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.v2.reader.DataSourceReader;
 import org.apache.spark.sql.execution.streaming.BaseStreamingSource;
-
-import java.util.Optional;
 
 /**
  * A mix-in interface for {@link DataSourceReader}. Data source readers can implement this

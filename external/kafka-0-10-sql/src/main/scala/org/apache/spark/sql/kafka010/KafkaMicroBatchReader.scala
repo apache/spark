@@ -32,8 +32,8 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.{HDFSMetadataLog, SerializedOffset}
 import org.apache.spark.sql.kafka010.KafkaSourceProvider.{INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_FALSE, INSTRUCTION_FOR_FAIL_ON_DATA_LOSS_TRUE}
-import org.apache.spark.sql.sources.v2.DataSourceOptions
-import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory, SupportsScanUnsafeRow}
+import org.apache.spark.sql.sources.v2.{DataFormat, DataSourceOptions}
+import org.apache.spark.sql.sources.v2.reader.{DataReader, DataReaderFactory}
 import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.UninterruptibleThread
@@ -61,7 +61,7 @@ private[kafka010] class KafkaMicroBatchReader(
     metadataPath: String,
     startingOffsets: KafkaOffsetRangeLimit,
     failOnDataLoss: Boolean)
-  extends MicroBatchReader with SupportsScanUnsafeRow with Logging {
+  extends MicroBatchReader with Logging {
 
   private var startPartitionOffsets: PartitionOffsetMap = _
   private var endPartitionOffsets: PartitionOffsetMap = _
@@ -101,7 +101,7 @@ private[kafka010] class KafkaMicroBatchReader(
         }
   }
 
-  override def createUnsafeRowReaderFactories(): ju.List[DataReaderFactory[UnsafeRow]] = {
+  override def createDataReaderFactories(): ju.List[DataReaderFactory] = {
     // Find the new partitions, and get their earliest offsets
     val newPartitions = endPartitionOffsets.keySet.diff(startPartitionOffsets.keySet)
     val newPartitionInitialOffsets = kafkaOffsetReader.fetchEarliestOffsets(newPartitions.toSeq)
@@ -146,7 +146,7 @@ private[kafka010] class KafkaMicroBatchReader(
       new KafkaMicroBatchDataReaderFactory(
         range, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer)
     }
-    factories.map(_.asInstanceOf[DataReaderFactory[UnsafeRow]]).asJava
+    factories.map(_.asInstanceOf[DataReaderFactory]).asJava
   }
 
   override def getStartOffset: Offset = {
@@ -305,11 +305,13 @@ private[kafka010] case class KafkaMicroBatchDataReaderFactory(
     executorKafkaParams: ju.Map[String, Object],
     pollTimeoutMs: Long,
     failOnDataLoss: Boolean,
-    reuseKafkaConsumer: Boolean) extends DataReaderFactory[UnsafeRow] {
+    reuseKafkaConsumer: Boolean) extends DataReaderFactory {
 
   override def preferredLocations(): Array[String] = offsetRange.preferredLoc.toArray
 
-  override def createDataReader(): DataReader[UnsafeRow] = new KafkaMicroBatchDataReader(
+  override def dataFormat(): DataFormat = DataFormat.UNSAFE_ROW
+
+  override def createUnsafeRowDataReader(): DataReader[UnsafeRow] = new KafkaMicroBatchDataReader(
     offsetRange, executorKafkaParams, pollTimeoutMs, failOnDataLoss, reuseKafkaConsumer)
 }
 

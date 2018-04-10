@@ -44,7 +44,7 @@ case class FakeReader() extends MicroBatchReader with ContinuousReader {
   def mergeOffsets(offsets: Array[PartitionOffset]): Offset = RateStreamOffset(Map())
   def setStartOffset(start: Optional[Offset]): Unit = {}
 
-  def createDataReaderFactories(): java.util.ArrayList[DataReaderFactory[Row]] = {
+  def createDataReaderFactories(): java.util.ArrayList[DataReaderFactory] = {
     throw new IllegalStateException("fake source - cannot actually read")
   }
 }

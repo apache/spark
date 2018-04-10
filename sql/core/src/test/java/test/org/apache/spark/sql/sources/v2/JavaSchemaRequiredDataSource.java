@@ -42,7 +42,7 @@ public class JavaSchemaRequiredDataSource implements DataSourceV2, ReadSupportWi
     }
 
     @Override
-    public List<DataReaderFactory<Row>> createDataReaderFactories() {
+    public List<DataReaderFactory> createDataReaderFactories() {
       return java.util.Collections.emptyList();
     }
   }

@@ -24,8 +24,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
@@ -144,7 +143,7 @@ class RateSourceSuite extends StreamTest {
     reader.setOffsetRange(Optional.of(startOffset), Optional.of(endOffset))
     val tasks = reader.createDataReaderFactories()
     assert(tasks.size == 1)
-    val dataReader = tasks.get(0).createDataReader()
+    val dataReader = tasks.get(0).createRowDataReader()
     val data = ArrayBuffer[Row]()
     while (dataReader.next()) {
       data.append(dataReader.get())
@@ -163,7 +162,7 @@ class RateSourceSuite extends StreamTest {
     assert(tasks.size == 11)
 
     val readData = tasks.asScala
-      .map(_.createDataReader())
+      .map(_.createRowDataReader())
       .flatMap { reader =>
         val buf = scala.collection.mutable.ListBuffer[Row]()
         while (reader.next()) buf.append(reader.get())
@@ -314,7 +313,7 @@ class RateSourceSuite extends StreamTest {
           .asInstanceOf[RateStreamOffset]
           .partitionToValueAndRunTimeMs(t.partitionIndex)
           .runTimeMs
-        val r = t.createDataReader().asInstanceOf[RateStreamContinuousDataReader]
+        val r = t.createRowDataReader().asInstanceOf[RateStreamContinuousDataReader]
         for (rowIndex <- 0 to 9) {
           r.next()
           data.append(r.get())

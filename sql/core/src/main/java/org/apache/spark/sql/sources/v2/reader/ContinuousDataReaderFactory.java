@@ -18,18 +18,48 @@
 package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.sources.v2.reader.streaming.PartitionOffset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
+import org.apache.spark.sql.sources.v2.reader.streaming.ContinuousDataReader;
+import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 /**
  * A mix-in interface for {@link DataReaderFactory}. Continuous data reader factories can
  * implement this interface to provide creating {@link DataReader} with particular offset.
  */
 @InterfaceStability.Evolving
-public interface ContinuousDataReaderFactory<T> extends DataReaderFactory<T> {
+public interface ContinuousDataReaderFactory extends DataReaderFactory {
+
   /**
-   * Create a DataReader with particular offset as its startOffset.
+   * Returns a row-formatted continuous data reader to do the actual reading work.
    *
-   * @param offset offset want to set as the DataReader's startOffset.
+   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
+   * get retried until hitting the maximum retry times.
    */
-  DataReader<T> createDataReaderWithOffset(PartitionOffset offset);
+  default ContinuousDataReader<Row> createRowDataReader() {
+    throw new IllegalStateException(
+      "createRowDataReader must be implemented if the data format is ROW.");
+  }
+
+  /**
+   * Returns a unsafe-row-formatted continuous data reader to do the actual reading work.
+   *
+   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
+   * get retried until hitting the maximum retry times.
+   */
+  default ContinuousDataReader<UnsafeRow> createUnsafeRowDataReader() {
+    throw new IllegalStateException(
+      "createUnsafeRowDataReader must be implemented if the data format is UNSAFE_ROW.");
+  }
+
+  /**
+   * Returns a columnar-batch-formatted continuous data reader to do the actual reading work.
+   *
+   * If this method fails (by throwing an exception), the corresponding Spark task would fail and
+   * get retried until hitting the maximum retry times.
+   */
+  default ContinuousDataReader<ColumnarBatch> createColumnarBatchDataReader() {
+    throw new IllegalStateException(
+      "createColumnarBatchDataReader must be implemented if the data format is COLUMNAR_BATCH.");
+  }
 }

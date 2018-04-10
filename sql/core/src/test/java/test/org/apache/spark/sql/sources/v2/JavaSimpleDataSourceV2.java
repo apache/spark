@@ -22,6 +22,7 @@ import java.util.List;
 
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.sources.v2.DataFormat;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.DataSourceOptions;
 import org.apache.spark.sql.sources.v2.ReadSupport;
@@ -41,14 +42,14 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public List<DataReaderFactory<Row>> createDataReaderFactories() {
+    public List<DataReaderFactory> createDataReaderFactories() {
       return java.util.Arrays.asList(
         new JavaSimpleDataReaderFactory(0, 5),
         new JavaSimpleDataReaderFactory(5, 10));
     }
   }
 
-  static class JavaSimpleDataReaderFactory implements DataReaderFactory<Row>, DataReader<Row> {
+  static class JavaSimpleDataReaderFactory implements DataReaderFactory, DataReader<Row> {
     private int start;
     private int end;
 
@@ -58,7 +59,12 @@ public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
     }
 
     @Override
-    public DataReader<Row> createDataReader() {
+    public DataFormat dataFormat() {
+      return DataFormat.ROW;
+    }
+
+    @Override
+    public DataReader<Row> createRowDataReader() {
       return new JavaSimpleDataReaderFactory(start - 1, end);
     }
 
