@@ -205,21 +205,27 @@ private[spark] class ExecutorPodFactory(
         .endSpec()
       .build()
 
+    val (executorPodWithVolumes, executorContainerWithVolumes) =
+      KubernetesUtils.addVolumes(executorPod,
+        executorContainer,
+        sparkConf.get(KUBERNETES_EXECUTOR_VOLUMES))
+
     val containerWithLimitCores = executorLimitCores.map { limitCores =>
       val executorCpuLimitQuantity = new QuantityBuilder(false)
         .withAmount(limitCores)
         .build()
-      new ContainerBuilder(executorContainer)
+      new ContainerBuilder(executorContainerWithVolumes)
         .editResources()
         .addToLimits("cpu", executorCpuLimitQuantity)
         .endResources()
         .build()
-    }.getOrElse(executorContainer)
+    }.getOrElse(executorContainerWithVolumes)
 
     val (maybeSecretsMountedPod, maybeSecretsMountedContainer) =
       mountSecretsBootstrap.map { bootstrap =>
-        (bootstrap.addSecretVolumes(executorPod), bootstrap.mountSecrets(containerWithLimitCores))
-      }.getOrElse((executorPod, containerWithLimitCores))
+        (bootstrap.addSecretVolumes(executorPodWithVolumes),
+          bootstrap.mountSecrets(containerWithLimitCores))
+      }.getOrElse((executorPodWithVolumes, containerWithLimitCores))
 
     val (bootstrappedPod, bootstrappedContainer) =
       initContainerBootstrap.map { bootstrap =>

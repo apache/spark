@@ -18,7 +18,7 @@ package org.apache.spark.deploy.k8s
 
 import java.io.File
 
-import io.fabric8.kubernetes.api.model.{Container, Pod, PodBuilder}
+import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.SparkConf
 import org.apache.spark.util.Utils
@@ -41,6 +41,57 @@ private[spark] object KubernetesUtils {
 
   def requireNandDefined(opt1: Option[_], opt2: Option[_], errMessage: String): Unit = {
     opt1.foreach { _ => require(opt2.isEmpty, errMessage) }
+  }
+
+  /**
+   * Parse a comma-delimited list of volume specs, each of which takes the form
+   * hostPath:containerPath[:ro|rw]; and add volume to pod and volume mount to container.
+   *
+   * @param pod original specification of the pod
+   * @param container original specification of the container
+   * @param volumes list of volume specs
+   * @return a tuple of (pod with the volume(s) added, container with mount(s) added)
+   */
+  def addVolumes(pod: Pod, container : Container, volumes: String): (Pod, Container) = {
+    val podBuilder = new PodBuilder(pod).editOrNewSpec()
+    val containerBuilder = new ContainerBuilder(container)
+    var volumeCount = 0
+    volumes.split(",").map(_.split(":")).map { spec =>
+      var hostPath: Option[String] = None
+      var containerPath: Option[String] = None
+      var readOnly: Option[Boolean] = None
+      spec match {
+        case Array(hostPathV, containerPathV) =>
+          hostPath = Some(hostPathV)
+          containerPath = Some(containerPathV)
+        case Array(hostPathV, containerPathV, "ro") =>
+          hostPath = Some(hostPathV)
+          containerPath = Some(containerPathV)
+          readOnly = Some(true)
+        case Array(hostPathV, containerPathV, "rw") =>
+          hostPath = Some(hostPathV)
+          containerPath = Some(containerPathV)
+          readOnly = Some(false)
+        case spec =>
+          None
+      }
+      if (hostPath.isDefined && containerPath.isDefined) {
+        podBuilder.addToVolumes(new VolumeBuilder()
+            .withHostPath(new HostPathVolumeSource(hostPath.get))
+            .withName(s"hostPath-volume-$volumeCount")
+            .build())
+        val volumeBuilder = new VolumeMountBuilder()
+          .withMountPath(containerPath.get)
+          .withName(s"hostPath-volume-$volumeCount")
+        if (readOnly.isDefined) {
+          containerBuilder.addToVolumeMounts(volumeBuilder.withReadOnly(readOnly.get).build())
+        } else {
+          containerBuilder.addToVolumeMounts(volumeBuilder.build())
+        }
+        volumeCount += 1
+      }
+    }
+    (podBuilder.endSpec().build(), containerBuilder.build())
   }
 
   /**
