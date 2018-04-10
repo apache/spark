@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import sys
+
 from pyspark import since, keyword_only
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
@@ -403,17 +405,23 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
                      typeConverter=TypeConverters.toString)
     initSteps = Param(Params._dummy(), "initSteps", "The number of steps for k-means|| " +
                       "initialization mode. Must be > 0.", typeConverter=TypeConverters.toInt)
+    distanceMeasure = Param(Params._dummy(), "distanceMeasure", "The distance measure. " +
+                            "Supported options: 'euclidean' and 'cosine'.",
+                            typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
-                 initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None):
+                 initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None,
+                 distanceMeasure="euclidean"):
         """
         __init__(self, featuresCol="features", predictionCol="prediction", k=2, \
-                 initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None)
+                 initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
+                 distanceMeasure="euclidean")
         """
         super(KMeans, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.clustering.KMeans", self.uid)
-        self._setDefault(k=2, initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20)
+        self._setDefault(k=2, initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20,
+                         distanceMeasure="euclidean")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -423,10 +431,12 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     @keyword_only
     @since("1.5.0")
     def setParams(self, featuresCol="features", predictionCol="prediction", k=2,
-                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None):
+                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None,
+                  distanceMeasure="euclidean"):
         """
         setParams(self, featuresCol="features", predictionCol="prediction", k=2, \
-                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None)
+                  initMode="k-means||", initSteps=2, tol=1e-4, maxIter=20, seed=None, \
+                  distanceMeasure="euclidean")
 
         Sets params for KMeans.
         """
@@ -474,6 +484,20 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         Gets the value of `initSteps`
         """
         return self.getOrDefault(self.initSteps)
+
+    @since("2.4.0")
+    def setDistanceMeasure(self, value):
+        """
+        Sets the value of :py:attr:`distanceMeasure`.
+        """
+        return self._set(distanceMeasure=value)
+
+    @since("2.4.0")
+    def getDistanceMeasure(self):
+        """
+        Gets the value of `distanceMeasure`
+        """
+        return self.getOrDefault(self.distanceMeasure)
 
 
 class BisectingKMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
@@ -1159,4 +1183,4 @@ if __name__ == "__main__":
         except OSError:
             pass
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

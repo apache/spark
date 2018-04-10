@@ -21,8 +21,6 @@ import scala.collection.mutable.HashSet
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.scalatest.concurrent.Eventually._
-
 import org.apache.spark.CleanerListener
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
@@ -30,6 +28,7 @@ import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.util.{AccumulatorContext, Utils}
@@ -368,12 +367,12 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     val toBeCleanedAccIds = new HashSet[Long]
 
     val accId1 = spark.table("t1").queryExecution.withCachedData.collect {
-      case i: InMemoryRelation => i.batchStats.id
+      case i: InMemoryRelation => i.sizeInBytesStats.id
     }.head
     toBeCleanedAccIds += accId1
 
     val accId2 = spark.table("t1").queryExecution.withCachedData.collect {
-      case i: InMemoryRelation => i.batchStats.id
+      case i: InMemoryRelation => i.sizeInBytesStats.id
     }.head
     toBeCleanedAccIds += accId2
 
@@ -780,6 +779,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
       val cachedDs2 = sql(sql2)
       assert(getNumInMemoryRelations(cachedDs2) == 1)
+    }
+  }
+
+  test("SPARK-23312: vectorized cache reader can be disabled") {
+    Seq(true, false).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val df = spark.range(10).cache()
+        df.queryExecution.executedPlan.foreach {
+          case i: InMemoryTableScanExec =>
+            assert(i.supportsBatch == vectorized && i.supportCodegen == vectorized)
+          case _ =>
+        }
+      }
     }
   }
 }

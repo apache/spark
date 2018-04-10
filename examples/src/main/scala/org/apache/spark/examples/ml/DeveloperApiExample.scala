@@ -53,7 +53,7 @@ object DeveloperApiExample {
     // Create a LogisticRegression instance. This instance is an Estimator.
     val lr = new MyLogisticRegression()
     // Print out the parameters, documentation, and any default values.
-    println("MyLogisticRegression parameters:\n" + lr.explainParams() + "\n")
+    println(s"MyLogisticRegression parameters:\n ${lr.explainParams()}")
 
     // We may set parameters using setter methods.
     lr.setMaxIter(10)
@@ -169,10 +169,10 @@ private class MyLogisticRegressionModel(
     Vectors.dense(-margin, margin)
   }
 
-  /** Number of classes the label can take. 2 indicates binary classification. */
+  // Number of classes the label can take. 2 indicates binary classification.
   override val numClasses: Int = 2
 
-  /** Number of features the model was trained on. */
+  // Number of features the model was trained on.
   override val numFeatures: Int = coefficients.size
 
   /**

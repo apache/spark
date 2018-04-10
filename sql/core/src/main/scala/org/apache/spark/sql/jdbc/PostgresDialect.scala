@@ -85,6 +85,17 @@ private object PostgresDialect extends JdbcDialect {
     s"SELECT 1 FROM $table LIMIT 1"
   }
 
+  /**
+  * The SQL query used to truncate a table. For Postgres, the default behaviour is to
+  * also truncate any descendant tables. As this is a (possibly unwanted) side-effect,
+  * the Postgres dialect adds 'ONLY' to truncate only the table in question
+  * @param table The name of the table.
+  * @return The SQL query to use for truncating a table
+  */
+  override def getTruncateQuery(table: String): String = {
+    s"TRUNCATE TABLE ONLY $table"
+  }
+
   override def beforeFetch(connection: Connection, properties: Map[String, String]): Unit = {
     super.beforeFetch(connection, properties)
 
@@ -97,8 +108,7 @@ private object PostgresDialect extends JdbcDialect {
     if (properties.getOrElse(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "0").toInt > 0) {
       connection.setAutoCommit(false)
     }
-
   }
 
-  override def isCascadingTruncateTable(): Option[Boolean] = Some(true)
+  override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 }

@@ -59,9 +59,11 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
+    val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
     OrcFileOperator.readSchema(
       files.map(_.getPath.toString),
-      Some(sparkSession.sessionState.newHadoopConf())
+      Some(sparkSession.sessionState.newHadoopConf()),
+      ignoreCorruptFiles
     )
   }
 
@@ -129,14 +131,18 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+    val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
 
     (file: PartitionedFile) => {
       val conf = broadcastedHadoopConf.value.value
 
+      val filePath = new Path(new URI(file.filePath))
+
       // SPARK-8501: Empty ORC files always have an empty schema stored in their footer. In this
       // case, `OrcFileOperator.readSchema` returns `None`, and we can't read the underlying file
       // using the given physical schema. Instead, we simply return an empty iterator.
-      val isEmptyFile = OrcFileOperator.readSchema(Seq(file.filePath), Some(conf)).isEmpty
+      val isEmptyFile =
+        OrcFileOperator.readSchema(Seq(filePath.toString), Some(conf), ignoreCorruptFiles).isEmpty
       if (isEmptyFile) {
         Iterator.empty
       } else {
@@ -146,15 +152,12 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           val job = Job.getInstance(conf)
           FileInputFormat.setInputPaths(job, file.filePath)
 
-          val fileSplit = new FileSplit(
-            new Path(new URI(file.filePath)), file.start, file.length, Array.empty
-          )
+          val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
           // Custom OrcRecordReader is used to get
           // ObjectInspector during recordReader creation itself and can
           // avoid NameNode call in unwrapOrcStructs per file.
           // Specifically would be helpful for partitioned datasets.
-          val orcReader = OrcFile.createReader(
-            new Path(new URI(file.filePath)), OrcFile.readerOptions(conf))
+          val orcReader = OrcFile.createReader(filePath, OrcFile.readerOptions(conf))
           new SparkOrcNewRecordReader(orcReader, conf, fileSplit.getStart, fileSplit.getLength)
         }
 

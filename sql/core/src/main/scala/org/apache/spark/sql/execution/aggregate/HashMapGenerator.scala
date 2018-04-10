@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, GlobalValue}
 import org.apache.spark.sql.types._
 
 /**
@@ -41,22 +41,21 @@ abstract class HashMapGenerator(
   val groupingKeys = groupingKeySchema.map(k => Buffer(k.dataType, ctx.freshName("key")))
   val bufferValues = bufferSchema.map(k => Buffer(k.dataType, ctx.freshName("value")))
   val groupingKeySignature =
-    groupingKeys.map(key => s"${ctx.javaType(key.dataType)} ${key.name}").mkString(", ")
+    groupingKeys.map(key => s"${CodeGenerator.javaType(key.dataType)} ${key.name}").mkString(", ")
   val buffVars: Seq[ExprCode] = {
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val initExpr = functions.flatMap(f => f.initialValues)
     initExpr.map { e =>
-      val isNull = ctx.freshName("bufIsNull")
-      val value = ctx.freshName("bufValue")
-      ctx.addMutableState("boolean", isNull, "")
-      ctx.addMutableState(ctx.javaType(e.dataType), value, "")
+      val isNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "bufIsNull")
+      val value = ctx.addMutableState(CodeGenerator.javaType(e.dataType), "bufValue")
       val ev = e.genCode(ctx)
       val initVars =
         s"""
            | $isNull = ${ev.isNull};
            | $value = ${ev.value};
        """.stripMargin
-      ExprCode(ev.code + initVars, isNull, value)
+      ExprCode(ev.code + initVars, GlobalValue(isNull, CodeGenerator.JAVA_BOOLEAN),
+        GlobalValue(value, CodeGenerator.javaType(e.dataType)))
     }
   }
 

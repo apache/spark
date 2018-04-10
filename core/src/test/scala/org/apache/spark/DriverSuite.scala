@@ -19,13 +19,16 @@ package org.apache.spark
 
 import java.io.File
 
-import org.scalatest.concurrent.TimeLimits
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.util.Utils
 
 class DriverSuite extends SparkFunSuite with TimeLimits {
+
+  // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
+  implicit val defaultSignaler: Signaler = ThreadSignaler
 
   ignore("driver should exit after finishing without cleanup (SPARK-530)") {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
@@ -48,7 +51,7 @@ class DriverSuite extends SparkFunSuite with TimeLimits {
  */
 object DriverWithoutCleanup {
   def main(args: Array[String]) {
-    Utils.configTestLog4j("INFO")
+    TestUtils.configTestLog4j("INFO")
     val conf = new SparkConf
     val sc = new SparkContext(args(0), "DriverWithoutCleanup", conf)
     sc.parallelize(1 to 100, 4).count()

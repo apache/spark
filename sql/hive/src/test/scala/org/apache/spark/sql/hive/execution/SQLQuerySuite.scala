@@ -461,74 +461,73 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("CTAS without serde without location") {
-    val originalConf = sessionState.conf.convertCTAS
-
-    setConf(SQLConf.CONVERT_CTAS, true)
-
-    val defaultDataSource = sessionState.conf.defaultDataSourceName
-    try {
-      sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-      sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-      val message = intercept[AnalysisException] {
+    withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
+      val defaultDataSource = sessionState.conf.defaultDataSourceName
+      withTable("ctas1") {
         sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-      }.getMessage
-      assert(message.contains("already exists"))
-      checkRelation("ctas1", true, defaultDataSource)
-      sql("DROP TABLE ctas1")
+        sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+        val message = intercept[AnalysisException] {
+          sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+        }.getMessage
+        assert(message.contains("already exists"))
+        checkRelation("ctas1", isDataSourceTable = true, defaultDataSource)
+      }
 
       // Specifying database name for query can be converted to data source write path
       // is not allowed right now.
-      sql("CREATE TABLE default.ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", true, defaultDataSource)
-      sql("DROP TABLE ctas1")
+      withTable("ctas1") {
+        sql("CREATE TABLE default.ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+        checkRelation("ctas1", isDataSourceTable = true, defaultDataSource)
+      }
 
-      sql("CREATE TABLE ctas1 stored as textfile" +
+      withTable("ctas1") {
+        sql("CREATE TABLE ctas1 stored as textfile" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false, "text")
-      sql("DROP TABLE ctas1")
+        checkRelation("ctas1", isDataSourceTable = false, "text")
+      }
 
-      sql("CREATE TABLE ctas1 stored as sequencefile" +
-            " AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false, "sequence")
-      sql("DROP TABLE ctas1")
+      withTable("ctas1") {
+        sql("CREATE TABLE ctas1 stored as sequencefile" +
+          " AS SELECT key k, value FROM src ORDER BY k, value")
+        checkRelation("ctas1", isDataSourceTable = false, "sequence")
+      }
 
-      sql("CREATE TABLE ctas1 stored as rcfile AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false, "rcfile")
-      sql("DROP TABLE ctas1")
+      withTable("ctas1") {
+        sql("CREATE TABLE ctas1 stored as rcfile AS SELECT key k, value FROM src ORDER BY k, value")
+        checkRelation("ctas1", isDataSourceTable = false, "rcfile")
+      }
 
-      sql("CREATE TABLE ctas1 stored as orc AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false, "orc")
-      sql("DROP TABLE ctas1")
+      withTable("ctas1") {
+        sql("CREATE TABLE ctas1 stored as orc AS SELECT key k, value FROM src ORDER BY k, value")
+        checkRelation("ctas1", isDataSourceTable = false, "orc")
+      }
 
-      sql("CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false, "parquet")
-      sql("DROP TABLE ctas1")
-    } finally {
-      setConf(SQLConf.CONVERT_CTAS, originalConf)
-      sql("DROP TABLE IF EXISTS ctas1")
+      withTable("ctas1") {
+        sql(
+          """
+            |CREATE TABLE ctas1 stored as parquet
+            |AS SELECT key k, value FROM src ORDER BY k, value
+          """.stripMargin)
+        checkRelation("ctas1", isDataSourceTable = false, "parquet")
+      }
     }
   }
 
   test("CTAS with default fileformat") {
     val table = "ctas1"
     val ctas = s"CREATE TABLE IF NOT EXISTS $table SELECT key k, value FROM src"
-    withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
-      withSQLConf("hive.default.fileformat" -> "textfile") {
+    Seq("orc", "parquet").foreach { dataSourceFormat =>
+      withSQLConf(
+        SQLConf.CONVERT_CTAS.key -> "true",
+        SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> dataSourceFormat,
+        "hive.default.fileformat" -> "textfile") {
         withTable(table) {
           sql(ctas)
-          // We should use parquet here as that is the default datasource fileformat. The default
-          // datasource file format is controlled by `spark.sql.sources.default` configuration.
+          // The default datasource file format is controlled by `spark.sql.sources.default`.
           // This testcase verifies that setting `hive.default.fileformat` has no impact on
           // the target table's fileformat in case of CTAS.
-          assert(sessionState.conf.defaultDataSourceName === "parquet")
-          checkRelation(tableName = table, isDataSourceTable = true, format = "parquet")
+          checkRelation(tableName = table, isDataSourceTable = true, format = dataSourceFormat)
         }
-      }
-      withSQLConf("spark.sql.sources.default" -> "orc") {
-        withTable(table) {
-          sql(ctas)
-          checkRelation(tableName = table, isDataSourceTable = true, format = "orc")
-         }
       }
     }
   }
@@ -539,30 +538,40 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         val defaultDataSource = sessionState.conf.defaultDataSourceName
 
         val tempLocation = dir.toURI.getPath.stripSuffix("/")
-        sql(s"CREATE TABLE ctas1 LOCATION 'file:$tempLocation/c1'" +
-          " AS SELECT key k, value FROM src ORDER BY k, value")
-        checkRelation("ctas1", true, defaultDataSource, Some(s"file:$tempLocation/c1"))
-        sql("DROP TABLE ctas1")
+        withTable("ctas1") {
+          sql(s"CREATE TABLE ctas1 LOCATION 'file:$tempLocation/c1'" +
+            " AS SELECT key k, value FROM src ORDER BY k, value")
+          checkRelation(
+            "ctas1", isDataSourceTable = true, defaultDataSource, Some(s"file:$tempLocation/c1"))
+        }
 
-        sql(s"CREATE TABLE ctas1 LOCATION 'file:$tempLocation/c2'" +
-          " AS SELECT key k, value FROM src ORDER BY k, value")
-        checkRelation("ctas1", true, defaultDataSource, Some(s"file:$tempLocation/c2"))
-        sql("DROP TABLE ctas1")
+        withTable("ctas1") {
+          sql(s"CREATE TABLE ctas1 LOCATION 'file:$tempLocation/c2'" +
+            " AS SELECT key k, value FROM src ORDER BY k, value")
+          checkRelation(
+            "ctas1", isDataSourceTable = true, defaultDataSource, Some(s"file:$tempLocation/c2"))
+        }
 
-        sql(s"CREATE TABLE ctas1 stored as textfile LOCATION 'file:$tempLocation/c3'" +
-          " AS SELECT key k, value FROM src ORDER BY k, value")
-        checkRelation("ctas1", false, "text", Some(s"file:$tempLocation/c3"))
-        sql("DROP TABLE ctas1")
+        withTable("ctas1") {
+          sql(s"CREATE TABLE ctas1 stored as textfile LOCATION 'file:$tempLocation/c3'" +
+            " AS SELECT key k, value FROM src ORDER BY k, value")
+          checkRelation(
+            "ctas1", isDataSourceTable = false, "text", Some(s"file:$tempLocation/c3"))
+        }
 
-        sql(s"CREATE TABLE ctas1 stored as sequenceFile LOCATION 'file:$tempLocation/c4'" +
-          " AS SELECT key k, value FROM src ORDER BY k, value")
-        checkRelation("ctas1", false, "sequence", Some(s"file:$tempLocation/c4"))
-        sql("DROP TABLE ctas1")
+        withTable("ctas1") {
+          sql(s"CREATE TABLE ctas1 stored as sequenceFile LOCATION 'file:$tempLocation/c4'" +
+            " AS SELECT key k, value FROM src ORDER BY k, value")
+          checkRelation(
+            "ctas1", isDataSourceTable = false, "sequence", Some(s"file:$tempLocation/c4"))
+        }
 
-        sql(s"CREATE TABLE ctas1 stored as rcfile LOCATION 'file:$tempLocation/c5'" +
-          " AS SELECT key k, value FROM src ORDER BY k, value")
-        checkRelation("ctas1", false, "rcfile", Some(s"file:$tempLocation/c5"))
-        sql("DROP TABLE ctas1")
+        withTable("ctas1") {
+          sql(s"CREATE TABLE ctas1 stored as rcfile LOCATION 'file:$tempLocation/c5'" +
+            " AS SELECT key k, value FROM src ORDER BY k, value")
+          checkRelation(
+            "ctas1", isDataSourceTable = false, "rcfile", Some(s"file:$tempLocation/c5"))
+        }
       }
     }
   }
@@ -1189,35 +1198,37 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("specifying database name for a temporary view is not allowed") {
     withTempPath { dir =>
-      val path = dir.toURI.toString
-      val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
-      df
-        .write
-        .format("parquet")
-        .save(path)
+      withTempView("db.t") {
+        val path = dir.toURI.toString
+        val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+        df
+          .write
+          .format("parquet")
+          .save(path)
 
-      // We don't support creating a temporary table while specifying a database
-      intercept[AnalysisException] {
+        // We don't support creating a temporary table while specifying a database
+        intercept[AnalysisException] {
+          spark.sql(
+            s"""
+              |CREATE TEMPORARY VIEW db.t
+              |USING parquet
+              |OPTIONS (
+              |  path '$path'
+              |)
+             """.stripMargin)
+        }
+
+        // If you use backticks to quote the name then it's OK.
         spark.sql(
           s"""
-            |CREATE TEMPORARY VIEW db.t
+            |CREATE TEMPORARY VIEW `db.t`
             |USING parquet
             |OPTIONS (
             |  path '$path'
             |)
            """.stripMargin)
+        checkAnswer(spark.table("`db.t`"), df)
       }
-
-      // If you use backticks to quote the name then it's OK.
-      spark.sql(
-        s"""
-          |CREATE TEMPORARY VIEW `db.t`
-          |USING parquet
-          |OPTIONS (
-          |  path '$path'
-          |)
-         """.stripMargin)
-      checkAnswer(spark.table("`db.t`"), df)
     }
   }
 
@@ -1562,7 +1573,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("multi-insert with lateral view") {
-    withTempView("t1") {
+    withTempView("source") {
       spark.range(10)
         .select(array($"id", $"id" + 1).as("arr"), $"id")
         .createOrReplaceTempView("source")
@@ -2142,14 +2153,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
               Row("12", "2", 12345, null, "98765", "01"))
           }
         }
-      }
-    }
-  }
-
-  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
-    test(s"Writing empty datasets should not fail - $format") {
-      withTempDir { dir =>
-        Seq("str").toDS.limit(0).write.format(format).save(dir.getCanonicalPath + "/tmp")
       }
     }
   }

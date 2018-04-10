@@ -56,6 +56,23 @@ from pyspark.traceback_utils import SCCallSiteSync
 __all__ = ["RDD"]
 
 
+class PythonEvalType(object):
+    """
+    Evaluation type of python rdd.
+
+    These values are internal to PySpark.
+
+    These values should match values in org.apache.spark.api.python.PythonEvalType.
+    """
+    NON_UDF = 0
+
+    SQL_BATCHED_UDF = 100
+
+    SQL_SCALAR_PANDAS_UDF = 200
+    SQL_GROUPED_MAP_PANDAS_UDF = 201
+    SQL_GROUPED_AGG_PANDAS_UDF = 202
+
+
 def portable_hash(x):
     """
     This function returns consistent hash code for builtin types, especially
@@ -750,7 +767,7 @@ class RDD(object):
 
             def pipe_objs(out):
                 for obj in iterator:
-                    s = str(obj).rstrip('\n') + '\n'
+                    s = unicode(obj).rstrip('\n') + '\n'
                     out.write(s.encode('utf-8'))
                 out.close()
             Thread(target=pipe_objs, args=[pipe.stdin]).start()
@@ -2481,7 +2498,7 @@ def _test():
         globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

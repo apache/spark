@@ -112,11 +112,11 @@ private[columnar] case object PassThrough extends CompressionScheme {
       var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else capacity
       var pos = 0
       var seenNulls = 0
-      var bufferPos = buffer.position
+      var bufferPos = buffer.position()
       while (pos < capacity) {
         if (pos != nextNullIndex) {
           val len = nextNullIndex - pos
-          assert(len * unitSize < Int.MaxValue)
+          assert(len * unitSize.toLong < Int.MaxValue)
           putFunction(columnVector, pos, bufferPos, len)
           bufferPos += len * unitSize
           pos += len

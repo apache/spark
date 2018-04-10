@@ -28,7 +28,7 @@ import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.Range
@@ -77,10 +77,23 @@ class StreamSuite extends StreamTest {
   }
 
   test("StreamingRelation.computeStats") {
-    val streamingRelation = spark.readStream.format("rate").load().logicalPlan collect {
-      case s: StreamingRelation => s
+    withTempDir { dir =>
+      val df = spark.readStream.format("csv").schema(StructType(Seq())).load(dir.getCanonicalPath)
+      val streamingRelation = df.logicalPlan collect {
+        case s: StreamingRelation => s
+      }
+      assert(streamingRelation.nonEmpty, "cannot find StreamingRelation")
+      assert(
+        streamingRelation.head.computeStats.sizeInBytes ==
+          spark.sessionState.conf.defaultSizeInBytes)
     }
-    assert(streamingRelation.nonEmpty, "cannot find StreamingRelation")
+  }
+
+  test("StreamingRelationV2.computeStats") {
+    val streamingRelation = spark.readStream.format("rate").load().logicalPlan collect {
+      case s: StreamingRelationV2 => s
+    }
+    assert(streamingRelation.nonEmpty, "cannot find StreamingExecutionRelation")
     assert(
       streamingRelation.head.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
   }
@@ -275,7 +288,7 @@ class StreamSuite extends StreamTest {
 
     // Check the latest batchid in the commit log
     def CheckCommitLogLatestBatchId(expectedId: Int): AssertOnQuery =
-      AssertOnQuery(_.batchCommitLog.getLatest().get._1 == expectedId,
+      AssertOnQuery(_.commitLog.getLatest().get._1 == expectedId,
         s"commitLog's latest should be $expectedId")
 
     // Ensure that there has not been an incremental execution after restart
@@ -417,6 +430,37 @@ class StreamSuite extends StreamTest {
     assert(OutputMode.Update === InternalOutputModes.Update)
   }
 
+  override protected def sparkConf: SparkConf = super.sparkConf
+    .set("spark.redaction.string.regex", "file:/[\\w_]+")
+
+  test("explain - redaction") {
+    val replacement = "*********"
+
+    val inputData = MemoryStream[String]
+    val df = inputData.toDS().map(_ + "foo").groupBy("value").agg(count("*"))
+    // Test StreamingQuery.display
+    val q = df.writeStream.queryName("memory_explain").outputMode("complete").format("memory")
+      .start()
+      .asInstanceOf[StreamingQueryWrapper]
+      .streamingQuery
+    try {
+      inputData.addData("abc")
+      q.processAllAvailable()
+
+      val explainWithoutExtended = q.explainInternal(false)
+      assert(explainWithoutExtended.contains(replacement))
+      assert(explainWithoutExtended.contains("StateStoreRestore"))
+      assert(!explainWithoutExtended.contains("file:/"))
+
+      val explainWithExtended = q.explainInternal(true)
+      assert(explainWithExtended.contains(replacement))
+      assert(explainWithExtended.contains("StateStoreRestore"))
+      assert(!explainWithoutExtended.contains("file:/"))
+    } finally {
+      q.stop()
+    }
+  }
+
   test("explain") {
     val inputData = MemoryStream[String]
     val df = inputData.toDS().map(_ + "foo").groupBy("value").agg(count("*"))
@@ -448,16 +492,20 @@ class StreamSuite extends StreamTest {
 
       val explainWithoutExtended = q.explainInternal(false)
       // `extended = false` only displays the physical plan.
-      assert("LocalRelation".r.findAllMatchIn(explainWithoutExtended).size === 0)
-      assert("LocalTableScan".r.findAllMatchIn(explainWithoutExtended).size === 1)
+      assert("Streaming RelationV2 MemoryStreamDataSource".r
+        .findAllMatchIn(explainWithoutExtended).size === 0)
+      assert("ScanV2 MemoryStreamDataSource".r
+        .findAllMatchIn(explainWithoutExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithoutExtended.contains("StateStoreRestore"))
 
       val explainWithExtended = q.explainInternal(true)
       // `extended = true` displays 3 logical plans (Parsed/Optimized/Optimized) and 1 physical
       // plan.
-      assert("LocalRelation".r.findAllMatchIn(explainWithExtended).size === 3)
-      assert("LocalTableScan".r.findAllMatchIn(explainWithExtended).size === 1)
+      assert("Streaming RelationV2 MemoryStreamDataSource".r
+        .findAllMatchIn(explainWithExtended).size === 3)
+      assert("ScanV2 MemoryStreamDataSource".r
+        .findAllMatchIn(explainWithExtended).size === 1)
       // Use "StateStoreRestore" to verify that it does output a streaming physical plan
       assert(explainWithExtended.contains("StateStoreRestore"))
     } finally {

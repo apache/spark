@@ -44,7 +44,7 @@ object FailureSingleton {
 }
 
 class StreamingAggregationSuite extends StateStoreMetricsTest
-    with BeforeAndAfterAll with Assertions with StatefulOperatorTest {
+    with BeforeAndAfterAll with Assertions {
 
   override def afterAll(): Unit = {
     super.afterAll()
@@ -281,8 +281,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       AddData(inputData, 0L, 5L, 5L, 10L),
       AdvanceManualClock(10 * 1000),
       CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
-      AssertOnQuery(sq =>
-        checkChildOutputHashPartitioning[StateStoreRestoreExec](sq, Seq("value"))),
 
       // advance clock to 20 seconds, should retain keys >= 10
       AddData(inputData, 15L, 15L, 20L),
@@ -299,7 +297,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
-        q.batchCommitLog.purge(3)
+        q.commitLog.purge(3)
         // advance by a minute i.e., 90 seconds total
         clock.advance(60 * 1000L)
         true
@@ -351,7 +349,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       StopStream,
       AssertOnQuery { q => // clear the sink
         q.sink.asInstanceOf[MemorySink].clear()
-        q.batchCommitLog.purge(3)
+        q.commitLog.purge(3)
         // advance by 60 days i.e., 90 days total
         clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
         true

@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, Join, Statistics}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
 
 
@@ -85,7 +85,8 @@ case class JoinEstimation(join: Join) extends Logging {
       // 3. Update statistics based on the output of join
       val inputAttrStats = AttributeMap(
         leftStats.attributeStats.toSeq ++ rightStats.attributeStats.toSeq)
-      val attributesWithStat = join.output.filter(a => inputAttrStats.contains(a))
+      val attributesWithStat = join.output.filter(a =>
+        inputAttrStats.get(a).map(_.hasCountStats).getOrElse(false))
       val (fromLeft, fromRight) = attributesWithStat.partition(join.left.outputSet.contains(_))
 
       val outputStats: Seq[(Attribute, ColumnStat)] = if (outputRows == 0) {
@@ -106,10 +107,10 @@ case class JoinEstimation(join: Join) extends Logging {
           case FullOuter =>
             fromLeft.map { a =>
               val oriColStat = inputAttrStats(a)
-              (a, oriColStat.copy(nullCount = oriColStat.nullCount + rightRows))
+              (a, oriColStat.copy(nullCount = Some(oriColStat.nullCount.get + rightRows)))
             } ++ fromRight.map { a =>
               val oriColStat = inputAttrStats(a)
-              (a, oriColStat.copy(nullCount = oriColStat.nullCount + leftRows))
+              (a, oriColStat.copy(nullCount = Some(oriColStat.nullCount.get + leftRows)))
             }
           case _ =>
             assert(joinType == Inner || joinType == Cross)
@@ -191,8 +192,19 @@ case class JoinEstimation(join: Join) extends Logging {
       val rInterval = ValueInterval(rightKeyStat.min, rightKeyStat.max, rightKey.dataType)
       if (ValueInterval.isIntersected(lInterval, rInterval)) {
         val (newMin, newMax) = ValueInterval.intersect(lInterval, rInterval, leftKey.dataType)
-        val (card, joinStat) = computeByNdv(leftKey, rightKey, newMin, newMax)
-        keyStatsAfterJoin += (leftKey -> joinStat, rightKey -> joinStat)
+        val (card, joinStat) = (leftKeyStat.histogram, rightKeyStat.histogram) match {
+          case (Some(l: Histogram), Some(r: Histogram)) =>
+            computeByHistogram(leftKey, rightKey, l, r, newMin, newMax)
+          case _ =>
+            computeByNdv(leftKey, rightKey, newMin, newMax)
+        }
+        keyStatsAfterJoin += (
+          // Histograms are propagated as unchanged. During future estimation, they should be
+          // truncated by the updated max/min. In this way, only pointers of the histograms are
+          // propagated and thus reduce memory consumption.
+          leftKey -> joinStat.copy(histogram = leftKeyStat.histogram),
+          rightKey -> joinStat.copy(histogram = rightKeyStat.histogram)
+        )
         // Return cardinality estimated from the most selective join keys.
         if (card < joinCard) joinCard = card
       } else {
@@ -208,20 +220,73 @@ case class JoinEstimation(join: Join) extends Logging {
   private def computeByNdv(
       leftKey: AttributeReference,
       rightKey: AttributeReference,
-      newMin: Option[Any],
-      newMax: Option[Any]): (BigInt, ColumnStat) = {
+      min: Option[Any],
+      max: Option[Any]): (BigInt, ColumnStat) = {
     val leftKeyStat = leftStats.attributeStats(leftKey)
     val rightKeyStat = rightStats.attributeStats(rightKey)
-    val maxNdv = leftKeyStat.distinctCount.max(rightKeyStat.distinctCount)
+    val maxNdv = leftKeyStat.distinctCount.get.max(rightKeyStat.distinctCount.get)
     // Compute cardinality by the basic formula.
     val card = BigDecimal(leftStats.rowCount.get * rightStats.rowCount.get) / BigDecimal(maxNdv)
 
     // Get the intersected column stat.
-    val newNdv = leftKeyStat.distinctCount.min(rightKeyStat.distinctCount)
-    val newMaxLen = math.min(leftKeyStat.maxLen, rightKeyStat.maxLen)
-    val newAvgLen = (leftKeyStat.avgLen + rightKeyStat.avgLen) / 2
-    val newStats = ColumnStat(newNdv, newMin, newMax, 0, newAvgLen, newMaxLen)
+    val newNdv = Some(leftKeyStat.distinctCount.get.min(rightKeyStat.distinctCount.get))
+    val newMaxLen = if (leftKeyStat.maxLen.isDefined && rightKeyStat.maxLen.isDefined) {
+      Some(math.min(leftKeyStat.maxLen.get, rightKeyStat.maxLen.get))
+    } else {
+      None
+    }
+    val newAvgLen = if (leftKeyStat.avgLen.isDefined && rightKeyStat.avgLen.isDefined) {
+      Some((leftKeyStat.avgLen.get + rightKeyStat.avgLen.get) / 2)
+    } else {
+      None
+    }
+    val newStats = ColumnStat(newNdv, min, max, Some(0), newAvgLen, newMaxLen)
 
+    (ceil(card), newStats)
+  }
+
+  /** Compute join cardinality using equi-height histograms. */
+  private def computeByHistogram(
+      leftKey: AttributeReference,
+      rightKey: AttributeReference,
+      leftHistogram: Histogram,
+      rightHistogram: Histogram,
+      newMin: Option[Any],
+      newMax: Option[Any]): (BigInt, ColumnStat) = {
+    val overlappedRanges = getOverlappedRanges(
+      leftHistogram = leftHistogram,
+      rightHistogram = rightHistogram,
+      // Only numeric values have equi-height histograms.
+      lowerBound = newMin.get.toString.toDouble,
+      upperBound = newMax.get.toString.toDouble)
+
+    var card: BigDecimal = 0
+    var totalNdv: Double = 0
+    for (i <- overlappedRanges.indices) {
+      val range = overlappedRanges(i)
+      if (i == 0 || range.hi != overlappedRanges(i - 1).hi) {
+        // If range.hi == overlappedRanges(i - 1).hi, that means the current range has only one
+        // value, and this value is already counted in the previous range. So there is no need to
+        // count it in this range.
+        totalNdv += math.min(range.leftNdv, range.rightNdv)
+      }
+      // Apply the formula in this overlapped range.
+      card += range.leftNumRows * range.rightNumRows / math.max(range.leftNdv, range.rightNdv)
+    }
+
+    val leftKeyStat = leftStats.attributeStats(leftKey)
+    val rightKeyStat = rightStats.attributeStats(rightKey)
+    val newMaxLen = if (leftKeyStat.maxLen.isDefined && rightKeyStat.maxLen.isDefined) {
+      Some(math.min(leftKeyStat.maxLen.get, rightKeyStat.maxLen.get))
+    } else {
+      None
+    }
+    val newAvgLen = if (leftKeyStat.avgLen.isDefined && rightKeyStat.avgLen.isDefined) {
+      Some((leftKeyStat.avgLen.get + rightKeyStat.avgLen.get) / 2)
+    } else {
+      None
+    }
+    val newStats = ColumnStat(Some(ceil(totalNdv)), newMin, newMax, Some(0), newAvgLen, newMaxLen)
     (ceil(card), newStats)
   }
 
@@ -244,10 +309,14 @@ case class JoinEstimation(join: Join) extends Logging {
       } else {
         val oldColStat = oldAttrStats(a)
         val oldNdv = oldColStat.distinctCount
-        val newNdv = if (join.left.outputSet.contains(a)) {
-          updateNdv(oldNumRows = leftRows, newNumRows = outputRows, oldNdv = oldNdv)
+        val newNdv = if (oldNdv.isDefined) {
+          Some(if (join.left.outputSet.contains(a)) {
+            updateNdv(oldNumRows = leftRows, newNumRows = outputRows, oldNdv = oldNdv.get)
+          } else {
+            updateNdv(oldNumRows = rightRows, newNumRows = outputRows, oldNdv = oldNdv.get)
+          })
         } else {
-          updateNdv(oldNumRows = rightRows, newNumRows = outputRows, oldNdv = oldNdv)
+          None
         }
         val newColStat = oldColStat.copy(distinctCount = newNdv)
         // TODO: support nullCount updates for specific outer joins
@@ -265,7 +334,7 @@ case class JoinEstimation(join: Join) extends Logging {
       // Note: join keys from EqualNullSafe also fall into this case (Coalesce), consider to
       // support it in the future by using `nullCount` in column stats.
       case (lk: AttributeReference, rk: AttributeReference)
-        if columnStatsExist((leftStats, lk), (rightStats, rk)) => (lk, rk)
+        if columnStatsWithCountsExist((leftStats, lk), (rightStats, rk)) => (lk, rk)
     }
   }
 

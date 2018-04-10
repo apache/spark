@@ -17,26 +17,28 @@
 
 package org.apache.spark.sql.streaming
 
+import java.{util => ju}
+import java.util.Optional
 import java.util.concurrent.CountDownLatch
 
 import org.apache.commons.lang3.RandomStringUtils
-import org.mockito.Mockito._
 import org.scalactic.TolerantNumerics
 import org.scalatest.BeforeAndAfter
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.sources.TestForeachWriter
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.v2.reader.DataReaderFactory
+import org.apache.spark.sql.sources.v2.reader.streaming.{Offset => OffsetV2}
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.ManualClock
-
 
 class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging with MockitoSugar {
 
@@ -172,12 +174,12 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       StopStream, // clears out StreamTest state
       AssertOnQuery { q =>
         // both commit log and offset log contain the same (latest) batch id
-        q.batchCommitLog.getLatest().map(_._1).getOrElse(-1L) ==
+        q.commitLog.getLatest().map(_._1).getOrElse(-1L) ==
           q.offsetLog.getLatest().map(_._1).getOrElse(-2L)
       },
       AssertOnQuery { q =>
         // blow away commit log and sink result
-        q.batchCommitLog.purge(1)
+        q.commitLog.purge(1)
         q.sink.asInstanceOf[MemorySink].clear()
         true
       },
@@ -207,19 +209,29 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
 
     /** Custom MemoryStream that waits for manual clock to reach a time */
     val inputData = new MemoryStream[Int](0, sqlContext) {
-      // getOffset should take 50 ms the first time it is called
-      override def getOffset: Option[Offset] = {
-        val offset = super.getOffset
-        if (offset.nonEmpty) {
-          clock.waitTillTime(1050)
+
+      private def dataAdded: Boolean = currentOffset.offset != -1
+
+      // setOffsetRange should take 50 ms the first time it is called after data is added
+      override def setOffsetRange(start: Optional[OffsetV2], end: Optional[OffsetV2]): Unit = {
+        synchronized {
+          if (dataAdded) clock.waitTillTime(1050)
+          super.setOffsetRange(start, end)
         }
-        offset
+      }
+
+      // getEndOffset should take 100 ms the first time it is called after data is added
+      override def getEndOffset(): OffsetV2 = synchronized {
+        if (dataAdded) clock.waitTillTime(1150)
+        super.getEndOffset()
       }
 
       // getBatch should take 100 ms the first time it is called
-      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        if (start.isEmpty) clock.waitTillTime(1150)
-        super.getBatch(start, end)
+      override def createUnsafeRowReaderFactories(): ju.List[DataReaderFactory[UnsafeRow]] = {
+        synchronized {
+          clock.waitTillTime(1350)
+          super.createUnsafeRowReaderFactories()
+        }
       }
     }
 
@@ -259,39 +271,44 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
-      // Test status and progress while offset is being fetched
+      // Test status and progress when setOffsetRange is being called
       AddData(inputData, 1, 2),
-      AdvanceManualClock(1000), // time = 1000 to start new trigger, will block on getOffset
+      AdvanceManualClock(1000), // time = 1000 to start new trigger, will block on setOffsetRange
       AssertStreamExecThreadIsWaitingForTime(1050),
       AssertOnQuery(_.status.isDataAvailable === false),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message.startsWith("Getting offsets from")),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
-      // Test status and progress while batch is being fetched
-      AdvanceManualClock(50), // time = 1050 to unblock getOffset
+      AdvanceManualClock(50), // time = 1050 to unblock setOffsetRange
       AssertClockTime(1050),
-      AssertStreamExecThreadIsWaitingForTime(1150),      // will block on getBatch that needs 1150
+      AssertStreamExecThreadIsWaitingForTime(1150), // will block on getEndOffset that needs 1150
+      AssertOnQuery(_.status.isDataAvailable === false),
+      AssertOnQuery(_.status.isTriggerActive === true),
+      AssertOnQuery(_.status.message.startsWith("Getting offsets from")),
+      AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
+
+      AdvanceManualClock(100), // time = 1150 to unblock getEndOffset
+      AssertClockTime(1150),
+      AssertStreamExecThreadIsWaitingForTime(1350), // will block on createReadTasks that needs 1350
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message === "Processing new data"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
-      // Test status and progress while batch is being processed
-      AdvanceManualClock(100), // time = 1150 to unblock getBatch
-      AssertClockTime(1150),
-      AssertStreamExecThreadIsWaitingForTime(1500), // will block in Spark job that needs 1500
+      AdvanceManualClock(200), // time = 1350 to unblock createReadTasks
+      AssertClockTime(1350),
+      AssertStreamExecThreadIsWaitingForTime(1500), // will block on map task that needs 1500
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === true),
       AssertOnQuery(_.status.message === "Processing new data"),
       AssertOnQuery(_.recentProgress.count(_.numInputRows > 0) === 0),
 
       // Test status and progress while batch processing has completed
-      AssertOnQuery { _ => clock.getTimeMillis() === 1150 },
-      AdvanceManualClock(350), // time = 1500 to unblock job
+      AdvanceManualClock(150), // time = 1500 to unblock map task
       AssertClockTime(1500),
       CheckAnswer(2),
-      AssertStreamExecThreadIsWaitingForTime(2000),
+      AssertStreamExecThreadIsWaitingForTime(2000),  // will block until the next trigger
       AssertOnQuery(_.status.isDataAvailable === true),
       AssertOnQuery(_.status.isTriggerActive === false),
       AssertOnQuery(_.status.message === "Waiting for next trigger"),
@@ -308,10 +325,11 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         assert(progress.numInputRows === 2)
         assert(progress.processedRowsPerSecond === 4.0)
 
-        assert(progress.durationMs.get("getOffset") === 50)
-        assert(progress.durationMs.get("getBatch") === 100)
-        assert(progress.durationMs.get("queryPlanning") === 0)
+        assert(progress.durationMs.get("setOffsetRange") === 50)
+        assert(progress.durationMs.get("getEndOffset") === 100)
+        assert(progress.durationMs.get("queryPlanning") === 200)
         assert(progress.durationMs.get("walCommit") === 0)
+        assert(progress.durationMs.get("addBatch") === 150)
         assert(progress.durationMs.get("triggerExecution") === 500)
 
         assert(progress.sources.length === 1)
@@ -425,6 +443,29 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
+  test("SPARK-22975: MetricsReporter defaults when there was no progress reported") {
+    withSQLConf("spark.sql.streaming.metricsEnabled" -> "true") {
+      BlockingSource.latch = new CountDownLatch(1)
+      withTempDir { tempDir =>
+        val sq = spark.readStream
+          .format("org.apache.spark.sql.streaming.util.BlockingSource")
+          .load()
+          .writeStream
+          .format("org.apache.spark.sql.streaming.util.BlockingSource")
+          .option("checkpointLocation", tempDir.toString)
+          .start()
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
+
+        val gauges = sq.streamMetrics.metricRegistry.getGauges
+        assert(gauges.get("latency").getValue.asInstanceOf[Long] == 0)
+        assert(gauges.get("processingRate-total").getValue.asInstanceOf[Double] == 0.0)
+        assert(gauges.get("inputRate-total").getValue.asInstanceOf[Double] == 0.0)
+        sq.stop()
+      }
+    }
+  }
+
   test("input row calculation with mixed batch and streaming sources") {
     val streamingTriggerDF = spark.createDataset(1 to 10).toDF
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
@@ -510,22 +551,22 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         .start()
     }
 
-    val input = MemoryStream[Int]
-    val q1 = startQuery(input.toDS, "stream_serializable_test_1")
-    val q2 = startQuery(input.toDS.map { i =>
+    val input = MemoryStream[Int] :: MemoryStream[Int] :: MemoryStream[Int] :: Nil
+    val q1 = startQuery(input(0).toDS, "stream_serializable_test_1")
+    val q2 = startQuery(input(1).toDS.map { i =>
       // Emulate that `StreamingQuery` get captured with normal usage unintentionally.
       // It should not fail the query.
       q1
       i
     }, "stream_serializable_test_2")
-    val q3 = startQuery(input.toDS.map { i =>
+    val q3 = startQuery(input(2).toDS.map { i =>
       // Emulate that `StreamingQuery` is used in executors. We should fail the query with a clear
       // error message.
       q1.explain()
       i
     }, "stream_serializable_test_3")
     try {
-      input.addData(1)
+      input.foreach(_.addData(1))
 
       // q2 should not fail since it doesn't use `q1` in the closure
       q2.processAllAvailable()

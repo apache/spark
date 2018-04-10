@@ -64,15 +64,26 @@ private[spark] class HadoopDelegationTokenManager(
   }
 
   private def getDelegationTokenProviders: Map[String, HadoopDelegationTokenProvider] = {
-    val providers = List(new HadoopFSDelegationTokenProvider(fileSystems),
-      new HiveDelegationTokenProvider,
-      new HBaseDelegationTokenProvider)
+    val providers = Seq(new HadoopFSDelegationTokenProvider(fileSystems)) ++
+      safeCreateProvider(new HiveDelegationTokenProvider) ++
+      safeCreateProvider(new HBaseDelegationTokenProvider)
 
     // Filter out providers for which spark.security.credentials.{service}.enabled is false.
     providers
       .filter { p => isServiceEnabled(p.serviceName) }
       .map { p => (p.serviceName, p) }
       .toMap
+  }
+
+  private def safeCreateProvider(
+      createFn: => HadoopDelegationTokenProvider): Option[HadoopDelegationTokenProvider] = {
+    try {
+      Some(createFn)
+    } catch {
+      case t: Throwable =>
+        logDebug(s"Failed to load built in provider.", t)
+        None
+    }
   }
 
   def isServiceEnabled(serviceName: String): Boolean = {
@@ -109,6 +120,8 @@ private[spark] class HadoopDelegationTokenManager(
    * Writes delegation tokens to creds.  Delegation tokens are fetched from all registered
    * providers.
    *
+   * @param hadoopConf hadoop Configuration
+   * @param creds Credentials that will be updated in place (overwritten)
    * @return Time after which the fetched delegation tokens should be renewed.
    */
   def obtainDelegationTokens(
@@ -125,3 +138,4 @@ private[spark] class HadoopDelegationTokenManager(
     }.foldLeft(Long.MaxValue)(math.min)
   }
 }
+

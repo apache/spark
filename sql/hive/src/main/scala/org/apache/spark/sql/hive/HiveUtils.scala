@@ -47,7 +47,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, WAREHOUSE_PATH}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ChildFirstURLClassLoader, Utils}
 
 
 private[spark] object HiveUtils extends Logging {
@@ -62,7 +62,7 @@ private[spark] object HiveUtils extends Logging {
 
   val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
-        s"<code>0.12.0</code> through <code>2.1.1</code>.")
+        s"<code>0.12.0</code> through <code>2.3.2</code>.")
     .stringConf
     .createWithDefault(builtinHiveVersion)
 
@@ -304,7 +304,7 @@ private[spark] object HiveUtils extends Logging {
         throw new IllegalArgumentException(
           "Builtin jars can only be used when hive execution version == hive metastore version. " +
             s"Execution: $builtinHiveVersion != Metastore: $hiveMetastoreVersion. " +
-            "Specify a vaild path to the correct hive jars using $HIVE_METASTORE_JARS " +
+            s"Specify a valid path to the correct hive jars using ${HIVE_METASTORE_JARS.key} " +
             s"or change ${HIVE_METASTORE_VERSION.key} to $builtinHiveVersion.")
       }
 
@@ -312,6 +312,8 @@ private[spark] object HiveUtils extends Logging {
       // starting from the given classLoader.
       def allJars(classLoader: ClassLoader): Array[URL] = classLoader match {
         case null => Array.empty[URL]
+        case childFirst: ChildFirstURLClassLoader =>
+          childFirst.getURLs() ++ allJars(Utils.getSparkClassLoader)
         case urlClassLoader: URLClassLoader =>
           urlClassLoader.getURLs ++ allJars(urlClassLoader.getParent)
         case other => allJars(other.getParent)
@@ -322,7 +324,7 @@ private[spark] object HiveUtils extends Logging {
       if (jars.length == 0) {
         throw new IllegalArgumentException(
           "Unable to locate hive jars to connect to metastore. " +
-            "Please set spark.sql.hive.metastore.jars.")
+            s"Please set ${HIVE_METASTORE_JARS.key}.")
       }
 
       logInfo(
@@ -458,6 +460,7 @@ private[spark] object HiveUtils extends Logging {
     case (decimal: java.math.BigDecimal, DecimalType()) =>
       // Hive strips trailing zeros so use its toString
       HiveDecimal.create(decimal).toString
+    case (other, _ : UserDefinedType[_]) => other.toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
 

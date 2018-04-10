@@ -19,7 +19,16 @@ package org.apache.spark.sql.hive.execution
 
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
+import org.apache.hadoop.hive.ql.plan.TableDesc
+import org.apache.orc.OrcConf.COMPRESS
+import org.apache.parquet.hadoop.ParquetOutputFormat
+
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.execution.datasources.orc.OrcOptions
+import org.apache.spark.sql.execution.datasources.parquet.ParquetOptions
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for the Hive data source. Note that rule `DetermineHiveSerde` will extract Hive
@@ -102,4 +111,17 @@ object HiveOptions {
     "collectionDelim" -> "colelction.delim",
     "mapkeyDelim" -> "mapkey.delim",
     "lineDelim" -> "line.delim").map { case (k, v) => k.toLowerCase(Locale.ROOT) -> v }
+
+  def getHiveWriteCompression(tableInfo: TableDesc, sqlConf: SQLConf): Option[(String, String)] = {
+    val tableProps = tableInfo.getProperties.asScala.toMap
+    tableInfo.getOutputFileFormatClassName.toLowerCase(Locale.ROOT) match {
+      case formatName if formatName.endsWith("parquetoutputformat") =>
+        val compressionCodec = new ParquetOptions(tableProps, sqlConf).compressionCodecClassName
+        Option((ParquetOutputFormat.COMPRESSION, compressionCodec))
+      case formatName if formatName.endsWith("orcoutputformat") =>
+        val compressionCodec = new OrcOptions(tableProps, sqlConf).compressionCodec
+        Option((COMPRESS.getAttribute, compressionCodec))
+      case _ => None
+    }
+  }
 }

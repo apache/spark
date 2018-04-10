@@ -15,8 +15,10 @@
 # limitations under the License.
 #
 import itertools
-import numpy as np
+import sys
 from multiprocessing.pool import ThreadPool
+
+import numpy as np
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
@@ -29,6 +31,29 @@ from pyspark.sql.functions import rand
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
            'TrainValidationSplitModel']
+
+
+def _parallelFitTasks(est, train, eva, validation, epm, collectSubModel):
+    """
+    Creates a list of callables which can be called from different threads to fit and evaluate
+    an estimator in parallel. Each callable returns an `(index, metric)` pair.
+
+    :param est: Estimator, the estimator to be fit.
+    :param train: DataFrame, training data set, used for fitting.
+    :param eva: Evaluator, used to compute `metric`
+    :param validation: DataFrame, validation data set, used for evaluation.
+    :param epm: Sequence of ParamMap, params maps to be used during fitting & evaluation.
+    :param collectSubModel: Whether to collect sub model.
+    :return: (int, float, subModel), an index into `epm` and the associated metric value.
+    """
+    modelIter = est.fitMultiple(train, epm)
+
+    def singleTask():
+        index, model = next(modelIter)
+        metric = eva.evaluate(model.transform(validation, epm[index]))
+        return index, metric, model if collectSubModel else None
+
+    return [singleTask] * len(epm)
 
 
 class ParamGridBuilder(object):
@@ -271,18 +296,12 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
             validation = df.filter(condition).cache()
             train = df.filter(~condition).cache()
 
-            def singleTrain(paramMapIndex):
-                paramMap = epm[paramMapIndex]
-                model = est.fit(train, paramMap)
+            tasks = _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam)
+            for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
+                metrics[j] += (metric / nFolds)
                 if collectSubModelsParam:
-                    subModels[i][paramMapIndex] = model
-                # TODO: duplicate evaluator to take extra params from input
-                metric = eva.evaluate(model.transform(validation, paramMap))
-                return metric
+                    subModels[i][j] = subModel
 
-            currentFoldMetrics = pool.map(singleTrain, range(numModels))
-            for j in range(numModels):
-                metrics[j] += (currentFoldMetrics[j] / nFolds)
             validation.unpersist()
             train.unpersist()
 
@@ -549,16 +568,14 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
         if collectSubModelsParam:
             subModels = [None for i in range(numModels)]
 
-        def singleTrain(paramMapIndex):
-            paramMap = epm[paramMapIndex]
-            model = est.fit(train, paramMap)
-            if collectSubModelsParam:
-                subModels[paramMapIndex] = model
-            metric = eva.evaluate(model.transform(validation, paramMap))
-            return metric
-
+        tasks = _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam)
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
-        metrics = pool.map(singleTrain, range(numModels))
+        metrics = [None] * numModels
+        for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
+            metrics[j] = metric
+            if collectSubModelsParam:
+                subModels[j] = subModel
+
         train.unpersist()
         validation.unpersist()
 
@@ -753,4 +770,4 @@ if __name__ == "__main__":
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

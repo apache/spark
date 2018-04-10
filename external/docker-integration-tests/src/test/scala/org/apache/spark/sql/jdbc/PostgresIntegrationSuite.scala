@@ -151,6 +151,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
 
   test("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE " +
     "should be recognized") {
+    // When using JDBC to read the columns of TIMESTAMP with TIME ZONE and TIME with TIME ZONE
+    // the actual types are java.sql.Types.TIMESTAMP and java.sql.Types.TIME
     val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
     val rows = dfRead.collect()
     val types = rows(0).toSeq.map(x => x.getClass.toString)

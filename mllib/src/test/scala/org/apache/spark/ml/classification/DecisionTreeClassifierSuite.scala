@@ -21,17 +21,16 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode, LeafNode}
+import org.apache.spark.ml.tree.ClassificationLeafNode
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
-import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree,
+  DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
-class DecisionTreeClassifierSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class DecisionTreeClassifierSuite extends MLTest with DefaultReadWriteTest {
 
   import DecisionTreeClassifierSuite.compareAPIs
   import testImplicits._
@@ -62,7 +61,8 @@ class DecisionTreeClassifierSuite
 
   test("params") {
     ParamsSuite.checkParams(new DecisionTreeClassifier)
-    val model = new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 1, 2)
+    val model = new DecisionTreeClassificationModel("dtc",
+      new ClassificationLeafNode(0.0, 0.0, null), 1, 2)
     ParamsSuite.checkParams(model)
   }
 
@@ -251,20 +251,33 @@ class DecisionTreeClassifierSuite
 
     MLTestingUtils.checkCopyAndUids(dt, newTree)
 
-    val predictions = newTree.transform(newData)
-      .select(newTree.getPredictionCol, newTree.getRawPredictionCol, newTree.getProbabilityCol)
-      .collect()
-
-    predictions.foreach { case Row(pred: Double, rawPred: Vector, probPred: Vector) =>
-      assert(pred === rawPred.argmax,
-        s"Expected prediction $pred but calculated ${rawPred.argmax} from rawPrediction.")
-      val sum = rawPred.toArray.sum
-      assert(Vectors.dense(rawPred.toArray.map(_ / sum)) === probPred,
-        "probability prediction mismatch")
+    testTransformer[(Vector, Double)](newData, newTree,
+      "prediction", "rawPrediction", "probability") {
+      case Row(pred: Double, rawPred: Vector, probPred: Vector) =>
+        assert(pred === rawPred.argmax,
+          s"Expected prediction $pred but calculated ${rawPred.argmax} from rawPrediction.")
+        val sum = rawPred.toArray.sum
+        assert(Vectors.dense(rawPred.toArray.map(_ / sum)) === probPred,
+          "probability prediction mismatch")
     }
 
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, DecisionTreeClassificationModel](newTree, newData)
+      Vector, DecisionTreeClassificationModel](this, newTree, newData)
+  }
+
+  test("prediction on single instance") {
+    val rdd = continuousDataPointsForMulticlassRDD
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(4)
+      .setMaxBins(100)
+    val categoricalFeatures = Map(0 -> 3)
+    val numClasses = 3
+
+    val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val newTree = dt.fit(newData)
+
+    testPredictionModelSinglePrediction(newTree, newData)
   }
 
   test("training with 1-category categorical feature") {
@@ -278,44 +291,6 @@ class DecisionTreeClassifierSuite
     val df = TreeTests.setMetadata(data, Map(0 -> 1), 2)
     val dt = new DecisionTreeClassifier().setMaxDepth(3)
     dt.fit(df)
-  }
-
-  test("Use soft prediction for binary classification with ordered categorical features") {
-    // The following dataset is set up such that the best split is {1} vs. {0, 2}.
-    // If the hard prediction is used to order the categories, then {0} vs. {1, 2} is chosen.
-    val arr = Array(
-      LabeledPoint(0.0, Vectors.dense(0.0)),
-      LabeledPoint(0.0, Vectors.dense(0.0)),
-      LabeledPoint(0.0, Vectors.dense(0.0)),
-      LabeledPoint(1.0, Vectors.dense(0.0)),
-      LabeledPoint(0.0, Vectors.dense(1.0)),
-      LabeledPoint(0.0, Vectors.dense(1.0)),
-      LabeledPoint(0.0, Vectors.dense(1.0)),
-      LabeledPoint(0.0, Vectors.dense(1.0)),
-      LabeledPoint(0.0, Vectors.dense(2.0)),
-      LabeledPoint(0.0, Vectors.dense(2.0)),
-      LabeledPoint(0.0, Vectors.dense(2.0)),
-      LabeledPoint(1.0, Vectors.dense(2.0)))
-    val data = sc.parallelize(arr)
-    val df = TreeTests.setMetadata(data, Map(0 -> 3), 2)
-
-    // Must set maxBins s.t. the feature will be treated as an ordered categorical feature.
-    val dt = new DecisionTreeClassifier()
-      .setImpurity("gini")
-      .setMaxDepth(1)
-      .setMaxBins(3)
-    val model = dt.fit(df)
-    model.rootNode match {
-      case n: InternalNode =>
-        n.split match {
-          case s: CategoricalSplit =>
-            assert(s.leftCategories === Array(1.0))
-          case other =>
-            fail(s"All splits should be categorical, but got ${other.getClass.getName}: $other.")
-        }
-      case other =>
-        fail(s"Root node should be an internal node, but got ${other.getClass.getName}: $other.")
-    }
   }
 
   test("Feature importance with toy data") {
@@ -400,6 +375,32 @@ class DecisionTreeClassifierSuite
     val model = dt.fit(data)
 
     testDefaultReadWrite(model)
+  }
+
+  test("label/impurity stats") {
+    val arr = Array(
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 0.0)))),
+      LabeledPoint(1.0, Vectors.sparse(2, Seq((1, 1.0)))),
+      LabeledPoint(0.0, Vectors.sparse(2, Seq((0, 1.0)))))
+    val rdd = sc.parallelize(arr)
+    val df = TreeTests.setMetadata(rdd, Map.empty[Int, Int], 2)
+    val dt1 = new DecisionTreeClassifier()
+      .setImpurity("entropy")
+      .setMaxDepth(2)
+      .setMinInstancesPerNode(2)
+    val model1 = dt1.fit(df)
+
+    val rootNode1 = model1.rootNode
+    assert(Array(rootNode1.getLabelCount(0), rootNode1.getLabelCount(1)) === Array(2.0, 1.0))
+
+    val dt2 = new DecisionTreeClassifier()
+      .setImpurity("gini")
+      .setMaxDepth(2)
+      .setMinInstancesPerNode(2)
+    val model2 = dt2.fit(df)
+
+    val rootNode2 = model2.rootNode
+    assert(Array(rootNode2.getLabelCount(0), rootNode2.getLabelCount(1)) === Array(2.0, 1.0))
   }
 }
 

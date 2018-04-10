@@ -25,7 +25,7 @@ import java.net._
 import java.nio.ByteBuffer
 import java.nio.channels.{Channels, FileChannel}
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Paths}
+import java.nio.file.Files
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicBoolean
@@ -50,17 +50,18 @@ import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.security.UserGroupInformation
-import org.apache.log4j.PropertyConfigurator
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.eclipse.jetty.util.MultiException
-import org.json4s._
 import org.slf4j.Logger
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+import org.apache.spark.status.api.v1.{StackTrace, ThreadStackTrace}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
 private[spark] case class CallSite(shortForm: String, longForm: String)
@@ -670,7 +671,6 @@ private[spark] object Utils extends Logging {
           logDebug("fetchFile not using security")
           uc = new URL(url).openConnection()
         }
-        Utils.setupSecureURLConnection(uc, securityMgr)
 
         val timeoutMs =
           conf.getTimeAsSeconds("spark.files.fetchTimeout", "60s").toInt * 1000
@@ -827,7 +827,18 @@ private[spark] object Utils extends Logging {
   }
 
   private def getOrCreateLocalRootDirsImpl(conf: SparkConf): Array[String] = {
-    getConfiguredLocalDirs(conf).flatMap { root =>
+    val configuredLocalDirs = getConfiguredLocalDirs(conf)
+    val uris = configuredLocalDirs.filter { root =>
+      // Here, we guess if the given value is a URI at its best - check if scheme is set.
+      Try(new URI(root).getScheme != null).getOrElse(false)
+    }
+    if (uris.nonEmpty) {
+      logWarning(
+        "The configured local directories are not expected to be URIs; however, got suspicious " +
+        s"values [${uris.mkString(", ")}]. Please check your configured local directories.")
+    }
+
+    configuredLocalDirs.flatMap { root =>
       try {
         val rootDir = new File(root)
         if (rootDir.exists || rootDir.mkdirs()) {
@@ -1004,68 +1015,16 @@ private[spark] object Utils extends Logging {
     " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
-  private def listFilesSafely(file: File): Seq[File] = {
-    if (file.exists()) {
-      val files = file.listFiles()
-      if (files == null) {
-        throw new IOException("Failed to list files for dir: " + file)
-      }
-      files
-    } else {
-      List()
-    }
-  }
-
-  /**
-   * Lists files recursively.
-   */
-  def recursiveList(f: File): Array[File] = {
-    require(f.isDirectory)
-    val current = f.listFiles
-    current ++ current.filter(_.isDirectory).flatMap(recursiveList)
-  }
-
   /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
    * Throws an exception if deletion is unsuccessful.
    */
-  def deleteRecursively(file: File) {
+  def deleteRecursively(file: File): Unit = {
     if (file != null) {
-      try {
-        if (file.isDirectory && !isSymlink(file)) {
-          var savedIOException: IOException = null
-          for (child <- listFilesSafely(file)) {
-            try {
-              deleteRecursively(child)
-            } catch {
-              // In case of multiple exceptions, only last one will be thrown
-              case ioe: IOException => savedIOException = ioe
-            }
-          }
-          if (savedIOException != null) {
-            throw savedIOException
-          }
-          ShutdownHookManager.removeShutdownDeleteDir(file)
-        }
-      } finally {
-        if (file.delete()) {
-          logTrace(s"${file.getAbsolutePath} has been deleted")
-        } else {
-          // Delete can also fail if the file simply did not exist
-          if (file.exists()) {
-            throw new IOException("Failed to delete: " + file.getAbsolutePath)
-          }
-        }
-      }
+      JavaUtils.deleteRecursively(file)
+      ShutdownHookManager.removeShutdownDeleteDir(file)
     }
-  }
-
-  /**
-   * Check to see if file is a symbolic link.
-   */
-  def isSymlink(file: File): Boolean = {
-    return Files.isSymbolicLink(Paths.get(file.toURI))
   }
 
   /**
@@ -1815,7 +1774,7 @@ private[spark] object Utils extends Logging {
    * [[scala.collection.Iterator#size]] because it uses a for loop, which is slightly slower
    * in the current version of Scala.
    */
-  def getIteratorSize[T](iterator: Iterator[T]): Long = {
+  def getIteratorSize(iterator: Iterator[_]): Long = {
     var count = 0L
     while (iterator.hasNext) {
       count += 1L
@@ -1862,17 +1821,6 @@ private[spark] object Utils extends Logging {
     obj.getClass.getSimpleName.replace("$", "")
   }
 
-  /** Return an option that translates JNothing to None */
-  def jsonOption(json: JValue): Option[JValue] = {
-    json match {
-      case JNothing => None
-      case value: JValue => Some(value)
-    }
-  }
-
-  /** Return an empty JSON object */
-  def emptyJson: JsonAST.JObject = JObject(List[JField]())
-
   /**
    * Return a Hadoop FileSystem with the scheme encoded in the given path.
    */
@@ -1885,15 +1833,6 @@ private[spark] object Utils extends Logging {
    */
   def getHadoopFileSystem(path: String, conf: Configuration): FileSystem = {
     getHadoopFileSystem(new URI(path), conf)
-  }
-
-  /**
-   * Return the absolute path of a file in the given directory.
-   */
-  def getFilePath(dir: File, fileName: String): Path = {
-    assert(dir.isDirectory)
-    val path = new File(dir, fileName).getAbsolutePath
-    new Path(path)
   }
 
   /**
@@ -1916,13 +1855,6 @@ private[spark] object Utils extends Logging {
    */
   def isTesting: Boolean = {
     sys.env.contains("SPARK_TESTING") || sys.props.contains("spark.testing")
-  }
-
-  /**
-   * Strip the directory from a path name
-   */
-  def stripDirectory(path: String): String = {
-    new File(path).getName
   }
 
   /**
@@ -2155,7 +2087,22 @@ private[spark] object Utils extends Logging {
     // We need to filter out null values here because dumpAllThreads() may return null array
     // elements for threads that are dead / don't exist.
     val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
-    threadInfos.sortBy(_.getThreadId).map(threadInfoToThreadStackTrace)
+    threadInfos.sortWith { case (threadTrace1, threadTrace2) =>
+        val v1 = if (threadTrace1.getThreadName.contains("Executor task launch")) 1 else 0
+        val v2 = if (threadTrace2.getThreadName.contains("Executor task launch")) 1 else 0
+        if (v1 == v2) {
+          val name1 = threadTrace1.getThreadName().toLowerCase(Locale.ROOT)
+          val name2 = threadTrace2.getThreadName().toLowerCase(Locale.ROOT)
+          val nameCmpRes = name1.compareTo(name2)
+          if (nameCmpRes == 0) {
+            threadTrace1.getThreadId < threadTrace2.getThreadId
+          } else {
+            nameCmpRes < 0
+          }
+        } else {
+          v1 > v2
+        }
+    }.map(threadInfoToThreadStackTrace)
   }
 
   def getThreadDumpForThread(threadId: Long): Option[ThreadStackTrace] = {
@@ -2171,14 +2118,14 @@ private[spark] object Utils extends Logging {
 
   private def threadInfoToThreadStackTrace(threadInfo: ThreadInfo): ThreadStackTrace = {
     val monitors = threadInfo.getLockedMonitors.map(m => m.getLockedStackFrame -> m).toMap
-    val stackTrace = threadInfo.getStackTrace.map { frame =>
+    val stackTrace = StackTrace(threadInfo.getStackTrace.map { frame =>
       monitors.get(frame) match {
         case Some(monitor) =>
           monitor.getLockedStackFrame.toString + s" => holding ${monitor.lockString}"
         case None =>
           frame.toString
       }
-    }.mkString("\n")
+    })
 
     // use a set to dedup re-entrant locks that are held at multiple places
     val heldLocks =
@@ -2321,50 +2268,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * config a log4j properties used for testsuite
-   */
-  def configTestLog4j(level: String): Unit = {
-    val pro = new Properties()
-    pro.put("log4j.rootLogger", s"$level, console")
-    pro.put("log4j.appender.console", "org.apache.log4j.ConsoleAppender")
-    pro.put("log4j.appender.console.target", "System.err")
-    pro.put("log4j.appender.console.layout", "org.apache.log4j.PatternLayout")
-    pro.put("log4j.appender.console.layout.ConversionPattern",
-      "%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n")
-    PropertyConfigurator.configure(pro)
-  }
-
-  /**
-   * If the given URL connection is HttpsURLConnection, it sets the SSL socket factory and
-   * the host verifier from the given security manager.
-   */
-  def setupSecureURLConnection(urlConnection: URLConnection, sm: SecurityManager): URLConnection = {
-    urlConnection match {
-      case https: HttpsURLConnection =>
-        sm.sslSocketFactory.foreach(https.setSSLSocketFactory)
-        sm.hostnameVerifier.foreach(https.setHostnameVerifier)
-        https
-      case connection => connection
-    }
-  }
-
-  def invoke(
-      clazz: Class[_],
-      obj: AnyRef,
-      methodName: String,
-      args: (Class[_], AnyRef)*): AnyRef = {
-    val (types, values) = args.unzip
-    val method = clazz.getDeclaredMethod(methodName, types: _*)
-    method.setAccessible(true)
-    method.invoke(obj, values.toSeq: _*)
-  }
-
-  // Limit of bytes for total size of results (default is 1GB)
-  def getMaxResultSize(conf: SparkConf): Long = {
-    memoryStringToMb(conf.get("spark.driver.maxResultSize", "1g")).toLong << 20
-  }
-
-  /**
    * Return the current system LD_LIBRARY_PATH name
    */
   def libraryPathEnvName: String = {
@@ -2399,16 +2302,20 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Return the value of a config either through the SparkConf or the Hadoop configuration
-   * if this is Yarn mode. In the latter case, this defaults to the value set through SparkConf
-   * if the key is not set in the Hadoop configuration.
+   * Return the value of a config either through the SparkConf or the Hadoop configuration.
+   * We Check whether the key is set in the SparkConf before look at any Hadoop configuration.
+   * If the key is set in SparkConf, no matter whether it is running on YARN or not,
+   * gets the value from SparkConf.
+   * Only when the key is not set in SparkConf and running on YARN,
+   * gets the value from Hadoop configuration.
    */
   def getSparkOrYarnConfig(conf: SparkConf, key: String, default: String): String = {
-    val sparkValue = conf.get(key, default)
-    if (SparkHadoopUtil.get.isYarnMode) {
-      SparkHadoopUtil.get.newConfiguration(conf).get(key, sparkValue)
+    if (conf.contains(key)) {
+      conf.get(key, default)
+    } else if (conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn") {
+      new YarnConfiguration(SparkHadoopUtil.get.newConfiguration(conf)).get(key, default)
     } else {
-      sparkValue
+      default
     }
   }
 
@@ -2597,16 +2504,6 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Unions two comma-separated lists of files and filters out empty strings.
-   */
-  def unionFileLists(leftList: Option[String], rightList: Option[String]): Set[String] = {
-    var allFiles = Set.empty[String]
-    leftList.foreach { value => allFiles ++= value.split(",") }
-    rightList.foreach { value => allFiles ++= value.split(",") }
-    allFiles.filter { _.nonEmpty }
-  }
-
-  /**
    * Return the jar files pointed by the "spark.jars" property. Spark internally will distribute
    * these jars through file server. In the YARN mode, it will return an empty list, since YARN
    * has its own mechanism to distribute jars.
@@ -2638,14 +2535,28 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Redact the sensitive values in the given map. If a map key matches the redaction pattern then
+   * its value is replaced with a dummy text.
+   */
+  def redact(regex: Option[Regex], kvs: Seq[(String, String)]): Seq[(String, String)] = {
+    regex match {
+      case None => kvs
+      case Some(r) => redact(r, kvs)
+    }
+  }
+
+  /**
    * Redact the sensitive information in the given string.
    */
-  def redact(conf: SparkConf, text: String): String = {
-    if (text == null || text.isEmpty || conf == null || !conf.contains(STRING_REDACTION_PATTERN)) {
-      text
-    } else {
-      val regex = conf.get(STRING_REDACTION_PATTERN).get
-      regex.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+  def redact(regex: Option[Regex], text: String): String = {
+    regex match {
+      case None => text
+      case Some(r) =>
+        if (text == null || text.isEmpty) {
+          text
+        } else {
+          r.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+        }
     }
   }
 
@@ -2742,6 +2653,42 @@ private[spark] object Utils extends Logging {
     }
   }
 
+  /**
+   * Check the validity of the given Kubernetes master URL and return the resolved URL. Prefix
+   * "k8s://" is appended to the resolved URL as the prefix is used by KubernetesClusterManager
+   * in canCreate to determine if the KubernetesClusterManager should be used.
+   */
+  def checkAndGetK8sMasterUrl(rawMasterURL: String): String = {
+    require(rawMasterURL.startsWith("k8s://"),
+      "Kubernetes master URL must start with k8s://.")
+    val masterWithoutK8sPrefix = rawMasterURL.substring("k8s://".length)
+
+    // To handle master URLs, e.g., k8s://host:port.
+    if (!masterWithoutK8sPrefix.contains("://")) {
+      val resolvedURL = s"https://$masterWithoutK8sPrefix"
+      logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
+        s"URL is $resolvedURL.")
+      return s"k8s://$resolvedURL"
+    }
+
+    val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
+    val resolvedURL = masterScheme.toLowerCase match {
+      case "https" =>
+        masterWithoutK8sPrefix
+      case "http" =>
+        logWarning("Kubernetes master URL uses HTTP instead of HTTPS.")
+        masterWithoutK8sPrefix
+      case null =>
+        val resolvedURL = s"https://$masterWithoutK8sPrefix"
+        logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
+          s"URL is $resolvedURL.")
+        resolvedURL
+      case _ =>
+        throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme)
+    }
+
+    s"k8s://$resolvedURL"
+  }
 }
 
 private[util] object CallerContext extends Logging {

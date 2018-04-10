@@ -20,7 +20,7 @@ import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
@@ -54,8 +54,8 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
     ev.copy(code = s"""
       boolean ${ev.isNull} = false;
       ${childGen.code}
-      ${ctx.javaType(dataType)} ${ev.value} = ${childGen.isNull} ? -1 :
-        (${childGen.value}).numElements();""", isNull = "false")
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${childGen.isNull} ? -1 :
+        (${childGen.value}).numElements();""", isNull = FalseLiteral)
   }
 }
 
@@ -270,7 +270,7 @@ case class ArrayContains(left: Expression, right: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (arr, value) => {
       val i = ctx.freshName("i")
-      val getValue = ctx.getValue(arr, right.dataType, i)
+      val getValue = CodeGenerator.getValue(arr, right.dataType, i)
       s"""
       for (int $i = 0; $i < $arr.numElements(); $i ++) {
         if ($arr.isNullAt($i)) {

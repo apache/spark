@@ -48,7 +48,7 @@ import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.{SparkApplication, SparkHadoopUtil}
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
@@ -58,18 +58,14 @@ import org.apache.spark.util.{CallerContext, Utils}
 
 private[spark] class Client(
     val args: ClientArguments,
-    val hadoopConf: Configuration,
     val sparkConf: SparkConf)
   extends Logging {
 
   import Client._
   import YarnSparkHadoopUtil._
 
-  def this(clientArgs: ClientArguments, spConf: SparkConf) =
-    this(clientArgs, SparkHadoopUtil.get.newConfiguration(spConf), spConf)
-
   private val yarnClient = YarnClient.createYarnClient
-  private val yarnConf = new YarnConfiguration(hadoopConf)
+  private val hadoopConf = new YarnConfiguration(SparkHadoopUtil.newConfiguration(sparkConf))
 
   private val isClusterMode = sparkConf.get("spark.submit.deployMode", "client") == "cluster"
 
@@ -97,13 +93,25 @@ private[spark] class Client(
 
   private val distCacheMgr = new ClientDistributedCacheManager()
 
-  private var loginFromKeytab = false
-  private var principal: String = null
-  private var keytab: String = null
-  private var credentials: Credentials = null
-  private var amKeytabFileName: String = null
+  private val principal = sparkConf.get(PRINCIPAL).orNull
+  private val keytab = sparkConf.get(KEYTAB).orNull
+  private val loginFromKeytab = principal != null
+  private val amKeytabFileName: String = {
+    require((principal == null) == (keytab == null),
+      "Both principal and keytab must be defined, or neither.")
+    if (loginFromKeytab) {
+      logInfo(s"Kerberos credentials: principal = $principal, keytab = $keytab")
+      // Generate a file name that can be used for the keytab file, that does not conflict
+      // with any user file.
+      new File(keytab).getName() + "-" + UUID.randomUUID().toString
+    } else {
+      null
+    }
+  }
 
   private val launcherBackend = new LauncherBackend() {
+    override protected def conf: SparkConf = sparkConf
+
     override def onStopRequest(): Unit = {
       if (isClusterMode && appId != null) {
         yarnClient.killApplication(appId)
@@ -122,11 +130,6 @@ private[spark] class Client(
   private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
     .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
 
-  private val credentialManager = new YARNHadoopDelegationTokenManager(
-    sparkConf,
-    hadoopConf,
-    conf => YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, conf))
-
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
   }
@@ -134,8 +137,6 @@ private[spark] class Client(
   def stop(): Unit = {
     launcherBackend.close()
     yarnClient.stop()
-    // Unset YARN mode system env variable, to allow switching between cluster types.
-    System.clearProperty("SPARK_YARN_MODE")
   }
 
   /**
@@ -149,10 +150,7 @@ private[spark] class Client(
     var appId: ApplicationId = null
     try {
       launcherBackend.connect()
-      // Setup the credentials before doing anything else,
-      // so we have don't have issues at any point.
-      setupCredentials()
-      yarnClient.init(yarnConf)
+      yarnClient.init(hadoopConf)
       yarnClient.start()
 
       logInfo("Requesting a new application from cluster with %d NodeManagers"
@@ -292,8 +290,26 @@ private[spark] class Client(
     appContext
   }
 
-  /** Set up security tokens for launching our ApplicationMaster container. */
+  /**
+   * Set up security tokens for launching our ApplicationMaster container.
+   *
+   * This method will obtain delegation tokens from all the registered providers, and set them in
+   * the AM's launch context.
+   */
   private def setupSecurityToken(amContainer: ContainerLaunchContext): Unit = {
+    val credentials = UserGroupInformation.getCurrentUser().getCredentials()
+    val credentialManager = new YARNHadoopDelegationTokenManager(sparkConf, hadoopConf)
+    credentialManager.obtainDelegationTokens(hadoopConf, credentials)
+
+    // When using a proxy user, copy the delegation tokens to the user's credentials. Avoid
+    // that for regular users, since in those case the user already has access to the TGT,
+    // and adding delegation tokens could lead to expired or cancelled tokens being used
+    // later, as reported in SPARK-15754.
+    val currentUser = UserGroupInformation.getCurrentUser()
+    if (SparkHadoopUtil.get.isProxyUser(currentUser)) {
+      currentUser.addCredentials(credentials)
+    }
+
     val dob = new DataOutputBuffer
     credentials.writeTokenStorageToStream(dob)
     amContainer.setTokens(ByteBuffer.wrap(dob.getData))
@@ -387,36 +403,6 @@ private[spark] class Client(
     // Upload Spark and the application JAR to the remote file system if necessary,
     // and add them as local resources to the application master.
     val fs = destDir.getFileSystem(hadoopConf)
-
-    // Merge credentials obtained from registered providers
-    val nearestTimeOfNextRenewal = credentialManager.obtainDelegationTokens(hadoopConf, credentials)
-
-    if (credentials != null) {
-      // Add credentials to current user's UGI, so that following operations don't need to use the
-      // Kerberos tgt to get delegations again in the client side.
-      val currentUser = UserGroupInformation.getCurrentUser()
-      if (SparkHadoopUtil.get.isProxyUser(currentUser)) {
-        currentUser.addCredentials(credentials)
-      }
-      logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
-    }
-
-    // If we use principal and keytab to login, also credentials can be renewed some time
-    // after current time, we should pass the next renewal and updating time to credential
-    // renewer and updater.
-    if (loginFromKeytab && nearestTimeOfNextRenewal > System.currentTimeMillis() &&
-      nearestTimeOfNextRenewal != Long.MaxValue) {
-
-      // Valid renewal time is 75% of next renewal time, and the valid update time will be
-      // slightly later then renewal time (80% of next renewal time). This is to make sure
-      // credentials are renewed and updated before expired.
-      val currTime = System.currentTimeMillis()
-      val renewalTime = (nearestTimeOfNextRenewal - currTime) * 0.75 + currTime
-      val updateTime = (nearestTimeOfNextRenewal - currTime) * 0.8 + currTime
-
-      sparkConf.set(CREDENTIALS_RENEWAL_TIME, renewalTime.toLong)
-      sparkConf.set(CREDENTIALS_UPDATE_TIME, updateTime.toLong)
-    }
 
     // Used to keep track of URIs added to the distributed cache. If the same URI is added
     // multiple times, YARN will fail to launch containers for the app with an internal
@@ -700,7 +686,13 @@ private[spark] class Client(
       }
     }
 
-    Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
+    // SPARK-23630: during testing, Spark scripts filter out hadoop conf dirs so that user's
+    // environments do not interfere with tests. This allows a special env variable during
+    // tests so that custom conf dirs can be used by unit tests.
+    val confDirs = Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR") ++
+      (if (Utils.isTesting) Seq("SPARK_TEST_HADOOP_CONF_DIR") else Nil)
+
+    confDirs.foreach { envKey =>
       sys.env.get(envKey).foreach { path =>
         val dir = new File(path)
         if (dir.isDirectory()) {
@@ -757,13 +749,15 @@ private[spark] class Client(
 
       // Save the YARN configuration into a separate file that will be overlayed on top of the
       // cluster's Hadoop conf.
-      confStream.putNextEntry(new ZipEntry(SPARK_HADOOP_CONF_FILE))
-      yarnConf.writeXml(confStream)
+      confStream.putNextEntry(new ZipEntry(SparkHadoopUtil.SPARK_HADOOP_CONF_FILE))
+      hadoopConf.writeXml(confStream)
       confStream.closeEntry()
 
-      // Save Spark configuration to a file in the archive.
+      // Save Spark configuration to a file in the archive, but filter out the app's secret.
       val props = new Properties()
-      sparkConf.getAll.foreach { case (k, v) => props.setProperty(k, v) }
+      sparkConf.getAll.foreach { case (k, v) =>
+        props.setProperty(k, v)
+      }
       // Override spark.yarn.key to point to the location in distributed cache which will be used
       // by AM.
       Option(amKeytabFileName).foreach { k => props.setProperty(KEYTAB.key, k) }
@@ -786,15 +780,9 @@ private[spark] class Client(
       pySparkArchives: Seq[String]): HashMap[String, String] = {
     logInfo("Setting up the launch environment for our AM container")
     val env = new HashMap[String, String]()
-    populateClasspath(args, yarnConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
-    env("SPARK_YARN_MODE") = "true"
+    populateClasspath(args, hadoopConf, sparkConf, env, sparkConf.get(DRIVER_CLASS_PATH))
     env("SPARK_YARN_STAGING_DIR") = stagingDirPath.toString
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
-    if (loginFromKeytab) {
-      val credentialsFile = "credentials-" + UUID.randomUUID().toString
-      sparkConf.set(CREDENTIALS_FILE_PATH, new Path(stagingDirPath, credentialsFile).toString)
-      logInfo(s"Credentials file set to: $credentialsFile")
-    }
 
     // Pick up any environment variables for the AM provided through spark.yarn.appMasterEnv.*
     val amEnvPrefix = "spark.yarn.appMasterEnv."
@@ -861,6 +849,7 @@ private[spark] class Client(
       } else {
         Nil
       }
+
     val launchEnv = setupLaunchEnv(appStagingDirPath, pySparkArchives)
     val localResources = prepareLocalResources(appStagingDirPath, pySparkArchives)
 
@@ -991,7 +980,11 @@ private[spark] class Client(
     logDebug("YARN AM launch context:")
     logDebug(s"    user class: ${Option(args.userClass).getOrElse("N/A")}")
     logDebug("    env:")
-    launchEnv.foreach { case (k, v) => logDebug(s"        $k -> $v") }
+    if (log.isDebugEnabled) {
+      Utils.redact(sparkConf, launchEnv.toSeq).foreach { case (k, v) =>
+        logDebug(s"        $k -> $v")
+      }
+    }
     logDebug("    resources:")
     localResources.foreach { case (k, v) => logDebug(s"        $k -> $v")}
     logDebug("    command:")
@@ -1004,25 +997,6 @@ private[spark] class Client(
       YarnSparkHadoopUtil.getApplicationAclsForYarn(securityManager).asJava)
     setupSecurityToken(amContainer)
     amContainer
-  }
-
-  def setupCredentials(): Unit = {
-    loginFromKeytab = sparkConf.contains(PRINCIPAL.key)
-    if (loginFromKeytab) {
-      principal = sparkConf.get(PRINCIPAL).get
-      keytab = sparkConf.get(KEYTAB).orNull
-
-      require(keytab != null, "Keytab must be specified when principal is specified.")
-      logInfo("Attempting to login to the Kerberos" +
-        s" using principal: $principal and keytab: $keytab")
-      val f = new File(keytab)
-      // Generate a file name that can be used for the keytab file, that does not conflict
-      // with any user file.
-      amKeytabFileName = f.getName + "-" + UUID.randomUUID().toString
-      sparkConf.set(PRINCIPAL.key, principal)
-    }
-    // Defensive copy of the credentials
-    credentials = new Credentials(UserGroupInformation.getCurrentUser.getCredentials)
   }
 
   /**
@@ -1185,24 +1159,6 @@ private[spark] class Client(
 
 private object Client extends Logging {
 
-  def main(argStrings: Array[String]) {
-    if (!sys.props.contains("SPARK_SUBMIT")) {
-      logWarning("WARNING: This client is deprecated and will be removed in a " +
-        "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
-    }
-
-    // Set an env variable indicating we are running in YARN mode.
-    // Note that any env variable with the SPARK_ prefix gets propagated to all (remote) processes
-    System.setProperty("SPARK_YARN_MODE", "true")
-    val sparkConf = new SparkConf
-    // SparkSubmit would use yarn cache to distribute files & jars in yarn mode,
-    // so remove them from sparkConf here for yarn mode.
-    sparkConf.remove("spark.jars")
-    sparkConf.remove("spark.files")
-    val args = new ClientArguments(argStrings)
-    new Client(args, sparkConf).run()
-  }
-
   // Alias for the user jar
   val APP_JAR_NAME: String = "__app__.jar"
 
@@ -1235,10 +1191,6 @@ private object Client extends Logging {
 
   // Name of the file in the conf archive containing Spark configuration.
   val SPARK_CONF_FILE = "__spark_conf__.properties"
-
-  // Name of the file containing the gateway's Hadoop configuration, to be overlayed on top of the
-  // cluster's Hadoop config.
-  val SPARK_HADOOP_CONF_FILE = "__spark_hadoop_conf__.xml"
 
   // Subdirectory where the user's python files (not archives) will be placed.
   val LOCALIZED_PYTHON_DIR = "__pyfiles__"
@@ -1437,12 +1389,17 @@ private object Client extends Logging {
   }
 
   /**
-   * Return whether the two file systems are the same.
+   * Return whether two URI represent file system are the same
    */
-  private def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
-    val srcUri = srcFs.getUri()
-    val dstUri = destFs.getUri()
+  private[spark] def compareUri(srcUri: URI, dstUri: URI): Boolean = {
+
     if (srcUri.getScheme() == null || srcUri.getScheme() != dstUri.getScheme()) {
+      return false
+    }
+
+    val srcAuthority = srcUri.getAuthority()
+    val dstAuthority = dstUri.getAuthority()
+    if (srcAuthority != null && !srcAuthority.equalsIgnoreCase(dstAuthority)) {
       return false
     }
 
@@ -1463,6 +1420,17 @@ private object Client extends Logging {
     }
 
     Objects.equal(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
+
+  }
+
+  /**
+   * Return whether the two file systems are the same.
+   */
+  protected def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
+    val srcUri = srcFs.getUri()
+    val dstUri = destFs.getUri()
+
+    compareUri(srcUri, dstUri)
   }
 
   /**
@@ -1503,6 +1471,19 @@ private object Client extends Logging {
   /** Returns whether the URI is a "local:" URI. */
   def isLocalUri(uri: String): Boolean = {
     uri.startsWith(s"$LOCAL_SCHEME:")
+  }
+
+}
+
+private[spark] class YarnClusterApplication extends SparkApplication {
+
+  override def start(args: Array[String], conf: SparkConf): Unit = {
+    // SparkSubmit would use yarn cache to distribute files & jars in yarn mode,
+    // so remove them from sparkConf here for yarn mode.
+    conf.remove("spark.jars")
+    conf.remove("spark.files")
+
+    new Client(new ClientArguments(args), conf).run()
   }
 
 }
