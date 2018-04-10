@@ -170,7 +170,7 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
 
 class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends IndexedSeq[T] {
 
-  private lazy val accessor: (Int) => Any = dataType match {
+  private def getAccessor(dataType: DataType): (Int) => Any = dataType match {
     case BooleanType => (idx: Int) => arrayData.getBoolean(idx)
     case ByteType => (idx: Int) => arrayData.getByte(idx)
     case ShortType => (idx: Int) => arrayData.getShort(idx)
@@ -185,8 +185,11 @@ class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends I
     case s: StructType => (idx: Int) => arrayData.getStruct(idx, s.length)
     case _: ArrayType => (idx: Int) => arrayData.getArray(idx)
     case _: MapType => (idx: Int) => arrayData.getMap(idx)
+    case u: UserDefinedType[_] => getAccessor(u.sqlType)
     case _ => (idx: Int) => arrayData.get(idx, dataType)
   }
+
+  private val accessor: (Int) => Any = getAccessor(dataType)
 
   override def apply(idx: Int): T = if (0 <= idx && idx < arrayData.numElements()) {
     if (arrayData.isNullAt(idx)) {
