@@ -48,7 +48,7 @@ module Jekyll
       begin
         code = File.open(@file).read.encode("UTF-8")
       rescue => e
-        # We need to explicitly exit on execptions here because Jekyll will silently swallow
+        # We need to explicitly exit on exceptions here because Jekyll will silently swallow
         # them, leading to silent build failures (see https://github.com/jekyll/jekyll/issues/5104)
         puts(e)
         puts(e.backtrace)

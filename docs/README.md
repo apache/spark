@@ -5,7 +5,7 @@ here with the Spark source code. You can also find documentation specific to rel
 Spark at http://spark.apache.org/documentation.html.
 
 Read on to learn more about viewing documentation in plain text (i.e., markdown) or building the
-documentation yourself. Why build it yourself? So that you have the docs that corresponds to
+documentation yourself. Why build it yourself? So that you have the docs that correspond to
 whichever version of Spark you currently have checked out of revision control.
 
 ## Prerequisites

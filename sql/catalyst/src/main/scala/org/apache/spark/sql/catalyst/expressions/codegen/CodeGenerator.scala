@@ -56,16 +56,17 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
  * @param value A term for a (possibly primitive) value of the result of the evaluation. Not
  *              valid if `isNull` is set to `true`.
  */
-case class ExprCode(var code: String, var isNull: String, var value: String)
+case class ExprCode(var code: String, var isNull: ExprValue, var value: ExprValue)
 
 object ExprCode {
   def forNullValue(dataType: DataType): ExprCode = {
     val defaultValueLiteral = CodeGenerator.defaultValue(dataType, typedNull = true)
-    ExprCode(code = "", isNull = "true", value = defaultValueLiteral)
+    ExprCode(code = "", isNull = TrueLiteral,
+      value = LiteralValue(defaultValueLiteral, CodeGenerator.javaType(dataType)))
   }
 
-  def forNonNullValue(value: String): ExprCode = {
-    ExprCode(code = "", isNull = "false", value = value)
+  def forNonNullValue(value: ExprValue): ExprCode = {
+    ExprCode(code = "", isNull = FalseLiteral, value = value)
   }
 }
 
@@ -77,7 +78,7 @@ object ExprCode {
  * @param value A term for a value of a common sub-expression. Not valid if `isNull`
  *              is set to `true`.
  */
-case class SubExprEliminationState(isNull: String, value: String)
+case class SubExprEliminationState(isNull: ExprValue, value: ExprValue)
 
 /**
  * Codes and common subexpressions mapping used for subexpression elimination.
@@ -330,7 +331,7 @@ class CodegenContext {
       case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
       case _ => s"$value = $initCode;"
     }
-    ExprCode(code, "false", value)
+    ExprCode(code, FalseLiteral, GlobalValue(value, javaType(dataType)))
   }
 
   def declareMutableStates(): String = {
@@ -1003,7 +1004,8 @@ class CodegenContext {
       // at least two nodes) as the cost of doing it is expected to be low.
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      val state = SubExprEliminationState(isNull, value)
+      val state = SubExprEliminationState(GlobalValue(isNull, JAVA_BOOLEAN),
+        GlobalValue(value, javaType(expr.dataType)))
       subExprEliminationExprs ++= e.map(_ -> state).toMap
     }
   }
