@@ -270,7 +270,7 @@ abstract class HashExpression[E] extends Expression {
   protected def computeHash(value: Any, dataType: DataType, seed: E): E
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = "false"
+    ev.isNull = FalseLiteral
 
     val childrenHash = children.map { child =>
       val childGen = child.genCode(ctx)
@@ -361,8 +361,7 @@ abstract class HashExpression[E] extends Expression {
   }
 
   protected def genHashString(input: String, result: String): String = {
-    val mb = s"$input.getMemoryBlock()"
-    s"$result = $hasherClassName.hashUnsafeBytesBlock($mb, $result);"
+    s"$result = $hasherClassName.hashUTF8String($input, $result);"
   }
 
   protected def genHashForMap(
@@ -644,7 +643,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = "false"
+    ev.isNull = FalseLiteral
 
     val childHash = ctx.freshName("childHash")
     val childrenHash = children.map { child =>
@@ -725,8 +724,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
      """
 
   override protected def genHashString(input: String, result: String): String = {
-    val mb = s"$input.getMemoryBlock()"
-    s"$result = $hasherClassName.hashUnsafeBytesBlock($mb);"
+    s"$result = $hasherClassName.hashUTF8String($input);"
   }
 
   override protected def genHashForArray(

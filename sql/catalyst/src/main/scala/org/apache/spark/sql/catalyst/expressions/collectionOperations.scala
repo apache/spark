@@ -20,7 +20,7 @@ import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -57,7 +57,7 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
       boolean ${ev.isNull} = false;
       ${childGen.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${childGen.isNull} ? -1 :
-        (${childGen.value}).numElements();""", isNull = "false")
+        (${childGen.value}).numElements();""", isNull = FalseLiteral)
   }
 }
 
