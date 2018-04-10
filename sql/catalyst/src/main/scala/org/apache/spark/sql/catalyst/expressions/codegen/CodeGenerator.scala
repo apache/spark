@@ -333,7 +333,7 @@ class CodegenContext {
       case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
       case _ => s"$value = $initCode;"
     }
-    ExprCode.forNonNullValue(JavaCode.global(value, dataType))
+    ExprCode(code, FalseLiteral, JavaCode.global(value, dataType))
   }
 
   def declareMutableStates(): String = {
