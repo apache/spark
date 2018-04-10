@@ -32,17 +32,6 @@ class ChiSquareTest(object):
 
     The null hypothesis is that the occurrence of the outcomes is statistically independent.
 
-    >>> from pyspark.ml.linalg import Vectors
-    >>> from pyspark.ml.stat import ChiSquareTest
-    >>> dataset = [[0, Vectors.dense([0, 0, 1])],
-    ...            [0, Vectors.dense([1, 0, 1])],
-    ...            [1, Vectors.dense([2, 1, 1])],
-    ...            [1, Vectors.dense([3, 1, 1])]]
-    >>> dataset = spark.createDataFrame(dataset, ["label", "features"])
-    >>> chiSqResult = ChiSquareTest.test(dataset, 'features', 'label')
-    >>> chiSqResult.select("degreesOfFreedom").collect()[0]
-    Row(degreesOfFreedom=[3, 1, 0])
-
     .. versionadded:: 2.2.0
 
     """
@@ -66,6 +55,17 @@ class ChiSquareTest(object):
           - `degreesOfFreedom: Array[Int]`
           - `statistics: Vector`
           Each of these fields has one value per feature.
+
+        >>> from pyspark.ml.linalg import Vectors
+        >>> from pyspark.ml.stat import ChiSquareTest
+        >>> dataset = [[0, Vectors.dense([0, 0, 1])],
+        ...            [0, Vectors.dense([1, 0, 1])],
+        ...            [1, Vectors.dense([2, 1, 1])],
+        ...            [1, Vectors.dense([3, 1, 1])]]
+        >>> dataset = spark.createDataFrame(dataset, ["label", "features"])
+        >>> chiSqResult = ChiSquareTest.test(dataset, 'features', 'label')
+        >>> chiSqResult.select("degreesOfFreedom").collect()[0]
+        Row(degreesOfFreedom=[3, 1, 0])
         """
         sc = SparkContext._active_spark_context
         javaTestObj = _jvm().org.apache.spark.ml.stat.ChiSquareTest
@@ -84,26 +84,6 @@ class Correlation(object):
       and sort it in order to retrieve the ranks and then join the columns back into an RDD[Vector],
       which is fairly costly. Cache the input Dataset before calling corr with `method = 'spearman'`
       to avoid recomputing the common lineage.
-
-    >>> from pyspark.ml.linalg import Vectors
-    >>> from pyspark.ml.stat import Correlation
-    >>> dataset = [[Vectors.dense([1, 0, 0, -2])],
-    ...            [Vectors.dense([4, 5, 0, 3])],
-    ...            [Vectors.dense([6, 7, 0, 8])],
-    ...            [Vectors.dense([9, 0, 0, 1])]]
-    >>> dataset = spark.createDataFrame(dataset, ['features'])
-    >>> pearsonCorr = Correlation.corr(dataset, 'features', 'pearson').collect()[0][0]
-    >>> print(str(pearsonCorr).replace('nan', 'NaN'))
-    DenseMatrix([[ 1.        ,  0.0556...,         NaN,  0.4004...],
-                 [ 0.0556...,  1.        ,         NaN,  0.9135...],
-                 [        NaN,         NaN,  1.        ,         NaN],
-                 [ 0.4004...,  0.9135...,         NaN,  1.        ]])
-    >>> spearmanCorr = Correlation.corr(dataset, 'features', method='spearman').collect()[0][0]
-    >>> print(str(spearmanCorr).replace('nan', 'NaN'))
-    DenseMatrix([[ 1.        ,  0.1054...,         NaN,  0.4       ],
-                 [ 0.1054...,  1.        ,         NaN,  0.9486... ],
-                 [        NaN,         NaN,  1.        ,         NaN],
-                 [ 0.4       ,  0.9486... ,         NaN,  1.        ]])
 
     .. versionadded:: 2.2.0
 
@@ -127,6 +107,26 @@ class Correlation(object):
           A DataFrame that contains the correlation matrix of the column of vectors. This
           DataFrame contains a single row and a single column of name
           '$METHODNAME($COLUMN)'.
+
+        >>> from pyspark.ml.linalg import Vectors
+        >>> from pyspark.ml.stat import Correlation
+        >>> dataset = [[Vectors.dense([1, 0, 0, -2])],
+        ...            [Vectors.dense([4, 5, 0, 3])],
+        ...            [Vectors.dense([6, 7, 0, 8])],
+        ...            [Vectors.dense([9, 0, 0, 1])]]
+        >>> dataset = spark.createDataFrame(dataset, ['features'])
+        >>> pearsonCorr = Correlation.corr(dataset, 'features', 'pearson').collect()[0][0]
+        >>> print(str(pearsonCorr).replace('nan', 'NaN'))
+        DenseMatrix([[ 1.        ,  0.0556...,         NaN,  0.4004...],
+                     [ 0.0556...,  1.        ,         NaN,  0.9135...],
+                     [        NaN,         NaN,  1.        ,         NaN],
+                     [ 0.4004...,  0.9135...,         NaN,  1.        ]])
+        >>> spearmanCorr = Correlation.corr(dataset, 'features', method='spearman').collect()[0][0]
+        >>> print(str(spearmanCorr).replace('nan', 'NaN'))
+        DenseMatrix([[ 1.        ,  0.1054...,         NaN,  0.4       ],
+                     [ 0.1054...,  1.        ,         NaN,  0.9486... ],
+                     [        NaN,         NaN,  1.        ,         NaN],
+                     [ 0.4       ,  0.9486... ,         NaN,  1.        ]])
         """
         sc = SparkContext._active_spark_context
         javaCorrObj = _jvm().org.apache.spark.ml.stat.Correlation
@@ -145,22 +145,6 @@ class KolmogorovSmirnovTest(object):
     distribution of the sample data and the theoretical distribution we can provide a test for the
     the null hypothesis that the sample data comes from that theoretical distribution.
 
-    >>> from pyspark.ml.stat import KolmogorovSmirnovTest
-    >>> dataset = [[-1.0], [0.0], [1.0]]
-    >>> dataset = spark.createDataFrame(dataset, ['sample'])
-    >>> ksResult = KolmogorovSmirnovTest.test(dataset, 'sample', 'norm', 0.0, 1.0).first()
-    >>> round(ksResult.pValue, 3)
-    1.0
-    >>> round(ksResult.statistic, 3)
-    0.175
-    >>> dataset = [[2.0], [3.0], [4.0]]
-    >>> dataset = spark.createDataFrame(dataset, ['sample'])
-    >>> ksResult = KolmogorovSmirnovTest.test(dataset, 'sample', 'norm', 3.0, 1.0).first()
-    >>> round(ksResult.pValue, 3)
-    1.0
-    >>> round(ksResult.statistic, 3)
-    0.175
-
     .. versionadded:: 2.4.0
 
     """
@@ -168,7 +152,9 @@ class KolmogorovSmirnovTest(object):
     @since("2.4.0")
     def test(dataset, sampleCol, distName, *params):
         """
-        Perform a Kolmogorov-Smirnov test using dataset.
+        Conduct a one-sample, two-sided Kolmogorov-Smirnov test for probability distribution
+        equality. Currently supports the normal distribution, taking as parameters the mean and
+        standard deviation.
 
         :param dataset:
           a Dataset or a DataFrame containing the sample of data to test.
@@ -184,6 +170,22 @@ class KolmogorovSmirnovTest(object):
           This DataFrame will contain a single Row with the following fields:
           - `pValue: Double`
           - `statistic: Double`
+
+        >>> from pyspark.ml.stat import KolmogorovSmirnovTest
+        >>> dataset = [[-1.0], [0.0], [1.0]]
+        >>> dataset = spark.createDataFrame(dataset, ['sample'])
+        >>> ksResult = KolmogorovSmirnovTest.test(dataset, 'sample', 'norm', 0.0, 1.0).first()
+        >>> round(ksResult.pValue, 3)
+        1.0
+        >>> round(ksResult.statistic, 3)
+        0.175
+        >>> dataset = [[2.0], [3.0], [4.0]]
+        >>> dataset = spark.createDataFrame(dataset, ['sample'])
+        >>> ksResult = KolmogorovSmirnovTest.test(dataset, 'sample', 'norm', 3.0, 1.0).first()
+        >>> round(ksResult.pValue, 3)
+        1.0
+        >>> round(ksResult.statistic, 3)
+        0.175
         """
         sc = SparkContext._active_spark_context
         javaTestObj = _jvm().org.apache.spark.ml.stat.KolmogorovSmirnovTest
