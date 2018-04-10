@@ -260,13 +260,28 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  override def getListing(): Iterator[ApplicationInfo] = {
+  override def getListing(user: Option[String]): Iterator[ApplicationInfo] = {
     // Return the listing in end time descending order.
     listing.view(classOf[ApplicationInfoWrapper])
       .index("endTime")
       .reverse()
       .iterator()
       .asScala
+      .filter(appInfo => {
+        val attempt = appInfo.attempts.last
+        val usersAcls = Set(attempt.info.sparkUser) ++ SecurityManager.stringToSet(
+          HISTORY_UI_ADMIN_ACLS + "," + attempt.adminAcls.getOrElse("") + "," +
+            attempt.viewAcls.getOrElse(""))
+        val groupAcls = Set(attempt.info.sparkUser) ++ SecurityManager.stringToSet(
+          HISTORY_UI_ADMIN_ACLS_GROUPS + "," + attempt.adminAclsGroups.getOrElse("") + "," +
+            attempt.viewAclsGroups.getOrElse(""))
+        SecurityManager.checkApplicationViewPermissions(
+          user.orNull,
+          HISTORY_UI_ACLS_ENABLE,
+          usersAcls,
+          groupAcls,
+          this.conf)
+      })
       .map(_.toApplicationInfo())
   }
 

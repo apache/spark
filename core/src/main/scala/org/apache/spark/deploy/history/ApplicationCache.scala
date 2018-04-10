@@ -173,7 +173,7 @@ private[history] class ApplicationCache(
       }
     }
     try {
-      val completed = loadedUI.ui.getApplicationInfoList.exists(_.attempts.last.completed)
+      val completed = loadedUI.ui.getApplicationInfoList(None).exists(_.attempts.last.completed)
       if (!completed) {
         // incomplete UIs have the cache-check filter put in front of them.
         registerFilter(new CacheKey(appId, attemptId), loadedUI)

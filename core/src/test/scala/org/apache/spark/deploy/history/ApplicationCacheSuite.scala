@@ -132,7 +132,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
       Seq(new AttemptInfo(attemptId, new Date(started), new Date(ended),
         new Date(ended), ended - started, "user", completed, org.apache.spark.SPARK_VERSION)))
     val ui = mock[SparkUI]
-    when(ui.getApplicationInfoList).thenReturn(List(info).iterator)
+    when(ui.getApplicationInfoList _).thenReturn((_: Option[String]) => List(info).iterator)
     when(ui.getAppName).thenReturn(name)
     when(ui.appName).thenReturn(name)
     val handler = new ServletContextHandler()

@@ -32,12 +32,11 @@ private[v1] class ApplicationListResource extends ApiRequestContext {
       @DefaultValue("3000-01-01") @QueryParam("maxEndDate") maxEndDate: SimpleDateParam,
       @QueryParam("limit") limit: Integer)
   : Iterator[ApplicationInfo] = {
-
     val numApps = Option(limit).map(_.toInt).getOrElse(Integer.MAX_VALUE)
     val includeCompleted = status.isEmpty || status.contains(ApplicationStatus.COMPLETED)
     val includeRunning = status.isEmpty || status.contains(ApplicationStatus.RUNNING)
 
-    uiRoot.getApplicationInfoList.filter { app =>
+    uiRoot.getApplicationInfoList(remoteUser).filter { app =>
       val anyRunning = app.attempts.exists(!_.completed)
       // if any attempt is still running, we consider the app to also still be running;
       // keep the app if *any* attempts fall in the right time window
