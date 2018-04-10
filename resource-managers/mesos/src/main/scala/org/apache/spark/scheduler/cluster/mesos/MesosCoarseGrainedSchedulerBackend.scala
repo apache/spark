@@ -86,8 +86,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private val taskLabels = conf.get("spark.mesos.task.labels", "")
 
-  private val gpuCores = conf.getInt("spark.mesos.gpus", 0)
-
   private[this] val shutdownTimeoutMS =
     conf.getTimeAsMs("spark.mesos.coarse.shutdownTimeout", "10s")
       .ensuring(_ >= 0, "spark.mesos.coarse.shutdownTimeout must be >= 0")
