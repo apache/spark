@@ -773,7 +773,7 @@ HAVING: 'HAVING';
 LIMIT: 'LIMIT';
 AT: 'AT';
 OR: 'OR';
-AND: 'AND';
+AND: 'AND' | '&&';
 IN: 'IN';
 NOT: 'NOT' | '!';
 NO: 'NO';
