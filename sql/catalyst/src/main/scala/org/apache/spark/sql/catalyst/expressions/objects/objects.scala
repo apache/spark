@@ -550,7 +550,7 @@ case class LambdaVariable(
     dataType: DataType,
     nullable: Boolean = true) extends LeafExpression with NonSQLExpression {
 
-  private val accessor: InternalRow => Any = InternalRow.getAccessor(dataType, 0)
+  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType)
 
   // Interpreted execution of `LambdaVariable` always get the 0-index element from input row.
   override def eval(input: InternalRow): Any = {
@@ -559,7 +559,7 @@ case class LambdaVariable(
     if (nullable && input.isNullAt(0)) {
       null
     } else {
-      accessor(input)
+      accessor(input, 0)
     }
   }
 

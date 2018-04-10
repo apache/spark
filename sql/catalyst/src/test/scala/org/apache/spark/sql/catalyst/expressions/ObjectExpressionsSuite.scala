@@ -280,6 +280,11 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("LambdaVariable should support interpreted execution") {
+    def genSchema(dt: DataType): Seq[StructType] = {
+      Seq(StructType(StructField("col_1", dt, nullable = false) :: Nil),
+        StructType(StructField("col_1", dt, nullable = true) :: Nil))
+    }
+
     val elementTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
       DoubleType, DecimalType.USER_DEFAULT, StringType, BinaryType, DateType, TimestampType,
       CalendarIntervalType, new ExamplePointUDT())
@@ -294,15 +299,16 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructType(StructField("col1", elementType, true) :: Nil))
     }
 
-    val acceptedTypes = elementTypes ++ arrayTypes ++ mapTypes ++ structTypes
+    val testTypes = elementTypes ++ arrayTypes ++ mapTypes ++ structTypes
     val random = new Random(100)
-    (0 until 100).foreach { _ =>
-      val schema = RandomDataGenerator.randomSchema(random, 1, acceptedTypes)
-      val row = RandomDataGenerator.randomRow(random, schema)
-      val rowConverter = RowEncoder(schema)
-      val internalRow = rowConverter.toRow(row)
-      val lambda = LambdaVariable("dummy", "dummuIsNull", schema(0).dataType, schema(0).nullable)
-      checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)
+    testTypes.foreach { dt =>
+      genSchema(dt).map { schema =>
+        val row = RandomDataGenerator.randomRow(random, schema)
+        val rowConverter = RowEncoder(schema)
+        val internalRow = rowConverter.toRow(row)
+        val lambda = LambdaVariable("dummy", "dummuIsNull", schema(0).dataType, schema(0).nullable)
+        checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)
+      }
     }
   }
 }
