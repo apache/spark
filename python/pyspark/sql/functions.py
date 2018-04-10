@@ -1846,6 +1846,7 @@ def array_contains(col, value):
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
 
 
+@ignore_unicode_prefix
 @since(2.4)
 def array_join(col, delimiter, null_replacement=None):
     """
