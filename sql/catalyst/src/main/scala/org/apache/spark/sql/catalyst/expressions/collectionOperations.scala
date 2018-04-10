@@ -85,10 +85,11 @@ case class Cardinality(child: Expression) extends UnaryExpression with ExpectsIn
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val value = ctx.freshName("cardinalityValue")
-    val evSize = size.doGenCode(ctx, ExprCode("", ev.isNull, value))
+    val evSize =
+      size.doGenCode(ctx, ExprCode("", ev.isNull, VariableValue(value, CodeGenerator.JAVA_INT)))
     ev.copy(
       code = evSize.code + s"\nDecimal ${ev.value} = Decimal.apply((long)$value);",
-      isNull = "false")
+      isNull = FalseLiteral)
   }
 }
 
