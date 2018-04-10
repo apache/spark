@@ -158,7 +158,7 @@ public class ColumnVectorUtils {
         dst.getChildColumn(0).appendInt(c.months);
         dst.getChildColumn(1).appendLong(c.microseconds);
       } else if (t instanceof DateType) {
-        dst.appendInt(DateTimeUtils.fromJavaDate((Date)o));
+//        dst.append(DateTimeUtils.fromJavaDate((Date)o));
       } else {
         throw new UnsupportedOperationException("Type " + t);
       }

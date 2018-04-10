@@ -40,6 +40,8 @@ import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
+import org.apache.spark.fpga.FpgaInitInstance
+
 /**
  * Spark executor, backed by a threadpool to run tasks.
  *
@@ -56,6 +58,12 @@ private[spark] class Executor(
   extends Logging {
 
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
+
+  // WQF, load FPGA engine library
+  logWarning("### loading sql engine library ...");
+  logWarning(System.getProperty("java.library.path"));
+  System.loadLibrary("sqlengine");
+  FpgaInitInstance.initFpgaInstance();
 
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.

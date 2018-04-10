@@ -17,24 +17,41 @@
 
 package org.apache.spark.sql.execution
 
+import java.nio.{ByteBuffer, ByteOrder}
+import java.nio.charset.StandardCharsets
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
-
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
+import org.apache.spark.sql.sqlEngine.FpgaSqlEngine
 import org.apache.spark.sql.types.LongType
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
 /** Physical plan for Project. */
 case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
+
+  val CMCCInputSize = 1164
+  val CMCCOutputSize = 1164
+
+  var FPGARowNumber = 0
+
+  val CMCCInputSchema = Array(2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(23)(1)
+  val CMCCOutputSchema = Array(2, 3, 3, 3, 1, 1, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(156)(1)
+  val testOutputSchema = CMCCOutputSchema
+
+  // Another hacker way to deal with 8 chars String => as Int, is this better?
+  val CMCCInputCharLength = Array(32, 8, 8, 12, 12, 20, 8, 8)
+  val CMCCOutputCharLength = Array(12, 8, 8, 12, 20, 8, 8)
 
   override def output: Seq[Attribute] = projectList.map(_.toAttribute)
 
@@ -70,13 +87,153 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
-      val project = UnsafeProjection.create(projectList, child.output,
-        subexpressionEliminationEnabled)
-      project.initialize(index)
-      iter.map(project)
+    println("In projection")
+    val res = FPGAProjection(child.execute())
+    res
+  }
+
+
+  def FPGAProjection(input: RDD[InternalRow]): RDD[InternalRow] = {
+
+    input.mapPartitions[InternalRow] { iter =>
+
+      // Convert InternalRows => ByteBuffer
+      val originBuffer = toFPGABatch(iter)
+
+      // FPGA Calculation
+      val outputBuffer = runFPGA(originBuffer)
+
+      // Convert ByteBuffer => InternalRows, pass the originBuffer to release the buffer memory after use
+      toInternalRow(outputBuffer, originBuffer)
+
     }
   }
+
+  def loadRowToBuffer(row: InternalRow, buffer: ByteBuffer): Unit = {
+    // Index to infer string length using CMCCCharLength
+    var stringIndex = 0
+    // Use a var index, and increase every time, this is more efficient than zipWithIndex
+    var index = 0
+    CMCCInputSchema.foreach { colType =>
+      // There are 2 fields(TIME_ID: index = 0, INNET_DATE: index = 36) which're not used in CMCC
+      // query, and optimization will prune the 2 fields by not reading them, so that we should add
+      // the two rows manually
+      if (index == 0 || index == 35)
+        buffer.putInt(0)
+      if (colType == 1) {
+        buffer.putInt(row.getInt(index))
+      } else if (colType == 2) {
+        buffer.putLong(row.getLong(index))
+      } else {
+        val tmpBuffer = new Array[Byte](CMCCInputCharLength(stringIndex))
+        val bytesOfStr = row.getBinary(index)
+        System.arraycopy(
+          bytesOfStr, 0, tmpBuffer, 0, math.min(
+            bytesOfStr.length, CMCCInputCharLength(stringIndex)));
+        buffer.put(tmpBuffer)
+        stringIndex += 1
+
+      }
+      index = index + 1
+    }
+  }
+
+  val tmpBuffer16 = new Array[Byte](16)
+
+  def load16BytesToBuffer(buffer: ByteBuffer): Unit = {
+    buffer.put(tmpBuffer16)
+  }
+
+  def readBytesFromBuffer(byteNum: Int, buffer: ByteBuffer): Unit = {
+    buffer.position(buffer.position() + byteNum)
+  }
+
+  def toFPGABatch (iter: Iterator[InternalRow]): ByteBuffer = {
+    val originBuffer = getByteBuffer(0)
+
+    originBuffer.order(ByteOrder.nativeOrder())
+
+    while(iter.hasNext) {
+      loadRowToBuffer(iter.next, originBuffer)
+      // FPGA needs this 16 whatever bytes
+//      load16BytesToBuffer(originBuffer)
+      originBuffer.put(tmpBuffer16)
+      FPGARowNumber += 1
+      // Test convert speed
+//      if (FPGARowNumber % 10000 == 0)
+//        log.warn(s"Now rows: $FPGARowNumber")
+    }
+    originBuffer.flip()
+    originBuffer
+  }
+
+  def toInternalRow(targetBuffer: ByteBuffer, originBufferShouldReturn: ByteBuffer): Iterator[InternalRow] = {
+    var rowCount = FPGARowNumber
+
+    targetBuffer.order(ByteOrder.nativeOrder())
+
+    new Iterator[InternalRow] {
+
+      val numFields = testOutputSchema.length
+
+      override def hasNext: Boolean = rowCount != 0
+
+      val row: UnsafeRow = new UnsafeRow(numFields)
+      val holder: BufferHolder = new BufferHolder(row, 0)
+      val rowWriter = new UnsafeRowWriter(holder, numFields)
+
+      val tmpBuffer = new Array[Byte](30)
+
+      override def next(): InternalRow = {
+
+        holder.reset()
+
+        var stringIndex = 0
+        var index = 0
+
+        testOutputSchema.foreach { colType =>
+          if (colType == 1) {
+            rowWriter.write(index, targetBuffer.getInt)
+          } else if (colType == 2) {
+            rowWriter.write(index, targetBuffer.getLong)
+          } else {
+            targetBuffer.get(tmpBuffer, 0, CMCCOutputCharLength(stringIndex))
+            rowWriter.write(index, tmpBuffer)
+            stringIndex += 1
+          }
+
+          index = index + 1
+        }
+
+        // For FPGA aligning issue
+//        readBytesFromBuffer(32, buffer)
+        targetBuffer.position(targetBuffer.position() + 32)
+        rowCount -= 1
+
+        // The release memory process has to be put here
+        if (rowCount == 0)
+          returnByteBuffer(originBufferShouldReturn)
+
+        row.setTotalSize(holder.totalSize())
+        row
+      }
+    }
+  }
+
+  def getByteBuffer(size: Int): ByteBuffer = {
+//    ByteBuffer.allocate(10000)
+    FpgaSqlEngine.getBuf(10000)
+  }
+
+  def runFPGA(input: ByteBuffer): ByteBuffer = {
+//    input
+    FpgaSqlEngine.project(input, FPGARowNumber)
+  }
+
+  def returnByteBuffer(buffer: ByteBuffer): Unit = {
+    FpgaSqlEngine.putBuf(buffer)
+  }
+
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
