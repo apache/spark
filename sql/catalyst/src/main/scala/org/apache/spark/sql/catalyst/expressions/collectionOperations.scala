@@ -305,7 +305,7 @@ case class ArrayContains(left: Expression, right: Expression)
        hello world
       > SELECT _FUNC_(array('hello', null ,'world'), ' ', ',');
        hello , world
-  """)
+  """, since = "2.4.0")
 case class ArrayJoin(
     array: Expression,
     delimiter: Expression,

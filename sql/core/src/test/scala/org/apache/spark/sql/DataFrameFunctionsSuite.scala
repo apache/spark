@@ -417,7 +417,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df = Seq(
       (Seq[String]("a", "b"), ","),
       (Seq[String]("a", null, "b"), ","),
-      (Seq[String](), ",")
+      (Seq.empty[String], ",")
     ).toDF("x", "delimiter")
 
     checkAnswer(
