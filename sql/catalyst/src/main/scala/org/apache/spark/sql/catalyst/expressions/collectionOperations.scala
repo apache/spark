@@ -310,6 +310,15 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
 
   private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val typeCheckResult = super.checkInputDataTypes()
+    if (typeCheckResult.isSuccess) {
+      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+    } else {
+      typeCheckResult
+    }
+  }
+
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
     val javaType = CodeGenerator.javaType(dataType)
@@ -342,6 +351,6 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
 
   override def dataType: DataType = child.dataType match {
     case ArrayType(dt, _) => dt
-    case _ => throw new IllegalStateException("array_max accepts only arrays.")
+    case _ => throw new IllegalStateException(s"$prettyName accepts only arrays.")
   }
 }
