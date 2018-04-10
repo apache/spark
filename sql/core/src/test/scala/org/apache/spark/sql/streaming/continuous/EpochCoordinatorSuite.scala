@@ -43,8 +43,6 @@ class EpochCoordinatorSuite
   private var query: ContinuousExecution = _
   private var orderVerifier: InOrder = _
 
-  private val startEpoch = 1L
-
   override def beforeEach(): Unit = {
     val reader = mock[ContinuousReader]
     writer = mock[StreamWriter]
@@ -52,7 +50,7 @@ class EpochCoordinatorSuite
     orderVerifier = inOrder(writer, query)
 
     epochCoordinator
-      = EpochCoordinatorRef.create(writer, reader, query, "test", startEpoch, spark, SparkEnv.get)
+      = EpochCoordinatorRef.create(writer, reader, query, "test", 1, spark, SparkEnv.get)
   }
 
   override def afterEach(): Unit = {
@@ -63,110 +61,102 @@ class EpochCoordinatorSuite
     setWriterPartitions(3)
     setReaderPartitions(2)
 
-    commitPartitionEpoch(0, startEpoch)
-    commitPartitionEpoch(1, startEpoch)
-    commitPartitionEpoch(2, startEpoch)
-    reportPartitionOffset(0, startEpoch)
-    reportPartitionOffset(1, startEpoch)
+    commitPartitionEpoch(0, 1)
+    commitPartitionEpoch(1, 1)
+    commitPartitionEpoch(2, 1)
+    reportPartitionOffset(0, 1)
+    reportPartitionOffset(1, 1)
 
     // Here and in subsequent tests this is called to make a synchronous call to EpochCoordinator
     // so that mocks would have been acted upon by the time verification happens
     makeSynchronousCall()
 
-    verifyCommit(startEpoch)
+    verifyCommit(1)
   }
 
   test("consequent epochs, messages for epoch (k + 1) arrive after messages for epoch k") {
     setWriterPartitions(2)
     setReaderPartitions(2)
 
-    val epochs = startEpoch to (startEpoch + 1)
+    commitPartitionEpoch(0, 1)
+    commitPartitionEpoch(1, 1)
+    reportPartitionOffset(0, 1)
+    reportPartitionOffset(1, 1)
 
-    commitPartitionEpoch(0, epochs(0))
-    commitPartitionEpoch(1, epochs(0))
-    reportPartitionOffset(0, epochs(0))
-    reportPartitionOffset(1, epochs(0))
-
-    commitPartitionEpoch(0, epochs(1))
-    commitPartitionEpoch(1, epochs(1))
-    reportPartitionOffset(0, epochs(1))
-    reportPartitionOffset(1, epochs(1))
+    commitPartitionEpoch(0, 2)
+    commitPartitionEpoch(1, 2)
+    reportPartitionOffset(0, 2)
+    reportPartitionOffset(1, 2)
 
     makeSynchronousCall()
 
-    verifyCommitsInOrderOf(epochs)
+    verifyCommitsInOrderOf(List(1, 2))
   }
 
   ignore("consequent epochs, a message for epoch k arrives after messages for epoch (k + 1)") {
     setWriterPartitions(2)
     setReaderPartitions(2)
 
-    val epochs = startEpoch to (startEpoch + 1)
+    commitPartitionEpoch(0, 1)
+    commitPartitionEpoch(1, 1)
+    reportPartitionOffset(0, 1)
 
-    commitPartitionEpoch(0, epochs(0))
-    commitPartitionEpoch(1, epochs(0))
-    reportPartitionOffset(0, epochs(0))
-
-    commitPartitionEpoch(0, epochs(1))
-    commitPartitionEpoch(1, epochs(1))
-    reportPartitionOffset(0, epochs(1))
-    reportPartitionOffset(1, epochs(1))
+    commitPartitionEpoch(0, 2)
+    commitPartitionEpoch(1, 2)
+    reportPartitionOffset(0, 2)
+    reportPartitionOffset(1, 2)
 
     // Message that arrives late
-    reportPartitionOffset(1, epochs(0))
+    reportPartitionOffset(1, 1)
 
     makeSynchronousCall()
 
-    verifyCommitsInOrderOf(epochs)
+    verifyCommitsInOrderOf(List(1, 2))
   }
 
   ignore("several epochs, messages arrive in order 1 -> 3 -> 4 -> 2") {
     setWriterPartitions(1)
     setReaderPartitions(1)
 
-    val epochs = startEpoch to (startEpoch + 3)
+    commitPartitionEpoch(0, 1)
+    reportPartitionOffset(0, 1)
 
-    commitPartitionEpoch(0, epochs(0))
-    reportPartitionOffset(0, epochs(0))
+    commitPartitionEpoch(0, 3)
+    reportPartitionOffset(0, 3)
 
-    commitPartitionEpoch(0, epochs(2))
-    reportPartitionOffset(0, epochs(2))
+    commitPartitionEpoch(0, 4)
+    reportPartitionOffset(0, 4)
 
-    commitPartitionEpoch(0, epochs(3))
-    reportPartitionOffset(0, epochs(3))
-
-    commitPartitionEpoch(0, epochs(1))
-    reportPartitionOffset(0, epochs(1))
+    commitPartitionEpoch(0, 2)
+    reportPartitionOffset(0, 2)
 
     makeSynchronousCall()
 
-    verifyCommitsInOrderOf(epochs)
+    verifyCommitsInOrderOf(List(1, 2, 3, 4))
   }
 
   ignore("several epochs, messages arrive in order 1 -> 3 -> 5 -> 4 -> 2") {
     setWriterPartitions(1)
     setReaderPartitions(1)
 
-    val epochs = startEpoch to (startEpoch + 4)
+    commitPartitionEpoch(0, 1)
+    reportPartitionOffset(0, 1)
 
-    commitPartitionEpoch(0, epochs(0))
-    reportPartitionOffset(0, epochs(0))
+    commitPartitionEpoch(0, 3)
+    reportPartitionOffset(0, 3)
 
-    commitPartitionEpoch(0, epochs(2))
-    reportPartitionOffset(0, epochs(2))
+    commitPartitionEpoch(0, 5)
+    reportPartitionOffset(0, 5)
 
-    commitPartitionEpoch(0, epochs(4))
-    reportPartitionOffset(0, epochs(4))
+    commitPartitionEpoch(0, 4)
+    reportPartitionOffset(0, 4)
 
-    commitPartitionEpoch(0, epochs(3))
-    reportPartitionOffset(0, epochs(3))
-
-    commitPartitionEpoch(0, epochs(1))
-    reportPartitionOffset(0, epochs(1))
+    commitPartitionEpoch(0, 2)
+    reportPartitionOffset(0, 2)
 
     makeSynchronousCall()
 
-    verifyCommitsInOrderOf(epochs)
+    verifyCommitsInOrderOf(List(1, 2, 3, 4, 5))
   }
 
   private def setWriterPartitions(numPartitions: Int): Unit = {
