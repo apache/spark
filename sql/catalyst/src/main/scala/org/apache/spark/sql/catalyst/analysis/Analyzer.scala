@@ -1218,8 +1218,8 @@ class Analyzer(
       plan.transformAllExpressions {
         case f: UnresolvedFunction
           if externalFunctionNameSet.contains(normalizeFuncName(f.name)) => f
-        case f: UnresolvedFunction if catalog.builtinFunctionExists(f.name) => f
-        case f: UnresolvedFunction if catalog.externalFunctionExists(f.name) =>
+        case f: UnresolvedFunction if catalog.isRegisteredFunction(f.name) => f
+        case f: UnresolvedFunction if catalog.isPersistentFunction(f.name) =>
           externalFunctionNameSet.add(normalizeFuncName(f.name))
           f
         case f: UnresolvedFunction =>

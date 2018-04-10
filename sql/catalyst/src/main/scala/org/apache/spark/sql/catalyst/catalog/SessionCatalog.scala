@@ -1099,17 +1099,8 @@ class SessionCatalog(
   def functionExists(name: FunctionIdentifier): Boolean = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     requireDbExists(db)
-    builtinFunctionExists(name) || externalFunctionExists(name)
-  }
-
-  def builtinFunctionExists(name: FunctionIdentifier): Boolean = {
-    functionRegistry.functionExists(name)
-  }
-
-  def externalFunctionExists(name: FunctionIdentifier): Boolean = {
-    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
-    requireDbExists(db)
-    externalCatalog.functionExists(db, name.funcName)
+    functionRegistry.functionExists(name) ||
+      externalCatalog.functionExists(db, name.funcName)
   }
 
   // ----------------------------------------------------------------
@@ -1200,6 +1191,22 @@ class SessionCatalog(
       functionRegistry.functionExists(name) &&
       !FunctionRegistry.builtin.functionExists(name) &&
       !hiveFunctions.contains(name.funcName.toLowerCase(Locale.ROOT))
+  }
+
+  /**
+   * Return whether this function has been registered in the function registry of the current
+   * session. If not existed, return false.
+   */
+  def isRegisteredFunction(name: FunctionIdentifier): Boolean = {
+    functionRegistry.functionExists(name)
+  }
+
+  /**
+   * Returns whether it is a persistent function. If not existed, returns false.
+   */
+  def isPersistentFunction(name: FunctionIdentifier): Boolean = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    databaseExists(db) && externalCatalog.functionExists(db, name.funcName)
   }
 
   protected def failFunctionLookup(name: FunctionIdentifier): Nothing = {
