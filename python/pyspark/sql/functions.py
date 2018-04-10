@@ -2087,7 +2087,7 @@ def array_max(col):
 
     :param col: name of column or expression
 
-    >>> df = spark.createDataFrame([([2, 1, 3],),([None, 10, -1],)], ['data'])
+    >>> df = spark.createDataFrame([([2, 1, 3],), ([None, 10, -1],)], ['data'])
     >>> df.select(array_max(df.data).alias('max')).collect()
     [Row(max=3), Row(max=10)]
      """
