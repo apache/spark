@@ -2154,7 +2154,9 @@ def array_max(col):
 def sort_array(col, asc=True):
     """
     Collection function: sorts the input array in ascending or descending order according
-    to the natural ordering of the array elements.
+    to the natural ordering of the array elements. Null elements will be placed at the beginning
+    of the returned array in ascending order or at the end of the returned array in descending
+    order.
 
     :param col: name of column or expression
 

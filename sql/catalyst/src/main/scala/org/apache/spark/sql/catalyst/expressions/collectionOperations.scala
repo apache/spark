@@ -123,7 +123,7 @@ trait ArraySortUtil extends ExpectsInputTypes with CodegenFallback {
   protected def arrayExpression: Expression
 
   // If -1, place null element at the end of the array
-  // If 1, place null element at the start of the array
+  // If 1, place null element at the beginning of the array
   protected def placeNullAtEnd: Int
 
   @transient
@@ -188,11 +188,16 @@ trait ArraySortUtil extends ExpectsInputTypes with CodegenFallback {
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(array[, ascendingOrder]) - Sorts the input array in ascending or descending order according to the natural ordering of the array elements.",
+  usage = """
+    _FUNC_(array[, ascendingOrder]) - Sorts the input array in ascending or descending order
+      according to the natural ordering of the array elements. Null elements will be placed
+      at the beginning of the returned array in ascending order or at the end of the returned
+      array in descending order.
+  """,
   examples = """
     Examples:
-      > SELECT _FUNC_(array('b', 'd', 'c', 'a'), true);
-       ["a","b","c","d"]
+      > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'), true);
+       [null,"a","b","c","d"]
   """)
 // scalastyle:on line.size.limit
 case class SortArray(base: Expression, ascendingOrder: Expression)
@@ -327,7 +332,8 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
 @ExpressionDescription(
   usage = """
     _FUNC_(array) - Sorts the input array in ascending order. The elements of the input array must
-      be orderable. Null elements will be placed at the end of the returned array.""",
+      be orderable. Null elements will be placed at the end of the returned array.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', null, 'c', 'a'));
