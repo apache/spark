@@ -2745,13 +2745,13 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, HasHandleInva
     """
 
     handleInvalid = Param(Params._dummy(), "handleInvalid", "How to handle invalid data (NULL " +
-                          "values). Options are 'skip' (filter out rows with invalid data), " +
-                          "'error' (throw an error), or 'keep' (return relevant number of NaN in " +
-                          "the output). Column lengths are taken from the size of ML Attribute " +
-                          "Group, which can be set using `VectorSizeHint` in a pipeline before " +
-                          "`VectorAssembler`. Column lengths can also be inferred from first " +
-                          "rows of the data since it is safe to do so but only in case of " +
-                          "'error' or 'skip').",
+                          "and NaN values). Options are 'skip' (filter out rows with invalid " +
+                          "data), 'error' (throw an error), or 'keep' (return relevant number " +
+                          "of NaN in the output). Column lengths are taken from the size of ML " +
+                          "Attribute Group, which can be set using `VectorSizeHint` in a " +
+                          "pipeline before `VectorAssembler`. Column lengths can also be " +
+                          "inferred from first rows of the data since it is safe to do so but " +
+                          "only in case of 'error' or 'skip').",
                           typeConverter=TypeConverters.toString)
 
     @keyword_only
