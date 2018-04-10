@@ -28,7 +28,7 @@ $ sudo Rscript -e 'devtools::install_version("roxygen2", version = "5.0.1", repo
 
 Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0.
 
-Note: Other versions of roxygen2 might work in SparkR documentation generation but `RoxygenNote` field in `SPARK_HOME/R/pkg/DESCRIPTION` is 5.0.1, which is updated if the version is mismatched.
+Note: Other versions of roxygen2 might work in SparkR documentation generation but `RoxygenNote` field in `$SPARK_HOME/R/pkg/DESCRIPTION` is 5.0.1, which is updated if the version is mismatched.
 
 ## Generating the Documentation HTML
 
@@ -65,12 +65,12 @@ $ PRODUCTION=1 jekyll build
 
 ## API Docs (Scaladoc, Javadoc, Sphinx, roxygen2, MkDocs)
 
-You can build just the Spark scaladoc and javadoc by running `build/sbt unidoc` from the `SPARK_HOME` directory.
+You can build just the Spark scaladoc and javadoc by running `build/sbt unidoc` from the `$SPARK_HOME` directory.
 
 Similarly, you can build just the PySpark docs by running `make html` from the
-`SPARK_HOME/python/docs` directory. Documentation is only generated for classes that are listed as
-public in `__init__.py`. The SparkR docs can be built by running `SPARK_HOME/R/create-docs.sh`, and
-the SQL docs can be built by running `SPARK_HOME/sql/create-docs.sh`
+`$SPARK_HOME/python/docs` directory. Documentation is only generated for classes that are listed as
+public in `__init__.py`. The SparkR docs can be built by running `$SPARK_HOME/R/create-docs.sh`, and
+the SQL docs can be built by running `$SPARK_HOME/sql/create-docs.sh`
 after [building Spark](https://github.com/apache/spark#building-spark) first.
 
 When you run `jekyll build` in the `docs` directory, it will also copy over the scaladoc and javadoc for the various
