@@ -3189,7 +3189,7 @@ class Dataset[T] private[sql](
 
   private[sql] def collectToPython(): Int = {
     EvaluatePython.registerPicklers()
-    withAction("collect", queryExecution) { plan =>
+    withAction("collectToPython", queryExecution) { plan =>
       val toJava: (Any) => Any = EvaluatePython.toJava(_, schema)
       val iter: Iterator[Array[Byte]] = new SerDeUtil.AutoBatchedPickler(
         plan.executeCollect().iterator.map(toJava))
@@ -3201,7 +3201,7 @@ class Dataset[T] private[sql](
    * Collect a Dataset as ArrowPayload byte arrays and serve to PySpark.
    */
   private[sql] def collectAsArrowToPython(): Int = {
-    withAction("collect", queryExecution) { plan =>
+    withAction("collectAsArrowToPython", queryExecution) { plan =>
       val iter: Iterator[Array[Byte]] =
         toArrowPayload(plan).collect().iterator.map(_.asPythonSerializable)
       PythonRDD.serveIterator(iter, "serve-Arrow")
@@ -3312,11 +3312,6 @@ class Dataset[T] private[sql](
   }
 
   /** Convert to an RDD of ArrowPayload byte arrays */
-  private[sql] def toArrowPayload: RDD[ArrowPayload] = {
-    // This is only used in tests, for now.
-    toArrowPayload(queryExecution.executedPlan)
-  }
-
   private[sql] def toArrowPayload(plan: SparkPlan): RDD[ArrowPayload] = {
     val schemaCaptured = this.schema
     val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
@@ -3326,5 +3321,10 @@ class Dataset[T] private[sql](
       ArrowConverters.toPayloadIterator(
         iter, schemaCaptured, maxRecordsPerBatch, timeZoneId, context)
     }
+  }
+
+  // This is only used in tests, for now.
+  private[sql] def toArrowPayload: RDD[ArrowPayload] = {
+    toArrowPayload(queryExecution.executedPlan)
   }
 }

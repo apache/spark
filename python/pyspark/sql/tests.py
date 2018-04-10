@@ -3062,6 +3062,72 @@ class SQLTests2(ReusedSQLTestCase):
             sc.stop()
 
 
+class SQLTests3(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import glob
+        from pyspark.find_spark_home import _find_spark_home
+
+        SPARK_HOME = _find_spark_home()
+        filename_pattern = (
+            "sql/core/target/scala-*/test-classes/org/apache/spark/sql/"
+            "TestQueryExecutionListener.class")
+        if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
+            raise unittest.SkipTest(
+                "'org.apache.spark.sql.TestQueryExecutionListener' is not "
+                "available. Skipping the related tests.")
+
+        # Note that 'spark.sql.queryExecutionListeners' is a static immutable configuration.
+        cls.spark = SparkSession.builder \
+            .master("local[4]") \
+            .appName(cls.__name__) \
+            .config(
+                "spark.sql.queryExecutionListeners",
+                "org.apache.spark.sql.TestQueryExecutionListener") \
+            .getOrCreate()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.spark.stop()
+
+    def tearDown(self):
+        self.spark._jvm.OnSuccessCall.clear()
+
+    # This test is separate because it uses 'spark.sql.queryExecutionListeners' which is
+    # static and immutable. This can't be set or unset when we already have the session.
+    def test_query_execution_listener_on_collect(self):
+        self.assertFalse(
+            self.spark._jvm.OnSuccessCall.isCalled(),
+            "The callback from the query execution listener should not be called before 'collect'")
+        self.spark.sql("SELECT * FROM range(1)").collect()
+        self.assertTrue(
+            self.spark._jvm.OnSuccessCall.isCalled(),
+            "The callback from the query execution listener should be called after 'collect'")
+
+    @unittest.skipIf(
+        not _have_pandas or not _have_pyarrow,
+        _pandas_requirement_message or _pyarrow_requirement_message)
+    def test_query_execution_listener_on_collect_with_arrow(self):
+        # Here, it deplicates codes in ReusedSQLTestCase.sql_conf context manager.
+        # Refactor and deduplicate it if there is another case like this.
+        old_value = self.spark.conf.get("spark.sql.execution.arrow.enabled", None)
+        self.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
+        try:
+            self.assertFalse(
+                self.spark._jvm.OnSuccessCall.isCalled(),
+                "The callback from the query execution listener should not be "
+                "called before 'collect'")
+            self.spark.sql("SELECT * FROM range(1)").toPandas()
+            self.assertTrue(
+                self.spark._jvm.OnSuccessCall.isCalled(),
+                "The callback from the query execution listener should be called after 'collect'")
+        finally:
+            if old_value is None:
+                self.spark.conf.unset("spark.sql.execution.arrow.enabled")
+            else:
+                self.spark.conf.set("spark.sql.execution.arrow.enabled", old_value)
+
+
 class SparkSessionTests(PySparkTestCase):
 
     # This test is separate because it's closely related with session's start and stop.
