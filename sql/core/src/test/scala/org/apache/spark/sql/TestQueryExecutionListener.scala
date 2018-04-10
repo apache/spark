@@ -33,7 +33,7 @@ class TestQueryExecutionListener extends QueryExecutionListener with Logging {
 }
 
 /**
- * This has variables to check if `onSuccess` is actually called or not. Currently, this is for
+ * This has a variable to check if `onSuccess` is actually called or not. Currently, this is for
  * the test case in PySpark. See SPARK-23942.
  */
 object OnSuccessCall {

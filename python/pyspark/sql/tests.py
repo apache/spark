@@ -3063,6 +3063,9 @@ class SQLTests2(ReusedSQLTestCase):
 
 
 class SQLTests3(unittest.TestCase):
+    # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
+    # static and immutable. This can't be set or unset.
+
     @classmethod
     def setUpClass(cls):
         import glob
@@ -3075,7 +3078,7 @@ class SQLTests3(unittest.TestCase):
         if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
             raise unittest.SkipTest(
                 "'org.apache.spark.sql.TestQueryExecutionListener' is not "
-                "available. Skipping the related tests.")
+                "available. Will skip the related tests.")
 
         # Note that 'spark.sql.queryExecutionListeners' is a static immutable configuration.
         cls.spark = SparkSession.builder \
@@ -3093,8 +3096,6 @@ class SQLTests3(unittest.TestCase):
     def tearDown(self):
         self.spark._jvm.OnSuccessCall.clear()
 
-    # This test is separate because it uses 'spark.sql.queryExecutionListeners' which is
-    # static and immutable. This can't be set or unset when we already have the session.
     def test_query_execution_listener_on_collect(self):
         self.assertFalse(
             self.spark._jvm.OnSuccessCall.isCalled(),
@@ -3116,11 +3117,11 @@ class SQLTests3(unittest.TestCase):
             self.assertFalse(
                 self.spark._jvm.OnSuccessCall.isCalled(),
                 "The callback from the query execution listener should not be "
-                "called before 'collect'")
+                "called before 'toPandas'")
             self.spark.sql("SELECT * FROM range(1)").toPandas()
             self.assertTrue(
                 self.spark._jvm.OnSuccessCall.isCalled(),
-                "The callback from the query execution listener should be called after 'collect'")
+                "The callback from the query execution listener should be called after 'toPandas'")
         finally:
             if old_value is None:
                 self.spark.conf.unset("spark.sql.execution.arrow.enabled")
