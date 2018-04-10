@@ -341,6 +341,15 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("size(a)"),
       Seq(Row(2), Row(0), Row(3), Row(-1))
     )
+
+    checkAnswer(
+      df.select(cardinality($"a")),
+      Seq(Row(BigInt(2)), Row(BigInt(0)), Row(BigInt(3)), Row(BigInt(-1)))
+    )
+    checkAnswer(
+      df.selectExpr("cardinality(a)"),
+      Seq(Row(BigInt(2)), Row(BigInt(0)), Row(BigInt(3)), Row(BigInt(-1)))
+    )
   }
 
   test("map size function") {

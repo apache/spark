@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.BigInteger
 import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -59,6 +60,35 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
       ${childGen.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${childGen.isNull} ? -1 :
         (${childGen.value}).numElements();""", isNull = FalseLiteral)
+  }
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the size of an array or a map as BigInt. Returns -1 if null.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array('b', 'd', 'c', 'a'));
+       4
+  """,
+  since = "2.4.0")
+case class Cardinality(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+  override def dataType: DataType = DecimalType.BigIntDecimal
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
+  override def nullable: Boolean = false
+
+  val size = Size(child)
+
+  override def eval(input: InternalRow): Any = {
+    new Decimal()
+      .setOrNull(size.eval(input).asInstanceOf[Int].toLong, DecimalType.MAX_PRECISION, 0)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val value = ctx.freshName("cardinalityValue")
+    val evSize = size.doGenCode(ctx, ExprCode("", ev.isNull, value))
+    ev.copy(
+      code = evSize.code + s"\nDecimal ${ev.value} = Decimal.apply((long)$value);",
+      isNull = "false")
   }
 }
 

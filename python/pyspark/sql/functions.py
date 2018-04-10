@@ -2125,6 +2125,21 @@ def size(col):
 
 
 @since(2.4)
+def cardinality(col):
+    """
+    Collection function: returns the length of the array or map stored in the column.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([1, 2, 3],),([],)], ['data'])
+    >>> df.select(cardinality(df.data)).collect()
+    [Row(cardinality(data)=3), Row(cardinality(data)=0)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.cardinality(_to_java_column(col)))
+
+
+@since(2.4)
 def array_min(col):
     """
     Collection function: returns the minimum value of the array.

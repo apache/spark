@@ -3300,6 +3300,14 @@ object functions {
   def size(e: Column): Column = withExpr { Size(e.expr) }
 
   /**
+   * Returns length of array or map as BigInt.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def cardinality(e: Column): Column = withExpr { Cardinality(e.expr) }
+
+  /**
    * Sorts the input array for the given column in ascending order,
    * according to the natural ordering of the array elements.
    *
