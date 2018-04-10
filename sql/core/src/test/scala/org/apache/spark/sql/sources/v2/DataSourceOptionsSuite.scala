@@ -85,7 +85,7 @@ class DataSourceOptionsSuite extends SparkFunSuite {
       DataSourceOptions.PATH_KEY -> "abc",
       DataSourceOptions.TABLE_KEY -> "tbl").asJava)
 
-    assert(options.path.get() == "abc")
+    assert(options.paths().toSeq == Seq("abc"))
     assert(options.tableName().get() == "tbl")
     assert(!options.databaseName().isPresent)
   }
@@ -95,7 +95,6 @@ class DataSourceOptionsSuite extends SparkFunSuite {
       DataSourceOptions.PATH_KEY -> "abc",
       DataSourceOptions.PATHS_KEY -> """["c", "d"]""").asJava)
 
-    assert(options.path.get() == "abc")
     assert(options.paths().toSeq == Seq("abc", "c", "d"))
   }
 
@@ -103,7 +102,6 @@ class DataSourceOptionsSuite extends SparkFunSuite {
     val options = new DataSourceOptions(Map(
       DataSourceOptions.PATHS_KEY -> """["c", "d\"e"]""").asJava)
 
-    assert(!options.path.isPresent)
     assert(options.paths().toSeq == Seq("c", "d\"e"))
   }
 }

@@ -164,20 +164,13 @@ public class DataSourceOptions {
   public static final String DATABASE_KEY = "database";
 
   /**
-   * Returns the value of the singular path option.
-   */
-  public Optional<String> path() {
-    return get(PATH_KEY);
-  }
-
-  /**
    * Returns all the paths specified by both the singular path option and the multiple
    * paths option.
    */
   public String[] paths() {
-    String[] singularPath = path().map(s -> new String[]{s}).orElseGet(() -> new String[0]);
+    String[] singularPath =
+      get(PATH_KEY).map(s -> new String[]{s}).orElseGet(() -> new String[0]);
     Optional<String> pathsStr = get(PATHS_KEY);
-    System.out.println(pathsStr);
     if (pathsStr.isPresent()) {
       ObjectMapper objectMapper = new ObjectMapper();
       try {
