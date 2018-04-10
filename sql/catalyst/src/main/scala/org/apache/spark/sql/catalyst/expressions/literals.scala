@@ -296,7 +296,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
             case Float.NegativeInfinity =>
               toExprCode("Float.NEGATIVE_INFINITY")
             case _ =>
-              toExprCode("${value}F")
+              toExprCode(s"${value}F")
           }
         case DoubleType =>
           value.asInstanceOf[Double] match {
