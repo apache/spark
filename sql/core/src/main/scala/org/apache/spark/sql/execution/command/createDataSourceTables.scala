@@ -182,7 +182,7 @@ case class CreateDataSourceTableAsSelectCommand(
         // provider (for example, see org.apache.spark.sql.parquet.DefaultSource).
         schema = result.schema)
       // Table location is already validated. No need to check it again during table creation.
-      sessionState.catalog.createTable(newTable, ignoreIfExists = true)
+      sessionState.catalog.createTable(newTable, ignoreIfExists = false, validateLocation = false)
 
       result match {
         case fs: HadoopFsRelation if table.partitionColumnNames.nonEmpty &&
