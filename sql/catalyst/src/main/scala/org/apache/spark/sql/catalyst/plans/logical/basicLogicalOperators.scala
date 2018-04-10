@@ -525,7 +525,14 @@ case class Range(
     Statistics(sizeInBytes = LongType.defaultSize * numElements)
   }
 
-  override def outputOrdering: Seq[SortOrder] = output.map(a => SortOrder(a, Descending))
+  override def outputOrdering: Seq[SortOrder] = {
+    val order = if (step > 0) {
+      Ascending
+    } else {
+      Descending
+    }
+    output.map(a => SortOrder(a, order))
+  }
 }
 
 case class Aggregate(

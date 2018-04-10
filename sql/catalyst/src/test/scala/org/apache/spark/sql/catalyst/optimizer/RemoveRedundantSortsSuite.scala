@@ -29,9 +29,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, ORDER_BY_ORDINAL}
 
 class RemoveRedundantSortsSuite extends PlanTest {
-  override val conf = new SQLConf().copy(CASE_SENSITIVE -> true, ORDER_BY_ORDINAL -> false)
-  val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
-  val analyzer = new Analyzer(catalog, conf)
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -46,48 +43,59 @@ class RemoveRedundantSortsSuite extends PlanTest {
   test("remove redundant order by") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
     val unnecessaryReordered = orderedPlan.select('a).orderBy('a.asc, 'b.desc_nullsFirst)
-    val optimized = Optimize.execute(analyzer.execute(unnecessaryReordered))
-    val correctAnswer = analyzer.execute(orderedPlan.select('a))
+    val optimized = Optimize.execute(unnecessaryReordered.analyze)
+    val correctAnswer = orderedPlan.select('a).analyze
     comparePlans(Optimize.execute(optimized), correctAnswer)
   }
 
   test("do not remove sort if the order is different") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
     val reorderedDifferently = orderedPlan.select('a).orderBy('a.asc, 'b.desc)
-    val optimized = Optimize.execute(analyzer.execute(reorderedDifferently))
-    val correctAnswer = analyzer.execute(reorderedDifferently)
+    val optimized = Optimize.execute(reorderedDifferently.analyze)
+    val correctAnswer = reorderedDifferently.analyze
     comparePlans(optimized, correctAnswer)
   }
 
   test("filters don't affect order") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc)
     val filteredAndReordered = orderedPlan.where('a > Literal(10)).orderBy('a.asc, 'b.desc)
-    val optimized = Optimize.execute(analyzer.execute(filteredAndReordered))
-    val correctAnswer = analyzer.execute(orderedPlan.where('a > Literal(10)))
+    val optimized = Optimize.execute(filteredAndReordered.analyze)
+    val correctAnswer = orderedPlan.where('a > Literal(10)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
   test("limits don't affect order") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc)
     val filteredAndReordered = orderedPlan.limit(Literal(10)).orderBy('a.asc, 'b.desc)
-    val optimized = Optimize.execute(analyzer.execute(filteredAndReordered))
-    val correctAnswer = analyzer.execute(orderedPlan.limit(Literal(10)))
+    val optimized = Optimize.execute(filteredAndReordered.analyze)
+    val correctAnswer = orderedPlan.limit(Literal(10)).analyze
     comparePlans(optimized, correctAnswer)
   }
 
   test("range is already sorted") {
     val inputPlan = Range(1L, 1000L, 1, 10)
-    val orderedPlan = inputPlan.orderBy('id.desc)
-    val optimized = Optimize.execute(analyzer.execute(orderedPlan))
-    val correctAnswer = analyzer.execute(inputPlan)
+    val orderedPlan = inputPlan.orderBy('id.asc)
+    val optimized = Optimize.execute(orderedPlan.analyze)
+    val correctAnswer = inputPlan.analyze
     comparePlans(optimized, correctAnswer)
+
+    val reversedPlan = inputPlan.orderBy('id.desc)
+    val reversedOptimized = Optimize.execute(reversedPlan.analyze)
+    val reversedCorrectAnswer = reversedPlan.analyze
+    comparePlans(reversedOptimized, reversedCorrectAnswer)
+
+    val negativeStepInputPlan = Range(10L, 1L, -1, 10)
+    val negativeStepOrderedPlan = negativeStepInputPlan.orderBy('id.desc)
+    val negativeStepOptimized = Optimize.execute(negativeStepOrderedPlan.analyze)
+    val negativeStepCorrectAnswer = negativeStepInputPlan.analyze
+    comparePlans(negativeStepOptimized, negativeStepCorrectAnswer)
   }
 
   test("sort should not be removed when there is a node which doesn't guarantee any order") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc)
     val groupedAndResorted = orderedPlan.groupBy('a)(sum('a)).orderBy('a.asc)
-    val optimized = Optimize.execute(analyzer.execute(groupedAndResorted))
-    val correctAnswer = analyzer.execute(groupedAndResorted)
+    val optimized = Optimize.execute(groupedAndResorted.analyze)
+    val correctAnswer = groupedAndResorted.analyze
     comparePlans(optimized, correctAnswer)
   }
 }

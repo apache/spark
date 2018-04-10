@@ -204,10 +204,10 @@ class PlannerSuite extends SharedSQLContext {
     val resorted = query.sort('key.desc)
     assert(resorted.queryExecution.optimizedPlan.collect { case s: Sort => s}.isEmpty)
     assert(resorted.select('key).collect().map(_.getInt(0)).toSeq ==
-      (1 to 100).sorted(Ordering[Int].reverse))
+      (1 to 100).reverse)
     // with a different order, the sort is needed
     val sortedAsc = query.sort('key)
-    assert(sortedAsc.queryExecution.optimizedPlan.collect { case s: Sort => s}.nonEmpty)
+    assert(sortedAsc.queryExecution.optimizedPlan.collect { case s: Sort => s}.size == 1)
     assert(sortedAsc.select('key).collect().map(_.getInt(0)).toSeq == (1 to 100))
   }
 
