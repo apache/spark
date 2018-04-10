@@ -310,7 +310,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
               toExprCode(s"${value}D")
           }
         case ByteType | ShortType =>
-          toExprCode(s"(($javaType)$value)")
+          ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
         case TimestampType | LongType =>
           toExprCode(s"${value}L")
         case _ =>

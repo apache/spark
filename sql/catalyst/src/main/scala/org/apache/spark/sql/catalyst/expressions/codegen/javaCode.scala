@@ -24,8 +24,8 @@ import scala.language.{existentials, implicitConversions}
 import org.apache.spark.sql.types.{BooleanType, DataType}
 
 /**
-+ * Trait representing an opaque fragments of java code.
-+ */
+ * Trait representing an opaque fragments of java code.
+ */
 trait JavaCode {
   def code: String
   override def toString: String = code
@@ -58,7 +58,14 @@ object JavaCode {
    * Create a local java variable.
    */
   def variable(name: String, dataType: DataType): VariableValue = {
-    VariableValue(name, CodeGenerator.javaClass(dataType))
+    variable(name, CodeGenerator.javaClass(dataType))
+  }
+
+  /**
+   * Create a local java variable.
+   */
+  def variable(name: String, javaClass: Class[_]): VariableValue = {
+    VariableValue(name, javaClass)
   }
 
   /**
@@ -70,7 +77,14 @@ object JavaCode {
    * Create a global java variable.
    */
   def global(name: String, dataType: DataType): GlobalValue = {
-    GlobalValue(name, CodeGenerator.javaClass(dataType))
+    global(name, CodeGenerator.javaClass(dataType))
+  }
+
+  /**
+   * Create a global java variable.
+   */
+  def global(name: String, javaClass: Class[_]): GlobalValue = {
+    GlobalValue(name, javaClass)
   }
 
   /**
@@ -82,7 +96,14 @@ object JavaCode {
    * Create an expression fragment.
    */
   def expression(code: String, dataType: DataType): SimpleExprValue = {
-    SimpleExprValue(code, CodeGenerator.javaClass(dataType))
+    expression(code, CodeGenerator.javaClass(dataType))
+  }
+
+  /**
+   * Create an expression fragment.
+   */
+  def expression(code: String, javaClass: Class[_]): SimpleExprValue = {
+    SimpleExprValue(code, javaClass)
   }
 
   /**

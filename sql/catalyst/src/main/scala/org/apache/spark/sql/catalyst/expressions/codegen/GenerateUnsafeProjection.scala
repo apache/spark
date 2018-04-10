@@ -292,7 +292,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
          |$writeExpressions
        """.stripMargin
     // `rowWriter` is declared as a class field, so we can access it directly in methods.
-    ExprCode(code, FalseLiteral, SimpleExprValue(s"$rowWriter.getRow()", classOf[UnsafeRow]))
+    ExprCode(code, FalseLiteral, JavaCode.expression(s"$rowWriter.getRow()", classOf[UnsafeRow]))
   }
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =
