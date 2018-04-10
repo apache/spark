@@ -192,7 +192,8 @@ case class BroadcastHashJoinExec(
           |  $value = ${ev.value};
           |}
          """.stripMargin
-        ExprCode(code, isNull, value)
+        ExprCode(code, VariableValue(isNull, CodeGenerator.JAVA_BOOLEAN),
+          VariableValue(value, CodeGenerator.javaType(a.dataType)))
       }
     }
   }
@@ -487,7 +488,8 @@ case class BroadcastHashJoinExec(
       s"$existsVar = true;"
     }
 
-    val resultVar = input ++ Seq(ExprCode("", "false", existsVar))
+    val resultVar = input ++ Seq(ExprCode("", FalseLiteral,
+      VariableValue(existsVar, CodeGenerator.JAVA_BOOLEAN)))
     if (broadcastRelation.value.keyIsUnique) {
       s"""
          |// generate join key for stream side

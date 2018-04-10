@@ -15,40 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.unsafe.memory;
+package org.apache.spark.sql.catalyst.expressions.codegen
 
-import javax.annotation.Nullable;
+import org.apache.spark.SparkFunSuite
 
-/**
- * A memory location. Tracked either by a memory address (with off-heap allocation),
- * or by an offset from a JVM object (in-heap allocation).
- */
-public class MemoryLocation {
+class ExprValueSuite extends SparkFunSuite {
 
-  @Nullable
-  Object obj;
+  test("TrueLiteral and FalseLiteral should be LiteralValue") {
+    val trueLit = TrueLiteral
+    val falseLit = FalseLiteral
 
-  long offset;
+    assert(trueLit.value == "true")
+    assert(falseLit.value == "false")
 
-  public MemoryLocation(@Nullable Object obj, long offset) {
-    this.obj = obj;
-    this.offset = offset;
-  }
+    assert(trueLit.isPrimitive)
+    assert(falseLit.isPrimitive)
 
-  public MemoryLocation() {
-    this(null, 0);
-  }
+    trueLit match {
+      case LiteralValue(value, javaType) =>
+        assert(value == "true" && javaType == "boolean")
+      case _ => fail()
+    }
 
-  public void setObjAndOffset(Object newObj, long newOffset) {
-    this.obj = newObj;
-    this.offset = newOffset;
-  }
-
-  public final Object getBaseObject() {
-    return obj;
-  }
-
-  public final long getBaseOffset() {
-    return offset;
+    falseLit match {
+      case LiteralValue(value, javaType) =>
+        assert(value == "false" && javaType == "boolean")
+      case _ => fail()
+    }
   }
 }
