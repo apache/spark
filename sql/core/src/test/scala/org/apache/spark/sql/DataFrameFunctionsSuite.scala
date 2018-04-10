@@ -413,6 +413,23 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("arrays_overlap function") {
+    val df = Seq(
+      (Seq[Option[Int]](Some(1), Some(2)), Seq[Option[Int]](Some(-1), Some(10))),
+      (Seq.empty[Option[Int]], Seq[Option[Int]](Some(-1), None)),
+      (Seq[Option[Int]](Some(3), Some(2)), Seq[Option[Int]](Some(1), Some(2)))
+    ).toDF("a", "b")
+
+    val answer = Seq(Row(false), Row(null), Row(true))
+
+    checkAnswer(df.select(arrays_overlap(df("a"), df("b"))), answer)
+    checkAnswer(df.selectExpr("arrays_overlap(a, b)"), answer)
+
+    intercept[AnalysisException] {
+      df.selectExpr("arrays_overlap(array(1, 2, 3), array('a', 'b', 'c'))")
+    }
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {

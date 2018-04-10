@@ -287,3 +287,112 @@ case class ArrayContains(left: Expression, right: Expression)
 
   override def prettyName: String = "array_contains"
 }
+
+
+/**
+ * Checks if the two arrays contain at least one common element.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(a1, a2) - Returns true if a1 contains at least an element present also in a2.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), array(3, 4, 5));
+       true
+  """, since = "2.4.0")
+case class ArraysOverlap(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  private lazy val elementType = inputTypes.head.asInstanceOf[ArrayType].elementType
+
+  override def dataType: DataType = BooleanType
+
+  override def inputTypes: Seq[AbstractDataType] = left.dataType match {
+    case la: ArrayType if la.sameType(right.dataType) =>
+      Seq(la, la)
+    case _ => Seq.empty
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!left.dataType.isInstanceOf[ArrayType] || !right.dataType.isInstanceOf[ArrayType] ||
+        !left.dataType.sameType(right.dataType)) {
+      TypeCheckResult.TypeCheckFailure("Arguments must be arrays with the same element type.")
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def nullable: Boolean = {
+    left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull ||
+      right.dataType.asInstanceOf[ArrayType].containsNull
+  }
+
+  override def nullSafeEval(a1: Any, a2: Any): Any = {
+    var hasNull = false
+    val arr1 = a1.asInstanceOf[ArrayData]
+    val arr2 = a2.asInstanceOf[ArrayData]
+    if (arr1.numElements() > 0) {
+      arr1.foreach(elementType, (_, v1) =>
+        if (v1 == null) {
+          hasNull = true
+        } else {
+          arr2.foreach(elementType, (_, v2) =>
+            if (v2 == null) {
+              hasNull = true
+            } else if (v1 == v2) {
+              return true
+            }
+          )
+        }
+      )
+    } else {
+      arr2.foreach(elementType, (_, v) =>
+        if (v == null) {
+          return null
+        }
+      )
+    }
+    if (hasNull) {
+      null
+    } else {
+      false
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (a1, a2) => {
+      val i1 = ctx.freshName("i")
+      val i2 = ctx.freshName("i")
+      val getValue1 = CodeGenerator.getValue(a1, elementType, i1)
+      val getValue2 = CodeGenerator.getValue(a2, elementType, i2)
+      s"""
+         |if ($a1.numElements() > 0) {
+         |  for (int $i1 = 0; $i1 < $a1.numElements(); $i1 ++) {
+         |    if ($a1.isNullAt($i1)) {
+         |      ${ev.isNull} = true;
+         |    } else {
+         |      for (int $i2 = 0; $i2 < $a2.numElements(); $i2 ++) {
+         |        if ($a2.isNullAt($i2)) {
+         |          ${ev.isNull} = true;
+         |        } else if (${ctx.genEqual(elementType, getValue1, getValue2)}) {
+         |          ${ev.isNull} = false;
+         |          ${ev.value} = true;
+         |          break;
+         |        }
+         |      }
+         |      if (${ev.value}) {
+         |        break;
+         |      }
+         |    }
+         |  }
+         |} else {
+         |  for (int $i2 = 0; $i2 < $a2.numElements(); $i2 ++) {
+         |    if ($a2.isNullAt($i2)) {
+         |      ${ev.isNull} = true;
+         |      break;
+         |    }
+         |  }
+         |}
+         |""".stripMargin
+    })
+  }
+}

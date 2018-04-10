@@ -1846,6 +1846,20 @@ def array_contains(col, value):
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
 
 
+@since(2.4)
+def arrays_overlap(a1, a2):
+    """
+    Collection function: returns true if the arrays contain any common non-null element; if not, returns
+    null if any of the arrays contains a null element and false otherwise.
+
+    >>> df = spark.createDataFrame([(["a", "b", "c"], ["c", "d", "e"]), (["a"], ["b", "c"])], ['x', 'y'])
+    >>> df.select(arrays_overlap(df.x, df.y).alias("overlap")).collect()
+    [Row(overlap=True), Row(overlap=False)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.arrays_overlap(_to_java_column(a1), _to_java_column(a2)))
+
+
 @since(1.4)
 def explode(col):
     """Returns a new row for each element in the given array or map.

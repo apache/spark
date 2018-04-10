@@ -105,4 +105,29 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
   }
+
+  test("ArraysOverlap") {
+    val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq(4, 5, 3), ArrayType(IntegerType))
+    val a2 = Literal.create(Seq(null, 5, 6), ArrayType(IntegerType))
+    val a3 = Literal.create(Seq(7, 8), ArrayType(IntegerType))
+    val a4 = Literal.create(Seq.empty[Int], ArrayType(IntegerType))
+
+    val a5 = Literal.create(Seq[String](null, ""), ArrayType(StringType))
+    val a6 = Literal.create(Seq[String]("", "abc"), ArrayType(StringType))
+    val a7 = Literal.create(Seq[String]("def", "ghi"), ArrayType(StringType))
+
+    checkEvaluation(ArraysOverlap(a0, a1), true)
+    checkEvaluation(ArraysOverlap(a0, a2), null)
+    checkEvaluation(ArraysOverlap(a1, a2), true)
+    checkEvaluation(ArraysOverlap(a1, a3), false)
+    checkEvaluation(ArraysOverlap(a0, a4), false)
+    checkEvaluation(ArraysOverlap(a2, a4), null)
+    checkEvaluation(ArraysOverlap(a4, a2), null)
+
+    checkEvaluation(ArraysOverlap(a5, a6), true)
+    checkEvaluation(ArraysOverlap(a5, a7), null)
+    checkEvaluation(ArraysOverlap(a6, a7), false)
+
+  }
 }
