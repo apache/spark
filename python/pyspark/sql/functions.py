@@ -2158,6 +2158,7 @@ def sort_array(col, asc=True):
 
     :param col: name of column or expression
 
+    >>> from pyspark.sql.functions import sort_array
     >>> df = spark.createDataFrame([([2, 1, 3],),([1],),([],)], ['data'])
     >>> df.select(sort_array(df.data).alias('r')).collect()
     [Row(r=[1, 2, 3]), Row(r=[1]), Row(r=[])]
@@ -2166,6 +2167,23 @@ def sort_array(col, asc=True):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
+
+
+@since(2.4)
+def array_sort(col):
+    """
+    Collection function: sorts the input array in ascending order. The elements of the input array
+    must be orderable. Null elements will be placed at the end of the returned array.
+
+    :param col: name of column or expression
+
+    >>> from pyspark.sql.functions import array_sort
+    >>> df = spark.createDataFrame([([2, 1, None, 3],),([1],),([],)], ['data'])
+    >>> df.select(array_sort(df.data).alias('r')).collect()
+    [Row(r=[1, 2, 3, None]), Row(r=[1]), Row(r=[])]
+     """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_sort(_to_java_column(col)))
 
 
 @since(1.5)
