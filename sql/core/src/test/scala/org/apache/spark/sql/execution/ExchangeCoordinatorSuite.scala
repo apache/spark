@@ -320,14 +320,14 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
             queryStageInputs.foreach { q =>
-                assert(q.partitionStartIndices.isDefined)
-                assert(q.outputPartitioning.numPartitions === 5)
+              assert(q.partitionStartIndices.isDefined)
+              assert(q.outputPartitioning.numPartitions === 5)
             }
 
           case None =>
             queryStageInputs.foreach { q =>
-                assert(q.partitionStartIndices.isDefined)
-                assert(q.outputPartitioning.numPartitions === 3)
+              assert(q.partitionStartIndices.isDefined)
+              assert(q.outputPartitioning.numPartitions === 3)
             }
         }
       }
@@ -367,14 +367,14 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
             queryStageInputs.foreach { q =>
-                assert(q.partitionStartIndices.isDefined)
-                assert(q.outputPartitioning.numPartitions === 5)
+              assert(q.partitionStartIndices.isDefined)
+              assert(q.outputPartitioning.numPartitions === 5)
             }
 
           case None =>
             queryStageInputs.foreach { q =>
-                assert(q.partitionStartIndices.isDefined)
-                assert(q.outputPartitioning.numPartitions === 2)
+              assert(q.partitionStartIndices.isDefined)
+              assert(q.outputPartitioning.numPartitions === 2)
             }
         }
       }
@@ -419,14 +419,14 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
             queryStageInputs.foreach { q =>
-                assert(q.partitionStartIndices.isDefined)
-                assert(q.outputPartitioning.numPartitions === 5)
+              assert(q.partitionStartIndices.isDefined)
+              assert(q.outputPartitioning.numPartitions === 5)
             }
 
           case None =>
             queryStageInputs.foreach { q =>
-                assert(q.partitionStartIndices.isDefined)
-                assert(q.outputPartitioning.numPartitions === 2)
+              assert(q.partitionStartIndices.isDefined)
+              assert(q.outputPartitioning.numPartitions === 2)
             }
         }
       }
@@ -471,14 +471,14 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
             queryStageInputs.foreach { q =>
-                assert(q.partitionStartIndices.isDefined)
-                assert(q.outputPartitioning.numPartitions === 5)
+              assert(q.partitionStartIndices.isDefined)
+              assert(q.outputPartitioning.numPartitions === 5)
             }
 
           case None =>
             queryStageInputs.foreach { q =>
-                assert(q.partitionStartIndices.isDefined)
-                assert(q.outputPartitioning.numPartitions === 3)
+              assert(q.partitionStartIndices.isDefined)
+              assert(q.outputPartitioning.numPartitions === 3)
             }
         }
       }
