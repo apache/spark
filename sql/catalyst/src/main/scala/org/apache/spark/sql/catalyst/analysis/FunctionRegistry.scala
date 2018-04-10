@@ -403,6 +403,7 @@ object FunctionRegistry {
     expression[CreateArray]("array"),
     expression[ArrayContains]("array_contains"),
     expression[ArrayPosition]("array_position"),
+    expression[ArraySort]("array_sort"),
     expression[CreateMap]("map"),
     expression[CreateNamedStruct]("named_struct"),
     expression[ElementAt]("element_at"),

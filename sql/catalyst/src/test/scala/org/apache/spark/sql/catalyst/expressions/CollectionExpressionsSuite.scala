@@ -83,6 +83,14 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val arrayStruct = Literal.create(Seq(create_row(2), create_row(1)), typeAS)
 
     checkEvaluation(new SortArray(arrayStruct), Seq(create_row(1), create_row(2)))
+
+
+    checkEvaluation(ArraySort(a0), Seq(1, 2, 3))
+    checkEvaluation(ArraySort(a1), Seq[Integer]())
+    checkEvaluation(ArraySort(a2), Seq("a", "b"))
+    checkEvaluation(ArraySort(a3), Seq("a", "b", null))
+    checkEvaluation(ArraySort(a4), Seq(null, null))
+    checkEvaluation(ArraySort(arrayStruct), Seq(create_row(1), create_row(2)))
   }
 
   test("Array contains") {

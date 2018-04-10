@@ -276,7 +276,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("sort_array function") {
+  test("sort_array/array_sort functions") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),
       (Array.empty[Int], Array.empty[String]),
@@ -323,6 +323,30 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val df3 = Seq(("xxx", "x")).toDF("a", "b")
     assert(intercept[AnalysisException] {
       df3.selectExpr("sort_array(a)").collect()
+    }.getMessage().contains("only supports array input"))
+
+    checkAnswer(
+      df.select(array_sort($"a"), array_sort($"b")),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+    checkAnswer(
+      df.selectExpr("array_sort(a)", "array_sort(b)"),
+      Seq(
+        Row(Seq(1, 2, 3), Seq("a", "b", "c")),
+        Row(Seq[Int](), Seq[String]()),
+        Row(null, null))
+    )
+
+    checkAnswer(
+      df2.selectExpr("array_sort(a)"),
+      Seq(Row(Seq[Seq[Int]](Seq(1), Seq(2), Seq(2, 4), null)))
+    )
+
+    assert(intercept[AnalysisException] {
+      df3.selectExpr("array_sort(a)").collect()
     }.getMessage().contains("only supports array input"))
   }
 
