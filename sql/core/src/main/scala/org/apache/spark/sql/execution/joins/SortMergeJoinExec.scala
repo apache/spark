@@ -530,7 +530,7 @@ case class SortMergeJoinExec(
           createJoinKey(ctx, leftRow, leftUpperKeys, left.output),
           createJoinKey(ctx, rightRow, rightLowerKeys, right.output),
           createJoinKey(ctx, rightRow, rightUpperKeys, right.output))
-      else (null, null, null, null)
+      else (Nil, Nil, Nil, Nil)
 
     val secRangeDataType = if(leftLowerKeys.size > 0) leftLowerKeys(0).dataType
       else if(leftUpperKeys.size > 0) leftUpperKeys(0).dataType
