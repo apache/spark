@@ -168,6 +168,11 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
   }
 }
 
+/**
+ * Implements an `IndexedSeq` interface for `ArrayData`. Notice that if the original `ArrayData`
+ * is a primitive array and contains null elements, it is better to ask for `IndexedSeq[Any]`,
+ * instead of `IndexedSeq[Int]`, in order to keep the null elements.
+ */
 class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends IndexedSeq[T] {
 
   private def getAccessor(dataType: DataType): (Int) => Any = dataType match {
@@ -191,16 +196,17 @@ class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends I
 
   private val accessor: (Int) => Any = getAccessor(dataType)
 
-  override def apply(idx: Int): T = if (0 <= idx && idx < arrayData.numElements()) {
-    if (arrayData.isNullAt(idx)) {
-      null.asInstanceOf[T]
+  override def apply(idx: Int): T =
+    if (0 <= idx && idx < arrayData.numElements()) {
+      if (arrayData.isNullAt(idx)) {
+        null.asInstanceOf[T]
+      } else {
+        accessor(idx).asInstanceOf[T]
+      }
     } else {
-      accessor(idx).asInstanceOf[T]
+      throw new IndexOutOfBoundsException(
+        s"Index $idx must be between 0 and the length of the ArrayData.")
     }
-  } else {
-    throw new IndexOutOfBoundsException(
-      s"Index $idx must be between 0 and the length of the ArrayData.")
-  }
 
   override def length: Int = arrayData.numElements()
 }
