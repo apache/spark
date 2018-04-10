@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
-import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
-import java.nio.file.{Files, Paths, StandardOpenOption}
+import java.nio.charset.UnsupportedCharsetException
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -1280,20 +1279,25 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     )
   }
 
-  test("SPARK-23846: schema inferring touches less data if samplingRation < 1.0") {
-    val predefinedSample = Set[Int](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
-      57, 62, 68, 72)
+  test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {
     withTempPath { path =>
-      val writer = Files.newBufferedWriter(Paths.get(path.getAbsolutePath),
-        StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW)
-      for (i <- 0 until 100) {
-        if (predefinedSample.contains(i)) {
-          writer.write(i.toString + "\n")
+      val rdd = spark.sqlContext.range(0, 100).map {row =>
+        val predefinedSample = Set[Long](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
+          57, 62, 68, 72)
+        val value = row.getLong(0)
+        if (predefinedSample.contains(value)) {
+          value.toString
         } else {
-          writer.write((i.toDouble + 0.1).toString + "\n")
+          (value.toDouble + 0.1).toString
         }
-      }
-      writer.close()
+      }.repartition(1)
+      rdd.write.text(path.getAbsolutePath)
+
+      val defaultMaxSplitBytes = spark.conf.get("spark.sql.files.maxPartitionBytes").toDouble
+      val openCostInBytes = spark.conf.get("spark.sql.files.openCostInBytes").toDouble
+      val maxSplitBytes = Math.min(defaultMaxSplitBytes, openCostInBytes)
+      require(rdd.collect().mkString("\n").length < maxSplitBytes,
+        "The test file must be mapped to one partition to make sure that sampling is stable")
 
       val ds = spark.read
         .option("inferSchema", true)
@@ -1303,7 +1307,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("SPARK-23846: usage of samplingRation while parsing of dataset of strings") {
+  test("SPARK-23846: usage of samplingRatio while parsing a dataset of strings") {
     val dstr = spark.sparkContext.parallelize(0 until 100, 1).map { i =>
       val predefinedSample = Set[Int](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
         57, 62, 68, 72)
@@ -1319,5 +1323,23 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .csv(dstr)
 
     assert(ds.schema == new StructType().add("_c0", IntegerType))
+  }
+
+  test("SPARK-23846: samplingRatio is out of the range (0, 1.0]") {
+    val dstr = spark.sparkContext.parallelize(0 until 100, 1)
+      .map { i => i.toString + "\n"}.toDS()
+
+    val errorMsg0 = intercept[IllegalArgumentException] {
+      spark.read.option("inferSchema", true).option("samplingRatio", -1).csv(dstr)
+    }.getMessage
+    assert(errorMsg0.contains("samplingRatio (-1.0) should be greater than 0"))
+
+    val errorMsg1 = intercept[IllegalArgumentException] {
+      spark.read.option("inferSchema", true).option("samplingRatio", 0).csv(dstr)
+    }.getMessage
+    assert(errorMsg1.contains("samplingRatio (0.0) should be greater than 0"))
+
+    val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 10).csv(dstr)
+    assert(sampled.count() == dstr.count())
   }
 }
