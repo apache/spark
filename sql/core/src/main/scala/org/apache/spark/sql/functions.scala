@@ -132,7 +132,7 @@ object functions {
    * Returns a sort expression based on ascending order of the column,
    * and null values return before non-null values.
    * {{{
-   *   df.sort(asc_nulls_last("dept"), desc("age"))
+   *   df.sort(asc_nulls_first("dept"), desc("age"))
    * }}}
    *
    * @group sort_funcs

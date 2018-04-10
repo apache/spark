@@ -14,41 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.deploy.k8s
 
-package org.apache.spark.unsafe.memory;
+import io.fabric8.kubernetes.api.model.LocalObjectReference
 
-import javax.annotation.Nullable;
+import org.apache.spark.SparkFunSuite
 
-/**
- * A memory location. Tracked either by a memory address (with off-heap allocation),
- * or by an offset from a JVM object (in-heap allocation).
- */
-public class MemoryLocation {
+class KubernetesUtilsTest extends SparkFunSuite {
 
-  @Nullable
-  Object obj;
+  test("testParseImagePullSecrets") {
+    val noSecrets = KubernetesUtils.parseImagePullSecrets(None)
+    assert(noSecrets === Nil)
 
-  long offset;
+    val oneSecret = KubernetesUtils.parseImagePullSecrets(Some("imagePullSecret"))
+    assert(oneSecret === new LocalObjectReference("imagePullSecret") :: Nil)
 
-  public MemoryLocation(@Nullable Object obj, long offset) {
-    this.obj = obj;
-    this.offset = offset;
+    val commaSeparatedSecrets = KubernetesUtils.parseImagePullSecrets(Some("s1, s2  , s3,s4"))
+    assert(commaSeparatedSecrets.map(_.getName) === "s1" :: "s2" :: "s3" :: "s4" :: Nil)
   }
 
-  public MemoryLocation() {
-    this(null, 0);
-  }
-
-  public void setObjAndOffset(Object newObj, long newOffset) {
-    this.obj = newObj;
-    this.offset = newOffset;
-  }
-
-  public final Object getBaseObject() {
-    return obj;
-  }
-
-  public final long getBaseOffset() {
-    return offset;
-  }
 }
