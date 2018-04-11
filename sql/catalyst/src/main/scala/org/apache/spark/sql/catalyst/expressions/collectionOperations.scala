@@ -225,27 +225,17 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
       > SELECT _FUNC_(array(2, 1, 4, 3));
        [3, 4, 1, 2]
   """,
-  since = "2.4.0")
+  since = "1.5.0",
+  note = "Reverse logic for arrays is available since 2.4.0."
+)
 case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   // Input types are utilized by type coercion in ImplicitTypeCasts.
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType)
-
-  val allowedTypes = Seq(StringType, ArrayType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, ArrayType))
 
   override def dataType: DataType = child.dataType
 
   lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    if (allowedTypes.exists(_.acceptsType(child.dataType))) {
-      TypeCheckResult.TypeCheckSuccess
-    } else {
-      TypeCheckResult.TypeCheckFailure(
-        s"The argument of function $prettyName should be StringType or ArrayType," +
-        s" but it's " + child.dataType.simpleString)
-    }
-  }
 
   override def nullSafeEval(input: Any): Any = input match {
     case a: ArrayData => new GenericArrayData(a.toObjectArray(elementType).reverse)
@@ -266,10 +256,19 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
   private def arrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {
     val length = ctx.freshName("length")
     val javaElementType = CodeGenerator.javaType(elementType)
-    val getCall = (index: String) => CodeGenerator.getValue(ev.value, elementType, index)
+    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
 
-    val swapAssigments = if (CodeGenerator.isPrimitiveType(elementType)) {
+    val initialization = if (isPrimitiveType) {
+      s"$childName.copy()"
+    } else {
+      s"new ${classOf[GenericArrayData].getName()}(new Object[$length])"
+    }
+
+    val numberOfIterations = if (isPrimitiveType) s"$length / 2" else length
+
+    val swapAssigments = if (isPrimitiveType) {
       val setFunc = "set" + CodeGenerator.primitiveTypeName(elementType)
+      val getCall = (index: String) => CodeGenerator.getValue(ev.value, elementType, index)
       s"""|boolean isNullAtK = ${ev.value}.isNullAt(k);
           |boolean isNullAtL = ${ev.value}.isNullAt(l);
           |if(!isNullAtK) {
@@ -285,19 +284,17 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
           |  ${ev.value}.setNullAt(l);
           |}""".stripMargin
     } else {
-      s"""|Object el = ${getCall("k")};
-          |${ev.value}.update(k, ${getCall("l")});
-          |${ev.value}.update(l, el);""".stripMargin
+      s"${ev.value}.update(k, ${CodeGenerator.getValue(childName, elementType, "l")});"
     }
 
     s"""
-       |${ev.value} = $childName.copy();
-       |final int $length = ${ev.value}.numElements();
-       |for(int k = 0; k < $length / 2; k++) {
-       |  int l = $length - k - 1;
-       |  $swapAssigments
-       |}
-      """.stripMargin
+    |final int $length = $childName.numElements();
+    |${ev.value} = $initialization;
+    |for(int k = 0; k < $numberOfIterations; k++) {
+    |  int l = $length - k - 1;
+    |  $swapAssigments
+    |}
+    """.stripMargin
   }
 
   override def prettyName: String = "reverse"

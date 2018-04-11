@@ -414,6 +414,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("reverse function") {
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // switch codegen on
+
     // String test cases
     val oneRowDF = Seq(("Spark", 3215)).toDF("s", "i")
 
@@ -438,7 +440,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(null))
     )
 
-
     // Array test cases (primitive-type elements)
     val idf = Seq(
       Seq(1, 9, 8, 7),
@@ -452,11 +453,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
     )
     checkAnswer(
+      idf.filter(dummyFilter('i)).select(reverse('i)),
+      Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
       idf.selectExpr("reverse(i)"),
       Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
     )
     checkAnswer(
       oneRowDF.selectExpr("reverse(array(1, null, 2, null))"),
+      Seq(Row(Seq(null, 2, null, 1)))
+    )
+    checkAnswer(
+      oneRowDF.filter(dummyFilter('i)).selectExpr("reverse(array(1, null, 2, null))"),
       Seq(Row(Seq(null, 2, null, 1)))
     )
 
@@ -473,11 +482,19 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
     )
     checkAnswer(
+      sdf.filter(dummyFilter('s)).select(reverse('s)),
+      Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
       sdf.selectExpr("reverse(s)"),
       Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
     )
     checkAnswer(
       oneRowDF.selectExpr("reverse(array(array(1, 2), array(3, 4)))"),
+      Seq(Row(Seq(Seq(3, 4), Seq(1, 2))))
+    )
+    checkAnswer(
+      oneRowDF.filter(dummyFilter('s)).selectExpr("reverse(array(array(1, 2), array(3, 4)))"),
       Seq(Row(Seq(Seq(3, 4), Seq(1, 2))))
     )
 
