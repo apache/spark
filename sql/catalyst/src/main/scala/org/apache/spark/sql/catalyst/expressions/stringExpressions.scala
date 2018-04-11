@@ -1017,7 +1017,8 @@ case class StringInstr(str: Expression, substr: Expression)
     Examples:
       > SELECT _FUNC_('SparkSQL', 'SQL');
        6
-  """)
+  """,
+  since = "2.4.0")
 case class ArrayPosition(str: Expression, substr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
