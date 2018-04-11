@@ -280,6 +280,6 @@ abstract class BinaryNode extends LogicalPlan {
   override final def children: Seq[LogicalPlan] = Seq(left, right)
 }
 
-abstract class KeepOrderUnaryNode extends UnaryNode {
+abstract class OrderPreservingUnaryNode extends UnaryNode {
   override final def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
