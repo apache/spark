@@ -94,7 +94,6 @@ if sys.version < '3':
 else:
     import socketserver as SocketServer
 import threading
-from pyspark.cloudpickle import CloudPickler
 from pyspark.serializers import read_int, PickleSerializer
 
 
@@ -266,4 +265,4 @@ if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

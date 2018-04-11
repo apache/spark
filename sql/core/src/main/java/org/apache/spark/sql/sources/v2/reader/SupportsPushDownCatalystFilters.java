@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression;
 public interface SupportsPushDownCatalystFilters extends DataSourceReader {
 
   /**
-   * Pushes down filters, and returns unsupported filters.
+   * Pushes down filters, and returns filters that need to be evaluated after scanning.
    */
   Expression[] pushCatalystFilters(Expression[] filters);
 

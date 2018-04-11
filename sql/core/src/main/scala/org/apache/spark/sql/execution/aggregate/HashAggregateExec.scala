@@ -174,11 +174,11 @@ case class HashAggregateExec(
     }
   }
 
-  // The variables used as aggregation buffer. Only used for aggregation without keys.
-  private var bufVars: Seq[ExprCode] = _
+  // The variables used as aggregation buffer. Only used in codegen for aggregation without keys.
+  @transient private var bufVars: Seq[ExprCode] = _
 
   private def doProduceWithoutKeys(ctx: CodegenContext): String = {
-    val initAgg = ctx.addMutableState(ctx.JAVA_BOOLEAN, "initAgg")
+    val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
     // The generated function doesn't have input row in the code context.
     ctx.INPUT_ROW = null
 
@@ -186,15 +186,18 @@ case class HashAggregateExec(
     val functions = aggregateExpressions.map(_.aggregateFunction.asInstanceOf[DeclarativeAggregate])
     val initExpr = functions.flatMap(f => f.initialValues)
     bufVars = initExpr.map { e =>
-      val isNull = ctx.addMutableState(ctx.JAVA_BOOLEAN, "bufIsNull")
-      val value = ctx.addMutableState(ctx.javaType(e.dataType), "bufValue")
+      val isNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "bufIsNull")
+      val value = ctx.addMutableState(CodeGenerator.javaType(e.dataType), "bufValue")
       // The initial expression should not access any column
       val ev = e.genCode(ctx)
       val initVars = s"""
          | $isNull = ${ev.isNull};
          | $value = ${ev.value};
        """.stripMargin
-      ExprCode(ev.code + initVars, isNull, value)
+      ExprCode(
+        ev.code + initVars,
+        JavaCode.isNullGlobal(isNull),
+        JavaCode.global(value, e.dataType))
     }
     val initBufVar = evaluateVariables(bufVars)
 
@@ -234,6 +237,8 @@ case class HashAggregateExec(
          |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
          | }
        """.stripMargin)
+
+    bufVars = null  // explicitly null this field out to allow the referent to be GC'd sooner
 
     val numOutput = metricTerm(ctx, "numOutputRows")
     val aggTime = metricTerm(ctx, "aggTime")
@@ -532,7 +537,7 @@ case class HashAggregateExec(
    */
   private def checkIfFastHashMapSupported(ctx: CodegenContext): Boolean = {
     val isSupported =
-      (groupingKeySchema ++ bufferSchema).forall(f => ctx.isPrimitiveType(f.dataType) ||
+      (groupingKeySchema ++ bufferSchema).forall(f => CodeGenerator.isPrimitiveType(f.dataType) ||
         f.dataType.isInstanceOf[DecimalType] || f.dataType.isInstanceOf[StringType]) &&
         bufferSchema.nonEmpty && modes.forall(mode => mode == Partial || mode == PartialMerge)
 
@@ -565,7 +570,7 @@ case class HashAggregateExec(
   }
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
-    val initAgg = ctx.addMutableState(ctx.JAVA_BOOLEAN, "initAgg")
+    val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
     if (sqlContext.conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap(ctx)
     } else {
@@ -757,7 +762,7 @@ case class HashAggregateExec(
 
     val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,
     incCounter) = if (testFallbackStartsAt.isDefined) {
-      val countTerm = ctx.addMutableState(ctx.JAVA_INT, "fallbackCounter")
+      val countTerm = ctx.addMutableState(CodeGenerator.JAVA_INT, "fallbackCounter")
       (s"$countTerm < ${testFallbackStartsAt.get._1}",
         s"$countTerm < ${testFallbackStartsAt.get._2}", s"$countTerm = 0;", s"$countTerm += 1;")
     } else {
@@ -832,7 +837,7 @@ case class HashAggregateExec(
       }
       val updateUnsafeRowBuffer = unsafeRowBufferEvals.zipWithIndex.map { case (ev, i) =>
         val dt = updateExpr(i).dataType
-        ctx.updateColumn(unsafeRowBuffer, dt, i, ev, updateExpr(i).nullable)
+        CodeGenerator.updateColumn(unsafeRowBuffer, dt, i, ev, updateExpr(i).nullable)
       }
       s"""
          |// common sub-expressions
@@ -855,7 +860,7 @@ case class HashAggregateExec(
         }
         val updateFastRow = fastRowEvals.zipWithIndex.map { case (ev, i) =>
           val dt = updateExpr(i).dataType
-          ctx.updateColumn(
+          CodeGenerator.updateColumn(
             fastRowBuffer, dt, i, ev, updateExpr(i).nullable, isVectorizedHashMapEnabled)
         }
 
