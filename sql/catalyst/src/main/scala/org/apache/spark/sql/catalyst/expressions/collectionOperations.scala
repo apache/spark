@@ -128,6 +128,62 @@ case class MapKeys(child: Expression)
   override def prettyName: String = "map_keys"
 }
 
+@ExpressionDescription(
+  usage = """_FUNC_(a1, a2) - Returns a merged array matching N-th element of first
+  array with the N-th element of second.""",
+  examples = """
+    Examples
+      > SELECT _FUNC_(array(1, 2, 3), array(2, 3, 4));
+        [[1, 2], [2, 3], [3, 4]]
+  """,
+  since = "2.4.0")
+case class Zip(left: Expression, right: Expression)
+  extends BinaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
+
+  override def dataType: DataType = ArrayType(left.dataType.asInstanceOf[ArrayType].elementType)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (arr1, arr2) => {
+      val i = ctx.freshName("i")
+      s"""
+      for (int $i = 0; $i < $arr1.numElements(); $i ++) {
+        if ($arr1.isNullAt($i)) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value}[$i] = ($arr1[$i], $arr2[$i]);
+        }
+      }
+     """
+    })
+  }
+
+  override def nullSafeEval(a1: Any, a2: Any): Any = {
+    var hasNull = false
+    val pair = (a1.asInstanceOf[ArrayData], a2.asInstanceOf[ArrayData])
+    val sizes = (pair._1.numElements(), pair._2.numElements())
+    val zipped: ArrayData = pair._1.copy()
+
+    val elementType = left.dataType.asInstanceOf[ArrayType].elementType
+    val data = pair._1.toArray[AnyRef](elementType)
+
+    if (sizes._1 < sizes._2) {
+      // maintain first array as the longest
+      pair.swap
+      sizes.swap
+    }
+
+    var i = 0
+    while (i < sizes._1) {
+      zipped.update(i, (pair._1.get(i, left.dataType), pair._2.get(i, right.dataType)))
+      i += 1
+    }
+
+    zipped
+  }
+}
+
 /**
  * Returns an unordered array containing the values of the map.
  */

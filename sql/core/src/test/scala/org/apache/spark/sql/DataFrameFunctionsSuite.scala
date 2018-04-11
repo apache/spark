@@ -479,6 +479,17 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("array zip function") {
+    val df = Seq(
+      (Seq[Int](1, 2, 3, 4)),
+      (Seq[Int](5, 6, 7, 8))
+    ).toDF("vals1", "vals2")
+    checkAnswer(
+      df.select(zip($"vals1", $"vals2") as "zipped"),
+      Seq(Row((1, 5), (2, 6), (3, 7), (4, 8)))
+    )
+  }
+
   test("map size function") {
     val df = Seq(
       (Map[Int, Int](1 -> 1, 2 -> 2), "x"),
