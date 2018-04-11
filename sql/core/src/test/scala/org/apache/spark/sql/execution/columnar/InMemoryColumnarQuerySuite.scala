@@ -42,7 +42,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val storageLevel = MEMORY_ONLY
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
     val inMemoryRelation = InMemoryRelation(useCompression = true, 5, storageLevel, plan, None,
-      data.logicalPlan.stats)
+      data.logicalPlan)
 
     assert(inMemoryRelation.cachedColumnBuffers.getStorageLevel == storageLevel)
     inMemoryRelation.cachedColumnBuffers.collect().head match {
@@ -119,7 +119,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("simple columnar query") {
     val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None,
-      testData.logicalPlan.stats)
+      testData.logicalPlan)
 
     checkAnswer(scan, testData.collect().toSeq)
   }
@@ -138,7 +138,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     val logicalPlan = testData.select('value, 'key).logicalPlan
     val plan = spark.sessionState.executePlan(logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None,
-      logicalPlan.stats)
+      logicalPlan)
 
     checkAnswer(scan, testData.collect().map {
       case Row(key: Int, value: String) => value -> key
@@ -155,7 +155,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-1436 regression: in-memory columns must be able to be accessed multiple times") {
     val plan = spark.sessionState.executePlan(testData.logicalPlan).sparkPlan
     val scan = InMemoryRelation(useCompression = true, 5, MEMORY_ONLY, plan, None,
-      testData.logicalPlan.stats)
+      testData.logicalPlan)
 
     checkAnswer(scan, testData.collect().toSeq)
     checkAnswer(scan, testData.collect().toSeq)
@@ -329,7 +329,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-17549: cached table size should be correctly calculated") {
     val data = spark.sparkContext.parallelize(1 to 10, 5).toDF()
     val plan = spark.sessionState.executePlan(data.logicalPlan).sparkPlan
-    val cached = InMemoryRelation(true, 5, MEMORY_ONLY, plan, None, data.logicalPlan.stats)
+    val cached = InMemoryRelation(true, 5, MEMORY_ONLY, plan, None, data.logicalPlan)
 
     // Materialize the data.
     val expectedAnswer = data.collect()
