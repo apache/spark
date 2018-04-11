@@ -880,8 +880,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("execB", "host2", ANY).get.index === 3)
   }
 
-  test("speculative task should not run on a given host where another attempt " +
-    "is already running on") {
+  test("SPARK-23888: speculative task should not run on a given host " +
+    "where another attempt is already running on") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(
       sc, ("execA", "host1"), ("execB", "host2"))
@@ -893,7 +893,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // let task0.0 run on host1
     assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL).get.index == 0)
     val info1 = manager.taskAttempts(0)(0)
-    assert(info1.running === true)
+    assert(info1.running)
     assert(info1.host === "host1")
 
     // long time elapse, and task0.0 is still running,
@@ -902,7 +902,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     manager.speculatableTasks += 0
     assert(manager.resourceOffer("execB", "host2", PROCESS_LOCAL).get.index === 0)
     val info2 = manager.taskAttempts(0)(0)
-    assert(info2.running === true)
+    assert(info2.running)
     assert(info2.host === "host2")
     assert(manager.speculatableTasks.size === 0)
 
@@ -917,7 +917,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // there's already a running copy.
     clock.advance(1000)
     info1.finishTime = clock.getTimeMillis()
-    assert(info1.running === false)
+    manager.handleFailedTask(info1.taskId, TaskState.FAILED, UnknownReason)
+    assert(!info1.running)
 
     // time goes on, and task0.1 is still running
     clock.advance(1000)
@@ -928,7 +929,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // no more running copy of task0
     assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL).get.index === 0)
     val info3 = manager.taskAttempts(0)(0)
-    assert(info3.running === true)
+    assert(info3.running)
     assert(info3.host === "host1")
     assert(manager.speculatableTasks.size === 0)
   }
