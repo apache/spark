@@ -2261,7 +2261,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
   }
 
-  test("Random-based UUID expressions should produce same results at retries in the same DataFrame") {
+  test("Random-based UUIDs should produce same results at retries in the same DataFrame") {
     val df = spark.range(1).select($"id", new Column(RandomBasedUuid()))
     checkAnswer(df, df.collect())
   }
