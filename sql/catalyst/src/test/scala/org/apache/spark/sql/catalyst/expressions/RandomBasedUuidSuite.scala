@@ -22,13 +22,34 @@ import org.apache.spark.SparkFunSuite
 class RandomBasedUuidSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("uuid length") {
-    checkEvaluation(Length(RandomBasedUuid()), 36)
+    checkEvaluation(Length(RandomBasedUuid(Some(0))), 36)
   }
 
   test("uuid equals") {
-    val uuid = RandomBasedUuid()
+    val seed1 = Some(5L)
+    val seed2 = Some(10L)
+    val uuid = RandomBasedUuid(seed1)
     assert(uuid.fastEquals(uuid))
-    assert(!uuid.fastEquals(RandomBasedUuid()))
+    assert(!uuid.fastEquals(RandomBasedUuid(seed1)))
+    assert(!uuid.fastEquals(RandomBasedUuid(seed2)))
     assert(!uuid.fastEquals(uuid.freshCopy()))
+  }
+
+  test("uuid evaluate") {
+    val seed1 = Some(5L)
+    assert(evaluateWithoutCodegen(RandomBasedUuid(seed1)) ===
+      evaluateWithoutCodegen(RandomBasedUuid(seed1)))
+    assert(evaluateWithGeneratedMutableProjection(RandomBasedUuid(seed1)) ===
+      evaluateWithGeneratedMutableProjection(RandomBasedUuid(seed1)))
+    assert(evaluateWithUnsafeProjection(RandomBasedUuid(seed1)) ===
+      evaluateWithUnsafeProjection(RandomBasedUuid(seed1)))
+
+    val seed2 = Some(10L)
+    assert(evaluateWithoutCodegen(RandomBasedUuid(seed1)) !==
+      evaluateWithoutCodegen(RandomBasedUuid(seed2)))
+    assert(evaluateWithGeneratedMutableProjection(RandomBasedUuid(seed1)) !==
+      evaluateWithGeneratedMutableProjection(RandomBasedUuid(seed2)))
+    assert(evaluateWithUnsafeProjection(RandomBasedUuid(seed1)) !==
+      evaluateWithUnsafeProjection(RandomBasedUuid(seed2)))
   }
 }

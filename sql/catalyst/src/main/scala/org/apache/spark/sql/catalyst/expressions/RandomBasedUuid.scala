@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.concurrent.ThreadLocalRandom
+import java.util.Random
 
 import com.fasterxml.uuid.Generators
 
@@ -33,13 +33,17 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
   """,
   since = "2.4.0"
 )
-case class RandomBasedUuid() extends UuidExpression {
+case class RandomBasedUuid(randomSeed: Option[Long] = None) extends UuidExpression {
+
+  def this() = this(None)
+
+  override lazy val resolved: Boolean = randomSeed.isDefined
 
   override protected def initializeInternal(partitionIndex: Int): Unit = {
-    generator = Generators.randomBasedGenerator(ThreadLocalRandom.current())
+    generator = Generators.randomBasedGenerator(new Random(randomSeed.get + partitionIndex))
   }
 
-  override def freshCopy(): RandomBasedUuid = RandomBasedUuid()
+  override def freshCopy(): RandomBasedUuid = RandomBasedUuid(randomSeed)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val gen = ctx.freshName("gen")
@@ -49,7 +53,7 @@ case class RandomBasedUuid() extends UuidExpression {
       useFreshName = false)
     ctx.addPartitionInitializationStatement(s"$gen = " +
       "com.fasterxml.uuid.Generators.randomBasedGenerator(" +
-      "java.util.concurrent.ThreadLocalRandom.current()" +
+      s"new java.util.Random(${randomSeed.get}L + partitionIndex)" +
       ");")
     ev.copy(code = s"final UTF8String ${ev.value} = " +
       s"UTF8String.fromString(${gen}.generate().toString());",
