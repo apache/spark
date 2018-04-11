@@ -429,8 +429,8 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
 case class DayOfWeek(child: Expression) extends DayWeek {
 
   override protected def nullSafeEval(date: Any): Any = {
-    c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    c.get(Calendar.DAY_OF_WEEK)
+    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
+    cal.get(Calendar.DAY_OF_WEEK)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -461,8 +461,8 @@ case class DayOfWeek(child: Expression) extends DayWeek {
 case class WeekDay(child: Expression) extends DayWeek {
 
   override protected def nullSafeEval(date: Any): Any = {
-    c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    (c.get(Calendar.DAY_OF_WEEK) + 5 ) % 7
+    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
+    (cal.get(Calendar.DAY_OF_WEEK) + 5 ) % 7
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -486,7 +486,7 @@ abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = IntegerType
 
-  @transient protected lazy val c: Calendar = {
+  @transient protected lazy val cal: Calendar = {
     Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
   }
 }
