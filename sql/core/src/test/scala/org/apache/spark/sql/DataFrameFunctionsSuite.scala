@@ -326,6 +326,24 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }.getMessage().contains("only supports array input"))
   }
 
+  test("array position function") {
+    val df = Seq(("aaads", "aa", "zz", null)).toDF("a", "b", "c", "nul")
+
+    checkAnswer(
+      df.select(
+        array_position($"a", "aa"),
+        array_position($"a", "gg"),
+        array_position($"nul", "gg")),
+      Row(BigInt(1), BigInt(0), null))
+    checkAnswer(
+      df.selectExpr(
+        "array_position(a, b)",
+        "array_position(a, c)",
+        "array_position(a, nul)",
+        "array_position(nul, c)"),
+      Row(BigInt(1), BigInt(0), null, null))
+  }
+
   test("array size function") {
     val df = Seq(
       (Seq[Int](1, 2), "x"),

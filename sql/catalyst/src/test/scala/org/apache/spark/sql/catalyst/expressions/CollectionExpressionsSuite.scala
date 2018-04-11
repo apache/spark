@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.types._
 
 class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -41,6 +42,29 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkEvaluation(Size(Literal.create(null, MapType(StringType, StringType))), -1)
     checkEvaluation(Size(Literal.create(null, ArrayType(StringType))), -1)
+  }
+
+  test("Array Position") {
+    val s1 = 'a.string.at(0)
+    val s2 = 'b.string.at(1)
+    val s3 = 'c.string.at(2)
+    val row1 = create_row("aaads", "aa", "zz")
+    val nullString = Literal.create(null, StringType)
+
+    checkEvaluation(ArrayPosition(Literal("aaads"), Literal("aa")), Decimal(BigInt(1)), row1)
+    checkEvaluation(ArrayPosition(Literal("aaads"), Literal("de")), Decimal(BigInt(0)), row1)
+    checkEvaluation(ArrayPosition(nullString, Literal("de")), null, row1)
+    checkEvaluation(ArrayPosition(Literal("aaads"), nullString), null, row1)
+
+    checkEvaluation(ArrayPosition(s1, s2), Decimal(BigInt(1)), row1)
+    checkEvaluation(ArrayPosition(s1, s3), Decimal(BigInt(0)), row1)
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(ArrayPosition(s1, s2), Decimal(BigInt(3)), create_row("花花世界", "世界"))
+    checkEvaluation(ArrayPosition(s1, s2), Decimal(BigInt(1)), create_row("花花世界", "花"))
+    checkEvaluation(ArrayPosition(s1, s2), Decimal(BigInt(0)), create_row("花花世界", "小"))
+    // scalastyle:on
   }
 
   test("MapKeys/MapValues") {

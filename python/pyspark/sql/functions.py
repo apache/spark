@@ -1845,6 +1845,23 @@ def array_contains(col, value):
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
 
 
+@since(2.4)
+def array_position(str, substr):
+    """
+    Collection function: Locates the position of the first occurrence of substr column
+    in the given string as Decimal. Returns null if either of the arguments are null.
+
+    .. note:: The position is not zero based, but 1 based index. Returns 0 if substr
+        could not be found in str.
+
+    >>> df = spark.createDataFrame([('abcd',)], ['s',])
+    >>> df.select(array_position(df.s, 'b').alias('s')).collect()
+    [Row(s=Decimal(2))]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_position(_to_java_column(str), substr))
+
+
 @since(1.4)
 def explode(col):
     """Returns a new row for each element in the given array or map.

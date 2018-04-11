@@ -1003,6 +1003,59 @@ case class StringInstr(str: Expression, substr: Expression)
 }
 
 /**
+ * A function that returns the position of the first occurrence of substr in the given string
+ * as BigInt. Returns 0 if substr could not be found in str.
+ * Returns null if either of the arguments are null and
+ *
+ * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of `substr` in `str`.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('SparkSQL', 'SQL');
+       6
+  """)
+// scalastyle:on line.size.limit
+case class ArrayPosition(str: Expression, substr: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def left: Expression = str
+  override def right: Expression = substr
+  override def dataType: DataType = DecimalType.BigIntDecimal
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+
+  private val stringInstr = StringInstr(str, substr)
+
+  override def nullSafeEval(string: Any, sub: Any): Any = {
+    val r = stringInstr.nullSafeEval(string, sub)
+    if (r == null) null else {
+      new Decimal().setOrNull(r.asInstanceOf[Int].toLong, DecimalType.MAX_PRECISION, 0)
+    }
+  }
+
+  override def prettyName: String = "array_position"
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val value = ctx.freshName("arrayPositionValue")
+    val evPosition = stringInstr.doGenCode(
+      ctx, ExprCode("", ev.isNull, VariableValue(value, CodeGenerator.JAVA_INT)))
+    ev.copy(
+      code = evPosition.code +
+        s"""
+           |Decimal ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+           |if (!${evPosition.isNull}) {
+           |  ${ev.value} = Decimal.apply((long)$value);
+           |}
+         """.stripMargin,
+      isNull = evPosition.isNull)
+  }
+}
+
+/**
  * Returns the substring from string str before count occurrences of the delimiter delim.
  * If count is positive, everything the left of the final delimiter (counting from left) is
  * returned. If count is negative, every to the right of the final delimiter (counting from the

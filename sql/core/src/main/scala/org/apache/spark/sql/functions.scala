@@ -3039,6 +3039,20 @@ object functions {
   }
 
   /**
+   * Locate the position of the first occurrence of substr column in the given string.
+   * Returns null if either of the arguments are null.
+   *
+   * @note The position is not zero based, but 1 based index. Returns 0 if substr
+   * could not be found in str.
+   *
+   * @group string_funcs
+   * @since 2.4.0
+   */
+  def array_position(str: Column, substring: String): Column = withExpr {
+    ArrayPosition(str.expr, lit(substring).expr)
+  }
+
+  /**
    * Creates a new row for each element in the given array or map column.
    *
    * @group collection_funcs
