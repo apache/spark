@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
 
 
-class TestQueryExecutionListener extends QueryExecutionListener with Logging {
+class TestQueryExecutionListener extends QueryExecutionListener {
   override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
     OnSuccessCall.isOnSuccessCalled.set(true)
   }

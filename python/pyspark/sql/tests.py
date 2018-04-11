@@ -3073,7 +3073,7 @@ class SQLTests2(ReusedSQLTestCase):
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
-    # static and immutable. This can't be set or unset.
+    # static and immutable. This can't be set or unset, for example, via `spark.conf`.
 
     @classmethod
     def setUpClass(cls):
