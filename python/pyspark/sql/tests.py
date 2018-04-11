@@ -3018,6 +3018,7 @@ class SQLTests(ReusedSQLTestCase):
             csv(rdd).schema
         self.assertEquals(schema, StructType([StructField("_c0", IntegerType(), True)]))
 
+
 class HiveSparkSubmitTests(SparkSubmitTests):
 
     def test_hivecontext(self):
