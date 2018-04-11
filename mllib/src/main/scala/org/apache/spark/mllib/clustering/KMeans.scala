@@ -586,7 +586,7 @@ object KMeans {
 /**
  * A vector with its norm for fast distance computation.
  */
-private[clustering] class VectorWithNorm(val vector: Vector, val norm: Double)
+private[spark] class VectorWithNorm(val vector: Vector, val norm: Double)
     extends Serializable {
 
   def this(vector: Vector) = this(vector, Vectors.norm(vector, 2.0))

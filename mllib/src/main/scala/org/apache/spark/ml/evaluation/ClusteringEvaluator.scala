@@ -23,8 +23,9 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, SparseVector, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable,
-  SchemaUtils}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
+import org.apache.spark.mllib.clustering.{DistanceMeasure, VectorWithNorm}
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.sql.{Column, DataFrame, Dataset}
 import org.apache.spark.sql.functions.{avg, col, udf}
 import org.apache.spark.sql.types.DoubleType
@@ -63,12 +64,12 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
 
   /**
    * param for metric name in evaluation
-   * (supports `"silhouette"` (default))
+   * (supports `"silhouette"` (default), `"kmeansCost"`)
    * @group param
    */
   @Since("2.3.0")
   val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("silhouette"))
+    val allowedParams = ParamValidators.inArray(Array("silhouette", "kmeansCost"))
     new Param(
       this, "metricName", "metric name in evaluation (silhouette)", allowedParams)
   }
@@ -83,12 +84,12 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
 
   /**
    * param for distance measure to be used in evaluation
-   * (supports `"squaredEuclidean"` (default), `"cosine"`)
+   * (supports `"squaredEuclidean"` (default), `"cosine"`, `"euclidean"`)
    * @group param
    */
   @Since("2.4.0")
   val distanceMeasure: Param[String] = {
-    val availableValues = Array("squaredEuclidean", "cosine")
+    val availableValues = Array("squaredEuclidean", "cosine", "euclidean")
     val allowedParams = ParamValidators.inArray(availableValues)
     new Param(this, "distanceMeasure", "distance measure in evaluation. Supported options: " +
       availableValues.mkString("'", "', '", "'"), allowedParams)
@@ -104,6 +105,23 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
 
   setDefault(metricName -> "silhouette", distanceMeasure -> "squaredEuclidean")
 
+  /**
+   * param for clusterCenters to be used in evaluation of the
+   * kmeansCost metric
+   * @group param
+   */
+  @Since("2.4.0")
+  val clusterCenters: Param[Array[Vector]] = new Param(this, "clusterCenters",
+    "Cluster centers used in the metric kmeansCost.", ParamValidators.arrayLengthGt[Vector](0))
+
+  /** @group getParam */
+  @Since("2.4.0")
+  def getClusterCenters: Array[Vector] = $(clusterCenters)
+
+  /** @group setParam */
+  @Since("2.4.0")
+  def setClusterCenters(value: Array[Vector]): this.type = set(clusterCenters, value)
+
   @Since("2.3.0")
   override def evaluate(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
@@ -115,6 +133,21 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
           dataset, $(predictionCol), $(featuresCol))
       case ("silhouette", "cosine") =>
         CosineSilhouette.computeSilhouetteScore(dataset, $(predictionCol), $(featuresCol))
+      case ("silhouette", dm) =>
+        throw new IllegalArgumentException(s"Silhouette does not support $dm distance measure.")
+      case ("kmeansCost", dm) =>
+        assert(isSet(clusterCenters), "Cluster centers need to be set for evaluating kmeansCost.")
+        assert(Seq("cosine", "euclidean").contains(dm),
+          s"kmeansCost does not support $dm distance measure.")
+        val distanceMeasure = DistanceMeasure.decodeFromString(dm)
+        val bClusterCenters = dataset.sparkSession.sparkContext.broadcast(
+          $(clusterCenters).map(p => new VectorWithNorm(OldVectors.fromML(p))))
+        val cost = dataset.select($(featuresCol)).rdd.map { row =>
+          distanceMeasure.pointCost(bClusterCenters.value,
+            new VectorWithNorm(OldVectors.fromML(row.getAs[Vector](0))))
+        }.sum()
+        bClusterCenters.destroy(false)
+        cost
     }
   }
 }
