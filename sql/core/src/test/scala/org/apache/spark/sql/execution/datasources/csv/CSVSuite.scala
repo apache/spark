@@ -1280,7 +1280,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("SPARK-23846: schema inferring touches less data if samplingRatio < 1.0") {
-    withTempPath { path =>
+    // Set default values for the DataSource parameters to make sure
+    // that whole test file is mapped to only one partition. This will guarantee
+    // reliable sampling of the input file.
+    withSQLConf(
+      "spark.sql.files.maxPartitionBytes" -> (128 * 1024 * 1024).toString,
+      "spark.sql.files.openCostInBytes" -> (4 * 1024 * 1024).toString
+    )(withTempPath { path =>
       val rdd = spark.sqlContext.range(0, 100).map {row =>
         val predefinedSample = Set[Long](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
           57, 62, 68, 72)
@@ -1293,18 +1299,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       }.repartition(1)
       rdd.write.text(path.getAbsolutePath)
 
-      val defaultMaxSplitBytes = spark.conf.get("spark.sql.files.maxPartitionBytes").toDouble
-      val openCostInBytes = spark.conf.get("spark.sql.files.openCostInBytes").toDouble
-      val maxSplitBytes = Math.min(defaultMaxSplitBytes, openCostInBytes)
-      require(rdd.collect().mkString("\n").length < maxSplitBytes,
-        "The test file must be mapped to one partition to make sure that sampling is stable")
-
       val ds = spark.read
         .option("inferSchema", true)
         .option("samplingRatio", 0.1)
         .csv(path.getCanonicalPath)
       assert(ds.schema == new StructType().add("_c0", IntegerType))
-    }
+    })
   }
 
   test("SPARK-23846: usage of samplingRatio while parsing a dataset of strings") {
