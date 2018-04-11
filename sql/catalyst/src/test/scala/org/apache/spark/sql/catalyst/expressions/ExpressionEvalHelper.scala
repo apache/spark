@@ -66,18 +66,12 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     checkEvaluationWithOptimization(expr, catalystValue, inputRow)
   }
 
-
-  private def getActualDataType(dt: DataType): DataType = dt match {
-    case u: UserDefinedType[_] => getActualDataType(u.sqlType)
-    case _ => dt
-  }
-
   /**
    * Check the equality between result of expression and expected value, it will handle
    * Array[Byte], Spread[Double], MapData and Row.
    */
   protected def checkResult(result: Any, expected: Any, exprDataType: DataType): Boolean = {
-    val dataType = getActualDataType(exprDataType)
+    val dataType = UserDefinedType.sqlType(exprDataType)
 
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
