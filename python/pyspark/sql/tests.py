@@ -186,16 +186,12 @@ class MyObject(object):
         self.value = value
 
 
-class ReusedSQLTestCase(ReusedPySparkTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
-        cls.spark = SparkSession(cls.sc)
-
-    @classmethod
-    def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
-        cls.spark.stop()
+class SQLTestUtils(object):
+    """
+    This util assumes the instance of this to have 'spark' attribute, having a spark session.
+    It is usually used with 'ReusedSQLTestCase' class but can be used if you feel sure the
+    the implementation of this class has 'spark' attribute.
+    """
 
     @contextmanager
     def sql_conf(self, pairs):
@@ -204,6 +200,7 @@ class ReusedSQLTestCase(ReusedPySparkTestCase):
         `value` to the configuration `key` and then restores it back when it exits.
         """
         assert isinstance(pairs, dict), "pairs should be a dictionary."
+        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
 
         keys = pairs.keys()
         new_values = pairs.values()
@@ -218,6 +215,18 @@ class ReusedSQLTestCase(ReusedPySparkTestCase):
                     self.spark.conf.unset(key)
                 else:
                     self.spark.conf.set(key, old_value)
+
+
+class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.spark = SparkSession(cls.sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+        cls.spark.stop()
 
     def assertPandasEqual(self, expected, result):
         msg = ("DataFrames are not equal: " +
@@ -3062,7 +3071,7 @@ class SQLTests2(ReusedSQLTestCase):
             sc.stop()
 
 
-class SQLTests3(unittest.TestCase):
+class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
     # static and immutable. This can't be set or unset.
 
@@ -3109,11 +3118,7 @@ class SQLTests3(unittest.TestCase):
         not _have_pandas or not _have_pyarrow,
         _pandas_requirement_message or _pyarrow_requirement_message)
     def test_query_execution_listener_on_collect_with_arrow(self):
-        # Here, it deplicates codes in ReusedSQLTestCase.sql_conf context manager.
-        # Refactor and deduplicate it if there is another case like this.
-        old_value = self.spark.conf.get("spark.sql.execution.arrow.enabled", None)
-        self.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
-        try:
+        with self.sql_conf({"spark.sql.execution.arrow.enabled": True}):
             self.assertFalse(
                 self.spark._jvm.OnSuccessCall.isCalled(),
                 "The callback from the query execution listener should not be "
@@ -3122,11 +3127,6 @@ class SQLTests3(unittest.TestCase):
             self.assertTrue(
                 self.spark._jvm.OnSuccessCall.isCalled(),
                 "The callback from the query execution listener should be called after 'toPandas'")
-        finally:
-            if old_value is None:
-                self.spark.conf.unset("spark.sql.execution.arrow.enabled")
-            else:
-                self.spark.conf.set("spark.sql.execution.arrow.enabled", old_value)
 
 
 class SparkSessionTests(PySparkTestCase):
