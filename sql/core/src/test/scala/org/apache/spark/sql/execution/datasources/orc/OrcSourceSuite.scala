@@ -39,8 +39,8 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll {
   protected override def beforeAll(): Unit = {
     super.beforeAll()
 
-    orcTableAsDir = Utils.createTempDir("orctests", "sparksql")
-    orcTableDir = Utils.createTempDir("orctests", "sparksql")
+    orcTableAsDir = Utils.createTempDir(namePrefix = "orctests")
+    orcTableDir = Utils.createTempDir(namePrefix = "orctests")
 
     sparkContext
       .makeRDD(1 to 10)

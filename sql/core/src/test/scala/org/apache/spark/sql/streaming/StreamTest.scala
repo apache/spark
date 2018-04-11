@@ -37,6 +37,7 @@ import org.apache.spark.SparkEnv
 import org.apache.spark.sql.{Dataset, Encoder, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.AllTuples
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2Relation
 import org.apache.spark.sql.execution.streaming._
@@ -444,6 +445,24 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
         }
       }
 
+      val lastExecution = currentStream.lastExecution
+      if (currentStream.isInstanceOf[MicroBatchExecution] && lastExecution != null) {
+        // Verify if stateful operators have correct metadata and distribution
+        // This can often catch hard to debug errors when developing stateful operators
+        lastExecution.executedPlan.collect { case s: StatefulOperator => s }.foreach { s =>
+          assert(s.stateInfo.map(_.numPartitions).contains(lastExecution.numStateStores))
+          s.requiredChildDistribution.foreach { d =>
+            withClue(s"$s specifies incorrect # partitions in requiredChildDistribution $d") {
+              assert(d.requiredNumPartitions.isDefined)
+              assert(d.requiredNumPartitions.get >= 1)
+              if (d != AllTuples) {
+                assert(d.requiredNumPartitions.get == s.stateInfo.get.numPartitions)
+              }
+            }
+          }
+        }
+      }
+
       val (latestBatchData, allData) = sink match {
         case s: MemorySink => (s.latestBatchData, s.allData)
         case s: MemorySinkV2 => (s.latestBatchData, s.allData)
@@ -629,8 +648,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             def findSourceIndex(plan: LogicalPlan): Option[Int] = {
               plan
                 .collect {
-                  case StreamingExecutionRelation(s, _) => s
-                  case StreamingDataSourceV2Relation(_, r) => r
+                  case r: StreamingExecutionRelation => r.source
+                  case r: StreamingDataSourceV2Relation => r.reader
                 }
                 .zipWithIndex
                 .find(_._1 == source)

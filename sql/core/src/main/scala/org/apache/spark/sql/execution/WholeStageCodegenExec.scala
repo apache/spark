@@ -111,7 +111,7 @@ trait CodegenSupport extends SparkPlan {
 
   private def prepareRowVar(ctx: CodegenContext, row: String, colVars: Seq[ExprCode]): ExprCode = {
     if (row != null) {
-      ExprCode("", "false", row)
+      ExprCode("", FalseLiteral, VariableValue(row, "UnsafeRow"))
     } else {
       if (colVars.nonEmpty) {
         val colExprs = output.zipWithIndex.map { case (attr, i) =>
@@ -126,10 +126,10 @@ trait CodegenSupport extends SparkPlan {
           |$evaluateInputs
           |${ev.code.trim}
          """.stripMargin.trim
-        ExprCode(code, "false", ev.value)
+        ExprCode(code, FalseLiteral, ev.value)
       } else {
         // There is no columns
-        ExprCode("", "false", "unsafeRow")
+        ExprCode("", FalseLiteral, VariableValue("unsafeRow", "UnsafeRow"))
       }
     }
   }
@@ -174,8 +174,9 @@ trait CodegenSupport extends SparkPlan {
     //    declaration.
     val confEnabled = SQLConf.get.wholeStageSplitConsumeFuncByOperator
     val requireAllOutput = output.forall(parent.usedInputs.contains(_))
-    val paramLength = ctx.calculateParamLength(output) + (if (row != null) 1 else 0)
-    val consumeFunc = if (confEnabled && requireAllOutput && ctx.isValidParamLength(paramLength)) {
+    val paramLength = CodeGenerator.calculateParamLength(output) + (if (row != null) 1 else 0)
+    val consumeFunc = if (confEnabled && requireAllOutput
+        && CodeGenerator.isValidParamLength(paramLength)) {
       constructDoConsumeFunction(ctx, inputVars, row)
     } else {
       parent.doConsume(ctx, inputVars, rowVar)
@@ -234,21 +235,22 @@ trait CodegenSupport extends SparkPlan {
 
     variables.zipWithIndex.foreach { case (ev, i) =>
       val paramName = ctx.freshName(s"expr_$i")
-      val paramType = ctx.javaType(attributes(i).dataType)
+      val paramType = CodeGenerator.javaType(attributes(i).dataType)
 
       arguments += ev.value
       parameters += s"$paramType $paramName"
       val paramIsNull = if (!attributes(i).nullable) {
         // Use constant `false` without passing `isNull` for non-nullable variable.
-        "false"
+        FalseLiteral
       } else {
         val isNull = ctx.freshName(s"exprIsNull_$i")
         arguments += ev.isNull
         parameters += s"boolean $isNull"
-        isNull
+        VariableValue(isNull, CodeGenerator.JAVA_BOOLEAN)
       }
 
-      paramVars += ExprCode("", paramIsNull, paramName)
+      paramVars += ExprCode("", paramIsNull,
+        VariableValue(paramName, CodeGenerator.javaType(attributes(i).dataType)))
     }
     (arguments, parameters, paramVars)
   }

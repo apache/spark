@@ -25,6 +25,7 @@ import org.apache.arrow.vector.holders.NullableVarCharHolder;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.arrow.ArrowUtils;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.unsafe.memory.OffHeapMemoryBlock;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -377,9 +378,10 @@ public final class ArrowColumnVector extends ColumnVector {
       if (stringResult.isSet == 0) {
         return null;
       } else {
-        return UTF8String.fromAddress(null,
+        return new UTF8String(new OffHeapMemoryBlock(
           stringResult.buffer.memoryAddress() + stringResult.start,
-          stringResult.end - stringResult.start);
+          stringResult.end - stringResult.start
+        ));
       }
     }
   }
