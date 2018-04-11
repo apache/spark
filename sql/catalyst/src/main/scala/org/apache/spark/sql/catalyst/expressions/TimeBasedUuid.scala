@@ -17,31 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import com.fasterxml.uuid.{EthernetAddress, Generators, NoArgGenerator}
+import com.fasterxml.uuid.{EthernetAddress, Generators}
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
-import org.apache.spark.sql.types.{DataType, StringType}
-import org.apache.spark.unsafe.types.UTF8String
 
-case class TimeBasedUuid() extends LeafExpression with Stateful {
-
-  @transient private var generator: NoArgGenerator = _
+case class TimeBasedUuid() extends UuidExpression {
 
   override protected def initializeInternal(partitionIndex: Int): Unit = {
     generator = Generators.timeBasedGenerator(EthernetAddress.fromInterface())
   }
-
-  override protected def evalInternal(input: InternalRow): Any = {
-    val uuid = generator
-      .generate()
-      .toString
-    UTF8String.fromString(uuid)
-  }
-
-  override def nullable: Boolean = false
-
-  override def dataType: DataType = StringType
 
   override def freshCopy(): TimeBasedUuid = TimeBasedUuid()
 
