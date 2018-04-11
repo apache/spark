@@ -281,38 +281,41 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     if (value == null) {
       ExprCode.forNullValue(dataType)
     } else {
+      def toExprCode(code: String): ExprCode = {
+        ExprCode.forNonNullValue(JavaCode.literal(code, dataType))
+      }
       dataType match {
         case BooleanType | IntegerType | DateType =>
-          ExprCode.forNonNullValue(value.toString)
+          toExprCode(value.toString)
         case FloatType =>
           value.asInstanceOf[Float] match {
             case v if v.isNaN =>
-              ExprCode.forNonNullValue("Float.NaN")
+              toExprCode("Float.NaN")
             case Float.PositiveInfinity =>
-              ExprCode.forNonNullValue("Float.POSITIVE_INFINITY")
+              toExprCode("Float.POSITIVE_INFINITY")
             case Float.NegativeInfinity =>
-              ExprCode.forNonNullValue("Float.NEGATIVE_INFINITY")
+              toExprCode("Float.NEGATIVE_INFINITY")
             case _ =>
-              ExprCode.forNonNullValue(s"${value}F")
+              toExprCode(s"${value}F")
           }
         case DoubleType =>
           value.asInstanceOf[Double] match {
             case v if v.isNaN =>
-              ExprCode.forNonNullValue("Double.NaN")
+              toExprCode("Double.NaN")
             case Double.PositiveInfinity =>
-              ExprCode.forNonNullValue("Double.POSITIVE_INFINITY")
+              toExprCode("Double.POSITIVE_INFINITY")
             case Double.NegativeInfinity =>
-              ExprCode.forNonNullValue("Double.NEGATIVE_INFINITY")
+              toExprCode("Double.NEGATIVE_INFINITY")
             case _ =>
-              ExprCode.forNonNullValue(s"${value}D")
+              toExprCode(s"${value}D")
           }
         case ByteType | ShortType =>
-          ExprCode.forNonNullValue(s"($javaType)$value")
+          ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
         case TimestampType | LongType =>
-          ExprCode.forNonNullValue(s"${value}L")
+          toExprCode(s"${value}L")
         case _ =>
           val constRef = ctx.addReferenceObj("literal", value, javaType)
-          ExprCode.forNonNullValue(constRef)
+          ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))
       }
     }
   }

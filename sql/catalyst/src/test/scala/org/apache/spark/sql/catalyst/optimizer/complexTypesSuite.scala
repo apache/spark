@@ -378,15 +378,6 @@ class ComplexTypesSuite extends PlanTest with ExpressionEvalHelper {
       .groupBy($"foo")("1")
     checkRule(structRel, structExpected)
 
-    // These tests must use nullable attributes from the base relation for the following reason:
-    // in the 'original' plans below, the Aggregate node produced by groupBy() has a
-    // nullable AttributeReference to a1, because both array indexing and map lookup are
-    // nullable expressions. After optimization, the same attribute is now non-nullable,
-    // but the AttributeReference is not updated to reflect this. In the 'expected' plans,
-    // the grouping expressions have the same nullability as the original attribute in the
-    // relation. If that attribute is non-nullable, the tests will fail as the plans will
-    // compare differently, so for these tests we must use a nullable attribute. See
-    // SPARK-23634.
     val arrayRel = relation
       .select(GetArrayItem(CreateArray(Seq('nullable_id, 'nullable_id + 1L)), 0) as "a1")
       .groupBy($"a1")("1")
