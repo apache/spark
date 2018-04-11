@@ -1997,7 +1997,7 @@ class Analyzer(
   }
 
   /**
-   * Set the seed for random number generation in Uuid expressions.
+   * Set the seed for random number generation in random-based UUID expressions.
    */
   object ResolvedUuidExpressions extends Rule[LogicalPlan] {
     private lazy val random = new Random()
@@ -2005,7 +2005,7 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.transformUp {
       case p if p.resolved => p
       case p => p transformExpressionsUp {
-        case Uuid(None) => Uuid(Some(random.nextLong()))
+        case RandomBasedUuid(None) => RandomBasedUuid(Some(random.nextLong()))
       }
     }
   }

@@ -28,7 +28,7 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.Uuid
+import org.apache.spark.sql.catalyst.expressions.RandomBasedUuid
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
@@ -2261,8 +2261,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
   }
 
-  test("Uuid expressions should produce same results at retries in the same DataFrame") {
-    val df = spark.range(1).select($"id", new Column(Uuid()))
+  test("Random-based UUID expressions should produce same results at retries in the same DataFrame") {
+    val df = spark.range(1).select($"id", new Column(RandomBasedUuid()))
     checkAnswer(df, df.collect())
   }
 }

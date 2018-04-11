@@ -23,29 +23,29 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 
 /**
- * Test suite for resolving Uuid expressions.
+ * Test suite for resolving random-based UUID expressions.
  */
 class ResolvedUuidExpressionsSuite extends AnalysisTest {
 
   private lazy val a = 'a.int
   private lazy val r = LocalRelation(a)
-  private lazy val uuid1 = Uuid().as('_uuid1)
-  private lazy val uuid2 = Uuid().as('_uuid2)
-  private lazy val uuid3 = Uuid().as('_uuid3)
+  private lazy val uuid1 = RandomBasedUuid().as('_uuid1)
+  private lazy val uuid2 = RandomBasedUuid().as('_uuid2)
+  private lazy val uuid3 = RandomBasedUuid().as('_uuid3)
   private lazy val uuid1Ref = uuid1.toAttribute
 
   private val analyzer = getAnalyzer(caseSensitive = true)
 
-  private def getUuidExpressions(plan: LogicalPlan): Seq[Uuid] = {
+  private def getUuidExpressions(plan: LogicalPlan): Seq[RandomBasedUuid] = {
     plan.flatMap {
       case p =>
         p.expressions.flatMap(_.collect {
-          case u: Uuid => u
+          case u: RandomBasedUuid => u
         })
     }
   }
 
-  test("analyzed plan sets random seed for Uuid expression") {
+  test("analyzed plan sets random seed for random-based UUID expression") {
     val plan = r.select(a, uuid1)
     val resolvedPlan = analyzer.executeAndCheck(plan)
     getUuidExpressions(resolvedPlan).foreach { u =>
@@ -54,13 +54,13 @@ class ResolvedUuidExpressionsSuite extends AnalysisTest {
     }
   }
 
-  test("Uuid expressions should have different random seeds") {
+  test("Random-based UUID expressions should have different random seeds") {
     val plan = r.select(a, uuid1).groupBy(uuid1Ref)(uuid2, uuid3)
     val resolvedPlan = analyzer.executeAndCheck(plan)
     assert(getUuidExpressions(resolvedPlan).map(_.randomSeed.get).distinct.length == 3)
   }
 
-  test("Different analyzed plans should have different random seeds in Uuids") {
+  test("Different analyzed plans should have different random seeds in random-based UUIDs") {
     val plan = r.select(a, uuid1).groupBy(uuid1Ref)(uuid2, uuid3)
     val resolvedPlan1 = analyzer.executeAndCheck(plan)
     val resolvedPlan2 = analyzer.executeAndCheck(plan)
