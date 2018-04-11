@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
 import scala.collection.immutable.Map
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
@@ -55,7 +56,8 @@ private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: Inp
 
   /**
    * Get any environment variables that should be added to the users environment when running pipes
-   * @return a Map with the environment variables and corresponding values, it could be empty
+    *
+    * @return a Map with the environment variables and corresponding values, it could be empty
    */
   def getPipeEnvVars(): Map[String, String] = {
     val envVars: Map[String, String] = if (inputSplit.value.isInstanceOf[FileSplit]) {
@@ -86,8 +88,7 @@ private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: Inp
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param minPartitions Minimum number of HadoopRDD partitions (Hadoop Splits) to generate.
- *
- * @note Instantiating this class directly is not recommended, please use
+  * @note Instantiating this class directly is not recommended, please use
  * `org.apache.spark.SparkContext.hadoopRDD()`
  */
 @DeveloperApi
@@ -203,11 +204,15 @@ class HadoopRDD[K, V](
     } else {
       allInputSplits
     }
-    val array = new Array[Partition](inputSplits.size)
+    val array = new ArrayBuffer[Partition]()
+    var index = 0;
     for (i <- 0 until inputSplits.size) {
-      array(i) = new HadoopPartition(id, i, inputSplits(i))
+      if (inputSplits(i).getLength > 0) {
+        array += new HadoopPartition(id, index, inputSplits(i))
+        index += 1
+      }
     }
-    array
+    array.toArray
   }
 
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
