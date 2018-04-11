@@ -32,7 +32,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
 import org.apache.spark.ml.util._
@@ -55,7 +55,7 @@ private[ml] trait ClassifierTypeTrait {
 /**
  * Params for [[OneVsRest]].
  */
-private[ml] trait OneVsRestParams extends PredictorParams
+private[ml] trait OneVsRestParams extends ClassifierParams
   with ClassifierTypeTrait with HasWeightCol {
 
   /**
@@ -138,6 +138,12 @@ final class OneVsRestModel private[ml] (
     @Since("1.4.0") val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams with MLWritable {
 
+  @Since("2.4.0")
+  val numClasses: Int = models.length
+
+  @Since("2.4.0")
+  val numFeatures: Int = models.head.numFeatures
+
   /** @group setParam */
   @Since("2.1.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
@@ -145,6 +151,10 @@ final class OneVsRestModel private[ml] (
   /** @group setParam */
   @Since("2.1.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
+  @Since("2.4.0")
+  def setRawPredictionCol(value: String): this.type = set(rawPredictionCol, value)
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
@@ -195,14 +205,18 @@ final class OneVsRestModel private[ml] (
       newDataset.unpersist()
     }
 
-    // output the index of the classifier with highest confidence as prediction
-    val labelUDF = udf { (predictions: Map[Int, Double]) =>
-      predictions.maxBy(_._2)._1.toDouble
+    // output the RawPrediction as vector
+    val rawPredictionUDF = udf { (predictions: Map[Int, Double]) =>
+      Vectors.sparse(numClasses, predictions.toList )
     }
 
-    // output label and label metadata as prediction
+    // output the index of the classifier with highest confidence as prediction
+    val labelUDF = udf { (predictions: Vector) => predictions.argmax.toDouble }
+
+    // output confidence as rwa prediction, label and label metadata as prediction
     aggregatedDataset
-      .withColumn($(predictionCol), labelUDF(col(accColName)), labelMetadata)
+      .withColumn(getRawPredictionCol, rawPredictionUDF(col(accColName)))
+      .withColumn(getPredictionCol, labelUDF(col(getRawPredictionCol)), labelMetadata)
       .drop(accColName)
   }
 
