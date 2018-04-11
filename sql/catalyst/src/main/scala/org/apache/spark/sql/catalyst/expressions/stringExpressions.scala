@@ -1009,7 +1009,6 @@ case class StringInstr(str: Expression, substr: Expression)
  *
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of `substr` in `str`.
@@ -1019,7 +1018,6 @@ case class StringInstr(str: Expression, substr: Expression)
       > SELECT _FUNC_('SparkSQL', 'SQL');
        6
   """)
-// scalastyle:on line.size.limit
 case class ArrayPosition(str: Expression, substr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
