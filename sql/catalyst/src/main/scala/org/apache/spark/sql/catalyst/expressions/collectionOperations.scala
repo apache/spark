@@ -288,13 +288,13 @@ case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastI
     }
 
     s"""
-    |final int $length = $childName.numElements();
-    |${ev.value} = $initialization;
-    |for(int k = 0; k < $numberOfIterations; k++) {
-    |  int l = $length - k - 1;
-    |  $swapAssigments
-    |}
-    """.stripMargin
+       |final int $length = $childName.numElements();
+       |${ev.value} = $initialization;
+       |for(int k = 0; k < $numberOfIterations; k++) {
+       |  int l = $length - k - 1;
+       |  $swapAssigments
+       |}
+     """.stripMargin
   }
 
   override def prettyName: String = "reverse"
