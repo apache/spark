@@ -190,8 +190,11 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
     // make sure new partitions are reflected in currentOffsets
     val newPartitions = parts.diff(currentOffsets.keySet)
+    val revokedPartitions = currentOffsets.keySet.diff(parts)
     // position for new partitions determined by auto.offset.reset if no commit
-    currentOffsets = currentOffsets ++ newPartitions.map(tp => tp -> c.position(tp)).toMap
+    currentOffsets = currentOffsets -- revokedPartitions ++
+      newPartitions.map(tp => tp -> c.position(tp)).toMap
+
     // don't want to consume messages, so pause
     c.pause(newPartitions.asJava)
     // find latest available offsets
