@@ -85,7 +85,7 @@ class EpochCoordinatorSuite
 
     makeSynchronousCall()
 
-    verifyCommitHasntHappened(1)
+    verifyNoCommitFor(1)
   }
 
   test("single epoch, all but one reader partition has reported an offset") {
@@ -99,7 +99,7 @@ class EpochCoordinatorSuite
 
     makeSynchronousCall()
 
-    verifyCommitHasntHappened(1)
+    verifyNoCommitFor(1)
   }
 
   test("consequent epochs, messages for epoch (k + 1) arrive after messages for epoch k") {
@@ -214,7 +214,7 @@ class EpochCoordinatorSuite
     orderVerifier.verify(query).commit(epoch)
   }
 
-  private def verifyCommitHasntHappened(epoch: Long): Unit = {
+  private def verifyNoCommitFor(epoch: Long): Unit = {
     verify(writer, never()).commit(eqTo(epoch), any())
     verify(query, never()).commit(epoch)
   }
