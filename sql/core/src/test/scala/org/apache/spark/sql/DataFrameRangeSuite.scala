@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql
 
+import java.util.concurrent.Semaphore
+
 import scala.concurrent.duration._
 import scala.math.abs
 import scala.util.Random
 
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.{SparkException, TaskContext}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
+import org.apache.spark.SparkException
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -152,25 +154,28 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
   }
 
   test("Cancelling stage in a query with Range.") {
+    val slices = 10
+
     val listener = new SparkListener {
-      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-        eventually(timeout(10.seconds), interval(1.millis)) {
-          assert(DataFrameRangeSuite.stageToKill != DataFrameRangeSuite.INVALID_STAGE_ID)
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        eventually(timeout(10.seconds)) {
+          assert(DataFrameRangeSuite.isTaskStarted)
         }
-        sparkContext.cancelStage(DataFrameRangeSuite.stageToKill)
+        sparkContext.cancelStage(taskStart.stageId)
+        DataFrameRangeSuite.semaphore.release(slices)
       }
     }
 
     sparkContext.addSparkListener(listener)
     for (codegen <- Seq(true, false)) {
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString()) {
-        DataFrameRangeSuite.stageToKill = DataFrameRangeSuite.INVALID_STAGE_ID
+        DataFrameRangeSuite.semaphore.drainPermits()
+        DataFrameRangeSuite.isTaskStarted = false
         val ex = intercept[SparkException] {
-          spark.range(0, 100000000000L, 1, 1).map { x =>
-            val taskContext = TaskContext.get()
-            if (!taskContext.isInterrupted()) {
-              DataFrameRangeSuite.stageToKill = taskContext.stageId()
-            }
+          sparkContext.range(0, 10000L, numSlices = slices).mapPartitions { x =>
+            DataFrameRangeSuite.isTaskStarted = true
+            // Block waiting for the listener to cancel the stage.
+            DataFrameRangeSuite.semaphore.acquire()
             x
           }.toDF("id").agg(sum("id")).collect()
         }
@@ -209,6 +214,6 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
 }
 
 object DataFrameRangeSuite {
-  val INVALID_STAGE_ID = -1
-  @volatile var stageToKill = INVALID_STAGE_ID
+  @volatile var isTaskStarted = false
+  val semaphore = new Semaphore(0)
 }
