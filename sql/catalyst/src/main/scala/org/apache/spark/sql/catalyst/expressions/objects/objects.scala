@@ -1009,16 +1009,35 @@ case class CatalystToExternalMap private(
   override def children: Seq[Expression] =
     keyLambdaFunction :: valueLambdaFunction :: inputData :: Nil
 
-  private lazy val toScalaValue: Any => Any = {
-    assert(inputData.dataType.isInstanceOf[MapType])
-    val mapType = inputData.dataType.asInstanceOf[MapType]
-    CatalystTypeConverters.createToScalaConverter(mapType)
+  private lazy val inputMapType = inputData.dataType.asInstanceOf[MapType]
+
+  private lazy val keyConverter =
+    CatalystTypeConverters.createToScalaConverter(inputMapType.keyType)
+  private lazy val valueConverter =
+    CatalystTypeConverters.createToScalaConverter(inputMapType.valueType)
+
+  private def newMapBuilder(): Builder[AnyRef, AnyRef] = {
+    val clazz = Utils.classForName(collClass.getCanonicalName + "$")
+    val module = clazz.getField("MODULE$").get(null)
+    val method = clazz.getMethod("newBuilder")
+    method.invoke(module).asInstanceOf[Builder[AnyRef, AnyRef]]
   }
 
   override def eval(input: InternalRow): Any = {
     val result = inputData.eval(input).asInstanceOf[MapData]
     if (result != null) {
-      toScalaValue(result)
+      val builder = newMapBuilder()
+      builder.sizeHint(result.numElements())
+      val keyArray = result.keyArray()
+      val valueArray = result.valueArray()
+      var i = 0
+      while (i < result.numElements()) {
+        val key = keyConverter(keyArray.get(i, inputMapType.keyType))
+        val value = valueConverter(valueArray.get(i, inputMapType.valueType))
+        builder += Tuple2(key, value)
+        i += 1
+      }
+      builder.result()
     } else {
       null
     }

@@ -386,7 +386,6 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-<<<<<<< 0c94e48bc50717e1627c0d2acd5382d9adc73c97
   test("LambdaVariable should support interpreted execution") {
     def genSchema(dt: DataType): Seq[StructType] = {
       Seq(StructType(StructField("col_1", dt, nullable = false) :: Nil),
