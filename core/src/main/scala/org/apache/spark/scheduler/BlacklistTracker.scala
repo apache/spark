@@ -77,7 +77,7 @@ private[scheduler] class BlacklistTracker (
    * An immutable copy of the set of nodes that are currently blacklisted.  Kept in an
    * AtomicReference to make [[nodeBlacklist()]] thread-safe.
    */
-  private val _nodeBlacklist = new AtomicReference[Set[String]](Set())
+  private val _nodeBlacklist = new AtomicReference[Map[String, Long]](Map())
   /**
    * Time when the next blacklist will expire.  Used as a
    * shortcut to avoid iterating over all entries in the blacklist when none will have expired.
@@ -126,7 +126,7 @@ private[scheduler] class BlacklistTracker (
           nodeIdToBlacklistExpiryTime.remove(node)
           listenerBus.post(SparkListenerNodeUnblacklisted(now, node))
         }
-        _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
+        updateNodeBlacklist()
       }
       updateNextExpiryTime()
     }
@@ -196,7 +196,7 @@ private[scheduler] class BlacklistTracker (
 
           nodeIdToBlacklistExpiryTime.put(host, expiryTimeForNewBlacklists)
           listenerBus.post(SparkListenerNodeBlacklisted(now, host, 1))
-          _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
+          updateNodeBlacklist()
           killExecutorsOnBlacklistedNode(host)
           updateNextExpiryTime()
         }
@@ -214,6 +214,10 @@ private[scheduler] class BlacklistTracker (
         blacklistedExecsOnNode += exec
       }
     }
+  }
+
+  private def updateNodeBlacklist(): Unit = {
+    _nodeBlacklist.set(collection.immutable.Map(nodeIdToBlacklistExpiryTime.toSeq: _*))
   }
 
   def updateBlacklistForSuccessfulTaskSet(
@@ -258,7 +262,7 @@ private[scheduler] class BlacklistTracker (
             s"executors blacklisted: ${blacklistedExecsOnNode}")
           nodeIdToBlacklistExpiryTime.put(node, expiryTimeForNewBlacklists)
           listenerBus.post(SparkListenerNodeBlacklisted(now, node, blacklistedExecsOnNode.size))
-          _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
+          updateNodeBlacklist()
           killExecutorsOnBlacklistedNode(node)
         }
       }
@@ -273,7 +277,7 @@ private[scheduler] class BlacklistTracker (
    * Get the full set of nodes that are blacklisted.  Unlike other methods in this class, this *IS*
    * thread-safe -- no lock required on a taskScheduler.
    */
-  def nodeBlacklist(): Set[String] = {
+  def nodeBlacklist(): Map[String, Long] = {
     _nodeBlacklist.get()
   }
 

@@ -729,7 +729,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         Option(allocator) match {
           case Some(a) =>
             if (a.requestTotalExecutorsWithPreferredLocalities(r.requestedTotal,
-              r.localityAwareTasks, r.hostToLocalTaskCount, r.nodeBlacklist)) {
+              r.localityAwareTasks, r.hostToLocalTaskCount, r.nodeBlacklistWithExpiryTimes)) {
               resetAllocatorInterval()
             }
             context.reply(true)

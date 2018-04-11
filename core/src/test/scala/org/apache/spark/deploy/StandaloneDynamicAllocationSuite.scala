@@ -501,7 +501,8 @@ class StandaloneDynamicAllocationSuite
 
     // Get "localhost" on a blacklist.
     val taskScheduler = mock(classOf[TaskSchedulerImpl])
-    when(taskScheduler.nodeBlacklist()).thenReturn(Set("blacklisted-host"))
+    when(taskScheduler.nodeBlacklistWithExpiryTimes())
+      .thenReturn(Map("blacklisted-host" -> Long.MaxValue))
     when(taskScheduler.sc).thenReturn(sc)
     sc.taskScheduler = taskScheduler
 
