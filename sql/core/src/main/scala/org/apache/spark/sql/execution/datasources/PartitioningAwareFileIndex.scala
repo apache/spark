@@ -139,12 +139,9 @@ abstract class PartitioningAwareFileIndex(
         // we need to cast into the data type that user specified.
         def castPartitionValuesToUserSchema(row: InternalRow) = {
           InternalRow((0 until row.numFields).map { i =>
-            val expr = inferredPartitionSpec.partitionColumns.fields(i).dataType match {
-              case StringType => Literal.create(row.getUTF8String(i), StringType)
-              case otherType => Literal.create(row.get(i, otherType))
-            }
+            val dt = inferredPartitionSpec.partitionColumns.fields(i).dataType
             Cast(
-              expr,
+              Literal.create(row.get(i, dt), dt),
               userPartitionSchema.fields(i).dataType,
               Option(timeZoneId)).eval()
           }: _*)
