@@ -2991,6 +2991,14 @@ class SQLTests(ReusedSQLTestCase):
                 os.environ['TZ'] = orig_env_tz
             time.tzset()
 
+    def test_csv_sampling_ratio(self):
+        rdd = self.spark.sparkContext.range(0, 100).\
+            map(lambda x: '0.1' if x == 1 else str(x)).\
+            repartition(1)
+        schema = self.spark.read.option('inferSchema', True).\
+            option('samplingRatio', 0.5).\
+            csv(rdd).schema
+        self.assertEquals(schema, StructType([StructField("_c0", IntegerType(), True)]))
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
