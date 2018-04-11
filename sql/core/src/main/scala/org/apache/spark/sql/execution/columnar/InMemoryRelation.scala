@@ -77,7 +77,8 @@ case class InMemoryRelation(
       tableName = None)(
       _cachedColumnBuffers,
       sizeInBytesStats,
-      statsOfPlanToCache)
+      statsOfPlanToCache,
+      outputOrdering)
 
   override def producedAttributes: AttributeSet = outputSet
 
