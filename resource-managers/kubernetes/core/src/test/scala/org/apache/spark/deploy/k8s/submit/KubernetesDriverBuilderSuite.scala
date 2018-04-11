@@ -17,7 +17,7 @@
 package org.apache.spark.deploy.k8s.submit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesSpec}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesDriverSpec$}
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, KubernetesFeaturesTestUtils, MountSecretsFeatureStep}
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
@@ -89,7 +89,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       SECRETS_STEP_TYPE)
   }
 
-  private def validateStepTypesApplied(resolvedSpec: KubernetesSpec, stepTypes: String*): Unit = {
+  private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*): Unit = {
     assert(resolvedSpec.systemProperties.size === stepTypes.size)
     stepTypes.foreach { stepType =>
       assert(resolvedSpec.pod.pod.getMetadata.getLabels.get(stepType) === stepType)

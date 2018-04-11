@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesSpec}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesDriverSpec$}
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, MountSecretsFeatureStep}
 
 private[spark] class KubernetesDriverBuilder(
@@ -32,7 +32,7 @@ private[spark] class KubernetesDriverBuilder(
       new MountSecretsFeatureStep(_)) {
 
   def buildFromFeatures(
-    kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesSpec = {
+    kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {
     val baseFeatures = Seq(
       provideBasicStep(kubernetesConf),
       provideCredentialsStep(kubernetesConf),
@@ -41,12 +41,12 @@ private[spark] class KubernetesDriverBuilder(
       baseFeatures ++ Seq(provideSecretsStep(kubernetesConf))
     } else baseFeatures
 
-    var spec = KubernetesSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
+    var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {
       val configuredPod = feature.configurePod(spec.pod)
       val addedSystemProperties = feature.getAdditionalPodSystemProperties()
       val addedResources = feature.getAdditionalKubernetesResources()
-      spec = KubernetesSpec(
+      spec = KubernetesDriverSpec(
         configuredPod,
         spec.driverKubernetesResources ++ addedResources,
         spec.systemProperties ++ addedSystemProperties)

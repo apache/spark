@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.mockito.MockitoSugar._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesSpec, SparkPod}
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesDriverSpec$, SparkPod}
 import org.apache.spark.deploy.k8s.Constants._
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
@@ -56,7 +56,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private val ADDITIONAL_RESOURCES = Seq(
     new SecretBuilder().withNewMetadata().withName("secret").endMetadata().build())
 
-  private val BUILT_KUBERNETES_SPEC = KubernetesSpec(
+  private val BUILT_KUBERNETES_SPEC = KubernetesDriverSpec(
     SparkPod(BUILT_DRIVER_POD, BUILT_DRIVER_CONTAINER),
     ADDITIONAL_RESOURCES,
     RESOLVED_JAVA_OPTIONS)
