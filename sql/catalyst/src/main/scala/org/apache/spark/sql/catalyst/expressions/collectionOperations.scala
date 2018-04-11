@@ -29,6 +29,47 @@ import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 /**
+ * Common base class for [[Size]] and [[Cardinality]].
+ */
+abstract class SizeUtil extends UnaryExpression with ExpectsInputTypes {
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
+  override def nullable: Boolean = false
+
+  def sizeEval(child: Expression, input: InternalRow, resultTypeBigInt: Boolean): Any = {
+    val value = child.eval(input)
+    val result = if (value == null) {
+      -1
+    } else child.dataType match {
+      case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
+      case _: MapType => value.asInstanceOf[MapData].numElements()
+    }
+    if (resultTypeBigInt) {
+      new Decimal().setOrNull(result.asInstanceOf[Int].toLong, DecimalType.MAX_PRECISION, 0)
+    } else {
+      result
+    }
+  }
+
+  def doSizeGenCode(ctx: CodegenContext, ev: ExprCode, resultTypeBigInt: Boolean): ExprCode = {
+    val childGen = child.genCode(ctx)
+    val value = ctx.freshName("sizeValue")
+    val valueAssignment = if (resultTypeBigInt) {
+      s"""Decimal ${ev.value} = Decimal.apply((long)$value);"""
+    } else {
+      s"""${CodeGenerator.javaType(dataType)} ${ev.value} = $value;"""
+    }
+    ev.copy(code =
+      s"""
+         |boolean ${ev.isNull} = false;
+         |${childGen.code}
+         |int $value = ${childGen.isNull} ? -1 : (${childGen.value}).numElements();
+         |$valueAssignment
+       """.stripMargin,
+      isNull = FalseLiteral)
+  }
+}
+
+/**
  * Given an array or map, returns its size. Returns -1 if null.
  */
 @ExpressionDescription(
@@ -38,31 +79,21 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'));
        4
   """)
-case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Size(child: Expression) extends SizeUtil {
   override def dataType: DataType = IntegerType
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
-  override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    if (value == null) {
-      -1
-    } else child.dataType match {
-      case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
-      case _: MapType => value.asInstanceOf[MapData].numElements()
-    }
+    sizeEval(child, input, false)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val childGen = child.genCode(ctx)
-    ev.copy(code = s"""
-      boolean ${ev.isNull} = false;
-      ${childGen.code}
-      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${childGen.isNull} ? -1 :
-        (${childGen.value}).numElements();""", isNull = FalseLiteral)
+    doSizeGenCode(ctx, ev, false)
   }
 }
 
+/**
+ * Given an array or map, returns its size as BigInt. Returns -1 if null.
+ */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the size of an array or a map as BigInt. Returns -1 if null.",
   examples = """
@@ -71,25 +102,15 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
        4
   """,
   since = "2.4.0")
-case class Cardinality(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+case class Cardinality(child: Expression) extends SizeUtil {
   override def dataType: DataType = DecimalType.BigIntDecimal
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
-  override def nullable: Boolean = false
-
-  val size = Size(child)
 
   override def eval(input: InternalRow): Any = {
-    new Decimal()
-      .setOrNull(size.eval(input).asInstanceOf[Int].toLong, DecimalType.MAX_PRECISION, 0)
+    sizeEval(child, input, true)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val value = ctx.freshName("cardinalityValue")
-    val evSize =
-      size.doGenCode(ctx, ExprCode("", ev.isNull, VariableValue(value, CodeGenerator.JAVA_INT)))
-    ev.copy(
-      code = evSize.code + s"\nDecimal ${ev.value} = Decimal.apply((long)$value);",
-      isNull = FalseLiteral)
+    doSizeGenCode(ctx, ev, true)
   }
 }
 
