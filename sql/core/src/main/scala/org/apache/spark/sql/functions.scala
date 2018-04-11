@@ -1137,6 +1137,7 @@ object functions {
     * {{{
     * 8919d47c-34bb-11e8-b81c-6cc2172fd3c0
     * }}}
+    * This function does not produce same UUID values for retries on the same data frame.
     *
     * @group normal_funcs
     * @since 2.4.0
@@ -1155,6 +1156,7 @@ object functions {
     * {{{
     * 8919d47c-34bb-11e8-b81c-6cc2172fd3c0
     * }}}
+    * This function produces same UUID values for retries on the same data frame.
     *
     * @group normal_funcs
     * @since 2.4.0
