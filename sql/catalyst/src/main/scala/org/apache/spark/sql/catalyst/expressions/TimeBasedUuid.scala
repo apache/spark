@@ -21,6 +21,16 @@ import com.fasterxml.uuid.{EthernetAddress, Generators}
 
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
 
+@ExpressionDescription(
+  usage = "_FUNC_() - Returns a time-based universally unique identifier (UUID)." +
+    " The value is returned as a canonical UUID 36-character string.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       46707d92-02f4-4817-8116-a4c3b23e6266
+  """,
+  since = "2.4.0"
+)
 case class TimeBasedUuid() extends UuidExpression {
 
   override protected def initializeInternal(partitionIndex: Int): Unit = {
