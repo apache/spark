@@ -147,7 +147,7 @@ class PartitionedTablePerfStatsSuite
           HiveCatalogMetrics.reset()
           spark.sql("select * from test where partCol1 = 999").count()
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 0)
-          checkFilesDiscovered(spec.isDatasourceTable, 0)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
 
           HiveCatalogMetrics.reset()
           spark.sql("select * from test where partCol1 < 2").count()
@@ -188,7 +188,7 @@ class PartitionedTablePerfStatsSuite
           HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test where partCol1 = 999").count() == 0)
           assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount() == 0)
-          checkFilesDiscovered(spec.isDatasourceTable, 0)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
 
           HiveCatalogMetrics.reset()
@@ -228,13 +228,13 @@ class PartitionedTablePerfStatsSuite
           spec.setupTable("test", dir)
           HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test").count() == 5)
-          checkFilesDiscovered(spec.isDatasourceTable, 5)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
 
           HiveCatalogMetrics.reset()
           spark.sql("refresh table test")
           assert(spark.sql("select * from test").count() == 5)
-          checkFilesDiscovered(spec.isDatasourceTable, 5)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
 
           spark.catalog.cacheTable("test")
@@ -257,10 +257,10 @@ class PartitionedTablePerfStatsSuite
           spec.setupTable("test", dir)
           HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test").count() == 5)
-          checkFilesDiscovered(spec.isDatasourceTable, 5)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
           assert(spark.sql("select * from test").count() == 5)
-          checkFilesDiscovered(spec.isDatasourceTable, 10)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 10)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
         }
       }
@@ -273,7 +273,7 @@ class PartitionedTablePerfStatsSuite
         withTempDir { dir =>
           HiveCatalogMetrics.reset()
           setupPartitionedDatasourceTable("test", dir, scale = 10, repair = false)
-          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 10)
+          assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 0)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
         }
       }
