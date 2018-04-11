@@ -56,8 +56,7 @@ private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: Inp
 
   /**
    * Get any environment variables that should be added to the users environment when running pipes
-    *
-    * @return a Map with the environment variables and corresponding values, it could be empty
+   * @return a Map with the environment variables and corresponding values, it could be empty
    */
   def getPipeEnvVars(): Map[String, String] = {
     val envVars: Map[String, String] = if (inputSplit.value.isInstanceOf[FileSplit]) {
@@ -88,7 +87,8 @@ private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: Inp
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param minPartitions Minimum number of HadoopRDD partitions (Hadoop Splits) to generate.
-  * @note Instantiating this class directly is not recommended, please use
+ *
+ * @note Instantiating this class directly is not recommended, please use
  * `org.apache.spark.SparkContext.hadoopRDD()`
  */
 @DeveloperApi
