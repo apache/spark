@@ -37,11 +37,10 @@ class ResolvedUuidExpressionsSuite extends AnalysisTest {
   private val analyzer = getAnalyzer(caseSensitive = true)
 
   private def getUuidExpressions(plan: LogicalPlan): Seq[RandomBasedUuid] = {
-    plan.flatMap {
-      case p =>
-        p.expressions.flatMap(_.collect {
-          case u: RandomBasedUuid => u
-        })
+    plan.flatMap { p =>
+      p.expressions.flatMap(_.collect {
+        case u: RandomBasedUuid => u
+      })
     }
   }
 
@@ -68,6 +67,6 @@ class ResolvedUuidExpressionsSuite extends AnalysisTest {
     val uuids2 = getUuidExpressions(resolvedPlan2)
     assert(uuids1.distinct.length == 3)
     assert(uuids2.distinct.length == 3)
-    assert(uuids1.intersect(uuids2).length == 0)
+    assert(uuids1.intersect(uuids2).isEmpty)
   }
 }
