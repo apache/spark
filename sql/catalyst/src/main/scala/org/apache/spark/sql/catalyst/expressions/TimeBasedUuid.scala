@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import com.fasterxml.uuid.{EthernetAddress, Generators, NoArgGenerator}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, FalseLiteral}
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -57,7 +57,7 @@ case class TimeBasedUuid() extends LeafExpression with Stateful {
       ");")
     ev.copy(code = s"final UTF8String ${ev.value} = " +
       s"UTF8String.fromString(${gen}.generate().toString());",
-      isNull = "false")
+      isNull = FalseLiteral)
   }
 
 }
