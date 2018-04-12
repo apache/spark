@@ -224,7 +224,7 @@ object KafkaDataConsumer extends Logging {
   private case class CacheKey(groupId: String, topicPartition: TopicPartition)
 
   // Don't want to depend on guava, don't want a cleanup thread, use a simple LinkedHashMap
-  private[kafka010] var cache: ju.Map[CacheKey, ju.List[InternalKafkaConsumer[_, _]]] = null
+  private var cache: ju.Map[CacheKey, ju.List[InternalKafkaConsumer[_, _]]] = null
 
   /**
    * Must be called before acquire, once per JVM, to configure the cache.
