@@ -23,7 +23,6 @@ import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -122,7 +121,6 @@ case class DataSource(
    *     be any further inference in any triggers.
    *
    * @param format the file format object for this DataSource
-   * @param fileIndex optional [[InMemoryFileIndex]] for getting partition schema and file list
    * @return A pair of the data schema (excluding partition columns) and the schema of the partition
    *         columns.
    */
