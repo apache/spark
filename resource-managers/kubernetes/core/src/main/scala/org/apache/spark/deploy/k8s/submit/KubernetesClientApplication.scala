@@ -157,6 +157,19 @@ private[spark] class Client(
         logInfo(s"Waiting for application $appName to finish...")
         watcher.awaitCompletion()
         logInfo(s"Application $appName finished.")
+        try {
+          // Upon completion of the application, the client deletes all auxiliary Kubernetes
+          // resources the application depended on instead of relying on Kubernetes garbage
+          // collection to kick in on the resources, which only happens when the driver pod
+          // gets explicitly deleted. Auxiliary resources include the headless service for
+          // the driver and the ConfigMap for the init-container, for example. Such resources
+          // are no longer needed once an application completes, but they are still persisted
+          // by the API server and there should be deleted upon completion.
+          val otherKubernetesResources = currentDriverSpec.otherKubernetesResources
+          kubernetesClient.resourceList(otherKubernetesResources: _*).delete()
+        } catch {
+          case e: Throwable => logWarning("Failed to clean up auxiliary Kubernetes resources", e)
+        }
       } else {
         logInfo(s"Deployed Spark application $appName into Kubernetes.")
       }
