@@ -103,9 +103,11 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     (Batch("Eliminate Distinct", Once, EliminateDistinct) ::
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
     // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
-    // However, because we also use the analyzer to canonicalized queries (for view definition),
+    // However, because we also use the analyzer to canonicalize queries (for view definition),
     // we do not eliminate subqueries or compute current time in the analyzer.
     Batch("Finish Analysis", Once,
+      // Must come before EliminateSubqueryAliases.
+      RemoveSubquerySorts,
       EliminateSubqueryAliases,
       EliminateView,
       ReplaceExpressions,
@@ -304,6 +306,32 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
 object RemoveRedundantProject extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case p @ Project(_, child) if p.output == child.output => child
+  }
+}
+
+/**
+ * Remove [[Sort]] in subqueries that do not affect the set of rows produced, only their
+ * order. Subqueries produce unordered sets of rows so sorting their output is unnecessary.
+ */
+object RemoveSubquerySorts extends Rule[LogicalPlan] {
+
+  /**
+   * Removes all [[Sort]] operators from a plan that are accessible from the root operator via
+   * 0 or more [[Project]], [[Filter]] or [[View]] operators.
+   */
+  private def removeTopLevelSorts(plan: LogicalPlan): LogicalPlan = {
+    plan match {
+      case Sort(_, _, child) => removeTopLevelSorts(child)
+      case Project(fields, child) => Project(fields, removeTopLevelSorts(child))
+      case Filter(condition, child) => Filter(condition, removeTopLevelSorts(child))
+      case View(tbl, output, child) => View(tbl, output, removeTopLevelSorts(child))
+      case _ => plan
+    }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Subquery(child) => Subquery(removeTopLevelSorts(child))
+    case SubqueryAlias(name, child) => SubqueryAlias(name, removeTopLevelSorts(child))
   }
 }
 
