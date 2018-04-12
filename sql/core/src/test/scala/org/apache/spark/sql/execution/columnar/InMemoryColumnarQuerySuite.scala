@@ -22,6 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, In}
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.{FilterExec, LocalTableScanExec, WholeStageCodegenExec}
 import org.apache.spark.sql.functions._
@@ -455,7 +456,8 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-22249: buildFilter should not throw exception when In contains an empty list") {
     val attribute = AttributeReference("a", IntegerType)()
     val localTableScanExec = LocalTableScanExec(Seq(attribute), Nil)
-    val testRelation = InMemoryRelation(false, 1, MEMORY_ONLY, localTableScanExec, None, null)
+    val testRelation = InMemoryRelation(false, 1, MEMORY_ONLY, localTableScanExec, None,
+      LocalRelation(Seq(attribute), Nil))
     val tableScanExec = InMemoryTableScanExec(Seq(attribute),
       Seq(In(attribute, Nil)), testRelation)
     assert(tableScanExec.partitionFilters.isEmpty)
