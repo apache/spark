@@ -566,6 +566,77 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.selectExpr("array_position(array(1, null), array(1, null)[0])"),
       Seq(Row(1L), Row(1L))
+  }
+
+  test("element at function") {
+    val df = Seq(
+      (Seq[String]("1", "2", "3")),
+      (Seq[String](null, "")),
+      (Seq[String]())
+    ).toDF("a")
+
+    intercept[Exception] {
+      checkAnswer(
+        df.select(element_at(df("a"), 0)),
+        Seq(Row(null), Row(null), Row(null))
+      )
+    }.getMessage.contains("SQL array indices start at 1")
+    intercept[Exception] {
+      checkAnswer(
+        df.select(element_at(df("a"), 1.1)),
+        Seq(Row(null), Row(null), Row(null))
+      )
+    }
+    checkAnswer(
+      df.select(element_at(df("a"), 4)),
+      Seq(Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(element_at(df("a"), -4)),
+      Seq(Row(null), Row(null), Row(null))
+    )
+
+    checkAnswer(
+      df.select(element_at(df("a"), 1)),
+      Seq(Row("1"), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(element_at(df("a"), 2)),
+      Seq(Row("2"), Row(""), Row(null))
+    )
+    checkAnswer(
+      df.select(element_at(df("a"), -1)),
+      Seq(Row("3"), Row(""), Row(null))
+    )
+    checkAnswer(
+      df.select(element_at(df("a"), -2)),
+      Seq(Row("2"), Row(null), Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("element_at(a, 4)"),
+      Seq(Row(null), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("element_at(a, -4)"),
+      Seq(Row(null), Row(null), Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("element_at(a, 1)"),
+      Seq(Row("1"), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("element_at(a, 2)"),
+      Seq(Row("2"), Row(""), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("element_at(a, -1)"),
+      Seq(Row("3"), Row(""), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("element_at(a, -2)"),
+      Seq(Row("2"), Row(null), Row(null))
     )
   }
 
