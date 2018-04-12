@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import java.math.BigInteger
 import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -35,7 +34,7 @@ abstract class SizeUtil extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
   override def nullable: Boolean = false
 
-  def sizeEval(child: Expression, input: InternalRow, resultTypeBigInt: Boolean): Any = {
+  def sizeEval(child: Expression, input: InternalRow): Any = {
     val value = child.eval(input)
     val result = if (value == null) {
       -1
@@ -43,27 +42,18 @@ abstract class SizeUtil extends UnaryExpression with ExpectsInputTypes {
       case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
       case _: MapType => value.asInstanceOf[MapData].numElements()
     }
-    if (resultTypeBigInt) {
-      new Decimal().setOrNull(result.asInstanceOf[Int].toLong, DecimalType.MAX_PRECISION, 0)
-    } else {
-      result
-    }
+    result
   }
 
-  def doSizeGenCode(ctx: CodegenContext, ev: ExprCode, resultTypeBigInt: Boolean): ExprCode = {
+  def doSizeGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
-    val value = ctx.freshName("sizeValue")
-    val valueAssignment = if (resultTypeBigInt) {
-      s"""Decimal ${ev.value} = Decimal.apply((long)$value);"""
-    } else {
-      s"""${CodeGenerator.javaType(dataType)} ${ev.value} = $value;"""
-    }
+    val javaDt = CodeGenerator.javaType(dataType)
     ev.copy(code =
       s"""
          |boolean ${ev.isNull} = false;
          |${childGen.code}
-         |int $value = ${childGen.isNull} ? -1 : (${childGen.value}).numElements();
-         |$valueAssignment
+         |$javaDt ${ev.value} =
+         |  ($javaDt) (${childGen.isNull} ? -1 : (${childGen.value}).numElements());
        """.stripMargin,
       isNull = FalseLiteral)
   }
@@ -83,11 +73,11 @@ case class Size(child: Expression) extends SizeUtil {
   override def dataType: DataType = IntegerType
 
   override def eval(input: InternalRow): Any = {
-    sizeEval(child, input, false)
+    sizeEval(child, input)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    doSizeGenCode(ctx, ev, false)
+    doSizeGenCode(ctx, ev)
   }
 }
 
@@ -95,7 +85,7 @@ case class Size(child: Expression) extends SizeUtil {
  * Given an array or map, returns its size as BigInt. Returns -1 if null.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the size of an array or a map as BigInt. Returns -1 if null.",
+  usage = "_FUNC_(expr) - Returns the size of an array or a map as long. Returns -1 if null.",
   examples = """
     Examples:
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'));
@@ -103,14 +93,14 @@ case class Size(child: Expression) extends SizeUtil {
   """,
   since = "2.4.0")
 case class Cardinality(child: Expression) extends SizeUtil {
-  override def dataType: DataType = DecimalType.BigIntDecimal
+  override def dataType: DataType = LongType
 
   override def eval(input: InternalRow): Any = {
-    sizeEval(child, input, true)
+    sizeEval(child, input)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    doSizeGenCode(ctx, ev, true)
+    doSizeGenCode(ctx, ev)
   }
 }
 
