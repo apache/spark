@@ -679,10 +679,18 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.gpus.max</code></td>
   <td><code>0</code></td>
   <td>
-    Set the maximum number GPU resources to acquire for this job. Note that executors will still launch when no GPU resources are found
-    since this configuration is just a upper limit and not a guaranteed amount.
+    Set the maximum number of GPU resources that can be acquired for this job. If total number of gpus to request
+    exceeds this setting, the new executors will not get launched. The executors that have obtained gpus before
+    exceeding this setting will still be launched
   </td>
-  </tr>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.gpus</code></td>
+  <td><code>0</code></td>
+  <td>
+    Set the hard limit on the number of gpus to request for each executor
+  </td>
+</tr>
 <tr>
   <td><code>spark.mesos.network.name</code></td>
   <td><code>(none)</code></td>

@@ -190,6 +190,16 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
   }
 
 
+  test("mesos declines offers where spark.mesos.gpus.max less than spark.mesos.executor.gpus") {
+    setBackend(Map("spark.mesos.gpus.max" -> "2",
+                   "spark.mesos.executor.gpus" -> "5"))
+
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(Resources(executorMemory, 1, 5)))
+    verifyDeclinedOffer(driver, createOfferId("o1"))
+  }
+
+
   test("mesos declines offers that exceed spark.mesos.gpus.max") {
     setBackend(Map("spark.mesos.gpus.max" -> "5",
                    "spark.mesos.executor.gpus" -> "2"))
