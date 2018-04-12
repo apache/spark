@@ -3011,7 +3011,7 @@ class SQLTests(ReusedSQLTestCase):
 
     def test_json_sampling_ratio(self):
         rdd = self.spark.sparkContext.range(0, 100, 1, 1) \
-            .map(lambda x: '{"a":0.1}' if x == 1 else '{"a":%s}'%str(x))
+            .map(lambda x: '{"a":0.1}' if x == 1 else '{"a":%s}' % str(x))
         schema = self.spark.read.option('inferSchema', True) \
             .option('samplingRatio', 0.5) \
             .json(rdd).schema
