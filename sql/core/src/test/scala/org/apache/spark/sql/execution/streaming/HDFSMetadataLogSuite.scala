@@ -85,7 +85,8 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
 
       // There should be exactly one file, called "2", in the metadata directory.
       // This check also tests for regressions of SPARK-17475
-      val allFiles = new File(metadataLog.metadataPath.toString).listFiles().toSeq
+      val allFiles = new File(metadataLog.metadataPath.toString).listFiles()
+        .filter(!_.getName.startsWith(".")).toSeq
       assert(allFiles.size == 1)
       assert(allFiles(0).getName() == "2")
     }
@@ -136,7 +137,7 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
     }
   }
 
-  test("HDFSMetadataLog: metadata directory collision") {
+  testQuietly("HDFSMetadataLog: metadata directory collision") {
     withTempDir { temp =>
       val waiter = new Waiter
       val maxBatchId = 100

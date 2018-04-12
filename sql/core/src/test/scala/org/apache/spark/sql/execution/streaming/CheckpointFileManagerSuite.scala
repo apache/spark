@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -61,9 +62,11 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
       assert(!fm.exists(path))
       fm.createAtomic(path, overwriteIfPossible = false).close()
       assert(fm.exists(path))
-      intercept[IOException] {
-        // should throw exception since file exists and overwrite is false
-        fm.createAtomic(path, overwriteIfPossible = false).close()
+      quietly {
+        intercept[IOException] {
+          // should throw exception since file exists and overwrite is false
+          fm.createAtomic(path, overwriteIfPossible = false).close()
+        }
       }
 
       // Create atomic with overwrite if possible
@@ -107,22 +110,22 @@ class CheckpointFileManagerSuite extends SparkFunSuite with SharedSparkSession {
 
   test("CheckpointFileManager.create() should fallback from FileContext to FileSystem") {
     import FakeFileSystem.scheme
-    spark.conf.set(
-      s"fs.$scheme.impl",
-      classOf[FakeFileSystem].getName)
-    withTempDir { temp =>
-      val metadataLog = new HDFSMetadataLog[String](spark, s"$scheme://${temp.toURI.getPath}")
-      assert(metadataLog.add(0, "batch0"))
-      assert(metadataLog.getLatest() === Some(0 -> "batch0"))
-      assert(metadataLog.get(0) === Some("batch0"))
-      assert(metadataLog.get(None, Some(0)) === Array(0 -> "batch0"))
+    spark.conf.set(s"fs.$scheme.impl", classOf[FakeFileSystem].getName)
+    quietly {
+      withTempDir { temp =>
+        val metadataLog = new HDFSMetadataLog[String](spark, s"$scheme://${temp.toURI.getPath}")
+        assert(metadataLog.add(0, "batch0"))
+        assert(metadataLog.getLatest() === Some(0 -> "batch0"))
+        assert(metadataLog.get(0) === Some("batch0"))
+        assert(metadataLog.get(None, Some(0)) === Array(0 -> "batch0"))
 
 
-      val metadataLog2 = new HDFSMetadataLog[String](spark, s"$scheme://${temp.toURI.getPath}")
-      assert(metadataLog2.get(0) === Some("batch0"))
-      assert(metadataLog2.getLatest() === Some(0 -> "batch0"))
-      assert(metadataLog2.get(None, Some(0)) === Array(0 -> "batch0"))
+        val metadataLog2 = new HDFSMetadataLog[String](spark, s"$scheme://${temp.toURI.getPath}")
+        assert(metadataLog2.get(0) === Some("batch0"))
+        assert(metadataLog2.getLatest() === Some(0 -> "batch0"))
+        assert(metadataLog2.get(None, Some(0)) === Array(0 -> "batch0"))
 
+      }
     }
   }
 }
