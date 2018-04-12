@@ -1128,49 +1128,49 @@ object functions {
   def monotonically_increasing_id(): Column = withExpr { MonotonicallyIncreasingID() }
 
   /**
-    * A column expression that generates time-based
-    * <a href="https://en.wikipedia.org/wiki/Universally_unique_identifier">UUIDs</a>
-    * (universally unique identifiers).
-    *
-    * The generated UUIDs are time-based (variant 1).
-    * UUID values are in the standard string format with total 36 characters, for example:
-    * {{{
-    * 8919d47c-34bb-11e8-b81c-6cc2172fd3c0
-    * }}}
-    * This function does not produce same UUID values for retries on the same data frame.
-    *
-    * @group normal_funcs
-    * @since 2.4.0
-    */
+   * A column expression that generates time-based UUIDs (variant 1).
+   *
+   * Universally unique identifiers
+   * (<a href="https://en.wikipedia.org/wiki/Universally_unique_identifier">UUIDs</a>)
+   * are generated in the standard string format with total 36 characters, for example:
+   * {{{
+   * 8919d47c-34bb-11e8-b81c-6cc2172fd3c0
+   * }}}
+   * This function does not produce same UUID values for retries on the same data frame.
+   *
+   * @group normal_funcs
+   * @since 2.4.0
+   */
   def time_based_uuid(): Column = withExpr {
     TimeBasedUuid()
   }
 
   /**
-    * A column expression that generates random-based
-    * <a href="https://en.wikipedia.org/wiki/Universally_unique_identifier">UUIDs</a>
-    * (universally unique identifiers).
-    *
-    * The generated UUIDs are random-based (variant 4).
-    * UUID values are in the standard string format with total 36 characters, for example:
-    * {{{
-    * 8919d47c-34bb-11e8-b81c-6cc2172fd3c0
-    * }}}
-    * This function produces same UUID values for retries on the same data frame.
-    *
-    * @group normal_funcs
-    * @since 2.4.0
-    */
+   * A column expression that generates random-based UUIDs (variant 4).
+   *
+   * Universally unique identifiers
+   * (<a href="https://en.wikipedia.org/wiki/Universally_unique_identifier">UUIDs</a>)
+   * are generated in the standard string format with total 36 characters, for example:
+   * {{{
+   * 8919d47c-34bb-11e8-b81c-6cc2172fd3c0
+   * }}}
+   * This function produces same UUID values for retries on the same data frame.
+   *
+   * @group normal_funcs
+   * @since 2.4.0
+   */
   def random_based_uuid(): Column = withExpr {
     RandomBasedUuid()
   }
 
   /**
-    * Alias for [[random_based_uuid()]].
-    *
-    * @group normal_funcs
-    * @since 2.4.0
-    */
+   * A column expression that generates random-based UUIDs (variant 4).
+   *
+   * Alias for [[random_based_uuid()]].
+   *
+   * @group normal_funcs
+   * @since 2.4.0
+   */
   def uuid(): Column = random_based_uuid()
 
   /**
