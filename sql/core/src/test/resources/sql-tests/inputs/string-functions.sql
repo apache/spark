@@ -13,8 +13,8 @@ FROM (SELECT id col1, id col2, id col3, id col4 FROM range(10));
 select replace('abc', 'b', '123');
 select replace('abc', 'b');
 
--- uuid
-select length(uuid()), (uuid() <> uuid());
+-- random_based_uuid
+select length(random_based_uuid()), (random_based_uuid() <> random_based_uuid());
 
 -- position
 select position('bar' in 'foobarbar'), position(null, 'foobarbar'), position('aaads', null);
