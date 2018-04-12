@@ -237,14 +237,11 @@ private class KafkaRDDIterator[K, V](
   cacheLoadFactor: Float
 ) extends Iterator[ConsumerRecord[K, V]] {
 
-  val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
-
   context.addTaskCompletionListener(_ => closeIfNeeded())
 
   val consumer = {
     KafkaDataConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
-    KafkaDataConsumer.acquire[K, V](
-      groupId, part.topicPartition(), kafkaParams, context, useConsumerCache)
+    KafkaDataConsumer.acquire[K, V](part.topicPartition(), kafkaParams, context, useConsumerCache)
   }
 
   var requestOffset = part.fromOffset

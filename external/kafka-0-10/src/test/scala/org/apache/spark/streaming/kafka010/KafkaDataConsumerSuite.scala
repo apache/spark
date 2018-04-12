@@ -79,9 +79,9 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
         null
       }
       val consumer = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
-        groupId, topicPartition, kafkaParams.asJava, taskContext, useCache)
+        topicPartition, kafkaParams.asJava, taskContext, useCache)
       try {
-        val rcvd = 0 until data.length map { offset =>
+        val rcvd = (0 until data.length).map { offset =>
           val bytes = consumer.get(offset, 10000).value()
           new String(bytes)
         }

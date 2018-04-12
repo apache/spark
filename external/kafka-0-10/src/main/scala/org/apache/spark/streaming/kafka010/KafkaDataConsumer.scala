@@ -82,22 +82,20 @@ private[kafka010] sealed trait KafkaDataConsumer[K, V] {
  * A wrapper around Kafka's KafkaConsumer.
  * This is not for direct use outside this file.
  */
-private[kafka010]
-class InternalKafkaConsumer[K, V](
-  val groupId: String,
-  val topicPartition: TopicPartition,
-  val kafkaParams: ju.Map[String, Object]) extends Logging {
+private class InternalKafkaConsumer[K, V](
+    val topicPartition: TopicPartition,
+    val kafkaParams: ju.Map[String, Object]) extends Logging {
 
-  require(groupId == kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG),
-    "groupId used for cache key must match the groupId in kafkaParams")
+  private[kafka010] val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG)
+    .asInstanceOf[String]
 
-  @volatile private var consumer = createConsumer
+  private val consumer = createConsumer
 
   /** indicates whether this consumer is in use or not */
-  @volatile var inUse = true
+  var inUse = true
 
   /** indicate whether this consumer is going to be stopped in the next release */
-  @volatile var markedForClose = false
+  var markedForClose = false
 
   // TODO if the buffer was kept around as a random-access structure,
   // could possibly optimize re-calculating of an RDD in the same batch
@@ -114,9 +112,8 @@ class InternalKafkaConsumer[K, V](
   /** Create a KafkaConsumer to fetch records for `topicPartition` */
   private def createConsumer: KafkaConsumer[K, V] = {
     val c = new KafkaConsumer[K, V](kafkaParams)
-    val tps = new ju.ArrayList[TopicPartition]()
-    tps.add(topicPartition)
-    c.assign(tps)
+    val topics = ju.Arrays.asList(topicPartition)
+    c.assign(topics)
     c
   }
 
@@ -134,7 +131,9 @@ class InternalKafkaConsumer[K, V](
       poll(timeout)
     }
 
-    if (!buffer.hasNext()) { poll(timeout) }
+    if (!buffer.hasNext()) {
+      poll(timeout)
+    }
     require(buffer.hasNext(),
       s"Failed to get records for $groupId $topicPartition $offset after polling for $timeout")
     var record = buffer.next()
@@ -213,19 +212,19 @@ object KafkaDataConsumer extends Logging {
 
   private case class CachedKafkaDataConsumer[K, V](internalConsumer: InternalKafkaConsumer[K, V])
     extends KafkaDataConsumer[K, V] {
-    assert(internalConsumer.inUse) // make sure this has been set to true
-    override def release(): Unit = { KafkaDataConsumer.release(internalConsumer) }
+    assert(internalConsumer.inUse)
+    override def release(): Unit = KafkaDataConsumer.release(internalConsumer)
   }
 
   private case class NonCachedKafkaDataConsumer[K, V](internalConsumer: InternalKafkaConsumer[K, V])
     extends KafkaDataConsumer[K, V] {
-    override def release(): Unit = { internalConsumer.close() }
+    override def release(): Unit = internalConsumer.close()
   }
 
   private case class CacheKey(groupId: String, topicPartition: TopicPartition)
 
   // Don't want to depend on guava, don't want a cleanup thread, use a simple LinkedHashMap
-  private var cache: ju.Map[CacheKey, ju.List[InternalKafkaConsumer[_, _]]] = null
+  private[kafka010] var cache: ju.Map[CacheKey, ju.List[InternalKafkaConsumer[_, _]]] = null
 
   /**
    * Must be called before acquire, once per JVM, to configure the cache.
@@ -240,10 +239,10 @@ object KafkaDataConsumer extends Logging {
       cache = new ju.LinkedHashMap[CacheKey, ju.List[InternalKafkaConsumer[_, _]]](
         initialCapacity, loadFactor, true) {
         override def removeEldestEntry(
-          entry: ju.Map.Entry[CacheKey, ju.List[InternalKafkaConsumer[_, _]]]): Boolean = {
+            entry: ju.Map.Entry[CacheKey, ju.List[InternalKafkaConsumer[_, _]]]): Boolean = {
           if (this.size > maxCapacity) {
             try {
-              entry.getValue.asScala.foreach { _.close() }
+              entry.getValue.asScala.foreach(_.close())
             } catch {
               case x: KafkaException =>
                 logError("Error closing oldest Kafka consumer", x)
@@ -267,27 +266,27 @@ object KafkaDataConsumer extends Logging {
    * caching them and tracking when they are in use.
    */
   def acquire[K, V](
-      groupId: String,
       topicPartition: TopicPartition,
       kafkaParams: ju.Map[String, Object],
       context: TaskContext,
       useCache: Boolean): KafkaDataConsumer[K, V] = synchronized {
+    val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
     val key = new CacheKey(groupId, topicPartition)
     val existingInternalConsumers = Option(cache.get(key))
       .getOrElse(new ju.LinkedList[InternalKafkaConsumer[_, _]])
 
     cache.putIfAbsent(key, existingInternalConsumers)
 
-    lazy val newInternalConsumer = new InternalKafkaConsumer[K, V](
-      groupId, topicPartition, kafkaParams)
+    lazy val newInternalConsumer = new InternalKafkaConsumer[K, V](topicPartition, kafkaParams)
 
     if (context != null && context.attemptNumber >= 1) {
       // If this is reattempt at running the task, then invalidate cached consumers if any and
-      // start with a new one.
+      // start with a new one. If prior attempt failures were cache related then this way old
+      // problematic consumers can be removed.
       logDebug("Reattempt detected, invalidating cached consumers")
       val closedExistingInternalConsumers = new ju.LinkedList[InternalKafkaConsumer[_, _]]()
       existingInternalConsumers.asScala.foreach { existingInternalConsumer =>
-        // Consumer exists in cache. If its in use, mark it for closing later, or close it now.
+        // Consumer exists in cache. If it's in use, mark it for closing later, or close it now.
         if (existingInternalConsumer.inUse) {
           existingInternalConsumer.markedForClose = true
         } else {
@@ -299,25 +298,19 @@ object KafkaDataConsumer extends Logging {
 
       logDebug("Reattempt detected, new cached consumer will be allocated " +
         s"$newInternalConsumer")
-      newInternalConsumer.inUse = true
       existingInternalConsumers.add(newInternalConsumer)
       CachedKafkaDataConsumer(newInternalConsumer)
-
     } else if (!useCache) {
       // If consumer reuse turned off, then do not use it, return a new consumer
       logDebug("Cache usage turned off, new non-cached consumer will be allocated " +
         s"$newInternalConsumer")
-      newInternalConsumer.inUse = true
       NonCachedKafkaDataConsumer(newInternalConsumer)
-
     } else if (existingInternalConsumers.isEmpty) {
       // If no consumer already cached, then put a new one into the cache and return it
       logDebug("No cached consumer, new cached consumer will be allocated " +
         s"$newInternalConsumer")
-      newInternalConsumer.inUse = true
       existingInternalConsumers.add(newInternalConsumer)
       CachedKafkaDataConsumer(newInternalConsumer)
-
     } else {
       // If consumers are already cached find a currently not used
       existingInternalConsumers.asScala.find(!_.inUse) match {
@@ -333,7 +326,6 @@ object KafkaDataConsumer extends Logging {
           // If every consumer is currently used, return a new consumer
           logDebug("All cached consumers used, new cached consumer will be allocated " +
             s"$newInternalConsumer")
-          newInternalConsumer.inUse = true
           existingInternalConsumers.add(newInternalConsumer)
           CachedKafkaDataConsumer(newInternalConsumer)
       }
