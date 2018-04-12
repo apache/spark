@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
@@ -47,6 +47,6 @@ case class SparkPartitionID() extends LeafExpression with Nondeterministic {
     ctx.addImmutableStateIfNotExists(CodeGenerator.JAVA_INT, idTerm)
     ctx.addPartitionInitializationStatement(s"$idTerm = partitionIndex;")
     ev.copy(code = s"final ${CodeGenerator.javaType(dataType)} ${ev.value} = $idTerm;",
-      isNull = "false")
+      isNull = FalseLiteral)
   }
 }

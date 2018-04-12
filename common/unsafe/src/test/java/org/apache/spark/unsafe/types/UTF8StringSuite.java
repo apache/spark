@@ -25,9 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import com.google.common.collect.ImmutableMap;
-import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
-import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.memory.OnHeapMemoryBlock;
 import org.junit.Test;
 
@@ -54,8 +52,8 @@ public class UTF8StringSuite {
 
     assertTrue(s1.contains(s2));
     assertTrue(s2.contains(s1));
-    assertTrue(s1.startsWith(s1));
-    assertTrue(s1.endsWith(s1));
+    assertTrue(s1.startsWith(s2));
+    assertTrue(s1.endsWith(s2));
   }
 
   @Test
@@ -513,22 +511,6 @@ public class UTF8StringSuite {
     assertEquals(fromString("").soundex(), fromString(""));
     assertEquals(fromString("123").soundex(), fromString("123"));
     assertEquals(fromString("世界千世").soundex(), fromString("世界千世"));
-  }
-
-  @Test
-  public void writeToOutputStreamUnderflow() throws IOException {
-    // offset underflow is apparently supported?
-    final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    final byte[] test = "01234567".getBytes(StandardCharsets.UTF_8);
-
-    for (int i = 1; i <= Platform.BYTE_ARRAY_OFFSET; ++i) {
-      new UTF8String(
-        new ByteArrayMemoryBlock(test, Platform.BYTE_ARRAY_OFFSET - i, test.length + i))
-          .writeTo(outputStream);
-      final ByteBuffer buffer = ByteBuffer.wrap(outputStream.toByteArray(), i, test.length);
-      assertEquals("01234567", StandardCharsets.UTF_8.decode(buffer).toString());
-      outputStream.reset();
-    }
   }
 
   @Test
