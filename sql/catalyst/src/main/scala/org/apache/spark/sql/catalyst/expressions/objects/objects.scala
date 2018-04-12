@@ -65,7 +65,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
 
     val resultIsNull = if (needNullCheck) {
       val resultIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "resultIsNull")
-      GlobalValue(resultIsNull, CodeGenerator.JAVA_BOOLEAN)
+      JavaCode.isNullGlobal(resultIsNull)
     } else {
       FalseLiteral
     }
@@ -569,12 +569,11 @@ case class LambdaVariable(
 
   override def genCode(ctx: CodegenContext): ExprCode = {
     val isNullValue = if (nullable) {
-      VariableValue(isNull, CodeGenerator.JAVA_BOOLEAN)
+      JavaCode.isNullVariable(isNull)
     } else {
       FalseLiteral
     }
-    ExprCode(code = "", value = VariableValue(value, CodeGenerator.javaType(dataType)),
-      isNull = isNullValue)
+    ExprCode(value = JavaCode.variable(value, dataType), isNull = isNullValue)
   }
 
   // This won't be called as `genCode` is overrided, just overriding it to make
