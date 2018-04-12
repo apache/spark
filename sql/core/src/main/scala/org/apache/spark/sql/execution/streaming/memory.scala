@@ -167,7 +167,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     }
   }
 
-  protected def generateDebugString(
+  private def generateDebugString(
       rows: Seq[UnsafeRow],
       startOrdinal: Int,
       endOrdinal: Int): String = {

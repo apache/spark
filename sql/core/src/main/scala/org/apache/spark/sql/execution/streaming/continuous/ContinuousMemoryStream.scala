@@ -66,6 +66,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   private val recordBuffer = new ContinuousMemoryStreamRecordBuffer()
 
+  @GuardedBy("this")
   private var startOffset: ContinuousMemoryStreamOffset = _
 
   @volatile private var endpointRef: RpcEndpointRef = _
@@ -87,18 +88,20 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     }.asInstanceOf[ContinuousMemoryStreamOffset]
   }
 
-  override def getStartOffset: Offset = startOffset
+  override def getStartOffset: Offset = synchronized {
+    startOffset
+  }
 
   override def deserializeOffset(json: String): ContinuousMemoryStreamOffset = {
     ContinuousMemoryStreamOffset(Serialization.read[Map[Int, Int]](json))
   }
 
   override def mergeOffsets(offsets: Array[PartitionOffset]): ContinuousMemoryStreamOffset = {
-    ContinuousMemoryStreamOffset {
+    ContinuousMemoryStreamOffset(
       offsets.map {
         case ContinuousMemoryStreamPartitionOffset(part, num) => (part, num)
       }.toMap
-    }
+    )
   }
 
   override def createDataReaderFactories(): ju.List[DataReaderFactory[Row]] = {
@@ -144,13 +147,8 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       case GetRecord(ContinuousMemoryStreamPartitionOffset(part, index)) =>
         ContinuousMemoryStream.this.synchronized {
           val buf = records(part)
+          val record = if (buf.size <= index) None else Some(buf(index))
 
-          val record =
-            if (buf.size <= index) {
-              None
-            } else {
-              Some(buf(index))
-            }
           context.reply(record.map(Row(_)))
         }
     }
