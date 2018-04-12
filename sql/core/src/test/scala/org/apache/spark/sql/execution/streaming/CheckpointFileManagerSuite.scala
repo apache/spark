@@ -101,10 +101,10 @@ class CheckpointFileManagerSuite extends SparkFunSuite with SharedSparkSession {
   test("CheckpointFileManager.create() should pick up user-specified class from conf") {
     withSQLConf(
       SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key ->
-        classOf[TestCheckpointFileManager].getName) {
+        classOf[CreateAtomicTestManager].getName) {
       val fileManager =
         CheckpointFileManager.create(new Path("/"), spark.sessionState.newHadoopConf)
-      assert(fileManager.isInstanceOf[TestCheckpointFileManager])
+      assert(fileManager.isInstanceOf[CreateAtomicTestManager])
     }
   }
 
@@ -142,34 +142,34 @@ class FileSystemBasedCheckpointFileManagerSuite extends CheckpointFileManagerTes
 
 
 /** A fake implementation to test different characteristics of CheckpointFileManager interface */
-class TestCheckpointFileManager(path: Path, hadoopConf: Configuration)
+class CreateAtomicTestManager(path: Path, hadoopConf: Configuration)
   extends FileSystemBasedCheckpointFileManager(path, hadoopConf) {
 
   import CheckpointFileManager._
 
   override def createAtomic(path: Path, overwrite: Boolean): CancellableFSDataOutputStream = {
-    if (TestCheckpointFileManager.shouldFailInCreateAtomic) {
-      TestCheckpointFileManager.cancelCalledInCreateAtomic = false
+    if (CreateAtomicTestManager.shouldFailInCreateAtomic) {
+      CreateAtomicTestManager.cancelCalledInCreateAtomic = false
     }
     val originalOut = super.createAtomic(path, overwrite)
 
     new CancellableFSDataOutputStream(originalOut) {
       override def close(): Unit = {
-        if (TestCheckpointFileManager.shouldFailInCreateAtomic) {
+        if (CreateAtomicTestManager.shouldFailInCreateAtomic) {
           throw new IOException("Copy failed intentionally")
         }
         super.close()
       }
 
       override def cancel(): Unit = {
-        TestCheckpointFileManager.cancelCalledInCreateAtomic = true
+        CreateAtomicTestManager.cancelCalledInCreateAtomic = true
         originalOut.cancel()
       }
     }
   }
 }
 
-object TestCheckpointFileManager {
+object CreateAtomicTestManager {
   @volatile var shouldFailInCreateAtomic = false
   @volatile var cancelCalledInCreateAtomic = false
 }

@@ -475,14 +475,14 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     val hadoopConf = new Configuration()
     hadoopConf.set(
       SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
-      classOf[TestCheckpointFileManager].getName)
+      classOf[CreateAtomicTestManager].getName)
     val remoteDir = Utils.createTempDir().getAbsolutePath
 
     val provider = newStoreProvider(
       opId = Random.nextInt, partition = 0, dir = remoteDir, hadoopConf = hadoopConf)
 
     // Disable failure of output stream and generate versions
-    TestCheckpointFileManager.shouldFailInCreateAtomic = false
+    CreateAtomicTestManager.shouldFailInCreateAtomic = false
     for (version <- 1 to 10) {
       val store = provider.getStore(version - 1)
       put(store, version.toString, version) // update "1" -> 1, "2" -> 2, ...
@@ -490,19 +490,21 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
     val version10Data = (1L to 10).map(_.toString).map(x => x -> x).toSet
 
+    CreateAtomicTestManager.cancelCalledInCreateAtomic = false
     val store = provider.getStore(10)
     // Fail commit for next version and verify that reloading resets the files
-    TestCheckpointFileManager.shouldFailInCreateAtomic = true
+    CreateAtomicTestManager.shouldFailInCreateAtomic = true
     put(store, "11", 11)
     val e = intercept[IllegalStateException] { quietly { store.commit() } }
-    assert(e.getCause.isInstanceOf[IOException], "Was waiting the IOException to be thrown")
-    TestCheckpointFileManager.shouldFailInCreateAtomic = false
+    assert(e.getCause.isInstanceOf[IOException])
+    CreateAtomicTestManager.shouldFailInCreateAtomic = false
 
     // Abort commit for next version and verify that reloading resets the files
+    CreateAtomicTestManager.cancelCalledInCreateAtomic = false
     val store2 = provider.getStore(10)
     put(store2, "11", 11)
     store2.abort()
-    assert(TestCheckpointFileManager.cancelCalledInCreateAtomic)
+    assert(CreateAtomicTestManager.cancelCalledInCreateAtomic)
   }
 
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {
