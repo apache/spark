@@ -516,45 +516,51 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of `substr` in `str`.
+    _FUNC_(array, element) - Returns the (1-based) index of the first element of the array.
   """,
   examples = """
     Examples:
-      > SELECT _FUNC_('SparkSQL', 'SQL');
-       6
+      > SELECT _FUNC_(array(3, 2, 1), 1);
+       3
   """,
   since = "2.4.0")
-case class ArrayPosition(str: Expression, substr: Expression)
+case class ArrayPosition(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
-  override def left: Expression = str
-  override def right: Expression = substr
   override def dataType: DataType = DecimalType.BigIntDecimal
-  override def inputTypes: Seq[DataType] = Seq(StringType, StringType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
 
-  private val stringInstr = StringInstr(str, substr)
+  override def nullable: Boolean = {
+    left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull
+  }
 
-  override def nullSafeEval(string: Any, sub: Any): Any = {
-    val r = stringInstr.nullSafeEval(string, sub)
-    if (r == null) null else {
-      new Decimal().setOrNull(r.asInstanceOf[Int].toLong, DecimalType.MAX_PRECISION, 0)
-    }
+  override def nullSafeEval(arr: Any, value: Any): Any = {
+    arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
+      if (v == value) {
+        return new Decimal().setOrNull((i + 1).toLong, DecimalType.MAX_PRECISION, 0)
+      }
+    )
+    new Decimal().setOrNull(0.toLong, DecimalType.MAX_PRECISION, 0)
   }
 
   override def prettyName: String = "array_position"
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val value = ctx.freshName("arrayPositionValue")
-    val evPosition = stringInstr.doGenCode(
-      ctx, ExprCode(ev.isNull, JavaCode.variable(value, IntegerType)))
-    ev.copy(
-      code = evPosition.code +
-        s"""
-           |Decimal ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-           |if (!${evPosition.isNull}) {
-           |  ${ev.value} = Decimal.apply((long)$value);
-           |}
-         """.stripMargin,
-      isNull = evPosition.isNull)
+    nullSafeCodeGen(ctx, ev, (arr, value) => {
+      val pos = ctx.freshName("arrayPosition")
+      val i = ctx.freshName("i")
+      val getValue = CodeGenerator.getValue(arr, right.dataType, i)
+      s"""
+         |int ${pos} = 0;
+         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
+         |  if (${ctx.genEqual(right.dataType, value, getValue)}) {
+         |    ${pos} = $i + 1;
+         |    break;
+         |  }
+         |}
+         |${ev.value} = Decimal.apply((long)$pos);
+       """
+    })
   }
 }

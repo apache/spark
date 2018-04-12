@@ -326,24 +326,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }.getMessage().contains("only supports array input"))
   }
 
-  test("array position function") {
-    val df = Seq(("aaads", "aa", "zz", null)).toDF("a", "b", "c", "nul")
-
-    checkAnswer(
-      df.select(
-        array_position($"a", "aa"),
-        array_position($"a", "gg"),
-        array_position($"nul", "gg")),
-      Row(BigInt(1), BigInt(0), null))
-    checkAnswer(
-      df.selectExpr(
-        "array_position(a, b)",
-        "array_position(a, c)",
-        "array_position(a, nul)",
-        "array_position(nul, c)"),
-      Row(BigInt(1), BigInt(0), null, null))
-  }
-
   test("array size function") {
     val df = Seq(
       (Seq[Int](1, 2), "x"),
@@ -551,6 +533,40 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException] {
       oneRowDF.selectExpr("reverse(map(1, 'a'))")
     }
+  }
+
+  test("array position function") {
+    val df = Seq(
+      (Seq[Int](1, 2), "x"),
+      (Seq[Int](), "x")
+    ).toDF("a", "b")
+
+    checkAnswer(
+      df.select(array_position(df("a"), 1)),
+      Seq(Row(BigInt(1)), Row(BigInt(0)))
+    )
+    checkAnswer(
+      df.selectExpr("array_position(a, 1)"),
+      Seq(Row(BigInt(1)), Row(BigInt(0)))
+    )
+
+    checkAnswer(
+      df.select(array_position(df("a"), null)),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("array_position(a, null)"),
+      Seq(Row(null), Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_position(array(array(1), null)[0], 1)"),
+      Seq(Row(BigInt(1)), Row(BigInt(1)))
+    )
+    checkAnswer(
+      df.selectExpr("array_position(array(1, null), array(1, null)[0])"),
+      Seq(Row(BigInt(1)), Row(BigInt(1)))
+    )
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

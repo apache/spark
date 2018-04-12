@@ -44,29 +44,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Size(Literal.create(null, ArrayType(StringType))), -1)
   }
 
-  test("Array Position") {
-    val s1 = 'a.string.at(0)
-    val s2 = 'b.string.at(1)
-    val s3 = 'c.string.at(2)
-    val row1 = create_row("aaads", "aa", "zz")
-    val nullString = Literal.create(null, StringType)
-
-    checkEvaluation(ArrayPosition(Literal("aaads"), Literal("aa")), Decimal(BigInt(1)), row1)
-    checkEvaluation(ArrayPosition(Literal("aaads"), Literal("de")), Decimal(BigInt(0)), row1)
-    checkEvaluation(ArrayPosition(nullString, Literal("de")), null, row1)
-    checkEvaluation(ArrayPosition(Literal("aaads"), nullString), null, row1)
-
-    checkEvaluation(ArrayPosition(s1, s2), Decimal(BigInt(1)), row1)
-    checkEvaluation(ArrayPosition(s1, s3), Decimal(BigInt(0)), row1)
-
-    // scalastyle:off
-    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
-    checkEvaluation(ArrayPosition(s1, s2), Decimal(BigInt(3)), create_row("花花世界", "世界"))
-    checkEvaluation(ArrayPosition(s1, s2), Decimal(BigInt(1)), create_row("花花世界", "花"))
-    checkEvaluation(ArrayPosition(s1, s2), Decimal(BigInt(0)), create_row("花花世界", "小"))
-    // scalastyle:on
-  }
-
   test("MapKeys/MapValues") {
     val m0 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
     val m1 = Literal.create(Map[String, String](), MapType(StringType, StringType))
@@ -192,5 +169,26 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Reverse(as6), Seq.empty)
     checkEvaluation(Reverse(as7), null)
     checkEvaluation(Reverse(aa), Seq(Seq("e"), Seq("c", "d"), Seq("a", "b")))
+  }
+
+  test("Array Position") {
+    val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq[String](null, ""), ArrayType(StringType))
+    val a2 = Literal.create(Seq(null), ArrayType(LongType))
+    val a3 = Literal.create(null, ArrayType(StringType))
+
+    checkEvaluation(ArrayPosition(a0, Literal(1)), Decimal(BigInt(1)))
+    checkEvaluation(ArrayPosition(a0, Literal(0)), Decimal(BigInt(0)))
+    checkEvaluation(ArrayPosition(a0, Literal.create(null, IntegerType)), null)
+
+    checkEvaluation(ArrayPosition(a1, Literal("")), Decimal(BigInt(2)))
+    checkEvaluation(ArrayPosition(a1, Literal("a")), Decimal(BigInt(0)))
+    checkEvaluation(ArrayPosition(a1, Literal.create(null, StringType)), null)
+
+    checkEvaluation(ArrayPosition(a2, Literal(1L)), Decimal(BigInt(0)))
+    checkEvaluation(ArrayPosition(a2, Literal.create(null, LongType)), null)
+
+    checkEvaluation(ArrayPosition(a3, Literal("")), null)
+    checkEvaluation(ArrayPosition(a3, Literal.create(null, StringType)), null)
   }
 }
