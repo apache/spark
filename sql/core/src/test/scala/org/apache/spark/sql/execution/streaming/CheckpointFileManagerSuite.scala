@@ -119,12 +119,10 @@ class CheckpointFileManagerSuite extends SparkFunSuite with SharedSparkSession {
         assert(metadataLog.get(0) === Some("batch0"))
         assert(metadataLog.get(None, Some(0)) === Array(0 -> "batch0"))
 
-
         val metadataLog2 = new HDFSMetadataLog[String](spark, s"$scheme://${temp.toURI.getPath}")
         assert(metadataLog2.get(0) === Some("batch0"))
         assert(metadataLog2.getLatest() === Some(0 -> "batch0"))
         assert(metadataLog2.get(None, Some(0)) === Array(0 -> "batch0"))
-
       }
     }
   }
