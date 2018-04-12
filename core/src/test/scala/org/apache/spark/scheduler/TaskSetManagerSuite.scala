@@ -880,8 +880,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("execB", "host2", ANY).get.index === 3)
   }
 
-  test("SPARK-23888: speculative task should not run on a given host " +
-    "where another attempt is already running on") {
+  test("SPARK-23888: speculative task cannot run on a host with another " +
+    "running attempt, but can run on a host with a failed attempt.") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(
       sc, ("execA", "host1"), ("execB", "host2"))
@@ -916,7 +916,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // after a long long time, task0.0 failed, and task0.0 can not re-run since
     // there's already a running copy.
     clock.advance(1000)
-    info1.finishTime = clock.getTimeMillis()
     manager.handleFailedTask(info1.taskId, TaskState.FAILED, UnknownReason)
     assert(!info1.running)
 
