@@ -15,32 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.sql.catalyst.expressions.codegen
 
-import java.io.PrintStream
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.BooleanType
 
-import org.apache.spark.SparkException
+class ExprValueSuite extends SparkFunSuite {
 
-/**
- * Contains basic command line parsing functionality and methods to parse some common Spark CLI
- * options.
- */
-private[spark] trait CommandLineUtils {
+  test("TrueLiteral and FalseLiteral should be LiteralValue") {
+    val trueLit = TrueLiteral
+    val falseLit = FalseLiteral
 
-  // Exposed for testing
-  private[spark] var exitFn: Int => Unit = (exitCode: Int) => System.exit(exitCode)
+    assert(trueLit.value == "true")
+    assert(falseLit.value == "false")
 
-  private[spark] var printStream: PrintStream = System.err
+    assert(trueLit.isPrimitive)
+    assert(falseLit.isPrimitive)
 
-  // scalastyle:off println
-  private[spark] def printMessage(str: String): Unit = printStream.println(str)
-  // scalastyle:on println
-
-  private[spark] def printErrorAndExit(str: String): Unit = {
-    printMessage("Error: " + str)
-    printMessage("Run with --help for usage help or --verbose for debug output")
-    exitFn(1)
+    assert(trueLit === JavaCode.literal("true", BooleanType))
+    assert(falseLit === JavaCode.literal("false", BooleanType))
   }
-
-  def main(args: Array[String]): Unit
 }
