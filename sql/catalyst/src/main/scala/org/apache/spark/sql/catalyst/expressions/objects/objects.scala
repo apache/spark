@@ -449,34 +449,22 @@ case class NewInstance(
     childrenResolved && !needOuterPointer
   }
 
-  private lazy val constructor: (Seq[AnyRef]) => Any = {
-    val paramTypes = arguments.map { expr =>
-      CallMethodViaReflection.typeMapping.getOrElse(expr.dataType,
-        Seq(expr.dataType.asInstanceOf[ObjectType].cls))
-    }
-    val findConstructor = (types: Seq[Seq[Class[_]]]) => {
-      val constructorOption = cls.getConstructors.find { c =>
-        if (c.getParameterCount == types.length) {
-          c.getParameterTypes.zip(types).forall { case (constructorType, candidateTypes) =>
-            candidateTypes.exists {
-              case tpe => constructorType.isAssignableFrom(tpe)
-            }
-          }
-        } else {
-          false
-        }
+  @transient private lazy val constructor: (Seq[AnyRef]) => Any = {
+    val paramTypes = ScalaReflection.expressionJavaClasses(arguments)
+    val getConstructor = (paramClazz: Seq[Class[_]]) => {
+      ScalaReflection.findConstructor(cls, paramClazz).getOrElse {
+        sys.error(s"Couldn't find a valid constructor on $cls")
       }
-      assert(constructorOption.isDefined)
-      constructorOption.get
     }
     outerPointer.map { p =>
       val outerObj = p()
-      val c = findConstructor(Seq(outerObj.getClass) +: paramTypes)
+      val d = outerObj.getClass +: paramTypes
+      val c = getConstructor(outerObj.getClass +: paramTypes)
       (args: Seq[AnyRef]) => {
         c.newInstance(outerObj +: args: _*)
       }
     }.getOrElse {
-      val c = findConstructor(paramTypes)
+      val c = getConstructor(paramTypes)
       (args: Seq[AnyRef]) => {
         c.newInstance(args: _*)
       }
