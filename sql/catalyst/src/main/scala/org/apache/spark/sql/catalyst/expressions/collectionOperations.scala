@@ -304,8 +304,6 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
   override def nullable: Boolean =
     child.nullable || child.dataType.asInstanceOf[ArrayType].containsNull
 
-  override def foldable: Boolean = child.foldable
-
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
   private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
