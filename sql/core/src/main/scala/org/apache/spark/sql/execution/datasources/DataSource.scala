@@ -127,10 +127,6 @@ case class DataSource(
    *         columns.
    */
   private def getOrInferFileFormatSchema(format: FileFormat): (StructType, StructType) = {
-    // the operations below are expensive therefore try not to do them if we don't need to, e.g.,
-    // in streaming mode, we have already inferred and registered partition columns, we will
-    // never have to materialize the lazy val below
-
     val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource
@@ -195,7 +191,12 @@ case class DataSource(
     (dataSchema, partitionSchema)
   }
 
-  /** An [[InMemoryFileIndex]] that can be used to get partition schema and file list. */
+  /**
+   * An [[InMemoryFileIndex]] that can be used to get partition schema and file list.
+   * The operations below are expensive therefore try not to do them if we don't need to, e.g.,
+   * in streaming mode, we have already inferred and registered partition columns, we will
+   * never have to materialize the lazy val below
+   */
   private lazy val inMemoryFileIndex: InMemoryFileIndex = {
     val globbedPaths =
       checkAndGlobPathIfNecessary(checkEmptyGlobPath = false, checkFilesExist = false)

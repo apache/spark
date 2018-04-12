@@ -99,16 +99,6 @@ class PartitionedTablePerfStatsSuite
     }
   }
 
-  /** For data source tables, all the files should be parsed once for creating file index */
-  private def checkFilesDiscovered(isDatasourceTable: Boolean, count: Int): Unit = {
-    val expectCount = if (isDatasourceTable) {
-      count + 5
-    } else {
-      count
-    }
-    assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == expectCount)
-  }
-
   genericTest("partitioned pruned table reports only selected files") { spec =>
     assert(spark.sqlContext.getConf(HiveUtils.CONVERT_METASTORE_PARQUET.key) == "true")
     withTable("test") {
