@@ -448,8 +448,9 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     val ref = BoundReference(0, IntegerType, true)
     val add1 = Add(ref, ref)
     val add2 = Add(add1, add1)
-    val dummy = SubExprEliminationState(VariableValue("dummy", "boolean"),
-      VariableValue("dummy", "boolean"))
+    val dummy = SubExprEliminationState(
+      JavaCode.variable("dummy", BooleanType),
+      JavaCode.variable("dummy", BooleanType))
 
     // raw testing of basic functionality
     {
