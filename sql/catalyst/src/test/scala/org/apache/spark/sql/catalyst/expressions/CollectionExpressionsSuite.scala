@@ -177,15 +177,15 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a2 = Literal.create(Seq(null), ArrayType(LongType))
     val a3 = Literal.create(null, ArrayType(StringType))
 
-    checkEvaluation(ArrayPosition(a0, Literal(1)), Decimal(BigInt(1)))
-    checkEvaluation(ArrayPosition(a0, Literal(0)), Decimal(BigInt(0)))
+    checkEvaluation(ArrayPosition(a0, Literal(1)), 1L)
+    checkEvaluation(ArrayPosition(a0, Literal(0)), 0L)
     checkEvaluation(ArrayPosition(a0, Literal.create(null, IntegerType)), null)
 
-    checkEvaluation(ArrayPosition(a1, Literal("")), Decimal(BigInt(2)))
-    checkEvaluation(ArrayPosition(a1, Literal("a")), Decimal(BigInt(0)))
+    checkEvaluation(ArrayPosition(a1, Literal("")), 2L)
+    checkEvaluation(ArrayPosition(a1, Literal("a")), 0L)
     checkEvaluation(ArrayPosition(a1, Literal.create(null, StringType)), null)
 
-    checkEvaluation(ArrayPosition(a2, Literal(1L)), Decimal(BigInt(0)))
+    checkEvaluation(ArrayPosition(a2, Literal(1L)), 0L)
     checkEvaluation(ArrayPosition(a2, Literal.create(null, LongType)), null)
 
     checkEvaluation(ArrayPosition(a3, Literal("")), null)

@@ -508,15 +508,15 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
 
 
 /**
- * A function that returns the position of the first occurrence of substr in the given string
- * as BigInt. Returns 0 if substr could not be found in str.
+ * A function that returns the position of the first occurrence of element in the given array
+ * as long. Returns 0 if substr could not be found in str.
  * Returns null if either of the arguments are null and
  *
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(array, element) - Returns the (1-based) index of the first element of the array.
+    _FUNC_(array, element) - Returns the (1-based) index of the first element of the array as long.
   """,
   examples = """
     Examples:
@@ -527,7 +527,7 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
 case class ArrayPosition(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
-  override def dataType: DataType = DecimalType.BigIntDecimal
+  override def dataType: DataType = LongType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
 
@@ -538,10 +538,10 @@ case class ArrayPosition(left: Expression, right: Expression)
   override def nullSafeEval(arr: Any, value: Any): Any = {
     arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
       if (v == value) {
-        return new Decimal().setOrNull((i + 1).toLong, DecimalType.MAX_PRECISION, 0)
+        return (i + 1).toLong
       }
     )
-    new Decimal().setOrNull(0.toLong, DecimalType.MAX_PRECISION, 0)
+    0L
   }
 
   override def prettyName: String = "array_position"
@@ -559,7 +559,7 @@ case class ArrayPosition(left: Expression, right: Expression)
          |    break;
          |  }
          |}
-         |${ev.value} = Decimal.apply((long)$pos);
+         |${ev.value} = (long) $pos;
        """
     })
   }

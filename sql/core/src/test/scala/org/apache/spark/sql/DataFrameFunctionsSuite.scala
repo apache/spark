@@ -543,11 +543,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(array_position(df("a"), 1)),
-      Seq(Row(BigInt(1)), Row(BigInt(0)))
+      Seq(Row(1L), Row(0L))
     )
     checkAnswer(
       df.selectExpr("array_position(a, 1)"),
-      Seq(Row(BigInt(1)), Row(BigInt(0)))
+      Seq(Row(1L), Row(0L))
     )
 
     checkAnswer(
@@ -561,11 +561,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.selectExpr("array_position(array(array(1), null)[0], 1)"),
-      Seq(Row(BigInt(1)), Row(BigInt(1)))
+      Seq(Row(1L), Row(1L))
     )
     checkAnswer(
       df.selectExpr("array_position(array(1, null), array(1, null)[0])"),
-      Seq(Row(BigInt(1)), Row(BigInt(1)))
+      Seq(Row(1L), Row(1L))
     )
   }
 

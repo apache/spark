@@ -3039,7 +3039,7 @@ object functions {
   }
 
   /**
-   * Locate the position of the first occurrence of the value in the given array.
+   * Locates the position of the first occurrence of the value in the given array as long.
    * Returns null if either of the arguments are null.
    *
    * @note The position is not zero based, but 1 based index. Returns 0 if value
