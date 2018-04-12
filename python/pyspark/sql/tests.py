@@ -2991,6 +2991,24 @@ class SQLTests(ReusedSQLTestCase):
                 os.environ['TZ'] = orig_env_tz
             time.tzset()
 
+    def test_sort_with_nulls_order(self):
+        from pyspark.sql import functions
+
+        df = self.spark.createDataFrame(
+            [('Tom', 80), (None, 60), ('Alice', 50)], ["name", "height"])
+        self.assertEquals(
+            df.select(df.name).orderBy(functions.asc_nulls_first('name')).collect(),
+            [Row(name=None), Row(name=u'Alice'), Row(name=u'Tom')])
+        self.assertEquals(
+            df.select(df.name).orderBy(functions.asc_nulls_last('name')).collect(),
+            [Row(name=u'Alice'), Row(name=u'Tom'), Row(name=None)])
+        self.assertEquals(
+            df.select(df.name).orderBy(functions.desc_nulls_first('name')).collect(),
+            [Row(name=None), Row(name=u'Tom'), Row(name=u'Alice')])
+        self.assertEquals(
+            df.select(df.name).orderBy(functions.desc_nulls_last('name')).collect(),
+            [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)])
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 

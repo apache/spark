@@ -687,7 +687,7 @@ setMethod("storageLevel",
 #' @rdname coalesce
 #' @name coalesce
 #' @aliases coalesce,SparkDataFrame-method
-#' @seealso \link{repartition}
+#' @seealso \link{repartition}, \link{repartitionByRange}
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -723,7 +723,7 @@ setMethod("coalesce",
 #' @rdname repartition
 #' @name repartition
 #' @aliases repartition,SparkDataFrame-method
-#' @seealso \link{coalesce}
+#' @seealso \link{coalesce}, \link{repartitionByRange}
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -755,6 +755,67 @@ setMethod("repartition",
               sdf <- callJMethod(x@sdf, "repartition", jcol)
             } else {
               stop("Please, specify the number of partitions and/or a column(s)")
+            }
+            dataFrame(sdf)
+          })
+
+
+#' Repartition by range
+#'
+#' The following options for repartition by range are possible:
+#' \itemize{
+#'  \item{1.} {Return a new SparkDataFrame range partitioned by
+#'                      the given columns into \code{numPartitions}.}
+#'  \item{2.} {Return a new SparkDataFrame range partitioned by the given column(s),
+#'                      using \code{spark.sql.shuffle.partitions} as number of partitions.}
+#'}
+#'
+#' @param x a SparkDataFrame.
+#' @param numPartitions the number of partitions to use.
+#' @param col the column by which the range partitioning will be performed.
+#' @param ... additional column(s) to be used in the range partitioning.
+#'
+#' @family SparkDataFrame functions
+#' @rdname repartitionByRange
+#' @name repartitionByRange
+#' @aliases repartitionByRange,SparkDataFrame-method
+#' @seealso \link{repartition}, \link{coalesce}
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' newDF <- repartitionByRange(df, col = df$col1, df$col2)
+#' newDF <- repartitionByRange(df, 3L, col = df$col1, df$col2)
+#'}
+#' @note repartitionByRange since 2.4.0
+setMethod("repartitionByRange",
+          signature(x = "SparkDataFrame"),
+          function(x, numPartitions = NULL, col = NULL, ...) {
+            if (!is.null(numPartitions) && !is.null(col)) {
+              # number of partitions and columns both are specified
+              if (is.numeric(numPartitions) && class(col) == "Column") {
+                cols <- list(col, ...)
+                jcol <- lapply(cols, function(c) { c@jc })
+                sdf <- callJMethod(x@sdf, "repartitionByRange", numToInt(numPartitions), jcol)
+              } else {
+                stop(paste("numPartitions and col must be numeric and Column; however, got",
+                           class(numPartitions), "and", class(col)))
+              }
+            } else if (!is.null(col))  {
+              # only columns are specified
+              if (class(col) == "Column") {
+                cols <- list(col, ...)
+                jcol <- lapply(cols, function(c) { c@jc })
+                sdf <- callJMethod(x@sdf, "repartitionByRange", jcol)
+              } else {
+                stop(paste("col must be Column; however, got", class(col)))
+              }
+            } else if (!is.null(numPartitions)) {
+              # only numPartitions is specified
+              stop("At least one partition-by column must be specified.")
+            } else {
+              stop("Please, specify a column(s) or the number of partitions with a column(s)")
             }
             dataFrame(sdf)
           })
