@@ -47,7 +47,7 @@ import org.apache.spark.util.RpcUtils
  * The overall strategy here is:
  *  * ContinuousMemoryStream maintains a list of records for each partition. addData() will
  *    distribute records evenly-ish across partitions.
- *  * ContinuousMemoryStreamRecordBuffer is set up as an endpoint for executor-side
+ *  * RecordEndpoint is set up as an endpoint for executor-side
  *    ContinuousMemoryStreamDataReader instances to poll. It returns the record at the specified
  *    offset within the list, or null if that offset doesn't yet have a record.
  */
@@ -64,11 +64,10 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   @GuardedBy("this")
   private val records = Seq.fill(NUM_PARTITIONS)(new ListBuffer[A])
 
-  private val recordBuffer = new ContinuousMemoryStreamRecordBuffer()
-
   @GuardedBy("this")
   private var startOffset: ContinuousMemoryStreamOffset = _
 
+  private val recordEndpoint = new RecordEndpoint()
   @volatile private var endpointRef: RpcEndpointRef = _
 
   def addData(data: TraversableOnce[A]): Offset = synchronized {
@@ -106,19 +105,20 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   override def createDataReaderFactories(): ju.List[DataReaderFactory[Row]] = {
     synchronized {
+      val endpointName = s"ContinuousMemoryStreamRecordReceiver-$id"
       endpointRef =
-        recordBuffer.rpcEnv.setupEndpoint(ContinuousMemoryStream.recordBufferName(id), recordBuffer)
+        recordEndpoint.rpcEnv.setupEndpoint(endpointName, recordEndpoint)
 
       startOffset.partitionNums.map {
         case (part, index) =>
-          val name = ContinuousMemoryStream.recordBufferName(id)
-          new ContinuousMemoryStreamDataReaderFactory(name, part, index): DataReaderFactory[Row]
+          new ContinuousMemoryStreamDataReaderFactory(
+            endpointName, part, index): DataReaderFactory[Row]
       }.toList.asJava
     }
   }
 
   override def stop(): Unit = {
-    if (endpointRef != null) recordBuffer.rpcEnv.stop(endpointRef)
+    if (endpointRef != null) recordEndpoint.rpcEnv.stop(endpointRef)
   }
 
   override def commit(end: Offset): Unit = {}
@@ -140,7 +140,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   /**
    * Endpoint for executors to poll for records.
    */
-  private class ContinuousMemoryStreamRecordBuffer extends ThreadSafeRpcEndpoint {
+  private class RecordEndpoint extends ThreadSafeRpcEndpoint {
     override val rpcEnv: RpcEnv = SparkEnv.get.rpcEnv
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -156,8 +156,6 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 }
 
 object ContinuousMemoryStream {
-  def recordBufferName(memoryStreamId: Int): String =
-    s"ContinuousMemoryStreamRecordReceiver-$memoryStreamId"
   case class GetRecord(offset: ContinuousMemoryStreamPartitionOffset)
 }
 
