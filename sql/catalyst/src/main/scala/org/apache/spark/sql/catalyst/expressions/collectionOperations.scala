@@ -322,8 +322,8 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
     val javaType = CodeGenerator.javaType(dataType)
     val i = ctx.freshName("i")
     val item = ExprCode("",
-      isNull = StatementValue(s"${childGen.value}.isNullAt($i)", "boolean"),
-      value = StatementValue(CodeGenerator.getValue(childGen.value, dataType, i), javaType))
+      isNull = JavaCode.isNullExpression(s"${childGen.value}.isNullAt($i)"),
+      value = JavaCode.expression(CodeGenerator.getValue(childGen.value, dataType, i), dataType))
     ev.copy(code =
       s"""
          |${childGen.code}
