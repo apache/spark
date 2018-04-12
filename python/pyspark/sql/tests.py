@@ -3010,12 +3010,12 @@ class SQLTests(ReusedSQLTestCase):
             [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)])
 
     def test_csv_sampling_ratio(self):
-        rdd = self.spark.sparkContext.range(0, 100).\
-            map(lambda x: '0.1' if x == 1 else str(x)).\
-            repartition(1)
-        schema = self.spark.read.option('inferSchema', True).\
-            option('samplingRatio', 0.5).\
-            csv(rdd).schema
+        rdd = self.spark.sparkContext.range(0, 100)\
+            .map(lambda x: '0.1' if x == 1 else str(x))\
+            .repartition(1)
+        schema = self.spark.read.option('inferSchema', True)\
+            .option('samplingRatio', 0.5)\
+            .csv(rdd).schema
         self.assertEquals(schema, StructType([StructField("_c0", IntegerType(), True)]))
 
 
