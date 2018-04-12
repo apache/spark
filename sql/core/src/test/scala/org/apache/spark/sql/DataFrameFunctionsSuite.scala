@@ -344,11 +344,11 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       df.select(cardinality($"a")),
-      Seq(Row(BigInt(2)), Row(BigInt(0)), Row(BigInt(3)), Row(BigInt(-1)))
+      Seq(Row(2L), Row(0L), Row(3L), Row(-1L))
     )
     checkAnswer(
       df.selectExpr("cardinality(a)"),
-      Seq(Row(BigInt(2)), Row(BigInt(0)), Row(BigInt(3)), Row(BigInt(-1)))
+      Seq(Row(2L), Row(0L), Row(3L), Row(-1L))
     )
   }
 

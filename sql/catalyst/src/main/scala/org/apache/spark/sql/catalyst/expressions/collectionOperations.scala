@@ -34,7 +34,7 @@ abstract class SizeUtil extends UnaryExpression with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
   override def nullable: Boolean = false
 
-  def sizeEval(child: Expression, input: InternalRow): Any = {
+  override def eval(input: InternalRow): Any = {
     val value = child.eval(input)
     val result = if (value == null) {
       -1
@@ -42,10 +42,13 @@ abstract class SizeUtil extends UnaryExpression with ExpectsInputTypes {
       case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
       case _: MapType => value.asInstanceOf[MapData].numElements()
     }
-    result
+    dataType match {
+      case IntegerType => result
+      case LongType => result.toLong
+    }
   }
 
-  def doSizeGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
     val javaDt = CodeGenerator.javaType(dataType)
     ev.copy(code =
@@ -71,14 +74,6 @@ abstract class SizeUtil extends UnaryExpression with ExpectsInputTypes {
   """)
 case class Size(child: Expression) extends SizeUtil {
   override def dataType: DataType = IntegerType
-
-  override def eval(input: InternalRow): Any = {
-    sizeEval(child, input)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    doSizeGenCode(ctx, ev)
-  }
 }
 
 /**
@@ -94,14 +89,6 @@ case class Size(child: Expression) extends SizeUtil {
   since = "2.4.0")
 case class Cardinality(child: Expression) extends SizeUtil {
   override def dataType: DataType = LongType
-
-  override def eval(input: InternalRow): Any = {
-    sizeEval(child, input)
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    doSizeGenCode(ctx, ev)
-  }
 }
 
 /**
