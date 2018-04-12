@@ -92,7 +92,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     private val newVersion = version + 1
     @volatile private var state: STATE = UPDATING
     private val finalDeltaFile: Path = deltaFile(newVersion)
-    private lazy val deltaFileStream = fm.createAtomic(finalDeltaFile, overwrite = true)
+    private lazy val deltaFileStream = fm.createAtomic(finalDeltaFile, overwriteIfPossible = true)
     private lazy val compressedStream = compressStream(deltaFileStream)
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
@@ -387,7 +387,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     var rawOutput: CancellableFSDataOutputStream = null
     var output: DataOutputStream = null
     try {
-      rawOutput = fm.createAtomic(targetFile, overwrite = true)
+      rawOutput = fm.createAtomic(targetFile, overwriteIfPossible = true)
       output = compressStream(rawOutput)
       val iter = map.entrySet().iterator()
       while(iter.hasNext) {

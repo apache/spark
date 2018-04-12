@@ -33,7 +33,7 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
 
   def createManager(path: Path): CheckpointFileManager
 
-  test("mkdirs, list, create, rename, delete") {
+  test("mkdirs, list, createAtomic, open, delete") {
     withTempPath { p =>
       val basePath = new Path(p.getAbsolutePath)
       val fm = createManager(basePath)
@@ -54,15 +54,17 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
       assert(fm.list(basePath, acceptAllFilter).exists(_.getPath.getName == "dir"))
       assert(fm.list(basePath, rejectAllFilter).length === 0)
 
-      // Create
+      // Create atomic and exists
       val path = new Path(s"$dir/file")
       assert(!fm.exists(path))
-      fm.create(path, overwrite = false).close()
+      fm.createAtomic(path, overwriteIfPossible = false).cancel()
+      assert(!fm.exists(path))
+      fm.createAtomic(path, overwriteIfPossible = false).close()
       assert(fm.exists(path))
       intercept[IOException] {
-        fm.create(path, overwrite = false)
+        fm.createAtomic(path, overwriteIfPossible = false).close()
       }
-      fm.create(path, overwrite = true).close()
+      fm.createAtomic(path, overwriteIfPossible = true).close()  // should not throw exception
 
       // Open and delete
       fm.open(path).close()
@@ -72,21 +74,6 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
         fm.open(path)
       }
       fm.delete(path) // should not throw exception
-
-      // Rename
-      val path1 = new Path(s"$dir/file1")
-      val path2 = new Path(s"$dir/file2")
-      fm.create(path1, overwrite = true).close()
-      assert(fm.exists(path1))
-      fm.rename(path1, path2, overwrite = false)
-
-      val path3 = new Path(s"$dir/file3")
-      fm.create(path3, overwrite = true).close()
-      assert(fm.exists(path3))
-      intercept[FileAlreadyExistsException] {
-        fm.rename(path2, path3, overwrite = false)
-      }
-      fm.rename(path2, path3, overwrite = true)
     }
   }
 

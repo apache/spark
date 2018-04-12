@@ -120,7 +120,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
    * valid behavior, we still need to prevent it from destroying the files.
    */
   private def writeBatchToFile(metadata: T, path: Path): Unit = {
-    val output = fileManager.createAtomic(path, overwrite = false)
+    val output = fileManager.createAtomic(path, overwriteIfPossible = false)
     try {
       serialize(metadata, output)
       output.close()
