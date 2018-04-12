@@ -40,6 +40,7 @@ import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdenti
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
 /**
@@ -146,7 +147,8 @@ class SparkHadoopUtil extends Logging {
   private[spark] def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
     UserGroupInformation.setConfiguration(newConfiguration(sparkConf))
     val creds = deserialize(tokens)
-    logInfo(s"Adding/updating delegation tokens ${dumpTokens(creds)}")
+    logInfo("Updating delegation tokens for current user.")
+    logDebug(s"Adding/updating delegation tokens ${dumpTokens(creds)}")
     addCurrentUserCredentials(creds)
   }
 
@@ -322,19 +324,6 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * Return a fresh Hadoop configuration, bypassing the HDFS cache mechanism.
-   * This is to prevent the DFSClient from using an old cached token to connect to the NameNode.
-   */
-  private[spark] def getConfBypassingFSCache(
-      hadoopConf: Configuration,
-      scheme: String): Configuration = {
-    val newConf = new Configuration(hadoopConf)
-    val confKey = s"fs.${scheme}.impl.disable.cache"
-    newConf.setBoolean(confKey, true)
-    newConf
-  }
-
-  /**
    * Dump the credentials' tokens to string values.
    *
    * @param credentials credentials
@@ -447,16 +436,17 @@ object SparkHadoopUtil {
   def get: SparkHadoopUtil = instance
 
   /**
-   * Given an expiration date (e.g. for Hadoop Delegation Tokens) return a the date
-   * when a given fraction of the duration until the expiration date has passed.
-   * Formula: current time + (fraction * (time until expiration))
+   * Given an expiration date for the current set of credentials, calculate the time when new
+   * credentials should be created.
+   *
    * @param expirationDate Drop-dead expiration date
-   * @param fraction fraction of the time until expiration return
-   * @return Date when the fraction of the time until expiration has passed
+   * @param conf Spark configuration
+   * @return Timestamp when new credentials should be created.
    */
-  private[spark] def getDateOfNextUpdate(expirationDate: Long, fraction: Double): Long = {
+  private[spark] def nextCredentialRenewalTime(expirationDate: Long, conf: SparkConf): Long = {
     val ct = System.currentTimeMillis
-    (ct + (fraction * (expirationDate - ct))).toLong
+    val ratio = conf.get(CREDENTIALS_RENEWAL_INTERVAL_RATIO)
+    (ct + (ratio * (expirationDate - ct))).toLong
   }
 
   /**

@@ -40,7 +40,7 @@ object HashBenchmark {
       safeProjection(encoder.toRow(generator().asInstanceOf[Row])).copy()
     ).toArray
 
-    val benchmark = new Benchmark("Hash For " + name, iters * numRows)
+    val benchmark = new Benchmark("Hash For " + name, iters * numRows.toLong)
     benchmark.addCase("interpreted version") { _: Int =>
       var sum = 0
       for (_ <- 0L until iters) {

@@ -674,18 +674,19 @@ class SparkSession(object):
                             "createDataFrame attempted Arrow optimization because "
                             "'spark.sql.execution.arrow.enabled' is set to true; however, "
                             "failed by the reason below:\n  %s\n"
-                            "Attempts non-optimization as "
+                            "Attempting non-optimization as "
                             "'spark.sql.execution.arrow.fallback.enabled' is set to "
                             "true." % _exception_message(e))
                         warnings.warn(msg)
                     else:
                         msg = (
                             "createDataFrame attempted Arrow optimization because "
-                            "'spark.sql.execution.arrow.enabled' is set to true; however, "
-                            "failed by the reason below:\n  %s\n"
-                            "For fallback to non-optimization automatically, please set true to "
-                            "'spark.sql.execution.arrow.fallback.enabled'." % _exception_message(e))
-                        raise RuntimeError(msg)
+                            "'spark.sql.execution.arrow.enabled' is set to true, but has reached "
+                            "the error below and will not continue because automatic fallback "
+                            "with 'spark.sql.execution.arrow.fallback.enabled' has been set to "
+                            "false.\n  %s" % _exception_message(e))
+                        warnings.warn(msg)
+                        raise
             data = self._convert_from_pandas(data, schema, timezone)
 
         if isinstance(schema, StructType):

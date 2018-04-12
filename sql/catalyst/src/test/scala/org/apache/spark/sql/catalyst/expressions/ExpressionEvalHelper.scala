@@ -55,7 +55,8 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
 
   protected def checkEvaluation(
       expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
-    val expr = prepareEvaluation(expression)
+    // Make it as method to obtain fresh expression everytime.
+    def expr = prepareEvaluation(expression)
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expr, catalystValue, inputRow)
@@ -111,12 +112,14 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
         val errMsg = intercept[T] {
           eval
         }.getMessage
-        if (errMsg != expectedErrMsg) {
+        if (!errMsg.contains(expectedErrMsg)) {
           fail(s"Expected error message is `$expectedErrMsg`, but `$errMsg` found")
         }
       }
     }
-    val expr = prepareEvaluation(expression)
+
+    // Make it as method to obtain fresh expression everytime.
+    def expr = prepareEvaluation(expression)
     checkException(evaluateWithoutCodegen(expr, inputRow), "non-codegen mode")
     checkException(evaluateWithGeneratedMutableProjection(expr, inputRow), "codegen mode")
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
@@ -176,7 +179,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
   }
 
-  private def evaluateWithGeneratedMutableProjection(
+  protected def evaluateWithGeneratedMutableProjection(
       expression: Expression,
       inputRow: InternalRow = EmptyRow): Any = {
     val plan = generateProject(
@@ -220,7 +223,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
   }
 
-  private def evaluateWithUnsafeProjection(
+  protected def evaluateWithUnsafeProjection(
       expression: Expression,
       inputRow: InternalRow = EmptyRow,
       factory: UnsafeProjectionCreator = UnsafeProjection): InternalRow = {
@@ -233,6 +236,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
           Alias(expression, s"Optimized($expression)2")() :: Nil),
       expression)
 
+    plan.initialize(0)
     plan(inputRow)
   }
 
