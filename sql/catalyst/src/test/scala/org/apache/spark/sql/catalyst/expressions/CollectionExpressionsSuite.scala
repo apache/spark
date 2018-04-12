@@ -124,6 +124,10 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Concat(Seq(ai0, ai4)), null)
     checkEvaluation(Concat(Seq(ai4, ai0)), null)
 
+    // Test of handling the limit of Java function size
+    val iIndexes = 1 to 1200
+    checkEvaluation(Concat(iIndexes.map(_ => ai2)), iIndexes.flatMap(_ => Seq(4, null, 5)))
+
     // Complex-type elements
     val as0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType))
     val as1 = Literal.create(Seq.empty[String], ArrayType(StringType))
@@ -145,5 +149,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Concat(Seq(as4, as0)), null)
 
     checkEvaluation(Concat(Seq(aa0, aa1)), Seq(Seq("a", "b"), Seq("c"), Seq("d"), Seq("e", "f")))
+
+    // Test of handling the limit of Java function size
+    val sIndexes = 1 to 1200
+    checkEvaluation(Concat(sIndexes.map(_ => as2)), sIndexes.flatMap(_ => Seq("d", null, "e")))
   }
 }
