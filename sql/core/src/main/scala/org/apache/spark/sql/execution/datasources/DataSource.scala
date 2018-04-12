@@ -357,8 +357,7 @@ case class DataSource(
       // This is a non-streaming file based datasource.
       case (format: FileFormat, _) =>
         checkAndGlobPathIfNecessary(checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
-        val (dataSchema, partitionSchema) =
-          getOrInferFileFormatSchema(format)
+        val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format)
 
         val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
             catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog) {
