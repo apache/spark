@@ -2355,3 +2355,29 @@ case class ArrayRemove(left: Expression, right: Expression)
 
   override def prettyName: String = "array_remove"
 }
+
+/**
+ * Removes duplicate values from the array.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Removes duplicate values from the array.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3, null, 3));
+       [1,2,3,null]
+             """, since = "2.4.0")
+case class ArrayDistinct(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes with CodegenFallback {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  override def dataType: DataType = child.dataType
+
+  override def nullSafeEval(array: Any): Any = {
+    val elementType = child.dataType.asInstanceOf[ArrayType].elementType
+    val data = array.asInstanceOf[ArrayData].toArray[AnyRef](elementType).distinct
+    new GenericArrayData(data.asInstanceOf[Array[Any]])
+  }
+
+  override def prettyName: String = "array_distinct"
+}

@@ -766,4 +766,18 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayRemove(c1, dataToRemove2), Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)))
     checkEvaluation(ArrayRemove(c2, dataToRemove2), Seq[Seq[Int]](null, Seq[Int](2, 1)))
   }
+
+  test("Array Unique") {
+    val a0 = Literal.create(Seq(2, 1, 2, 3, 4, 4, 5), ArrayType(IntegerType))
+    val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))
+    val a2 = Literal.create(Seq("b", "a", "a", "c", "b"), ArrayType(StringType))
+    val a3 = Literal.create(Seq("b", null, "a", "a"), ArrayType(StringType))
+    val a4 = Literal.create(Seq(null, null), ArrayType(NullType))
+
+    checkEvaluation(new ArrayDistinct(a0), Seq(2, 1, 3, 4, 5))
+    checkEvaluation(new ArrayDistinct(a1), Seq[Integer]())
+    checkEvaluation(new ArrayDistinct(a2), Seq("b", "a", "c"))
+    checkEvaluation(new ArrayDistinct(a3), Seq("b", null, "a"))
+    checkEvaluation(new ArrayDistinct(a4), Seq(null))
+  }
 }

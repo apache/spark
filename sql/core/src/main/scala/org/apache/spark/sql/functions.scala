@@ -3190,6 +3190,13 @@ object functions {
   }
 
   /**
+   * Removes duplicate values from the array.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_distinct(e: Column): Column = withExpr { ArrayDistinct(e.expr) }
+
+  /**
    * Creates a new row for each element in the given array or map column.
    *
    * @group collection_funcs
