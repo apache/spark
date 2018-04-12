@@ -301,8 +301,7 @@ case class ArrayContains(left: Expression, right: Expression)
   """, since = "2.4.0")
 case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
-  override def nullable: Boolean =
-    child.nullable || child.dataType.asInstanceOf[ArrayType].containsNull
+  override def nullable: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
