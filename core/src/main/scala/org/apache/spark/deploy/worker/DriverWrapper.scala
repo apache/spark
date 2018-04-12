@@ -25,7 +25,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{DependencyUtils, SparkHadoopUtil, SparkSubmit}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
+import org.apache.spark.util._
 
 /**
  * Utility object for launching driver programs such that they share fate with the Worker process.
@@ -93,7 +93,7 @@ object DriverWrapper extends Logging {
     val jars = {
       val jarsProp = sys.props.get("spark.jars").orNull
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
-        SparkSubmit.mergeFileLists(jarsProp, resolvedMavenCoordinates)
+        DependencyUtils.mergeFileLists(jarsProp, resolvedMavenCoordinates)
       } else {
         jarsProp
       }

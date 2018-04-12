@@ -813,8 +813,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     val df = classOf[DateFormat].getName
     if (format.foldable) {
       if (formatter == null) {
-        ExprCode("", TrueLiteral, LiteralValue("(UTF8String) null",
-          CodeGenerator.javaType(dataType)))
+        ExprCode.forNullValue(StringType)
       } else {
         val formatterName = ctx.addReferenceObj("formatter", formatter, df)
         val t = left.genCode(ctx)

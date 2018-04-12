@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.BooleanType
 
 class ExprValueSuite extends SparkFunSuite {
 
@@ -31,16 +32,7 @@ class ExprValueSuite extends SparkFunSuite {
     assert(trueLit.isPrimitive)
     assert(falseLit.isPrimitive)
 
-    trueLit match {
-      case LiteralValue(value, javaType) =>
-        assert(value == "true" && javaType == "boolean")
-      case _ => fail()
-    }
-
-    falseLit match {
-      case LiteralValue(value, javaType) =>
-        assert(value == "false" && javaType == "boolean")
-      case _ => fail()
-    }
+    assert(trueLit === JavaCode.literal("true", BooleanType))
+    assert(falseLit === JavaCode.literal("false", BooleanType))
   }
 }
