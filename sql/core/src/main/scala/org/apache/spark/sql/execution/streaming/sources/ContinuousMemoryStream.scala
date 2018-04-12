@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import java.{util => ju}
 import java.util.Optional
+import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.JavaConverters._
@@ -26,8 +27,8 @@ import scala.collection.mutable.ListBuffer
 
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
-
 import org.apache.spark.SparkEnv
+
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.{Encoder, Row, SQLContext}
 import org.apache.spark.sql.execution.streaming._
@@ -147,6 +148,10 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
 object ContinuousMemoryStream {
   case class GetRecord(offset: ContinuousMemoryStreamPartitionOffset)
+  protected val memoryStreamId = new AtomicInteger(0)
+
+  def apply[A : Encoder](implicit sqlContext: SQLContext): ContinuousMemoryStream[A] =
+    new ContinuousMemoryStream[A](memoryStreamId.getAndIncrement(), sqlContext)
 }
 
 /**

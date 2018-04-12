@@ -63,7 +63,7 @@ class ContinuousSuite extends ContinuousSuiteBase {
   import testImplicits._
 
   test("basic") {
-    val input = new ContinuousMemoryStream[Int](0, spark.sqlContext)
+    val input = ContinuousMemoryStream[Int]
 
     testStream(input.toDF())(
       AddData(input, 0, 1, 2),
