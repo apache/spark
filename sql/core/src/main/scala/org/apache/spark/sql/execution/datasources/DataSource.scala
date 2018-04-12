@@ -130,29 +130,29 @@ case class DataSource(
    *     be any further inference in any triggers.
    *
    * @param format the file format object for this DataSource
-   * @param optionalFileIndex optional [[FileIndex]] for getting partition schema and file list
+   * @param fileIndex optional [[InMemoryFileIndex]] for getting partition schema and file list
    * @return A pair of the data schema (excluding partition columns) and the schema of the partition
    *         columns.
    */
   private def getOrInferFileFormatSchema(
       format: FileFormat,
-      optionalFileIndex: Option[FileIndex] = None): (StructType, StructType) = {
-    def fileIndex = optionalFileIndex.getOrElse(tempFileIndex)
+      fileIndex: Option[InMemoryFileIndex] = None): (StructType, StructType) = {
+    def inMemoryFileIndex = fileIndex.getOrElse(tempFileIndex)
 
     val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource
-      fileIndex.partitionSchema
+      inMemoryFileIndex.partitionSchema
     } else {
       // maintain old behavior before SPARK-18510. If userSpecifiedSchema is empty used inferred
       // partitioning
       if (userSpecifiedSchema.isEmpty) {
-        val inferredPartitions = fileIndex.partitionSchema
+        val inferredPartitions = inMemoryFileIndex.partitionSchema
         inferredPartitions
       } else {
         val partitionFields = partitionColumns.map { partitionColumn =>
           userSpecifiedSchema.flatMap(_.find(c => equality(c.name, partitionColumn))).orElse {
-            val inferredPartitions = fileIndex.partitionSchema
+            val inferredPartitions = inMemoryFileIndex.partitionSchema
             val inferredOpt = inferredPartitions.find(p => equality(p.name, partitionColumn))
             if (inferredOpt.isDefined) {
               logDebug(
@@ -178,14 +178,10 @@ case class DataSource(
     val dataSchema = userSpecifiedSchema.map { schema =>
       StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
     }.orElse {
-      val index = fileIndex match {
-        case i: InMemoryFileIndex => i
-        case _ => tempFileIndex
-      }
       format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,
-        index.allFiles())
+        inMemoryFileIndex.allFiles())
     }.getOrElse {
       throw new AnalysisException(
         s"Unable to infer schema for $format. It must be specified manually.")
@@ -362,18 +358,22 @@ case class DataSource(
       case (format: FileFormat, _) =>
         val globbedPaths =
           checkAndGlobPathIfNecessary(checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
-        val fileCatalog = if (sparkSession.sqlContext.conf.manageFilesourcePartitions &&
-            catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog) {
+        val useCatalogFileIndex = sparkSession.sqlContext.conf.manageFilesourcePartitions &&
+          catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog &&
+          catalogTable.get.partitionSchema.nonEmpty
+        val (fileCatalog, dataSchema, partitionSchema) = if (useCatalogFileIndex) {
           val defaultTableSize = sparkSession.sessionState.conf.defaultSizeInBytes
-          new CatalogFileIndex(
+          val index = new CatalogFileIndex(
             sparkSession,
             catalogTable.get,
             catalogTable.get.stats.map(_.sizeInBytes.toLong).getOrElse(defaultTableSize))
+          (index, catalogTable.get.dataSchema, catalogTable.get.partitionSchema)
         } else {
-          createInMemoryFileIndex(globbedPaths)
+          val index = createInMemoryFileIndex(globbedPaths)
+          val (resultDataSchema, resultPartitionSchema) =
+            getOrInferFileFormatSchema(format, Some(index))
+          (index, resultDataSchema, resultPartitionSchema)
         }
-        val (dataSchema, partitionSchema) =
-          getOrInferFileFormatSchema(format, Some(fileCatalog))
 
         HadoopFsRelation(
           fileCatalog,
