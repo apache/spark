@@ -240,6 +240,24 @@
             </exclusion>
           </exclusions>
         </dependency>
+        <!--
+        The jetty declarations are made
+        (a) to keep that jetty-util-ajax version in sync with the rest of Spark.
+        (b) to minimise the effects which Spark's jetty shading has on the
+            availability of the jetty JARs on for hadoop-azure, which depends
+            on them.
+         -->
+        <dependency>
+          <groupId>org.eclipse.jetty</groupId>
+          <artifactId>jetty-util</artifactId>
+          <scope>${hadoop.deps.scope}</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.eclipse.jetty</groupId>
+          <artifactId>jetty-util-ajax</artifactId>
+          <version>${jetty.version}</version>
+          <scope>${hadoop.deps.scope}</scope>
+        </dependency>
       </dependencies>
     </profile>
 
