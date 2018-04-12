@@ -127,11 +127,6 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
     this
   }
 
-  override def reset(): Unit = synchronized {
-    records.foreach(_.clear())
-    startOffset = ContinuousMemoryStreamOffset((0 until NUM_PARTITIONS).map(i => (i, 0)).toMap)
-  }
-
   /**
    * Endpoint for executors to poll for records.
    */

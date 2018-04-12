@@ -73,8 +73,6 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Bas
   protected def logicalPlan: LogicalPlan
 
   def addData(data: TraversableOnce[A]): Offset
-
-  def reset(): Unit
 }
 
 /**
@@ -195,7 +193,7 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   override def stop() {}
 
-  override def reset(): Unit = synchronized {
+  def reset(): Unit = synchronized {
     batches.clear()
     startOffset = LongOffset(-1)
     endOffset = LongOffset(-1)
