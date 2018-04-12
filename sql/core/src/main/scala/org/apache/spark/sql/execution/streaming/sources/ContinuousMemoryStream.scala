@@ -49,7 +49,7 @@ import org.apache.spark.util.RpcUtils
 class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   extends MemoryStreamBase[A](sqlContext) with ContinuousReader with ContinuousReadSupport {
   private implicit val formats = Serialization.formats(NoTypeHints)
-  val NUM_PARTITIONS = 2
+  private val NUM_PARTITIONS = 2
 
   protected val logicalPlan =
     StreamingRelationV2(this, "memory", Map(), attributes, None)(sqlContext.sparkSession)
