@@ -243,8 +243,8 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
     }
 
     try {
-      if (!fs.rename(srcPath, dstPath)) {
-        if (fs.exists(dstPath) && !overwriteIfPossible) {
+      if (!fs.rename(srcPath, dstPath) && !overwriteIfPossible) {
+        if (fs.exists(dstPath)) {
           // Some implementations of FileSystem may not throw FileAlreadyExistsException but
           // only return false if file already exists. Explicitly throw the error.
           // Note that this is definitely not atomic, so this is only a best-effort attempt

@@ -54,16 +54,25 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
       assert(fm.list(basePath, acceptAllFilter).exists(_.getPath.getName == "dir"))
       assert(fm.list(basePath, rejectAllFilter).length === 0)
 
-      // Create atomic and exists
-      val path = new Path(s"$dir/file")
+      // Create atomic without overwrite
+      var path = new Path(s"$dir/file")
       assert(!fm.exists(path))
       fm.createAtomic(path, overwriteIfPossible = false).cancel()
       assert(!fm.exists(path))
       fm.createAtomic(path, overwriteIfPossible = false).close()
       assert(fm.exists(path))
       intercept[IOException] {
+        // should throw exception since file exists and overwrite is false
         fm.createAtomic(path, overwriteIfPossible = false).close()
       }
+
+      // Create atomic with overwrite if possible
+      path = new Path(s"$dir/file2")
+      assert(!fm.exists(path))
+      fm.createAtomic(path, overwriteIfPossible = true).cancel()
+      assert(!fm.exists(path))
+      fm.createAtomic(path, overwriteIfPossible = true).close()
+      assert(fm.exists(path))
       fm.createAtomic(path, overwriteIfPossible = true).close()  // should not throw exception
 
       // Open and delete

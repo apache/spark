@@ -148,7 +148,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       // the other used for read+write. We don't want the read-only to delete state files.
       if (state == UPDATING) {
         state = ABORTED
-        cancelIfPossible(compressedStream, deltaFileStream)
+        cancelDeltaFile(compressedStream, deltaFileStream)
       } else {
         state = ABORTED
       }
@@ -403,7 +403,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       output.close()
     } catch {
       case e: Throwable =>
-        cancelIfPossible(compressedStream = output, rawStream = rawOutput)
+        cancelDeltaFile(compressedStream = output, rawStream = rawOutput)
         throw e
     }
     logInfo(s"Written snapshot file for version $version of $this at $targetFile")
@@ -415,7 +415,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
    * @param compressedStream the compressed stream.
    * @param rawStream the underlying stream which needs to be cancelled.
    */
-  private def cancelIfPossible(
+  private def cancelDeltaFile(
       compressedStream: DataOutputStream,
       rawStream: CancellableFSDataOutputStream): Unit = {
     try {
