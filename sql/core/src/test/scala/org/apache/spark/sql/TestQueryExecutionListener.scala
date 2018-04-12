@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.QueryExecutionListener
 
