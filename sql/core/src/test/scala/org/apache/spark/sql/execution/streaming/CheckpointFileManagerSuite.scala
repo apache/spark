@@ -109,8 +109,8 @@ class CheckpointFileManagerSuite extends SparkFunSuite with SharedSparkSession {
   }
 
   test("CheckpointFileManager.create() should fallback from FileContext to FileSystem") {
-    import FakeFileSystem.scheme
-    spark.conf.set(s"fs.$scheme.impl", classOf[FakeFileSystem].getName)
+    import CheckpointFileManagerSuiteFileSystem.scheme
+    spark.conf.set(s"fs.$scheme.impl", classOf[CheckpointFileManagerSuiteFileSystem].getName)
     quietly {
       withTempDir { temp =>
         val metadataLog = new HDFSMetadataLog[String](spark, s"$scheme://${temp.toURI.getPath}")
@@ -177,15 +177,18 @@ object TestCheckpointFileManager {
 }
 
 
-/** FakeFileSystem to test fallback of the HDFSMetadataLog from FileContext to FileSystem API */
-private class FakeFileSystem extends RawLocalFileSystem {
-  import FakeFileSystem.scheme
+/**
+ * CheckpointFileManagerSuiteFileSystem to test fallback of the CheckpointFileManager
+ * from FileContext to FileSystem API.
+ */
+private class CheckpointFileManagerSuiteFileSystem extends RawLocalFileSystem {
+  import CheckpointFileManagerSuiteFileSystem.scheme
 
   override def getUri: URI = {
     URI.create(s"$scheme:///")
   }
 }
 
-private object FakeFileSystem {
-  val scheme = s"HDFSMetadataLogSuite${math.abs(Random.nextInt)}"
+private object CheckpointFileManagerSuiteFileSystem {
+  val scheme = s"CheckpointFileManagerSuiteFileSystem${math.abs(Random.nextInt)}"
 }

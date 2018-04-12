@@ -16,12 +16,11 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{FileSystem => _, _}
+import java.io.{FileNotFoundException, IOException, OutputStream}
 import java.util.{EnumSet, UUID}
 
 import scala.util.control.NonFatal
 
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.local.{LocalFs, RawLocalFs}
@@ -228,7 +227,8 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
   }
 
   override def createAtomic(
-      path: Path, overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
+      path: Path,
+      overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
     new RenameBasedFSDataOutputStream(this, path, overwriteIfPossible)
   }
 
@@ -311,7 +311,8 @@ class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuratio
   }
 
   override def createAtomic(
-      path: Path, overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
+      path: Path,
+      overwriteIfPossible: Boolean): CancellableFSDataOutputStream = {
     new RenameBasedFSDataOutputStream(this, path, overwriteIfPossible)
   }
 

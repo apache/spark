@@ -18,26 +18,18 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.io.File
-import java.net.URI
 import java.util.ConcurrentModificationException
 
 import scala.language.implicitConversions
-import scala.util.Random
 
-import org.apache.hadoop.fs._
 import org.scalatest.concurrent.Waiters._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.streaming.FakeFileSystem._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.UninterruptibleThread
 
 class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
-
-  /** To avoid caching of FS objects */
-  override protected def sparkConf =
-    super.sparkConf.set(s"spark.hadoop.fs.$scheme.impl.disable.cache", "true")
 
   private implicit def toOption[A](a: A): Option[A] = Option(a)
 
