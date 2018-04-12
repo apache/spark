@@ -100,7 +100,7 @@ class ContinuousMemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
 
   override def createDataReaderFactories(): ju.List[DataReaderFactory[Row]] = {
     synchronized {
-      val endpointName = s"ContinuousMemoryStreamRecordReceiver-$id"
+      val endpointName = s"RecordEndpoint-${java.util.UUID.randomUUID()}-$id"
       endpointRef =
         recordEndpoint.rpcEnv.setupEndpoint(endpointName, recordEndpoint)
 
