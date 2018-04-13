@@ -23,7 +23,6 @@ import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -95,14 +94,6 @@ case class DataSource(
   lazy val sourceInfo: SourceInfo = sourceSchema()
   private val caseInsensitiveOptions = CaseInsensitiveMap(options)
   private val equality = sparkSession.sessionState.conf.resolver
-  // The operations below are expensive therefore try not to do them if we don't need to, e.g.,
-  // in streaming mode, we have already inferred and registered partition columns, we will
-  // never have to materialize the lazy val below
-  private lazy val tempFileIndex = {
-    val globbedPaths =
-      checkAndGlobPathIfNecessary(checkEmptyGlobPath = false, checkFilesExist = false)
-    createInMemoryFileIndex(globbedPaths)
-  }
 
   bucketSpec.map { bucket =>
     SchemaUtils.checkColumnNameDuplication(
@@ -137,22 +128,29 @@ case class DataSource(
   private def getOrInferFileFormatSchema(
       format: FileFormat,
       fileIndex: Option[InMemoryFileIndex] = None): (StructType, StructType) = {
-    def inMemoryFileIndex = fileIndex.getOrElse(tempFileIndex)
+    // The operations below are expensive therefore try not to do them if we don't need to, e.g.,
+    // in streaming mode, we have already inferred and registered partition columns, we will
+    // never have to materialize the lazy val below
+    lazy val tempFileIndex = fileIndex.getOrElse {
+      val globbedPaths =
+        checkAndGlobPathIfNecessary(checkEmptyGlobPath = false, checkFilesExist = false)
+      createInMemoryFileIndex(globbedPaths)
+    }
 
     val partitionSchema = if (partitionColumns.isEmpty) {
       // Try to infer partitioning, because no DataSource in the read path provides the partitioning
       // columns properly unless it is a Hive DataSource
-      inMemoryFileIndex.partitionSchema
+      tempFileIndex.partitionSchema
     } else {
       // maintain old behavior before SPARK-18510. If userSpecifiedSchema is empty used inferred
       // partitioning
       if (userSpecifiedSchema.isEmpty) {
-        val inferredPartitions = inMemoryFileIndex.partitionSchema
+        val inferredPartitions = tempFileIndex.partitionSchema
         inferredPartitions
       } else {
         val partitionFields = partitionColumns.map { partitionColumn =>
           userSpecifiedSchema.flatMap(_.find(c => equality(c.name, partitionColumn))).orElse {
-            val inferredPartitions = inMemoryFileIndex.partitionSchema
+            val inferredPartitions = tempFileIndex.partitionSchema
             val inferredOpt = inferredPartitions.find(p => equality(p.name, partitionColumn))
             if (inferredOpt.isDefined) {
               logDebug(
@@ -181,7 +179,7 @@ case class DataSource(
       format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,
-        inMemoryFileIndex.allFiles())
+        tempFileIndex.allFiles())
     }.getOrElse {
       throw new AnalysisException(
         s"Unable to infer schema for $format. It must be specified manually.")
@@ -360,7 +358,7 @@ case class DataSource(
           checkAndGlobPathIfNecessary(checkEmptyGlobPath = true, checkFilesExist = checkFilesExist)
         val useCatalogFileIndex = sparkSession.sqlContext.conf.manageFilesourcePartitions &&
           catalogTable.isDefined && catalogTable.get.tracksPartitionsInCatalog &&
-          catalogTable.get.partitionSchema.nonEmpty
+          catalogTable.get.partitionColumnNames.nonEmpty
         val (fileCatalog, dataSchema, partitionSchema) = if (useCatalogFileIndex) {
           val defaultTableSize = sparkSession.sessionState.conf.defaultSizeInBytes
           val index = new CatalogFileIndex(
