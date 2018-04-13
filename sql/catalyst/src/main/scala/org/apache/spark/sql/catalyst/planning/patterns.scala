@@ -164,6 +164,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
               case "vs" => rangePreds.add(p); Some(LessThanOrEqual(r, l))
               case _ => None
           }
+          case _ => None
         }
         val (leftKeys, rightKeys) = joinKeys.unzip
 
