@@ -340,7 +340,6 @@ case class ArrayJoin(
     val nullReplacementEval = nullReplacement.map(_.eval(input))
     if (nullReplacementEval.contains(null)) return null
 
-
     val buffer = new UTF8StringBuilder()
     var firstItem = true
     val nullHandling = nullReplacementEval match {
@@ -380,7 +379,7 @@ case class ArrayJoin(
              |}
              |$buffer.append(${replacementGen.value});
              |$firstItem = false;
-               """.stripMargin
+           """.stripMargin
         }
         val execCode = if (replacement.nullable) {
           ctx.nullSafeExec(replacement.nullable, replacementGen.isNull) {
@@ -392,7 +391,7 @@ case class ArrayJoin(
         s"""
            |${replacementGen.code}
            |$execCode
-           """.stripMargin
+         """.stripMargin
       case None => genCodeForArrayAndDelimiter(ctx, ev,
         (_: String, _: String, _: String) => "// nulls are ignored")
     }
@@ -404,8 +403,8 @@ case class ArrayJoin(
            |$code
          """.stripMargin)
     } else {
-      ev.copy(s"""
-           |boolean ${ev.isNull} = false;
+      ev.copy(
+        s"""
            |UTF8String ${ev.value} = null;
            |$code
          """.stripMargin, FalseLiteral)
