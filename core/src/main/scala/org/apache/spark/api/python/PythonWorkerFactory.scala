@@ -27,6 +27,7 @@ import scala.collection.mutable
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
+import org.apache.spark.security.SocketAuthHelper
 import org.apache.spark.util.{RedirectThread, Utils}
 
 private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String, String])
@@ -44,6 +45,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
     // This flag is ignored on Windows as it's unable to fork.
     !System.getProperty("os.name").startsWith("Windows") && useDaemonEnabled
   }
+
+
+  private val authHelper = new SocketAuthHelper(SparkEnv.get.conf)
 
   var daemon: Process = null
   val daemonHost = InetAddress.getByAddress(Array(127, 0, 0, 1))
@@ -85,6 +89,8 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       if (pid < 0) {
         throw new IllegalStateException("Python daemon failed to launch worker with code " + pid)
       }
+
+      authHelper.authToServer(socket)
       daemonWorkers.put(socket, pid)
       socket
     }
@@ -122,25 +128,24 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       workerEnv.put("PYTHONPATH", pythonPath)
       // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
       workerEnv.put("PYTHONUNBUFFERED", "YES")
+      workerEnv.put("PYTHON_WORKER_FACTORY_PORT", serverSocket.getLocalPort.toString)
+      workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
       val worker = pb.start()
 
       // Redirect worker stdout and stderr
       redirectStreamsToStderr(worker.getInputStream, worker.getErrorStream)
 
-      // Tell the worker our port
-      val out = new  OutputStreamWriter(worker.getOutputStream, StandardCharsets.UTF_8)
-      out.write(serverSocket.getLocalPort + "\n")
-      out.flush()
-
-      // Wait for it to connect to our socket
+      // Wait for it to connect to our socket, and validate the auth secret.
       serverSocket.setSoTimeout(10000)
+
       try {
         val socket = serverSocket.accept()
+        authHelper.authClient(socket)
         simpleWorkers.put(socket, worker)
         return socket
       } catch {
         case e: Exception =>
-          throw new SparkException("Python worker did not connect back in time", e)
+          throw new SparkException("Python worker failed to connect back.", e)
       }
     } finally {
       if (serverSocket != null) {
@@ -163,6 +168,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars.asJava)
         workerEnv.put("PYTHONPATH", pythonPath)
+        workerEnv.put("PYTHON_WORKER_FACTORY_SECRET", authHelper.secret)
         // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
         workerEnv.put("PYTHONUNBUFFERED", "YES")
         daemon = pb.start()
@@ -172,7 +178,6 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
         // Redirect daemon stdout and stderr
         redirectStreamsToStderr(in, daemon.getErrorStream)
-
       } catch {
         case e: Exception =>
 
