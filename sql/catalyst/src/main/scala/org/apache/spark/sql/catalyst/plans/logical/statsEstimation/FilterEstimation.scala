@@ -392,31 +392,34 @@ case class FilterEstimation(plan: Filter) extends Logging {
     val dataType = attr.dataType
     var newNdv = ndv
 
+    if (ndv.toDouble == 0 || colStat.min.isEmpty || colStat.max.isEmpty)  {
+      return Some(0.0)
+    }
+
     // use [min, max] to filter the original hSet
     dataType match {
       case _: NumericType | BooleanType | DateType | TimestampType =>
-        if (colStat.min.isDefined && colStat.max.isDefined) {
-          val statsInterval =
-            ValueInterval(colStat.min, colStat.max, dataType).asInstanceOf[NumericValueInterval]
-          val validQuerySet = hSet.filter { v =>
-            v != null && statsInterval.contains(Literal(v, dataType))
-          }
-
-          if (validQuerySet.isEmpty) {
-            return Some(0.0)
-          }
-
-          val newMax = validQuerySet.maxBy(EstimationUtils.toDouble(_, dataType))
-          val newMin = validQuerySet.minBy(EstimationUtils.toDouble(_, dataType))
-          // newNdv should not be greater than the old ndv.  For example, column has only 2 values
-          // 1 and 6. The predicate column IN (1, 2, 3, 4, 5). validQuerySet.size is 5.
-          newNdv = ndv.min(BigInt(validQuerySet.size))
-          if (update) {
-            val newStats = colStat.copy(distinctCount = Some(newNdv), min = Some(newMin),
-              max = Some(newMax), nullCount = Some(0))
-            colStatsMap.update(attr, newStats)
-          }
+        val statsInterval =
+          ValueInterval(colStat.min, colStat.max, dataType).asInstanceOf[NumericValueInterval]
+        val validQuerySet = hSet.filter { v =>
+          v != null && statsInterval.contains(Literal(v, dataType))
         }
+
+        if (validQuerySet.isEmpty) {
+          return Some(0.0)
+        }
+
+        val newMax = validQuerySet.maxBy(EstimationUtils.toDouble(_, dataType))
+        val newMin = validQuerySet.minBy(EstimationUtils.toDouble(_, dataType))
+        // newNdv should not be greater than the old ndv.  For example, column has only 2 values
+        // 1 and 6. The predicate column IN (1, 2, 3, 4, 5). validQuerySet.size is 5.
+        newNdv = ndv.min(BigInt(validQuerySet.size))
+        if (update) {
+          val newStats = colStat.copy(distinctCount = Some(newNdv), min = Some(newMin),
+            max = Some(newMax), nullCount = Some(0))
+          colStatsMap.update(attr, newStats)
+        }
+
       // We assume the whole set since there is no min/max information for String/Binary type
       case StringType | BinaryType =>
         newNdv = ndv.min(BigInt(hSet.size))
@@ -428,11 +431,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
     // return the filter selectivity.  Without advanced statistics such as histograms,
     // we have to assume uniform distribution.
-    if (ndv.toDouble != 0) {
-      Some(math.min(newNdv.toDouble / ndv.toDouble, 1.0))
-    } else {
-      Some(0.0)
-    }
+    Some(math.min(newNdv.toDouble / ndv.toDouble, 1.0))
   }
 
   /**
