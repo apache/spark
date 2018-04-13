@@ -1873,7 +1873,7 @@ def element_at(col, value):
 
     >>> df = spark.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
     >>> df.select(element_at(df.data, 1)).collect()
-    [Row(element_at(data, 1)=u'a'), Row(element_at(data, 1)=None)]
+    [Row(element_at(data, 1)='a'), Row(element_at(data, 1)=None)]
 
     >>> df = spark.createDataFrame([({"a": 1.0, "b": 2.0},), ({},)], ['data'])
     >>> df.select(element_at(df.data, "a")).collect()
