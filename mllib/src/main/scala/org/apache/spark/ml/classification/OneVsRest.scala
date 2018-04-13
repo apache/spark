@@ -215,8 +215,9 @@ final class OneVsRestModel private[ml] (
       }
 
       // output the index of the classifier with highest confidence as prediction
-      val labelUDF = udf { (predictions: Vector) => predictions.argmax.toDouble }
+      val labelUDF = udf { (rawpredictions: Vector) => rawpredictions.argmax.toDouble }
 
+      // output confidence as raw prediction, label and label metadata as prediction
       aggregatedDataset
         .withColumn(getRawPredictionCol, rawPredictionUDF(col(accColName)))
         .withColumn(getPredictionCol, labelUDF(col(getRawPredictionCol)), labelMetadata)
@@ -227,7 +228,7 @@ final class OneVsRestModel private[ml] (
       val labelUDF = udf { (predictions: Map[Int, Double]) =>
         predictions.maxBy(_._2)._1.toDouble
       }
-      // output confidence as rwa prediction, label and label metadata as prediction
+      // output label and label metadata as prediction
       aggregatedDataset
         .withColumn(getPredictionCol, labelUDF(col(accColName)), labelMetadata)
         .drop(accColName)
