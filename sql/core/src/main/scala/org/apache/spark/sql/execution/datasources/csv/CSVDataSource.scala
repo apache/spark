@@ -53,7 +53,8 @@ abstract class CSVDataSource extends Serializable {
       parser: UnivocityParser,
       schema: StructType,
       // Actual schema of data in the csv file
-      dataSchema: StructType): Iterator[InternalRow]
+      dataSchema: StructType,
+      caseSensitive: Boolean): Iterator[InternalRow]
 
   /**
    * Infers the schema from `inputPaths` files.
@@ -123,7 +124,7 @@ object CSVDataSource {
   }
 
   def checkHeaderColumnNames(schema: StructType, columnNames: Array[String], fileName: String,
-      checkHeaderFlag: Boolean): Unit = {
+      checkHeaderFlag: Boolean, caseSensitive: Boolean): Unit = {
     if (checkHeaderFlag && columnNames != null) {
       val fieldNames = schema.map(_.name).toIndexedSeq
       val (headerLen, schemaSize) = (columnNames.size, fieldNames.length)
@@ -132,7 +133,11 @@ object CSVDataSource {
       if (headerLen == schemaSize) {
         var i = 0
         while (error.isEmpty && i < headerLen) {
-          val (nameInSchema, nameInHeader) = (fieldNames(i), columnNames(i))
+          var (nameInSchema, nameInHeader) = (fieldNames(i), columnNames(i))
+          if (caseSensitive == false) {
+            nameInSchema = nameInSchema.toLowerCase
+            nameInHeader = nameInHeader.toLowerCase
+          }
           if (nameInHeader != nameInSchema) {
             error = Some(
               s"""|CSV file header does not contain the expected fields.
@@ -162,12 +167,9 @@ object CSVDataSource {
 object TextInputCSVDataSource extends CSVDataSource {
   override val isSplitable: Boolean = true
 
-  override def readFile(
-      conf: Configuration,
-      file: PartitionedFile,
-      parser: UnivocityParser,
-      schema: StructType,
-      dataSchema: StructType): Iterator[InternalRow] = {
+  override def readFile(conf: Configuration, file: PartitionedFile, parser: UnivocityParser,
+      schema: StructType, dataSchema: StructType,
+      caseSensitive: Boolean): Iterator[InternalRow] = {
     val lines = {
       val linesReader = new HadoopFileLinesReader(file, conf)
       Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
@@ -184,7 +186,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       // be not extracted.
       CSVUtils.extractHeader(lines, parser.options).foreach { header =>
         checkHeader(header, parser.tokenizer, dataSchema, file.filePath,
-          checkHeaderFlag = !parser.options.enforceSchema)
+          checkHeaderFlag = !parser.options.enforceSchema, caseSensitive)
       }
     }
 
@@ -248,9 +250,10 @@ object TextInputCSVDataSource extends CSVDataSource {
   }
 
   def checkHeader(header: String, parser: CsvParser, schema: StructType, fileName: String,
-      checkHeaderFlag: Boolean): Unit = {
+      checkHeaderFlag: Boolean, caseSensitive: Boolean): Unit = {
     if (checkHeaderFlag) {
-      checkHeaderColumnNames(schema, parser.parseLine(header), fileName, checkHeaderFlag)
+      checkHeaderColumnNames(schema, parser.parseLine(header), fileName, checkHeaderFlag,
+        caseSensitive)
     }
   }
 }
@@ -258,16 +261,12 @@ object TextInputCSVDataSource extends CSVDataSource {
 object MultiLineCSVDataSource extends CSVDataSource {
   override val isSplitable: Boolean = false
 
-  override def readFile(
-      conf: Configuration,
-      file: PartitionedFile,
-      parser: UnivocityParser,
-      schema: StructType,
-      dataSchema: StructType): Iterator[InternalRow] = {
+  override def readFile(conf: Configuration, file: PartitionedFile, parser: UnivocityParser,
+      schema: StructType, dataSchema: StructType,
+      caseSensitive: Boolean): Iterator[InternalRow] = {
     def checkHeader(header: Array[String]): Unit = {
       CSVDataSource.checkHeaderColumnNames(dataSchema, header, file.filePath,
-        checkHeaderFlag = !parser.options.enforceSchema
-      )
+        checkHeaderFlag = !parser.options.enforceSchema, caseSensitive)
     }
 
     UnivocityParser.parseStream(

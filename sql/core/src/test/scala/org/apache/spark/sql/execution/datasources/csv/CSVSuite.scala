@@ -1280,70 +1280,72 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   def checkHeader(multiLine: Boolean): Unit = {
-    withTempPath { path =>
-      import collection.JavaConverters._
-      val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
-      val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
-      odf.write.option("header", true).csv(path.getCanonicalPath)
-      val ischema = new StructType().add("f2", DoubleType).add("f1", DoubleType)
-      val exception = intercept[SparkException] {
-        spark.read
-          .schema(ischema)
-          .option("multiLine", multiLine)
-          .option("header", true)
-          .option("enforceSchema", false)
-          .csv(path.getCanonicalPath)
-          .collect()
-      }
-      assert(exception.getMessage.contains(
-        "CSV file header does not contain the expected fields"
-      ))
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      withTempPath { path =>
+        import collection.JavaConverters._
+        val oschema = new StructType().add("f1", DoubleType).add("f2", DoubleType)
+        val odf = spark.createDataFrame(List(Row(1.0, 1234.5)).asJava, oschema)
+        odf.write.option("header", true).csv(path.getCanonicalPath)
+        val ischema = new StructType().add("f2", DoubleType).add("f1", DoubleType)
+        val exception = intercept[SparkException] {
+          spark.read
+            .schema(ischema)
+            .option("multiLine", multiLine)
+            .option("header", true)
+            .option("enforceSchema", false)
+            .csv(path.getCanonicalPath)
+            .collect()
+        }
+        assert(exception.getMessage.contains(
+          "CSV file header does not contain the expected fields"
+        ))
 
-      val shortSchema = new StructType().add("f1", DoubleType)
-      val exceptionForShortSchema = intercept[SparkException] {
-        spark.read
-          .schema(shortSchema)
-          .option("multiLine", multiLine)
-          .option("header", true)
-          .option("enforceSchema", false)
-          .csv(path.getCanonicalPath)
-          .collect()
-      }
-      assert(exceptionForShortSchema.getMessage.contains(
-        "Number of column in CSV header is not equal to number of fields in the schema"
-      ))
+        val shortSchema = new StructType().add("f1", DoubleType)
+        val exceptionForShortSchema = intercept[SparkException] {
+          spark.read
+            .schema(shortSchema)
+            .option("multiLine", multiLine)
+            .option("header", true)
+            .option("enforceSchema", false)
+            .csv(path.getCanonicalPath)
+            .collect()
+        }
+        assert(exceptionForShortSchema.getMessage.contains(
+          "Number of column in CSV header is not equal to number of fields in the schema"
+        ))
 
-      val longSchema = new StructType()
-        .add("f1", DoubleType)
-        .add("f2", DoubleType)
-        .add("f3", DoubleType)
+        val longSchema = new StructType()
+          .add("f1", DoubleType)
+          .add("f2", DoubleType)
+          .add("f3", DoubleType)
 
-      val exceptionForLongSchema = intercept[SparkException] {
-        spark.read
-          .schema(longSchema)
-          .option("multiLine", multiLine)
-          .option("header", true)
-          .option("enforceSchema", false)
-          .csv(path.getCanonicalPath)
-          .collect()
-      }
-      assert(exceptionForLongSchema.getMessage.contains(
-        "Header length: 2, schema size: 3"
-      ))
+        val exceptionForLongSchema = intercept[SparkException] {
+          spark.read
+            .schema(longSchema)
+            .option("multiLine", multiLine)
+            .option("header", true)
+            .option("enforceSchema", false)
+            .csv(path.getCanonicalPath)
+            .collect()
+        }
+        assert(exceptionForLongSchema.getMessage.contains(
+          "Header length: 2, schema size: 3"
+        ))
 
-      val caseSensitiveSchema = new StructType().add("F1", DoubleType).add("f2", DoubleType)
-      val caseSensitiveException = intercept[SparkException] {
-        spark.read
-          .schema(caseSensitiveSchema)
-          .option("multiLine", multiLine)
-          .option("header", true)
-          .option("enforceSchema", false)
-          .csv(path.getCanonicalPath)
-          .collect()
+        val caseSensitiveSchema = new StructType().add("F1", DoubleType).add("f2", DoubleType)
+        val caseSensitiveException = intercept[SparkException] {
+          spark.read
+            .schema(caseSensitiveSchema)
+            .option("multiLine", multiLine)
+            .option("header", true)
+            .option("enforceSchema", false)
+            .csv(path.getCanonicalPath)
+            .collect()
+        }
+        assert(caseSensitiveException.getMessage.contains(
+          "CSV file header does not contain the expected fields"
+        ))
       }
-      assert(caseSensitiveException.getMessage.contains(
-        "CSV file header does not contain the expected fields"
-      ))
     }
   }
 
@@ -1369,6 +1371,23 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           .csv(path.getCanonicalPath)
 
       checkAnswer(idf, odf)
+    }
+  }
+
+  test("Ignore column name case if spark.sql.caseSensitive is false") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTempPath { path =>
+        import collection.JavaConverters._
+        val oschema = new StructType().add("A", StringType)
+        val odf = spark.createDataFrame(List(Row("0")).asJava, oschema)
+        odf.write.option("header", true).csv(path.getCanonicalPath)
+        val ischema = new StructType().add("a", StringType)
+        val idf = spark.read.schema(ischema)
+          .option("header", true)
+          .option("enforceSchema", false)
+          .csv(path.getCanonicalPath)
+        checkAnswer(idf, odf)
+      }
     }
   }
 }
