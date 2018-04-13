@@ -317,16 +317,16 @@ case class ArrayJoin(
     this(array, delimiter, Some(nullReplacement))
 
   override def inputTypes: Seq[AbstractDataType] = if (nullReplacement.isDefined) {
-      Seq(ArrayType(StringType), StringType, StringType)
-    } else {
-      Seq(ArrayType(StringType), StringType)
-    }
+    Seq(ArrayType(StringType), StringType, StringType)
+  } else {
+    Seq(ArrayType(StringType), StringType)
+  }
 
   override def children: Seq[Expression] = if (nullReplacement.isDefined) {
-      Seq(array, delimiter, nullReplacement.get)
-    } else {
-      Seq(array, delimiter)
-    }
+    Seq(array, delimiter, nullReplacement.get)
+  } else {
+    Seq(array, delimiter)
+  }
 
   override def nullable: Boolean = children.exists(_.nullable)
 
