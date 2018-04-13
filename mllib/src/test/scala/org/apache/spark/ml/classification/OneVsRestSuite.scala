@@ -180,10 +180,10 @@ class OneVsRestSuite extends MLTest with DefaultReadWriteTest {
     val dataset2 = dataset.select(col("label").as("y"), col("features").as("fea"))
     ovaModel.setFeaturesCol("fea")
     ovaModel.setPredictionCol("pred")
-    ovaModel.setRawPredictionCol("rawpred")
+    ovaModel.setRawPredictionCol("")
     val transformedDataset = ovaModel.transform(dataset2)
     val outputFields = transformedDataset.schema.fieldNames.toSet
-    assert(outputFields === Set("y", "fea", "pred", "rawpred"))
+    assert(outputFields === Set("y", "fea", "pred"))
   }
 
   test("SPARK-8049: OneVsRest shouldn't output temp columns") {

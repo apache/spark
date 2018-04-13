@@ -191,6 +191,7 @@ final class OneVsRestModel private[ml] (
         val updateUDF = udf { (predictions: Map[Int, Double], prediction: Vector) =>
           predictions + ((index, prediction(1)))
         }
+
         model.setFeaturesCol($(featuresCol))
         val transformedDataset = model.transform(df).select(columns: _*)
         val updatedDataset = transformedDataset
@@ -206,18 +207,31 @@ final class OneVsRestModel private[ml] (
     }
 
     // output the RawPrediction as vector
-    val rawPredictionUDF = udf { (predictions: Map[Int, Double]) =>
-      Vectors.sparse(numClasses, predictions.toList )
+    if (getRawPredictionCol != "") {
+      val rawPredictionUDF = udf { (predictions: Map[Int, Double]) =>
+        val myArray = Array.fill[Double](numClasses)(0.0)
+        predictions.foreach { case (idx, value) => myArray(idx) = value }
+        Vectors.dense(myArray)
+      }
+
+      // output the index of the classifier with highest confidence as prediction
+      val labelUDF = udf { (predictions: Vector) => predictions.argmax.toDouble }
+
+      aggregatedDataset
+        .withColumn(getRawPredictionCol, rawPredictionUDF(col(accColName)))
+        .withColumn(getPredictionCol, labelUDF(col(getRawPredictionCol)), labelMetadata)
+        .drop(accColName)
     }
-
-    // output the index of the classifier with highest confidence as prediction
-    val labelUDF = udf { (predictions: Vector) => predictions.argmax.toDouble }
-
-    // output confidence as rwa prediction, label and label metadata as prediction
-    aggregatedDataset
-      .withColumn(getRawPredictionCol, rawPredictionUDF(col(accColName)))
-      .withColumn(getPredictionCol, labelUDF(col(getRawPredictionCol)), labelMetadata)
-      .drop(accColName)
+    else {
+      // output the index of the classifier with highest confidence as prediction
+      val labelUDF = udf { (predictions: Map[Int, Double]) =>
+        predictions.maxBy(_._2)._1.toDouble
+      }
+      // output confidence as rwa prediction, label and label metadata as prediction
+      aggregatedDataset
+        .withColumn(getPredictionCol, labelUDF(col(accColName)), labelMetadata)
+        .drop(accColName)
+    }
   }
 
   @Since("1.4.1")
