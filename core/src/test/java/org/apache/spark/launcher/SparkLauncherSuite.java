@@ -109,7 +109,7 @@ public class SparkLauncherSuite extends BaseSuite {
       .addSparkArg(opts.CONF,
         String.format("%s=-Dfoo=ShouldBeOverriddenBelow", SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS))
       .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
-        "-Dfoo=bar -Dtest.appender=childproc")
+        "-Dfoo=bar -Dtest.appender=console")
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .addSparkArg(opts.CLASS, "ShouldBeOverriddenBelow")
       .setMainClass(SparkLauncherTestApp.class.getName())
@@ -190,6 +190,41 @@ public class SparkLauncherSuite extends BaseSuite {
         handle.kill();
       }
     }
+  }
+
+  @Test
+  public void testInProcessLauncherDoesNotKillJvm() throws Exception {
+    SparkSubmitOptionParser opts = new SparkSubmitOptionParser();
+    List<String[]> wrongArgs = Arrays.asList(
+      new String[] { "--unknown" },
+      new String[] { opts.DEPLOY_MODE, "invalid" });
+
+    for (String[] args : wrongArgs) {
+      InProcessLauncher launcher = new InProcessLauncher()
+        .setAppResource(SparkLauncher.NO_RESOURCE);
+      switch (args.length) {
+        case 2:
+          launcher.addSparkArg(args[0], args[1]);
+          break;
+
+        case 1:
+          launcher.addSparkArg(args[0]);
+          break;
+
+        default:
+          fail("FIXME: invalid test.");
+      }
+
+      SparkAppHandle handle = launcher.startApplication();
+      waitFor(handle);
+      assertEquals(SparkAppHandle.State.FAILED, handle.getState());
+    }
+
+    // Run --version, which is useless as a use case, but should succeed and not exit the JVM.
+    // The expected state is "LOST" since "--version" doesn't report state back to the handle.
+    SparkAppHandle handle = new InProcessLauncher().addSparkArg(opts.VERSION).startApplication();
+    waitFor(handle);
+    assertEquals(SparkAppHandle.State.LOST, handle.getState());
   }
 
   public static class SparkLauncherTestApp {
