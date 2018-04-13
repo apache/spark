@@ -25,21 +25,24 @@ import scala.util.Random
 import org.apache.kafka.clients.consumer.ConsumerConfig._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark._
 
-class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
-
+class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
   private var testUtils: KafkaTestUtils = _
+  private val topic = "topic" + Random.nextInt()
+  private val topicPartition = new TopicPartition(topic, 0)
+  private val groupId = "groupId"
 
-  override def beforeAll {
+  override def beforeAll(): Unit = {
     super.beforeAll()
     testUtils = new KafkaTestUtils
     testUtils.setup()
+    KafkaDataConsumer.init(16, 64, 0.75f)
   }
 
-  override def afterAll {
+  override def afterAll(): Unit = {
     if (testUtils != null) {
       testUtils.teardown()
       testUtils = null
@@ -47,24 +50,46 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
     super.afterAll()
   }
 
-  test("concurrent use of KafkaDataConsumer") {
-    KafkaDataConsumer.init(16, 64, 0.75f)
+  override def afterEach(): Unit = {
+    super.afterEach()
+    KafkaDataConsumer.cache.clear()
+  }
 
-    val topic = "topic" + Random.nextInt()
+  private def getKafkaParams() = Map[String, Object](
+    GROUP_ID_CONFIG -> groupId,
+    BOOTSTRAP_SERVERS_CONFIG -> testUtils.brokerAddress,
+    KEY_DESERIALIZER_CLASS_CONFIG -> classOf[ByteArrayDeserializer].getName,
+    VALUE_DESERIALIZER_CLASS_CONFIG -> classOf[ByteArrayDeserializer].getName,
+    AUTO_OFFSET_RESET_CONFIG -> "earliest",
+    ENABLE_AUTO_COMMIT_CONFIG -> "false"
+  ).asJava
+
+  test("KafkaDataConsumer reuse in case of same groupId and TopicPartition") {
+    val kafkaParams = getKafkaParams()
+
+    val consumer1 = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
+      topicPartition, kafkaParams, null, true)
+    consumer1.release()
+
+    val consumer2 = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
+      topicPartition, kafkaParams, null, true)
+    consumer2.release()
+
+    assert(KafkaDataConsumer.cache.size() == 1)
+    val key = new CacheKey(groupId, topicPartition)
+    val existingInternalConsumers = KafkaDataConsumer.cache.get(key)
+    assert(existingInternalConsumers.size() == 1)
+    val existingInternalConsumer = existingInternalConsumers.get(0)
+    assert(existingInternalConsumer.eq(consumer1.internalConsumer))
+    assert(existingInternalConsumer.eq(consumer2.internalConsumer))
+  }
+
+  test("concurrent use of KafkaDataConsumer") {
     val data = (1 to 1000).map(_.toString)
-    val topicPartition = new TopicPartition(topic, 0)
     testUtils.createTopic(topic)
     testUtils.sendMessages(topic, data.toArray)
 
-    val groupId = "groupId"
-    val kafkaParams = Map[String, Object](
-      GROUP_ID_CONFIG -> groupId,
-      BOOTSTRAP_SERVERS_CONFIG -> testUtils.brokerAddress,
-      KEY_DESERIALIZER_CLASS_CONFIG -> classOf[ByteArrayDeserializer].getName,
-      VALUE_DESERIALIZER_CLASS_CONFIG -> classOf[ByteArrayDeserializer].getName,
-      AUTO_OFFSET_RESET_CONFIG -> "earliest",
-      ENABLE_AUTO_COMMIT_CONFIG -> "false"
-    )
+    val kafkaParams = getKafkaParams()
 
     val numThreads = 100
     val numConsumerUsages = 500
@@ -79,7 +104,7 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
         null
       }
       val consumer = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
-        topicPartition, kafkaParams.asJava, taskContext, useCache)
+        topicPartition, kafkaParams, taskContext, useCache)
       try {
         val rcvd = (0 until data.length).map { offset =>
           val bytes = consumer.get(offset, 10000).value()

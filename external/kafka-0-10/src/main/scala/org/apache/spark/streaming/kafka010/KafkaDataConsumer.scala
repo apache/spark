@@ -74,7 +74,7 @@ private[kafka010] sealed trait KafkaDataConsumer[K, V] {
   def release(): Unit
 
   /** Reference to the internal implementation that this wrapper delegates to */
-  protected def internalConsumer: InternalKafkaConsumer[K, V]
+  private[kafka010] def internalConsumer: InternalKafkaConsumer[K, V]
 }
 
 
@@ -82,7 +82,7 @@ private[kafka010] sealed trait KafkaDataConsumer[K, V] {
  * A wrapper around Kafka's KafkaConsumer.
  * This is not for direct use outside this file.
  */
-private class InternalKafkaConsumer[K, V](
+private[kafka010] class InternalKafkaConsumer[K, V](
     val topicPartition: TopicPartition,
     val kafkaParams: ju.Map[String, Object]) extends Logging {
 
@@ -207,8 +207,9 @@ private class InternalKafkaConsumer[K, V](
 
 }
 
-private[kafka010]
-object KafkaDataConsumer extends Logging {
+private[kafka010] case class CacheKey(groupId: String, topicPartition: TopicPartition)
+
+private[kafka010] object KafkaDataConsumer extends Logging {
 
   private case class CachedKafkaDataConsumer[K, V](internalConsumer: InternalKafkaConsumer[K, V])
     extends KafkaDataConsumer[K, V] {
@@ -221,10 +222,8 @@ object KafkaDataConsumer extends Logging {
     override def release(): Unit = internalConsumer.close()
   }
 
-  private case class CacheKey(groupId: String, topicPartition: TopicPartition)
-
   // Don't want to depend on guava, don't want a cleanup thread, use a simple LinkedHashMap
-  private var cache: ju.Map[CacheKey, ju.List[InternalKafkaConsumer[_, _]]] = null
+  private[kafka010] var cache: ju.Map[CacheKey, ju.List[InternalKafkaConsumer[_, _]]] = null
 
   /**
    * Must be called before acquire, once per JVM, to configure the cache.
