@@ -27,13 +27,14 @@ import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
-
 import org.apache.spark.TaskContext
+
 import org.apache.spark.input.{PortableDataStream, StreamInputFormat}
 import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.csv.CSVDataSource.checkHeaderColumnNames
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
 
@@ -50,9 +51,9 @@ abstract class CSVDataSource extends Serializable {
       conf: Configuration,
       file: PartitionedFile,
       parser: UnivocityParser,
-      schema: StructType, // Schema of projection
-      dataSchema: StructType // Schema of data in csv files
-  ): Iterator[InternalRow]
+      schema: StructType,
+      // Actual schema of data in the csv file
+      dataSchema: StructType): Iterator[InternalRow]
 
   /**
    * Infers the schema from `inputPaths` files.
@@ -121,12 +122,8 @@ object CSVDataSource {
     }
   }
 
-  def checkHeaderColumnNames(
-    schema: StructType,
-    columnNames: Array[String],
-    fileName: String,
-    checkHeaderFlag: Boolean
-  ): Unit = {
+  def checkHeaderColumnNames(schema: StructType, columnNames: Array[String], fileName: String,
+      checkHeaderFlag: Boolean): Unit = {
     if (checkHeaderFlag && columnNames != null) {
       val fieldNames = schema.map(_.name).toIndexedSeq
       val (headerLen, schemaSize) = (columnNames.size, fieldNames.length)
@@ -161,20 +158,6 @@ object CSVDataSource {
       }
     }
   }
-
-  def checkHeader(
-    header: String,
-    parser: CsvParser,
-    schema: StructType,
-    fileName: String,
-    checkHeaderFlag: Boolean
-  ): Unit = {
-    if (checkHeaderFlag) {
-      val columnNames = parser.parseLine(header)
-
-      checkHeaderColumnNames(schema, columnNames, fileName, checkHeaderFlag)
-    }
-  }
 }
 
 object TextInputCSVDataSource extends CSVDataSource {
@@ -201,7 +184,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       // Note: if there are only comments in the first block, the header would probably
       // be not extracted.
       CSVUtils.extractHeader(lines, parser.options).foreach { header =>
-        CSVDataSource.checkHeader(header, parser.tokenizer, dataSchema, file.filePath,
+        checkHeader(header, parser.tokenizer, dataSchema, file.filePath,
           checkHeaderFlag = !parser.options.enforceSchema)
       }
     }
@@ -264,6 +247,13 @@ object TextInputCSVDataSource extends CSVDataSource {
       sparkSession.createDataset(rdd)(Encoders.STRING)
     }
   }
+
+  def checkHeader(header: String, parser: CsvParser, schema: StructType, fileName: String,
+      checkHeaderFlag: Boolean): Unit = {
+    if (checkHeaderFlag) {
+      checkHeaderColumnNames(schema, parser.parseLine(header), fileName, checkHeaderFlag)
+    }
+  }
 }
 
 object MultiLineCSVDataSource extends CSVDataSource {
@@ -283,7 +273,7 @@ object MultiLineCSVDataSource extends CSVDataSource {
 
     UnivocityParser.parseStream(
       CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))),
-      parser.options.headerFlag, parser, schema, file.filePath, checkHeader)
+      parser.options.headerFlag, parser, schema, checkHeader)
   }
 
   override def infer(

@@ -250,7 +250,6 @@ private[csv] object UnivocityParser {
       dropFirstRecord: Boolean,
       parser: UnivocityParser,
       schema: StructType,
-      filePath: String,
       checkFirstRecord: Array[String] => Unit): Iterator[InternalRow] = {
     val tokenizer = parser.tokenizer
     val safeParser = new FailureSafeParser[Array[String]](
@@ -267,8 +266,8 @@ private[csv] object UnivocityParser {
       inputStream: InputStream,
       dropFirstRecord: Boolean,
       tokenizer: CsvParser,
-      checkFirstRecord: Array[String] => Unit
-  )(convert: Array[String] => T) = new Iterator[T] {
+      checkFirstRecord: Array[String] => Unit)(
+      convert: Array[String] => T) = new Iterator[T] {
     tokenizer.beginParsing(inputStream)
     private var nextRecord = {
       if (dropFirstRecord) {
@@ -299,8 +298,7 @@ private[csv] object UnivocityParser {
       schema: StructType): Iterator[InternalRow] = {
     val options = parser.options
 
-    val filteredLines: Iterator[String] =
-      CSVUtils.filterCommentAndEmpty(lines, options)
+    val filteredLines: Iterator[String] = CSVUtils.filterCommentAndEmpty(lines, options)
 
     val safeParser = new FailureSafeParser[String](
       input => Seq(parser.parse(input)),
