@@ -25,11 +25,11 @@ import scala.util.Random
 import org.apache.kafka.clients.consumer.ConsumerConfig._
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
+import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark._
 
-class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
+class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
   private var testUtils: KafkaTestUtils = _
   private val topic = "topic" + Random.nextInt()
   private val topicPartition = new TopicPartition(topic, 0)
@@ -50,11 +50,6 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll with B
     super.afterAll()
   }
 
-  override def afterEach(): Unit = {
-    super.afterEach()
-    KafkaDataConsumer.cache.clear()
-  }
-
   private def getKafkaParams() = Map[String, Object](
     GROUP_ID_CONFIG -> groupId,
     BOOTSTRAP_SERVERS_CONFIG -> testUtils.brokerAddress,
@@ -65,6 +60,8 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll with B
   ).asJava
 
   test("KafkaDataConsumer reuse in case of same groupId and TopicPartition") {
+    KafkaDataConsumer.cache.clear()
+
     val kafkaParams = getKafkaParams()
 
     val consumer1 = KafkaDataConsumer.acquire[Array[Byte], Array[Byte]](
