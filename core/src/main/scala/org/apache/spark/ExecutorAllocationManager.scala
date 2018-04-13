@@ -368,7 +368,7 @@ private[spark] class ExecutorAllocationManager(
    */
   private def addExecutors(maxNumExecutorsNeeded: Int): Int = {
     // Do not request more executors if it would put our target over the upper bound
-    if (numExecutorsTarget >= maxNumExecutors) {
+    if (numExecutorsTarget > maxNumExecutors) {
       logDebug(s"Not adding executors because our current target total " +
         s"is already $numExecutorsTarget (limit $maxNumExecutors)")
       numExecutorsToAdd = 1
@@ -390,7 +390,7 @@ private[spark] class ExecutorAllocationManager(
 
     // If our target has not changed, do not send a message
     // to the cluster manager and reset our exponential growth
-    if (delta == 0) {
+    if (delta == 0 && numExecutorsTarget != maxNumExecutors) {
       // Check if there is any speculative jobs pending
       if (listener.pendingTasks == 0 && listener.pendingSpeculativeTasks > 0) {
         numExecutorsTarget =
