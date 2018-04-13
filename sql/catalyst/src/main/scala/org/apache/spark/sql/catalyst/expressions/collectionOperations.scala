@@ -146,41 +146,41 @@ case class Zip(left: Expression, right: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (arr1, arr2) => {
-      val i = ctx.freshName("i")
-      s"""
-      for (int $i = 0; $i < $arr1.numElements(); $i ++) {
-        if ($arr1.isNullAt($i)) {
-          ${ev.isNull} = true;
-        } else {
-          ${ev.value}[$i] = ($arr1[$i], $arr2[$i]);
-        }
-      }
-     """
+      (arr1, arr2).zipped.map((a, b) => (a, b)).mkString("[", ",", "]")
     })
   }
 
   override def nullSafeEval(a1: Any, a2: Any): Any = {
-    var hasNull = false
-    val pair = (a1.asInstanceOf[ArrayData], a2.asInstanceOf[ArrayData])
-    val sizes = (pair._1.numElements(), pair._2.numElements())
-    val zipped: ArrayData = pair._1.copy()
+    var entries = (a1.asInstanceOf[ArrayData], a2.asInstanceOf[ArrayData])
 
-    val elementType = left.dataType.asInstanceOf[ArrayType].elementType
-    val data = pair._1.toArray[AnyRef](elementType)
+    var lens = (entries._1.numElements(), entries._2.numElements())
 
-    if (sizes._1 < sizes._2) {
-      // maintain first array as the longest
-      pair.swap
-      sizes.swap
+    var types = (left.dataType.asInstanceOf[ArrayType].elementType,
+      right.dataType.asInstanceOf[ArrayType].elementType)
+
+    var arrays = (entries._1.toArray[AnyRef](types._1),
+      entries._2.toArray[AnyRef](types._2))
+
+    if (lens._1 < lens._2) {
+      arrays = arrays.swap
+      lens = lens.swap
+      entries = entries.swap
+      types = types.swap
     }
 
+    val zipped = Array.ofDim[(Any, Any)](lens._1)
+
     var i = 0
-    while (i < sizes._1) {
-      zipped.update(i, (pair._1.get(i, left.dataType), pair._2.get(i, right.dataType)))
+    while ( i < lens._1) {
+      if (lens._2 > i) {
+        zipped(i) = (arrays._1(i), arrays._2(i))
+      } else {
+        zipped(i) = (arrays._1(i), null)
+      }
       i += 1
     }
 
-    zipped
+    new GenericArrayData(zipped.asInstanceOf[Array[(Any, Any)]])
   }
 }
 
