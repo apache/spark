@@ -508,9 +508,8 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
 
 
 /**
- * A function that returns the position of the first occurrence of element in the given array
- * as long. Returns 0 if substr could not be found in str.
- * Returns null if either of the arguments are null and
+ * Returns the position of the first occurrence of element in the given array as long.
+ * Returns 0 if substr could not be found in str. Returns null if either of the arguments are null
  *
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
