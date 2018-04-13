@@ -2023,6 +2023,7 @@ def array_union(col1, col2):
     :param col1: name of column containing array
     :param col2: name of column containing array
 
+    >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
     >>> df.select(array_union(df.c1, df.c2)).collect()
     [Row(array_union(c1, c2)=[u'b', u'a', u'c', u'd', u'f']))]
