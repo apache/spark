@@ -3170,6 +3170,15 @@ object functions {
   def array_sort(e: Column): Column = withExpr { ArraySort(e.expr) }
 
   /**
+   * Remove all elements that equal to element from the given array.
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_remove(column: Column, element: Any): Column = withExpr {
+    ArrayRemove(column.expr, Literal(element))
+  }
+
+  /**
    * Creates a new row for each element in the given array or map column.
    *
    * @group collection_funcs

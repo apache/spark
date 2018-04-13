@@ -1882,3 +1882,44 @@ case class ArrayRepeat(left: Expression, right: Expression)
   }
 
 }
+
+/**
+ * Remove all elements that equal to element from the given array
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(array, element) - Remove all elements that equal to element from array.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3, null, 3), 3);
+       [1,2,null]
+  """, since = "2.4.0")
+case class ArrayRemove(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes with CodegenFallback {
+
+  override def dataType: DataType = left.dataType
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
+
+  override def nullable: Boolean = {
+    left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val value1 = left.eval(input)
+    if (value1 == null) {
+      null
+    } else {
+      val value2 = right.eval(input)
+      nullSafeEval(value1, value2)
+    }
+  }
+
+  override def nullSafeEval(arr: Any, value: Any): Any = {
+    val elementType = left.dataType.asInstanceOf[ArrayType].elementType
+    val data = arr.asInstanceOf[ArrayData].toArray[AnyRef](elementType).filter(_ != value)
+    new GenericArrayData(data.asInstanceOf[Array[Any]])
+  }
+
+  override def prettyName: String = "array_remove"
+}
