@@ -19,9 +19,10 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import scala.annotation.tailrec
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.NoOp
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
 /**
@@ -53,9 +54,10 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val rowClass = classOf[GenericInternalRow].getName
 
     val fieldWriters = schema.map(_.dataType).zipWithIndex.map { case (dt, i) =>
-      val converter = convertToSafe(ctx,
-        StatementValue(CodeGenerator.getValue(tmpInput, dt, i.toString),
-          CodeGenerator.javaType(dt)), dt)
+      val converter = convertToSafe(
+        ctx,
+        JavaCode.expression(CodeGenerator.getValue(tmpInput, dt, i.toString), dt),
+        dt)
       s"""
         if (!$tmpInput.isNullAt($i)) {
           ${converter.code}
@@ -76,7 +78,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
          |final InternalRow $output = new $rowClass($values);
        """.stripMargin
 
-    ExprCode(code, FalseLiteral, VariableValue(output, "InternalRow"))
+    ExprCode(code, FalseLiteral, JavaCode.variable(output, classOf[InternalRow]))
   }
 
   private def createCodeForArray(
@@ -91,9 +93,10 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val index = ctx.freshName("index")
     val arrayClass = classOf[GenericArrayData].getName
 
-    val elementConverter = convertToSafe(ctx,
-        StatementValue(CodeGenerator.getValue(tmpInput, elementType, index),
-          CodeGenerator.javaType(elementType)), elementType)
+    val elementConverter = convertToSafe(
+      ctx,
+      JavaCode.expression(CodeGenerator.getValue(tmpInput, elementType, index), elementType),
+      elementType)
     val code = s"""
       final ArrayData $tmpInput = $input;
       final int $numElements = $tmpInput.numElements();
@@ -107,7 +110,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final ArrayData $output = new $arrayClass($values);
     """
 
-    ExprCode(code, FalseLiteral, VariableValue(output, "ArrayData"))
+    ExprCode(code, FalseLiteral, JavaCode.variable(output, classOf[ArrayData]))
   }
 
   private def createCodeForMap(
@@ -128,7 +131,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       final MapData $output = new $mapClass(${keyConverter.value}, ${valueConverter.value});
     """
 
-    ExprCode(code, FalseLiteral, VariableValue(output, "MapData"))
+    ExprCode(code, FalseLiteral, JavaCode.variable(output, classOf[MapData]))
   }
 
   @tailrec
@@ -140,7 +143,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     case ArrayType(elementType, _) => createCodeForArray(ctx, input, elementType)
     case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
     case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
-    case _ => ExprCode("", FalseLiteral, input)
+    case _ => ExprCode(FalseLiteral, input)
   }
 
   protected def create(expressions: Seq[Expression]): Projection = {

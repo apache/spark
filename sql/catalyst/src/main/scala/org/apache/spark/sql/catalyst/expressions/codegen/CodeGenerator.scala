@@ -59,10 +59,12 @@ import org.apache.spark.util.{ParentClassLoader, Utils}
 case class ExprCode(var code: String, var isNull: ExprValue, var value: ExprValue)
 
 object ExprCode {
+  def apply(isNull: ExprValue, value: ExprValue): ExprCode = {
+    ExprCode(code = "", isNull, value)
+  }
+
   def forNullValue(dataType: DataType): ExprCode = {
-    val defaultValueLiteral = CodeGenerator.defaultValue(dataType, typedNull = true)
-    ExprCode(code = "", isNull = TrueLiteral,
-      value = LiteralValue(defaultValueLiteral, CodeGenerator.javaType(dataType)))
+    ExprCode(code = "", isNull = TrueLiteral, JavaCode.defaultLiteral(dataType))
   }
 
   def forNonNullValue(value: ExprValue): ExprCode = {
@@ -331,7 +333,7 @@ class CodegenContext {
       case _: StructType | _: ArrayType | _: MapType => s"$value = $initCode.copy();"
       case _ => s"$value = $initCode;"
     }
-    ExprCode(code, FalseLiteral, GlobalValue(value, javaType(dataType)))
+    ExprCode(code, FalseLiteral, JavaCode.global(value, dataType))
   }
 
   def declareMutableStates(): String = {
@@ -1004,8 +1006,9 @@ class CodegenContext {
       // at least two nodes) as the cost of doing it is expected to be low.
 
       subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      val state = SubExprEliminationState(GlobalValue(isNull, JAVA_BOOLEAN),
-        GlobalValue(value, javaType(expr.dataType)))
+      val state = SubExprEliminationState(
+        JavaCode.isNullGlobal(isNull),
+        JavaCode.global(value, expr.dataType))
       subExprEliminationExprs ++= e.map(_ -> state).toMap
     }
   }
@@ -1477,6 +1480,26 @@ object CodeGenerator extends Logging {
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
     case _ => "Object"
+  }
+
+  def javaClass(dt: DataType): Class[_] = dt match {
+    case BooleanType => java.lang.Boolean.TYPE
+    case ByteType => java.lang.Byte.TYPE
+    case ShortType => java.lang.Short.TYPE
+    case IntegerType | DateType => java.lang.Integer.TYPE
+    case LongType | TimestampType => java.lang.Long.TYPE
+    case FloatType => java.lang.Float.TYPE
+    case DoubleType => java.lang.Double.TYPE
+    case _: DecimalType => classOf[Decimal]
+    case BinaryType => classOf[Array[Byte]]
+    case StringType => classOf[UTF8String]
+    case CalendarIntervalType => classOf[CalendarInterval]
+    case _: StructType => classOf[InternalRow]
+    case _: ArrayType => classOf[ArrayData]
+    case _: MapType => classOf[MapData]
+    case udt: UserDefinedType[_] => javaClass(udt.sqlType)
+    case ObjectType(cls) => cls
+    case _ => classOf[Object]
   }
 
   /**
