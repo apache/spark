@@ -591,45 +591,43 @@ case class SortMergeJoinExec(
     logDebug(s"upperCompExp: $upperCompExp")
 
     // Add secondary range dequeue method
-    if(useSecondaryRange) {
-      if (lowerSecondaryRangeExpression.isEmpty || rightLowerKeys.size == 0 ||
-          rightUpperKeys.size == 0) {
-        ctx.addNewFunction("dequeueUntilLowerConditionHolds",
-          "private void dequeueUntilLowerConditionHolds() { }",
-          inlineToOuterClass = true)
-      }
-      else {
-        val rightRngTmpKeyVars = createJoinKey(ctx, rightTmpRow,
-          rightUpperKeys.slice(0, 1), right.output)
-        val rightRngTmpKeyVarsDecl = rightRngTmpKeyVars.map(_.code).mkString("\n")
-        rightRngTmpKeyVars.foreach(_.code = "")
-        val javaType = CodeGenerator.javaType(rightLowerKeys(0).dataType)
+    if (!useSecondaryRange || lowerSecondaryRangeExpression.isEmpty ||
+        rightLowerKeys.size == 0 || rightUpperKeys.size == 0) {
+      ctx.addNewFunction("dequeueUntilLowerConditionHolds",
+        "private void dequeueUntilLowerConditionHolds() { }",
+        inlineToOuterClass = true)
+    }
+    else {
+      val rightRngTmpKeyVars = createJoinKey(ctx, rightTmpRow,
+        rightUpperKeys.slice(0, 1), right.output)
+      val rightRngTmpKeyVarsDecl = rightRngTmpKeyVars.map(_.code).mkString("\n")
+      rightRngTmpKeyVars.foreach(_.code = "")
+      val javaType = CodeGenerator.javaType(rightLowerKeys(0).dataType)
 
-        ctx.addNewFunction("getRightTmpRangeValue",
-          s"""
-             |private $javaType getRightTmpRangeValue() {
-             |  $rightRngTmpKeyVarsDecl
-             |  return ${rightRngTmpKeyVars(0).value};
-             |}
-           """.stripMargin)
+      ctx.addNewFunction("getRightTmpRangeValue",
+        s"""
+           |private $javaType getRightTmpRangeValue() {
+           |  $rightRngTmpKeyVarsDecl
+           |  return ${rightRngTmpKeyVars(0).value};
+           |}
+         """.stripMargin)
 
-        ctx.addNewFunction("dequeueUntilLowerConditionHolds",
-          s"""
-             |private void dequeueUntilLowerConditionHolds() {
-             |  if($matches.isEmpty())
-             |    return;
-             |  $rightTmpRow = $matches.get(0);
-             |  $javaType tempVal = getRightTmpRangeValue();
-             |  while(${leftLowerSecRangeKey.value} $upperCompop tempVal) {
-             |    $matches.dequeue();
-             |    if($matches.isEmpty())
-             |      break;
-             |    $rightTmpRow = $matches.get(0);
-             |    tempVal = getRightTmpRangeValue();
-             |  }
-             |}
-           """.stripMargin, inlineToOuterClass = true)
-      }
+      ctx.addNewFunction("dequeueUntilLowerConditionHolds",
+        s"""
+           |private void dequeueUntilLowerConditionHolds() {
+           |  if($matches.isEmpty())
+           |    return;
+           |  $rightTmpRow = $matches.get(0);
+           |  $javaType tempVal = getRightTmpRangeValue();
+           |  while(${leftLowerSecRangeKey.value} $upperCompop tempVal) {
+           |    $matches.dequeue();
+           |    if($matches.isEmpty())
+           |      break;
+           |    $rightTmpRow = $matches.get(0);
+           |    tempVal = getRightTmpRangeValue();
+           |  }
+           |}
+         """.stripMargin, inlineToOuterClass = true)
     }
     val (leftLowVarsCode, leftUpperVarsCode) = if (useSecondaryRange) {
         (leftLowerKeyVars.map(_.code).mkString("\n"), leftUpperKeyVars.map(_.code).mkString("\n"))
