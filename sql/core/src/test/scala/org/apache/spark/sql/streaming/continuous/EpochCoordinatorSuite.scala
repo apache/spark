@@ -25,15 +25,16 @@ import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.sql.LocalSparkSession
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousReader, PartitionOffset}
 import org.apache.spark.sql.sources.v2.writer.WriterCommitMessage
 import org.apache.spark.sql.sources.v2.writer.streaming.StreamWriter
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.TestSparkSession
 
 class EpochCoordinatorSuite
   extends SparkFunSuite
-    with SharedSparkSession
+    with LocalSparkSession
     with MockitoSugar
     with BeforeAndAfterEach {
 
@@ -49,12 +50,10 @@ class EpochCoordinatorSuite
     query = mock[ContinuousExecution]
     orderVerifier = inOrder(writer, query)
 
+    spark = new TestSparkSession()
+
     epochCoordinator
       = EpochCoordinatorRef.create(writer, reader, query, "test", 1, spark, SparkEnv.get)
-  }
-
-  override def afterEach(): Unit = {
-    SparkEnv.get.rpcEnv.stop(epochCoordinator)
   }
 
   test("single epoch") {
