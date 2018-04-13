@@ -22,12 +22,12 @@ import java.util.ConcurrentModificationException
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.SerializerManager
-import org.apache.spark.storage.BlockManager
-import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray.DefaultInitialSizeOfInMemoryBuffer
+import org.apache.spark.storage.BlockManager
 
 /**
  * An append-only array for [[UnsafeRow]]s that strictly keeps content in an in-memory array
