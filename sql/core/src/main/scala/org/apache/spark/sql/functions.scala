@@ -3300,7 +3300,7 @@ object functions {
   def size(e: Column): Column = withExpr { Size(e.expr) }
 
   /**
-   * Returns length of array or map as BigInt.
+   * Returns length of array or map as long.
    *
    * @group collection_funcs
    * @since 2.4.0
