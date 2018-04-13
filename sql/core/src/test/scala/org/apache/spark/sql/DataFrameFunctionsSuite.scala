@@ -422,6 +422,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       (Seq(1, 0), Seq.empty[Int], Seq(2L), nseqi, Seq("a"), Seq.empty[String], Seq(null), nseqs)
     ).toDF("i1", "i2", "i3", "in", "s1", "s2", "s3", "sn")
 
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // switch codeGen on
+
     // Simple test cases
     checkAnswer(
       df.selectExpr("array(1, 2, 3L)"),
@@ -437,6 +439,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
     )
     checkAnswer(
+      df.filter(dummyFilter($"i1")).select(concat($"i1", $"i2", $"i3")),
+      Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
+    )
+    checkAnswer(
       df.selectExpr("concat(array(1, null), i2, i3)"),
       Seq(Row(Seq(1, null, 2, 3, 5, 6)), Row(Seq(1, null, 2)))
     )
@@ -446,6 +452,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
     checkAnswer(
       df.selectExpr("concat(s1, s2, s3)"),
+      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+    )
+    checkAnswer(
+      df.filter(dummyFilter($"s1"))select(concat($"s1", $"s2", $"s3")),
       Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
     )
 

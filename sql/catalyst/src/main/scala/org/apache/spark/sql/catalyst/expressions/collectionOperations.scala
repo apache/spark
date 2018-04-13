@@ -368,7 +368,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
         val arrayConcatClass = if (CodeGenerator.isPrimitiveType(elementType)) {
           genCodeForPrimitiveArrayConcat(ctx, elementType)
         } else {
-          genCodeForComplexArrayConcat(ctx)
+          genCodeForComplexArrayConcat(ctx, elementType)
         }
         (arrayConcatClass, s"ArrayData[] $args = new ArrayData[${evals.length}];")
     }
@@ -451,7 +451,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
          |  } else {
          |    $arrayData.set$primitiveValueTypeName(
          |      $counter[0],
-         |      args[$idx].get$primitiveValueTypeName(z)
+         |      ${CodeGenerator.getValue(s"args[$idx]", elementType, "z")}
          |    );
          |  }
          |  $counter[0]++;
@@ -482,7 +482,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
        |}""".stripMargin
   }
 
-  private def genCodeForComplexArrayConcat(ctx: CodegenContext): String = {
+  private def genCodeForComplexArrayConcat(ctx: CodegenContext, elementType: DataType): String = {
     val genericArrayClass = classOf[GenericArrayData].getName
     val arrayData = ctx.freshName("arrayObjects")
     val counter = ctx.freshName("counter")
@@ -492,7 +492,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
     val assignments = (0 until children.length).map { idx =>
       s"""
          |for (int z = 0; z < args[$idx].numElements(); z++) {
-         |  $arrayData[$counter[0]] = args[$idx].array()[z];
+         |  $arrayData[$counter[0]] = ${CodeGenerator.getValue(s"args[$idx]", elementType, "z")};
          |  $counter[0]++;
          |}
         """.stripMargin
