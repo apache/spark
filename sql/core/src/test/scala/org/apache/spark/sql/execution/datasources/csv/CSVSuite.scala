@@ -1330,6 +1330,20 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       assert(exceptionForLongSchema.getMessage.contains(
         "Header length: 2, schema size: 3"
       ))
+
+      val caseSensitiveSchema = new StructType().add("F1", DoubleType).add("f2", DoubleType)
+      val caseSensitiveException = intercept[SparkException] {
+        spark.read
+          .schema(caseSensitiveSchema)
+          .option("multiLine", multiLine)
+          .option("header", true)
+          .option("enforceSchema", false)
+          .csv(path.getCanonicalPath)
+          .collect()
+      }
+      assert(caseSensitiveException.getMessage.contains(
+        "CSV file header does not contain the expected fields"
+      ))
     }
   }
 

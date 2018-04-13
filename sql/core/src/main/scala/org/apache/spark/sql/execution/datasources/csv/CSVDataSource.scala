@@ -132,8 +132,7 @@ object CSVDataSource {
       if (headerLen == schemaSize) {
         var i = 0
         while (error.isEmpty && i < headerLen) {
-          val nameInSchema = fieldNames(i).toLowerCase
-          val nameInHeader = columnNames(i).toLowerCase
+          val (nameInSchema, nameInHeader) = (fieldNames(i), columnNames(i))
           if (nameInHeader != nameInSchema) {
             error = Some(
               s"""|CSV file header does not contain the expected fields.
