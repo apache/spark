@@ -308,12 +308,12 @@ class Summarizer(object):
         return Summarizer._get_single_metric(col, weightCol, "normL2")
 
     @staticmethod
-    def _check_param(featureCol, weightCol):
+    def _check_param(featuresCol, weightCol):
         if weightCol is None:
             weightCol = lit(1.0)
-        if not isinstance(featureCol, Column) or not isinstance(weightCol, Column):
+        if not isinstance(featuresCol, Column) or not isinstance(weightCol, Column):
             raise TypeError("featureCol and weightCol should be a Column")
-        return featureCol, weightCol
+        return featuresCol, weightCol
 
     @staticmethod
     def _get_single_metric(col, weightCol, metric):
@@ -339,8 +339,10 @@ class Summarizer(object):
          - normL2: the Euclidian norm for each coefficient.
          - normL1: the L1 norm of each coefficient (sum of the absolute values).
 
-        :param metrics metrics that can be provided.
-        :return a Summarizer
+        :param metrics:
+         metrics that can be provided.
+        :return:
+         an object of :py:class:`pyspark.ml.stat.SummaryBuilder`
 
         Note: Currently, the performance of this interface is about 2x~3x slower then using the RDD
         interface.
@@ -348,17 +350,17 @@ class Summarizer(object):
         sc = SparkContext._active_spark_context
         js = JavaWrapper._new_java_obj("org.apache.spark.ml.stat.Summarizer.metrics",
                                        _to_seq(sc, metrics))
-        return SummarizerBuilder(js)
+        return SummaryBuilder(js)
 
 
-class SummarizerBuilder(object):
+class SummaryBuilder(JavaWrapper):
     """
     .. note:: Experimental
 
     A builder object that provides summary statistics about a given column.
 
     Users should not directly create such builders, but instead use one of the methods in
-    :py:class:`pyspark.ml.stat.Summary`
+    :py:class:`pyspark.ml.stat.Summarizer`
 
     .. versionadded:: 2.4.0
 
@@ -367,13 +369,22 @@ class SummarizerBuilder(object):
         self._js = js
 
     @since("2.4.0")
-    def summary(self, featureCol, weightCol=None):
+    def summary(self, featuresCol, weightCol=None):
         """
         Returns an aggregate object that contains the summary of the column with the requested
         metrics.
+
+        :param featuresCol:
+         a column that contains features Vector object.
+        :param weightCol
+         a column that contains weight value. Default weight is 1.0.
+        :return:
+         an aggregate column that contains the statistics. The exact content of this
+         structure is determined during the creation of the builder.
+
         """
-        featureCol, weightCol = Summarizer._check_param(featureCol, weightCol)
-        return Column(self._js.summary(featureCol._jc, weightCol._jc))
+        featuresCol, weightCol = Summarizer._check_param(featuresCol, weightCol)
+        return Column(self._js.summary(featuresCol._jc, weightCol._jc))
 
 
 if __name__ == "__main__":
