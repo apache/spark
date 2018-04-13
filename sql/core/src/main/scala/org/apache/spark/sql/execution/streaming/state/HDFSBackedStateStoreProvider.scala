@@ -129,8 +129,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       verify(state == UPDATING, "Cannot commit after already committed or aborted")
 
       try {
-        finalizeDeltaFile(compressedStream)
-        loadedMaps.put(newVersion, mapToUpdate)
+        commitUpdates(newVersion, mapToUpdate, compressedStream)
         state = COMMITTED
         logInfo(s"Committed version $newVersion for $this to file $finalDeltaFile")
         newVersion
@@ -249,6 +248,13 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
 
   private case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
+
+  private def commitUpdates(newVersion: Long, map: MapType, output: DataOutputStream): Unit = {
+    synchronized {
+      finalizeDeltaFile(output)
+      loadedMaps.put(newVersion, map)
+    }
+  }
 
   /**
    * Get iterator of all the data of the latest version of the store.
