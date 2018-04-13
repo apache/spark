@@ -354,9 +354,11 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
         numFolds = java_stage.getNumFolds()
         seed = java_stage.getSeed()
         parallelism = java_stage.getParallelism()
+        collectSubModels = java_stage.getCollectSubModels()
         # Create a new instance of this stage.
         py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
-                       numFolds=numFolds, seed=seed, parallelism=parallelism)
+                       numFolds=numFolds, seed=seed, parallelism=parallelism,
+                       collectSubModels=collectSubModels)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -376,6 +378,7 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, HasCollectSubMo
         _java_obj.setSeed(self.getSeed())
         _java_obj.setNumFolds(self.getNumFolds())
         _java_obj.setParallelism(self.getParallelism())
+        _java_obj.setCollectSubModels(self.getCollectSubModels())
 
         return _java_obj
 
@@ -410,6 +413,7 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         and some extra params. This copies the underlying bestModel,
         creates a deep copy of the embedded paramMap, and
         copies the embedded and extra parameters over.
+        It does not copy the extra Params into the subModels.
 
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
@@ -628,9 +632,11 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
         trainRatio = java_stage.getTrainRatio()
         seed = java_stage.getSeed()
         parallelism = java_stage.getParallelism()
+        collectSubModels = java_stage.getCollectSubModels()
         # Create a new instance of this stage.
         py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
-                       trainRatio=trainRatio, seed=seed, parallelism=parallelism)
+                       trainRatio=trainRatio, seed=seed, parallelism=parallelism,
+                       collectSubModels=collectSubModels)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -650,6 +656,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, HasCollec
         _java_obj.setTrainRatio(self.getTrainRatio())
         _java_obj.setSeed(self.getSeed())
         _java_obj.setParallelism(self.getParallelism())
+        _java_obj.setCollectSubModels(self.getCollectSubModels())
         return _java_obj
 
 
@@ -682,6 +689,7 @@ class TrainValidationSplitModel(Model, ValidatorParams, MLReadable, MLWritable):
         creates a deep copy of the embedded paramMap, and
         copies the embedded and extra parameters over.
         And, this creates a shallow copy of the validationMetrics.
+        It does not copy the extra Params into the subModels.
 
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance

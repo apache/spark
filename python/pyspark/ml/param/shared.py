@@ -657,10 +657,10 @@ class HasParallelism(Params):
 
 class HasCollectSubModels(Params):
     """
-    Mixin for param collectSubModels: whether to collect a list of sub-models trained during tuning
+    Mixin for param collectSubModels: Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.
     """
 
-    collectSubModels = Param(Params._dummy(), "collectSubModels", "whether to collect a list of sub-models trained during tuning", typeConverter=TypeConverters.toBoolean)
+    collectSubModels = Param(Params._dummy(), "collectSubModels", "Param for whether to collect a list of sub-models trained during tuning. If set to false, then only the single best sub-model will be available after fitting. If set to true, then all sub-models will be available. Warning: For large models, collecting all sub-models can cause OOMs on the Spark driver.", typeConverter=TypeConverters.toBoolean)
 
     def __init__(self):
         super(HasCollectSubModels, self).__init__()
