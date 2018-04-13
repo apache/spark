@@ -107,7 +107,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("Reverse") {
-    // Simple-type elements
+    // Primitive-type elements
     val ai0 = Literal.create(Seq(2, 1, 4, 3), ArrayType(IntegerType))
     val ai1 = Literal.create(Seq(2, 1, 3), ArrayType(IntegerType))
     val ai2 = Literal.create(Seq(null, 1, null, 3), ArrayType(IntegerType))
@@ -126,7 +126,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Reverse(ai6), Seq.empty)
     checkEvaluation(Reverse(ai7), null)
 
-    // Complex-type elements
+    // Non-primitive-type elements
     val as0 = Literal.create(Seq("b", "a", "d", "c"), ArrayType(StringType))
     val as1 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType))
     val as2 = Literal.create(Seq(null, "a", null, "c"), ArrayType(StringType))

@@ -2098,6 +2098,7 @@ def sort_array(col, asc=True):
 
 
 @since(1.5)
+@ignore_unicode_prefix
 def reverse(col):
     """
     Collection function: returns a reversed string or an array with reverse order of elements.

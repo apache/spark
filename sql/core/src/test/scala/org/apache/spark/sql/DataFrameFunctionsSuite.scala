@@ -469,7 +469,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(Seq(null, 2, null, 1)))
     )
 
-    // Array test cases (complex-type elements)
+    // Array test cases (non-primitive-type elements)
     val sdf = Seq(
       Seq("c", "a", "b"),
       Seq("b", null, "c", null),
