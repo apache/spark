@@ -2866,7 +2866,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(array, value) - Returns an array of the elements in the union of x and y,
+    _FUNC_(array1, array2) - Returns an array of the elements in the union of array1 and array2,
       without duplicates.
   """,
   examples = """
