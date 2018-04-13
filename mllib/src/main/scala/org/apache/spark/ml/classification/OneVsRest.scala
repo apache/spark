@@ -209,9 +209,9 @@ final class OneVsRestModel private[ml] (
     // output the RawPrediction as vector
     if (getRawPredictionCol != "") {
       val rawPredictionUDF = udf { (predictions: Map[Int, Double]) =>
-        val myArray = Array.fill[Double](numClasses)(0.0)
-        predictions.foreach { case (idx, value) => myArray(idx) = value }
-        Vectors.dense(myArray)
+        val predArray = Array.fill[Double](numClasses)(0.0)
+        predictions.foreach { case (idx, value) => predArray(idx) = value }
+        Vectors.dense(predArray)
       }
 
       // output the index of the classifier with highest confidence as prediction
