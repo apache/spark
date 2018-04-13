@@ -174,6 +174,25 @@ class ContinuousSuite extends ContinuousSuiteBase {
       "Continuous processing does not support current time operations."))
   }
 
+  test("subquery alias") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "5")
+      .load()
+      .createOrReplaceTempView("rate")
+    val test = spark.sql("select value from rate where value > 5")
+
+    testStream(test, useV2Sink = true)(
+      StartStream(longContinuousTrigger),
+      AwaitEpoch(0),
+      Execute(waitForRateSourceTriggers(_, 2)),
+      IncrementEpoch(),
+      Execute(waitForRateSourceTriggers(_, 4)),
+      IncrementEpoch(),
+      CheckAnswerRowsContains(scala.Range(6, 20).map(Row(_))))
+  }
+
   test("repeatedly restart") {
     val df = spark.readStream
       .format("rate")
