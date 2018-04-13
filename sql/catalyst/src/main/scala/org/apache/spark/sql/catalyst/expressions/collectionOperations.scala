@@ -563,7 +563,7 @@ case class ArrayPosition(left: Expression, right: Expression)
 }
 
 /**
- * Returns the value of index `right` in Array `left` or key `right` in Map `left`.
+ * Returns the value of index `right` in Array `left` or the value for key `right` in Map `left`.
  */
 @ExpressionDescription(
   usage = """
