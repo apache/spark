@@ -138,6 +138,8 @@ final class OneVsRestModel private[ml] (
     @Since("1.4.0") val models: Array[_ <: ClassificationModel[_, _]])
   extends Model[OneVsRestModel] with OneVsRestParams with MLWritable {
 
+  require(models.nonEmpty, "OneVsRestModel requires at least one model for one class")
+
   @Since("2.4.0")
   val numClasses: Int = models.length
 
@@ -206,24 +208,25 @@ final class OneVsRestModel private[ml] (
       newDataset.unpersist()
     }
 
-    // output the RawPrediction as vector
     if (getRawPredictionCol != "") {
+      val numClass = models.length
+
+      // output the RawPrediction as vector
       val rawPredictionUDF = udf { (predictions: Map[Int, Double]) =>
-        val predArray = Array.fill[Double](numClasses)(0.0)
+        val predArray = Array.fill[Double](numClass)(0.0)
         predictions.foreach { case (idx, value) => predArray(idx) = value }
         Vectors.dense(predArray)
       }
 
       // output the index of the classifier with highest confidence as prediction
-      val labelUDF = udf { (rawpredictions: Vector) => rawpredictions.argmax.toDouble }
+      val labelUDF = udf { (rawPredictions: Vector) => rawPredictions.argmax.toDouble }
 
       // output confidence as raw prediction, label and label metadata as prediction
       aggregatedDataset
         .withColumn(getRawPredictionCol, rawPredictionUDF(col(accColName)))
         .withColumn(getPredictionCol, labelUDF(col(getRawPredictionCol)), labelMetadata)
         .drop(accColName)
-    }
-    else {
+    } else {
       // output the index of the classifier with highest confidence as prediction
       val labelUDF = udf { (predictions: Map[Int, Double]) =>
         predictions.maxBy(_._2)._1.toDouble
@@ -325,6 +328,10 @@ final class OneVsRest @Since("1.4.0") (
   /** @group setParam */
   @Since("1.5.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
+  @Since("2.4.0")
+  def setRawPredictionCol(value: String): this.type = set(rawPredictionCol, value)
 
   /**
    * The implementation of parallel one vs. rest runs the classification for
