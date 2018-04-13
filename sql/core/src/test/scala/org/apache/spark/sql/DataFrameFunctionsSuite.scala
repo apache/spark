@@ -276,6 +276,103 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("mask functions") {
+    val df = Seq("TestString-123", "", null).toDF("a")
+    checkAnswer(df.select(mask($"a")), Seq(Row("XxxxXxxxxx-nnn"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_first_n($"a", 4)), Seq(Row("XxxxString-123"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_last_n($"a", 4)), Seq(Row("TestString-nnn"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_show_first_n($"a", 4)),
+      Seq(Row("TestXxxxxx-nnn"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_show_last_n($"a", 4)),
+      Seq(Row("XxxxXxxxxx-123"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_hash($"a")),
+      Seq(Row("dd78d68ad1b23bde126812482dd70ac6"),
+        Row("d41d8cd98f00b204e9800998ecf8427e"),
+        Row(null)))
+
+    checkAnswer(df.select(mask($"a", "U", "l", "#")),
+      Seq(Row("UlllUlllll-###"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_first_n($"a", 4, "U", "l", "#")),
+      Seq(Row("UlllString-123"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_last_n($"a", 4, "U", "l", "#")),
+      Seq(Row("TestString-###"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_show_first_n($"a", 4, "U", "l", "#")),
+      Seq(Row("TestUlllll-###"), Row(""), Row(null)))
+    checkAnswer(df.select(mask_show_last_n($"a", 4, "U", "l", "#")),
+      Seq(Row("UlllUlllll-123"), Row(""), Row(null)))
+
+    checkAnswer(
+      df.selectExpr("mask(a)", "mask(a, 'U')", "mask(a, 'U', 'l')", "mask(a, 'U', 'l', '#')"),
+      Seq(Row("XxxxXxxxxx-nnn", "UxxxUxxxxx-nnn", "UlllUlllll-nnn", "UlllUlllll-###"),
+        Row("", "", "", ""),
+        Row(null, null, null, null)))
+    checkAnswer(sql("select mask(null)"), Row(null))
+    checkAnswer(sql("select mask('AAaa11', null, null, null)"), Row("XXxxnn"))
+    checkAnswer(df.selectExpr("mask(a, a)"), Seq(Row("XxxxXxxxxx-nnn"), Row(""), Row(null)))
+
+    checkAnswer(
+      df.selectExpr(
+        "mask_first_n(a)",
+        "mask_first_n(a, 6)",
+        "mask_first_n(a, 6, 'U')",
+        "mask_first_n(a, 6, 'U', 'l')",
+        "mask_first_n(a, 6, 'U', 'l', '#')"),
+      Seq(Row("XxxxString-123", "XxxxXxring-123", "UxxxUxring-123", "UlllUlring-123",
+        "UlllUlring-123"),
+        Row("", "", "", "", ""),
+        Row(null, null, null, null, null)))
+    checkAnswer(sql("select mask_first_n(null)"), Row(null))
+    checkAnswer(sql("select mask_first_n('A1aA1a', null, null, null, null)"), Row("XnxX1a"))
+    checkAnswer(spark.range(1).selectExpr("mask_first_n('A1aA1a', id)"), Row("XnxX1a"))
+
+    checkAnswer(
+      df.selectExpr(
+        "mask_last_n(a)",
+        "mask_last_n(a, 6)",
+        "mask_last_n(a, 6, 'U')",
+        "mask_last_n(a, 6, 'U', 'l')",
+        "mask_last_n(a, 6, 'U', 'l', '#')"),
+      Seq(Row("TestString-nnn", "TestStrixx-nnn", "TestStrixx-nnn", "TestStrill-nnn",
+        "TestStrill-###"),
+        Row("", "", "", "", ""),
+        Row(null, null, null, null, null)))
+    checkAnswer(sql("select mask_last_n(null)"), Row(null))
+    checkAnswer(sql("select mask_last_n('A1aA1a', null, null, null, null)"), Row("A1xXnx"))
+    checkAnswer(spark.range(1).selectExpr("mask_last_n('A1aA1a', id)"), Row("A1xXnx"))
+
+    checkAnswer(
+      df.selectExpr(
+        "mask_show_first_n(a)",
+        "mask_show_first_n(a, 6)",
+        "mask_show_first_n(a, 6, 'U')",
+        "mask_show_first_n(a, 6, 'U', 'l')",
+        "mask_show_first_n(a, 6, 'U', 'l', '#')"),
+      Seq(Row("TestXxxxxx-nnn", "TestStxxxx-nnn", "TestStxxxx-nnn", "TestStllll-nnn",
+        "TestStllll-###"),
+        Row("", "", "", "", ""),
+        Row(null, null, null, null, null)))
+    checkAnswer(sql("select mask_show_first_n(null)"), Row(null))
+    checkAnswer(sql("select mask_show_first_n('A1aA1a', null, null, null, null)"), Row("A1aAnx"))
+    checkAnswer(spark.range(1).selectExpr("mask_show_first_n('A1aA1a', id)"), Row("A1aAnx"))
+
+    checkAnswer(
+      df.selectExpr(
+        "mask_show_last_n(a)",
+        "mask_show_last_n(a, 6)",
+        "mask_show_last_n(a, 6, 'U')",
+        "mask_show_last_n(a, 6, 'U', 'l')",
+        "mask_show_last_n(a, 6, 'U', 'l', '#')"),
+      Seq(Row("XxxxXxxxxx-123", "XxxxXxxxng-123", "UxxxUxxxng-123", "UlllUlllng-123",
+        "UlllUlllng-123"),
+        Row("", "", "", "", ""),
+        Row(null, null, null, null, null)))
+    checkAnswer(sql("select mask_show_last_n(null)"), Row(null))
+    checkAnswer(sql("select mask_show_last_n('A1aA1a', null, null, null, null)"), Row("XnaA1a"))
+    checkAnswer(spark.range(1).selectExpr("mask_show_last_n('A1aA1a', id)"), Row("XnaA1a"))
+
+    checkAnswer(sql("select mask_hash(null)"), Row(null))
+  }
+
   test("sort_array function") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),
