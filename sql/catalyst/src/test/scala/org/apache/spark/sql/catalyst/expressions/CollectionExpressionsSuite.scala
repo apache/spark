@@ -1166,4 +1166,42 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayDistinct(c1), Seq[Seq[Int]](Seq[Int](5, 6), Seq[Int](2, 1)))
     checkEvaluation(ArrayDistinct(c2), Seq[Seq[Int]](null, Seq[Int](2, 1)))
   }
+
+  test("Array Union") {
+    val a00 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, false))
+    val a01 = Literal.create(Seq(4, 2), ArrayType(IntegerType, false))
+    val a02 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val a03 = Literal.create(Seq(1, 2, null, 4, 5), ArrayType(IntegerType))
+    val a04 = Literal.create(Seq(-5, 4, -3, 2, -1), ArrayType(IntegerType))
+    val a05 = Literal.create(Seq.empty[Int], ArrayType(IntegerType))
+
+    val a10 = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType, false))
+    val a11 = Literal.create(Seq(4L, 2L), ArrayType(LongType, false))
+    val a12 = Literal.create(Seq(1L, 2L, 3L), ArrayType(LongType))
+    val a13 = Literal.create(Seq(1L, 2L, null, 4L, 5L), ArrayType(LongType))
+    val a14 = Literal.create(Seq(-5L, 4L, -3L, 2L, -1L), ArrayType(LongType))
+    val a15 = Literal.create(Seq.empty[Long], ArrayType(LongType))
+
+    val a20 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType))
+    val a21 = Literal.create(Seq("c", "d", "a", "f"), ArrayType(StringType))
+    val a22 = Literal.create(Seq("b", null, "a", "g"), ArrayType(StringType))
+
+    val a30 = Literal.create(Seq(null, null), ArrayType(NullType))
+
+    checkEvaluation(ArrayUnion(a00, a01), UnsafeArrayData.fromPrimitiveArray(Array(4, 1, 3, 2)))
+    checkEvaluation(ArrayUnion(a01, a02), Seq(4, 2, 1, 3))
+    checkEvaluation(ArrayUnion(a03, a04), Seq(1, 2, null, 4, 5, -5, -3, -1))
+    checkEvaluation(ArrayUnion(a03, a05), Seq(1, 2, null, 4, 5))
+
+    checkEvaluation(
+      ArrayUnion(a10, a11), UnsafeArrayData.fromPrimitiveArray(Array(4L, 1L, 3L, 2L)))
+    checkEvaluation(ArrayUnion(a11, a12), Seq(4L, 2L, 1L, 3L))
+    checkEvaluation(ArrayUnion(a13, a14), Seq(1L, 2L, null, 4L, 5L, -5L, -3L, -1L))
+    checkEvaluation(ArrayUnion(a13, a15), Seq(1L, 2L, null, 4L, 5L))
+
+    checkEvaluation(ArrayUnion(a20, a21), Seq("b", "a", "c", "d", "f"))
+    checkEvaluation(ArrayUnion(a20, a22), Seq("b", "a", "c", null, "g"))
+
+    checkEvaluation(ArrayUnion(a30, a30), Seq(null))
+  }
 }

@@ -2021,7 +2021,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
       ByteArray.concat(inputs: _*)
     case StringType =>
       val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-      UTF8String.concat(inputs : _*)
+      UTF8String.concat(inputs: _*)
     case ArrayType(elementType, _) =>
       val inputs = children.toStream.map(_.eval(input))
       if (inputs.contains(null)) {
@@ -2035,7 +2035,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
         }
         val finalData = new Array[AnyRef](numberOfElements.toInt)
         var position = 0
-        for(ad <- arrayData) {
+        for (ad <- arrayData) {
           val arr = ad.toObjectArray(elementType)
           Array.copy(arr, 0, finalData, position, arr.length)
           position += arr.length
@@ -2082,23 +2082,24 @@ case class Concat(children: Seq[Expression]) extends Expression {
     """)
   }
 
-  private def genCodeForNumberOfElements(ctx: CodegenContext) : (String, String) = {
+  private def genCodeForNumberOfElements(ctx: CodegenContext): (String, String) = {
     val numElements = ctx.freshName("numElements")
-    val code = s"""
-        |long $numElements = 0L;
-        |for (int z = 0; z < ${children.length}; z++) {
-        |  $numElements += args[z].numElements();
-        |}
-        |if ($numElements > $MAX_ARRAY_LENGTH) {
-        |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $numElements +
-        |    " elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
-        |}
+    val code =
+      s"""
+         |long $numElements = 0L;
+         |for (int z = 0; z < ${children.length}; z++) {
+         |  $numElements += args[z].numElements();
+         |}
+         |if ($numElements > $MAX_ARRAY_LENGTH) {
+         |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $numElements +
+         |    " elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
+         |}
       """.stripMargin
 
     (code, numElements)
   }
 
-  private def nullArgumentProtection() : String = {
+  private def nullArgumentProtection(): String = {
     if (nullable) {
       s"""
          |for (int z = 0; z < ${children.length}; z++) {
@@ -2858,7 +2859,83 @@ case class ArrayRepeat(left: Expression, right: Expression)
        |$arrayDataName = new $genericArrayClass($arrayName);
      """.stripMargin
   }
+}
 
+/**
+ * Returns an array of the elements in the union of x and y, without duplicates
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, value) - Returns an array of the elements in the union of x and y,
+      without duplicates.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
+       array(1, 2, 3, 5)
+  """,
+  since = "2.4.0")
+case class ArrayUnion(left: Expression, right: Expression)
+  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val r = super.checkInputDataTypes()
+    if ((r == TypeCheckResult.TypeCheckSuccess) &&
+      (left.dataType.asInstanceOf[ArrayType].elementType !=
+        right.dataType.asInstanceOf[ArrayType].elementType)) {
+      TypeCheckResult.TypeCheckFailure("Element type in both arrays must be the same")
+    } else {
+      r
+    }
+  }
+
+  override def dataType: DataType = left.dataType
+
+  override def nullSafeEval(linput: Any, rinput: Any): Any = {
+    val elementType = dataType.asInstanceOf[ArrayType].elementType
+    val cnl = left.dataType.asInstanceOf[ArrayType].containsNull
+    val cnr = right.dataType.asInstanceOf[ArrayType].containsNull
+    val larray = linput.asInstanceOf[ArrayData]
+    val rarray = rinput.asInstanceOf[ArrayData]
+
+    if (!cnl && !cnr && elementType == IntegerType) {
+      // avoid boxing primitive int array elements
+      val hs = new OpenHashSet[Int]
+      var i = 0
+      while (i < larray.numElements()) {
+        hs.add(larray.getInt(i))
+        i += 1
+      }
+      i = 0
+      while (i < rarray.numElements()) {
+        hs.add(rarray.getInt(i))
+        i += 1
+      }
+      UnsafeArrayData.fromPrimitiveArray(hs.iterator.toArray)
+    } else if (!cnl && !cnr && elementType == LongType) {
+      // avoid boxing of primitive long array elements
+      val hs = new OpenHashSet[Long]
+      var i = 0
+      while (i < larray.numElements()) {
+        hs.add(larray.getLong(i))
+        i += 1
+      }
+      i = 0
+      while (i < rarray.numElements()) {
+        hs.add(rarray.getLong(i))
+        i += 1
+      }
+      UnsafeArrayData.fromPrimitiveArray(hs.iterator.toArray)
+    } else {
+      new GenericArrayData(
+        (larray.toArray[AnyRef](elementType) union rarray.toArray[AnyRef](elementType))
+          .distinct.asInstanceOf[Array[Any]])
+    }
+  }
+
+  override def prettyName: String = "array_union"
 }
 
 /**

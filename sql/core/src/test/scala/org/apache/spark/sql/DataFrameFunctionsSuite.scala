@@ -1120,6 +1120,47 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
   }
 
+  test("array union functions") {
+    val df1 = Seq((Array(1, 2, 3), Array(4, 2))).toDF("a", "b")
+    val ans1 = Row(Seq(4, 1, 3, 2))
+    checkAnswer(df1.select(array_union($"a", $"b")), ans1)
+    checkAnswer(df1.selectExpr("array_union(a, b)"), ans1)
+
+    val df2 = Seq((Array[Integer](1, 2, null, 4, 5), Array(-5, 4, -3, 2, -1))).toDF("a", "b")
+    val ans2 = Row(Seq(1, 2, null, 4, 5, -5, -3, -1))
+    checkAnswer(df2.select(array_union($"a", $"b")), ans2)
+    checkAnswer(df2.selectExpr("array_union(a, b)"), ans2)
+
+    val df3 = Seq((Array(1L, 2L, 3L), Array(4L, 2L))).toDF("a", "b")
+    val ans3 = Row(Seq(4L, 1L, 3L, 2L))
+    checkAnswer(df3.select(array_union($"a", $"b")), ans3)
+    checkAnswer(df3.selectExpr("array_union(a, b)"), ans3)
+
+    val df4 = Seq((Array[java.lang.Long](1L, 2L, null, 4L, 5L), Array(-5L, 4L, -3L, 2L, -1L)))
+      .toDF("a", "b")
+    val ans4 = Row(Seq(1L, 2L, null, 4L, 5L, -5L, -3L, -1L))
+    checkAnswer(df4.select(array_union($"a", $"b")), ans4)
+    checkAnswer(df4.selectExpr("array_union(a, b)"), ans4)
+
+    val df5 = Seq((Array("b", "a", "c"), Array("b", null, "a", "g"))).toDF("a", "b")
+    val ans5 = Row(Seq("b", "a", "c", null, "g"))
+    checkAnswer(df5.select(array_union($"a", $"b")), ans5)
+    checkAnswer(df5.selectExpr("array_union(a, b)"), ans5)
+
+    val df6 = Seq((null, null)).toDF("a", "b")
+    val ans6 = Row(null)
+    checkAnswer(df6.select(array_union($"a", $"b")), ans6)
+    checkAnswer(df6.selectExpr("array_union(a, b)"), ans6)
+
+    val df0 = Seq((Array(1), Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df0.select(array_union($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df0.selectExpr("array_contains(a, b)")
+    }
+  }
+
   test("concat function - arrays") {
     val nseqi : Seq[Int] = null
     val nseqs : Seq[String] = null
