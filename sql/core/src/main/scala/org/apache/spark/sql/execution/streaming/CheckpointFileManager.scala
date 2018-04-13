@@ -237,7 +237,12 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
   }
 
   override def exists(path: Path): Boolean = {
-    fs.exists(path)
+    try
+      return fs.getFileStatus(path) != null
+    catch {
+      case e: FileNotFoundException =>
+        return false
+    }
   }
 
   override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
@@ -247,17 +252,14 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
     }
 
     if (!fs.rename(srcPath, dstPath)) {
-      // If overwriteIfPossible = false, then we want to find out why the rename failed and
-      // try to throw the right error.
+      // FileSystem.rename() returning false is very ambiguous as it can be for many reasons.
+      // This tries to make a best effort attempt to return the most appropriate exception.
       if (fs.exists(dstPath)) {
-        // Some implementations of FileSystem may only return false instead of throwing
-        // FileAlreadyExistsException. In that case, explicitly throw the error the error
-        // if overwriteIfPossible = false. Note that this is definitely not atomic.
-        // This is only a best-effort attempt to identify the situation when rename returned
-        // false.
         if (!overwriteIfPossible) {
-          throw new FileAlreadyExistsException(s"$dstPath already exists")
+          throw new FileAlreadyExistsException(s"Failed to rename as $dstPath already exists")
         }
+      } else if (!fs.exists(srcPath)) {
+        throw new FileNotFoundException(s"Failed to rename as $srcPath was not found")
       } else {
         val msg = s"Failed to rename temp file $srcPath to $dstPath as rename returned false"
         logWarning(msg)

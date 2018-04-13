@@ -137,22 +137,6 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
     }
   }
 
-  /**
-   * @return the deserialized metadata in a batch file, or None if file not exist.
-   * @throws IllegalArgumentException when path does not point to a batch file.
-   */
-  def get(batchFile: Path): Option[T] = {
-    if (fileManager.exists(batchFile)) {
-      if (isBatchFile(batchFile)) {
-        get(pathToBatchId(batchFile))
-      } else {
-        throw new IllegalArgumentException(s"File ${batchFile} is not a batch file!")
-      }
-    } else {
-      None
-    }
-  }
-
   override def get(batchId: Long): Option[T] = {
     val batchMetadataFile = batchIdToPath(batchId)
     if (fileManager.exists(batchMetadataFile)) {

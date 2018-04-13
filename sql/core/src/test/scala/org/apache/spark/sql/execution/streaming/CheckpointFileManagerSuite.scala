@@ -34,7 +34,7 @@ abstract class CheckpointFileManagerTests extends SparkFunSuite {
 
   def createManager(path: Path): CheckpointFileManager
 
-  test("mkdirs, list, createAtomic, open, delete") {
+  test("mkdirs, list, createAtomic, open, delete, exists") {
     withTempPath { p =>
       val basePath = new Path(p.getAbsolutePath)
       val fm = createManager(basePath)
