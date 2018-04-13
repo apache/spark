@@ -23,7 +23,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import scala.io.{Source => IOSource}
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.fs.{Path, PathFilter}
+import org.apache.hadoop.fs.{FSDataOutputStream, Path, PathFilter}
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
@@ -138,6 +138,9 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
     logData.foreach { data =>
       out.write('\n')
       out.write(Serialization.write(data).getBytes(UTF_8))
+    }
+    if (out.isInstanceOf[FSDataOutputStream]) {
+      out.asInstanceOf[FSDataOutputStream].hflush
     }
   }
 

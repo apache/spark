@@ -123,6 +123,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           serialize(metadata, output)
           return Some(tempPath)
         } finally {
+          output.hflush()
           output.close()
         }
       } catch {
