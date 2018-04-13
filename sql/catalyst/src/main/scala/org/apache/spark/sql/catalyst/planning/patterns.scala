@@ -197,14 +197,15 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
     if(lattrs.size != 1 || rattrs.size != 1) {
       "none"
     }
-    else if(canEvaluate(l, left) && canEvaluate(r, right)) {
+    else if (canEvaluate(l, left) && canEvaluate(r, right)) {
       val equiset = joinKeys.filter{ case (ljk : Expression, rjk : Expression) =>
         ljk.references.toSeq.contains(lattrs(0)) && rjk.references.toSeq.contains(rattrs(0)) }
-      if(equiset.isEmpty) {
+      if (equiset.isEmpty) {
         "asis"
       }
-      else
+      else {
         "none"
+      }
     }
     else if (canEvaluate(l, right) && canEvaluate(r, left)) {
       val equiset = joinKeys.filter{ case (ljk : Expression, rjk : Expression) =>
@@ -212,11 +213,13 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       if(equiset.isEmpty) {
         "vs"
       }
-      else
+      else {
         "none"
+      }
     }
-    else
+    else {
       "none"
+    }
   }
 
 }

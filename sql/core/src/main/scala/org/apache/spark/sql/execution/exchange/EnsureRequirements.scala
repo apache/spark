@@ -284,10 +284,12 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         ShuffledHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, buildSide, condition,
           left, right)
 
-      case SortMergeJoinExec(leftKeys, rightKeys, joinType, rangeConditions, condition, left, right) =>
+      case SortMergeJoinExec(leftKeys, rightKeys, joinType, rangeConditions,
+          condition, left, right) =>
         val (reorderedLeftKeys, reorderedRightKeys) =
           reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
-        SortMergeJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, rangeConditions, condition, left, right)
+        SortMergeJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, rangeConditions,
+          condition, left, right)
       case other => other
     }
   }

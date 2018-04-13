@@ -19,17 +19,15 @@ package org.apache.spark.sql.execution
 
 import java.util.ConcurrentModificationException
 
-import org.apache.spark.internal.Logging
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray.DefaultInitialSizeOfInMemoryBuffer
 import org.apache.spark.storage.BlockManager
-import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, UnsafeSorterIterator}
 import org.apache.spark.{SparkEnv, TaskContext}
-
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * An append-only array for [[UnsafeRow]]s that strictly keeps content in an in-memory array
@@ -101,12 +99,6 @@ private[sql] class InMemoryUnsafeRowQueue(
    * Clears up resources (eg. memory) held by the backing storage
    */
   override def clear(): Unit = {
-    /*if (spillableArray != null) {
-      // The last `spillableArray` of this task will be cleaned up via task completion listener
-      // inside `UnsafeExternalSorter`
-      spillableArray.cleanupResources()
-      spillableArray = null
-    } else*/
     if (inMemoryQueue != null) {
       inMemoryQueue.clear()
     }
@@ -116,15 +108,16 @@ private[sql] class InMemoryUnsafeRowQueue(
   }
 
   def dequeue(): Option[UnsafeRow] = {
-    if(numRows == 0)
+    if (numRows == 0) {
       None
+    }
     else {
       numRows -= 1
       Some(inMemoryQueue.dequeue())
     }
   }
 
-  def get(idx:Int): UnsafeRow = {
+  def get(idx: Int): UnsafeRow = {
     inMemoryQueue(idx)
   }
 
@@ -133,44 +126,6 @@ private[sql] class InMemoryUnsafeRowQueue(
       inMemoryQueue += unsafeRow.copy()
     } else {
       throw new RuntimeException(s"Reached spill threshold of $numRowsInMemoryBufferThreshold rows")
-      /*if (spillableArray == null) {
-        logInfo(s"Reached spill threshold of $numRowsInMemoryBufferThreshold rows, switching to " +
-          s"${classOf[UnsafeExternalSorter].getName}")
-
-        // We will not sort the rows, so prefixComparator and recordComparator are null
-        spillableArray = UnsafeExternalSorter.create(
-          taskMemoryManager,
-          blockManager,
-          serializerManager,
-          taskContext,
-          null,
-          null,
-          initialSize,
-          pageSizeBytes,
-          numRowsSpillThreshold,
-          false)
-
-        // populate with existing in-memory buffered rows
-        if (inMemoryBuffer != null) {
-          inMemoryBuffer.foreach(existingUnsafeRow =>
-            spillableArray.insertRecord(
-              existingUnsafeRow.getBaseObject,
-              existingUnsafeRow.getBaseOffset,
-              existingUnsafeRow.getSizeInBytes,
-              0,
-              false)
-          )
-          inMemoryBuffer.clear()
-        }
-        numFieldsPerRow = unsafeRow.numFields()
-      }
-
-      spillableArray.insertRecord(
-        unsafeRow.getBaseObject,
-        unsafeRow.getBaseOffset,
-        unsafeRow.getSizeInBytes,
-        0,
-        false)*/
     }
 
     numRows += 1
@@ -191,14 +146,8 @@ private[sql] class InMemoryUnsafeRowQueue(
           s"Total elements: $numRows, requested `startIndex`: $startIndex")
     }
 
-    //if (spillableArray == null) {
-      new InMemoryBufferIterator(startIndex)
-    /*} else {
-      new SpillableArrayIterator(spillableArray.getIterator(startIndex), numFieldsPerRow)
-    }*/
+    new InMemoryBufferIterator(startIndex)
   }
-
-//  override def generateIterator(): Iterator[UnsafeRow] = generateIterator(startIndex = 0)
 
   private[this]
   abstract class ExternalAppendOnlyUnsafeRowArrayIterator extends Iterator[UnsafeRow] {
@@ -229,23 +178,6 @@ private[sql] class InMemoryUnsafeRowQueue(
       result
     }
   }
-
-  /*private[this] class SpillableArrayIterator(
-      iterator: UnsafeSorterIterator,
-      numFieldPerRow: Int)
-    extends ExternalAppendOnlyUnsafeRowArrayIterator {
-
-    private val currentRow = new UnsafeRow(numFieldPerRow)
-
-    override def hasNext(): Boolean = !isModified() && iterator.hasNext
-
-    override def next(): UnsafeRow = {
-      throwExceptionIfModified()
-      iterator.loadNext()
-      currentRow.pointTo(iterator.getBaseObject, iterator.getBaseOffset, iterator.getRecordLength)
-      currentRow
-    }
-  }*/
 }
 
 

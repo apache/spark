@@ -136,13 +136,14 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         boundCondition: Option[Expression],
         leftPlan: SparkPlan,
         rightPlan: SparkPlan) = {
-      val sortMergeJoin = joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, Nil, boundCondition,
-        leftPlan, rightPlan)
+      val sortMergeJoin = joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, Nil,
+        boundCondition, leftPlan, rightPlan)
       EnsureRequirements(spark.sessionState.conf).apply(sortMergeJoin)
     }
 
     test(s"$testName using BroadcastHashJoin (build=left)") {
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions, boundCondition, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions,
+          boundCondition, _, _) =>
         assert(!expectRangeJoin && rangeConditions.isEmpty ||
           expectRangeJoin && rangeConditions.size == 2)
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -156,7 +157,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     }
 
     test(s"$testName using BroadcastHashJoin (build=right)") {
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions, boundCondition, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions,
+          boundCondition, _, _) =>
         assert(!expectRangeJoin && rangeConditions.isEmpty ||
           expectRangeJoin && rangeConditions.size == 2)
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -170,7 +172,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     }
 
     test(s"$testName using ShuffledHashJoin (build=left)") {
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions, boundCondition, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions,
+          boundCondition, _, _) =>
         assert(!expectRangeJoin && rangeConditions.isEmpty ||
           expectRangeJoin && rangeConditions.size == 2)
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -184,7 +187,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     }
 
     test(s"$testName using ShuffledHashJoin (build=right)") {
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions, boundCondition, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions,
+          boundCondition, _, _) =>
         assert(!expectRangeJoin && rangeConditions.isEmpty ||
           expectRangeJoin && rangeConditions.size == 2)
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -198,7 +202,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     }
 
     test(s"$testName using SortMergeJoin") {
-      extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions, boundCondition, _, _) =>
+      extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions,
+          boundCondition, _, _) =>
         assert(!expectRangeJoin && rangeConditions.isEmpty ||
           expectRangeJoin && rangeConditions.size == 2)
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
@@ -304,7 +309,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       left,
       right,
       () => ((left("a") === right("a")) and (left("b") <= right("b")-1)
-        and (left("b") >= right("b")+1)).expr,
+        and (left("b") >= right("b") + 1)).expr,
       Seq(
         (1, 1, 1, 1),
         (1, 1, 1, 2),
