@@ -293,7 +293,7 @@ case class ArrayContains(left: Expression, right: Expression)
  * Returns the maximum value in the array.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(array) - Returns the maximum value in the array.",
+  usage = "_FUNC_(array) - Returns the maximum value in the array. NULL elements are skipped.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 20, null, 3));
@@ -350,4 +350,6 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
     case ArrayType(dt, _) => dt
     case _ => throw new IllegalStateException(s"$prettyName accepts only arrays.")
   }
+
+  override def prettyName: String = "array_max"
 }
