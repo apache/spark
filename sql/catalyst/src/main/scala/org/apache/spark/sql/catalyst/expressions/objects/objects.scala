@@ -32,9 +32,10 @@ import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Common base class for [[StaticInvoke]], [[Invoke]], and [[NewInstance]].
@@ -60,13 +61,13 @@ trait InvokeLike extends Expression with NonSQLExpression {
    * @param ctx a [[CodegenContext]]
    * @return (code to prepare arguments, argument string, result of argument null check)
    */
-  def prepareArguments(ctx: CodegenContext): (String, String, String) = {
+  def prepareArguments(ctx: CodegenContext): (String, String, ExprValue) = {
 
     val resultIsNull = if (needNullCheck) {
       val resultIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "resultIsNull")
-      resultIsNull
+      JavaCode.isNullGlobal(resultIsNull)
     } else {
-      "false"
+      FalseLiteral
     }
     val argValues = arguments.map { e =>
       val argValue = ctx.addMutableState(CodeGenerator.javaType(e.dataType), "argValue")
@@ -217,12 +218,21 @@ case class StaticInvoke(
     returnNullable: Boolean = true) extends InvokeLike {
 
   val objectName = staticObject.getName.stripSuffix("$")
+  val cls = if (staticObject.getName == objectName) {
+    staticObject
+  } else {
+    Utils.classForName(objectName)
+  }
 
   override def nullable: Boolean = needNullCheck || returnNullable
   override def children: Seq[Expression] = arguments
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+  lazy val argClasses = ScalaReflection.expressionJavaClasses(arguments)
+  @transient lazy val method = cls.getDeclaredMethod(functionName, argClasses : _*)
+
+  override def eval(input: InternalRow): Any = {
+    invoke(null, method, arguments, input, dataType)
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
@@ -234,7 +244,7 @@ case class StaticInvoke(
     val prepareIsNull = if (nullable) {
       s"boolean ${ev.isNull} = $resultIsNull;"
     } else {
-      ev.isNull = "false"
+      ev.isNull = FalseLiteral
       ""
     }
 
@@ -536,7 +546,7 @@ case class WrapOption(child: Expression, optType: DataType)
         ${inputObject.isNull} ?
         scala.Option$$.MODULE$$.apply(null) : new scala.Some(${inputObject.value});
     """
-    ev.copy(code = code, isNull = "false")
+    ev.copy(code = code, isNull = FalseLiteral)
   }
 }
 
@@ -558,7 +568,12 @@ case class LambdaVariable(
   }
 
   override def genCode(ctx: CodegenContext): ExprCode = {
-    ExprCode(code = "", value = value, isNull = if (nullable) isNull else "false")
+    val isNullValue = if (nullable) {
+      JavaCode.isNullVariable(isNull)
+    } else {
+      FalseLiteral
+    }
+    ExprCode(value = JavaCode.variable(value, dataType), isNull = isNullValue)
   }
 
   // This won't be called as `genCode` is overrided, just overriding it to make
@@ -830,7 +845,7 @@ case class MapObjects private(
     // Make a copy of the data if it's unsafe-backed
     def makeCopyIfInstanceOf(clazz: Class[_ <: Any], value: String) =
       s"$value instanceof ${clazz.getSimpleName}? ${value}.copy() : $value"
-    val genFunctionValue = lambdaFunction.dataType match {
+    val genFunctionValue: String = lambdaFunction.dataType match {
       case StructType(_) => makeCopyIfInstanceOf(classOf[UnsafeRow], genFunction.value)
       case ArrayType(_, _) => makeCopyIfInstanceOf(classOf[UnsafeArrayData], genFunction.value)
       case MapType(_, _, _) => makeCopyIfInstanceOf(classOf[UnsafeMapData], genFunction.value)
@@ -1333,7 +1348,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
          |$childrenCode
          |final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, $schemaField);
        """.stripMargin
-    ev.copy(code = code, isNull = "false")
+    ev.copy(code = code, isNull = FalseLiteral)
   }
 }
 
@@ -1410,8 +1425,45 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
   override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
   override def dataType: DataType = beanInstance.dataType
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+  private lazy val resolvedSetters = {
+    assert(beanInstance.dataType.isInstanceOf[ObjectType])
+
+    val ObjectType(beanClass) = beanInstance.dataType
+    setters.map {
+      case (name, expr) =>
+        // Looking for known type mapping.
+        // But also looking for general `Object`-type parameter for generic methods.
+        val paramTypes = ScalaReflection.expressionJavaClasses(Seq(expr)) ++ Seq(classOf[Object])
+        val methods = paramTypes.flatMap { fieldClass =>
+          try {
+            Some(beanClass.getDeclaredMethod(name, fieldClass))
+          } catch {
+            case e: NoSuchMethodException => None
+          }
+        }
+        if (methods.isEmpty) {
+          throw new NoSuchMethodException(s"""A method named "$name" is not declared """ +
+            "in any enclosing class nor any supertype")
+        }
+        methods.head -> expr
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val instance = beanInstance.eval(input)
+    if (instance != null) {
+      val bean = instance.asInstanceOf[Object]
+      resolvedSetters.foreach {
+        case (setter, expr) =>
+          val paramVal = expr.eval(input)
+          // We don't call setter if input value is null.
+          if (paramVal != null) {
+            setter.invoke(bean, paramVal.asInstanceOf[AnyRef])
+          }
+      }
+    }
+    instance
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val instanceGen = beanInstance.genCode(ctx)
@@ -1424,7 +1476,9 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
         val fieldGen = fieldValue.genCode(ctx)
         s"""
            |${fieldGen.code}
-           |$javaBeanInstance.$setterMethod(${fieldGen.value});
+           |if (!${fieldGen.isNull}) {
+           |  $javaBeanInstance.$setterMethod(${fieldGen.value});
+           |}
          """.stripMargin
     }
     val initializeCode = ctx.splitExpressionsWithCurrentInputs(
@@ -1489,7 +1543,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String] = Nil)
         throw new NullPointerException($errMsgField);
       }
      """
-    ev.copy(code = code, isNull = "false", value = childGen.value)
+    ev.copy(code = code, isNull = FalseLiteral, value = childGen.value)
   }
 }
 
@@ -1540,7 +1594,7 @@ case class GetExternalRowField(
 
       final Object ${ev.value} = ${row.value}.get($index);
      """
-    ev.copy(code = code, isNull = "false")
+    ev.copy(code = code, isNull = FalseLiteral)
   }
 }
 

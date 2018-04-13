@@ -17,7 +17,7 @@ container images and entrypoints.**
 * A runnable distribution of Spark 2.3 or above.
 * A running Kubernetes cluster at version >= 1.6 with access configured to it using
 [kubectl](https://kubernetes.io/docs/user-guide/prereqs/).  If you do not already have a working Kubernetes cluster,
-you may setup a test cluster on your local machine using
+you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
   * We recommend using the latest release of minikube with the DNS addon enabled.
   * Be aware that the default minikube configuration is not enough for running Spark applications.
@@ -221,7 +221,7 @@ that allows driver pods to create pods and services under the default Kubernetes
 [RBAC](https://kubernetes.io/docs/admin/authorization/rbac/) policies. Sometimes users may need to specify a custom
 service account that has the right role granted. Spark on Kubernetes supports specifying a custom service account to
 be used by the driver pod through the configuration property
-`spark.kubernetes.authenticate.driver.serviceAccountName=<service account name>`. For example to make the driver pod
+`spark.kubernetes.authenticate.driver.serviceAccountName=<service account name>`. For example, to make the driver pod
 use the `spark` service account, a user simply adds the following option to the `spark-submit` command:
 
 ```

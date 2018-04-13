@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.io.File
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -26,6 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 /**
@@ -242,6 +245,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("change stats after set location command") {
     val table = "change_stats_set_location_table"
+    val tableLoc = new File(spark.sessionState.catalog.defaultTablePath(TableIdentifier(table)))
     Seq(false, true).foreach { autoUpdate =>
       withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
         withTable(table) {
@@ -269,6 +273,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
               assert(fetched3.get.sizeInBytes == fetched1.get.sizeInBytes)
             } else {
               checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
+              // SPARK-19724: clean up the previous table location.
+              waitForTasksToFinish()
+              Utils.deleteRecursively(tableLoc)
             }
           }
         }
