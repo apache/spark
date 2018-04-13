@@ -143,7 +143,7 @@ object CSVDataSource {
               s"""|CSV file header does not contain the expected fields.
                   | Header: ${columnNames.mkString(", ")}
                   | Schema: ${fieldNames.mkString(", ")}
-                  |Expected: $nameInSchema but found: $nameInHeader
+                  |Expected: ${columnNames(i)} but found: ${fieldNames(i)}
                   |CSV file: $fileName""".stripMargin
             )
           }
@@ -160,6 +160,14 @@ object CSVDataSource {
       error.headOption.foreach { msg =>
         throw new IllegalArgumentException(msg)
       }
+    }
+  }
+
+  def checkHeader(header: String, parser: CsvParser, schema: StructType, fileName: String,
+    checkHeaderFlag: Boolean, caseSensitive: Boolean): Unit = {
+    if (checkHeaderFlag) {
+      checkHeaderColumnNames(schema, parser.parseLine(header), fileName, checkHeaderFlag,
+        caseSensitive)
     }
   }
 }
@@ -185,7 +193,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       // Note: if there are only comments in the first block, the header would probably
       // be not extracted.
       CSVUtils.extractHeader(lines, parser.options).foreach { header =>
-        checkHeader(header, parser.tokenizer, dataSchema, file.filePath,
+        CSVDataSource.checkHeader(header, parser.tokenizer, dataSchema, file.filePath,
           checkHeaderFlag = !parser.options.enforceSchema, caseSensitive)
       }
     }
@@ -246,14 +254,6 @@ object TextInputCSVDataSource extends CSVDataSource {
         .hadoopFile[LongWritable, Text, TextInputFormat](paths.mkString(","))
         .mapPartitions(_.map(pair => new String(pair._2.getBytes, 0, pair._2.getLength, charset)))
       sparkSession.createDataset(rdd)(Encoders.STRING)
-    }
-  }
-
-  def checkHeader(header: String, parser: CsvParser, schema: StructType, fileName: String,
-      checkHeaderFlag: Boolean, caseSensitive: Boolean): Unit = {
-    if (checkHeaderFlag) {
-      checkHeaderColumnNames(schema, parser.parseLine(header), fileName, checkHeaderFlag,
-        caseSensitive)
     }
   }
 }

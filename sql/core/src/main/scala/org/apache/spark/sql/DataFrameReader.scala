@@ -21,6 +21,8 @@ import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
+import com.univocity.parsers.csv.CsvParser
+
 import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.api.java.JavaRDD
@@ -486,6 +488,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       StructType(schema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
 
     val linesWithoutHeader: RDD[String] = maybeFirstLine.map { firstLine =>
+      if (parsedOptions.enforceSchema == false) {
+        CSVDataSource.checkHeader(firstLine, new CsvParser(parsedOptions.asParserSettings),
+          actualSchema, csvDataset.getClass.getCanonicalName, checkHeaderFlag = true,
+          sparkSession.sessionState.conf.caseSensitiveAnalysis)
+      }
       filteredLines.rdd.mapPartitions(CSVUtils.filterHeaderLine(_, firstLine, parsedOptions))
     }.getOrElse(filteredLines.rdd)
 

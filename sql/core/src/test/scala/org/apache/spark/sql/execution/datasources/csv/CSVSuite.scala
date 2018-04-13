@@ -1374,7 +1374,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("Ignore column name case if spark.sql.caseSensitive is false") {
+  test("SPARK-23786: Ignore column name case if spark.sql.caseSensitive is false") {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       withTempPath { path =>
         import collection.JavaConverters._
@@ -1389,5 +1389,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         checkAnswer(idf, odf)
       }
     }
+  }
+
+  test("SPARK-23786: check header on parsing of dataset of strings") {
+    val ds = Seq("columnA,columnB", "1.0,1000.0").toDS()
+    val ischema = new StructType().add("columnB", DoubleType).add("columnA", DoubleType)
+    val exception = intercept[IllegalArgumentException] {
+      spark.read.schema(ischema).option("header", true).option("enforceSchema", false).csv(ds)
+    }
+
+    assert(exception.getMessage.contains("CSV file header does not contain the expected fields"))
   }
 }
