@@ -930,6 +930,13 @@ object SQLConf {
       .intConf
       .createWithDefault(100)
 
+  val STREAMING_CHECKPOINT_FILE_MANAGER_CLASS =
+    buildConf("spark.sql.streaming.checkpointFileManagerClass")
+      .doc("The class used to write checkpoint files atomically. This class must be a subclass " +
+        "of the interface CheckpointFileManager.")
+      .internal()
+      .stringConf
+
   val NDV_MAX_ERROR =
     buildConf("spark.sql.statistics.ndv.maxError")
       .internal()
