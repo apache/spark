@@ -261,6 +261,7 @@ class ContinuousExecution(
       epochUpdateThread.setDaemon(true)
       epochUpdateThread.start()
 
+      updateStatusMessage("Running")
       reportTimeTaken("runContinuous") {
         SQLExecution.withNewExecutionId(
           sparkSessionForQuery, lastExecution)(lastExecution.toRdd)
@@ -313,6 +314,7 @@ class ContinuousExecution(
    * before this is called.
    */
   def commit(epoch: Long): Unit = {
+    updateStatusMessage(s"Committing epoch $epoch")
     assert(continuousSources.length == 1, "only one continuous source supported currently")
     assert(offsetLog.get(epoch).isDefined, s"offset for epoch $epoch not reported before commit")
     synchronized {
