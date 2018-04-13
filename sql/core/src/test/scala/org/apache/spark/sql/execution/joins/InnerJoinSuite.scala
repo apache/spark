@@ -70,6 +70,19 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     (3, 2)
   ).toDF("a", "b")
 
+  private lazy val rangeTestData1 = Seq(
+    (1, 1), (1, 2), (1, 3),
+    (2, 1), (2, 2), (2, 3),
+    (3, 1), (3, 2), (3, 3),
+    (4, 1), (4, 2), (4, 3)
+  ).toDF("a", "b")
+
+  private lazy val rangeTestData2 = Seq(
+    (1, 1), (1, 2), (1, 3),
+    (2, 1), (2, 2), (2, 3),
+    (3, 1), (3, 2), (3, 3)
+  ).toDF("a", "b")
+
   // Note: the input dataframes and expression must be evaluated lazily because
   // the SQLContext should be used only within a test to keep SQL tests stable
   private def testInnerJoin(
@@ -77,7 +90,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       leftRows: => DataFrame,
       rightRows: => DataFrame,
       condition: () => Expression,
-      expectedAnswer: Seq[Product]): Unit = {
+      expectedAnswer: Seq[Product],
+      expectRangeJoin: Boolean = false): Unit = {
 
     def extractJoinParts(): Option[ExtractEquiJoinKeys.ReturnType] = {
       val join = Join(leftRows.logicalPlan, rightRows.logicalPlan, Inner, Some(condition()))
@@ -129,6 +143,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
 
     test(s"$testName using BroadcastHashJoin (build=left)") {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions, boundCondition, _, _) =>
+        assert(!expectRangeJoin && rangeConditions.isEmpty ||
+          expectRangeJoin && rangeConditions.size == 2)
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeBroadcastHashJoin(
@@ -141,6 +157,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
 
     test(s"$testName using BroadcastHashJoin (build=right)") {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions, boundCondition, _, _) =>
+        assert(!expectRangeJoin && rangeConditions.isEmpty ||
+          expectRangeJoin && rangeConditions.size == 2)
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeBroadcastHashJoin(
@@ -153,6 +171,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
 
     test(s"$testName using ShuffledHashJoin (build=left)") {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions, boundCondition, _, _) =>
+        assert(!expectRangeJoin && rangeConditions.isEmpty ||
+          expectRangeJoin && rangeConditions.size == 2)
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeShuffledHashJoin(
@@ -165,6 +185,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
 
     test(s"$testName using ShuffledHashJoin (build=right)") {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions, boundCondition, _, _) =>
+        assert(!expectRangeJoin && rangeConditions.isEmpty ||
+          expectRangeJoin && rangeConditions.size == 2)
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeShuffledHashJoin(
@@ -177,6 +199,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
 
     test(s"$testName using SortMergeJoin") {
       extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions, boundCondition, _, _) =>
+        assert(!expectRangeJoin && rangeConditions.isEmpty ||
+          expectRangeJoin && rangeConditions.size == 2)
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
             makeSortMergeJoin(leftKeys, rightKeys, boundCondition, leftPlan, rightPlan),
@@ -269,6 +293,42 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         (1, 0, 1, 0),
         (2, null, 2, null)
       )
+    )
+  }
+
+  {
+    lazy val left = rangeTestData1
+    lazy val right = rangeTestData2
+    testInnerJoin(
+      "inner range join",
+      left,
+      right,
+      () => ((left("a") === right("a")) and (left("b") <= right("b")-1)
+        and (left("b") >= right("b")+1)).expr,
+      Seq(
+        (1, 1, 1, 1),
+        (1, 1, 1, 2),
+        (1, 2, 1, 1),
+        (1, 2, 1, 2),
+        (1, 2, 1, 3),
+        (1, 3, 1, 2),
+        (1, 3, 1, 3),
+        (2, 1, 2, 1),
+        (2, 1, 2, 2),
+        (2, 2, 2, 1),
+        (2, 2, 2, 2),
+        (2, 2, 2, 3),
+        (2, 3, 2, 2),
+        (2, 3, 2, 3),
+        (3, 1, 3, 1),
+        (3, 1, 3, 2),
+        (3, 2, 3, 1),
+        (3, 2, 3, 2),
+        (3, 2, 3, 3),
+        (3, 3, 3, 2),
+        (3, 3, 3, 3)
+      ),
+      true
     )
   }
 
