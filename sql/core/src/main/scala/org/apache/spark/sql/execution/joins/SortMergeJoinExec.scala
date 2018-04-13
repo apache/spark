@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -224,7 +225,7 @@ case class SortMergeJoinExec(
             private[this] var currentRightMatches: ExternalAppendOnlyUnsafeRowArray = _
             private[this] var rightMatchesIterator: Iterator[UnsafeRow] = null
             private[this] val smjScanner =
-              if(lowerSecondaryRangeExpression.isDefined ||
+              if (lowerSecondaryRangeExpression.isDefined ||
                   upperSecondaryRangeExpression.isDefined) {
                 new SortMergeJoinInnerRangeScanner(
                   createLeftKeyGenerator(),
@@ -490,8 +491,8 @@ case class SortMergeJoinExec(
      """.stripMargin
   }
 
-  private def shouldUseSecondaryRangeJoin():Boolean = {
-    //TODO check sorting of the two relations? - Check it during planning?
+  private def shouldUseSecondaryRangeJoin(): Boolean = {
+    // TODO check sorting of the two relations? - Check it during planning?
     lowerSecondaryRangeExpression.isDefined || upperSecondaryRangeExpression.isDefined
   }
 
@@ -505,9 +506,10 @@ case class SortMergeJoinExec(
     // Inline mutable state since not many join operations in a task
     val leftRow = ctx.addMutableState("InternalRow", "leftRow", forceInline = true)
     val rightRow = ctx.addMutableState("InternalRow", "rightRow", forceInline = true)
-    val rightTmpRow = if (useSecondaryRange)
+    val rightTmpRow = if (useSecondaryRange) {
         ctx.addMutableState("InternalRow", "rightTmpRow", forceInline = true)
-      else ""
+      }
+      else { "" }
 
     // Create variables for join keys from both sides.
     val leftKeyVars = createJoinKey(ctx, leftRow, leftKeys, left.output)
@@ -541,7 +543,7 @@ case class SortMergeJoinExec(
         (Nil, Nil, Nil, Nil)
       }
 
-    val secRangeDataType = if(leftLowerKeys.size > 0) { leftLowerKeys(0).dataType }
+    val secRangeDataType = if (leftLowerKeys.size > 0) { leftLowerKeys(0).dataType }
       else if (leftUpperKeys.size > 0) { leftUpperKeys(0).dataType }
       else null
     val secRangeInitValue = CodeGenerator.defaultValue(secRangeDataType)
@@ -558,7 +560,7 @@ case class SortMergeJoinExec(
       }
 
     // A queue to hold all matched rows from right side.
-    val clsName = if(useSecondaryRange) classOf[InMemoryUnsafeRowQueue].getName
+    val clsName = if (useSecondaryRange) classOf[InMemoryUnsafeRowQueue].getName
       else classOf[ExternalAppendOnlyUnsafeRowArray].getName
 
     val spillThreshold = getSpillThreshold
@@ -629,24 +631,28 @@ case class SortMergeJoinExec(
            """.stripMargin, inlineToOuterClass = true)
       }
     }
-    val (leftLowVarsCode, leftUpperVarsCode) = if(useSecondaryRange)
-      (leftLowerKeyVars.map(_.code).mkString("\n"), leftUpperKeyVars.map(_.code).mkString("\n"))
-    else ("", "")
-    val (rightLowVarsCode, rightUpperVarsCode) = if(useSecondaryRange)
-      (rightLowerKeyVars.map(_.code).mkString("\n"), rightUpperKeyVars.map(_.code).mkString("\n"))
-    else ("", "")
-    val (leftLowAssignCode, rightLowAssignCode) = if(leftLowerKeyVars.size > 0)
+    val (leftLowVarsCode, leftUpperVarsCode) = if (useSecondaryRange) {
+        (leftLowerKeyVars.map(_.code).mkString("\n"), leftUpperKeyVars.map(_.code).mkString("\n"))
+      }
+      else { ("", "") }
+    val (rightLowVarsCode, rightUpperVarsCode) = if (useSecondaryRange) {
+        (rightLowerKeyVars.map(_.code).mkString("\n"), rightUpperKeyVars.map(_.code).mkString("\n"))
+      }
+      else { ("", "") }
+    val (leftLowAssignCode, rightLowAssignCode) = if (leftLowerKeyVars.size > 0) {
         lowerSecondaryRangeExpression.map(_ =>
-      (s"${leftLowerSecRangeKey.value} = ${leftLowerKeyVars(0).value};",
-        s"${rightLowerSecRangeKey.value} = ${rightLowerKeyVars(0).value};")).
-      getOrElse(("", ""))
-      else ("", "")
-    val (leftUpperAssignCode, rightUpperAssignCode) = if(leftUpperKeyVars.size > 0)
+          (s"${leftLowerSecRangeKey.value} = ${leftLowerKeyVars(0).value};",
+            s"${rightLowerSecRangeKey.value} = ${rightLowerKeyVars(0).value};")).
+          getOrElse(("", ""))
+      }
+      else { ("", "") }
+    val (leftUpperAssignCode, rightUpperAssignCode) = if (leftUpperKeyVars.size > 0) {
         lowerSecondaryRangeExpression.map(_ =>
-      (s"${leftUpperSecRangeKey.value} = ${leftUpperKeyVars(0).value};",
-        s"${rightUpperSecRangeKey.value} = ${rightUpperKeyVars(0).value};")).
-      getOrElse(("", ""))
-      else ("", "")
+          (s"${leftUpperSecRangeKey.value} = ${leftUpperKeyVars(0).value};",
+            s"${rightUpperSecRangeKey.value} = ${rightUpperKeyVars(0).value};")).
+          getOrElse(("", ""))
+      }
+      else { ("", "") }
 
     ctx.addNewFunction("findNextInnerJoinRows",
       s"""
@@ -1055,27 +1061,27 @@ private[joins] class SortMergeJoinScanner(
 }
 
 /**
-  * Helper class that is used to implement [[SortMergeJoinExec]].
-  *
-  * To perform an inner (outer) join, users of this class call [[findNextInnerJoinRows()]]
-  * which returns `true` if a result has been produced and `false`
-  * otherwise. If a result has been produced, then the caller may call [[getStreamedRow]] to return
-  * the matching row from the streamed input and may call [[getBufferedMatches]] to return the
-  * sequence of matching rows from the buffered input (in the case of an outer join, this will return
-  * an empty sequence if there are no matches from the buffered input). For efficiency, both of these
-  * methods return mutable objects which are re-used across calls to the `findNext*JoinRows()`
-  * methods.
-  *
-  * @param streamedKeyGenerator a projection that produces join keys from the streamed input.
-  * @param bufferedKeyGenerator a projection that produces join keys from the buffered input.
-  * @param keyOrdering an ordering which can be used to compare join keys.
-  * @param streamedIter an input whose rows will be streamed.
-  * @param bufferedIter an input whose rows will be buffered to construct sequences of rows that
-  *                     have the same join key.
-  * @param inMemoryThreshold Threshold for number of rows guaranteed to be held in memory by
-  *                          internal buffer
-  * @param spillThreshold Threshold for number of rows to be spilled by internal buffer
-  */
+ * Helper class that is used to implement [[SortMergeJoinExec]].
+ *
+ * To perform an inner (outer) join, users of this class call [[findNextInnerJoinRows()]]
+ * which returns `true` if a result has been produced and `false`
+ * otherwise. If a result has been produced, then the caller may call [[getStreamedRow]] to return
+ * the matching row from the streamed input and may call [[getBufferedMatches]] to return the
+ * sequence of matching rows from the buffered input (in the case of an outer join, this will
+ * return an empty sequence if there are no matches from the buffered input). For efficiency,
+ * both of these methods return mutable objects which are re-used across calls to
+ * the `findNext*JoinRows()` methods.
+ *
+ * @param streamedKeyGenerator a projection that produces join keys from the streamed input.
+ * @param bufferedKeyGenerator a projection that produces join keys from the buffered input.
+ * @param keyOrdering an ordering which can be used to compare join keys.
+ * @param streamedIter an input whose rows will be streamed.
+ * @param bufferedIter an input whose rows will be buffered to construct sequences of rows that
+ *                     have the same join key.
+ * @param inMemoryThreshold Threshold for number of rows guaranteed to be held in memory by
+ *                          internal buffer
+ * @param spillThreshold Threshold for number of rows to be spilled by internal buffer
+ */
 private[joins] class SortMergeJoinInnerRangeScanner(
                                            streamedKeyGenerator: Projection,
                                            bufferedKeyGenerator: Projection,
@@ -1094,8 +1100,8 @@ private[joins] class SortMergeJoinInnerRangeScanner(
   // Note: this is guaranteed to never have any null columns:
   private[this] var bufferedRowKey: InternalRow = _
   /**
-    * The join key for the rows buffered in `bufferedMatches`, or null if `bufferedMatches` is empty
-    */
+   * The join key for the rows buffered in `bufferedMatches`, or null if `bufferedMatches` is empty
+   */
   private[this] var matchJoinKey: InternalRow = _
   /** Buffered rows from the buffered side of the join. This is empty if there are no matches. */
 
@@ -1113,11 +1119,11 @@ private[joins] class SortMergeJoinInnerRangeScanner(
   override def getBufferedMatches: InMemoryUnsafeRowQueue = bufferedMatches
 
   /**
-    * Advances both input iterators, stopping when we have found rows with matching join keys.
-    * @return true if matching rows have been found and false otherwise. If this returns true, then
-    *         [[getStreamedRow]] and [[getBufferedMatches]] can be called to construct the join
-    *         results.
-    */
+   * Advances both input iterators, stopping when we have found rows with matching join keys.
+   * @return true if matching rows have been found and false otherwise. If this returns true, then
+   *         [[getStreamedRow]] and [[getBufferedMatches]] can be called to construct the join
+   *         results.
+   */
   override final def findNextInnerJoinRows(): Boolean = {
     while (advanceStreamed() && streamedRowKey.anyNull) {
       // Advance the streamed side of the join until we find the next row whose join key contains
@@ -1146,7 +1152,7 @@ private[joins] class SortMergeJoinInnerRangeScanner(
       false
     } else {
       // Advance both the streamed and buffered iterators to find the next pair of matching rows.
-      var comp = -1//keyOrdering.compare(streamedRowKey, bufferedRowKey)
+      var comp = -1 // keyOrdering.compare(streamedRowKey, bufferedRowKey)
       do {
         if (streamedRowKey.anyNull) {
           advanceStreamed()
@@ -1176,9 +1182,9 @@ private[joins] class SortMergeJoinInnerRangeScanner(
   // --- Private methods --------------------------------------------------------------------------
 
   /**
-    * Advance the streamed iterator and compute the new row's join key.
-    * @return true if the streamed iterator returned a row and false otherwise.
-    */
+   * Advance the streamed iterator and compute the new row's join key.
+   * @return true if the streamed iterator returned a row and false otherwise.
+   */
   private def advanceStreamed(): Boolean = {
     if (streamedIter.advanceNext()) {
       streamedRow = streamedIter.getRow
@@ -1192,9 +1198,9 @@ private[joins] class SortMergeJoinInnerRangeScanner(
   }
 
   /**
-    * Advance the buffered iterator until we find a row with join key that does not contain nulls.
-    * @return true if the buffered iterator returned a row and false otherwise.
-    */
+   * Advance the buffered iterator until we find a row with join key that does not contain nulls.
+   * @return true if the buffered iterator returned a row and false otherwise.
+   */
   private def advanceBufferedToRowWithNullFreeJoinKey(): Boolean = {
     var foundRow: Boolean = false
     while (!foundRow && bufferedIter.advanceNext()) {
@@ -1212,29 +1218,30 @@ private[joins] class SortMergeJoinInnerRangeScanner(
   }
 
   /**
-    * Advance the buffered iterator as long as the join key is the same and
-    * the lower range condition is not satisfied.
-    * Skip rows with nulls.
-    * @return Result of the join key comparison.
-    */
+   * Advance the buffered iterator as long as the join key is the same and
+   * the lower range condition is not satisfied.
+   * Skip rows with nulls.
+   * @return Result of the join key comparison.
+   */
   private def checkLowerBoundAndAdvanceBuffered(): Int = {
     assert(bufferedRow != null)
     assert(streamedRow != null)
     var comp = 0
     var lowCheck = lowerRangeCondition(joinRow(streamedRow, bufferedRow))
-    if(!lowCheck)
-      while(!lowCheck && comp == 0 && advanceBufferedToRowWithNullFreeJoinKey()) {
+    if (!lowCheck) {
+      while (!lowCheck && comp == 0 && advanceBufferedToRowWithNullFreeJoinKey()) {
         comp = keyOrdering.compare(streamedRowKey, bufferedRowKey)
-        if(comp == 0) {
+        if (comp == 0) {
           lowCheck = lowerRangeCondition(joinRow(streamedRow, bufferedRow))
         }
       }
+    }
     comp
   }
 
   /**
-    * Called when the streamed and buffered join keys match in order to buffer the matching rows.
-    */
+   * Called when the streamed and buffered join keys match in order to buffer the matching rows.
+   */
   private def bufferMatchingRows(clear: Boolean): Unit = {
     assert(streamedRowKey != null)
     assert(!streamedRowKey.anyNull)
@@ -1252,15 +1259,16 @@ private[joins] class SortMergeJoinInnerRangeScanner(
       val jr = joinRow(streamedRow, bufferedRow)
       lowerRangeOk = lowerRangeCondition(jr)
       upperRangeOk = upperRangeCondition(jr)
-      if(lowerRangeOk && upperRangeOk)
+      if (lowerRangeOk && upperRangeOk) {
         bufferedMatches.add(bufferedRow.asInstanceOf[UnsafeRow])
+      }
       advanceBufferedToRowWithNullFreeJoinKey()
     } while (bufferedRow != null && keyOrdering.compare(streamedRowKey, bufferedRowKey) == 0
       && upperRangeOk)
   }
 
   private def dequeueUntilLowerConditionHolds(): Unit = {
-    while(!bufferedMatches.isEmpty && !lowerRangeCondition(joinRow(streamedRow, bufferedRow))) {
+    while (!bufferedMatches.isEmpty && !lowerRangeCondition(joinRow(streamedRow, bufferedRow))) {
       bufferedMatches.dequeue()
     }
   }
