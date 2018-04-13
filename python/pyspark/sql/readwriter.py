@@ -365,9 +365,12 @@ class DataFrameReader(OptionUtils):
                        default value, ``false``.
         :param inferSchema: infers the input schema automatically from data. It requires one extra
                        pass over the data. If None is set, it uses the default value, ``false``.
-        :param enforceSchema: Forcibly apply the specified or inferred schema to CSV
-                              files. If None is set, it uses the default value, ``true``.
-                              In that case, CSV headers are ignored.
+        :param enforceSchema: If it is set to ``true``, the specified or inferred schema will be
+                              forcibly applied to datasource files and headers in CSV files will be
+                              ignored. If the option is set to ``false``, the schema will be
+                              validated against headers in CSV files if the ``header`` option is set
+                              to ``true``. The validation is performed in column ordering aware and
+                              case sensitive manner. If None is set, ``true`` is used by default.
         :param ignoreLeadingWhiteSpace: A flag indicating whether or not leading whitespaces from
                                         values being read should be skipped. If None is set, it
                                         uses the default value, ``false``.
