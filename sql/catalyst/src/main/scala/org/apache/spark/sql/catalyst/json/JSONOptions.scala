@@ -96,7 +96,8 @@ private[sql] class JSONOptions(
 
   /**
    * Standard encoding (charset) name. For example UTF-8, UTF-16LE and UTF-32BE.
-   * If the encoding is not specified (None), it will be detected automatically.
+   * If the encoding is not specified (None), it will be detected automatically
+   * when the multiLine option is set to `true`.
    */
   val encoding: Option[String] = parameters.get("encoding")
     .orElse(parameters.get("charset")).map { enc =>
@@ -113,10 +114,7 @@ private[sql] class JSONOptions(
            | ${blacklist.mkString(", ")}""".stripMargin)
 
       val forcingLineSep = !(multiLine == false && enc != "UTF-8" && lineSeparator.isEmpty)
-      require(forcingLineSep,
-        s"""The lineSep option must be specified for the $enc encoding.
-           |Example: .option("lineSep", "|^|")
-           |Note: lineSep can be detected automatically for UTF-8 only.""".stripMargin)
+      require(forcingLineSep, s"The lineSep option must be specified for the $enc encoding")
       enc
   }
 

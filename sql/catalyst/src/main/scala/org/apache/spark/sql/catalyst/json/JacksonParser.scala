@@ -363,11 +363,8 @@ class JacksonParser(
         throw BadRecordException(() => recordLiteral(record), () => None, e)
       case e: CharConversionException if options.encoding.isEmpty =>
         val msg =
-          """Failed to parse a character. Encoding was detected automatically.
-            |You might want to set it explicitly via the encoding option like:
-            |  .option("encoding", "UTF-8")
-            |Example of supported encodings:
-            |  UTF-8, UTF-16BE, UTF-16LE, UTF-32BE, UTF-32LE
+          """JSON parser cannot handle a character in its input.
+            |Specifying encoding as an input option explicitly might help to resolve the issue.
             |""".stripMargin + e.getMessage
         throw new CharConversionException(msg)
     }

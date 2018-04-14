@@ -102,8 +102,8 @@ object TextInputJsonDataSource extends JsonDataSource {
     val sampled: Dataset[String] = JsonUtils.sample(json, parsedOptions)
     val rdd: RDD[InternalRow] = sampled.queryExecution.toRdd
     val rowParser = parsedOptions.encoding.map { enc =>
-      CreateJacksonParser.internalRow(enc, _: JsonFactory, _: InternalRow, 0)
-    }.getOrElse(CreateJacksonParser.internalRow(_: JsonFactory, _: InternalRow, 0))
+      CreateJacksonParser.internalRow(enc, _: JsonFactory, _: InternalRow)
+    }.getOrElse(CreateJacksonParser.internalRow(_: JsonFactory, _: InternalRow))
 
     JsonInferSchema.infer(rdd, parsedOptions, rowParser)
   }

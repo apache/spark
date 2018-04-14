@@ -367,8 +367,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
    * <li>`encoding` (by default it is not set): allows to forcibly set one of standard basic
-   * or extended encoding for the JSON files. For example UTF-8, UTF-16BE, UTF-32LE. If the encoding
-   * is not specified (by default), it will be detected automatically.</li>
+   * or extended encoding for the JSON files. For example UTF-16BE, UTF-32LE. If the encoding
+   * is not specified and `multiLine` is set to `true`, it will be detected automatically.</li>
    * <li>`lineSep` (default covers all `\r`, `\r\n` and `\n`): defines the line separator
    * that should be used for parsing.</li>
    * </ul>
