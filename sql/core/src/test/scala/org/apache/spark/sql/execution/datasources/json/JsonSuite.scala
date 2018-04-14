@@ -2128,8 +2128,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
   }
 
-  val sampledTestData = (row: Row) => {
-    val value = row.getLong(0)
+  val sampledTestData = (value: java.lang.Long) => {
     val predefinedSample = Set[Long](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
       57, 62, 68, 72)
     if (predefinedSample.contains(value)) {
@@ -2147,41 +2146,39 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       "spark.sql.files.maxPartitionBytes" -> (128 * 1024 * 1024).toString,
       "spark.sql.files.openCostInBytes" -> (4 * 1024 * 1024).toString
     )(withTempPath { path =>
-      val rdd = spark.sqlContext.range(0, 100, 1, 1).map(sampledTestData)
-      rdd.write.text(path.getAbsolutePath)
+      val ds = spark.range(0, 100, 1, 1).map(sampledTestData)
+      ds.write.text(path.getAbsolutePath)
 
-      val ds = spark.read
-        .option("inferSchema", true)
-        .option("samplingRatio", 0.1)
+      val readback = spark.read
+        .option("inferSchema", true).option("samplingRatio", 0.1)
         .json(path.getCanonicalPath)
-      assert(ds.schema == new StructType().add("f1", LongType))
+      assert(readback.schema == new StructType().add("f1", LongType))
     })
   }
 
   test("SPARK-23849: usage of samplingRatio while parsing a dataset of strings") {
-    val rdd = spark.sqlContext.range(0, 100, 1, 1).map(sampledTestData)
-    val ds = spark.read
-      .option("inferSchema", true)
-      .option("samplingRatio", 0.1)
-      .json(rdd)
+    val ds = spark.range(0, 100, 1, 1).map(sampledTestData)
+    val readback = spark.read
+      .option("inferSchema", true).option("samplingRatio", 0.1)
+      .json(ds)
 
-    assert(ds.schema == new StructType().add("f1", LongType))
+    assert(readback.schema == new StructType().add("f1", LongType))
   }
 
   test("SPARK-23849: samplingRatio is out of the range (0, 1.0]") {
-    val dstr = spark.sparkContext.parallelize(0 until 100, 1).map(_.toString).toDS()
+    val ds = spark.range(0, 100, 1, 1).map(_.toString)
 
     val errorMsg0 = intercept[IllegalArgumentException] {
-      spark.read.option("inferSchema", true).option("samplingRatio", -1).json(dstr)
+      spark.read.option("inferSchema", true).option("samplingRatio", -1).json(ds)
     }.getMessage
     assert(errorMsg0.contains("samplingRatio (-1.0) should be greater than 0"))
 
     val errorMsg1 = intercept[IllegalArgumentException] {
-      spark.read.option("inferSchema", true).option("samplingRatio", 0).json(dstr)
+      spark.read.option("inferSchema", true).option("samplingRatio", 0).json(ds)
     }.getMessage
     assert(errorMsg1.contains("samplingRatio (0.0) should be greater than 0"))
 
-    val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 10).json(dstr)
-    assert(sampled.count() == dstr.count())
+    val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 10).json(ds)
+    assert(sampled.count() == ds.count())
   }
 }
