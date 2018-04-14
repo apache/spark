@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.util.{Comparator, TimeZone}
+import java.util
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -501,6 +502,61 @@ case class MapEntries(child: Expression) extends UnaryExpression with ExpectsInp
   }
 
   override def prettyName: String = "map_entries"
+
+/**
+ * Returns the union of all the given maps.
+ */
+@ExpressionDescription(
+usage = "_FUNC_(map, ...) - Returns the union of all the given maps",
+examples = """
+    Examples:
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), map(2, 'c', 3, 'd'));
+       [[1 -> "a"], [2 -> "c"], [3 -> "d"]
+  """)
+case class MapConcat(children: Seq[Expression]) extends Expression
+  with CodegenFallback {
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    // this check currently does not allow valueContainsNull to vary,
+    // and unfortunately none of the MapType toString methods include
+    // valueContainsNull for the error message
+    if (children.exists(!_.dataType.isInstanceOf[MapType])) {
+      TypeCheckResult.TypeCheckFailure(
+        s"The given input of function $prettyName should all be of type map, " +
+          "but they are " + children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+    } else if (children.map(_.dataType).distinct.length > 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"The given input maps of function $prettyName should all be the same type, " +
+          "but they are " + children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
+    } else {
+      TypeCheckResult.TypeCheckSuccess
+    }
+  }
+  override def dataType: MapType = {
+    children.headOption.map(_.dataType.asInstanceOf[MapType])
+      .getOrElse(MapType(keyType = StringType, valueType = StringType))
+  }
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any = {
+    val union = new util.LinkedHashMap[Any, Any]()
+    children.map(_.eval(input)).foreach { raw =>
+      if (raw != null) {
+        val map = raw.asInstanceOf[MapData]
+        map.foreach(dataType.keyType, dataType.valueType, (k, v) =>
+          union.put(k, v)
+        )
+      }
+    }
+    val (keyArray, valueArray) = union.entrySet().toArray().map { e =>
+      val e2 = e.asInstanceOf[java.util.Map.Entry[Any, Any]]
+      (e2.getKey, e2.getValue)
+    }.unzip
+    new ArrayBasedMapData(new GenericArrayData(keyArray), new GenericArrayData(valueArray))
+  }
+
+  override def prettyName: String = "map_concat"
 }
 
 /**

@@ -422,6 +422,7 @@ object FunctionRegistry {
     expression[MapValues]("map_values"),
     expression[MapEntries]("map_entries"),
     expression[MapFromEntries]("map_from_entries"),
+    expression[MapConcat]("map_concat"),
     expression[Size]("size"),
     expression[Slice]("slice"),
     expression[Size]("cardinality"),

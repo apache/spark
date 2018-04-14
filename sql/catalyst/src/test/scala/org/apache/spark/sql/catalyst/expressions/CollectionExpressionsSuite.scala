@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
 import java.util.TimeZone
+import scala.collection.mutable
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
@@ -96,6 +97,26 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(MapEntries(ms0), Seq(r("a", "c"), r("b", null)))
     checkEvaluation(MapEntries(ms1), Seq.empty)
     checkEvaluation(MapEntries(ms2), null)
+
+  test("Map Concat") {
+    val m0 = Literal.create(Map("a" -> "1", "b" -> "2"), MapType(StringType, StringType))
+    val m1 = Literal.create(Map("c" -> "3", "a" -> "4"), MapType(StringType, StringType))
+    val m2 = Literal.create(Map("d" -> "4", "e" -> "5"), MapType(StringType, StringType))
+    val mNull = Literal.create(null, MapType(StringType, StringType))
+    val i1 = Literal.create(1, IntegerType)
+
+    // overlapping maps
+    checkEvaluation(MapConcat(Seq(m0, m1)), Map("a" -> "4", "b" -> "2", "c" -> "3"))
+    // maps with no overlap
+    checkEvaluation(MapConcat(Seq(m0, m2)),
+      mutable.LinkedHashMap("a" -> "1", "b" -> "2", "d" -> "4", "e" -> "5"))
+    // 3 maps
+    checkEvaluation(MapConcat(Seq(m0, m1, m2)),
+      mutable.LinkedHashMap("a" -> "4", "b" -> "2", "c" -> "3", "d" -> "4", "e" -> "5"))
+    // no input
+    checkEvaluation(MapConcat(Seq()), Map())
+    // null map
+    checkEvaluation(MapConcat(Seq(m0, mNull)), Map("a" -> "1", "b" -> "2"))
   }
 
   test("MapFromEntries") {
