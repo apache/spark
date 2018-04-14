@@ -27,6 +27,7 @@ private[spark] class ClientArguments(args: Array[String]) {
   var primaryPyFile: String = null
   var primaryRFile: String = null
   var userArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
+  var spanId: String = null
 
   parseArgs(args.toList)
 
@@ -55,6 +56,10 @@ private[spark] class ClientArguments(args: Array[String]) {
           userArgs += value
           args = tail
 
+        case ("--span-id") :: value :: tail =>
+          spanId = value
+          args = tail
+
         case Nil =>
 
         case _ =>
@@ -81,6 +86,7 @@ private[spark] class ClientArguments(args: Array[String]) {
       |  --primary-r-file         A main R file
       |  --arg ARG                Argument to be passed to your application's main class.
       |                           Multiple invocations are possible, each will be passed in order.
+      |  --span-id SPAN_ID        Span Id of the application.
       """.stripMargin
   }
 }

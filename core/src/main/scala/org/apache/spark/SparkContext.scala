@@ -39,6 +39,7 @@ import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, Doub
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
+import org.apache.htrace.core.{SpanId, Tracer, TraceScope}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
@@ -57,6 +58,7 @@ import org.apache.spark.status.AppStatusStore
 import org.apache.spark.status.api.v1.ThreadStackTrace
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
+import org.apache.spark.trace.SparkAppTracer
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
 import org.apache.spark.util._
 
@@ -87,6 +89,11 @@ class SparkContext(config: SparkConf) extends Logging {
   val startTime = System.currentTimeMillis()
 
   private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
+
+
+  private[spark] var tracer: Tracer = null
+  var traceDriverScope: TraceScope = null
+  private[spark] var spanId: String = null
 
   private[spark] def assertNotStopped(): Unit = {
     if (stopped.get()) {
@@ -384,6 +391,15 @@ class SparkContext(config: SparkConf) extends Logging {
       logInfo("Spark configuration:\n" + _conf.toDebugString)
     }
 
+    // Create the tracer
+    tracer = SparkAppTracer.getTracer("Driver", conf)
+    if (conf.contains("spark.app.spanId")) {
+      traceDriverScope = tracer.newScope("Application#" + appName,
+        SpanId.fromString(conf.get("spark.app.spanId")))
+    } else {
+      traceDriverScope = tracer.newScope("Application#" + appName)
+    }
+    spanId = traceDriverScope.getSpanId.toString
     // Set Spark driver host and port system properties. This explicitly sets the configuration
     // instead of relying on the default value of the config constant.
     _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_HOST_ADDRESS))
@@ -503,6 +519,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _applicationId = _taskScheduler.applicationId()
     _applicationAttemptId = taskScheduler.applicationAttemptId()
     _conf.set("spark.app.id", _applicationId)
+    traceDriverScope.addKVAnnotation("spark.app.id", _applicationId)
     if (_conf.getBoolean("spark.ui.reverseProxy", false)) {
       System.setProperty("spark.ui.proxyBase", "/proxy/" + _applicationId)
     }
@@ -1952,6 +1969,12 @@ class SparkContext(config: SparkConf) extends Logging {
     localProperties.remove()
     // Unset YARN mode system env variable, to allow switching between cluster types.
     SparkContext.clearActiveContext()
+    if (traceDriverScope != null) {
+      traceDriverScope.close()
+    }
+    if (tracer != null) {
+      tracer.close()
+    }
     logInfo("Successfully stopped SparkContext")
   }
 

@@ -960,9 +960,17 @@ private[spark] class Client(
     val userArgs = args.userArgs.flatMap { arg =>
       Seq("--arg", YarnSparkHadoopUtil.escapeForShell(arg))
     }
+    val spanId =
+      if (args.spanId != null) {
+        Seq("--span-id", args.spanId)
+      } else {
+        Nil
+      }
     val amArgs =
       Seq(amClass) ++ userClass ++ userJar ++ primaryPyFile ++ primaryRFile ++ userArgs ++
-      Seq("--properties-file", buildPath(Environment.PWD.$$(), LOCALIZED_CONF_DIR, SPARK_CONF_FILE))
+      Seq("--properties-file", buildPath(Environment.PWD.$$(),
+        LOCALIZED_CONF_DIR, SPARK_CONF_FILE)) ++ spanId
+
 
     // Command for the ApplicationMaster
     val commands = prefixEnv ++

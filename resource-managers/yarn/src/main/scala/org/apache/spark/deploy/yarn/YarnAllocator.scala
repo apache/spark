@@ -31,6 +31,7 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.htrace.core.SpanId
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
@@ -66,7 +67,8 @@ private[yarn] class YarnAllocator(
     appAttemptId: ApplicationAttemptId,
     securityMgr: SecurityManager,
     localResources: Map[String, LocalResource],
-    resolver: SparkRackResolver)
+    resolver: SparkRackResolver,
+    spanId: String = null)
   extends Logging {
 
   import YarnAllocator._
@@ -530,7 +532,8 @@ private[yarn] class YarnAllocator(
                   executorCores,
                   appAttemptId.getApplicationId.toString,
                   securityMgr,
-                  localResources
+                  localResources,
+                  spanId
                 ).run()
                 updateInternalState()
               } catch {
