@@ -736,12 +736,15 @@ object EliminateSorts extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes Sort operation if the child is already sorted
+ * Removes redundant Sort operation. This can happen:
+ * 1) if the child is already sorted
+ * 2) if the next operator is a Sort itself
  */
 object RemoveRedundantSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Sort(orders, true, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
       child
+    case s @ Sort(_, _, Sort(_, _, child)) => s.copy(child = child)
   }
 }
 

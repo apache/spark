@@ -98,4 +98,11 @@ class RemoveRedundantSortsSuite extends PlanTest {
     val correctAnswer = groupedAndResorted.analyze
     comparePlans(optimized, correctAnswer)
   }
+
+  test("remove two consecutive sorts") {
+    val orderedTwice = testRelation.orderBy('a.asc).orderBy('b.desc)
+    val optimized = Optimize.execute(orderedTwice.analyze)
+    val correctAnswer = testRelation.orderBy('b.desc).analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }
