@@ -82,7 +82,7 @@ private[spark] class YarnAllocatorBlacklistTracker(
           updateAllocationBlacklistedNodes(hostname)
         }
       case None =>
-        failureWithinTimeIntervalTracker.registerSumExecutorFailure()
+        failureWithinTimeIntervalTracker.registerExecutorFailure()
     }
   }
 
@@ -110,7 +110,7 @@ private[spark] class YarnAllocatorBlacklistTracker(
       BLACKLIST_SIZE_LIMIT.getOrElse((numClusterNodes * BLACKLIST_SIZE_DEFAULT_WEIGHT).toInt)
     val nodesToBlacklist =
       if (schedulerBlacklistedNodesWithExpiry.size +
-        allocationBlacklistedNodesWithExpiry.size > limit) {
+          allocationBlacklistedNodesWithExpiry.size > limit) {
         mostRelevantSubsetOfBlacklistedNodes(limit)
       } else {
         schedulerBlacklistedNodesWithExpiry.keySet ++ allocationBlacklistedNodesWithExpiry.keySet

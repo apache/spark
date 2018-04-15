@@ -38,31 +38,31 @@ class FailureWithinTimeIntervalTrackerSuite extends SparkFunSuite with Matchers 
     clock.setTime(0)
     failureWithinTimeIntervalTracker.registerFailureOnHost("host1")
     failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost("host1") should be (1)
-    failureWithinTimeIntervalTracker.getSumExecutorsFailed should be (1)
+    failureWithinTimeIntervalTracker.getNumExecutorsFailed should be (1)
 
     clock.setTime(10)
     failureWithinTimeIntervalTracker.registerFailureOnHost("host2")
     failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost("host2") should be (1)
-    failureWithinTimeIntervalTracker.getSumExecutorsFailed should be (2)
+    failureWithinTimeIntervalTracker.getNumExecutorsFailed should be (2)
 
     clock.setTime(20)
     failureWithinTimeIntervalTracker.registerFailureOnHost("host1")
     failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost("host1") should be (2)
-    failureWithinTimeIntervalTracker.getSumExecutorsFailed should be (3)
+    failureWithinTimeIntervalTracker.getNumExecutorsFailed should be (3)
 
     clock.setTime(30)
     failureWithinTimeIntervalTracker.registerFailureOnHost("host2")
     failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost("host2") should be (2)
-    failureWithinTimeIntervalTracker.getSumExecutorsFailed should be (4)
+    failureWithinTimeIntervalTracker.getNumExecutorsFailed should be (4)
 
     clock.setTime(101)
     failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost("host1") should be (1)
-    failureWithinTimeIntervalTracker.getSumExecutorsFailed should be (3)
+    failureWithinTimeIntervalTracker.getNumExecutorsFailed should be (3)
 
     clock.setTime(231)
     failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost("host1") should be (0)
     failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost("host2") should be (0)
-    failureWithinTimeIntervalTracker.getSumExecutorsFailed should be (0)
+    failureWithinTimeIntervalTracker.getNumExecutorsFailed should be (0)
   }
 
 
@@ -76,27 +76,27 @@ class FailureWithinTimeIntervalTrackerSuite extends SparkFunSuite with Matchers 
     clock.setTime(0)
     failureWithinTimeIntervalTracker.registerFailureOnHost("host1")
     failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost("host1") should be (1)
-    failureWithinTimeIntervalTracker.getSumExecutorsFailed should be (1)
+    failureWithinTimeIntervalTracker.getNumExecutorsFailed should be (1)
 
     clock.setTime(10)
     failureWithinTimeIntervalTracker.registerFailureOnHost("host2")
     failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost("host2") should be (1)
-    failureWithinTimeIntervalTracker.getSumExecutorsFailed should be (2)
+    failureWithinTimeIntervalTracker.getNumExecutorsFailed should be (2)
 
     clock.setTime(20)
     failureWithinTimeIntervalTracker.registerFailureOnHost("host1")
     failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost("host1") should be (2)
-    failureWithinTimeIntervalTracker.getSumExecutorsFailed should be (3)
+    failureWithinTimeIntervalTracker.getNumExecutorsFailed should be (3)
 
     clock.setTime(30)
     failureWithinTimeIntervalTracker.registerFailureOnHost("host2")
     failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost("host2") should be (2)
-    failureWithinTimeIntervalTracker.getSumExecutorsFailed should be (4)
+    failureWithinTimeIntervalTracker.getNumExecutorsFailed should be (4)
 
     clock.setTime(1000)
     failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost("host1") should be (2)
     failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost("host2") should be (2)
-    failureWithinTimeIntervalTracker.getSumExecutorsFailed should be (4)
+    failureWithinTimeIntervalTracker.getNumExecutorsFailed should be (4)
   }
 
 }

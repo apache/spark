@@ -157,7 +157,7 @@ private[yarn] class YarnAllocator(
 
   def getNumExecutorsRunning: Int = runningExecutors.size()
 
-  def getNumExecutorsFailed: Int = failureWithinTimeIntervalTracker.getSumExecutorsFailed
+  def getNumExecutorsFailed: Int = failureWithinTimeIntervalTracker.getNumExecutorsFailed
 
   def getFailureWithinTimeIntervalTracker: FailureWithinTimeIntervalTracker =
     failureWithinTimeIntervalTracker

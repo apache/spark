@@ -32,7 +32,7 @@ private[spark] class FailureWithinTimeIntervalTracker(sparkConf: SparkConf) exte
   // Queue to store the timestamp of failed executors for each host
   private val failedExecutorsTimeStampsPerHost = mutable.Map[String, mutable.Queue[Long]]()
 
-  private val sumFailedExecutorsTimeStamps = new mutable.Queue[Long]()
+  private val failedExecutorsTimeStamps = new mutable.Queue[Long]()
 
   private def getNumFailuresWithinValidityInterval(
       failedExecutorsTimeStampsForHost: mutable.Queue[Long],
@@ -52,13 +52,13 @@ private[spark] class FailureWithinTimeIntervalTracker(sparkConf: SparkConf) exte
     clock = newClock
   }
 
-  def getSumExecutorsFailed: Int = synchronized {
-    getNumFailuresWithinValidityInterval(sumFailedExecutorsTimeStamps, clock.getTimeMillis())
+  def getNumExecutorsFailed: Int = synchronized {
+    getNumFailuresWithinValidityInterval(failedExecutorsTimeStamps, clock.getTimeMillis())
   }
 
   def registerFailureOnHost(hostname: String): Unit = synchronized {
     val timeMillis = clock.getTimeMillis()
-    sumFailedExecutorsTimeStamps.enqueue(timeMillis)
+    failedExecutorsTimeStamps.enqueue(timeMillis)
     val failedExecutorsOnHost =
       failedExecutorsTimeStampsPerHost.getOrElse(hostname, {
         val failureOnHost = mutable.Queue[Long]()
@@ -67,9 +67,9 @@ private[spark] class FailureWithinTimeIntervalTracker(sparkConf: SparkConf) exte
       })
     failedExecutorsOnHost.enqueue(timeMillis)  }
 
-  def registerSumExecutorFailure(): Unit = synchronized {
+  def registerExecutorFailure(): Unit = synchronized {
     val timeMillis = clock.getTimeMillis()
-    sumFailedExecutorsTimeStamps.enqueue(timeMillis)
+    failedExecutorsTimeStamps.enqueue(timeMillis)
   }
 
   def getNumExecutorFailuresOnHost(hostname: String): Int =
