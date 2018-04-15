@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.json
 import java.io.File
 
 import org.apache.spark.SparkConf
-
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.util.{Benchmark, Utils}
