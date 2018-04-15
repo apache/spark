@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.datasources.json
 import java.io.File
 
 import org.apache.spark.SparkConf
+
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{LongType, StringType, StructType}
 import org.apache.spark.util.{Benchmark, Utils}
 
 /**
@@ -123,8 +124,57 @@ object JSONBenchmarks {
     }
   }
 
+  def perlineParsingOfWideColumn(rowsNum: Int): Unit = {
+    val benchmark = new Benchmark("JSON parsing of wide lines", rowsNum)
+
+    withTempPath { path =>
+      // scalastyle:off
+      benchmark.out.println("Preparing data for benchmarking ...")
+      // scalastyle:on
+
+      spark.sparkContext.range(0, rowsNum, 1)
+        .map { i =>
+          val s = "abcdef0123456789ABCDEF" * 20
+          s"""{"a":"$s","b": $i,"c":"$s","d":$i,"e":"$s","f":$i,"x":"$s","y":$i,"z":"$s"}"""
+         }
+        .toDF().write.text(path.getAbsolutePath)
+      val schema = new StructType()
+        .add("a", StringType).add("b", LongType)
+        .add("c", StringType).add("d", LongType)
+        .add("e", StringType).add("f", LongType)
+        .add("x", StringType).add("y", LongType)
+        .add("z", StringType)
+
+      benchmark.addCase("No encoding", 3) { _ =>
+        spark.read
+          .schema(schema)
+          .json(path.getAbsolutePath)
+          .count()
+      }
+
+      benchmark.addCase("UTF-8 is set", 3) { _ =>
+        spark.read
+          .option("encoding", "UTF-8")
+          .schema(schema)
+          .json(path.getAbsolutePath)
+          .count()
+      }
+
+      /*
+      Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
+
+      JSON parsing of wide lines:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      ------------------------------------------------------------------------------------------------
+      No encoding                                 45543 / 45660          0.2        4554.3       1.0X
+      UTF-8 is set                                65737 / 65957          0.2        6573.7       0.7X
+      */
+      benchmark.run()
+    }
+  }
+
   def main(args: Array[String]): Unit = {
     schemaInferring(100 * 1000 * 1000)
     perlineParsing(100 * 1000 * 1000)
+    perlineParsingOfWideColumn(10 * 1000 * 1000)
   }
 }
