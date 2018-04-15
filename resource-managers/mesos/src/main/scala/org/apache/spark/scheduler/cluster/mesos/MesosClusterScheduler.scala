@@ -425,9 +425,9 @@ private[spark] class MesosClusterScheduler(
       _.map(_.split(",").map(_.trim))
     ).flatten
 
-    val jarUrl = desc.jarUrl.stripPrefix("file:").stripPrefix("local:")
+    val jarUrl = desc.appJarAsMesosURI
 
-    ((jarUrl :: confUris) ++ getDriverExecutorURI(desc).toList).map(uri =>
+    (jarUrl.toList ++ confUris ++ getDriverExecutorURI(desc).toList).map(uri =>
       CommandInfo.URI.newBuilder().setValue(uri.trim()).setCache(useFetchCache).build())
   }
 
@@ -449,7 +449,7 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def getDriverCommandValue(desc: MesosDriverDescription): String = {
-    val dockerDefined = desc.conf.contains("spark.mesos.executor.docker.image")
+    val dockerDefined = desc.isDockerDefined()
     val executorUri = getDriverExecutorURI(desc)
     // Gets the path to run spark-submit, and the path to the Mesos sandbox.
     val (executable, sandboxPath) = if (dockerDefined) {
@@ -480,7 +480,7 @@ private[spark] class MesosClusterScheduler(
       (cmdExecutable, ".")
     }
     val cmdOptions = generateCmdOption(desc, sandboxPath).mkString(" ")
-    val primaryResource = new File(sandboxPath, desc.jarUrl.split("/").last).toString()
+    val primaryResource = desc.appJarAsCommandLineArg(sandboxPath)
     val appArguments = desc.command.arguments.mkString(" ")
 
     s"$executable $cmdOptions $primaryResource $appArguments"

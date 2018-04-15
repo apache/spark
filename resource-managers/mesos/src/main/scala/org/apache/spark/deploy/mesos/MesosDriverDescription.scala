@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.mesos
 
+import java.io.File
 import java.util.Date
 
 import org.apache.spark.SparkConf
@@ -49,6 +50,28 @@ private[spark] class MesosDriverDescription(
 
   val conf = new SparkConf(false)
   schedulerProperties.foreach {case (k, v) => conf.set(k, v)}
+
+  private def isAppJarSparkInternal() = (jarUrl == "spark-internal")
+
+  private def isAppJarLocal() = (jarUrl.startsWith("local:"))
+
+  def isDockerDefined(): Boolean = conf.contains("spark.mesos.executor.docker.image")
+
+  def appJarAsCommandLineArg(path: String): String = {
+    if ((isAppJarLocal() && isDockerDefined()) || isAppJarSparkInternal()) {
+      jarUrl
+    } else {
+      new File(path, jarUrl.split("/").last).toString()
+    }
+  }
+
+  def appJarAsMesosURI(): Option[String] = {
+    if ((isAppJarLocal() && isDockerDefined()) || isAppJarSparkInternal()) {
+      None
+    } else {
+      Some(jarUrl.stripPrefix("file:").stripPrefix("local:"))
+    }
+  }
 
   def copy(
       name: String = name,

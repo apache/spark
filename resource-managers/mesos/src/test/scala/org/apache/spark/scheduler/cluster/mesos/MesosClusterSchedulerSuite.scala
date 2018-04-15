@@ -411,13 +411,52 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     Utils.verifyFileBasedValueSecrets(launchedTasks)
   }
 
-  private def launchDriverTask(addlSparkConfVars: Map[String, String]): List[TaskInfo] = {
+  test("appJar download") {
+    val addlConf = Map("spark.mesos.uris" -> "this.jar,that.jar")
+    val tasks = launchDriverTask(addlConf, "https://example.com/app.jar")
+
+    assert(tasks.head.getCommand.getUrisList.asScala.map(_.getValue) ==
+      List("https://example.com/app.jar", "this.jar", "that.jar"))
+    assert(tasks.head.getCommand.getValue.contains(" ./app.jar "))
+  }
+
+  test("appJar spark-internal") {
+    val addlConf = Map("spark.mesos.uris" -> "this.jar,that.jar")
+    val tasks = launchDriverTask(addlConf, "spark-internal")
+
+    assert(tasks.head.getCommand.getUrisList.asScala.map(_.getValue) ==
+      List("this.jar", "that.jar"))
+    assert(tasks.head.getCommand.getValue.contains(" spark-internal "))
+  }
+
+  test("appJar from container") {
+    val addlConf = Map(
+      "spark.mesos.uris" -> "this.jar,that.jar",
+      "spark.mesos.executor.docker.image" -> "image")
+    val tasks = launchDriverTask(addlConf, "local:/usr/local/app.jar")
+
+    assert(tasks.head.getCommand.getUrisList.asScala.map(_.getValue) ==
+      List("this.jar", "that.jar"))
+    assert(tasks.head.getCommand.getValue.contains(" local:/usr/local/app.jar "))
+  }
+
+  test("appJar from host") {
+    val addlConf = Map("spark.mesos.uris" -> "this.jar,that.jar")
+    val tasks = launchDriverTask(addlConf, "local:/usr/local/app.jar")
+
+    assert(tasks.head.getCommand.getUrisList.asScala.map(_.getValue) ==
+      List("/usr/local/app.jar", "this.jar", "that.jar"))
+    assert(tasks.head.getCommand.getValue.contains(" ./app.jar "))
+  }
+
+  private def launchDriverTask(addlSparkConfVars: Map[String, String],
+                               jarUrl: String = "jar"): List[TaskInfo] = {
     setScheduler()
     val mem = 1000
     val cpu = 1
     val driverDesc = new MesosDriverDescription(
       "d1",
-      "jar",
+      jarUrl,
       mem,
       cpu,
       true,
