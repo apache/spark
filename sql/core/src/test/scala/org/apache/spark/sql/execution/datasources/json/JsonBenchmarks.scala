@@ -163,10 +163,10 @@ object JSONBenchmarks {
       /*
       Intel(R) Core(TM) i7-7920HQ CPU @ 3.10GHz
 
-      JSON parsing of wide lines:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-      ------------------------------------------------------------------------------------------------
-      No encoding                                 45543 / 45660          0.2        4554.3       1.0X
-      UTF-8 is set                                65737 / 65957          0.2        6573.7       0.7X
+      JSON parsing of wide lines:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+      --------------------------------------------------------------------------------------------
+      No encoding                             45543 / 45660          0.2        4554.3       1.0X
+      UTF-8 is set                            65737 / 65957          0.2        6573.7       0.7X
       */
       benchmark.run()
     }
