@@ -105,7 +105,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val mNull = Literal.create(null, MapType(StringType, StringType))
 
     // overlapping maps
-    checkEvaluation(MapConcat(Seq(m0, m1)), Map("a" -> "4", "b" -> "2", "c" -> "3"))
+    checkEvaluation(MapConcat(Seq(m0, m1)),
+      mutable.LinkedHashMap("a" -> "4", "b" -> "2", "c" -> "3"))
     // maps with no overlap
     checkEvaluation(MapConcat(Seq(m0, m2)),
       mutable.LinkedHashMap("a" -> "1", "b" -> "2", "d" -> "4", "e" -> "5"))
@@ -115,7 +116,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     // no input
     checkEvaluation(MapConcat(Seq()), Map())
     // null map
-    checkEvaluation(MapConcat(Seq(m0, mNull)), Map("a" -> "1", "b" -> "2"))
+    checkEvaluation(MapConcat(Seq(m0, mNull)),
+      mutable.LinkedHashMap("a" -> "1", "b" -> "2"))
   }
 
   test("MapFromEntries") {
