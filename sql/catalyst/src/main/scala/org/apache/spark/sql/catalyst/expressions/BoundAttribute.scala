@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.types._
 
 /**
@@ -76,7 +76,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
              |  ${CodeGenerator.defaultValue(dataType)} : ($value);
            """.stripMargin)
       } else {
-        ev.copy(code = s"$javaType ${ev.value} = $value;", isNull = "false")
+        ev.copy(code = s"$javaType ${ev.value} = $value;", isNull = FalseLiteral)
       }
     }
   }

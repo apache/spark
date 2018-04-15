@@ -381,7 +381,7 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
 
     val (fieldRefs, fieldOrdinals) = nonPartitionKeyAttrs.map { case (attr, ordinal) =>
       soi.getStructFieldRef(attr.name) -> ordinal
-    }.unzip
+    }.toArray.unzip
 
     /**
      * Builds specific unwrappers ahead of time according to object inspector

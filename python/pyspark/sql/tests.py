@@ -182,16 +182,12 @@ class MyObject(object):
         self.value = value
 
 
-class ReusedSQLTestCase(ReusedPySparkTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
-        cls.spark = SparkSession(cls.sc)
-
-    @classmethod
-    def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
-        cls.spark.stop()
+class SQLTestUtils(object):
+    """
+    This util assumes the instance of this to have 'spark' attribute, having a spark session.
+    It is usually used with 'ReusedSQLTestCase' class but can be used if you feel sure the
+    the implementation of this class has 'spark' attribute.
+    """
 
     @contextmanager
     def sql_conf(self, pairs):
@@ -200,6 +196,7 @@ class ReusedSQLTestCase(ReusedPySparkTestCase):
         `value` to the configuration `key` and then restores it back when it exits.
         """
         assert isinstance(pairs, dict), "pairs should be a dictionary."
+        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
 
         keys = pairs.keys()
         new_values = pairs.values()
@@ -214,6 +211,18 @@ class ReusedSQLTestCase(ReusedPySparkTestCase):
                     self.spark.conf.unset(key)
                 else:
                     self.spark.conf.set(key, old_value)
+
+
+class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.spark = SparkSession(cls.sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+        cls.spark.stop()
 
     def assertPandasEqual(self, expected, result):
         msg = ("DataFrames are not equal: " +
@@ -2987,6 +2996,24 @@ class SQLTests(ReusedSQLTestCase):
                 os.environ['TZ'] = orig_env_tz
             time.tzset()
 
+    def test_sort_with_nulls_order(self):
+        from pyspark.sql import functions
+
+        df = self.spark.createDataFrame(
+            [('Tom', 80), (None, 60), ('Alice', 50)], ["name", "height"])
+        self.assertEquals(
+            df.select(df.name).orderBy(functions.asc_nulls_first('name')).collect(),
+            [Row(name=None), Row(name=u'Alice'), Row(name=u'Tom')])
+        self.assertEquals(
+            df.select(df.name).orderBy(functions.asc_nulls_last('name')).collect(),
+            [Row(name=u'Alice'), Row(name=u'Tom'), Row(name=None)])
+        self.assertEquals(
+            df.select(df.name).orderBy(functions.desc_nulls_first('name')).collect(),
+            [Row(name=None), Row(name=u'Tom'), Row(name=u'Alice')])
+        self.assertEquals(
+            df.select(df.name).orderBy(functions.desc_nulls_last('name')).collect(),
+            [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)])
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
@@ -3043,6 +3070,64 @@ class SQLTests2(ReusedSQLTestCase):
         finally:
             spark.stop()
             sc.stop()
+
+
+class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
+    # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
+    # static and immutable. This can't be set or unset, for example, via `spark.conf`.
+
+    @classmethod
+    def setUpClass(cls):
+        import glob
+        from pyspark.find_spark_home import _find_spark_home
+
+        SPARK_HOME = _find_spark_home()
+        filename_pattern = (
+            "sql/core/target/scala-*/test-classes/org/apache/spark/sql/"
+            "TestQueryExecutionListener.class")
+        if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
+            raise unittest.SkipTest(
+                "'org.apache.spark.sql.TestQueryExecutionListener' is not "
+                "available. Will skip the related tests.")
+
+        # Note that 'spark.sql.queryExecutionListeners' is a static immutable configuration.
+        cls.spark = SparkSession.builder \
+            .master("local[4]") \
+            .appName(cls.__name__) \
+            .config(
+                "spark.sql.queryExecutionListeners",
+                "org.apache.spark.sql.TestQueryExecutionListener") \
+            .getOrCreate()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.spark.stop()
+
+    def tearDown(self):
+        self.spark._jvm.OnSuccessCall.clear()
+
+    def test_query_execution_listener_on_collect(self):
+        self.assertFalse(
+            self.spark._jvm.OnSuccessCall.isCalled(),
+            "The callback from the query execution listener should not be called before 'collect'")
+        self.spark.sql("SELECT * FROM range(1)").collect()
+        self.assertTrue(
+            self.spark._jvm.OnSuccessCall.isCalled(),
+            "The callback from the query execution listener should be called after 'collect'")
+
+    @unittest.skipIf(
+        not _have_pandas or not _have_pyarrow,
+        _pandas_requirement_message or _pyarrow_requirement_message)
+    def test_query_execution_listener_on_collect_with_arrow(self):
+        with self.sql_conf({"spark.sql.execution.arrow.enabled": True}):
+            self.assertFalse(
+                self.spark._jvm.OnSuccessCall.isCalled(),
+                "The callback from the query execution listener should not be "
+                "called before 'toPandas'")
+            self.spark.sql("SELECT * FROM range(1)").toPandas()
+            self.assertTrue(
+                self.spark._jvm.OnSuccessCall.isCalled(),
+                "The callback from the query execution listener should be called after 'toPandas'")
 
 
 class SparkSessionTests(PySparkTestCase):

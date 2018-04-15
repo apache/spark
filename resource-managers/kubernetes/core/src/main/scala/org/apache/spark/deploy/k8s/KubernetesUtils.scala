@@ -16,8 +16,6 @@
  */
 package org.apache.spark.deploy.k8s
 
-import java.nio.file.Paths
-
 import io.fabric8.kubernetes.api.model.LocalObjectReference
 
 import org.apache.spark.SparkConf
@@ -39,17 +37,6 @@ private[spark] object KubernetesUtils {
     sparkConf.getAllWithPrefix(prefix).toMap
   }
 
-  /**
-   * Parses comma-separated list of imagePullSecrets into K8s-understandable format
-   */
-  def parseImagePullSecrets(imagePullSecrets: Option[String]): List[LocalObjectReference] = {
-    imagePullSecrets match {
-      case Some(secretsCommaSeparated) =>
-        secretsCommaSeparated.split(',').map(_.trim).map(new LocalObjectReference(_)).toList
-      case None => Nil
-    }
-  }
-
   def requireNandDefined(opt1: Option[_], opt2: Option[_], errMessage: String): Unit = {
     opt1.foreach { _ => require(opt2.isEmpty, errMessage) }
   }
@@ -57,41 +44,19 @@ private[spark] object KubernetesUtils {
   /**
    * For the given collection of file URIs, resolves them as follows:
    * - File URIs with scheme local:// resolve to just the path of the URI.
-   * - Otherwise, the URIs are returned resolved to the downloaded path.
+   * - Otherwise, the URIs are returned as-is.
    */
-  def resolveFileUrisAndPath(
-      fileUris: Iterable[String], downloadPath: String): Iterable[String] = {
+  def resolveFileUrisAndPath(fileUris: Iterable[String]): Iterable[String] = {
     fileUris.map { uri =>
-      resolveFileUri(uri, downloadPath)
+      resolveFileUri(uri)
     }
   }
 
-  /**
-   * Get from a given collection of file URIs the ones that represent submitter-local files.
-   */
-  def getOnlySubmitterLocalFiles(uris: Iterable[String]): Iterable[String] = {
-    uris.filter { uri =>
-      Utils.resolveURI(uri).getScheme == "file"
-    }
-  }
-
-  def resolveLocalFile(uri: String): String = {
+  private def resolveFileUri(uri: String): String = {
     val fileUri = Utils.resolveURI(uri)
     val fileScheme = Option(fileUri.getScheme).getOrElse("file")
     fileScheme match {
       case "local" => fileUri.getPath
-      case _ => uri
-    }
-  }
-
-  private def resolveFileUri(uri: String, downloadPath: String): String = {
-    val fileUri = Utils.resolveURI(uri)
-    val fileScheme = Option(fileUri.getScheme).getOrElse("file")
-    fileScheme match {
-      case "local" => fileUri.getPath
-      case "file" =>
-        val fileName = Paths.get(fileUri.getPath).toFile.getName
-        s"$downloadPath/$fileName"
       case _ => uri
     }
   }

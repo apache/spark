@@ -286,7 +286,10 @@ class SessionCatalog(
    * Create a metastore table in the database specified in `tableDefinition`.
    * If no such database is specified, create it in the current database.
    */
-  def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
+  def createTable(
+      tableDefinition: CatalogTable,
+      ignoreIfExists: Boolean,
+      validateLocation: Boolean = true): Unit = {
     val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableDefinition.identifier.table)
     val tableIdentifier = TableIdentifier(table, Some(db))
@@ -305,7 +308,11 @@ class SessionCatalog(
     }
 
     requireDbExists(db)
-    if (!ignoreIfExists) {
+    if (tableExists(newTableDefinition.identifier)) {
+      if (!ignoreIfExists) {
+        throw new TableAlreadyExistsException(db = db, table = table)
+      }
+    } else if (validateLocation) {
       validateTableLocation(newTableDefinition)
     }
     externalCatalog.createTable(newTableDefinition, ignoreIfExists)
