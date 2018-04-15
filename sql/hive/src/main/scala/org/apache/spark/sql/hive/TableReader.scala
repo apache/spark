@@ -176,13 +176,12 @@ class HadoopTableReader(
               val matches = fs.globStatus(pathPattern)
               matches.foreach(fileStatus => existPathSet += fileStatus.getPath.toString)
             }
-            // convert  /demo/data/year/month/day  to  /demo/data/year/month/*/
+            // convert  /demo/data/year/month/day  to  /demo/data/*/*/*/
             def getPathPatternByPath(parNum: Int, tempPath: Path): String = {
               var path = tempPath
-              if (parNum > 0) {
-                path = path.getParent
-              }
-              s"${path.toString}/*/"
+              for (i <- (1 to parNum)) path = path.getParent
+              val tails = (1 to parNum).map(_ => "*").mkString("/", "/", "/")
+              path.toString + tails
             }
 
             val partPath = partition.getDataLocation
