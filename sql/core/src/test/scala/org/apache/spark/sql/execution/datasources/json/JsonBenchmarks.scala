@@ -75,8 +75,8 @@ object JSONBenchmarks {
 
       JSON schema inferring:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       --------------------------------------------------------------------------------------------
-      No encoding                             41193 / 41484          2.4         411.9       1.0X
-      UTF-8 is set                          109807 / 110674          0.9        1098.1       0.4X
+      No encoding                             38902 / 39282          2.6         389.0       1.0X
+      UTF-8 is set                            56959 / 57261          1.8         569.6       0.7X
       */
       benchmark.run()
     }
@@ -116,8 +116,8 @@ object JSONBenchmarks {
 
       JSON per-line parsing:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       --------------------------------------------------------------------------------------------
-      No encoding                             28953 / 29274          3.5         289.5       1.0X
-      UTF-8 is set                            96040 / 96888          1.0         960.4       0.3X
+      No encoding                             25947 / 26188          3.9         259.5       1.0X
+      UTF-8 is set                            46319 / 46417          2.2         463.2       0.6X
       */
       benchmark.run()
     }
@@ -172,8 +172,8 @@ object JSONBenchmarks {
   }
 
   def main(args: Array[String]): Unit = {
-    schemaInferring(100 * 1000 * 1000)
-    perlineParsing(100 * 1000 * 1000)
+    // schemaInferring(100 * 1000 * 1000)
+    // perlineParsing(100 * 1000 * 1000)
     perlineParsingOfWideColumn(10 * 1000 * 1000)
   }
 }

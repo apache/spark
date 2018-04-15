@@ -18,9 +18,12 @@
 package org.apache.spark.sql.catalyst.json
 
 import java.io.{ByteArrayInputStream, InputStream, InputStreamReader}
+import java.nio.channels.Channels
+import java.nio.charset.Charset
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import org.apache.hadoop.io.Text
+import sun.nio.cs.StreamDecoder
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.unsafe.types.UTF8String
@@ -44,10 +47,18 @@ private[sql] object CreateJacksonParser extends Serializable {
     jsonFactory.createParser(record.getBytes, 0, record.getLength)
   }
 
-  def text(enc: String, jsonFactory: JsonFactory, record: Text): JsonParser = {
-    val bain = new ByteArrayInputStream(record.getBytes, 0, record.getLength)
+  def getStreamDecoder(enc: String, in: Array[Byte], length: Int): StreamDecoder = {
+    val bais = new ByteArrayInputStream(in, 0, length)
+    val byteChannel = Channels.newChannel(bais)
+    val decodingBufferSize = Math.min(length, 8192)
+    val decoder = Charset.forName(enc).newDecoder()
 
-    jsonFactory.createParser(new InputStreamReader(bain, enc))
+    StreamDecoder.forDecoder(byteChannel, decoder, decodingBufferSize)
+  }
+
+  def text(enc: String, jsonFactory: JsonFactory, record: Text): JsonParser = {
+    val sd = getStreamDecoder(enc, record.getBytes, record.getLength)
+    jsonFactory.createParser(sd)
   }
 
   def inputStream(jsonFactory: JsonFactory, is: InputStream): JsonParser = {
@@ -65,8 +76,9 @@ private[sql] object CreateJacksonParser extends Serializable {
   }
 
   def internalRow(enc: String, jsonFactory: JsonFactory, row: InternalRow): JsonParser = {
-    val is = new ByteArrayInputStream(row.getBinary(0))
+    val binary = row.getBinary(0)
+    val sd = getStreamDecoder(enc, binary, binary.length)
 
-    inputStream(enc, jsonFactory, is)
+    jsonFactory.createParser(sd)
   }
 }
