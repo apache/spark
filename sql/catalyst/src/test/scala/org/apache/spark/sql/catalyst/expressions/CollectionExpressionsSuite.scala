@@ -103,7 +103,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val m1 = Literal.create(Map("c" -> "3", "a" -> "4"), MapType(StringType, StringType))
     val m2 = Literal.create(Map("d" -> "4", "e" -> "5"), MapType(StringType, StringType))
     val mNull = Literal.create(null, MapType(StringType, StringType))
-    val i1 = Literal.create(1, IntegerType)
 
     // overlapping maps
     checkEvaluation(MapConcat(Seq(m0, m1)), Map("a" -> "4", "b" -> "2", "c" -> "3"))
