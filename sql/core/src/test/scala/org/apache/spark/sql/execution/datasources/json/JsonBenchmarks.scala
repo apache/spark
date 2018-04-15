@@ -172,8 +172,8 @@ object JSONBenchmarks {
   }
 
   def main(args: Array[String]): Unit = {
-    // schemaInferring(100 * 1000 * 1000)
-    // perlineParsing(100 * 1000 * 1000)
+    schemaInferring(100 * 1000 * 1000)
+    perlineParsing(100 * 1000 * 1000)
     perlineParsingOfWideColumn(10 * 1000 * 1000)
   }
 }
