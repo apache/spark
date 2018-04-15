@@ -572,6 +572,11 @@ class TypeCoercionSuite extends AnalysisTest {
       Coalesce(Seq(nullLit, floatNullLit, doubleLit, stringLit)),
       Coalesce(Seq(Cast(nullLit, StringType), Cast(floatNullLit, StringType),
         Cast(doubleLit, StringType), Cast(stringLit, StringType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(timestampLit, intLit, stringLit)),
+      Coalesce(Seq(Cast(timestampLit, StringType), Cast(intLit, StringType),
+        Cast(stringLit, StringType))))
   }
 
   test("CreateArray casts") {
