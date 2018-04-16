@@ -306,6 +306,8 @@ case class ArrayContains(left: Expression, right: Expression)
   """)
 case class Concat(children: Seq[Expression]) extends Expression {
 
+  private val MAX_ARRAY_LENGTH: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+
   val allowedTypes = Seq(StringType, BinaryType, ArrayType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -341,8 +343,20 @@ case class Concat(children: Seq[Expression]) extends Expression {
       if (inputs.contains(null)) {
         null
       } else {
-        val elements = inputs.flatMap(_.asInstanceOf[ArrayData].toObjectArray(elementType))
-        new GenericArrayData(elements)
+        val arrayData = inputs.map(_.asInstanceOf[ArrayData])
+        val numberOfElements = arrayData.foldLeft(0L)((sum, ad) => sum + ad.numElements())
+        if (numberOfElements > MAX_ARRAY_LENGTH) {
+          throw new RuntimeException(s"Unsuccessful try to concat arrays with $numberOfElements" +
+            s" elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.")
+        }
+        val finalData = new Array[AnyRef](numberOfElements.toInt)
+        var position = 0
+        for(ad <- arrayData) {
+          val arr = ad.toObjectArray(elementType)
+          Array.copy(arr, 0, finalData, position, arr.length)
+          position += arr.length
+        }
+        new GenericArrayData(finalData)
       }
   }
 
@@ -366,9 +380,9 @@ case class Concat(children: Seq[Expression]) extends Expression {
         ("UTF8String", s"UTF8String[] $args = new UTF8String[${evals.length}];")
       case ArrayType(elementType, _) =>
         val arrayConcatClass = if (CodeGenerator.isPrimitiveType(elementType)) {
-          genCodeForPrimitiveArrayConcat(ctx, elementType)
+          genCodeForPrimitiveArrays(ctx, elementType)
         } else {
-          genCodeForComplexArrayConcat(ctx, elementType)
+          genCodeForNonPrimitiveArrays(ctx, elementType)
         }
         (arrayConcatClass, s"ArrayData[] $args = new ArrayData[${evals.length}];")
     }
@@ -385,48 +399,34 @@ case class Concat(children: Seq[Expression]) extends Expression {
   }
 
   private def genCodeForNumberOfElements(ctx: CodegenContext) : (String, String) = {
-    val tempVariableName = ctx.freshName("tempNumElements")
-    val numElementsConstant = ctx.freshName("numElements")
-    val assignments = (0 until children.length)
-      .map(idx => s"$tempVariableName[0] += args[$idx].numElements();")
+    val numElements = ctx.freshName("numElements")
+    val code = s"""
+        |long $numElements = 0L;
+        |for (int z = 0; z < ${children.length}; z++) {
+        |  $numElements += args[z].numElements();
+        |}
+        |if ($numElements > $MAX_ARRAY_LENGTH) {
+        |  throw new RuntimeException("Unsuccessful try to concat arrays with $numElements" +
+        |    " elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
+        |}
+      """.stripMargin
 
-    val assignmentSection = ctx.splitExpressions(
-      expressions = assignments,
-      funcName = "complexArrayConcat",
-      arguments = Seq((s"${javaType}[]", "args"), ("int[]", tempVariableName)))
-
-    (s"""
-        |int[] $tempVariableName = new int[]{0};
-        |$assignmentSection
-        |final int $numElementsConstant = $tempVariableName[0];
-      """.stripMargin,
-     numElementsConstant)
+    (code, numElements)
   }
 
-  private def nullArgumentProtection(ctx: CodegenContext) : String = {
-    val isNullVariable = ctx.freshName("isArrayNull")
-    val assignments = children
-      .zipWithIndex
-      .filter(_._1.nullable)
-      .map(ci => s"$isNullVariable[0] |= args[${ci._2}] == null;")
-
-    if (assignments.length > 0) {
-      val assignmentSection = ctx.splitExpressions(
-        expressions = assignments,
-        funcName = "isNullArrayConcat",
-        arguments = Seq((s"${javaType}[]", "args"), ("boolean[]", isNullVariable)))
-
+  private def nullArgumentProtection() : String = {
+    if (nullable) {
       s"""
-         |boolean[] $isNullVariable = new boolean[]{false};
-         |$assignmentSection;
-         |if ($isNullVariable[0]) return null;
+         |for (int z = 0; z < ${children.length}; z++) {
+         |  if (args[z] == null) return null;
+         |}
        """.stripMargin
     } else {
       ""
     }
   }
 
-  private def genCodeForPrimitiveArrayConcat(ctx: CodegenContext, elementType: DataType): String = {
+  private def genCodeForPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
     val arrayName = ctx.freshName("array")
     val arraySizeName = ctx.freshName("size")
     val counter = ctx.freshName("counter")
@@ -435,83 +435,69 @@ case class Concat(children: Seq[Expression]) extends Expression {
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
     val unsafeArraySizeInBytes = s"""
-      |int $arraySizeName = UnsafeArrayData.calculateHeaderPortionInBytes($numElemName) +
-      |${classOf[ByteArrayMethods].getName}.roundNumberOfBytesToNearestWord(
-      |  ${elementType.defaultSize} * $numElemName
-      |);
+      |long $arraySizeName = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
+      |  $numElemName,
+      |  ${elementType.defaultSize});
+      |if ($arraySizeName > $MAX_ARRAY_LENGTH) {
+      |  throw new RuntimeException("Unsuccessful try to concat arrays with $arraySizeName bytes" +
+      |    " of data due to exceeding the limit $MAX_ARRAY_LENGTH bytes for UnsafeArrayData.");
+      |}
       """.stripMargin
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
-
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
-    val assignments = (0 until children.length).map { idx =>
-      s"""
-         |for (int z = 0; z < args[$idx].numElements(); z++) {
-         |  if (args[$idx].isNullAt(z)) {
-         |    $arrayData.setNullAt($counter[0]);
-         |  } else {
-         |    $arrayData.set$primitiveValueTypeName(
-         |      $counter[0],
-         |      ${CodeGenerator.getValue(s"args[$idx]", elementType, "z")}
-         |    );
-         |  }
-         |  $counter[0]++;
-         |}
-        """.stripMargin
-    }
-    val assignmentSection = ctx.splitExpressions(
-      expressions = assignments,
-      funcName = "primitiveArrayConcat",
-      arguments = Seq(
-        (s"${javaType}[]", "args"),
-        ("UnsafeArrayData", arrayData),
-        ("int[]", counter)))
 
-    s"""new Object() {
+    s"""
+       |new Object() {
        |  public ArrayData concat(${CodeGenerator.javaType(dataType)}[] args) {
-       |    ${nullArgumentProtection(ctx)}
+       |    ${nullArgumentProtection()}
        |    $numElemCode
-       |    $unsafeArraySizeInBytes
-       |    byte[] $arrayName = new byte[$arraySizeName];
+     |    $unsafeArraySizeInBytes
+       |    byte[] $arrayName = new byte[(int)$arraySizeName];
        |    UnsafeArrayData $arrayData = new UnsafeArrayData();
        |    Platform.putLong($arrayName, $baseOffset, $numElemName);
-       |    $arrayData.pointTo($arrayName, $baseOffset, $arraySizeName);
-       |    int[] $counter = new int[]{0};
-       |    $assignmentSection
+       |    $arrayData.pointTo($arrayName, $baseOffset, (int)$arraySizeName);
+       |    int $counter = 0;
+       |    for (int y = 0; y < ${children.length}; y++) {
+       |      for (int z = 0; z < args[y].numElements(); z++) {
+       |        if (args[y].isNullAt(z)) {
+       |          $arrayData.setNullAt($counter);
+       |        } else {
+       |          $arrayData.set$primitiveValueTypeName(
+       |            $counter,
+       |            ${CodeGenerator.getValue(s"args[y]", elementType, "z")}
+       |          );
+       |        }
+       |        $counter++;
+       |      }
+       |    }
        |    return $arrayData;
        |  }
-       |}""".stripMargin
+       |}""".stripMargin.stripPrefix("\n")
   }
 
-  private def genCodeForComplexArrayConcat(ctx: CodegenContext, elementType: DataType): String = {
+  private def genCodeForNonPrimitiveArrays(ctx: CodegenContext, elementType: DataType): String = {
     val genericArrayClass = classOf[GenericArrayData].getName
     val arrayData = ctx.freshName("arrayObjects")
     val counter = ctx.freshName("counter")
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
-    val assignments = (0 until children.length).map { idx =>
-      s"""
-         |for (int z = 0; z < args[$idx].numElements(); z++) {
-         |  $arrayData[$counter[0]] = ${CodeGenerator.getValue(s"args[$idx]", elementType, "z")};
-         |  $counter[0]++;
-         |}
-        """.stripMargin
-    }
-    val assignmentSection = ctx.splitExpressions(
-      expressions = assignments,
-      funcName = "complexArrayConcat",
-      arguments = Seq((s"${javaType}[]", "args"), ("Object[]", arrayData), ("int[]", counter)))
-
-    s"""new Object() {
+    s"""
+       |new Object() {
        |  public ArrayData concat(${CodeGenerator.javaType(dataType)}[] args) {
-       |    ${nullArgumentProtection(ctx)}
+       |    ${nullArgumentProtection()}
        |    $numElemCode
-       |    Object[] $arrayData = new Object[$numElemName];
-       |    int[] $counter = new int[]{0};
-       |    $assignmentSection
+       |    Object[] $arrayData = new Object[(int)$numElemName];
+       |    int $counter = 0;
+       |    for (int y = 0; y < ${children.length}; y++) {
+       |      for (int z = 0; z < args[y].numElements(); z++) {
+       |        $arrayData[$counter] = ${CodeGenerator.getValue(s"args[y]", elementType, "z")};
+       |        $counter++;
+       |      }
+       |    }
        |    return new $genericArrayClass($arrayData);
        |  }
-       |}""".stripMargin
+       |}""".stripMargin.stripPrefix("\n")
   }
 
   override def toString: String = s"concat(${children.mkString(", ")})"
