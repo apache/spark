@@ -27,6 +27,7 @@ import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType, StructType}
 
 private[clustering] case class TestRow(features: Vector)
 
@@ -196,30 +197,43 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
   }
 
   test("KMean with Array input") {
-    val featuresColName = "array_model_features"
+    val featuresColNameD = "array_double_features"
+    val featuresColNameF = "array_float_features"
 
-    val arrayUDF = udf { (features: Vector) =>
-      features.toArray
+    val doubleUDF = udf { (features: Vector) =>
+      val featureArray = Array.fill[Double](features.size)(0.0)
+      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
+      featureArray
     }
-    val newdataset = dataset.withColumn(featuresColName, arrayUDF(col("features")) )
+    val floatUDF = udf { (features: Vector) =>
+      val featureArray = Array.fill[Float](features.size)(0.0f)
+      features.foreachActive((idx, value) => featureArray(idx) = value.toFloat)
+      featureArray
+    }
 
-    val kmeans = new KMeans()
-      .setFeaturesCol(featuresColName)
+    val newdatasetD = dataset.withColumn(featuresColNameD, doubleUDF(col("features")))
+      .drop("features")
+    val newdatasetF = dataset.withColumn(featuresColNameF, floatUDF(col("features")))
+      .drop("features")
 
-    assert(kmeans.getK === 2)
-    assert(kmeans.getFeaturesCol === featuresColName)
-    assert(kmeans.getPredictionCol === "prediction")
-    assert(kmeans.getMaxIter === 20)
-    assert(kmeans.getInitMode === MLlibKMeans.K_MEANS_PARALLEL)
-    assert(kmeans.getInitSteps === 2)
-    assert(kmeans.getTol === 1e-4)
-    assert(kmeans.getDistanceMeasure === DistanceMeasure.EUCLIDEAN)
-    val model = kmeans.setMaxIter(1).fit(newdataset)
+    assert(newdatasetD.schema(featuresColNameD).dataType.equals(new ArrayType(DoubleType, false)))
+    assert(newdatasetF.schema(featuresColNameF).dataType.equals(new ArrayType(FloatType, false)))
 
-    MLTestingUtils.checkCopyAndUids(kmeans, model)
-    assert(model.hasSummary)
-    val copiedModel = model.copy(ParamMap.empty)
-    assert(copiedModel.hasSummary)
+    val kmeansD = new KMeans().setK(k).setFeaturesCol(featuresColNameD).setSeed(1)
+    val kmeansF = new KMeans().setK(k).setFeaturesCol(featuresColNameF).setSeed(1)
+    val modelD = kmeansD.fit(newdatasetD)
+    val modelF = kmeansF.fit(newdatasetF)
+
+    val transformedD = modelD.transform(newdatasetD)
+    val transformedF = modelF.transform(newdatasetF)
+
+    val predictDifference = transformedD.select("prediction")
+      .except(transformedF.select("prediction"))
+
+    assert(predictDifference.count() == 0)
+
+    assert(modelD.computeCost(newdatasetD) == modelF.computeCost(newdatasetF) )
+
   }
 
 

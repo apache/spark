@@ -129,14 +129,21 @@ class KMeansModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     // val predictUDF = udf((vector: Vector) => predict(vector))
-    if (dataset.schema($(featuresCol)).dataType.equals(new VectorUDT)) {
-      val predictUDF = udf((vector: Vector) => predict(vector))
-      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
-    } else {
-      val predictUDF = udf((vector: Seq[_]) =>
-        predict(Vectors.dense(vector.asInstanceOf[Seq[Double]].toArray)))
-      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    val predictUDF = if (dataset.schema($(featuresCol)).dataType.equals(new VectorUDT)) {
+      udf((vector: Vector) => predict(vector))
     }
+    else {
+      udf((vector: Seq[_]) => {
+        val featureArray = Array.fill[Double](vector.size)(0.0)
+        for (idx <- 0 until vector.size) {
+          featureArray(idx) = vector(idx).toString().toDouble
+        }
+        OldVectors.fromML(Vectors.dense(featureArray))
+        predict(Vectors.dense(featureArray))
+      })
+    }
+
+    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
   @Since("1.5.0")
@@ -164,6 +171,12 @@ class KMeansModel private[ml] (
     SchemaUtils.checkColumnTypes(dataset.schema, $(featuresCol), typeCandidates)
     val data: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
+      case Row(point: Seq[_]) =>
+        val featureArray = Array.fill[Double](point.size)(0.0)
+        for (idx <- 0 until point.size) {
+          featureArray(idx) = point(idx).toString().toDouble
+        }
+        OldVectors.fromML(Vectors.dense(featureArray))
     }
     parentModel.computeCost(data)
   }
@@ -330,8 +343,12 @@ class KMeans @Since("1.5.0") (
     val instances: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
       case Row(point: Seq[_]) =>
-        OldVectors.fromML(Vectors.dense(point.asInstanceOf[Seq[Double]].toArray))
-    }
+        val featureArray = Array.fill[Double](point.size)(0.0)
+        for (idx <- 0 until point.size) {
+          featureArray(idx) = point(idx).toString().toDouble
+        }
+        OldVectors.fromML(Vectors.dense(featureArray))
+      }
 
     if (handlePersistence) {
       instances.persist(StorageLevel.MEMORY_AND_DISK)
