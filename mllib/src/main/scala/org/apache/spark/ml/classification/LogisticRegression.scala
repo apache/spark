@@ -816,7 +816,7 @@ class LogisticRegression @Since("1.2.0") (
 
         if (state == null) {
           val msg = s"${optimizer.getClass.getName} failed."
-          logError(msg)
+          instr.logError(msg)
           throw new SparkException(msg)
         }
 
