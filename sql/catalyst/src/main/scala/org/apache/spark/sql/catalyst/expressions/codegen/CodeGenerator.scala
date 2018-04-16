@@ -575,7 +575,7 @@ class CodegenContext {
     if (freshNameIds.contains(fullName)) {
       val id = freshNameIds(fullName)
       freshNameIds(fullName) = id + 1
-      s"$fullName$id"
+      s"${fullName}_$id"
     } else {
       freshNameIds += fullName -> 1
       fullName

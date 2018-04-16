@@ -489,4 +489,11 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(!ctx.subExprEliminationExprs.contains(ref))
     }
   }
+
+  test("SPARK-23986: freshName can generate duplicated names") {
+    val ctx = new CodegenContext
+    val names = ctx.freshName("myName1") :: ctx.freshName("myName1") ::
+      ctx.freshName("myName11") :: Nil
+    assert(names.distinct.length == 3)
+  }
 }
