@@ -177,8 +177,8 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
             rangeConditions.filter(x => x.isInstanceOf[GreaterThan] ||
               x.isInstanceOf[GreaterThanOrEqual]).size == 0 ||
             // Both comparisons reference the same columns:
-            rangeConditions.map(c => c.left).distinct.size != 1 ||
-            rangeConditions.map(c => c.right).distinct.size != 1) {
+            rangeConditions.map(c => c.left.references).distinct.size != 1 ||
+            rangeConditions.map(c => c.right.references).distinct.size != 1) {
           rangeConditions = Nil
           rangePreds.clear()
         }

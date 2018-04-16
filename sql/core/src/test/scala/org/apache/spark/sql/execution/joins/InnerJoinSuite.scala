@@ -302,14 +302,14 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   {
-    lazy val left = rangeTestData1
-    lazy val right = rangeTestData2
+    lazy val left = rangeTestData1.orderBy("a").sortWithinPartitions("b")
+    lazy val right = rangeTestData2.orderBy("a").sortWithinPartitions("b")
     testInnerJoin(
       "inner range join",
       left,
       right,
-      () => ((left("a") === right("a")) and (left("b") <= right("b")-1)
-        and (left("b") >= right("b") + 1)).expr,
+      () => ((left("a") === right("a")) and (left("b") <= right("b") + 1)
+        and (left("b") >= right("b") - 1)).expr,
       Seq(
         (1, 1, 1, 1),
         (1, 1, 1, 2),
