@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
@@ -226,7 +227,7 @@ class FallBackToOrcV1(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       sparkSession = sparkSession,
       paths = Seq.empty,
       userSpecifiedSchema = v2Relation.userSpecifiedSchema,
-      className = "org.apache.spark.sql.execution.datasources.orc",
+      className = classOf[OrcFileFormat].getCanonicalName,
       options = v2Relation.options).resolveRelation()
     LogicalRelation(v1)
   }

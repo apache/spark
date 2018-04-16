@@ -541,28 +541,6 @@ object PartitioningUtils {
     StructType(fields)
   }
 
-  /**
-   * In the read path, only managed tables by Hive provide the partition columns properly when
-   * initializing this class. All other file based data sources will try to infer the partitioning,
-   * and then cast the inferred types to user specified dataTypes if the partition columns exist
-   * inside `userSpecifiedSchema`, otherwise we can hit data corruption bugs like SPARK-18510, or
-   * inconsistent data types as reported in SPARK-21463.
-   * @param fileIndex A FileIndex that will perform partition inference
-   * @return The PartitionSchema resolved from inference and cast according to `userSpecifiedSchema`
-   */
-  def combineInferredAndUserSpecifiedPartitionSchema(
-      fileIndex: FileIndex,
-      userSpecifiedSchema: Option[StructType] = None,
-      caseSensitive: Boolean): StructType = {
-    val equality = columnNameEquality(caseSensitive)
-    val resolved = fileIndex.partitionSchema.map { partitionField =>
-      // SPARK-18510: try to get schema from userSpecifiedSchema, otherwise fallback to inferred
-      userSpecifiedSchema.flatMap(_.find(f => equality(f.name, partitionField.name))).getOrElse(
-        partitionField)
-    }
-    StructType(resolved)
-  }
-
   private def getColName(f: StructField, caseSensitive: Boolean): String = {
     if (caseSensitive) {
       f.name
