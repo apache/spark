@@ -568,7 +568,7 @@ case class ArrayPosition(left: Expression, right: Expression)
 @ExpressionDescription(
   usage = """
     _FUNC_(array, index) - Returns element of array at given index. If index < 0, accesses elements
-      from the last to the first.
+      from the last to the first. Returns NULL if the index exceeds the length of the array.
 
     _FUNC_(map, key) - Returns value for given key, or NULL if the key is not contained in the map
   """,
@@ -613,7 +613,7 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
           } else {
             array.numElements() + index
           }
-          if (array.isNullAt(idx)) {
+          if (left.dataType.asInstanceOf[ArrayType].containsNull && array.isNullAt(idx)) {
             null
           } else {
             array.get(idx, dataType)
@@ -634,7 +634,7 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
                |if ($eval1.isNullAt($index)) {
                |  ${ev.isNull} = true;
                |} else
-             """
+             """.stripMargin
           } else {
             ""
           }
@@ -655,7 +655,7 @@ case class ElementAt(left: Expression, right: Expression) extends GetMapValueUti
              |    ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};
              |  }
              |}
-           """
+           """.stripMargin
         })
       case _: MapType =>
         doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType])

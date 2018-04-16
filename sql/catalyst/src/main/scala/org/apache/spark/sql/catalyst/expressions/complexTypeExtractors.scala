@@ -342,8 +342,8 @@ abstract class GetMapValueUtil extends BinaryExpression with ImplicitCastInputTy
  *
  * We need to do type checking here as `key` expression maybe unresolved.
  */
-case class GetMapValue(child: Expression, key: Expression) extends GetMapValueUtil
-  with ExtractValue with NullIntolerant {
+case class GetMapValue(child: Expression, key: Expression)
+  extends GetMapValueUtil with ExtractValue with NullIntolerant {
 
   private def keyType = child.dataType.asInstanceOf[MapType].keyType
 
