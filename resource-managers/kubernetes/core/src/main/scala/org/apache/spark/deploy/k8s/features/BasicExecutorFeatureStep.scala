@@ -172,7 +172,7 @@ private[spark] class BasicExecutorFeatureStep(
 
     val (executorPodWithVolumes, executorContainerWithVolumes) =
       KubernetesUtils.addVolumes(executorPod,
-        executorContainer,
+        containerWithLimitCores,
         kubernetesConf.get(KUBERNETES_EXECUTOR_VOLUMES))
 
     SparkPod(executorPodWithVolumes, executorContainerWithVolumes)
