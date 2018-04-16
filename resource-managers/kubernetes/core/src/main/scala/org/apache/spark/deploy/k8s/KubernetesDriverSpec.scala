@@ -14,17 +14,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit.steps
+package org.apache.spark.deploy.k8s
 
-import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
+import io.fabric8.kubernetes.api.model.HasMetadata
 
-/**
- * Represents a step in configuring the Spark driver pod.
- */
-private[spark] trait DriverConfigurationStep {
+private[spark] case class KubernetesDriverSpec(
+    pod: SparkPod,
+    driverKubernetesResources: Seq[HasMetadata],
+    systemProperties: Map[String, String])
 
-  /**
-   * Apply some transformation to the previous state of the driver to add a new feature to it.
-   */
-  def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec
+private[spark] object KubernetesDriverSpec {
+  def initialSpec(initialProps: Map[String, String]): KubernetesDriverSpec = KubernetesDriverSpec(
+    SparkPod.initialPod(),
+    Seq.empty,
+    initialProps)
 }

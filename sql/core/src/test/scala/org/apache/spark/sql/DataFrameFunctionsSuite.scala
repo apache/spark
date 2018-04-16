@@ -413,6 +413,20 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("array_max function") {
+    val df = Seq(
+      Seq[Option[Int]](Some(1), Some(3), Some(2)),
+      Seq.empty[Option[Int]],
+      Seq[Option[Int]](None),
+      Seq[Option[Int]](None, Some(1), Some(-100))
+    ).toDF("a")
+
+    val answer = Seq(Row(3), Row(null), Row(null), Row(1))
+
+    checkAnswer(df.select(array_max(df("a"))), answer)
+    checkAnswer(df.selectExpr("array_max(a)"), answer)
+  }
+
   test("concat function - arrays") {
     val nseqi : Seq[Int] = null
     val nseqs : Seq[String] = null

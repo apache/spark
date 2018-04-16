@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io.{File, IOException}
 import java.net.URI
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -28,17 +27,17 @@ import scala.util.Random
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
+import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -138,7 +137,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     assert(getData(provider, 19) === Set("a" -> 19))
   }
 
-  test("SPARK-19677: Committing a delta file atop an existing one should not fail on HDFS") {
+  testQuietly("SPARK-19677: Committing a delta file atop an existing one should not fail on HDFS") {
     val conf = new Configuration()
     conf.set("fs.fake.impl", classOf[RenameLikeHDFSFileSystem].getName)
     conf.set("fs.defaultFS", "fake:///")
@@ -344,7 +343,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     }
   }
 
-  test("SPARK-18342: commit fails when rename fails") {
+  testQuietly("SPARK-18342: commit fails when rename fails") {
     import RenameReturnsFalseFileSystem._
     val dir = scheme + "://" + newDir()
     val conf = new Configuration()
@@ -366,7 +365,7 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
 
     def numTempFiles: Int = {
       if (deltaFileDir.exists) {
-        deltaFileDir.listFiles.map(_.getName).count(n => n.contains("temp") && !n.startsWith("."))
+        deltaFileDir.listFiles.map(_.getName).count(n => n.endsWith(".tmp"))
       } else 0
     }
 
@@ -469,6 +468,43 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
         spark.stop()
       }
     }
+  }
+
+  test("error writing [version].delta cancels the output stream") {
+
+    val hadoopConf = new Configuration()
+    hadoopConf.set(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
+      classOf[CreateAtomicTestManager].getName)
+    val remoteDir = Utils.createTempDir().getAbsolutePath
+
+    val provider = newStoreProvider(
+      opId = Random.nextInt, partition = 0, dir = remoteDir, hadoopConf = hadoopConf)
+
+    // Disable failure of output stream and generate versions
+    CreateAtomicTestManager.shouldFailInCreateAtomic = false
+    for (version <- 1 to 10) {
+      val store = provider.getStore(version - 1)
+      put(store, version.toString, version) // update "1" -> 1, "2" -> 2, ...
+      store.commit()
+    }
+    val version10Data = (1L to 10).map(_.toString).map(x => x -> x).toSet
+
+    CreateAtomicTestManager.cancelCalledInCreateAtomic = false
+    val store = provider.getStore(10)
+    // Fail commit for next version and verify that reloading resets the files
+    CreateAtomicTestManager.shouldFailInCreateAtomic = true
+    put(store, "11", 11)
+    val e = intercept[IllegalStateException] { quietly { store.commit() } }
+    assert(e.getCause.isInstanceOf[IOException])
+    CreateAtomicTestManager.shouldFailInCreateAtomic = false
+
+    // Abort commit for next version and verify that reloading resets the files
+    CreateAtomicTestManager.cancelCalledInCreateAtomic = false
+    val store2 = provider.getStore(10)
+    put(store2, "11", 11)
+    store2.abort()
+    assert(CreateAtomicTestManager.cancelCalledInCreateAtomic)
   }
 
   override def newStoreProvider(): HDFSBackedStateStoreProvider = {
@@ -720,6 +756,14 @@ abstract class StateStoreSuiteBase[ProviderClass <: StateStoreProvider]
    * this provider
    */
   def getData(storeProvider: ProviderClass, version: Int): Set[(String, Int)]
+
+  protected def testQuietly(name: String)(f: => Unit): Unit = {
+    test(name) {
+      quietly {
+        f
+      }
+    }
+  }
 }
 
 object StateStoreTestsHelper {

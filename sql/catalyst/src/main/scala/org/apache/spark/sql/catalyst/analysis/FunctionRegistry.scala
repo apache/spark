@@ -394,6 +394,7 @@ object FunctionRegistry {
     expression[TruncTimestamp]("date_trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
     expression[DayOfWeek]("dayofweek"),
+    expression[WeekDay]("weekday"),
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),
@@ -407,6 +408,7 @@ object FunctionRegistry {
     expression[MapValues]("map_values"),
     expression[Size]("size"),
     expression[SortArray]("sort_array"),
+    expression[ArrayMax]("array_max"),
     expression[Concat]("concat"),
     CreateStruct.registryEntry,
 

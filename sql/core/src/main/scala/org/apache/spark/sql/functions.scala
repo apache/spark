@@ -3301,6 +3301,14 @@ object functions {
   def sort_array(e: Column, asc: Boolean): Column = withExpr { SortArray(e.expr, lit(asc).expr) }
 
   /**
+   * Returns the maximum value in the array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
+
+  /**
    * Returns an unordered array containing the keys of the map.
    * @group collection_funcs
    * @since 2.3.0
