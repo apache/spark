@@ -26,6 +26,7 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.functions._
 
 private[clustering] case class TestRow(features: Vector)
 
@@ -193,6 +194,34 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(e.getCause.isInstanceOf[AssertionError])
     assert(e.getCause.getMessage.contains("Cosine distance is not defined"))
   }
+
+  test("KMean with Array input") {
+    val featuresColName = "array_model_features"
+
+    val arrayUDF = udf { (features: Vector) =>
+      features.toArray
+    }
+    val newdataset = dataset.withColumn(featuresColName, arrayUDF(col("features")) )
+
+    val kmeans = new KMeans()
+      .setFeaturesCol(featuresColName)
+
+    assert(kmeans.getK === 2)
+    assert(kmeans.getFeaturesCol === featuresColName)
+    assert(kmeans.getPredictionCol === "prediction")
+    assert(kmeans.getMaxIter === 20)
+    assert(kmeans.getInitMode === MLlibKMeans.K_MEANS_PARALLEL)
+    assert(kmeans.getInitSteps === 2)
+    assert(kmeans.getTol === 1e-4)
+    assert(kmeans.getDistanceMeasure === DistanceMeasure.EUCLIDEAN)
+    val model = kmeans.setMaxIter(1).fit(newdataset)
+
+    MLTestingUtils.checkCopyAndUids(kmeans, model)
+    assert(model.hasSummary)
+    val copiedModel = model.copy(ParamMap.empty)
+    assert(copiedModel.hasSummary)
+  }
+
 
   test("read/write") {
     def checkModelData(model: KMeansModel, model2: KMeansModel): Unit = {

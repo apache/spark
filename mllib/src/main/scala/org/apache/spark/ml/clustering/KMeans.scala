@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -32,7 +32,7 @@ import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils.majorVersion
 
@@ -90,7 +90,12 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
+    val typeCandidates = List( new VectorUDT,
+      new ArrayType(DoubleType, true),
+      new ArrayType(DoubleType, false),
+      new ArrayType(FloatType, true),
+      new ArrayType(FloatType, false))
+    SchemaUtils.checkColumnTypes(schema, $(featuresCol), typeCandidates)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
   }
 }
@@ -123,8 +128,15 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val predictUDF = udf((vector: Vector) => predict(vector))
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    // val predictUDF = udf((vector: Vector) => predict(vector))
+    if (dataset.schema($(featuresCol)).dataType.equals(new VectorUDT)) {
+      val predictUDF = udf((vector: Vector) => predict(vector))
+      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    } else {
+      val predictUDF = udf((vector: Seq[_]) =>
+        predict(Vectors.dense(vector.asInstanceOf[Seq[Double]].toArray)))
+      dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    }
   }
 
   @Since("1.5.0")
@@ -144,7 +156,12 @@ class KMeansModel private[ml] (
   // TODO: Replace the temp fix when we have proper evaluators defined for clustering.
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
-    SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
+    val typeCandidates = List( new VectorUDT,
+      new ArrayType(DoubleType, true),
+      new ArrayType(DoubleType, false),
+      new ArrayType(FloatType, true),
+      new ArrayType(FloatType, false))
+    SchemaUtils.checkColumnTypes(dataset.schema, $(featuresCol), typeCandidates)
     val data: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
@@ -305,6 +322,8 @@ class KMeans @Since("1.5.0") (
   @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  case class SeqDouble(value: Seq[Double])
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
     transformSchema(dataset.schema, logging = true)
@@ -312,6 +331,8 @@ class KMeans @Since("1.5.0") (
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val instances: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
+      case Row(point: Seq[_]) =>
+        OldVectors.fromML(Vectors.dense(point.asInstanceOf[Seq[Double]].toArray))
     }
 
     if (handlePersistence) {
