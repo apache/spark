@@ -800,18 +800,6 @@ private[spark] class TaskSetManager(
             fetchFailed.bmAddress.host, fetchFailed.bmAddress.executorId))
         }
         fetchFailedTaskIndexSet.add(index)
-        // Kill any other attempts for this FetchFailed task
-        for (attemptInfo <- taskAttempts(index) if attemptInfo.running) {
-          logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for task ${attemptInfo.id} " +
-            s"in stage ${taskSet.id} (TID ${attemptInfo.taskId}) on ${attemptInfo.host} " +
-            s"as the attempt ${info.attemptNumber} failed because FetchFailed")
-          killedByOtherAttempt(index) = true
-          sched.backend.killTask(
-            attemptInfo.taskId,
-            attemptInfo.executorId,
-            interruptThread = true,
-            reason = "another attempt fetch failed")
-        }
 
         None
 
