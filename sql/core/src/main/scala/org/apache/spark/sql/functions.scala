@@ -3309,6 +3309,14 @@ object functions {
   def array_min(e: Column): Column = withExpr { ArrayMin(e.expr) }
 
   /**
+   * Returns the maximum value in the array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
+
+  /**
    * Returns an unordered array containing the keys of the map.
    * @group collection_funcs
    * @since 2.3.0

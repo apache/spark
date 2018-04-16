@@ -37,17 +37,6 @@ private[spark] object KubernetesUtils {
     sparkConf.getAllWithPrefix(prefix).toMap
   }
 
-  /**
-   * Parses comma-separated list of imagePullSecrets into K8s-understandable format
-   */
-  def parseImagePullSecrets(imagePullSecrets: Option[String]): List[LocalObjectReference] = {
-    imagePullSecrets match {
-      case Some(secretsCommaSeparated) =>
-        secretsCommaSeparated.split(',').map(_.trim).map(new LocalObjectReference(_)).toList
-      case None => Nil
-    }
-  }
-
   def requireNandDefined(opt1: Option[_], opt2: Option[_], errMessage: String): Unit = {
     opt1.foreach { _ => require(opt2.isEmpty, errMessage) }
   }
