@@ -394,19 +394,18 @@ case class Flatten(child: Expression) extends UnaryExpression {
     if (elements.contains(null)) {
       null
     } else {
-      val arrays = elements.map(
-        _.asInstanceOf[ArrayData].toObjectArray(elementType)
-      )
-      val numberOfElements = arrays.foldLeft(0L)((sum, e) => sum + e.length)
-      if(numberOfElements > MAX_ARRAY_LENGTH) {
+      val arrayData = elements.map(_.asInstanceOf[ArrayData])
+      val numberOfElements = arrayData.foldLeft(0L)((sum, e) => sum + e.numElements())
+      if (numberOfElements > MAX_ARRAY_LENGTH) {
         throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
           s" $numberOfElements elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.")
       }
       val flattenedData = new Array(numberOfElements.toInt)
       var position = 0
-      for(a <- arrays) {
-        Array.copy(a, 0, flattenedData, position, a.length)
-        position += a.length
+      for (ad <- arrayData) {
+        val arr = ad.toObjectArray(elementType)
+        Array.copy(arr, 0, flattenedData, position, arr.length)
+        position += arr.length
       }
       new GenericArrayData(flattenedData)
     }
@@ -428,10 +427,10 @@ case class Flatten(child: Expression) extends UnaryExpression {
       childVariableName: String,
       coreLogic: String): String = {
     s"""
-    |for(int z=0; !${ev.isNull} && z < $childVariableName.numElements(); z++) {
+    |for (int z=0; !${ev.isNull} && z < $childVariableName.numElements(); z++) {
     |  ${ev.isNull} |= $childVariableName.isNullAt(z);
     |}
-    |if(!${ev.isNull}) {
+    |if (!${ev.isNull}) {
     |  $coreLogic
     |}
     """.stripMargin
@@ -443,7 +442,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
     val variableName = ctx.freshName("numElements")
     val code = s"""
       |long $variableName = 0;
-      |for(int z=0; z < $childVariableName.numElements(); z++) {
+      |for (int z=0; z < $childVariableName.numElements(); z++) {
       |  $variableName += $childVariableName.getArray(z).numElements();
       |}
       |if ($variableName > ${MAX_ARRAY_LENGTH}) {
@@ -471,7 +470,8 @@ case class Flatten(child: Expression) extends UnaryExpression {
       |  ${elementType.defaultSize});
       |if ($arraySizeName > $MAX_ARRAY_LENGTH) {
       |  throw new RuntimeException("Unsuccessful try to flatten an array of arrays with" +
-      |    " $arraySizeName bytes of data due to exceeding the limit $MAX_ARRAY_LENGTH bytes.");
+      |    " $arraySizeName bytes of data due to exceeding the limit $MAX_ARRAY_LENGTH" +
+      |    " bytes for UnsafeArrayData.");
       |}
       """.stripMargin
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
@@ -486,10 +486,10 @@ case class Flatten(child: Expression) extends UnaryExpression {
     |Platform.putLong($arrayName, $baseOffset, $numElemName);
     |$tempArrayDataName.pointTo($arrayName, $baseOffset, (int)$arraySizeName);
     |int $counter = 0;
-    |for(int k=0; k < $childVariableName.numElements(); k++) {
+    |for (int k=0; k < $childVariableName.numElements(); k++) {
     |  ArrayData arr = $childVariableName.getArray(k);
-    |  for(int l = 0; l < arr.numElements(); l++) {
-    |   if(arr.isNullAt(l)) {
+    |  for (int l = 0; l < arr.numElements(); l++) {
+    |   if (arr.isNullAt(l)) {
     |     $tempArrayDataName.setNullAt($counter);
     |   } else {
     |     $tempArrayDataName.set$primitiveValueTypeName(
@@ -517,9 +517,9 @@ case class Flatten(child: Expression) extends UnaryExpression {
     |$numElemCode
     |Object[] $arrayName = new Object[(int)$numElemName];
     |int $counter = 0;
-    |for(int k=0; k < $childVariableName.numElements(); k++) {
+    |for (int k=0; k < $childVariableName.numElements(); k++) {
     |  ArrayData arr = $childVariableName.getArray(k);
-    |  for(int l = 0; l < arr.numElements(); l++) {
+    |  for (int l = 0; l < arr.numElements(); l++) {
     |    $arrayName[$counter] = ${CodeGenerator.getValue("arr", elementType, "l")};
     |    $counter++;
     |  }
