@@ -42,15 +42,15 @@ class RemoveRedundantSortsSuite extends PlanTest {
 
   test("remove redundant order by") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
-    val unnecessaryReordered = orderedPlan.select('a).orderBy('a.asc, 'b.desc_nullsFirst)
+    val unnecessaryReordered = orderedPlan.limit(2).select('a).orderBy('a.asc, 'b.desc_nullsFirst)
     val optimized = Optimize.execute(unnecessaryReordered.analyze)
-    val correctAnswer = orderedPlan.select('a).analyze
+    val correctAnswer = orderedPlan.limit(2).select('a).analyze
     comparePlans(Optimize.execute(optimized), correctAnswer)
   }
 
   test("do not remove sort if the order is different") {
     val orderedPlan = testRelation.select('a, 'b).orderBy('a.asc, 'b.desc_nullsFirst)
-    val reorderedDifferently = orderedPlan.select('a).orderBy('a.asc, 'b.desc)
+    val reorderedDifferently = orderedPlan.limit(2).select('a).orderBy('a.asc, 'b.desc)
     val optimized = Optimize.execute(reorderedDifferently.analyze)
     val correctAnswer = reorderedDifferently.analyze
     comparePlans(optimized, correctAnswer)
