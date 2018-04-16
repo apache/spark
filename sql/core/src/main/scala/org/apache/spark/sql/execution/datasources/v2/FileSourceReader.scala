@@ -35,7 +35,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
 
 trait FileSourceReader extends DataSourceReader
   with SupportsScanUnsafeRow
-  with SupportsPushDownRequiredColumns {
+  with SupportsPushDownRequiredColumns
+  with SupportsPushDownCatalystFilters {
   def options: DataSourceOptions
   def userSpecifiedSchema: Option[StructType]
 
@@ -91,6 +92,7 @@ trait FileSourceReader extends DataSourceReader
     PartitioningUtils.mergeDataAndPartitionSchema(dataSchema, partitionSchema, isCaseSensitive)
   protected var requiredSchema = fullSchema
   protected var partitionFilters: Array[Expression] = Array.empty
+  protected var pushedFiltersArray: Array[Expression] = Array.empty
 
   protected def partitions: Seq[FilePartition] = {
     val selectedPartitions = fileIndex.listFiles(partitionFilters, Seq.empty)
@@ -117,6 +119,12 @@ trait FileSourceReader extends DataSourceReader
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     this.requiredSchema = requiredSchema
+  }
+
+  override def pushCatalystFilters(filters: Array[Expression]): Array[Expression] = Array.empty
+
+  override def pushedCatalystFilters(): Array[Expression] = {
+    pushedFiltersArray
   }
 
   override def createUnsafeRowReaderFactories: JList[DataReaderFactory[UnsafeRow]] = {

@@ -58,8 +58,6 @@ case class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: 
     OrcUtils.readSchema(sparkSession, files)
   }
 
-  private var pushedFiltersArray: Array[Expression] = Array.empty
-
   override def readFunction: PartitionedFile => Iterator[InternalRow] = {
     val capacity = sqlConf.orcVectorizedReaderBatchSize
     val enableOffHeapColumnVector = sqlConf.offHeapColumnVectorEnabled
@@ -162,10 +160,6 @@ case class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: 
       }
     }
     otherFilters
-  }
-
-  override def pushedCatalystFilters(): Array[Expression] = {
-    pushedFiltersArray
   }
 
   override def enableBatchRead(): Boolean = {
