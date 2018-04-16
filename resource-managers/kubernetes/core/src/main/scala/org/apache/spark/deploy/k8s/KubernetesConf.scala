@@ -16,13 +16,16 @@
  */
 package org.apache.spark.deploy.k8s
 
+import scala.collection.mutable
+
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.submit.{JavaMainAppResource, MainAppResource}
+import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config.ConfigEntry
+
 
 private[spark] sealed trait KubernetesRoleSpecificConf
 
@@ -54,7 +57,8 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     roleLabels: Map[String, String],
     roleAnnotations: Map[String, String],
     roleSecretNamesToMountPaths: Map[String, String],
-    roleEnvs: Map[String, String]) {
+    roleEnvs: Map[String, String],
+    sparkFiles: Seq[String]) {
 
   def namespace(): String = sparkConf.get(KUBERNETES_NAMESPACE)
 
@@ -63,10 +67,13 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     .map(str => str.split(",").toSeq)
     .getOrElse(Seq.empty[String])
 
-  def sparkFiles(): Seq[String] = sparkConf
-    .getOption("spark.files")
+  def pyFiles(): Seq[String] = sparkConf
+    .get(KUBERNETES_PYSPARK_PY_FILES)
     .map(str => str.split(",").toSeq)
     .getOrElse(Seq.empty[String])
+
+  def pySparkMainResource(): Option[String] = sparkConf
+    .get(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE)
 
   def imagePullPolicy(): String = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
 
@@ -101,17 +108,27 @@ private[spark] object KubernetesConf {
       appId: String,
       mainAppResource: Option[MainAppResource],
       mainClass: String,
-      appArgs: Array[String]): KubernetesConf[KubernetesDriverSpecificConf] = {
+      appArgs: Array[String],
+      maybePyFiles: Seq[String]): KubernetesConf[KubernetesDriverSpecificConf] = {
     val sparkConfWithMainAppJar = sparkConf.clone()
+    val additionalFiles = mutable.ArrayBuffer.empty[String]
     mainAppResource.foreach {
-      case JavaMainAppResource(res) =>
-        val previousJars = sparkConf
-          .getOption("spark.jars")
-          .map(_.split(","))
-          .getOrElse(Array.empty)
-        if (!previousJars.contains(res)) {
-          sparkConfWithMainAppJar.setJars(previousJars ++ Seq(res))
-        }
+        case JavaMainAppResource(res) =>
+          val previousJars = sparkConf
+            .getOption("spark.jars")
+            .map(_.split(","))
+            .getOrElse(Array.empty)
+          if (!previousJars.contains(res)) {
+            sparkConfWithMainAppJar.setJars(previousJars ++ Seq(res))
+          }
+        case nonJVM: NonJVMResource =>
+          nonJVM match {
+            case PythonMainAppResource(res) =>
+              additionalFiles += res
+              additionalFiles.appendAll(maybePyFiles)
+              sparkConfWithMainAppJar.set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, res)
+          }
+          sparkConfWithMainAppJar.set(MEMORY_OVERHEAD_FACTOR, 0.4)
     }
 
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
@@ -132,6 +149,11 @@ private[spark] object KubernetesConf {
     val driverEnvs = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_ENV_PREFIX)
 
+    val sparkFiles = sparkConf
+      .getOption("spark.files")
+      .map(str => str.split(",").toSeq)
+      .getOrElse(Seq.empty[String]) ++ additionalFiles
+
     KubernetesConf(
       sparkConfWithMainAppJar,
       KubernetesDriverSpecificConf(mainAppResource, mainClass, appName, appArgs),
@@ -140,7 +162,8 @@ private[spark] object KubernetesConf {
       driverLabels,
       driverAnnotations,
       driverSecretNamesToMountPaths,
-      driverEnvs)
+      driverEnvs,
+      sparkFiles)
   }
 
   def createExecutorConf(
@@ -179,6 +202,7 @@ private[spark] object KubernetesConf {
       executorLabels,
       executorAnnotations,
       executorSecrets,
-      executorEnv)
+      executorEnv,
+      Seq.empty[String])
   }
 }

@@ -33,6 +33,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   private val CONTAINER_IMAGE_PULL_POLICY = "IfNotPresent"
   private val APP_NAME = "spark-test"
   private val MAIN_CLASS = "org.apache.spark.examples.SparkPi"
+  private val PYTHON_MAIN_CLASS = "example.py"
+  private val EXAMPLE_PYTHON_FILES = Seq("example2.py", "example3.py")
   private val APP_ARGS = Array("arg1", "arg2", "\"arg 3\"")
   private val CUSTOM_ANNOTATION_KEY = "customAnnotation"
   private val CUSTOM_ANNOTATION_VALUE = "customAnnotationValue"
@@ -69,7 +71,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_LABELS,
       DRIVER_ANNOTATIONS,
       Map.empty,
-      DRIVER_ENVS)
+      DRIVER_ENVS,
+      Seq.empty[String])
 
     val featureStep = new BasicDriverFeatureStep(kubernetesConf)
     val basePod = SparkPod.initialPod()
@@ -138,7 +141,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       DRIVER_LABELS,
       DRIVER_ANNOTATIONS,
       Map.empty,
-      Map.empty)
+      Map.empty,
+      allFiles)
     val step = new BasicDriverFeatureStep(kubernetesConf)
     val additionalProperties = step.getAdditionalPodSystemProperties()
     val expectedSparkConf = Map(

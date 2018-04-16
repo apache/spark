@@ -48,7 +48,8 @@ private[spark] class BasicDriverFeatureStep(
   private val driverMemoryMiB = conf.get(DRIVER_MEMORY)
   private val memoryOverheadMiB = conf
     .get(DRIVER_MEMORY_OVERHEAD)
-    .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * driverMemoryMiB).toInt, MEMORY_OVERHEAD_MIN_MIB))
+    .getOrElse(math.max((conf.get(MEMORY_OVERHEAD_FACTOR) * driverMemoryMiB).toInt,
+      MEMORY_OVERHEAD_MIN_MIB))
   private val driverMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
 
   override def configurePod(pod: SparkPod): SparkPod = {
@@ -122,7 +123,7 @@ private[spark] class BasicDriverFeatureStep(
     val resolvedSparkJars = KubernetesUtils.resolveFileUrisAndPath(
       conf.sparkJars())
     val resolvedSparkFiles = KubernetesUtils.resolveFileUrisAndPath(
-      conf.sparkFiles())
+      conf.sparkFiles)
     if (resolvedSparkJars.nonEmpty) {
       additionalProps.put("spark.jars", resolvedSparkJars.mkString(","))
     }

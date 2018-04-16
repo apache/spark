@@ -39,11 +39,13 @@ import org.apache.spark.util.Utils
  * @param mainAppResource the main application resource if any
  * @param mainClass the main class of the application to run
  * @param driverArgs arguments to the driver
+ * @param maybePyFiles additional Python files via --py-files
  */
 private[spark] case class ClientArguments(
     mainAppResource: Option[MainAppResource],
     mainClass: String,
-    driverArgs: Array[String])
+    driverArgs: Array[String],
+    maybePyFiles: Seq[String])
 
 private[spark] object ClientArguments {
 
@@ -51,10 +53,15 @@ private[spark] object ClientArguments {
     var mainAppResource: Option[MainAppResource] = None
     var mainClass: Option[String] = None
     val driverArgs = mutable.ArrayBuffer.empty[String]
+    var maybePyFiles : Seq[String] = Seq.empty[String]
 
     args.sliding(2, 2).toList.foreach {
       case Array("--primary-java-resource", primaryJavaResource: String) =>
         mainAppResource = Some(JavaMainAppResource(primaryJavaResource))
+      case Array("--primary-py-file", primaryPythonResource: String) =>
+        mainAppResource = Some(PythonMainAppResource(primaryPythonResource))
+      case Array("--other-py-files", pyFiles: String) =>
+        maybePyFiles = pyFiles.split(",")
       case Array("--main-class", clazz: String) =>
         mainClass = Some(clazz)
       case Array("--arg", arg: String) =>
@@ -69,7 +76,8 @@ private[spark] object ClientArguments {
     ClientArguments(
       mainAppResource,
       mainClass.get,
-      driverArgs.toArray)
+      driverArgs.toArray,
+      maybePyFiles)
   }
 }
 
@@ -206,6 +214,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     val kubernetesResourceNamePrefix = {
       s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
     }
+    sparkConf.set("spark.kubernetes.python.pyFiles", clientArguments.maybePyFiles.mkString(","))
     val kubernetesConf = KubernetesConf.createDriverConf(
       sparkConf,
       appName,
@@ -213,7 +222,8 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
       kubernetesAppId,
       clientArguments.mainAppResource,
       clientArguments.mainClass,
-      clientArguments.driverArgs)
+      clientArguments.driverArgs,
+      clientArguments.maybePyFiles)
     val builder = new KubernetesDriverBuilder
     val namespace = kubernetesConf.namespace()
     // The master URL has been checked for validity already in SparkSubmit.

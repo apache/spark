@@ -117,6 +117,21 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault("spark")
 
+  val KUBERNETES_PYSPARK_PY_FILES =
+    ConfigBuilder("spark.kubernetes.python.pyFiles")
+      .doc("The PyFiles that are distributed via client arguments")
+      .internal()
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_PYSPARK_MAIN_APP_RESOURCE =
+    ConfigBuilder("spark.kubernetes.python.mainAppResource")
+      .doc("The main app resource for pyspark jobs")
+      .internal()
+      .stringConf
+      .createOptional
+
+
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
       .doc("Number of pods to launch at once in each round of executor allocation.")
@@ -153,6 +168,13 @@ private[spark] object Config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(interval => interval > 0, s"Logging interval must be a positive time value.")
       .createWithDefaultString("1s")
+
+  val MEMORY_OVERHEAD_FACTOR =
+    ConfigBuilder("spark.kubernetes.memoryOverheadFactor")
+      .doc("This sets the Memory Overhead Factor that will allocate memory to non-JVM jobs " +
+        "which in the case of JVM tasks will default to 0.10 and 0.40 for non-JVM jobs")
+      .doubleConf
+      .createWithDefault(0.10)
 
   val KUBERNETES_AUTH_SUBMISSION_CONF_PREFIX =
     "spark.kubernetes.authenticate.submission"
