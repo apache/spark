@@ -97,7 +97,7 @@ trait DStreamCheckpointTester { self: SparkFunSuite =>
     val batchDurationMillis = batchDuration.milliseconds
 
     // Setup the stream computation
-    val checkpointDir = Utils.createTempDir(this.getClass.getSimpleName()).toString
+    val checkpointDir = Utils.createTempDir(namePrefix = this.getClass.getSimpleName()).toString
     logDebug(s"Using checkpoint directory $checkpointDir")
     val ssc = createContextForCheckpointOperation(batchDuration)
     require(ssc.conf.get("spark.streaming.clock") === classOf[ManualClock].getName,

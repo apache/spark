@@ -135,6 +135,11 @@ class GBTClassifier @Since("1.4.0") (
   @Since("1.4.0")
   override def setStepSize(value: Double): this.type = set(stepSize, value)
 
+  /** @group setParam */
+  @Since("2.3.0")
+  override def setFeatureSubsetStrategy(value: String): this.type =
+    set(featureSubsetStrategy, value)
+
   // Parameters from GBTClassifierParams:
 
   /** @group setParam */
@@ -167,12 +172,12 @@ class GBTClassifier @Since("1.4.0") (
     val instr = Instrumentation.create(this, oldDataset)
     instr.logParams(labelCol, featuresCol, predictionCol, impurity, lossType,
       maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
-      seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval)
+      seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval, featureSubsetStrategy)
     instr.logNumFeatures(numFeatures)
     instr.logNumClasses(numClasses)
 
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,
-      $(seed))
+      $(seed), $(featureSubsetStrategy))
     val m = new GBTClassificationModel(uid, baseLearners, learnerWeights, numFeatures)
     instr.logSuccess(m)
     m
@@ -262,7 +267,7 @@ class GBTClassificationModel private[ml](
     dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
   }
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     // If thresholds defined, use predictRaw to get probabilities, otherwise use optimization
     if (isDefined(thresholds)) {
       super.predict(features)
@@ -366,14 +371,14 @@ object GBTClassificationModel extends MLReadable[GBTClassificationModel] {
     override def load(path: String): GBTClassificationModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], treeWeights: Array[Double]) =
-        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
+        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName, false)
       val numFeatures = (metadata.metadata \ numFeaturesKey).extract[Int]
       val numTrees = (metadata.metadata \ numTreesKey).extract[Int]
 
       val trees: Array[DecisionTreeRegressionModel] = treesData.map {
         case (treeMetadata, root) =>
-          val tree =
-            new DecisionTreeRegressionModel(treeMetadata.uid, root, numFeatures)
+          val tree = new DecisionTreeRegressionModel(treeMetadata.uid,
+            root.asInstanceOf[RegressionNode], numFeatures)
           DefaultParamsReader.getAndSetParams(tree, treeMetadata)
           tree
       }

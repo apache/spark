@@ -21,7 +21,6 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
-import scala.reflect.ClassTag
 
 import org.apache.mesos.{Protos, Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos._
@@ -38,7 +37,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor}
 import org.apache.spark.scheduler.cluster.mesos.Utils._
 
 class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
@@ -651,6 +650,37 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
     // Offer non-local resource, which should be accepted
     offerResourcesAndVerify(2, true)
+  }
+
+  test("Creates an env-based reference secrets.") {
+    val launchedTasks = launchExecutorTasks(configEnvBasedRefSecrets(executorSecretConfig))
+    verifyEnvBasedRefSecrets(launchedTasks)
+  }
+
+  test("Creates an env-based value secrets.") {
+    val launchedTasks = launchExecutorTasks(configEnvBasedValueSecrets(executorSecretConfig))
+    verifyEnvBasedValueSecrets(launchedTasks)
+  }
+
+  test("Creates file-based reference secrets.") {
+    val launchedTasks = launchExecutorTasks(configFileBasedRefSecrets(executorSecretConfig))
+    verifyFileBasedRefSecrets(launchedTasks)
+  }
+
+  test("Creates a file-based value secrets.") {
+    val launchedTasks = launchExecutorTasks(configFileBasedValueSecrets(executorSecretConfig))
+    verifyFileBasedValueSecrets(launchedTasks)
+  }
+
+  private def launchExecutorTasks(sparkConfVars: Map[String, String]): List[TaskInfo] = {
+    setBackend(sparkConfVars)
+
+    val (mem, cpu) = (backend.executorMemory(sc), 4)
+
+    val offer1 = createOffer("o1", "s1", mem, cpu)
+    backend.resourceOffers(driver, List(offer1).asJava)
+
+    verifyTaskLaunched(driver, "o1")
   }
 
   private case class Resources(mem: Int, cpus: Int, gpus: Int = 0)

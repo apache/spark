@@ -34,14 +34,14 @@ private[spark] class YarnClusterSchedulerBackend(
     val attemptId = ApplicationMaster.getAttemptId
     bindToYarn(attemptId.getApplicationId(), Some(attemptId))
     super.start()
-    totalExpectedExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sc.conf)
+    totalExpectedExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(sc.conf)
   }
 
   override def getDriverLogUrls: Option[Map[String, String]] = {
     var driverLogs: Option[Map[String, String]] = None
     try {
       val yarnConf = new YarnConfiguration(sc.hadoopConfiguration)
-      val containerId = YarnSparkHadoopUtil.get.getContainerId
+      val containerId = YarnSparkHadoopUtil.getContainerId
 
       val httpAddress = System.getenv(Environment.NM_HOST.name()) +
         ":" + System.getenv(Environment.NM_HTTP_PORT.name())

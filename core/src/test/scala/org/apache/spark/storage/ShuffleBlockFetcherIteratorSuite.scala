@@ -33,7 +33,7 @@ import org.scalatest.PrivateMethodTester
 import org.apache.spark.{SparkFunSuite, TaskContext}
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
-import org.apache.spark.network.shuffle.{BlockFetchingListener, TempShuffleFileManager}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, TempFileManager}
 import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.util.Utils
@@ -352,6 +352,51 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     intercept[FetchFailedException] { iterator.next() }
   }
 
+  test("big blocks are not checked for corruption") {
+    val corruptStream = mock(classOf[InputStream])
+    when(corruptStream.read(any(), any(), any())).thenThrow(new IOException("corrupt"))
+    val corruptBuffer = mock(classOf[ManagedBuffer])
+    when(corruptBuffer.createInputStream()).thenReturn(corruptStream)
+    doReturn(10000L).when(corruptBuffer).size()
+
+    val blockManager = mock(classOf[BlockManager])
+    val localBmId = BlockManagerId("test-client", "test-client", 1)
+    doReturn(localBmId).when(blockManager).blockManagerId
+    doReturn(corruptBuffer).when(blockManager).getBlockData(ShuffleBlockId(0, 0, 0))
+    val localBlockLengths = Seq[Tuple2[BlockId, Long]](
+      ShuffleBlockId(0, 0, 0) -> corruptBuffer.size()
+    )
+
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val remoteBlockLengths = Seq[Tuple2[BlockId, Long]](
+      ShuffleBlockId(0, 1, 0) -> corruptBuffer.size()
+    )
+
+    val transfer = createMockTransfer(
+      Map(ShuffleBlockId(0, 0, 0) -> corruptBuffer, ShuffleBlockId(0, 1, 0) -> corruptBuffer))
+
+    val blocksByAddress = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
+      (localBmId, localBlockLengths),
+      (remoteBmId, remoteBlockLengths)
+    )
+
+    val taskContext = TaskContext.empty()
+    val iterator = new ShuffleBlockFetcherIterator(
+      taskContext,
+      transfer,
+      blockManager,
+      blocksByAddress,
+      (_, in) => new LimitedInputStream(in, 10000),
+      2048,
+      Int.MaxValue,
+      Int.MaxValue,
+      Int.MaxValue,
+      true)
+    // Blocks should be returned without exceptions.
+    assert(Set(iterator.next()._1, iterator.next()._1) ===
+        Set(ShuffleBlockId(0, 0, 0), ShuffleBlockId(0, 1, 0)))
+  }
+
   test("retry corrupt blocks (disabled)") {
     val blockManager = mock(classOf[BlockManager])
     val localBmId = BlockManagerId("test-client", "test-client", 1)
@@ -437,12 +482,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val remoteBlocks = Map[BlockId, ManagedBuffer](
       ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer())
     val transfer = mock(classOf[BlockTransferService])
-    var tempShuffleFileManager: TempShuffleFileManager = null
+    var tempFileManager: TempFileManager = null
     when(transfer.fetchBlocks(any(), any(), any(), any(), any(), any()))
       .thenAnswer(new Answer[Unit] {
         override def answer(invocation: InvocationOnMock): Unit = {
           val listener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
-          tempShuffleFileManager = invocation.getArguments()(5).asInstanceOf[TempShuffleFileManager]
+          tempFileManager = invocation.getArguments()(5).asInstanceOf[TempFileManager]
           Future {
             listener.onBlockFetchSuccess(
               ShuffleBlockId(0, 0, 0).toString, remoteBlocks(ShuffleBlockId(0, 0, 0)))
@@ -472,13 +517,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     fetchShuffleBlock(blocksByAddress1)
     // `maxReqSizeShuffleToMem` is 200, which is greater than the block size 100, so don't fetch
     // shuffle block to disk.
-    assert(tempShuffleFileManager == null)
+    assert(tempFileManager == null)
 
     val blocksByAddress2 = Seq[(BlockManagerId, Seq[(BlockId, Long)])](
       (remoteBmId, remoteBlocks.keys.map(blockId => (blockId, 300L)).toSeq))
     fetchShuffleBlock(blocksByAddress2)
     // `maxReqSizeShuffleToMem` is 200, which is smaller than the block size 300, so fetch
     // shuffle block to disk.
-    assert(tempShuffleFileManager != null)
+    assert(tempFileManager != null)
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.io.{DataInputStream, DataOutputStream, FileNotFoundException, IOException}
+import java.io._
 import java.nio.channels.ClosedChannelException
 import java.util.Locale
 
@@ -27,13 +27,16 @@ import scala.util.Random
 import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
+import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs._
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.LZ4CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager
+import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{SizeEstimator, Utils}
 
@@ -87,10 +90,10 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     case object ABORTED extends STATE
 
     private val newVersion = version + 1
-    private val tempDeltaFile = new Path(baseDir, s"temp-${Random.nextLong}")
-    private lazy val tempDeltaFileStream = compressStream(fs.create(tempDeltaFile, true))
     @volatile private var state: STATE = UPDATING
-    @volatile private var finalDeltaFile: Path = null
+    private val finalDeltaFile: Path = deltaFile(newVersion)
+    private lazy val deltaFileStream = fm.createAtomic(finalDeltaFile, overwriteIfPossible = true)
+    private lazy val compressedStream = compressStream(deltaFileStream)
 
     override def id: StateStoreId = HDFSBackedStateStoreProvider.this.stateStoreId
 
@@ -103,14 +106,14 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       val keyCopy = key.copy()
       val valueCopy = value.copy()
       mapToUpdate.put(keyCopy, valueCopy)
-      writeUpdateToDeltaFile(tempDeltaFileStream, keyCopy, valueCopy)
+      writeUpdateToDeltaFile(compressedStream, keyCopy, valueCopy)
     }
 
     override def remove(key: UnsafeRow): Unit = {
       verify(state == UPDATING, "Cannot remove after already committed or aborted")
       val prevValue = mapToUpdate.remove(key)
       if (prevValue != null) {
-        writeRemoveToDeltaFile(tempDeltaFileStream, key)
+        writeRemoveToDeltaFile(compressedStream, key)
       }
     }
 
@@ -126,8 +129,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       verify(state == UPDATING, "Cannot commit after already committed or aborted")
 
       try {
-        finalizeDeltaFile(tempDeltaFileStream)
-        finalDeltaFile = commitUpdates(newVersion, mapToUpdate, tempDeltaFile)
+        commitUpdates(newVersion, mapToUpdate, compressedStream)
         state = COMMITTED
         logInfo(s"Committed version $newVersion for $this to file $finalDeltaFile")
         newVersion
@@ -140,23 +142,14 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
     /** Abort all the updates made on this store. This store will not be usable any more. */
     override def abort(): Unit = {
-      verify(state == UPDATING || state == ABORTED, "Cannot abort after already committed")
-      try {
+      // This if statement is to ensure that files are deleted only if there are changes to the
+      // StateStore. We have two StateStores for each task, one which is used only for reading, and
+      // the other used for read+write. We don't want the read-only to delete state files.
+      if (state == UPDATING) {
         state = ABORTED
-        if (tempDeltaFileStream != null) {
-          tempDeltaFileStream.close()
-        }
-        if (tempDeltaFile != null) {
-          fs.delete(tempDeltaFile, true)
-        }
-      } catch {
-        case c: ClosedChannelException =>
-          // This can happen when underlying file output stream has been closed before the
-          // compression stream.
-          logDebug(s"Error aborting version $newVersion into $this", c)
-
-        case e: Exception =>
-          logWarning(s"Error aborting version $newVersion into $this", e)
+        cancelDeltaFile(compressedStream, deltaFileStream)
+      } else {
+        state = ABORTED
       }
       logInfo(s"Aborted version $newVersion for $this")
     }
@@ -212,7 +205,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     this.valueSchema = valueSchema
     this.storeConf = storeConf
     this.hadoopConf = hadoopConf
-    fs.mkdirs(baseDir)
+    fm.mkdirs(baseDir)
   }
 
   override def stateStoreId: StateStoreId = stateStoreId_
@@ -251,31 +244,15 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
   private lazy val loadedMaps = new mutable.HashMap[Long, MapType]
   private lazy val baseDir = stateStoreId.storeCheckpointLocation()
-  private lazy val fs = baseDir.getFileSystem(hadoopConf)
+  private lazy val fm = CheckpointFileManager.create(baseDir, hadoopConf)
   private lazy val sparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(new SparkConf)
 
   private case class StoreFile(version: Long, path: Path, isSnapshot: Boolean)
 
-  /** Commit a set of updates to the store with the given new version */
-  private def commitUpdates(newVersion: Long, map: MapType, tempDeltaFile: Path): Path = {
+  private def commitUpdates(newVersion: Long, map: MapType, output: DataOutputStream): Unit = {
     synchronized {
-      val finalDeltaFile = deltaFile(newVersion)
-
-      // scalastyle:off
-      // Renaming a file atop an existing one fails on HDFS
-      // (http://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/filesystem/filesystem.html).
-      // Hence we should either skip the rename step or delete the target file. Because deleting the
-      // target file will break speculation, skipping the rename step is the only choice. It's still
-      // semantically correct because Structured Streaming requires rerunning a batch should
-      // generate the same output. (SPARK-19677)
-      // scalastyle:on
-      if (fs.exists(finalDeltaFile)) {
-        fs.delete(tempDeltaFile, true)
-      } else if (!fs.rename(tempDeltaFile, finalDeltaFile)) {
-        throw new IOException(s"Failed to rename $tempDeltaFile to $finalDeltaFile")
-      }
+      finalizeDeltaFile(output)
       loadedMaps.put(newVersion, map)
-      finalDeltaFile
     }
   }
 
@@ -297,17 +274,44 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
   /** Load the required version of the map data from the backing files */
   private def loadMap(version: Long): MapType = {
-    if (version <= 0) return new MapType
-    synchronized { loadedMaps.get(version) }.getOrElse {
-      val mapFromFile = readSnapshotFile(version).getOrElse {
-        val prevMap = loadMap(version - 1)
-        val newMap = new MapType(prevMap)
-        updateFromDeltaFile(version, newMap)
-        newMap
-      }
-      loadedMaps.put(version, mapFromFile)
-      mapFromFile
+
+    // Shortcut if the map for this version is already there to avoid a redundant put.
+    val loadedCurrentVersionMap = synchronized { loadedMaps.get(version) }
+    if (loadedCurrentVersionMap.isDefined) {
+      return loadedCurrentVersionMap.get
     }
+    val snapshotCurrentVersionMap = readSnapshotFile(version)
+    if (snapshotCurrentVersionMap.isDefined) {
+      synchronized { loadedMaps.put(version, snapshotCurrentVersionMap.get) }
+      return snapshotCurrentVersionMap.get
+    }
+
+    // Find the most recent map before this version that we can.
+    // [SPARK-22305] This must be done iteratively to avoid stack overflow.
+    var lastAvailableVersion = version
+    var lastAvailableMap: Option[MapType] = None
+    while (lastAvailableMap.isEmpty) {
+      lastAvailableVersion -= 1
+
+      if (lastAvailableVersion <= 0) {
+        // Use an empty map for versions 0 or less.
+        lastAvailableMap = Some(new MapType)
+      } else {
+        lastAvailableMap =
+          synchronized { loadedMaps.get(lastAvailableVersion) }
+            .orElse(readSnapshotFile(lastAvailableVersion))
+      }
+    }
+
+    // Load all the deltas from the version after the last available one up to the target version.
+    // The last available version is the one with a full snapshot, so it doesn't need deltas.
+    val resultMap = new MapType(lastAvailableMap.get)
+    for (deltaVersion <- lastAvailableVersion + 1 to version) {
+      updateFromDeltaFile(deltaVersion, resultMap)
+    }
+
+    synchronized { loadedMaps.put(version, resultMap) }
+    resultMap
   }
 
   private def writeUpdateToDeltaFile(
@@ -338,7 +342,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     val fileToRead = deltaFile(version)
     var input: DataInputStream = null
     val sourceStream = try {
-      fs.open(fileToRead)
+      fm.open(fileToRead)
     } catch {
       case f: FileNotFoundException =>
         throw new IllegalStateException(
@@ -385,12 +389,12 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   }
 
   private def writeSnapshotFile(version: Long, map: MapType): Unit = {
-    val fileToWrite = snapshotFile(version)
-    val tempFile =
-      new Path(fileToWrite.getParent, s"${fileToWrite.getName}.temp-${Random.nextLong}")
+    val targetFile = snapshotFile(version)
+    var rawOutput: CancellableFSDataOutputStream = null
     var output: DataOutputStream = null
-    Utils.tryWithSafeFinally {
-      output = compressStream(fs.create(tempFile, false))
+    try {
+      rawOutput = fm.createAtomic(targetFile, overwriteIfPossible = true)
+      output = compressStream(rawOutput)
       val iter = map.entrySet().iterator()
       while(iter.hasNext) {
         val entry = iter.next()
@@ -402,16 +406,34 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
         output.write(valueBytes)
       }
       output.writeInt(-1)
-    } {
-      if (output != null) output.close()
+      output.close()
+    } catch {
+      case e: Throwable =>
+        cancelDeltaFile(compressedStream = output, rawStream = rawOutput)
+        throw e
     }
-    if (fs.exists(fileToWrite)) {
-      // Skip rename if the file is alreayd created.
-      fs.delete(tempFile, true)
-    } else if (!fs.rename(tempFile, fileToWrite)) {
-      throw new IOException(s"Failed to rename $tempFile to $fileToWrite")
+    logInfo(s"Written snapshot file for version $version of $this at $targetFile")
+  }
+
+  /**
+   * Try to cancel the underlying stream and safely close the compressed stream.
+   *
+   * @param compressedStream the compressed stream.
+   * @param rawStream the underlying stream which needs to be cancelled.
+   */
+  private def cancelDeltaFile(
+      compressedStream: DataOutputStream,
+      rawStream: CancellableFSDataOutputStream): Unit = {
+    try {
+      if (rawStream != null) rawStream.cancel()
+      IOUtils.closeQuietly(compressedStream)
+    } catch {
+      case e: FSError if e.getCause.isInstanceOf[IOException] =>
+        // Closing the compressedStream causes the stream to write/flush flush data into the
+        // rawStream. Since the rawStream is already closed, there may be errors.
+        // Usually its an IOException. However, Hadoop's RawLocalFileSystem wraps
+        // IOException into FSError.
     }
-    logInfo(s"Written snapshot file for version $version of $this at $fileToWrite")
   }
 
   private def readSnapshotFile(version: Long): Option[MapType] = {
@@ -420,7 +442,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     var input: DataInputStream = null
 
     try {
-      input = decompressStream(fs.open(fileToRead))
+      input = decompressStream(fm.open(fileToRead))
       var eof = false
 
       while (!eof) {
@@ -481,7 +503,6 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
           case None =>
             // The last map is not loaded, probably some other instance is in charge
         }
-
       }
     } catch {
       case NonFatal(e) =>
@@ -507,7 +528,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
           }
           val filesToDelete = files.filter(_.version < earliestFileToRetain.version)
           filesToDelete.foreach { f =>
-            fs.delete(f.path, true)
+            fm.delete(f.path)
           }
           logInfo(s"Deleted files older than ${earliestFileToRetain.version} for $this: " +
             filesToDelete.mkString(", "))
@@ -549,7 +570,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
   /** Fetch all the files that back the store */
   private def fetchFiles(): Seq[StoreFile] = {
     val files: Seq[FileStatus] = try {
-      fs.listStatus(baseDir)
+      fm.list(baseDir)
     } catch {
       case _: java.io.FileNotFoundException =>
         Seq.empty

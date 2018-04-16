@@ -31,8 +31,11 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.SparkConf;
 import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
+import org.apache.spark.memory.TooLargePageException;
 import org.apache.spark.serializer.DummySerializerInstance;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.BlockManager;
@@ -43,7 +46,6 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.Utils;
-import org.apache.spark.internal.config.package$;
 
 /**
  * An external sorter that is specialized for sort-based shuffle.
@@ -75,10 +77,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   private final ShuffleWriteMetrics writeMetrics;
 
   /**
-   * Force this sorter to spill when there are this many elements in memory. The default value is
-   * 1024 * 1024 * 1024, which allows the maximum size of the pointer array to be 8G.
+   * Force this sorter to spill when there are this many elements in memory.
    */
-  private final long numElementsForSpillThreshold;
+  private final int numElementsForSpillThreshold;
 
   /** The buffer size to use when writing spills using DiskBlockObjectWriter */
   private final int fileBufferSizeBytes;
@@ -123,7 +124,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.fileBufferSizeBytes =
         (int) (long) conf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
     this.numElementsForSpillThreshold =
-      conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", 1024 * 1024 * 1024);
+        (int) conf.get(package$.MODULE$.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD());
     this.writeMetrics = writeMetrics;
     this.inMemSorter = new ShuffleInMemorySorter(
       this, initialSize, conf.getBoolean("spark.shuffle.sort.useRadixSort", true));
@@ -325,7 +326,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
    * array and grows the array if additional space is required. If the required space cannot be
    * obtained, then the in-memory data will be spilled to disk.
    */
-  private void growPointerArrayIfNecessary() {
+  private void growPointerArrayIfNecessary() throws IOException {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
       long used = inMemSorter.getMemoryUsage();
@@ -333,7 +334,11 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       try {
         // could trigger spilling
         array = allocateArray(used / 8 * 2);
-      } catch (OutOfMemoryError e) {
+      } catch (TooLargePageException e) {
+        // The pointer array is too big to fix in a single page, spill.
+        spill();
+        return;
+      } catch (SparkOutOfMemoryError e) {
         // should have trigger spilling
         if (!inMemSorter.hasSpaceForAnotherRecord()) {
           logger.error("Unable to grow the pointer array");

@@ -48,7 +48,7 @@ case class BroadcastExchangeExec(
 
   override def outputPartitioning: Partitioning = BroadcastPartitioning(mode)
 
-  override lazy val canonicalized: SparkPlan = {
+  override def doCanonicalize(): SparkPlan = {
     BroadcastExchangeExec(mode.canonicalized, child.canonicalized)
   }
 

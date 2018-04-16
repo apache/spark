@@ -21,12 +21,15 @@ import java.io.{FileNotFoundException, IOException}
 
 import scala.collection.mutable
 
+import org.apache.parquet.io.ParquetDecodingException
+
 import org.apache.spark.{Partition => RDDPartition, TaskContext, TaskKilledException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.vectorized.ColumnarBatch
+import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.NextIterator
 
 /**
@@ -66,6 +69,7 @@ class FileScanRDD(
   extends RDD[InternalRow](sparkSession.sparkContext, Nil) {
 
   private val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
+  private val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
     val iterator = new Iterator[Object] with AutoCloseable {
@@ -142,7 +146,7 @@ class FileScanRDD(
           // Sets InputFileBlockHolder for the file block's information
           InputFileBlockHolder.set(currentFile.filePath, currentFile.start, currentFile.length)
 
-          if (ignoreCorruptFiles) {
+          if (ignoreMissingFiles || ignoreCorruptFiles) {
             currentIterator = new NextIterator[Object] {
               // The readFunction may read some bytes before consuming the iterator, e.g.,
               // vectorized Parquet reader. Here we use lazy val to delay the creation of
@@ -158,9 +162,13 @@ class FileScanRDD(
                     null
                   }
                 } catch {
-                  // Throw FileNotFoundException even `ignoreCorruptFiles` is true
-                  case e: FileNotFoundException => throw e
-                  case e @ (_: RuntimeException | _: IOException) =>
+                  case e: FileNotFoundException if ignoreMissingFiles =>
+                    logWarning(s"Skipped missing file: $currentFile", e)
+                    finished = true
+                    null
+                  // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+                  case e: FileNotFoundException if !ignoreMissingFiles => throw e
+                  case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
                     logWarning(
                       s"Skipped the rest of the content in the corrupted file: $currentFile", e)
                     finished = true
@@ -174,7 +182,23 @@ class FileScanRDD(
             currentIterator = readCurrentFile()
           }
 
-          hasNext
+          try {
+            hasNext
+          } catch {
+            case e: SchemaColumnConvertNotSupportedException =>
+              val message = "Parquet column cannot be converted in " +
+                s"file ${currentFile.filePath}. Column: ${e.getColumn}, " +
+                s"Expected: ${e.getLogicalType}, Found: ${e.getPhysicalType}"
+              throw new QueryExecutionException(message, e)
+            case e: ParquetDecodingException =>
+              if (e.getMessage.contains("Can not read value at")) {
+                val message = "Encounter error while reading parquet files. " +
+                  "One possible cause: Parquet column cannot be converted in the " +
+                  "corresponding files. Details: "
+                throw new QueryExecutionException(message, e)
+              }
+              throw e
+          }
         } else {
           currentFile = null
           InputFileBlockHolder.unset()

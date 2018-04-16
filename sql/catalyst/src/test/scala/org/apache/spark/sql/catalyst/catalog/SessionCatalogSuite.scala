@@ -279,7 +279,7 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  test("create temp table") {
+  test("create temp view") {
     withBasicCatalog { catalog =>
       val tempTable1 = Range(1, 10, 1, 10)
       val tempTable2 = Range(1, 20, 2, 10)
@@ -288,11 +288,11 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       assert(catalog.getTempView("tbl1") == Option(tempTable1))
       assert(catalog.getTempView("tbl2") == Option(tempTable2))
       assert(catalog.getTempView("tbl3").isEmpty)
-      // Temporary table already exists
+      // Temporary view already exists
       intercept[TempTableAlreadyExistsException] {
         catalog.createTempView("tbl1", tempTable1, overrideIfExists = false)
       }
-      // Temporary table already exists but we override it
+      // Temporary view already exists but we override it
       catalog.createTempView("tbl1", tempTable2, overrideIfExists = true)
       assert(catalog.getTempView("tbl1") == Option(tempTable2))
     }
@@ -463,9 +463,9 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     withBasicCatalog { sessionCatalog =>
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
       val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
-      sessionCatalog.alterTableSchema(
+      sessionCatalog.alterTableDataSchema(
         TableIdentifier("t1", Some("default")),
-        StructType(oldTab.dataSchema.add("c3", IntegerType) ++ oldTab.partitionSchema))
+        StructType(oldTab.dataSchema.add("c3", IntegerType)))
 
       val newTab = sessionCatalog.externalCatalog.getTable("default", "t1")
       // construct the expected table schema
@@ -480,8 +480,8 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       sessionCatalog.createTable(newTable("t1", "default"), ignoreIfExists = false)
       val oldTab = sessionCatalog.externalCatalog.getTable("default", "t1")
       val e = intercept[AnalysisException] {
-        sessionCatalog.alterTableSchema(
-          TableIdentifier("t1", Some("default")), StructType(oldTab.schema.drop(1)))
+        sessionCatalog.alterTableDataSchema(
+          TableIdentifier("t1", Some("default")), StructType(oldTab.dataSchema.drop(1)))
       }.getMessage
       assert(e.contains("We don't support dropping columns yet."))
     }

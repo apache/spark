@@ -18,6 +18,11 @@
 package org.apache.spark.ml.util
 
 import java.io.IOException
+import java.util.{Locale, ServiceLoader}
+
+import scala.collection.JavaConverters._
+import scala.collection.mutable
+import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.fs.Path
 import org.json4s._
@@ -25,8 +30,8 @@ import org.json4s.{DefaultFormats, JObject}
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.annotation.{DeveloperApi, InterfaceStability, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
@@ -83,7 +88,82 @@ private[util] sealed trait BaseReadWrite {
 }
 
 /**
- * Abstract class for utility classes that can save ML instances.
+ * Abstract class to be implemented by objects that provide ML exportability.
+ *
+ * A new instance of this class will be instantiated each time a save call is made.
+ *
+ * Must have a valid zero argument constructor which will be called to instantiate.
+ *
+ * @since 2.4.0
+ */
+@InterfaceStability.Unstable
+@Since("2.4.0")
+trait MLWriterFormat {
+  /**
+   * Function to write the provided pipeline stage out.
+   *
+   * @param path  The path to write the result out to.
+   * @param session  SparkSession associated with the write request.
+   * @param optionMap  User provided options stored as strings.
+   * @param stage  The pipeline stage to be saved.
+   */
+  @Since("2.4.0")
+  def write(path: String, session: SparkSession, optionMap: mutable.Map[String, String],
+    stage: PipelineStage): Unit
+}
+
+/**
+ * ML export formats for should implement this trait so that users can specify a shortname rather
+ * than the fully qualified class name of the exporter.
+ *
+ * A new instance of this class will be instantiated each time a save call is made.
+ *
+ * @since 2.4.0
+ */
+@InterfaceStability.Unstable
+@Since("2.4.0")
+trait MLFormatRegister extends MLWriterFormat {
+  /**
+   * The string that represents the format that this format provider uses. This is, along with
+   * stageName, is overridden by children to provide a nice alias for the writer. For example:
+   *
+   * {{{
+   *   override def format(): String =
+   *       "pmml"
+   * }}}
+   * Indicates that this format is capable of saving a pmml model.
+   *
+   * Must have a valid zero argument constructor which will be called to instantiate.
+   *
+   * Format discovery is done using a ServiceLoader so make sure to list your format in
+   * META-INF/services.
+   * @since 2.4.0
+   */
+  @Since("2.4.0")
+  def format(): String
+
+  /**
+   * The string that represents the stage type that this writer supports. This is, along with
+   * format, is overridden by children to provide a nice alias for the writer. For example:
+   *
+   * {{{
+   *   override def stageName(): String =
+   *       "org.apache.spark.ml.regression.LinearRegressionModel"
+   * }}}
+   * Indicates that this format is capable of saving Spark's own PMML model.
+   *
+   * Format discovery is done using a ServiceLoader so make sure to list your format in
+   * META-INF/services.
+   * @since 2.4.0
+   */
+  @Since("2.4.0")
+  def stageName(): String
+
+  private[ml] def shortName(): String = s"${format()}+${stageName()}"
+}
+
+/**
+ * Abstract class for utility classes that can save ML instances in Spark's internal format.
  */
 @Since("1.6.0")
 abstract class MLWriter extends BaseReadWrite with Logging {
@@ -116,6 +196,89 @@ abstract class MLWriter extends BaseReadWrite with Logging {
     this
   }
 
+  /**
+   * Map to store extra options for this writer.
+   */
+  protected val optionMap: mutable.Map[String, String] = new mutable.HashMap[String, String]()
+
+  /**
+   * Adds an option to the underlying MLWriter. See the documentation for the specific model's
+   * writer for possible options. The option name (key) is case-insensitive.
+   */
+  @Since("2.3.0")
+  def option(key: String, value: String): this.type = {
+    require(key != null && !key.isEmpty)
+    optionMap.put(key.toLowerCase(Locale.ROOT), value)
+    this
+  }
+
+  // override for Java compatibility
+  @Since("1.6.0")
+  override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
+
+  // override for Java compatibility
+  @Since("1.6.0")
+  override def context(sqlContext: SQLContext): this.type = super.session(sqlContext.sparkSession)
+}
+
+/**
+ * A ML Writer which delegates based on the requested format.
+ */
+@InterfaceStability.Unstable
+@Since("2.4.0")
+class GeneralMLWriter(stage: PipelineStage) extends MLWriter with Logging {
+  private var source: String = "internal"
+
+  /**
+   * Specifies the format of ML export (e.g. "pmml", "internal", or
+   * the fully qualified class name for export).
+   */
+  @Since("2.4.0")
+  def format(source: String): this.type = {
+    this.source = source
+    this
+  }
+
+  /**
+   * Dispatches the save to the correct MLFormat.
+   */
+  @Since("2.4.0")
+  @throws[IOException]("If the input path already exists but overwrite is not enabled.")
+  @throws[SparkException]("If multiple sources for a given short name format are found.")
+  override protected def saveImpl(path: String): Unit = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoader = ServiceLoader.load(classOf[MLFormatRegister], loader)
+    val stageName = stage.getClass.getName
+    val targetName = s"$source+$stageName"
+    val formats = serviceLoader.asScala.toList
+    val shortNames = formats.map(_.shortName())
+    val writerCls = formats.filter(_.shortName().equalsIgnoreCase(targetName)) match {
+      // requested name did not match any given registered alias
+      case Nil =>
+        Try(loader.loadClass(source)) match {
+          case Success(writer) =>
+            // Found the ML writer using the fully qualified path
+            writer
+          case Failure(error) =>
+            throw new SparkException(
+              s"Could not load requested format $source for $stageName ($targetName) had $formats" +
+              s"supporting $shortNames", error)
+        }
+      case head :: Nil =>
+        head.getClass
+      case _ =>
+        // Multiple sources
+        throw new SparkException(
+          s"Multiple writers found for $source+$stageName, try using the class name of the writer")
+    }
+    if (classOf[MLWriterFormat].isAssignableFrom(writerCls)) {
+      val writer = writerCls.newInstance().asInstanceOf[MLWriterFormat]
+      writer.write(path, sparkSession, optionMap, stage)
+    } else {
+      throw new SparkException(s"ML source $source is not a valid MLWriterFormat")
+    }
+  }
+
   // override for Java compatibility
   override def session(sparkSession: SparkSession): this.type = super.session(sparkSession)
 
@@ -141,6 +304,19 @@ trait MLWritable {
   @Since("1.6.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def save(path: String): Unit = write.save(path)
+}
+
+/**
+ * Trait for classes that provide `GeneralMLWriter`.
+ */
+@Since("2.4.0")
+@InterfaceStability.Unstable
+trait GeneralMLWritable extends MLWritable {
+  /**
+   * Returns an `MLWriter` instance for this ML instance.
+   */
+  @Since("2.4.0")
+  override def write: GeneralMLWriter
 }
 
 /**

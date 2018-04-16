@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.ui
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
-class SQLTab(val listener: SQLListener, sparkUI: SparkUI)
+class SQLTab(val sqlStore: SQLAppStatusStore, sparkUI: SparkUI)
   extends SparkUITab(sparkUI, "SQL") with Logging {
 
   val parent = sparkUI

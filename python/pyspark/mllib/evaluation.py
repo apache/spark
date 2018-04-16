@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 import warnings
 
 from pyspark import since
@@ -234,7 +235,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         if label is None:
             # note:: Deprecated in 2.0.0. Use accuracy.
-            warnings.warn("Deprecated in 2.0.0. Use accuracy.")
+            warnings.warn("Deprecated in 2.0.0. Use accuracy.", DeprecationWarning)
             return self.call("precision")
         else:
             return self.call("precision", float(label))
@@ -246,7 +247,7 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         if label is None:
             # note:: Deprecated in 2.0.0. Use accuracy.
-            warnings.warn("Deprecated in 2.0.0. Use accuracy.")
+            warnings.warn("Deprecated in 2.0.0. Use accuracy.", DeprecationWarning)
             return self.call("recall")
         else:
             return self.call("recall", float(label))
@@ -259,7 +260,7 @@ class MulticlassMetrics(JavaModelWrapper):
         if beta is None:
             if label is None:
                 # note:: Deprecated in 2.0.0. Use accuracy.
-                warnings.warn("Deprecated in 2.0.0. Use accuracy.")
+                warnings.warn("Deprecated in 2.0.0. Use accuracy.", DeprecationWarning)
                 return self.call("fMeasure")
             else:
                 return self.call("fMeasure", label)
@@ -542,7 +543,7 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

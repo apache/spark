@@ -24,10 +24,11 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expre
  * This is used by DataFrame.groupby().apply().
  */
 case class FlatMapGroupsInPandas(
-  groupingAttributes: Seq[Attribute],
-  functionExpr: Expression,
-  output: Seq[Attribute],
-  child: LogicalPlan) extends UnaryNode {
+    groupingAttributes: Seq[Attribute],
+    functionExpr: Expression,
+    output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+
   /**
    * This is needed because output attributes are considered `references` when
    * passed through the constructor.

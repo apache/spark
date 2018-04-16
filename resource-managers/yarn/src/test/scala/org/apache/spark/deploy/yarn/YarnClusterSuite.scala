@@ -45,8 +45,7 @@ import org.apache.spark.util.Utils
 
 /**
  * Integration tests for YARN; these tests use a mini Yarn cluster to run Spark-on-YARN
- * applications, and require the Spark assembly to be built before they can be successfully
- * run.
+ * applications.
  */
 @ExtendedYarnTest
 class YarnClusterSuite extends BaseYarnClusterSuite {
@@ -95,7 +94,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         "spark.executor.cores" -> "1",
         "spark.executor.memory" -> "512m",
         "spark.executor.instances" -> "2",
-        // Sending some senstive information, which we'll make sure gets redacted
+        // Sending some sensitive information, which we'll make sure gets redacted
         "spark.executorEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD,
         "spark.yarn.appMasterEnv.HADOOP_CREDSTORE_PASSWORD" -> YarnClusterDriver.SECRET_PASSWORD
       ))
@@ -115,8 +114,26 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       ))
   }
 
-  test("run Spark in yarn-cluster mode with using SparkHadoopUtil.conf") {
-    testYarnAppUseSparkHadoopUtilConf()
+  test("yarn-cluster should respect conf overrides in SparkHadoopUtil (SPARK-16414, SPARK-23630)") {
+    // Create a custom hadoop config file, to make sure it's contents are propagated to the driver.
+    val customConf = Utils.createTempDir()
+    val coreSite = """<?xml version="1.0" encoding="UTF-8"?>
+      |<configuration>
+      |  <property>
+      |    <name>spark.test.key</name>
+      |    <value>testvalue</value>
+      |  </property>
+      |</configuration>
+      |""".stripMargin
+    Files.write(coreSite, new File(customConf, "core-site.xml"), StandardCharsets.UTF_8)
+
+    val result = File.createTempFile("result", null, tempDir)
+    val finalState = runSpark(false,
+      mainClassName(YarnClusterDriverUseSparkHadoopUtilConf.getClass),
+      appArgs = Seq("key=value", "spark.test.key=testvalue", result.getAbsolutePath()),
+      extraConf = Map("spark.hadoop.key" -> "value"),
+      extraEnv = Map("SPARK_TEST_HADOOP_CONF_DIR" -> customConf.getAbsolutePath()))
+    checkResult(finalState, result)
   }
 
   test("run Spark in yarn-client mode with additional jar") {
@@ -147,7 +164,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("run Python application in yarn-cluster mode using " +
-    " spark.yarn.appMasterEnv to override local envvar") {
+    "spark.yarn.appMasterEnv to override local envvar") {
     testPySpark(
       clientMode = false,
       extraConf = Map(
@@ -208,20 +225,19 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     finalState should be (SparkAppHandle.State.FAILED)
   }
 
+  test("executor env overwrite AM env in client mode") {
+    testExecutorEnv(true)
+  }
+
+  test("executor env overwrite AM env in cluster mode") {
+    testExecutorEnv(false)
+  }
+
   private def testBasicYarnApp(clientMode: Boolean, conf: Map[String, String] = Map()): Unit = {
     val result = File.createTempFile("result", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClusterDriver.getClass),
       appArgs = Seq(result.getAbsolutePath()),
       extraConf = conf)
-    checkResult(finalState, result)
-  }
-
-  private def testYarnAppUseSparkHadoopUtilConf(): Unit = {
-    val result = File.createTempFile("result", null, tempDir)
-    val finalState = runSpark(false,
-      mainClassName(YarnClusterDriverUseSparkHadoopUtilConf.getClass),
-      appArgs = Seq("key=value", result.getAbsolutePath()),
-      extraConf = Map("spark.hadoop.key" -> "value"))
     checkResult(finalState, result)
   }
 
@@ -297,6 +313,17 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, executorResult, "OVERRIDDEN")
   }
 
+  private def testExecutorEnv(clientMode: Boolean): Unit = {
+    val result = File.createTempFile("result", null, tempDir)
+    val finalState = runSpark(clientMode, mainClassName(ExecutorEnvTestApp.getClass),
+      appArgs = Seq(result.getAbsolutePath),
+      extraConf = Map(
+        "spark.yarn.appMasterEnv.TEST_ENV" -> "am_val",
+        "spark.executorEnv.TEST_ENV" -> "executor_val"
+      )
+    )
+    checkResult(finalState, result, "true")
+  }
 }
 
 private[spark] class SaveExecutorInfo extends SparkListener {
@@ -324,13 +351,13 @@ private object YarnClusterDriverWithFailure extends Logging with Matchers {
 
 private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matchers {
   def main(args: Array[String]): Unit = {
-    if (args.length != 2) {
+    if (args.length < 2) {
       // scalastyle:off println
       System.err.println(
         s"""
         |Invalid command line: ${args.mkString(" ")}
         |
-        |Usage: YarnClusterDriverUseSparkHadoopUtilConf [hadoopConfKey=value] [result file]
+        |Usage: YarnClusterDriverUseSparkHadoopUtilConf [hadoopConfKey=value]+ [result file]
         """.stripMargin)
       // scalastyle:on println
       System.exit(1)
@@ -340,11 +367,16 @@ private object YarnClusterDriverUseSparkHadoopUtilConf extends Logging with Matc
       .set("spark.extraListeners", classOf[SaveExecutorInfo].getName)
       .setAppName("yarn test using SparkHadoopUtil's conf"))
 
-    val kv = args(0).split("=")
-    val status = new File(args(1))
+    val kvs = args.take(args.length - 1).map { kv =>
+      val parsed = kv.split("=")
+      (parsed(0), parsed(1))
+    }
+    val status = new File(args.last)
     var result = "failure"
     try {
-      SparkHadoopUtil.get.conf.get(kv(0)) should be (kv(1))
+      kvs.foreach { case (k, v) =>
+        SparkHadoopUtil.get.conf.get(k) should be (v)
+      }
       result = "success"
     } finally {
       Files.write(result, status, StandardCharsets.UTF_8)
@@ -385,7 +417,9 @@ private object YarnClusterDriver extends Logging with Matchers {
 
       // Verify that the config archive is correctly placed in the classpath of all containers.
       val confFile = "/" + Client.SPARK_CONF_FILE
-      assert(getClass().getResource(confFile) != null)
+      if (conf.getOption(SparkLauncher.DEPLOY_MODE) == Some("cluster")) {
+        assert(getClass().getResource(confFile) != null)
+      }
       val configFromExecutors = sc.parallelize(1 to 4, 4)
         .map { _ => Option(getClass().getResource(confFile)).map(_.toString).orNull }
         .collect()
@@ -424,7 +458,7 @@ private object YarnClusterDriver extends Logging with Matchers {
             s"Driver logs contain sensitive info (${SECRET_PASSWORD}): \n${log} "
           )
         }
-        val containerId = YarnSparkHadoopUtil.get.getContainerId
+        val containerId = YarnSparkHadoopUtil.getContainerId
         val user = Utils.getCurrentUserName()
         assert(urlStr.endsWith(s"/node/containerlogs/$containerId/$user/stderr?start=-4096"))
       }
@@ -508,6 +542,23 @@ private object SparkContextTimeoutApp {
   def main(args: Array[String]): Unit = {
     val Array(sleepTime) = args
     Thread.sleep(java.lang.Long.parseLong(sleepTime))
+  }
+
+}
+
+private object ExecutorEnvTestApp {
+
+  def main(args: Array[String]): Unit = {
+    val status = args(0)
+    val sparkConf = new SparkConf()
+    val sc = new SparkContext(sparkConf)
+    val executorEnvs = sc.parallelize(Seq(1)).flatMap { _ => sys.env }.collect().toMap
+    val result = sparkConf.getExecutorEnv.forall { case (k, v) =>
+      executorEnvs.get(k).contains(v)
+    }
+
+    Files.write(result.toString, new File(status), StandardCharsets.UTF_8)
+    sc.stop()
   }
 
 }

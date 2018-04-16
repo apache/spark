@@ -28,12 +28,12 @@ import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.scheduler.LiveListenerBus
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
-import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
+import org.apache.spark.sql.execution.ui.{SQLAppStatusListener, SQLAppStatusStore, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 
@@ -84,9 +84,17 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   val cacheManager: CacheManager = new CacheManager
 
   /**
-   * A listener for SQL-specific [[org.apache.spark.scheduler.SparkListenerEvent]]s.
+   * A status store to query SQL status/metrics of this Spark application, based on SQL-specific
+   * [[org.apache.spark.scheduler.SparkListenerEvent]]s.
    */
-  val listener: SQLListener = createListenerAndUI(sparkContext)
+  val statusStore: SQLAppStatusStore = {
+    val kvStore = sparkContext.statusStore.store.asInstanceOf[ElementTrackingStore]
+    val listener = new SQLAppStatusListener(sparkContext.conf, kvStore, live = true)
+    sparkContext.listenerBus.addToStatusQueue(listener)
+    val statusStore = new SQLAppStatusStore(kvStore, Some(listener))
+    sparkContext.ui.foreach(new SQLTab(statusStore, _))
+    statusStore
+  }
 
   /**
    * A catalog that interacts with external systems.
@@ -142,19 +150,6 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   val jarClassLoader = new NonClosableMutableURLClassLoader(
     org.apache.spark.util.Utils.getContextOrSparkClassLoader)
 
-  /**
-   * Create a SQLListener then add it into SparkContext, and create a SQLTab if there is SparkUI.
-   */
-  private def createListenerAndUI(sc: SparkContext): SQLListener = {
-    if (SparkSession.sqlListener.get() == null) {
-      val listener = new SQLListener(sc.conf)
-      if (SparkSession.sqlListener.compareAndSet(null, listener)) {
-        sc.listenerBus.addToStatusQueue(listener)
-        sc.ui.foreach(new SQLTab(listener, _))
-      }
-    }
-    SparkSession.sqlListener.get()
-  }
 }
 
 object SharedState extends Logging {

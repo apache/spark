@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.text
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CompressionCodecs}
 
 /**
@@ -33,8 +35,25 @@ private[text] class TextOptions(@transient private val parameters: CaseInsensiti
    * Compression codec to use.
    */
   val compressionCodec = parameters.get(COMPRESSION).map(CompressionCodecs.getCodecClassName)
+
+  /**
+   * wholetext - If true, read a file as a single row and not split by "\n".
+   */
+  val wholeText = parameters.getOrElse(WHOLETEXT, "false").toBoolean
+
+  private val lineSeparator: Option[String] = parameters.get(LINE_SEPARATOR).map { sep =>
+    require(sep.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
+    sep
+  }
+  // Note that the option 'lineSep' uses a different default value in read and write.
+  val lineSeparatorInRead: Option[Array[Byte]] =
+    lineSeparator.map(_.getBytes(StandardCharsets.UTF_8))
+  val lineSeparatorInWrite: Array[Byte] =
+    lineSeparatorInRead.getOrElse("\n".getBytes(StandardCharsets.UTF_8))
 }
 
-private[text] object TextOptions {
+private[datasources] object TextOptions {
   val COMPRESSION = "compression"
+  val WHOLETEXT = "wholetext"
+  val LINE_SEPARATOR = "lineSep"
 }

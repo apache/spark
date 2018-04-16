@@ -24,8 +24,6 @@ if sys.version >= '3':
 else:
     intlike = (int, long)
 
-from abc import ABCMeta, abstractmethod
-
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import _to_seq
@@ -407,7 +405,7 @@ class DataStreamReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             multiLine=None,  allowUnquotedControlChars=None):
+             multiLine=None,  allowUnquotedControlChars=None, lineSep=None):
         """
         Loads a JSON file stream and returns the results as a :class:`DataFrame`.
 
@@ -442,13 +440,13 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
-                 record, and puts the malformed string into a field configured by \
-                 ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
-                 a string type field named ``columnNameOfCorruptRecord`` in an user-defined \
-                 schema. If a schema does not have the field, it drops corrupt records during \
-                 parsing. When inferring a schema, it implicitly adds a \
-                 ``columnNameOfCorruptRecord`` field in an output schema.
+                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                  into a field configured by ``columnNameOfCorruptRecord``, and sets other \
+                  fields to ``null``. To keep corrupt records, an user can set a string type \
+                  field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
+                  schema does not have the field, it drops corrupt records during parsing. \
+                  When inferring a schema, it implicitly adds a ``columnNameOfCorruptRecord`` \
+                  field in an output schema.
                 *  ``DROPMALFORMED`` : ignores the whole corrupted records.
                 *  ``FAILFAST`` : throws an exception when it meets corrupted records.
 
@@ -470,6 +468,8 @@ class DataStreamReader(OptionUtils):
         :param allowUnquotedControlChars: allows JSON Strings to contain unquoted control
                                           characters (ASCII characters with value less than 32,
                                           including tab and line feed characters) or not.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -484,9 +484,26 @@ class DataStreamReader(OptionUtils):
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
             timestampFormat=timestampFormat, multiLine=multiLine,
-            allowUnquotedControlChars=allowUnquotedControlChars)
+            allowUnquotedControlChars=allowUnquotedControlChars, lineSep=lineSep)
         if isinstance(path, basestring):
             return self._df(self._jreader.json(path))
+        else:
+            raise TypeError("path can be only a single string")
+
+    @since(2.3)
+    def orc(self, path):
+        """Loads a ORC file stream, returning the result as a :class:`DataFrame`.
+
+        .. note:: Evolving.
+
+        >>> orc_sdf = spark.readStream.schema(sdf_schema).orc(tempfile.mkdtemp())
+        >>> orc_sdf.isStreaming
+        True
+        >>> orc_sdf.schema == sdf_schema
+        True
+        """
+        if isinstance(path, basestring):
+            return self._df(self._jreader.orc(path))
         else:
             raise TypeError("path can be only a single string")
 
@@ -514,17 +531,20 @@ class DataStreamReader(OptionUtils):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def text(self, path):
+    def text(self, path, wholetext=False, lineSep=None):
         """
         Loads a text file stream and returns a :class:`DataFrame` whose schema starts with a
         string column named "value", and followed by partitioned columns if there
         are any.
 
-        Each line in the text file is a new row in the resulting DataFrame.
+        By default, each line in the text file is a new row in the resulting DataFrame.
 
         .. note:: Evolving.
 
         :param paths: string, or list of strings, for input path(s).
+        :param wholetext: if true, read each file from input path(s) as a single row.
+        :param lineSep: defines the line separator that should be used for parsing. If None is
+                        set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> text_sdf = spark.readStream.text(tempfile.mkdtemp())
         >>> text_sdf.isStreaming
@@ -532,6 +552,7 @@ class DataStreamReader(OptionUtils):
         >>> "value" in str(text_sdf.schema)
         True
         """
+        self._set_opts(wholetext=wholetext, lineSep=lineSep)
         if isinstance(path, basestring):
             return self._df(self._jreader.text(path))
         else:
@@ -543,7 +564,7 @@ class DataStreamReader(OptionUtils):
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
-            columnNameOfCorruptRecord=None, multiLine=None):
+            columnNameOfCorruptRecord=None, multiLine=None, charToEscapeQuoteEscaping=None):
         """Loads a CSV file stream and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -555,17 +576,17 @@ class DataStreamReader(OptionUtils):
         :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
-        :param sep: sets the single character as a separator for each field and value.
+        :param sep: sets a single character as a separator for each field and value.
                     If None is set, it uses the default value, ``,``.
         :param encoding: decodes the CSV files by the given encoding type. If None is set,
                          it uses the default value, ``UTF-8``.
-        :param quote: sets the single character used for escaping quoted values where the
+        :param quote: sets a single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
                       value, ``"``. If you would like to turn off quotations, you need to set an
                       empty string.
-        :param escape: sets the single character used for escaping quotes inside an already
+        :param escape: sets a single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``.
-        :param comment: sets the single character used for skipping lines beginning with this
+        :param comment: sets a single character used for skipping lines beginning with this
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
                        default value, ``false``.
@@ -604,13 +625,15 @@ class DataStreamReader(OptionUtils):
         :param mode: allows a mode for dealing with corrupt records during parsing. If None is
                      set, it uses the default value, ``PERMISSIVE``.
 
-                * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted \
-                  record, and puts the malformed string into a field configured by \
-                  ``columnNameOfCorruptRecord``. To keep corrupt records, an user can set \
-                  a string type field named ``columnNameOfCorruptRecord`` in an \
-                  user-defined schema. If a schema does not have the field, it drops corrupt \
-                  records during parsing. When a length of parsed CSV tokens is shorter than \
-                  an expected length of a schema, it sets `null` for extra fields.
+                * ``PERMISSIVE`` : when it meets a corrupted record, puts the malformed string \
+                  into a field configured by ``columnNameOfCorruptRecord``, and sets other \
+                  fields to ``null``. To keep corrupt records, an user can set a string type \
+                  field named ``columnNameOfCorruptRecord`` in an user-defined schema. If a \
+                  schema does not have the field, it drops corrupt records during parsing. \
+                  A record with less/more tokens than schema is not a corrupted record to CSV. \
+                  When it meets a record having fewer tokens than the length of the schema, \
+                  sets ``null`` to extra fields. When the record has more tokens than the \
+                  length of the schema, it drops extra tokens.
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
 
@@ -621,6 +644,10 @@ class DataStreamReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``.
         :param multiLine: parse one record, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
+        :param charToEscapeQuoteEscaping: sets a single character used for escaping the escape for
+                                          the quote character. If None is set, the default value is
+                                          escape character when escape and quote characters are
+                                          different, ``\0`` otherwise..
 
         >>> csv_sdf = spark.readStream.csv(tempfile.mkdtemp(), schema = sdf_schema)
         >>> csv_sdf.isStreaming
@@ -636,7 +663,8 @@ class DataStreamReader(OptionUtils):
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
-            columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine)
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine,
+            charToEscapeQuoteEscaping=charToEscapeQuoteEscaping)
         if isinstance(path, basestring):
             return self._df(self._jreader.csv(path))
         else:
@@ -764,35 +792,54 @@ class DataStreamWriter(object):
 
     @keyword_only
     @since(2.0)
-    def trigger(self, processingTime=None, once=None):
+    def trigger(self, processingTime=None, once=None, continuous=None):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
 
         .. note:: Evolving.
 
         :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
+                               Set a trigger that runs a query periodically based on the processing
+                               time. Only one trigger can be set.
+        :param once: if set to True, set a trigger that processes only one batch of data in a
+                     streaming query then terminates the query. Only one trigger can be set.
 
         >>> # trigger the query for execution every 5 seconds
         >>> writer = sdf.writeStream.trigger(processingTime='5 seconds')
         >>> # trigger the query for just once batch of data
         >>> writer = sdf.writeStream.trigger(once=True)
+        >>> # trigger the query for execution every 5 seconds
+        >>> writer = sdf.writeStream.trigger(continuous='5 seconds')
         """
+        params = [processingTime, once, continuous]
+
+        if params.count(None) == 3:
+            raise ValueError('No trigger provided')
+        elif params.count(None) < 2:
+            raise ValueError('Multiple triggers not allowed.')
+
         jTrigger = None
         if processingTime is not None:
-            if once is not None:
-                raise ValueError('Multiple triggers not allowed.')
             if type(processingTime) != str or len(processingTime.strip()) == 0:
                 raise ValueError('Value for processingTime must be a non empty string. Got: %s' %
                                  processingTime)
             interval = processingTime.strip()
             jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.ProcessingTime(
                 interval)
+
         elif once is not None:
             if once is not True:
                 raise ValueError('Value for once must be True. Got: %s' % once)
             jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Once()
+
         else:
-            raise ValueError('No trigger provided')
+            if type(continuous) != str or len(continuous.strip()) == 0:
+                raise ValueError('Value for continuous must be a non empty string. Got: %s' %
+                                 continuous)
+            interval = continuous.strip()
+            jTrigger = self._spark._sc._jvm.org.apache.spark.sql.streaming.Trigger.Continuous(
+                interval)
+
         self._jwrite = self._jwrite.trigger(jTrigger)
         return self
 
@@ -887,7 +934,7 @@ def _test():
     globs['spark'].stop()
 
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

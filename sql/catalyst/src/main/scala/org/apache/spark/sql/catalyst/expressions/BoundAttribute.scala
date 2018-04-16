@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.types._
 
 /**
@@ -59,21 +59,25 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = ctx.javaType(dataType)
-    val value = ctx.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
     if (ctx.currentVars != null && ctx.currentVars(ordinal) != null) {
       val oev = ctx.currentVars(ordinal)
       ev.isNull = oev.isNull
       ev.value = oev.value
-      val code = oev.code
-      oev.code = ""
-      ev.copy(code = code)
-    } else if (nullable) {
-      ev.copy(code = s"""
-        boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
-        $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(dataType)} : ($value);""")
+      ev.copy(code = oev.code)
     } else {
-      ev.copy(code = s"""$javaType ${ev.value} = $value;""", isNull = "false")
+      assert(ctx.INPUT_ROW != null, "INPUT_ROW and currentVars cannot both be null.")
+      val javaType = CodeGenerator.javaType(dataType)
+      val value = CodeGenerator.getValue(ctx.INPUT_ROW, dataType, ordinal.toString)
+      if (nullable) {
+        ev.copy(code =
+          s"""
+             |boolean ${ev.isNull} = ${ctx.INPUT_ROW}.isNullAt($ordinal);
+             |$javaType ${ev.value} = ${ev.isNull} ?
+             |  ${CodeGenerator.defaultValue(dataType)} : ($value);
+           """.stripMargin)
+      } else {
+        ev.copy(code = s"$javaType ${ev.value} = $value;", isNull = FalseLiteral)
+      }
     }
   }
 }

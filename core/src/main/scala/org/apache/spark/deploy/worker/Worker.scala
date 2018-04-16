@@ -199,7 +199,7 @@ private[deploy] class Worker(
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
-    shuffleService.startIfEnabled()
+    startExternalShuffleService()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
 
@@ -367,6 +367,16 @@ private[deploy] class Worker(
     }
   }
 
+  private def startExternalShuffleService() {
+    try {
+      shuffleService.startIfEnabled()
+    } catch {
+      case e: Exception =>
+        logError("Failed to start external shuffle service", e)
+        System.exit(1)
+    }
+  }
+
   private def sendRegisterMessageToMaster(masterEndpoint: RpcEndpointRef): Unit = {
     masterEndpoint.send(RegisterWorker(
       workerId,
@@ -431,7 +441,7 @@ private[deploy] class Worker(
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker
       // rpcEndpoint.
       // Copy ids so that it can be used in the cleanup thread.
-      val appIds = executors.values.map(_.appId).toSet
+      val appIds = (executors.values.map(_.appId) ++ drivers.values.map(_.driverId)).toSet
       val cleanupFuture = concurrent.Future {
         val appDirs = workDir.listFiles()
         if (appDirs == null) {

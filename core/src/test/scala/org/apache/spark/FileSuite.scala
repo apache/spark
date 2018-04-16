@@ -31,7 +31,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInputFormat => NewTextInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 
-import org.apache.spark.internal.config.{IGNORE_CORRUPT_FILES, IGNORE_EMPTY_SPLITS}
+import org.apache.spark.internal.config._
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -244,7 +244,10 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     for (i <- 0 until testOutputCopies) {
       // Shift values by i so that they're different in the output
       val alteredOutput = testOutput.map(b => (b + i).toByte)
-      channel.write(ByteBuffer.wrap(alteredOutput))
+      val buffer = ByteBuffer.wrap(alteredOutput)
+      while (buffer.hasRemaining) {
+        channel.write(buffer)
+      }
     }
     channel.close()
     file.close()
@@ -510,9 +513,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("spark.files.ignoreEmptySplits work correctly (old Hadoop API)") {
+  test("spark.hadoopRDD.ignoreEmptySplits work correctly (old Hadoop API)") {
     val conf = new SparkConf()
-    conf.setAppName("test").setMaster("local").set(IGNORE_EMPTY_SPLITS, true)
+      .setAppName("test")
+      .setMaster("local")
+      .set(HADOOP_RDD_IGNORE_EMPTY_SPLITS, true)
     sc = new SparkContext(conf)
 
     def testIgnoreEmptySplits(
@@ -549,9 +554,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       expectedPartitionNum = 2)
   }
 
-  test("spark.files.ignoreEmptySplits work correctly (new Hadoop API)") {
+  test("spark.hadoopRDD.ignoreEmptySplits work correctly (new Hadoop API)") {
     val conf = new SparkConf()
-    conf.setAppName("test").setMaster("local").set(IGNORE_EMPTY_SPLITS, true)
+      .setAppName("test")
+      .setMaster("local")
+      .set(HADOOP_RDD_IGNORE_EMPTY_SPLITS, true)
     sc = new SparkContext(conf)
 
     def testIgnoreEmptySplits(

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
@@ -129,12 +129,12 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
           if ($eval.isNullAt($ordinal)) {
             ${ev.isNull} = true;
           } else {
-            ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
+            ${ev.value} = ${CodeGenerator.getValue(eval, dataType, ordinal.toString)};
           }
         """
       } else {
         s"""
-          ${ev.value} = ${ctx.getValue(eval, dataType, ordinal.toString)};
+          ${ev.value} = ${CodeGenerator.getValue(eval, dataType, ordinal.toString)};
         """
       }
     })
@@ -186,6 +186,16 @@ case class GetArrayStructFields(
       val values = ctx.freshName("values")
       val j = ctx.freshName("j")
       val row = ctx.freshName("row")
+      val nullSafeEval = if (field.nullable) {
+        s"""
+         if ($row.isNullAt($ordinal)) {
+           $values[$j] = null;
+         } else
+        """
+      } else {
+        ""
+      }
+
       s"""
         final int $n = $eval.numElements();
         final Object[] $values = new Object[$n];
@@ -194,10 +204,8 @@ case class GetArrayStructFields(
             $values[$j] = null;
           } else {
             final InternalRow $row = $eval.getStruct($j, $numFields);
-            if ($row.isNullAt($ordinal)) {
-              $values[$j] = null;
-            } else {
-              $values[$j] = ${ctx.getValue(row, field.dataType, ordinal.toString)};
+            $nullSafeEval {
+              $values[$j] = ${CodeGenerator.getValue(row, field.dataType, ordinal.toString)};
             }
           }
         }
@@ -242,12 +250,17 @@ case class GetArrayItem(child: Expression, ordinal: Expression)
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       val index = ctx.freshName("index")
+      val nullCheck = if (child.dataType.asInstanceOf[ArrayType].containsNull) {
+        s" || $eval1.isNullAt($index)"
+      } else {
+        ""
+      }
       s"""
         final int $index = (int) $eval2;
-        if ($index >= $eval1.numElements() || $index < 0 || $eval1.isNullAt($index)) {
+        if ($index >= $eval1.numElements() || $index < 0$nullCheck) {
           ${ev.isNull} = true;
         } else {
-          ${ev.value} = ${ctx.getValue(eval1, dataType, index)};
+          ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};
         }
       """
     })
@@ -309,6 +322,12 @@ case class GetMapValue(child: Expression, key: Expression)
     val found = ctx.freshName("found")
     val key = ctx.freshName("key")
     val values = ctx.freshName("values")
+    val nullCheck = if (child.dataType.asInstanceOf[MapType].valueContainsNull) {
+      s" || $values.isNullAt($index)"
+    } else {
+      ""
+    }
+    val keyJavaType = CodeGenerator.javaType(keyType)
     nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
       s"""
         final int $length = $eval1.numElements();
@@ -318,7 +337,7 @@ case class GetMapValue(child: Expression, key: Expression)
         int $index = 0;
         boolean $found = false;
         while ($index < $length && !$found) {
-          final ${ctx.javaType(keyType)} $key = ${ctx.getValue(keys, keyType, index)};
+          final $keyJavaType $key = ${CodeGenerator.getValue(keys, keyType, index)};
           if (${ctx.genEqual(keyType, key, eval2)}) {
             $found = true;
           } else {
@@ -326,10 +345,10 @@ case class GetMapValue(child: Expression, key: Expression)
           }
         }
 
-        if (!$found || $values.isNullAt($index)) {
+        if (!$found$nullCheck) {
           ${ev.isNull} = true;
         } else {
-          ${ev.value} = ${ctx.getValue(values, dataType, index)};
+          ${ev.value} = ${CodeGenerator.getValue(values, dataType, index)};
         }
       """
     })

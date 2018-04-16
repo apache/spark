@@ -39,8 +39,8 @@ import org.apache.spark.sql.types.{DecimalType, DoubleType}
 
 
 private[sql] class HiveSessionCatalog(
-    externalCatalog: HiveExternalCatalog,
-    globalTempViewManager: GlobalTempViewManager,
+    externalCatalogBuilder: () => HiveExternalCatalog,
+    globalTempViewManagerBuilder: () => GlobalTempViewManager,
     val metastoreCatalog: HiveMetastoreCatalog,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
@@ -48,8 +48,8 @@ private[sql] class HiveSessionCatalog(
     parser: ParserInterface,
     functionResourceLoader: FunctionResourceLoader)
   extends SessionCatalog(
-      externalCatalog,
-      globalTempViewManager,
+      externalCatalogBuilder,
+      globalTempViewManagerBuilder,
       functionRegistry,
       conf,
       hadoopConf,
@@ -94,8 +94,15 @@ private[sql] class HiveSessionCatalog(
         }
       } catch {
         case NonFatal(e) =>
-          val analysisException =
-            new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e")
+          val noHandlerMsg = s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e"
+          val errorMsg =
+            if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
+              s"$noHandlerMsg\nPlease make sure your function overrides " +
+                "`public StructObjectInspector initialize(ObjectInspector[] args)`."
+            } else {
+              noHandlerMsg
+            }
+          val analysisException = new AnalysisException(errorMsg)
           analysisException.setStackTrace(e.getStackTrace)
           throw analysisException
       }

@@ -3,41 +3,323 @@ layout: global
 displayTitle: Spark Security
 title: Security
 ---
+* This will become a table of contents (this text will be scraped).
+{:toc}
 
-Spark currently supports authentication via a shared secret. Authentication can be configured to be on via the `spark.authenticate` configuration parameter. This parameter controls whether the Spark communication protocols do authentication using the shared secret. This authentication is a basic handshake to make sure both sides have the same shared secret and are allowed to communicate. If the shared secret is not identical they will not be allowed to communicate. The shared secret is created as follows:
+# Spark RPC
 
-* For Spark on [YARN](running-on-yarn.html) deployments, configuring `spark.authenticate` to `true` will automatically handle generating and distributing the shared secret. Each application will use a unique shared secret.
-* For other types of Spark deployments, the Spark parameter `spark.authenticate.secret` should be configured on each of the nodes. This secret will be used by all the Master/Workers and applications.
+## Authentication
 
-## Web UI
+Spark currently supports authentication for RPC channels using a shared secret. Authentication can
+be turned on by setting the `spark.authenticate` configuration parameter.
 
-The Spark UI can be secured by using [javax servlet filters](http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html) via the `spark.ui.filters` setting
-and by using [https/SSL](http://en.wikipedia.org/wiki/HTTPS) via [SSL settings](security.html#ssl-configuration).
+The exact mechanism used to generate and distribute the shared secret is deployment-specific.
 
-### Authentication
+For Spark on [YARN](running-on-yarn.html) and local deployments, Spark will automatically handle
+generating and distributing the shared secret. Each application will use a unique shared secret. In
+the case of YARN, this feature relies on YARN RPC encryption being enabled for the distribution of
+secrets to be secure.
 
-A user may want to secure the UI if it has data that other users should not be allowed to see. The javax servlet filter specified by the user can authenticate the user and then once the user is logged in, Spark can compare that user versus the view ACLs to make sure they are authorized to view the UI. The configs `spark.acls.enable`, `spark.ui.view.acls` and `spark.ui.view.acls.groups` control the behavior of the ACLs. Note that the user who started the application always has view access to the UI.  On YARN, the Spark UI uses the standard YARN web application proxy mechanism and will authenticate via any installed Hadoop filters.
+For other resource managers, `spark.authenticate.secret` must be configured on each of the nodes.
+This secret will be shared by all the daemons and applications, so this deployment configuration is
+not as secure as the above, especially when considering multi-tenant clusters.
 
-Spark also supports modify ACLs to control who has access to modify a running Spark application. This includes things like killing the application or a task. This is controlled by the configs `spark.acls.enable`, `spark.modify.acls` and `spark.modify.acls.groups`. Note that if you are authenticating the web UI, in order to use the kill button on the web UI it might be necessary to add the users in the modify acls to the view acls also. On YARN, the modify acls are passed in and control who has modify access via YARN interfaces.
-Spark allows for a set of administrators to be specified in the acls who always have view and modify permissions to all the applications. is controlled by the configs `spark.admin.acls` and `spark.admin.acls.groups`. This is useful on a shared cluster where you might have administrators or support staff who help users debug applications.
-
-## Event Logging
-
-If your applications are using event logging, the directory where the event logs go (`spark.eventLog.dir`) should be manually created and have the proper permissions set on it. If you want those log files secured, the permissions should be set to `drwxrwxrwxt` for that directory. The owner of the directory should be the super user who is running the history server and the group permissions should be restricted to super user group. This will allow all users to write to the directory but will prevent unprivileged users from removing or renaming a file unless they own the file or directory. The event log files will be created by Spark with permissions such that only the user and group have read and write access.
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.authenticate</code></td>
+  <td>false</td>
+  <td>Whether Spark authenticates its internal connections.</td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.secret</code></td>
+  <td>None</td>
+  <td>
+    The secret key used authentication. See above for when this configuration should be set.
+  </td>
+</tr>
+</table>
 
 ## Encryption
 
-Spark supports SSL for HTTP protocols. SASL encryption is supported for the block transfer service
-and the RPC endpoints. Shuffle files can also be encrypted if desired.
+Spark supports AES-based encryption for RPC connections. For encryption to be enabled, RPC
+authentication must also be enabled and properly configured. AES encryption uses the
+[Apache Commons Crypto](http://commons.apache.org/proper/commons-crypto/) library, and Spark's
+configuration system allows access to that library's configuration for advanced users.
 
-### SSL Configuration
+There is also support for SASL-based encryption, although it should be considered deprecated. It
+is still required when talking to shuffle services from Spark versions older than 2.2.0.
+
+The following table describes the different options available for configuring this feature.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.network.crypto.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enable AES-based RPC encryption, including the new authentication protocol added in 2.2.0.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.keyLength</code></td>
+  <td>128</td>
+  <td>
+    The length in bits of the encryption key to generate. Valid values are 128, 192 and 256.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.keyFactoryAlgorithm</code></td>
+  <td>PBKDF2WithHmacSHA1</td>
+  <td>
+    The key factory algorithm to use when generating encryption keys. Should be one of the
+    algorithms supported by the javax.crypto.SecretKeyFactory class in the JRE being used.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.config.*</code></td>
+  <td>None</td>
+  <td>
+    Configuration values for the commons-crypto library, such as which cipher implementations to
+    use. The config name should be the name of commons-crypto configuration without the
+    <code>commons.crypto</code> prefix.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.crypto.saslFallback</code></td>
+  <td>true</td>
+  <td>
+    Whether to fall back to SASL authentication if authentication fails using Spark's internal
+    mechanism. This is useful when the application is connecting to old shuffle services that
+    do not support the internal Spark authentication protocol. On the shuffle service side,
+    disabling this feature will block older clients from authenticating.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.authenticate.enableSaslEncryption</code></td>
+  <td>false</td>
+  <td>
+    Enable SASL-based encrypted communication.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.sasl.serverAlwaysEncrypt</code></td>
+  <td>false</td>
+  <td>
+    Disable unencrypted connections for ports using SASL authentication. This will deny connections
+    from clients that have authentication enabled, but do not request SASL-based encryption.
+  </td>
+</tr>
+</table>
+
+
+# Local Storage Encryption
+
+Spark supports encrypting temporary data written to local disks. This covers shuffle files, shuffle
+spills and data blocks stored on disk (for both caching and broadcast variables). It does not cover
+encrypting output data generated by applications with APIs such as `saveAsHadoopFile` or
+`saveAsTable`.
+
+The following settings cover enabling encryption for data written to disk:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.io.encryption.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enable local disk I/O encryption. Currently supported by all modes except Mesos. It's strongly
+    recommended that RPC encryption be enabled when using this feature.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.encryption.keySizeBits</code></td>
+  <td>128</td>
+  <td>
+    IO encryption key size in bits. Supported values are 128, 192 and 256.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.encryption.keygen.algorithm</code></td>
+  <td>HmacSHA1</td>
+  <td>
+    The algorithm to use when generating the IO encryption key. The supported algorithms are
+    described in the KeyGenerator section of the Java Cryptography Architecture Standard Algorithm
+    Name Documentation.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.encryption.commons.config.*</code></td>
+  <td>None</td>
+  <td>
+    Configuration values for the commons-crypto library, such as which cipher implementations to
+    use. The config name should be the name of commons-crypto configuration without the
+    <code>commons.crypto</code> prefix.
+  </td>
+</tr>
+</table>
+
+
+# Web UI
+
+## Authentication and Authorization
+
+Enabling authentication for the Web UIs is done using [javax servlet filters](http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html).
+You will need a filter that implements the authentication method you want to deploy. Spark does not
+provide any built-in authentication filters.
+
+Spark also supports access control to the UI when an authentication filter is present. Each
+application can be configured with its own separate access control lists (ACLs). Spark
+differentiates between "view" permissions (who is allowed to see the application's UI), and "modify"
+permissions (who can do things like kill jobs in a running application).
+
+ACLs can be configured for either users or groups. Configuration entries accept comma-separated
+lists as input, meaning multiple users or groups can be given the desired privileges. This can be
+used if you run on a shared cluster and have a set of administrators or developers who need to
+monitor applications they may not have started themselves. A wildcard (`*`) added to specific ACL
+means that all users will have the respective pivilege. By default, only the user submitting the
+application is added to the ACLs.
+
+Group membership is established by using a configurable group mapping provider. The mapper is
+configured using the <code>spark.user.groups.mapping</code> config option, described in the table
+below.
+
+The following options control the authentication of Web UIs:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.ui.filters</code></td>
+  <td>None</td>
+  <td>
+    See the <a href="configuration.html#spark-ui">Spark UI</a> configuration for how to configure
+    filters.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.acls.enable</code></td>
+  <td>false</td>
+  <td>
+    Whether UI ACLs should be enabled. If enabled, this checks to see if the user has access
+    permissions to view or modify the application. Note this requires the user to be authenticated,
+    so if no authentication filter is installed, this option does not do anything.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.admin.acls</code></td>
+  <td>None</td>
+  <td>
+    Comma-separated list of users that have view and modify access to the Spark application.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.admin.acls.groups</code></td>
+  <td>None</td>
+  <td>
+    Comma-separated list of groups that have view and modify access to the Spark application.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.modify.acls</code></td>
+  <td>None</td>
+  <td>
+    Comma-separated list of users that have modify access to the Spark application.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.modify.acls.groups</code></td>
+  <td>None</td>
+  <td>
+    Comma-separated list of groups that have modify access to the Spark application.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.view.acls</code></td>
+  <td>None</td>
+  <td>
+    Comma-separated list of users that have view access to the Spark application.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.view.acls.groups</code></td>
+  <td>None</td>
+  <td>
+    Comma-separated list of groups that have view access to the Spark application.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.user.groups.mapping</code></td>
+  <td><code>org.apache.spark.security.ShellBasedGroupsMappingProvider</code></td>
+  <td>
+    The list of groups for a user is determined by a group mapping service defined by the trait
+    <code>org.apache.spark.security.GroupMappingServiceProvider</code>, which can be configured by
+    this property.
+
+    <br />By default, a Unix shell-based implementation is used, which collects this information
+    from the host OS.
+
+    <br /><em>Note:</em> This implementation supports only Unix/Linux-based environments.
+    Windows environment is currently <b>not</b> supported. However, a new platform/protocol can
+    be supported by implementing the trait mentioned above.
+  </td>
+</tr>
+</table>
+
+On YARN, the view and modify ACLs are provided to the YARN service when submitting applications, and
+control who has the respective privileges via YARN interfaces.
+
+## Spark History Server ACLs
+
+Authentication for the SHS Web UI is enabled the same way as for regular applications, using
+servlet filters.
+
+To enable authorization in the SHS, a few extra options are used:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.history.ui.acls.enable</td>
+  <td>false</td>
+  <td>
+    Specifies whether ACLs should be checked to authorize users viewing the applications in
+    the history server. If enabled, access control checks are performed regardless of what the
+    individual applications had set for <code>spark.ui.acls.enable</code>. The application owner
+    will always have authorization to view their own application and any users specified via
+    <code>spark.ui.view.acls</code> and groups specified via <code>spark.ui.view.acls.groups</code>
+    when the application was run will also have authorization to view that application.
+    If disabled, no access control checks are made for any application UIs available through
+    the history server.
+  </td>
+</tr>
+<tr>
+  <td>spark.history.ui.admin.acls</td>
+  <td>None</td>
+  <td>
+    Comma separated list of users that have view access to all the Spark applications in history
+    server.
+  </td>
+</tr>
+<tr>
+  <td>spark.history.ui.admin.acls.groups</td>
+  <td>None</td>
+  <td>
+    Comma separated list of groups that have view access to all the Spark applications in history
+    server.
+  </td>
+</tr>
+</table>
+
+The SHS uses the same options to configure the group mapping provider as regular applications.
+In this case, the group mapping provider will apply to all UIs server by the SHS, and individual
+application configurations will be ignored.
+
+## SSL Configuration
 
 Configuration for SSL is organized hierarchically. The user can configure the default SSL settings
 which will be used for all the supported communication protocols unless they are overwritten by
 protocol-specific settings. This way the user can easily provide the common settings for all the
-protocols without disabling the ability to configure each one individually. The common SSL settings
-are at `spark.ssl` namespace in Spark configuration. The following table describes the
-component-specific configuration namespaces used to override the default settings:
+protocols without disabling the ability to configure each one individually. The following table
+describes the the SSL configuration namespaces:
 
 <table class="table">
   <tr>
@@ -45,8 +327,11 @@ component-specific configuration namespaces used to override the default setting
     <th>Component</th>
   </tr>
   <tr>
-    <td><code>spark.ssl.fs</code></td>
-    <td>File download client (used to download jars and files from HTTPS-enabled servers).</td>
+    <td><code>spark.ssl</code></td>
+    <td>
+      The default SSL configuration. These values will apply to all namespaces below, unless
+      explicitly overridden at the namespace level.
+    </td>
   </tr>
   <tr>
     <td><code>spark.ssl.ui</code></td>
@@ -62,49 +347,205 @@ component-specific configuration namespaces used to override the default setting
   </tr>
 </table>
 
-The full breakdown of available SSL options  can be found on the [configuration page](configuration.html).
-SSL must be configured on each node and configured for each component involved in communication using the particular protocol.
+The full breakdown of available SSL options can be found below. The `${ns}` placeholder should be
+replaced with one of the above namespaces.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>${ns}.enabled</code></td>
+    <td>false</td>
+    <td>Enables SSL. When enabled, <code>${ns}.ssl.protocol</code> is required.</td>
+  </tr>
+  <tr>
+    <td><code>${ns}.port</code></td>
+    <td>None</td>
+    <td>
+      The port where the SSL service will listen on.
+
+      <br />The port must be defined within a specific namespace configuration. The default
+      namespace is ignored when reading this configuration.
+
+      <br />When not set, the SSL port will be derived from the non-SSL port for the
+      same service. A value of "0" will make the service bind to an ephemeral port.
+    </td>
+  </tr>
+  <tr>
+    <td><code>${ns}.enabledAlgorithms</code></td>
+    <td>None</td>
+    <td>
+      A comma-separated list of ciphers. The specified ciphers must be supported by JVM.
+
+      <br />The reference list of protocols can be found in the "JSSE Cipher Suite Names" section
+      of the Java security guide. The list for Java 8 can be found at
+      <a href="https://docs.oracle.com/javase/8/docs/technotes/guides/security/StandardNames.html#ciphersuites">this</a>
+      page.
+
+      <br />Note: If not set, the default cipher suite for the JRE will be used.
+    </td>
+  </tr>
+  <tr>
+    <td><code>${ns}.keyPassword</code></td>
+    <td>None</td>
+    <td>
+      The password to the private key in the key store.
+    </td>
+  </tr>
+  <tr>
+    <td><code>${ns}.keyStore</code></td>
+    <td>None</td>
+    <td>
+      Path to the key store file. The path can be absolute or relative to the directory in which the
+      process is started.
+    </td>
+  </tr>
+  <tr>
+    <td><code>${ns}.keyStorePassword</code></td>
+    <td>None</td>
+    <td>Password to the key store.</td>
+  </tr>
+  <tr>
+    <td><code>${ns}.keyStoreType</code></td>
+    <td>JKS</td>
+    <td>The type of the key store.</td>
+  </tr>
+  <tr>
+    <td><code>${ns}.protocol</code></td>
+    <td>None</td>
+    <td>
+      TLS protocol to use. The protocol must be supported by JVM.
+
+      <br />The reference list of protocols can be found in the "Additional JSSE Standard Names"
+      section of the Java security guide. For Java 8, the list can be found at
+      <a href="https://docs.oracle.com/javase/8/docs/technotes/guides/security/StandardNames.html#jssenames">this</a>
+      page.
+    </td>
+  </tr>
+  <tr>
+    <td><code>${ns}.needClientAuth</code></td>
+    <td>false</td>
+    <td>Whether to require client authentication.</td>
+  </tr>
+  <tr>
+    <td><code>${ns}.trustStore</code></td>
+    <td>None</td>
+    <td>
+      Path to the trust store file. The path can be absolute or relative to the directory in which
+      the process is started.
+    </td>
+  </tr>
+  <tr>
+    <td><code>${ns}.trustStorePassword</code></td>
+    <td>None</td>
+    <td>Password for the trust store.</td>
+  </tr>
+  <tr>
+    <td><code>${ns}.trustStoreType</code></td>
+    <td>JKS</td>
+    <td>The type of the trust store.</td>
+  </tr>
+</table>
+
+## Preparing the key stores
+
+Key stores can be generated by `keytool` program. The reference documentation for this tool for
+Java 8 is [here](https://docs.oracle.com/javase/8/docs/technotes/tools/unix/keytool.html).
+The most basic steps to configure the key stores and the trust store for a Spark Standalone
+deployment mode is as follows:
+
+* Generate a key pair for each node
+* Export the public key of the key pair to a file on each node
+* Import all exported public keys into a single trust store
+* Distribute the trust store to the cluster nodes
 
 ### YARN mode
-The key-store can be prepared on the client side and then distributed and used by the executors as the part of the application. It is possible because the user is able to deploy files before the application is started in YARN by using `spark.yarn.dist.files` or `spark.yarn.dist.archives` configuration settings. The responsibility for encryption of transferring these files is on YARN side and has nothing to do with Spark.
 
-For long-running apps like Spark Streaming apps to be able to write to HDFS, it is possible to pass a principal and keytab to `spark-submit` via the `--principal` and `--keytab` parameters respectively. The keytab passed in will be copied over to the machine running the Application Master via the Hadoop Distributed Cache (securely - if YARN is configured with SSL and HDFS encryption is enabled). The Kerberos login will be periodically renewed using this principal and keytab and the delegation tokens required for HDFS will be generated periodically so the application can continue writing to HDFS.
+To provide a local trust store or key store file to drivers running in cluster mode, they can be
+distributed with the application using the `--files` command line argument (or the equivalent
+`spark.files` configuration). The files will be placed on the driver's working directory, so the TLS
+configuration should just reference the file name with no absolute path.
+
+Distributing local key stores this way may require the files to be staged in HDFS (or other similar
+distributed file system used by the cluster), so it's recommended that the undelying file system be
+configured with security in mind (e.g. by enabling authentication and wire encryption).
 
 ### Standalone mode
-The user needs to provide key-stores and configuration options for master and workers. They have to be set by attaching appropriate Java system properties in `SPARK_MASTER_OPTS` and in `SPARK_WORKER_OPTS` environment variables, or just in `SPARK_DAEMON_JAVA_OPTS`. In this mode, the user may allow the executors to use the SSL settings inherited from the worker which spawned that executor. It can be accomplished by setting `spark.ssl.useNodeLocalConf` to `true`. If that parameter is set, the settings provided by user on the client side, are not used by the executors.
+
+The user needs to provide key stores and configuration options for master and workers. They have to
+be set by attaching appropriate Java system properties in `SPARK_MASTER_OPTS` and in
+`SPARK_WORKER_OPTS` environment variables, or just in `SPARK_DAEMON_JAVA_OPTS`.
+
+The user may allow the executors to use the SSL settings inherited from the worker process. That
+can be accomplished by setting `spark.ssl.useNodeLocalConf` to `true`. In that case, the settings
+provided by the user on the client side are not used.
 
 ### Mesos mode
-Mesos 1.3.0 and newer supports `Secrets` primitives as both file-based and environment based secrets. Spark allows the specification of file-based and environment variable based secrets with the `spark.mesos.driver.secret.filenames` and `spark.mesos.driver.secret.envkeys`, respectively. Depending on the secret store backend secrets can be passed by reference or by value with the `spark.mesos.driver.secret.names` and `spark.mesos.driver.secret.values` configuration properties, respectively. Reference type secrets are served by the secret store and referred to by name, for example `/mysecret`. Value type secrets are passed on the command line and translated into their appropriate files or environment variables. 
+Mesos 1.3.0 and newer supports `Secrets` primitives as both file-based and environment based
+secrets. Spark allows the specification of file-based and environment variable based secrets with
+`spark.mesos.driver.secret.filenames` and `spark.mesos.driver.secret.envkeys`, respectively.
 
-### Preparing the key-stores
-Key-stores can be generated by `keytool` program. The reference documentation for this tool is
-[here](https://docs.oracle.com/javase/7/docs/technotes/tools/solaris/keytool.html). The most basic
-steps to configure the key-stores and the trust-store for the standalone deployment mode is as
-follows:
+Depending on the secret store backend secrets can be passed by reference or by value with the
+`spark.mesos.driver.secret.names` and `spark.mesos.driver.secret.values` configuration properties,
+respectively.
 
-* Generate a keys pair for each node
-* Export the public key of the key pair to a file on each node
-* Import all exported public keys into a single trust-store
-* Distribute the trust-store over the nodes
+Reference type secrets are served by the secret store and referred to by name, for example
+`/mysecret`. Value type secrets are passed on the command line and translated into their
+appropriate files or environment variables.
 
-### Configuring SASL Encryption
+## HTTP Security Headers
 
-SASL encryption is currently supported for the block transfer service when authentication
-(`spark.authenticate`) is enabled. To enable SASL encryption for an application, set
-`spark.authenticate.enableSaslEncryption` to `true` in the application's configuration.
+Apache Spark can be configured to include HTTP headers to aid in preventing Cross Site Scripting
+(XSS), Cross-Frame Scripting (XFS), MIME-Sniffing, and also to enforce HTTP Strict Transport
+Security.
 
-When using an external shuffle service, it's possible to disable unencrypted connections by setting
-`spark.network.sasl.serverAlwaysEncrypt` to `true` in the shuffle service's configuration. If that
-option is enabled, applications that are not set up to use SASL encryption will fail to connect to
-the shuffle service.
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.ui.xXssProtection</code></td>
+  <td><code>1; mode=block</code></td>
+  <td>
+    Value for HTTP X-XSS-Protection response header. You can choose appropriate value
+    from below:
+    <ul>
+      <li><code>0</code> (Disables XSS filtering)</li>
+      <li><code>1</code> (Enables XSS filtering. If a cross-site scripting attack is detected,
+        the browser will sanitize the page.)</li>
+      <li><code>1; mode=block</code> (Enables XSS filtering. The browser will prevent rendering
+        of the page if an attack is detected.)</li>
+    </ul>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.xContentTypeOptions.enabled</code></td>
+  <td><code>true</code></td>
+  <td>
+    When enabled, X-Content-Type-Options HTTP response header will be set to "nosniff".
+  </td>
+  </tr>
+<tr>
+  <td><code>spark.ui.strictTransportSecurity</code></td>
+  <td>None</td>
+  <td>
+    Value for HTTP Strict Transport Security (HSTS) Response Header. You can choose appropriate
+    value from below and set <code>expire-time</code> accordingly. This option is only used when
+    SSL/TLS is enabled.
+    <ul>
+      <li><code>max-age=&lt;expire-time&gt;</code></li>
+      <li><code>max-age=&lt;expire-time&gt;; includeSubDomains</code></li>
+      <li><code>max-age=&lt;expire-time&gt;; preload</code></li>
+    </ul>
+  </td>
+</tr>
+</table>
 
-## Configuring Ports for Network Security
+
+# Configuring Ports for Network Security
 
 Spark makes heavy use of the network, and some environments have strict requirements for using tight
 firewall settings.  Below are the primary ports that Spark uses for its communication and how to
 configure those ports.
 
-### Standalone mode only
+## Standalone mode only
 
 <table class="table">
   <tr>
@@ -145,7 +586,7 @@ configure those ports.
   </tr>
 </table>
 
-### All cluster managers
+## All cluster managers
 
 <table class="table">
   <tr>
@@ -187,6 +628,69 @@ configure those ports.
 </table>
 
 
-See the [configuration page](configuration.html) for more details on the security configuration
-parameters, and <a href="{{site.SPARK_GITHUB_URL}}/tree/master/core/src/main/scala/org/apache/spark/SecurityManager.scala">
-<code>org.apache.spark.SecurityManager</code></a> for implementation details about security.
+# Kerberos
+
+Spark supports submitting applications in environments that use Kerberos for authentication.
+In most cases, Spark relies on the credentials of the current logged in user when authenticating
+to Kerberos-aware services. Such credentials can be obtained by logging in to the configured KDC
+with tools like `kinit`.
+
+When talking to Hadoop-based services, Spark needs to obtain delegation tokens so that non-local
+processes can authenticate. Spark ships with support for HDFS and other Hadoop file systems, Hive
+and HBase.
+
+When using a Hadoop filesystem (such HDFS or WebHDFS), Spark will acquire the relevant tokens
+for the service hosting the user's home directory.
+
+An HBase token will be obtained if HBase is in the application's classpath, and the HBase
+configuration has Kerberos authentication turned (`hbase.security.authentication=kerberos`).
+
+Similarly, a Hive token will be obtained if Hive is in the classpath, and the configuration includes
+URIs for remote metastore services (`hive.metastore.uris` is not empty).
+
+Delegation token support is currently only supported in YARN and Mesos modes. Consult the
+deployment-specific page for more information.
+
+The following options provides finer-grained control for this feature:
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.security.credentials.${service}.enabled</code></td>
+  <td><code>true</code></td>
+  <td>
+  Controls whether to obtain credentials for services when security is enabled.
+  By default, credentials for all supported services are retrieved when those services are
+  configured, but it's possible to disable that behavior if it somehow conflicts with the
+  application being run.
+  </td>
+</tr>
+</table>
+
+## Long-Running Applications
+
+Long-running applications may run into issues if their run time exceeds the maximum delegation
+token lifetime configured in services it needs to access.
+
+Spark supports automatically creating new tokens for these applications when running in YARN mode.
+Kerberos credentials need to be provided to the Spark application via the `spark-submit` command,
+using the `--principal` and `--keytab` parameters.
+
+The provided keytab will be copied over to the machine running the Application Master via the Hadoop
+Distributed Cache. For this reason, it's strongly recommended that both YARN and HDFS be secured
+with encryption, at least.
+
+The Kerberos login will be periodically renewed using the provided credentials, and new delegation
+tokens for supported will be created.
+
+
+# Event Logging
+
+If your applications are using event logging, the directory where the event logs go
+(`spark.eventLog.dir`) should be manually created with proper permissions. To secure the log files,
+the directory permissions should be set to `drwxrwxrwxt`. The owner and group of the directory
+should correspond to the super user who is running the Spark History Server.
+
+This will allow all users to write to the directory but will prevent unprivileged users from
+reading, removing or renaming a file unless they own it. The event log files will be created by
+Spark with permissions such that only the user and group have read and write access.

@@ -158,7 +158,7 @@ object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifi
   /** Accessor for supported featureSubsetStrategy settings: auto, all, onethird, sqrt, log2 */
   @Since("1.4.0")
   final val supportedFeatureSubsetStrategies: Array[String] =
-    RandomForestParams.supportedFeatureSubsetStrategies
+    TreeEnsembleParams.supportedFeatureSubsetStrategies
 
   @Since("2.0.0")
   override def load(path: String): RandomForestClassifier = super.load(path)
@@ -310,15 +310,15 @@ object RandomForestClassificationModel extends MLReadable[RandomForestClassifica
     override def load(path: String): RandomForestClassificationModel = {
       implicit val format = DefaultFormats
       val (metadata: Metadata, treesData: Array[(Metadata, Node)], _) =
-        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName)
+        EnsembleModelReadWrite.loadImpl(path, sparkSession, className, treeClassName, true)
       val numFeatures = (metadata.metadata \ "numFeatures").extract[Int]
       val numClasses = (metadata.metadata \ "numClasses").extract[Int]
       val numTrees = (metadata.metadata \ "numTrees").extract[Int]
 
       val trees: Array[DecisionTreeClassificationModel] = treesData.map {
         case (treeMetadata, root) =>
-          val tree =
-            new DecisionTreeClassificationModel(treeMetadata.uid, root, numFeatures, numClasses)
+          val tree = new DecisionTreeClassificationModel(treeMetadata.uid,
+            root.asInstanceOf[ClassificationNode], numFeatures, numClasses)
           DefaultParamsReader.getAndSetParams(tree, treeMetadata)
           tree
       }

@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS}
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
+import org.apache.spark.storage.BlockManagerMaster
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 /**
@@ -81,7 +82,8 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 private[spark] class ExecutorAllocationManager(
     client: ExecutorAllocationClient,
     listenerBus: LiveListenerBus,
-    conf: SparkConf)
+    conf: SparkConf,
+    blockManagerMaster: BlockManagerMaster)
   extends Logging {
 
   allocationManager =>
@@ -141,13 +143,17 @@ private[spark] class ExecutorAllocationManager(
   private val removeTimes = new mutable.HashMap[String, Long]
 
   // Polling loop interval (ms)
-  private val intervalMillis: Long = 100
+  private val intervalMillis: Long = if (Utils.isTesting) {
+      conf.getLong(TESTING_SCHEDULE_INTERVAL_KEY, 100)
+    } else {
+      100
+    }
 
   // Clock used to schedule when executors should be added and removed
   private var clock: Clock = new SystemClock()
 
   // Listener for Spark events that impact the allocation policy
-  private val listener = new ExecutorAllocationListener
+  val listener = new ExecutorAllocationListener
 
   // Executor that handles the scheduling task.
   private val executor =
@@ -191,8 +197,11 @@ private[spark] class ExecutorAllocationManager(
       throw new SparkException(
         "spark.dynamicAllocation.sustainedSchedulerBacklogTimeout must be > 0!")
     }
-    if (executorIdleTimeoutS <= 0) {
-      throw new SparkException("spark.dynamicAllocation.executorIdleTimeout must be > 0!")
+    if (executorIdleTimeoutS < 0) {
+      throw new SparkException("spark.dynamicAllocation.executorIdleTimeout must be >= 0!")
+    }
+    if (cachedExecutorIdleTimeoutS < 0) {
+      throw new SparkException("spark.dynamicAllocation.cachedExecutorIdleTimeout must be >= 0!")
     }
     // Require external shuffle service for dynamic allocation
     // Otherwise, we may lose shuffle files when killing executors
@@ -267,6 +276,10 @@ private[spark] class ExecutorAllocationManager(
     (numRunningOrPendingTasks + tasksPerExecutor - 1) / tasksPerExecutor
   }
 
+  private def totalRunningTasks(): Int = synchronized {
+    listener.totalRunningTasks
+  }
+
   /**
    * This is called at a fixed interval to regulate the number of pending executor requests
    * and number of executors running.
@@ -323,6 +336,11 @@ private[spark] class ExecutorAllocationManager(
 
       // If the new target has not changed, avoid sending a message to the cluster manager
       if (numExecutorsTarget < oldNumExecutorsTarget) {
+        // We lower the target number of executors but don't actively kill any yet.  Killing is
+        // controlled separately by an idle timeout.  It's still helpful to reduce the target number
+        // in case an executor just happens to get lost (eg., bad hardware, or the cluster manager
+        // preempts it) -- in that case, there is no point in trying to immediately  get a new
+        // executor, since we wouldn't even use it yet.
         client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
         logDebug(s"Lowering target number of executors to $numExecutorsTarget (previously " +
           s"$oldNumExecutorsTarget) because not all requested executors are actually needed")
@@ -444,7 +462,10 @@ private[spark] class ExecutorAllocationManager(
     val executorsRemoved = if (testing) {
       executorIdsToBeRemoved
     } else {
-      client.killExecutors(executorIdsToBeRemoved)
+      // We don't want to change our target number of executors, because we already did that
+      // when the task backlog decreased.
+      client.killExecutors(executorIdsToBeRemoved, adjustTargetNumExecutors = false,
+        countFailures = false, force = false)
     }
     // [SPARK-21834] killExecutors api reduces the target number of executors.
     // So we need to update the target with desired value.
@@ -564,7 +585,7 @@ private[spark] class ExecutorAllocationManager(
         // Note that it is not necessary to query the executors since all the cached
         // blocks we are concerned with are reported to the driver. Note that this
         // does not include broadcast blocks.
-        val hasCachedBlocks = SparkEnv.get.blockManager.master.hasCachedBlocks(executorId)
+        val hasCachedBlocks = blockManagerMaster.hasCachedBlocks(executorId)
         val now = clock.getTimeMillis()
         val timeout = {
           if (hasCachedBlocks) {
@@ -599,15 +620,14 @@ private[spark] class ExecutorAllocationManager(
    * This class is intentionally conservative in its assumptions about the relative ordering
    * and consistency of events returned by the listener.
    */
-  private class ExecutorAllocationListener extends SparkListener {
+  private[spark] class ExecutorAllocationListener extends SparkListener {
 
     private val stageIdToNumTasks = new mutable.HashMap[Int, Int]
+    // Number of running tasks per stage including speculative tasks.
+    // Should be 0 when no stages are active.
+    private val stageIdToNumRunningTask = new mutable.HashMap[Int, Int]
     private val stageIdToTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
     private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
-    // Number of tasks currently running on the cluster including speculative tasks.
-    // Should be 0 when no stages are active.
-    private var numRunningTasks: Int = _
-
     // Number of speculative tasks to be scheduled in each stage
     private val stageIdToNumSpeculativeTasks = new mutable.HashMap[Int, Int]
     // The speculative tasks started in each stage
@@ -625,6 +645,7 @@ private[spark] class ExecutorAllocationManager(
       val numTasks = stageSubmitted.stageInfo.numTasks
       allocationManager.synchronized {
         stageIdToNumTasks(stageId) = numTasks
+        stageIdToNumRunningTask(stageId) = 0
         allocationManager.onSchedulerBacklogged()
 
         // Compute the number of tasks requested by the stage on each host
@@ -651,6 +672,7 @@ private[spark] class ExecutorAllocationManager(
       val stageId = stageCompleted.stageInfo.stageId
       allocationManager.synchronized {
         stageIdToNumTasks -= stageId
+        stageIdToNumRunningTask -= stageId
         stageIdToNumSpeculativeTasks -= stageId
         stageIdToTaskIndices -= stageId
         stageIdToSpeculativeTaskIndices -= stageId
@@ -663,10 +685,6 @@ private[spark] class ExecutorAllocationManager(
         // This is needed in case the stage is aborted for any reason
         if (stageIdToNumTasks.isEmpty && stageIdToNumSpeculativeTasks.isEmpty) {
           allocationManager.onSchedulerQueueEmpty()
-          if (numRunningTasks != 0) {
-            logWarning("No stages are running, but numRunningTasks != 0")
-            numRunningTasks = 0
-          }
         }
       }
     }
@@ -678,7 +696,9 @@ private[spark] class ExecutorAllocationManager(
       val executorId = taskStart.taskInfo.executorId
 
       allocationManager.synchronized {
-        numRunningTasks += 1
+        if (stageIdToNumRunningTask.contains(stageId)) {
+          stageIdToNumRunningTask(stageId) += 1
+        }
         // This guards against the race condition in which the `SparkListenerTaskStart`
         // event is posted before the `SparkListenerBlockManagerAdded` event, which is
         // possible because these events are posted in different threads. (see SPARK-4951)
@@ -709,7 +729,9 @@ private[spark] class ExecutorAllocationManager(
       val taskIndex = taskEnd.taskInfo.index
       val stageId = taskEnd.stageId
       allocationManager.synchronized {
-        numRunningTasks -= 1
+        if (stageIdToNumRunningTask.contains(stageId)) {
+          stageIdToNumRunningTask(stageId) -= 1
+        }
         // If the executor is no longer running any scheduled tasks, mark it as idle
         if (executorIdToTaskIds.contains(executorId)) {
           executorIdToTaskIds(executorId) -= taskId
@@ -787,7 +809,9 @@ private[spark] class ExecutorAllocationManager(
     /**
      * The number of tasks currently running across all stages.
      */
-    def totalRunningTasks(): Int = numRunningTasks
+    def totalRunningTasks(): Int = {
+      stageIdToNumRunningTask.values.sum
+    }
 
     /**
      * Return true if an executor is not currently running a task, and false otherwise.
@@ -849,4 +873,5 @@ private[spark] class ExecutorAllocationManager(
 
 private object ExecutorAllocationManager {
   val NOT_SET = Long.MaxValue
+  val TESTING_SCHEDULE_INTERVAL_KEY = "spark.testing.dynamicAllocation.scheduleInterval"
 }

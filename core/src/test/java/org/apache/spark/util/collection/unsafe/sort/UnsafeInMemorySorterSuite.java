@@ -98,8 +98,10 @@ public class UnsafeInMemorySorterSuite {
       public int compare(
         Object leftBaseObject,
         long leftBaseOffset,
+        int leftBaseLength,
         Object rightBaseObject,
-        long rightBaseOffset) {
+        long rightBaseOffset,
+        int rightBaseLength) {
         return 0;
       }
     };
@@ -164,8 +166,10 @@ public class UnsafeInMemorySorterSuite {
       public int compare(
               Object leftBaseObject,
               long leftBaseOffset,
+              int leftBaseLength,
               Object rightBaseObject,
-              long rightBaseOffset) {
+              long rightBaseOffset,
+              int rightBaseLength) {
         return 0;
       }
     };
@@ -179,7 +183,8 @@ public class UnsafeInMemorySorterSuite {
     } catch (OutOfMemoryError oom) {
       // as expected
     }
-    // [SPARK-21907] this failed on NPE at org.apache.spark.memory.MemoryConsumer.freeArray(MemoryConsumer.java:108)
+    // [SPARK-21907] this failed on NPE at
+    // org.apache.spark.memory.MemoryConsumer.freeArray(MemoryConsumer.java:108)
     sorter.free();
     // simulate a 'back to back' free.
     sorter.free();
