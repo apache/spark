@@ -403,7 +403,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
             Instance(label - offset, weight, features)
         }
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
-        standardizeFeatures = true, standardizeLabel = true)
+        standardizeFeatures = true, standardizeLabel = true, instrument = Some(instr))
       val wlsModel = optimizer.fit(instances)
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
@@ -420,7 +420,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
       val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam))
       val optimizer = new IterativelyReweightedLeastSquares(initialModel,
-        familyAndLink.reweightFunc, $(fitIntercept), $(regParam), $(maxIter), $(tol))
+        familyAndLink.reweightFunc, $(fitIntercept), $(regParam), $(maxIter), $(tol),
+        instrument = Some(instr))
       val irlsModel = optimizer.fit(instances)
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
