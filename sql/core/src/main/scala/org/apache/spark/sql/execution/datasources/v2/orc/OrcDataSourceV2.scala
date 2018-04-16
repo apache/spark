@@ -51,8 +51,7 @@ class OrcDataSourceV2 extends DataSourceV2 with ReadSupport with ReadSupportWith
 }
 
 case class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: Option[StructType])
-  extends ColumnarBatchFileSourceReader
-  with SupportsPushDownCatalystFilters {
+  extends ColumnarBatchFileSourceReader {
 
   override def inferSchema(files: Seq[FileStatus]): Option[StructType] = {
     OrcUtils.readSchema(sparkSession, files)
