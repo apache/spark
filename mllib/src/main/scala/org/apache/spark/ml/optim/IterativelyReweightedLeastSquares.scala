@@ -20,6 +20,7 @@ package org.apache.spark.ml.optim
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.util.{Instrumentation, OptionalLogging}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -61,7 +62,9 @@ private[ml] class IterativelyReweightedLeastSquares(
     val fitIntercept: Boolean,
     val regParam: Double,
     val maxIter: Int,
-    val tol: Double) extends Logging with Serializable {
+    val tol: Double,
+    override val instrument: Option[Instrumentation[_]])
+  extends OptionalLogging with Serializable {
 
   def fit(instances: RDD[OffsetInstance]): IterativelyReweightedLeastSquaresModel = {
 
@@ -83,7 +86,8 @@ private[ml] class IterativelyReweightedLeastSquares(
 
       // Estimate new model
       model = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
-        standardizeFeatures = false, standardizeLabel = false).fit(newInstances)
+        standardizeFeatures = false, standardizeLabel = false, instrument = instrument)
+        .fit(newInstances)
 
       // Check convergence
       val oldCoefficients = oldModel.coefficients

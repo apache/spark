@@ -156,3 +156,43 @@ private[spark] object Instrumentation {
   }
 
 }
+
+private[spark] trait OptionalLogging extends Logging {
+
+  protected def instrument: Option[Instrumentation[_]]
+
+  protected override def logInfo(msg: => String) {
+    instrument match {
+      case Some(instr) => instr.logInfo(msg)
+      case None => super.logInfo(msg)
+    }
+  }
+
+  protected override def logDebug(msg: => String) {
+    instrument match {
+      case Some(instr) => instr.logDebug(msg)
+      case None => super.logDebug(msg)
+    }
+  }
+
+  protected override def logTrace(msg: => String) {
+    instrument match {
+      case Some(instr) => instr.logTrace(msg)
+      case None => super.logTrace(msg)
+    }
+  }
+
+  protected override def logWarning(msg: => String) {
+    instrument match {
+      case Some(instr) => instr.logWarning(msg)
+      case None => super.logWarning(msg)
+    }
+  }
+
+  protected override def logError(msg: => String) {
+    instrument match {
+      case Some(instr) => instr.logError(msg)
+      case None => super.logError(msg)
+    }
+  }
+}

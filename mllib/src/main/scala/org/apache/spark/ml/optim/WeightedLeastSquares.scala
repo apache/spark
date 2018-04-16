@@ -20,6 +20,7 @@ package org.apache.spark.ml.optim
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.util.{Instrumentation, OptionalLogging}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -81,7 +82,9 @@ private[ml] class WeightedLeastSquares(
     val standardizeLabel: Boolean,
     val solverType: WeightedLeastSquares.Solver = WeightedLeastSquares.Auto,
     val maxIter: Int = 100,
-    val tol: Double = 1e-6) extends Logging with Serializable {
+    val tol: Double = 1e-6,
+    override val instrument: Option[Instrumentation[_]] = None)
+  extends OptionalLogging with Serializable {
   import WeightedLeastSquares._
 
   require(regParam >= 0.0, s"regParam cannot be negative: $regParam")
