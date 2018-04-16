@@ -738,13 +738,20 @@ object EliminateSorts extends Rule[LogicalPlan] {
 /**
  * Removes redundant Sort operation. This can happen:
  * 1) if the child is already sorted
- * 2) if the next operator is a Sort itself
+ * 2) if the there is another Sort operator separated by 0...n Project/Filter operators
  */
 object RemoveRedundantSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Sort(orders, true, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
       child
-    case s @ Sort(_, _, Sort(_, _, child)) => s.copy(child = child)
+    case s @ Sort(_, _, child) => s.copy(child = recursiveRemoveSort(child))
+  }
+
+  def recursiveRemoveSort(plan: LogicalPlan): LogicalPlan = plan match {
+    case Project(fields, child) => Project(fields, recursiveRemoveSort(child))
+    case Filter(condition, child) => Filter(condition, recursiveRemoveSort(child))
+    case Sort(_, _, child) => recursiveRemoveSort(child)
+    case _ => plan
   }
 }
 

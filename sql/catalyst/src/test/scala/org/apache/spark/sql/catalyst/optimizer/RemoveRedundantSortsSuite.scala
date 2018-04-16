@@ -105,4 +105,24 @@ class RemoveRedundantSortsSuite extends PlanTest {
     val correctAnswer = testRelation.orderBy('b.desc).analyze
     comparePlans(optimized, correctAnswer)
   }
+
+  test("remove sorts separated by Filter/Project operators") {
+    val orderedTwiceWithProject = testRelation.orderBy('a.asc).select('b).orderBy('b.desc)
+    val optimizedWithProject = Optimize.execute(orderedTwiceWithProject.analyze)
+    val correctAnswerWithProject = testRelation.select('b).orderBy('b.desc).analyze
+    comparePlans(optimizedWithProject, correctAnswerWithProject)
+
+    val orderedTwiceWithFilter =
+      testRelation.orderBy('a.asc).where('b > Literal(0)).orderBy('b.desc)
+    val optimizedWithFilter = Optimize.execute(orderedTwiceWithFilter.analyze)
+    val correctAnswerWithFilter = testRelation.where('b > Literal(0)).orderBy('b.desc).analyze
+    comparePlans(optimizedWithFilter, correctAnswerWithFilter)
+
+    val orderedTwiceWithBoth =
+      testRelation.orderBy('a.asc).select('b).where('b > Literal(0)).orderBy('b.desc)
+    val optimizedWithBoth = Optimize.execute(orderedTwiceWithBoth.analyze)
+    val correctAnswerWithBoth =
+      testRelation.select('b).where('b > Literal(0)).orderBy('b.desc).analyze
+    comparePlans(optimizedWithBoth, correctAnswerWithBoth)
+  }
 }
