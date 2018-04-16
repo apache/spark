@@ -73,12 +73,12 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
   private lazy val rangeTestData1 = Seq(
     (1, 1), (1, 2), (1, 3),
     (2, 1), (2, 2), (2, 3),
-    (3, 1), (3, 2), (3, 3),
+    (3, 1), (3, 2), (3, 3), (3, 5),
     (4, 1), (4, 2), (4, 3)
   ).toDF("a", "b")
 
   private lazy val rangeTestData2 = Seq(
-    (1, 1), (1, 2), (1, 3),
+    (1, 1), (1, 2), (1, 3), (1, 5),
     (2, 1), (2, 2), (2, 3),
     (3, 1), (3, 2), (3, 3)
   ).toDF("a", "b")
@@ -134,9 +134,10 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         leftKeys: Seq[Expression],
         rightKeys: Seq[Expression],
         boundCondition: Option[Expression],
+        rangeConditions: Seq[Expression],
         leftPlan: SparkPlan,
         rightPlan: SparkPlan) = {
-      val sortMergeJoin = joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, Nil,
+      val sortMergeJoin = joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, rangeConditions,
         boundCondition, leftPlan, rightPlan)
       EnsureRequirements(spark.sessionState.conf).apply(sortMergeJoin)
     }
@@ -208,7 +209,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
           expectRangeJoin && rangeConditions.size == 2)
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
-            makeSortMergeJoin(leftKeys, rightKeys, boundCondition, leftPlan, rightPlan),
+            makeSortMergeJoin(leftKeys, rightKeys, boundCondition, rangeConditions,
+              leftPlan, rightPlan),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }

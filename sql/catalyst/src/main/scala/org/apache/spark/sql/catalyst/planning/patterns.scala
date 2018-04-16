@@ -176,9 +176,17 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
               x.isInstanceOf[LessThanOrEqual]).size == 0 ||
             rangeConditions.filter(x => x.isInstanceOf[GreaterThan] ||
               x.isInstanceOf[GreaterThanOrEqual]).size == 0 ||
-            // Both comparisons reference the same columns:
+            // Check if both comparisons reference the same columns:
             rangeConditions.map(c => c.left.references).distinct.size != 1 ||
             rangeConditions.map(c => c.right.references).distinct.size != 1) {
+          logDebug(s"Clearing range conditions because: " +
+            s"${rangeConditions.size}, " +
+            s"${rangeConditions.filter(x => x.isInstanceOf[LessThan] ||
+            x.isInstanceOf[LessThanOrEqual]).size}, " +
+            s"${rangeConditions.filter(x => x.isInstanceOf[GreaterThan] ||
+            x.isInstanceOf[GreaterThanOrEqual]).size}, " +
+            s"${rangeConditions.map(c => c.left.references)}, " +
+            s"${rangeConditions.map(c => c.right.references)}")
           rangeConditions = Nil
           rangePreds.clear()
         }
