@@ -674,11 +674,7 @@ case class Greatest(children: Seq[Expression]) extends Expression {
     val evals = evalChildren.map(eval =>
       s"""
          |${eval.code}
-         |if (!${eval.isNull} && (${ev.isNull} ||
-         |  ${ctx.genGreater(dataType, eval.value, ev.value)})) {
-         |  ${ev.isNull} = false;
-         |  ${ev.value} = ${eval.value};
-         |}
+         |${ctx.reassignIfGreater(dataType, ev, eval)}
       """.stripMargin
     )
 
