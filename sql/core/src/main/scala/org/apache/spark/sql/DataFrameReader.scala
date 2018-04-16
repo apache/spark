@@ -192,7 +192,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     val allPaths = (CaseInsensitiveMap(extraOptions.toMap).get("path") ++ paths).toSeq
-    option("path", allPaths.mkString(","))
     val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf, allPaths)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
       val ds = cls.newInstance().asInstanceOf[DataSourceV2]
@@ -203,6 +202,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
           val objectMapper = new ObjectMapper()
           DataSourceOptions.PATHS_KEY -> objectMapper.writeValueAsString(paths.toArray)
         }
+
         Dataset.ofRows(sparkSession, DataSourceV2Relation.create(
           ds, extraOptions.toMap ++ sessionOptions + pathsOption,
           userSpecifiedSchema = userSpecifiedSchema))
