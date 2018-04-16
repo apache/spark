@@ -322,8 +322,6 @@ class KMeans @Since("1.5.0") (
   @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  case class SeqDouble(value: Seq[Double])
-
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
     transformSchema(dataset.schema, logging = true)
