@@ -152,11 +152,11 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Flatten(aia3), null)
     checkEvaluation(Flatten(aia4), null)
 
-    // Complex-type test cases
+    // Non-primitive-type test cases
     val strArrayType = ArrayType(ArrayType(StringType))
     val arrArrayType = ArrayType(ArrayType(ArrayType(StringType)))
 
-    // Main test cases (complex type)
+    // Main test cases (non-primitive type)
     val asm1 = Literal.create(Seq(Seq("a"), Seq("b", "c"), Seq("d", "e", "f")), strArrayType)
     val asm2 = Literal.create(Seq(Seq("a", "b")), strArrayType)
     val asm3 = Literal.create(Seq(Seq(Seq("a", "b"), Seq("c")), Seq(Seq("d", "e"))), arrArrayType)
@@ -165,7 +165,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Flatten(asm2), Seq("a", "b"))
     checkEvaluation(Flatten(asm3), Seq(Seq("a", "b"), Seq("c"), Seq("d", "e")))
 
-    // Test cases with an empty array (complex type)
+    // Test cases with an empty array (non-primitive type)
     val ase1 = Literal.create(Seq(Seq.empty, Seq("a", "b"), Seq("c", "d")), strArrayType)
     val ase2 = Literal.create(Seq(Seq("a", "b"), Seq.empty, Seq("c", "d")), strArrayType)
     val ase3 = Literal.create(Seq(Seq("a", "b"), Seq("c", "d"), Seq.empty), strArrayType)
@@ -180,7 +180,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Flatten(ase5), Seq.empty)
     checkEvaluation(Flatten(ase6), Seq.empty)
 
-    // Test cases with null elements (complex type)
+    // Test cases with null elements (non-primitive type)
     val asn1 = Literal.create(Seq(Seq(null, null, "c"), Seq(null, null)), strArrayType)
     val asn2 = Literal.create(Seq(Seq(null, null, null), Seq("d", null)), strArrayType)
     val asn3 = Literal.create(Seq(Seq(null, null), Seq(null, null)), strArrayType)
@@ -189,7 +189,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(Flatten(asn2), Seq(null, null, null, "d", null))
     checkEvaluation(Flatten(asn3), Seq(null, null, null, null))
 
-    // Test cases with a null array (complex type)
+    // Test cases with a null array (non-primitive type)
     val asa1 = Literal.create(Seq(null, Seq("a", "b")), strArrayType)
     val asa2 = Literal.create(Seq(Seq("a", "b"), null), strArrayType)
     val asa3 = Literal.create(Seq(null), strArrayType)

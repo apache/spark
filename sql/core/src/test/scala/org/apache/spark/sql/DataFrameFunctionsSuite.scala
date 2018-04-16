@@ -414,6 +414,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("flatten function") {
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // to switch codeGen on
     val oneRowDF = Seq((1, "a", Seq(1, 2, 3))).toDF("i", "s", "arr")
 
     // Test cases with a primitive type
@@ -439,12 +440,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null))
 
     checkAnswer(intDF.select(flatten($"i")), intDFResult)
+    checkAnswer(intDF.filter(dummyFilter($"i"))select(flatten($"i")), intDFResult)
     checkAnswer(intDF.selectExpr("flatten(i)"), intDFResult)
     checkAnswer(
       oneRowDF.selectExpr("flatten(array(arr, array(null, 5), array(6, null)))"),
       Seq(Row(Seq(1, 2, 3, null, 5, 6, null))))
 
-    // Test cases with complex types
+    // Test cases with non-primitive types
     val strDF = Seq(
       (Seq(Seq("a", "b"), Seq("c"), Seq("d", "e", "f"))),
       (Seq(Seq("a", "b"))),
@@ -469,6 +471,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null))
 
     checkAnswer(strDF.select(flatten($"s")), strDFResult)
+    checkAnswer(strDF.filter(dummyFilter($"s")).select(flatten($"s")), strDFResult)
     checkAnswer(strDF.selectExpr("flatten(s)"), strDFResult)
     checkAnswer(
       oneRowDF.selectExpr("flatten(array(array(arr, arr), array(arr)))"),

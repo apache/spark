@@ -303,13 +303,15 @@ case class ArrayContains(left: Expression, right: Expression)
   since = "2.4.0")
 case class Flatten(child: Expression) extends UnaryExpression {
 
-  override def nullable: Boolean = child.nullable || dataType.containsNull
+  private val MAX_ARRAY_LENGTH = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 
-  override def dataType: ArrayType = {
-    child
-      .dataType.asInstanceOf[ArrayType]
-      .elementType.asInstanceOf[ArrayType]
-  }
+  private lazy val childDataType: ArrayType = child.dataType.asInstanceOf[ArrayType]
+
+  override def nullable: Boolean = child.nullable || childDataType.containsNull
+
+  override def dataType: DataType = childDataType.elementType
+
+  lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ArrayType(_: ArrayType, _) =>
@@ -321,26 +323,37 @@ case class Flatten(child: Expression) extends UnaryExpression {
       )
   }
 
-  override def nullSafeEval(array: Any): Any = {
-    val elements = array.asInstanceOf[ArrayData].toObjectArray(dataType)
+  override def nullSafeEval(child: Any): Any = {
+    val elements = child.asInstanceOf[ArrayData].toObjectArray(dataType)
 
     if (elements.contains(null)) {
       null
     } else {
-      val flattened = elements.flatMap(
-        _.asInstanceOf[ArrayData].toObjectArray(dataType.elementType)
+      val arrays = elements.map(
+        _.asInstanceOf[ArrayData].toObjectArray(elementType)
       )
-      new GenericArrayData(flattened)
+      val numberOfElements = arrays.foldLeft(0L)((sum, e) => sum + e.length)
+      if(numberOfElements > MAX_ARRAY_LENGTH) {
+        throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
+          s" $numberOfElements elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.")
+      }
+      val flattenedData = new Array(numberOfElements.toInt)
+      var position = 0
+      for(a <- arrays) {
+        Array.copy(a, 0, flattenedData, position, a.length)
+        position += a.length
+      }
+      new GenericArrayData(flattenedData)
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
-      val code = if (CodeGenerator.isPrimitiveType(dataType.elementType)) {
-          genCodeForConcatOfPrimitiveElements(ctx, c, ev.value)
-        } else {
-          genCodeForConcatOfComplexElements(ctx, c, ev.value)
-        }
+      val code = if (CodeGenerator.isPrimitiveType(elementType)) {
+        genCodeForFlattenOfPrimitiveElements(ctx, c, ev.value)
+      } else {
+        genCodeForFlattenOfNonPrimitiveElements(ctx, c, ev.value)
+      }
       nullElementsProtection(ev, c, code)
     })
   }
@@ -350,7 +363,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
       childVariableName: String,
       coreLogic: String): String = {
     s"""
-    |for(int z=0; z < $childVariableName.numElements(); z++) {
+    |for(int z=0; !${ev.isNull} && z < $childVariableName.numElements(); z++) {
     |  ${ev.isNull} |= $childVariableName.isNullAt(z);
     |}
     |if(!${ev.isNull}) {
@@ -364,15 +377,19 @@ case class Flatten(child: Expression) extends UnaryExpression {
       childVariableName: String) : (String, String) = {
     val variableName = ctx.freshName("numElements")
     val code = s"""
-      |int $variableName = 0;
+      |long $variableName = 0;
       |for(int z=0; z < $childVariableName.numElements(); z++) {
       |  $variableName += $childVariableName.getArray(z).numElements();
+      |}
+      |if ($variableName > ${MAX_ARRAY_LENGTH}) {
+      |  throw new RuntimeException("Unsuccessful try to flatten an array of arrays with" +
+      |    " $variableName elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
       |}
       """.stripMargin
     (code, variableName)
   }
 
-  private def genCodeForConcatOfPrimitiveElements(
+  private def genCodeForFlattenOfPrimitiveElements(
       ctx: CodegenContext,
       childVariableName: String,
       arrayDataName: String): String = {
@@ -381,14 +398,16 @@ case class Flatten(child: Expression) extends UnaryExpression {
     val counter = ctx.freshName("counter")
     val tempArrayDataName = ctx.freshName("tempArrayData")
 
-    val elementType = dataType.elementType
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx, childVariableName)
 
     val unsafeArraySizeInBytes = s"""
-      |int $arraySizeName = UnsafeArrayData.calculateHeaderPortionInBytes($numElemName) +
-      |${classOf[ByteArrayMethods].getName}.roundNumberOfBytesToNearestWord(
-      | ${elementType.defaultSize} * $numElemName
-      |);
+      |long $arraySizeName = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
+      |  $numElemName,
+      |  ${elementType.defaultSize});
+      |if ($arraySizeName > $MAX_ARRAY_LENGTH) {
+      |  throw new RuntimeException("Unsuccessful try to flatten an array of arrays with" +
+      |    " $arraySizeName bytes of data due to exceeding the limit $MAX_ARRAY_LENGTH bytes.");
+      |}
       """.stripMargin
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
 
@@ -397,10 +416,10 @@ case class Flatten(child: Expression) extends UnaryExpression {
     s"""
     |$numElemCode
     |$unsafeArraySizeInBytes
-    |byte[] $arrayName = new byte[$arraySizeName];
+    |byte[] $arrayName = new byte[(int)$arraySizeName];
     |UnsafeArrayData $tempArrayDataName = new UnsafeArrayData();
     |Platform.putLong($arrayName, $baseOffset, $numElemName);
-    |$tempArrayDataName.pointTo($arrayName, $baseOffset, $arraySizeName);
+    |$tempArrayDataName.pointTo($arrayName, $baseOffset, (int)$arraySizeName);
     |int $counter = 0;
     |for(int k=0; k < $childVariableName.numElements(); k++) {
     |  ArrayData arr = $childVariableName.getArray(k);
@@ -410,7 +429,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
     |   } else {
     |     $tempArrayDataName.set$primitiveValueTypeName(
     |       $counter,
-    |       arr.get$primitiveValueTypeName(l)
+    |       ${CodeGenerator.getValue("arr", elementType, "l")}
     |     );
     |   }
     |   $counter++;
@@ -420,7 +439,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
     """.stripMargin
   }
 
-  private def genCodeForConcatOfComplexElements(
+  private def genCodeForFlattenOfNonPrimitiveElements(
       ctx: CodegenContext,
       childVariableName: String,
       arrayDataName: String): String = {
@@ -431,12 +450,12 @@ case class Flatten(child: Expression) extends UnaryExpression {
 
     s"""
     |$numElemCode
-    |Object[] $arrayName = new Object[$numElemName];
+    |Object[] $arrayName = new Object[(int)$numElemName];
     |int $counter = 0;
     |for(int k=0; k < $childVariableName.numElements(); k++) {
-    |  Object[] arr = $childVariableName.getArray(k).array();
-    |  for(int l = 0; l < arr.length; l++) {
-    |    $arrayName[$counter] = arr[l];
+    |  ArrayData arr = $childVariableName.getArray(k);
+    |  for(int l = 0; l < arr.numElements(); l++) {
+    |    $arrayName[$counter] = ${CodeGenerator.getValue("arr", elementType, "l")};
     |    $counter++;
     |  }
     |}
