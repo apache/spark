@@ -531,7 +531,7 @@ case class ArrayPosition(left: Expression, right: Expression)
     Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
 
   override def nullable: Boolean = {
-    left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull
+    left.nullable || right.nullable
   }
 
   override def nullSafeEval(arr: Any, value: Any): Any = {
@@ -551,15 +551,15 @@ case class ArrayPosition(left: Expression, right: Expression)
       val i = ctx.freshName("i")
       val getValue = CodeGenerator.getValue(arr, right.dataType, i)
       s"""
-         |int ${pos} = 0;
+         |int $pos = 0;
          |for (int $i = 0; $i < $arr.numElements(); $i ++) {
-         |  if (${ctx.genEqual(right.dataType, value, getValue)}) {
-         |    ${pos} = $i + 1;
+         |  if (!$arr.isNullAt($i) && ${ctx.genEqual(right.dataType, value, getValue)}) {
+         |    $pos = $i + 1;
          |    break;
          |  }
          |}
          |${ev.value} = (long) $pos;
-       """
+       """.stripMargin
     })
   }
 }

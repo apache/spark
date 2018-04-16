@@ -172,11 +172,12 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("Array Position") {
-    val a0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+    val a0 = Literal.create(Seq(1, null, 2, 3), ArrayType(IntegerType))
     val a1 = Literal.create(Seq[String](null, ""), ArrayType(StringType))
     val a2 = Literal.create(Seq(null), ArrayType(LongType))
     val a3 = Literal.create(null, ArrayType(StringType))
 
+    checkEvaluation(ArrayPosition(a0, Literal(3)), 4L)
     checkEvaluation(ArrayPosition(a0, Literal(1)), 1L)
     checkEvaluation(ArrayPosition(a0, Literal(0)), 0L)
     checkEvaluation(ArrayPosition(a0, Literal.create(null, IntegerType)), null)
