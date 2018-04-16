@@ -199,14 +199,16 @@ class NewHadoopRDD[K, V](
           _reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
           _reader
         } catch {
+          case e: FileNotFoundException if ignoreMissingFiles =>
+            logWarning(s"Skipped missing file: ${split.serializableHadoopSplit}", e)
+            finished = true
+            null
+          // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+          case e: FileNotFoundException if !ignoreMissingFiles => throw e
           case e: IOException if ignoreCorruptFiles =>
             logWarning(
               s"Skipped the rest content in the corrupted file: ${split.serializableHadoopSplit}",
               e)
-            finished = true
-            null
-          case e: FileNotFoundException if ignoreMissingFiles =>
-            logWarning(s"Skipped missing file: ${split.serializableHadoopSplit}", e)
             finished = true
             null
         }
@@ -227,15 +229,16 @@ class NewHadoopRDD[K, V](
           try {
             finished = !reader.nextKeyValue
           } catch {
+            case e: FileNotFoundException if ignoreMissingFiles =>
+              logWarning(s"Skipped missing file: ${split.serializableHadoopSplit}", e)
+              finished = true
+            // Throw FileNotFoundException even if `ignoreCorruptFiles` is true
+            case e: FileNotFoundException if !ignoreMissingFiles => throw e
             case e: IOException if ignoreCorruptFiles =>
               logWarning(
                 s"Skipped the rest content in the corrupted file: ${split.serializableHadoopSplit}",
                 e)
               finished = true
-            case e: FileNotFoundException if ignoreMissingFiles =>
-              logWarning(s"Skipped missing file: ${split.serializableHadoopSplit}", e)
-              finished = true
-              null
           }
           if (finished) {
             // Close and release the reader here; close() will also be called when the task
