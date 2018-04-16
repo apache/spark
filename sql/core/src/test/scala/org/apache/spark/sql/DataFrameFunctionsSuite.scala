@@ -535,6 +535,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+<<<<<<< HEAD
   test("array position function") {
     val df = Seq(
       (Seq[Int](1, 2), "x"),
@@ -568,7 +569,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row(1L), Row(1L))
   }
 
-  test("element at function") {
+  test("element_at function") {
     val df = Seq(
       (Seq[String]("1", "2", "3")),
       (Seq[String](null, "")),
@@ -591,34 +592,18 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.select(element_at(df("a"), 4)),
       Seq(Row(null), Row(null), Row(null))
     )
-    checkAnswer(
-      df.select(element_at(df("a"), -4)),
-      Seq(Row(null), Row(null), Row(null))
-    )
 
     checkAnswer(
       df.select(element_at(df("a"), 1)),
       Seq(Row("1"), Row(null), Row(null))
     )
     checkAnswer(
-      df.select(element_at(df("a"), 2)),
-      Seq(Row("2"), Row(""), Row(null))
-    )
-    checkAnswer(
       df.select(element_at(df("a"), -1)),
       Seq(Row("3"), Row(""), Row(null))
-    )
-    checkAnswer(
-      df.select(element_at(df("a"), -2)),
-      Seq(Row("2"), Row(null), Row(null))
     )
 
     checkAnswer(
       df.selectExpr("element_at(a, 4)"),
-      Seq(Row(null), Row(null), Row(null))
-    )
-    checkAnswer(
-      df.selectExpr("element_at(a, -4)"),
       Seq(Row(null), Row(null), Row(null))
     )
 
@@ -627,16 +612,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(Row("1"), Row(null), Row(null))
     )
     checkAnswer(
-      df.selectExpr("element_at(a, 2)"),
-      Seq(Row("2"), Row(""), Row(null))
-    )
-    checkAnswer(
       df.selectExpr("element_at(a, -1)"),
       Seq(Row("3"), Row(""), Row(null))
-    )
-    checkAnswer(
-      df.selectExpr("element_at(a, -2)"),
-      Seq(Row("2"), Row(null), Row(null))
     )
   }
 
