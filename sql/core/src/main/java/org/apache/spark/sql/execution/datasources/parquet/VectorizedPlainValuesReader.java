@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
+import org.apache.spark.unsafe.Platform;
 
 /**
  * An implementation of the Parquet PLAIN decoder that supports the vectorized interface.
@@ -71,8 +72,13 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     int requiredBytes = total * 4;
     ByteBuffer buffer = getBuffer(requiredBytes);
 
-    for (int i = 0; i < total; i += 1) {
-      c.putInt(rowId + i, buffer.getInt());
+    if (buffer.hasArray()) {
+      int offset = buffer.arrayOffset() + buffer.position();
+      c.putIntsLittleEndian(rowId, total, buffer.array(), offset - Platform.BYTE_ARRAY_OFFSET);
+    } else {
+      for (int i = 0; i < total; i += 1) {
+        c.putInt(rowId + i, buffer.getInt());
+      }
     }
   }
 
@@ -81,8 +87,13 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     int requiredBytes = total * 8;
     ByteBuffer buffer = getBuffer(requiredBytes);
 
-    for (int i = 0; i < total; i += 1) {
-      c.putLong(rowId + i, buffer.getLong());
+    if (buffer.hasArray()) {
+      int offset = buffer.arrayOffset() + buffer.position();
+      c.putLongsLittleEndian(rowId, total, buffer.array(), offset - Platform.BYTE_ARRAY_OFFSET);
+    } else {
+      for (int i = 0; i < total; i += 1) {
+        c.putLong(rowId + i, buffer.getLong());
+      }
     }
   }
 
@@ -91,8 +102,13 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     int requiredBytes = total * 4;
     ByteBuffer buffer = getBuffer(requiredBytes);
 
-    for (int i = 0; i < total; i += 1) {
-      c.putFloat(rowId + i, buffer.getFloat());
+    if (buffer.hasArray()) {
+      int offset = buffer.arrayOffset() + buffer.position();
+      c.putFloats(rowId, total, buffer.array(), offset - Platform.BYTE_ARRAY_OFFSET);
+    } else {
+      for (int i = 0; i < total; i += 1) {
+        c.putFloat(rowId + i, buffer.getFloat());
+      }
     }
   }
 
@@ -101,8 +117,13 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     int requiredBytes = total * 8;
     ByteBuffer buffer = getBuffer(requiredBytes);
 
-    for (int i = 0; i < total; i += 1) {
-      c.putDouble(rowId + i, buffer.getDouble());
+    if (buffer.hasArray()) {
+      int offset = buffer.arrayOffset() + buffer.position();
+      c.putDoubles(rowId, total, buffer.array(), offset - Platform.BYTE_ARRAY_OFFSET);
+    } else {
+      for (int i = 0; i < total; i += 1) {
+        c.putDouble(rowId + i, buffer.getDouble());
+      }
     }
   }
 
