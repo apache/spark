@@ -106,6 +106,16 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
   }
 
+  test("Array max") {
+    checkEvaluation(ArrayMax(Literal.create(Seq(1, 10, 2), ArrayType(IntegerType))), 10)
+    checkEvaluation(
+      ArrayMax(Literal.create(Seq[String](null, "abc", ""), ArrayType(StringType))), "abc")
+    checkEvaluation(ArrayMax(Literal.create(Seq(null), ArrayType(LongType))), null)
+    checkEvaluation(ArrayMax(Literal.create(null, ArrayType(StringType))), null)
+    checkEvaluation(
+      ArrayMax(Literal.create(Seq(1.123, 0.1234, 1.121), ArrayType(DoubleType))), 1.123)
+  }
+
   test("Reverse") {
     // Primitive-type elements
     val ai0 = Literal.create(Seq(2, 1, 4, 3), ArrayType(IntegerType))

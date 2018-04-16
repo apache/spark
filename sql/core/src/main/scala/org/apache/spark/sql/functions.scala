@@ -3293,6 +3293,14 @@ object functions {
   def sort_array(e: Column, asc: Boolean): Column = withExpr { SortArray(e.expr, lit(asc).expr) }
 
   /**
+   * Returns the maximum value in the array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
+
+  /**
    * Returns a reversed string or an array with reverse order of elements.
    * @group collection_funcs
    * @since 1.5.0
