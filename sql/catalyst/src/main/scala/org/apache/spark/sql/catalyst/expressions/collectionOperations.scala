@@ -472,7 +472,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
         |  $numElements += args[z].numElements();
         |}
         |if ($numElements > $MAX_ARRAY_LENGTH) {
-        |  throw new RuntimeException("Unsuccessful try to concat arrays with $numElements" +
+        |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $numElements +
         |    " elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
         |}
       """.stripMargin
@@ -505,8 +505,9 @@ case class Concat(children: Seq[Expression]) extends Expression {
       |  $numElemName,
       |  ${elementType.defaultSize});
       |if ($arraySizeName > $MAX_ARRAY_LENGTH) {
-      |  throw new RuntimeException("Unsuccessful try to concat arrays with $arraySizeName bytes" +
-      |    " of data due to exceeding the limit $MAX_ARRAY_LENGTH bytes for UnsafeArrayData.");
+      |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $arraySizeName +
+      |    " bytes of data due to exceeding the limit $MAX_ARRAY_LENGTH bytes" +
+      |    " for UnsafeArrayData.");
       |}
       """.stripMargin
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
@@ -517,7 +518,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
        |  public ArrayData concat(${CodeGenerator.javaType(dataType)}[] args) {
        |    ${nullArgumentProtection()}
        |    $numElemCode
-     |    $unsafeArraySizeInBytes
+       |    $unsafeArraySizeInBytes
        |    byte[] $arrayName = new byte[(int)$arraySizeName];
        |    UnsafeArrayData $arrayData = new UnsafeArrayData();
        |    Platform.putLong($arrayName, $baseOffset, $numElemName);
