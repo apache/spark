@@ -287,9 +287,9 @@ private[spark] class TaskSetManager(
     None
   }
 
-  /** Check whether a task is currently running an attempt on a given host */
+  /** Check whether a task once run an attempt on a given host */
   private def hasAttemptOnHost(taskIndex: Int, host: String): Boolean = {
-    taskAttempts(taskIndex).exists { info => info.running && info.host == host }
+    taskAttempts(taskIndex).exists(_.host == host)
   }
 
   private def isTaskBlacklistedOnExecOrNode(index: Int, execId: String, host: String): Boolean = {
