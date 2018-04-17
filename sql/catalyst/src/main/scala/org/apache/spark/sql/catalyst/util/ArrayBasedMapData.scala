@@ -29,6 +29,18 @@ class ArrayBasedMapData(val keyArray: ArrayData, val valueArray: ArrayData) exte
   override def toString: String = {
     s"keys: $keyArray, values: $valueArray"
   }
+
+  override def equals(that: Any): Boolean = that match {
+    case m: ArrayBasedMapData => this.keyArray == m.keyArray && this.valueArray == m.valueArray
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val keyHashCode = if (keyArray == null) 0 else keyArray.hashCode()
+    val valueHashCode = if (valueArray == null) 0 else valueArray.hashCode()
+
+    41 * keyHashCode + valueHashCode
+  }
 }
 
 object ArrayBasedMapData {

@@ -20,17 +20,66 @@ package org.apache.spark.sql.util
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 
-class DataTypeSuite extends SparkFunSuite {
-  test("compare 2 simple maps") {
+class ArrayBasedMapDataSuite extends SparkFunSuite {
+  test("compare simple maps") {
     val map1 = new ArrayBasedMapData(
       keyArray = new GenericArrayData(Array[String]("a")),
-      valueArray = new GenericArrayData(Array[Int](1))
-    )
+      valueArray = new GenericArrayData(Array[Int](1)))
     val map2 = new ArrayBasedMapData(
       keyArray = new GenericArrayData(Array[String]("a")),
-      valueArray = new GenericArrayData(Array[Int](1))
-    )
+      valueArray = new GenericArrayData(Array[Int](1)))
 
     assert(map1 == map2)
+    assert(map1.hashCode() == map2.hashCode())
+  }
+
+  test("compare not equal simple maps - values different") {
+    val map1 = new ArrayBasedMapData(
+      keyArray = new GenericArrayData(Array[String]("a")),
+      valueArray = new GenericArrayData(Array[Int](1)))
+    val map2 = new ArrayBasedMapData(
+      keyArray = new GenericArrayData(Array[String]("a")),
+      valueArray = new GenericArrayData(Array[Int](2)))
+
+    assert(map1 != map2)
+    assert(map1.hashCode() != map2.hashCode())
+  }
+
+  test("compare not equal simple maps - keys different") {
+    val map1 = new ArrayBasedMapData(
+      keyArray = new GenericArrayData(Array[String]("a")),
+      valueArray = new GenericArrayData(Array[Int](1)))
+    val map2 = new ArrayBasedMapData(
+      keyArray = new GenericArrayData(Array[String]("b")),
+      valueArray = new GenericArrayData(Array[Int](1)))
+
+    assert(map1 != map2)
+    assert(map1.hashCode() != map2.hashCode())
+  }
+
+  test("compare maps of maps") {
+    val baseMapA = new ArrayBasedMapData(
+      keyArray = new GenericArrayData(Array[String]("A")),
+      valueArray = new GenericArrayData(Array[Int](1)))
+    val baseMapB = new ArrayBasedMapData(
+      keyArray = new GenericArrayData(Array[String]("B")),
+      valueArray = new GenericArrayData(Array[Int](1)))
+
+    val map1 = new ArrayBasedMapData(
+      keyArray = new GenericArrayData(Array(baseMapA, baseMapB)),
+      valueArray = new GenericArrayData(Array[Int](1, 2)))
+    val map2 = new ArrayBasedMapData(
+      keyArray = new GenericArrayData(Array(baseMapA, baseMapB)),
+      valueArray = new GenericArrayData(Array[Int](1, 2)))
+
+    assert(map1 == map2)
+    assert(map1.hashCode() == map2.hashCode())
+
+    val map3 = new ArrayBasedMapData(
+      keyArray = new GenericArrayData(Array(baseMapA, baseMapB)),
+      valueArray = new GenericArrayData(Array[Int](1, 0)))
+
+    assert(map1 != map3)
+    assert(map1.hashCode() != map3.hashCode())
   }
 }
