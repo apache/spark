@@ -578,7 +578,7 @@ class CodegenContext {
       s"${fullName}_$id"
     } else {
       freshNameIds += fullName -> 1
-      fullName
+      s"${fullName}_0"
     }
   }
 
