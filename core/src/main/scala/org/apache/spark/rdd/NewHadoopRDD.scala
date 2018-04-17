@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
 import scala.collection.JavaConverters.asScalaBufferConverter
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
@@ -62,8 +63,7 @@ private[spark] class NewHadoopPartition(
  * @param inputFormatClass Storage format of the data to be read.
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
- *
- * @note Instantiating this class directly is not recommended, please use
+  * @note Instantiating this class directly is not recommended, please use
  * `org.apache.spark.SparkContext.newAPIHadoopRDD()`
  */
 @DeveloperApi
@@ -124,17 +124,22 @@ class NewHadoopRDD[K, V](
         configurable.setConf(_conf)
       case _ =>
     }
-    val allRowSplits = inputFormat.getSplits(new JobContextImpl(_conf, jobId)).asScala
-    val rawSplits = if (ignoreEmptySplits) {
-      allRowSplits.filter(_.getLength > 0)
-    } else {
-      allRowSplits
-    }
-    val result = new Array[Partition](rawSplits.size)
+    val rawSplits = inputFormat.getSplits(new JobContextImpl(_conf, jobId)).asScala
+    val resultPartitions = new ArrayBuffer[Partition]()
+    var index = 0;
     for (i <- 0 until rawSplits.size) {
-      result(i) = new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
+      if (ignoreEmptySplits) {
+        if (rawSplits(i).getLength > 0) {
+          resultPartitions += new NewHadoopPartition(id, index,
+            rawSplits(i).asInstanceOf[InputSplit with Writable])
+          index += 1
+        }
+      } else {
+        resultPartitions += new NewHadoopPartition(id, i,
+          rawSplits(i).asInstanceOf[InputSplit with Writable])
+      }
     }
-    result
+    resultPartitions.toArray
   }
 
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {

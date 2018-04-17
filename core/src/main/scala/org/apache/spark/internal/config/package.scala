@@ -323,7 +323,7 @@ package object config {
       .internal()
       .doc("When true, HadoopRDD/NewHadoopRDD will not create partitions for empty input splits.")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SECRET_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.regex")

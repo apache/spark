@@ -22,6 +22,7 @@ import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
 import scala.collection.immutable.Map
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
@@ -197,17 +198,20 @@ class HadoopRDD[K, V](
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
     SparkHadoopUtil.get.addCredentials(jobConf)
-    val allInputSplits = getInputFormat(jobConf).getSplits(jobConf, minPartitions)
-    val inputSplits = if (ignoreEmptySplits) {
-      allInputSplits.filter(_.getLength > 0)
-    } else {
-      allInputSplits
-    }
-    val array = new Array[Partition](inputSplits.size)
+    val inputSplits = getInputFormat(jobConf).getSplits(jobConf, minPartitions)
+    val resultPartitions = new ArrayBuffer[Partition]()
+    var index = 0;
     for (i <- 0 until inputSplits.size) {
-      array(i) = new HadoopPartition(id, i, inputSplits(i))
+      if (ignoreEmptySplits) {
+        if (inputSplits(i).getLength > 0) {
+          resultPartitions += new HadoopPartition(id, index, inputSplits(i))
+          index += 1
+        }
+      } else {
+        resultPartitions += new HadoopPartition(id, i, inputSplits(i))
+      }
     }
-    array
+    resultPartitions.toArray
   }
 
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
