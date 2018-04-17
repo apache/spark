@@ -154,7 +154,8 @@ class BasicExecutorFeatureStepSuite
 
   test("single executor hostPath volume gets mounted") {
     val conf = baseConf.clone()
-    conf.set(KUBERNETES_EXECUTOR_VOLUMES, "/tmp/mount:/opt/mount")
+    conf.set("spark.kubernetes.executor.volumes.hostPath.hostPath-1.mount.path", "/opt/mount")
+    conf.set("spark.kubernetes.executor.volumes.hostPath.hostPath-1.options.path", "/tmp/mount")
 
     val step = new BasicExecutorFeatureStep(
       KubernetesConf(
@@ -181,7 +182,10 @@ class BasicExecutorFeatureStepSuite
 
   test("multiple executor hostPath volumes get mounted") {
     val conf = baseConf.clone()
-    conf.set(KUBERNETES_EXECUTOR_VOLUMES, "/tmp/mount1:/opt/mount1,/tmp/mount2:/opt/mount2")
+    conf.set("spark.kubernetes.executor.volumes.hostPath.hostPath-1.mount.path", "/opt/mount1")
+    conf.set("spark.kubernetes.executor.volumes.hostPath.hostPath-1.options.path", "/tmp/mount1")
+    conf.set("spark.kubernetes.executor.volumes.hostPath.hostPath-2.mount.path", "/opt/mount2")
+    conf.set("spark.kubernetes.executor.volumes.hostPath.hostPath-2.options.path", "/tmp/mount2")
     val step = new BasicExecutorFeatureStep(
       KubernetesConf(
         conf,
@@ -196,9 +200,9 @@ class BasicExecutorFeatureStepSuite
 
     assert(executor.container.getImage === EXECUTOR_IMAGE)
     assert(executor.container.getVolumeMounts.size() === 2)
-    assert(executor.container.getVolumeMounts.get(0).getName === "hostPath-volume-0")
+    assert(executor.container.getVolumeMounts.get(0).getName === "hostPath-1")
     assert(executor.container.getVolumeMounts.get(0).getMountPath === "/opt/mount1")
-    assert(executor.container.getVolumeMounts.get(1).getName === "hostPath-volume-1")
+    assert(executor.container.getVolumeMounts.get(1).getName === "hostPath-2")
     assert(executor.container.getVolumeMounts.get(1).getMountPath === "/opt/mount2")
 
     assert(executor.pod.getSpec.getVolumes.size() === 2)
