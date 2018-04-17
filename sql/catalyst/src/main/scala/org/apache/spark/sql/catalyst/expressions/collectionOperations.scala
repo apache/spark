@@ -2876,7 +2876,7 @@ case class ArrayRepeat(left: Expression, right: Expression)
   """,
   since = "2.4.0")
 case class ArrayUnion(left: Expression, right: Expression)
-  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+  extends BinaryExpression with ExpectsInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
 
@@ -2893,46 +2893,106 @@ case class ArrayUnion(left: Expression, right: Expression)
 
   override def dataType: DataType = left.dataType
 
+  private def elementType = dataType.asInstanceOf[ArrayType].elementType
+  private def cnLeft = left.dataType.asInstanceOf[ArrayType].containsNull
+  private def cnRight = right.dataType.asInstanceOf[ArrayType].containsNull
+
   override def nullSafeEval(linput: Any, rinput: Any): Any = {
-    val elementType = dataType.asInstanceOf[ArrayType].elementType
-    val cnl = left.dataType.asInstanceOf[ArrayType].containsNull
-    val cnr = right.dataType.asInstanceOf[ArrayType].containsNull
     val larray = linput.asInstanceOf[ArrayData]
     val rarray = rinput.asInstanceOf[ArrayData]
 
-    if (!cnl && !cnr && elementType == IntegerType) {
-      // avoid boxing primitive int array elements
-      val hs = new OpenHashSet[Int]
-      var i = 0
-      while (i < larray.numElements()) {
-        hs.add(larray.getInt(i))
-        i += 1
+    if (!cnLeft && !cnRight) {
+      elementType match {
+        case IntegerType =>
+          // avoid boxing of primitive int array elements
+          val hs = new OpenHashSet[Int]
+          var i = 0
+          while (i < larray.numElements()) {
+            hs.add(larray.getInt(i))
+            i += 1
+          }
+          i = 0
+          while (i < rarray.numElements()) {
+            hs.add(rarray.getInt(i))
+            i += 1
+          }
+          UnsafeArrayData.fromPrimitiveArray(hs.iterator.toArray)
+        case LongType =>
+          // avoid boxing of primitive long array elements
+          val hs = new OpenHashSet[Long]
+          var i = 0
+          while (i < larray.numElements()) {
+            hs.add(larray.getLong(i))
+            i += 1
+          }
+          i = 0
+          while (i < rarray.numElements()) {
+            hs.add(rarray.getLong(i))
+            i += 1
+          }
+          UnsafeArrayData.fromPrimitiveArray(hs.iterator.toArray)
+        case _ =>
+          val hs = new OpenHashSet[Any]
+          var i = 0
+          while (i < larray.numElements()) {
+            hs.add(larray.get(i, elementType))
+            i += 1
+          }
+          i = 0
+          while (i < rarray.numElements()) {
+            hs.add(rarray.get(i, elementType))
+            i += 1
+          }
+          new GenericArrayData(hs.iterator.toArray)
       }
-      i = 0
-      while (i < rarray.numElements()) {
-        hs.add(rarray.getInt(i))
-        i += 1
-      }
-      UnsafeArrayData.fromPrimitiveArray(hs.iterator.toArray)
-    } else if (!cnl && !cnr && elementType == LongType) {
-      // avoid boxing of primitive long array elements
-      val hs = new OpenHashSet[Long]
-      var i = 0
-      while (i < larray.numElements()) {
-        hs.add(larray.getLong(i))
-        i += 1
-      }
-      i = 0
-      while (i < rarray.numElements()) {
-        hs.add(rarray.getLong(i))
-        i += 1
-      }
-      UnsafeArrayData.fromPrimitiveArray(hs.iterator.toArray)
     } else {
-      new GenericArrayData(
-        (larray.toArray[AnyRef](elementType) union rarray.toArray[AnyRef](elementType))
-          .distinct.asInstanceOf[Array[Any]])
+      CollectionOperations.arrayUnion(larray, rarray, elementType)
     }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val hs = ctx.freshName("hs")
+    val i = ctx.freshName("i")
+    val collectionOperations = "org.apache.spark.sql.catalyst.expressions.CollectionOperations"
+    val genericArrayData = classOf[GenericArrayData].getName
+    val unsafeArrayData = classOf[UnsafeArrayData].getName
+    val openHashSet = classOf[OpenHashSet[_]].getName
+    val ot = "org.apache.spark.sql.types.ObjectType$.MODULE$.apply(Object.class)"
+    val (postFix, classTag, getter, arrayBuilder, castType) = if (!cnLeft && !cnRight) {
+      val ptName = CodeGenerator.primitiveTypeName(elementType)
+      elementType match {
+        case ByteType | ShortType | IntegerType =>
+          (s"$$mcI$$sp", s"scala.reflect.ClassTag$$.MODULE$$.$ptName()", s"get$ptName($i)",
+           s"$unsafeArrayData.fromPrimitiveArray", CodeGenerator.javaType(elementType))
+        case LongType =>
+          (s"$$mcJ$$sp", s"scala.reflect.ClassTag$$.MODULE$$.$ptName()", s"get$ptName($i)",
+           s"$unsafeArrayData.fromPrimitiveArray", "long")
+        case _ =>
+          ("", s"scala.reflect.ClassTag$$.MODULE$$.Object()", s"get($i, $ot)",
+           s"new $genericArrayData", "Object")
+      }
+    } else {
+      ("", "", "", "", "")
+    }
+
+    nullSafeCodeGen(ctx, ev, (larray, rarray) => {
+      if (classTag != "") {
+        s"""
+           |$openHashSet $hs = new $openHashSet$postFix($classTag);
+           |for (int $i = 0; $i < $larray.numElements(); $i++) {
+           |  $hs.add$postFix($larray.$getter);
+           |}
+           |for (int $i = 0; $i < $rarray.numElements(); $i++) {
+           |  $hs.add$postFix($rarray.$getter);
+           |}
+           |${ev.value} = $arrayBuilder(
+           |  ($castType[]) $hs.iterator().toArray($classTag));
+         """.stripMargin
+      } else {
+        val dt = "org.apache.spark.sql.types.ObjectType$.MODULE$.apply(Object.class)"
+        s"${ev.value} = $collectionOperations$$.MODULE$$.arrayUnion($larray, $rarray, $ot);"
+      }
+    })
   }
 
   override def prettyName: String = "array_union"
@@ -3337,4 +3397,11 @@ case class ArrayDistinct(child: Expression)
   }
 
   override def prettyName: String = "array_distinct"
+}
+
+object CollectionOperations {
+  def arrayUnion(larray: ArrayData, rarray: ArrayData, et: DataType): ArrayData = {
+    new GenericArrayData(larray.toArray[AnyRef](et).union(rarray.toArray[AnyRef](et))
+      .distinct.asInstanceOf[Array[Any]])
+  }
 }
