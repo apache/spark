@@ -1120,7 +1120,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       "argument 1 requires (array or map) type, however, '`_1`' is of string type"))
   }
 
-  test("array union functions") {
+  test("array_union functions") {
     val df1 = Seq((Array(1, 2, 3), Array(4, 2))).toDF("a", "b")
     val ans1 = Row(Seq(4, 1, 3, 2))
     checkAnswer(df1.select(array_union($"a", $"b")), ans1)
