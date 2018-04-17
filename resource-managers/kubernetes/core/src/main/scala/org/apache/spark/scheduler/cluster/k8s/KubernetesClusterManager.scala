@@ -21,7 +21,7 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.deploy.k8s.{InitContainerBootstrap, KubernetesUtils, MountSecretsBootstrap, SparkKubernetesClientFactory}
+import org.apache.spark.deploy.k8s.{KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
@@ -33,7 +33,9 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
   override def canCreate(masterURL: String): Boolean = masterURL.startsWith("k8s")
 
   override def createTaskScheduler(sc: SparkContext, masterURL: String): TaskScheduler = {
-    if (masterURL.startsWith("k8s") && sc.deployMode == "client") {
+    if (masterURL.startsWith("k8s") &&
+      sc.deployMode == "client" &&
+      !sc.conf.get(KUBERNETES_DRIVER_SUBMIT_CHECK).getOrElse(false)) {
       throw new SparkException("Client mode is currently not supported for Kubernetes.")
     }
 
@@ -44,74 +46,15 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       sc: SparkContext,
       masterURL: String,
       scheduler: TaskScheduler): SchedulerBackend = {
-    val sparkConf = sc.getConf
-    val initContainerConfigMap = sparkConf.get(INIT_CONTAINER_CONFIG_MAP_NAME)
-    val initContainerConfigMapKey = sparkConf.get(INIT_CONTAINER_CONFIG_MAP_KEY_CONF)
-
-    if (initContainerConfigMap.isEmpty) {
-      logWarning("The executor's init-container config map is not specified. Executors will " +
-        "therefore not attempt to fetch remote or submitted dependencies.")
-    }
-
-    if (initContainerConfigMapKey.isEmpty) {
-      logWarning("The executor's init-container config map key is not specified. Executors will " +
-        "therefore not attempt to fetch remote or submitted dependencies.")
-    }
-
-    // Only set up the bootstrap if they've provided both the config map key and the config map
-    // name. The config map might not be provided if init-containers aren't being used to
-    // bootstrap dependencies.
-    val initContainerBootstrap = for {
-      configMap <- initContainerConfigMap
-      configMapKey <- initContainerConfigMapKey
-    } yield {
-      val initContainerImage = sparkConf
-        .get(INIT_CONTAINER_IMAGE)
-        .getOrElse(throw new SparkException(
-          "Must specify the init-container image when there are remote dependencies"))
-      new InitContainerBootstrap(
-        initContainerImage,
-        sparkConf.get(CONTAINER_IMAGE_PULL_POLICY),
-        sparkConf.get(JARS_DOWNLOAD_LOCATION),
-        sparkConf.get(FILES_DOWNLOAD_LOCATION),
-        configMap,
-        configMapKey,
-        SPARK_POD_EXECUTOR_ROLE,
-        sparkConf)
-    }
-
     val executorSecretNamesToMountPaths = KubernetesUtils.parsePrefixedKeyValuePairs(
-      sparkConf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
-    val mountSecretBootstrap = if (executorSecretNamesToMountPaths.nonEmpty) {
-      Some(new MountSecretsBootstrap(executorSecretNamesToMountPaths))
-    } else {
-      None
-    }
-    // Mount user-specified executor secrets also into the executor's init-container. The
-    // init-container may need credentials in the secrets to be able to download remote
-    // dependencies. The executor's main container and its init-container share the secrets
-    // because the init-container is sort of an implementation details and this sharing
-    // avoids introducing a dedicated configuration property just for the init-container.
-    val initContainerMountSecretsBootstrap = if (initContainerBootstrap.nonEmpty &&
-      executorSecretNamesToMountPaths.nonEmpty) {
-      Some(new MountSecretsBootstrap(executorSecretNamesToMountPaths))
-    } else {
-      None
-    }
-
+      sc.conf, KUBERNETES_EXECUTOR_SECRETS_PREFIX)
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
       KUBERNETES_MASTER_INTERNAL_URL,
-      Some(sparkConf.get(KUBERNETES_NAMESPACE)),
+      Some(sc.conf.get(KUBERNETES_NAMESPACE)),
       KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
-      sparkConf,
+      sc.conf,
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
       Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
-
-    val executorPodFactory = new ExecutorPodFactory(
-      sparkConf,
-      mountSecretBootstrap,
-      initContainerBootstrap,
-      initContainerMountSecretsBootstrap)
 
     val allocatorExecutor = ThreadUtils
       .newDaemonSingleThreadScheduledExecutor("kubernetes-pod-allocator")
@@ -120,7 +63,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     new KubernetesClusterSchedulerBackend(
       scheduler.asInstanceOf[TaskSchedulerImpl],
       sc.env.rpcEnv,
-      executorPodFactory,
+      new KubernetesExecutorBuilder,
       kubernetesClient,
       allocatorExecutor,
       requestExecutorsService)

@@ -17,15 +17,12 @@
 
 package org.apache.spark.sql.streaming.continuous
 
-import java.util.UUID
-
-import org.apache.spark.{SparkContext, SparkEnv, SparkException}
-import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkListenerTaskStart}
+import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanExec, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
-import org.apache.spark.sql.execution.streaming.sources.MemorySinkV2
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.{StreamTest, Trigger}
 import org.apache.spark.sql.test.TestSparkSession
@@ -43,7 +40,7 @@ class ContinuousSuiteBase extends StreamTest {
       case s: ContinuousExecution =>
         assert(numTriggers >= 2, "must wait for at least 2 triggers to ensure query is initialized")
         val reader = s.lastExecution.executedPlan.collectFirst {
-          case DataSourceV2ScanExec(_, r: RateStreamContinuousReader) => r
+          case DataSourceV2ScanExec(_, _, _, r: RateStreamContinuousReader) => r
         }.get
 
         val deltaMs = numTriggers * 1000 + 300
@@ -172,6 +169,25 @@ class ContinuousSuite extends ContinuousSuiteBase {
 
     assert(except.message.contains(
       "Continuous processing does not support current time operations."))
+  }
+
+  test("subquery alias") {
+    val df = spark.readStream
+      .format("rate")
+      .option("numPartitions", "5")
+      .option("rowsPerSecond", "5")
+      .load()
+      .createOrReplaceTempView("rate")
+    val test = spark.sql("select value from rate where value > 5")
+
+    testStream(test, useV2Sink = true)(
+      StartStream(longContinuousTrigger),
+      AwaitEpoch(0),
+      Execute(waitForRateSourceTriggers(_, 2)),
+      IncrementEpoch(),
+      Execute(waitForRateSourceTriggers(_, 4)),
+      IncrementEpoch(),
+      CheckAnswerRowsContains(scala.Range(6, 20).map(Row(_))))
   }
 
   test("repeatedly restart") {

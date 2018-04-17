@@ -72,6 +72,7 @@ $(function() {
   collapseTablePageLoad('collapse-aggregated-allActiveStages','aggregated-allActiveStages');
   collapseTablePageLoad('collapse-aggregated-allPendingStages','aggregated-allPendingStages');
   collapseTablePageLoad('collapse-aggregated-allCompletedStages','aggregated-allCompletedStages');
+  collapseTablePageLoad('collapse-aggregated-allSkippedStages','aggregated-allSkippedStages');
   collapseTablePageLoad('collapse-aggregated-allFailedStages','aggregated-allFailedStages');
   collapseTablePageLoad('collapse-aggregated-activeStages','aggregated-activeStages');
   collapseTablePageLoad('collapse-aggregated-pendingOrSkippedStages','aggregated-pendingOrSkippedStages');

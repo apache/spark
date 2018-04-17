@@ -42,8 +42,8 @@ trait StatsEstimationTestBase extends SparkFunSuite {
 
   def getColSize(attribute: Attribute, colStat: ColumnStat): Long = attribute.dataType match {
     // For UTF8String: base + offset + numBytes
-    case StringType => colStat.avgLen + 8 + 4
-    case _ => colStat.avgLen
+    case StringType => colStat.avgLen.getOrElse(attribute.dataType.defaultSize.toLong) + 8 + 4
+    case _ => colStat.avgLen.getOrElse(attribute.dataType.defaultSize)
   }
 
   def attr(colName: String): AttributeReference = AttributeReference(colName, IntegerType)()
@@ -54,6 +54,12 @@ trait StatsEstimationTestBase extends SparkFunSuite {
     val nameToAttr: Map[String, Attribute] = plan.output.map(a => (a.name, a)).toMap
     AttributeMap(colStats.map(kv => nameToAttr(kv._1) -> kv._2))
   }
+
+  /** Get a test ColumnStat with given distinctCount and nullCount */
+  def rangeColumnStat(distinctCount: Int, nullCount: Int): ColumnStat =
+    ColumnStat(distinctCount = Some(distinctCount),
+      min = Some(1), max = Some(distinctCount),
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
 }
 
 /**

@@ -147,7 +147,10 @@ class MemoryStreamWriter(val sink: MemorySinkV2, outputMode: OutputMode)
 }
 
 case class MemoryWriterFactory(outputMode: OutputMode) extends DataWriterFactory[Row] {
-  def createDataWriter(partitionId: Int, attemptNumber: Int): DataWriter[Row] = {
+  override def createDataWriter(
+      partitionId: Int,
+      attemptNumber: Int,
+      epochId: Long): DataWriter[Row] = {
     new MemoryDataWriter(partitionId, outputMode)
   }
 }

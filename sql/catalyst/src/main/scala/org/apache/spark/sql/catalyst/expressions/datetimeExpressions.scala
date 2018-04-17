@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -426,19 +426,11 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
   """,
   since = "2.3.0")
 // scalastyle:on line.size.limit
-case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  @transient private lazy val c = {
-    Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
-  }
+case class DayOfWeek(child: Expression) extends DayWeek {
 
   override protected def nullSafeEval(date: Any): Any = {
-    c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    c.get(Calendar.DAY_OF_WEEK)
+    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
+    cal.get(Calendar.DAY_OF_WEEK)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -453,6 +445,49 @@ case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCas
         ${ev.value} = $c.get($cal.DAY_OF_WEEK);
       """
     })
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2009-07-30');
+       3
+  """,
+  since = "2.4.0")
+// scalastyle:on line.size.limit
+case class WeekDay(child: Expression) extends DayWeek {
+
+  override protected def nullSafeEval(date: Any): Any = {
+    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
+    (cal.get(Calendar.DAY_OF_WEEK) + 5 ) % 7
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, time => {
+      val cal = classOf[Calendar].getName
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      val c = "calWeekDay"
+      ctx.addImmutableStateIfNotExists(cal, c,
+        v => s"""$v = $cal.getInstance($dtu.getTimeZone("UTC"));""")
+      s"""
+        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
+        ${ev.value} = ($c.get($cal.DAY_OF_WEEK) + 5) % 7;
+      """
+    })
+  }
+}
+
+abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  @transient protected lazy val cal: Calendar = {
+    Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
   }
 }
 
@@ -673,18 +708,19 @@ abstract class UnixTime
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val javaType = CodeGenerator.javaType(dataType)
     left.dataType match {
       case StringType if right.foldable =>
         val df = classOf[DateFormat].getName
         if (formatter == null) {
-          ExprCode("", "true", ctx.defaultValue(dataType))
+          ExprCode.forNullValue(dataType)
         } else {
           val formatterName = ctx.addReferenceObj("formatter", formatter, df)
           val eval1 = left.genCode(ctx)
           ev.copy(code = s"""
             ${eval1.code}
             boolean ${ev.isNull} = ${eval1.isNull};
-            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+            $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
             if (!${ev.isNull}) {
               try {
                 ${ev.value} = $formatterName.parse(${eval1.value}.toString()).getTime() / 1000L;
@@ -713,7 +749,7 @@ abstract class UnixTime
         ev.copy(code = s"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = ${eval1.value} / 1000000L;
           }""")
@@ -724,7 +760,7 @@ abstract class UnixTime
         ev.copy(code = s"""
           ${eval1.code}
           boolean ${ev.isNull} = ${eval1.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = $dtu.daysToMillis(${eval1.value}, $tz) / 1000L;
           }""")
@@ -812,14 +848,14 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     val df = classOf[DateFormat].getName
     if (format.foldable) {
       if (formatter == null) {
-        ExprCode("", "true", "(UTF8String) null")
+        ExprCode.forNullValue(StringType)
       } else {
         val formatterName = ctx.addReferenceObj("formatter", formatter, df)
         val t = left.genCode(ctx)
         ev.copy(code = s"""
           ${t.code}
           boolean ${ev.isNull} = ${t.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             try {
               ${ev.value} = UTF8String.fromString($formatterName.format(
@@ -1344,18 +1380,19 @@ trait TruncInstant extends BinaryExpression with ImplicitCastInputTypes {
     : ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
 
+    val javaType = CodeGenerator.javaType(dataType)
     if (format.foldable) {
       if (truncLevel == DateTimeUtils.TRUNC_INVALID || truncLevel > maxLevel) {
         ev.copy(code = s"""
           boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};""")
       } else {
         val t = instant.genCode(ctx)
         val truncFuncStr = truncFunc(t.value, truncLevel.toString)
         ev.copy(code = s"""
           ${t.code}
           boolean ${ev.isNull} = ${t.isNull};
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
             ${ev.value} = $dtu.$truncFuncStr;
           }""")
