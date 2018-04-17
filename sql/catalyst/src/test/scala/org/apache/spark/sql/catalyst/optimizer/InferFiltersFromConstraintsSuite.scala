@@ -40,6 +40,19 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
+  private def testConstraintsAfterJoin(
+      x: LogicalPlan,
+      y: LogicalPlan,
+      expectedLeft: LogicalPlan,
+      expectedRight: LogicalPlan,
+      joinType: JoinType) = {
+    val condition = Some("x.a".attr === "y.a".attr)
+    val originalQuery = x.join(y, joinType, condition).analyze
+    val correctAnswer = expectedLeft.join(expectedRight, joinType, condition).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("filter: filter out constraints in condition") {
     val originalQuery = testRelation.where('a === 1 && 'a === 'b).analyze
     val correctAnswer = testRelation
@@ -196,12 +209,24 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
   test("SPARK-23405: left-semi equal-join should filter out null join keys on both sides") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
-    val condition = Some("x.a".attr === "y.a".attr)
-    val originalQuery = x.join(y, LeftSemi, condition).analyze
-    val left = x.where(IsNotNull('a))
-    val right = y.where(IsNotNull('a))
-    val correctAnswer = left.join(right, LeftSemi, condition).analyze
-    val optimized = Optimize.execute(originalQuery)
-    comparePlans(optimized, correctAnswer)
+    testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y.where(IsNotNull('a)), LeftSemi)
+  }
+
+  test("SPARK-23564: left anti join should filter out null join keys on right side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    testConstraintsAfterJoin(x, y, x, y.where(IsNotNull('a)), LeftAnti)
+  }
+
+  test("SPARK-23564: left outer join should filter out null join keys on right side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    testConstraintsAfterJoin(x, y, x, y.where(IsNotNull('a)), LeftOuter)
+  }
+
+  test("SPARK-23564: right outer join should filter out null join keys on left side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y, RightOuter)
   }
 }

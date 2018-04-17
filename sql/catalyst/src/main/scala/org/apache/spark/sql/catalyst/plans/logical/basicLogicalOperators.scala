@@ -342,6 +342,26 @@ case class Join(
     case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
   }
+
+  override protected def constructAllConstraints: Set[Expression] = {
+    // additional constraints which are not enforced on the result of join operations, but can be
+    // enforced either on the left or the right side
+    val additionalConstraints = joinType match {
+      case LeftAnti | LeftOuter if condition.isDefined =>
+        splitConjunctivePredicates(condition.get).flatMap(inferIsNotNullConstraints).filter(
+          _.references.subsetOf(right.outputSet))
+      case RightOuter if condition.isDefined =>
+        splitConjunctivePredicates(condition.get).flatMap(inferIsNotNullConstraints).filter(
+          _.references.subsetOf(left.outputSet))
+      case _ => Seq.empty[Expression]
+    }
+    super.constructAllConstraints ++ additionalConstraints
+  }
+
+  override lazy val constraints: ExpressionSet = ExpressionSet(
+    super.constructAllConstraints.filter { c =>
+      c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
+    })
 }
 
 /**

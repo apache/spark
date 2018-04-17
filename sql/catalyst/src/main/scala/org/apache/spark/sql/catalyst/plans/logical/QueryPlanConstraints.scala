@@ -26,15 +26,7 @@ trait QueryPlanConstraints { self: LogicalPlan =>
    * An [[ExpressionSet]] that contains an additional set of constraints, such as equality
    * constraints and `isNotNull` constraints, etc.
    */
-  lazy val allConstraints: ExpressionSet = {
-    if (conf.constraintPropagationEnabled) {
-      ExpressionSet(validConstraints
-        .union(inferAdditionalConstraints(validConstraints))
-        .union(constructIsNotNullConstraints(validConstraints)))
-    } else {
-      ExpressionSet(Set.empty)
-    }
-  }
+  lazy val allConstraints: ExpressionSet = ExpressionSet(constructAllConstraints)
 
   /**
    * An [[ExpressionSet]] that contains invariants about the rows output by this operator. For
@@ -54,6 +46,20 @@ trait QueryPlanConstraints { self: LogicalPlan =>
    * See [[Canonicalize]] for more details.
    */
   protected def validConstraints: Set[Expression] = Set.empty
+
+  /**
+   * Returns the [[Expression]]s representing all the constraints which can be enforced on the
+   * current operator.
+   */
+  protected def constructAllConstraints: Set[Expression] = {
+    if (conf.constraintPropagationEnabled) {
+      validConstraints
+        .union(inferAdditionalConstraints(validConstraints))
+        .union(constructIsNotNullConstraints(validConstraints))
+    } else {
+      Set.empty
+    }
+  }
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
@@ -76,7 +82,7 @@ trait QueryPlanConstraints { self: LogicalPlan =>
    * Infer the Attribute-specific IsNotNull constraints from the null intolerant child expressions
    * of constraints.
    */
-  private def inferIsNotNullConstraints(constraint: Expression): Seq[Expression] =
+  protected def inferIsNotNullConstraints(constraint: Expression): Seq[Expression] =
     constraint match {
       // When the root is IsNotNull, we can push IsNotNull through the child null intolerant
       // expressions

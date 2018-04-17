@@ -237,23 +237,46 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
   test("propagating constraints in left-outer join") {
     val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
     val tr2 = LocalRelation('a.int, 'd.int, 'e.int).subquery('tr2)
-    verifyConstraints(tr1
+    val plan = tr1
       .where('a.attr > 10)
       .join(tr2.where('d.attr < 100), LeftOuter, Some("tr1.a".attr === "tr2.a".attr))
-      .analyze.constraints,
-      ExpressionSet(Seq(tr1.resolveQuoted("a", caseInsensitiveResolution).get > 10,
-        IsNotNull(tr1.resolveQuoted("a", caseInsensitiveResolution).get))))
+      .analyze
+    val expectedConstraints = ExpressionSet(Seq(
+      tr1.resolveQuoted("a", caseInsensitiveResolution).get > 10,
+      IsNotNull(tr1.resolveQuoted("a", caseInsensitiveResolution).get)))
+    verifyConstraints(plan.constraints, expectedConstraints)
+    verifyConstraints(plan.allConstraints, expectedConstraints +
+      IsNotNull(tr2.resolveQuoted("a", caseInsensitiveResolution).get))
   }
 
   test("propagating constraints in right-outer join") {
     val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
     val tr2 = LocalRelation('a.int, 'd.int, 'e.int).subquery('tr2)
-    verifyConstraints(tr1
+    val plan = tr1
       .where('a.attr > 10)
       .join(tr2.where('d.attr < 100), RightOuter, Some("tr1.a".attr === "tr2.a".attr))
-      .analyze.constraints,
-      ExpressionSet(Seq(tr2.resolveQuoted("d", caseInsensitiveResolution).get < 100,
-        IsNotNull(tr2.resolveQuoted("d", caseInsensitiveResolution).get))))
+      .analyze
+    val expectedConstraints = ExpressionSet(Seq(
+      tr2.resolveQuoted("d", caseInsensitiveResolution).get < 100,
+      IsNotNull(tr2.resolveQuoted("d", caseInsensitiveResolution).get)))
+    verifyConstraints(plan.constraints, expectedConstraints)
+    verifyConstraints(plan.allConstraints, expectedConstraints +
+      IsNotNull(tr1.resolveQuoted("a", caseInsensitiveResolution).get))
+  }
+
+  test("propagating constraints in left-anti join") {
+    val tr1 = LocalRelation('a.int, 'b.int, 'c.int).subquery('tr1)
+    val tr2 = LocalRelation('a.int, 'd.int, 'e.int).subquery('tr2)
+    val plan = tr1
+      .where('a.attr > 10)
+      .join(tr2.where('d.attr < 100), LeftAnti, Some("tr1.a".attr === "tr2.a".attr))
+      .analyze
+    val expectedConstraints = ExpressionSet(Seq(
+      tr1.resolveQuoted("a", caseInsensitiveResolution).get > 10,
+      IsNotNull(tr1.resolveQuoted("a", caseInsensitiveResolution).get)))
+    verifyConstraints(plan.constraints, expectedConstraints)
+    verifyConstraints(plan.allConstraints, expectedConstraints +
+      IsNotNull(tr2.resolveQuoted("a", caseInsensitiveResolution).get))
   }
 
   test("propagating constraints in full-outer join") {
