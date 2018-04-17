@@ -5479,6 +5479,7 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
                     'mixture.*aggregate function.*group aggregate pandas UDF'):
                 df.groupby(df.id).agg(mean_udf(df.v), mean(df.v)).collect()
 
+
 @unittest.skipIf(
     not _have_pandas or not _have_pyarrow,
     _pandas_requirement_message or _pyarrow_requirement_message)
@@ -5497,7 +5498,8 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.window import Window
 
         df = self.data
-        w = Window.partitionBy('id').rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+        w = Window.partitionBy('id') \
+            .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
         mean_udf = pandas_udf(lambda v: v.mean(), 'double', PandasUDFType.GROUPED_AGG)
 
         result1 = df.withColumn('mean_v', mean_udf(df['v']).over(w)).toPandas()

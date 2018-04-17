@@ -127,6 +127,7 @@ def wrap_grouped_agg_pandas_udf(f, return_type):
 
     return lambda *a: (wrapped(*a), arrow_return_type)
 
+
 def wrap_window_agg_pandas_udf(f, return_type):
     arrow_return_type = to_arrow_type(return_type)
 
@@ -138,6 +139,7 @@ def wrap_window_agg_pandas_udf(f, return_type):
         return pd.Series(np.repeat(result, len(series[0])))
 
     return lambda *a: (wrapped(*a), arrow_return_type)
+
 
 def read_single_udf(pickleSer, infile, eval_type):
     num_arg = read_int(infile)
