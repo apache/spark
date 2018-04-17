@@ -16,8 +16,11 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf}
-import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, MountSecretsFeatureStep}
+import java.io.File
+
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf, KubernetesRoleSpecificConf, KubernetesUtils}
+import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, MountLocalFilesFeatureStep, MountSecretsFeatureStep}
+import org.apache.spark.util.Utils
 
 private[spark] class KubernetesDriverBuilder(
     provideBasicStep: (KubernetesConf[KubernetesDriverSpecificConf]) => BasicDriverFeatureStep =
@@ -29,7 +32,11 @@ private[spark] class KubernetesDriverBuilder(
       new DriverServiceFeatureStep(_),
     provideSecretsStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
       => MountSecretsFeatureStep) =
-      new MountSecretsFeatureStep(_)) {
+      new MountSecretsFeatureStep(_),
+    provideMountLocalFilesStep: (KubernetesConf[_ <: KubernetesRoleSpecificConf]
+      => MountLocalFilesFeatureStep) =
+      new MountLocalFilesFeatureStep(_)) {
+  import KubernetesDriverBuilder._
 
   def buildFromFeatures(
     kubernetesConf: KubernetesConf[KubernetesDriverSpecificConf]): KubernetesDriverSpec = {
@@ -37,9 +44,23 @@ private[spark] class KubernetesDriverBuilder(
       provideBasicStep(kubernetesConf),
       provideCredentialsStep(kubernetesConf),
       provideServiceStep(kubernetesConf))
-    val allFeatures = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
+    val withProvideSecretsStep = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
       baseFeatures ++ Seq(provideSecretsStep(kubernetesConf))
     } else baseFeatures
+
+    val sparkFiles = kubernetesConf.sparkFiles()
+    val localFiles = KubernetesUtils.submitterLocalFiles(sparkFiles).map(new File(_))
+    require(localFiles.forall(_.isFile), s"All submitted local files must be present and not" +
+      s" directories, Got got: ${localFiles.map(_.getAbsolutePath).mkString(",")}")
+
+    val totalFileSize = localFiles.map(_.length()).sum
+    val totalSizeBytesString = Utils.bytesToString(totalFileSize)
+    require(totalFileSize < MAX_SECRET_BUNDLE_SIZE_BYTES,
+      s"Total size of all files submitted must be less than $MAX_SECRET_BUNDLE_SIZE_BYTES_STRING." +
+        s" Total size for files ended up being $totalSizeBytesString")
+    val allFeatures = if (localFiles.nonEmpty) {
+      withProvideSecretsStep ++ Seq(provideMountLocalFilesStep(kubernetesConf))
+    } else withProvideSecretsStep
 
     var spec = KubernetesDriverSpec.initialSpec(kubernetesConf.sparkConf.getAll.toMap)
     for (feature <- allFeatures) {
@@ -53,4 +74,10 @@ private[spark] class KubernetesDriverBuilder(
     }
     spec
   }
+}
+
+private object KubernetesDriverBuilder {
+  val MAX_SECRET_BUNDLE_SIZE_BYTES = 10240
+  val MAX_SECRET_BUNDLE_SIZE_BYTES_STRING =
+    Utils.bytesToString(MAX_SECRET_BUNDLE_SIZE_BYTES)
 }

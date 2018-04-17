@@ -70,6 +70,7 @@ private[spark] object Constants {
 
   val ENV_SPARK_CONF_DIR = "SPARK_CONF_DIR"
   // Spark app configs for containers
+  val MOUNTED_FILES_SECRET_DIR = "/var/data/spark-submitted-files"
   val SPARK_CONF_VOLUME = "spark-conf-volume"
   val SPARK_CONF_DIR_INTERNAL = "/opt/spark/conf"
   val SPARK_CONF_FILE_NAME = "spark.properties"
