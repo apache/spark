@@ -2405,6 +2405,7 @@ class PandasUDFType(object):
 
     GROUPED_AGG = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
+
 @since(1.3)
 def udf(f=None, returnType=StringType()):
     """Creates a user defined function (UDF).
