@@ -1753,7 +1753,7 @@ Apart from these, the following properties are also available, and may be useful
     <code>spark.dynamicAllocation.minExecutors</code>,
     <code>spark.dynamicAllocation.maxExecutors</code>, and
     <code>spark.dynamicAllocation.initialExecutors</code>
-    <code>spark.dynamicAllocation.fullExecutorAllocationDivisor</code>
+    <code>spark.dynamicAllocation.executorAllocationRatio</code>
   </td>
 </tr>
 <tr>
@@ -1799,16 +1799,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.dynamicAllocation.fullExecutorAllocationDivisor</code></td>
+  <td><code>spark.dynamicAllocation.executorAllocationRatio</code></td>
   <td>1</td>
   <td>
     By default, the dynamic allocation will request enough executors to maximize the
     parallelism according to the number of tasks to process. While this minimizes the
     latency of the job, with small tasks this setting can waste a lot of resources due to
     executor allocation overhead, as some executor might not even do any work.
-    This setting allows to set a divisor that will be used to reduce the number of
+    This setting allows to set a ratio that will be used to reduce the number of
     executors w.r.t. full parallelism.
-    Defaults to 1.0
+    Defaults to 1.0 to give maximum parallelism.
+    0.5 will divide the target number of executors by 2
     The target number of executors computed by the dynamicAllocation can still be overriden
     by the <code>spark.dynamicAllocation.minExecutors</code> and
     <code>spark.dynamicAllocation.maxExecutors</code> settings

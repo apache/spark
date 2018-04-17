@@ -69,7 +69,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  *   spark.dynamicAllocation.maxExecutors - Upper bound on the number of executors
  *   spark.dynamicAllocation.initialExecutors - Number of executors to start with
  *
- *   spark.dynamicAllocation.fullExecutorAllocationDivisor -
+ *   spark.dynamicAllocation.executorAllocationRatio -
  *     This is used to reduce the parallelism of the dynamic allocation that can waste
  *     resources when tasks are small
  *
@@ -123,8 +123,8 @@ private[spark] class ExecutorAllocationManager(
   private val tasksPerExecutorForFullParallelism =
     conf.getInt("spark.executor.cores", 1) / conf.getInt("spark.task.cpus", 1)
 
-  private val fullExecutorAllocationDivisor =
-    conf.getDouble("spark.dynamicAllocation.fullExecutorAllocationDivisor", 1.0)
+  private val executorAllocationRatio =
+    conf.getDouble("spark.dynamicAllocation.executorAllocationRatio", 1.0)
 
   validateSettings()
 
@@ -220,9 +220,9 @@ private[spark] class ExecutorAllocationManager(
       throw new SparkException("spark.executor.cores must not be < spark.task.cpus.")
     }
 
-    if (fullExecutorAllocationDivisor < 1.0) {
+    if (executorAllocationRatio > 1.0 || executorAllocationRatio <= 0.0) {
       throw new SparkException(
-        "spark.dynamicAllocation.fullExecutorAllocationDivisor must be >= 1.0")
+        "spark.dynamicAllocation.executorAllocationRatio must be > 0 and <= 1.0")
     }
   }
 
@@ -279,16 +279,15 @@ private[spark] class ExecutorAllocationManager(
     removeTimes.clear()
   }
 
-  private def tasksPerExecutor() =
-    fullExecutorAllocationDivisor * tasksPerExecutorForFullParallelism
-
   /**
    * The maximum number of executors we would need under the current load to satisfy all running
    * and pending tasks, rounded up.
    */
   private def maxNumExecutorsNeeded(): Int = {
     val numRunningOrPendingTasks = listener.totalPendingTasks + listener.totalRunningTasks
-    math.ceil(numRunningOrPendingTasks / tasksPerExecutor).toInt
+    math.ceil(numRunningOrPendingTasks * executorAllocationRatio /
+              tasksPerExecutorForFullParallelism)
+      .toInt
   }
 
   private def totalRunningTasks(): Int = synchronized {
