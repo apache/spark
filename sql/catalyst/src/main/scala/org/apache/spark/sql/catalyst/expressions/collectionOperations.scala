@@ -562,8 +562,8 @@ case class MapConcat(children: Seq[Expression]) extends Expression
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val mapCodes = children.map(c => c.genCode(ctx))
-    val keyTypes = children.map(c => c.dataType.asInstanceOf[MapType].keyType)
-    val valueTypes = children.map(c => c.dataType.asInstanceOf[MapType].valueType)
+    val keyType = children.head.dataType.asInstanceOf[MapType].keyType
+    val valueType = children.head.dataType.asInstanceOf[MapType].valueType
     val mapRefArrayName = ctx.freshName("mapRefArray")
     val mapNullArrayName = ctx.freshName("mapNullArray")
     val unionMapName = ctx.freshName("union")
@@ -578,7 +578,7 @@ case class MapConcat(children: Seq[Expression]) extends Expression
     val init =
       s"""
         |boolean[] $mapNullArrayName = new boolean[${mapCodes.size}];
-        |Object[] $mapRefArrayName = new Object[${mapCodes.size}];
+        |$mapDataClass[] $mapRefArrayName = new $mapDataClass[${mapCodes.size}];
         |boolean ${ev.isNull} = false;
       """.stripMargin
 
@@ -614,12 +614,12 @@ case class MapConcat(children: Seq[Expression]) extends Expression
         |  if ($isNullCheckName) {
         |    continue;
         |  }
-        |  MapData $mapDataName = ($mapDataClass) $mapRefArrayName[$index1Name];
+        |  $mapDataClass $mapDataName = $mapRefArrayName[$index1Name];
         |  $arrayDataClass $kaName = $mapDataName.keyArray();
         |  $arrayDataClass $vaName = $mapDataName.valueArray();
         |  for (int $index2Name = 0; $index2Name < $kaName.numElements(); $index2Name++) {
-        |    Object $keyName = ${CodeGenerator.getValue(kaName, keyTypes.head, index2Name)};
-        |    Object $valueName = ${CodeGenerator.getValue(vaName, valueTypes.head, index2Name)};
+        |    Object $keyName = ${CodeGenerator.getValue(kaName, keyType, index2Name)};
+        |    Object $valueName = ${CodeGenerator.getValue(vaName, valueType, index2Name)};
         |    $unionMapName.put($keyName, $valueName);
         |  }
         |}
@@ -631,8 +631,8 @@ case class MapConcat(children: Seq[Expression]) extends Expression
     val createMapData =
       s"""
         |Object[] $entrySetName = $unionMapName.entrySet().toArray();
-        |Object[] $mergedKeyArrayName = new Object[$unionMapName.size()];
-        |Object[] $mergedValueArrayName = new Object[$unionMapName.size()];
+        |Object[] $mergedKeyArrayName = new Object[$entrySetName.length];
+        |Object[] $mergedValueArrayName = new Object[$entrySetName.length];
         |for (int $index1Name = 0; $index1Name < $entrySetName.length; $index1Name++) {
         |  $entryClass<Object, Object> entry =
         |     ($entryClass<Object, Object>) $entrySetName[$index1Name];
