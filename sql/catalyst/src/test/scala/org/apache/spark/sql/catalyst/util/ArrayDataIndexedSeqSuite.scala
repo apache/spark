@@ -17,30 +17,37 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
-import org.apache.spark.sql.types.StringType
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.sql.RandomDataGenerator
+import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.{FromUnsafeProjection, UnsafeArrayData, UnsafeProjection}
+import org.apache.spark.sql.types._
 
 class ArrayDataIndexedSeqSuite extends SparkFunSuite {
-  def utf8(str: String): UTF8String = UTF8String.fromString(str)
-  val stringArray = Array("1", "10", "100", null)
-
-  private def testArrayData(arrayData: ArrayData): Unit = {
-    assert(arrayData.numElements == stringArray.length)
-    stringArray.zipWithIndex.map { case (e, i) =>
+  private def compArray(arrayData: ArrayData, elementDt: DataType, array: Array[Any]): Unit = {
+    assert(arrayData.numElements == array.length)
+    array.zipWithIndex.map { case (e, i) =>
       if (e != null) {
-        assert(arrayData.getUTF8String(i).toString().equals(e))
+        elementDt match {
+          // For NaN, etc.
+          case FloatType | DoubleType => assert(arrayData.get(i, elementDt).equals(e))
+          case _ => assert(arrayData.get(i, elementDt) === e)
+        }
       } else {
         assert(arrayData.isNullAt(i))
       }
     }
 
-    val seq = arrayData.toSeq[UTF8String](StringType)
-    stringArray.zipWithIndex.map { case (e, i) =>
+    val seq = arrayData.toSeq[Any](elementDt)
+    array.zipWithIndex.map { case (e, i) =>
       if (e != null) {
-        assert(seq(i).toString().equals(e))
+        elementDt match {
+          // For Nan, etc.
+          case FloatType | DoubleType => assert(seq(i).equals(e))
+          case _ => assert(seq(i) === e)
+        }
       } else {
         assert(seq(i) == null)
       }
@@ -55,15 +62,39 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
     }.getMessage().contains("must be between 0 and the length of the ArrayData.")
   }
 
-  test("ArrayDataIndexedSeq can work on GenericArrayData") {
-    val arrayData = new GenericArrayData(stringArray.map(utf8(_)))
-    testArrayData(arrayData)
+  private def testArrayData(): Unit = {
+    val elementTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
+      DoubleType, DecimalType.USER_DEFAULT, StringType, BinaryType, DateType, TimestampType,
+      CalendarIntervalType, new ExamplePointUDT())
+    val arrayTypes = elementTypes.flatMap { elementType =>
+      Seq(ArrayType(elementType, containsNull = false), ArrayType(elementType, containsNull = true))
+    }
+    val random = new Random(100)
+    arrayTypes.foreach { dt =>
+      val schema = StructType(StructField("col_1", dt, nullable = false) :: Nil)
+      val row = RandomDataGenerator.randomRow(random, schema)
+      val rowConverter = RowEncoder(schema)
+      val internalRow = rowConverter.toRow(row)
+
+      val unsafeRowConverter = UnsafeProjection.create(schema)
+      val safeRowConverter = FromUnsafeProjection(schema)
+
+      val unsafeRow = unsafeRowConverter(internalRow)
+      val safeRow = safeRowConverter(unsafeRow)
+
+      val genericArrayData = safeRow.getArray(0).asInstanceOf[GenericArrayData]
+      val unsafeArrayData = unsafeRow.getArray(0).asInstanceOf[UnsafeArrayData]
+
+      val elementType = dt.elementType
+      test("ArrayDataIndexedSeq - UnsafeArrayData - " + dt.toString) {
+        compArray(unsafeArrayData, elementType, unsafeArrayData.toArray[Any](elementType))
+      }
+
+      test("ArrayDataIndexedSeq - GenericArrayData - " + dt.toString) {
+        compArray(genericArrayData, elementType, genericArrayData.toArray[Any](elementType))
+      }
+    }
   }
 
-  test("ArrayDataIndexedSeq can work on UnsafeArrayData") {
-    val unsafeArrayData = ExpressionEncoder[Array[String]].resolveAndBind().
-      toRow(stringArray).getArray(0)
-    assert(unsafeArrayData.isInstanceOf[UnsafeArrayData])
-    testArrayData(unsafeArrayData)
-  }
+  testArrayData()
 }
