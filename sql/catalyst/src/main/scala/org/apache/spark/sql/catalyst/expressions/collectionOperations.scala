@@ -556,6 +556,90 @@ case class MapConcat(children: Seq[Expression]) extends Expression
     new ArrayBasedMapData(new GenericArrayData(keyArray), new GenericArrayData(valueArray))
   }
 
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val mapCodes = children.map(c => c.genCode(ctx))
+    val keyTypes = children.map(c => c.dataType.asInstanceOf[MapType].keyType)
+    val valueTypes = children.map(c => c.dataType.asInstanceOf[MapType].valueType)
+    val mapRefArrayName = ctx.freshName("mapRefArray")
+    val mapNullArrayName = ctx.freshName("mapNullArray")
+    val unionMapName = ctx.freshName("union")
+
+    val mapDataClass = classOf[MapData].getName
+    val arrayBasedMapDataClass = classOf[ArrayBasedMapData].getName
+    val arrayDataClass = classOf[GenericArrayData].getName
+    val hashMapClass = classOf[util.LinkedHashMap[Any, Any]].getName
+    val entryClass = classOf[util.Map.Entry[Any, Any]].getName
+
+    val init =
+      s"""
+        |boolean[] $mapNullArrayName = new boolean[${mapCodes.size}];
+        |Object[] $mapRefArrayName = new Object[${mapCodes.size}];
+      """.stripMargin
+
+    val assignments = mapCodes.zipWithIndex.map { case (m, i) =>
+      val initCode = mapCodes(i).code
+      val isNullVarname = mapCodes(i).isNull
+      val valueVarname = mapCodes(i).value.code
+      s"""
+         |$initCode
+         |$mapNullArrayName[$i] = $isNullVarname;
+         | if (!$mapNullArrayName[$i]) {
+         |   $mapRefArrayName[$i] = $valueVarname;
+         | } else {
+         |   $mapRefArrayName[$i] = null;
+         | }
+       """.stripMargin
+    }.mkString("\n")
+
+    val index1Name = ctx.freshName("idx1")
+    val index2Name = ctx.freshName("idx2")
+    val mapDataName = ctx.freshName("m")
+    val kaName = ctx.freshName("ka")
+    val vaName = ctx.freshName("va")
+
+    val mapMerge =
+      s"""
+        |$hashMapClass<Object, Object> $unionMapName = new $hashMapClass<Object, Object>();
+        |for (int $index1Name = 0; $index1Name < $mapRefArrayName.size; $index1Name++) {
+        |  boolean isNull = $mapNullArrayName[$index1Name];
+        |  if (isNull) {
+        |    continue;
+        |  }
+        |  MapData $mapDataName = ($mapDataClass) $mapRefArrayName[$index1Name];
+        |  Object[] $kaName = (Object[]) $mapDataName.keyArray().toObjectArray();
+        |  Object[] $vaName = (Object[]) $mapDataName.valueArray().toObjectArray();
+        |  for (int $index2Name = 0; $index2Name < $kaName.length; $index2Name++) {
+        |    $unionMapName.put($kaName[$index2Name], $vaName[$index2Name]);
+        |  }
+        |}
+      """.stripMargin
+
+    val mergedKeyArrayName = ctx.freshName("keyArray")
+    val mergedValueArrayName = ctx.freshName("valueArray")
+    val entrySetName = ctx.freshName("entrySet")
+    val createMapData =
+      s"""
+        |$entryClass<Object, Object>[] entries = $unionMapName.entrySet().toArray();
+        |Object[] $mergedKeyArrayName = new Object[$unionMapName.size];
+        |Object[] $mergedValueArrayName = new Object[$unionMapName.size];
+        |for (int $index1Name = 0; $index1Name < $entrySetName.length(); $index1Name++) {
+        |  $entryClass<Object, Object> entry = $entrySetName[$index1Name];
+        |  $mergedKeyArrayName[$index1Name] = (Object) entry.getKey();
+        |  $mergedValueArrayName[$index1Name] = (Object) entry.getValue();
+        |}
+        |${ev.value} = new $arrayBasedMapDataClass(new $arrayDataClass($mergedKeyArrayName),
+        |                                          new $arrayDataClass($mergedValueArrayName));
+      """.stripMargin
+    val code =
+      s"""
+        |$init
+        |$assignments
+        |$mapMerge
+         $createMapData
+      """.stripMargin
+    ev.copy(code = code)
+  }
+
   override def prettyName: String = "map_concat"
 }
 
