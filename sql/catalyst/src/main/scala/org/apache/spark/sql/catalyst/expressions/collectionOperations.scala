@@ -520,7 +520,10 @@ case class MapConcat(children: Seq[Expression]) extends Expression
     // this check currently does not allow valueContainsNull to vary,
     // and unfortunately none of the MapType toString methods include
     // valueContainsNull for the error message
-    if (children.exists(!_.dataType.isInstanceOf[MapType])) {
+    if (children.size < 2) {
+      TypeCheckResult.TypeCheckFailure(
+        s"$prettyName expects at least two input maps.")
+    } else if (children.exists(!_.dataType.isInstanceOf[MapType])) {
       TypeCheckResult.TypeCheckFailure(
         s"The given input of function $prettyName should all be of type map, " +
           "but they are " + children.map(_.dataType.simpleString).mkString("[", ", ", "]"))
@@ -532,6 +535,7 @@ case class MapConcat(children: Seq[Expression]) extends Expression
       TypeCheckResult.TypeCheckSuccess
     }
   }
+
   override def dataType: MapType = {
     children.headOption.map(_.dataType.asInstanceOf[MapType])
       .getOrElse(MapType(keyType = StringType, valueType = StringType))
