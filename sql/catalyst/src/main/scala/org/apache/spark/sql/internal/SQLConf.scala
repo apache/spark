@@ -580,6 +580,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val BUCKETING_MAX_BUCKETS = buildConf("spark.sql.bucketing.maxBuckets")
+    .doc("The maximum number of buckets allowed. Defaults to 100000")
+    .longConf
+    .createWithDefault(100000)
+
   val CROSS_JOINS_ENABLED = buildConf("spark.sql.crossJoin.enabled")
     .doc("When false, we will throw an error if a query contains a cartesian product without " +
         "explicit CROSS JOIN syntax.")
@@ -1489,6 +1494,8 @@ class SQLConf extends Serializable with Logging {
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_PARALLELISM)
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
+
+  def bucketingMaxBuckets: Long = getConf(SQLConf.BUCKETING_MAX_BUCKETS)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)

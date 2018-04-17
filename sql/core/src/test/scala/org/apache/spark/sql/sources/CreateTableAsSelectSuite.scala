@@ -224,20 +224,40 @@ class CreateTableAsSelectSuite
   }
 
   test("create table using as select - with invalid number of buckets") {
+    def createTableSql(numBuckets: Int): String =
+      s"""
+         |CREATE TABLE t USING PARQUET
+         |OPTIONS (PATH '${path.toURI}')
+         |CLUSTERED BY (a) SORTED BY (b) INTO $numBuckets BUCKETS
+         |AS SELECT 1 AS a, 2 AS b
+       """.stripMargin
+
     withTable("t") {
-      Seq(0, 100000).foreach(numBuckets => {
+      Seq(0, 100001).foreach(numBuckets => {
         val e = intercept[AnalysisException] {
-          sql(
-            s"""
-               |CREATE TABLE t USING PARQUET
-               |OPTIONS (PATH '${path.toURI}')
-               |CLUSTERED BY (a) SORTED BY (b) INTO $numBuckets BUCKETS
-               |AS SELECT 1 AS a, 2 AS b
-             """.stripMargin
-          )
+          sql(createTableSql(numBuckets))
         }.getMessage
-        assert(e.contains("Number of buckets should be greater than 0 but less than 100000"))
+        assert(e.contains("Number of buckets should be greater than 0 but less than " +
+          "spark.sql.bucketing.maxBuckets"))
       })
+
+      // Reconfigure max
+      val maxNrBuckets: Int = 200000
+      val catalog = spark.sessionState.catalog
+      withSQLConf("spark.sql.bucketing.maxBuckets" -> maxNrBuckets.toString) {
+        Seq(100001, maxNrBuckets).foreach(numBuckets => {
+          sql(createTableSql(numBuckets))
+          val table = catalog.getTableMetadata(TableIdentifier("t"))
+          assert(table.bucketSpec == Option(BucketSpec(numBuckets, Seq("a"), Seq("b"))))
+        })
+
+        // Test new limit not respected
+        val e = intercept[AnalysisException] {
+          sql(createTableSql(maxNrBuckets + 1))
+        }.getMessage
+        assert(e.contains("Number of buckets should be greater than 0 but less than " +
+          "spark.sql.bucketing.maxBuckets"))
+      }
     }
   }
 
