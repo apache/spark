@@ -240,18 +240,24 @@ class CreateTableAsSelectSuite
         assert(e.contains("Number of buckets should be greater than 0 but less than " +
           "spark.sql.bucketing.maxBuckets"))
       })
+    }
 
-      // Reconfigure max
-      val maxNrBuckets: Int = 200000
-      val catalog = spark.sessionState.catalog
-      withSQLConf("spark.sql.bucketing.maxBuckets" -> maxNrBuckets.toString) {
-        Seq(100001, maxNrBuckets).foreach(numBuckets => {
+    // Reconfigure max
+    val maxNrBuckets: Int = 200000
+    val catalog = spark.sessionState.catalog
+    withSQLConf("spark.sql.bucketing.maxBuckets" -> maxNrBuckets.toString) {
+
+      // Shall be allowed
+      Seq(100001, maxNrBuckets).foreach(numBuckets => {
+        withTable("t") {
           sql(createTableSql(numBuckets))
           val table = catalog.getTableMetadata(TableIdentifier("t"))
           assert(table.bucketSpec == Option(BucketSpec(numBuckets, Seq("a"), Seq("b"))))
-        })
+        }
+      })
 
-        // Test new limit not respected
+      // Test new limit not respected
+      withTable("t") {
         val e = intercept[AnalysisException] {
           sql(createTableSql(maxNrBuckets + 1))
         }.getMessage
