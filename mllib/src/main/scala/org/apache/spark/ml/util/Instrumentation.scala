@@ -168,20 +168,6 @@ private[spark] trait OptionalLogging extends Logging {
     }
   }
 
-  protected override def logDebug(msg: => String) {
-    instrument match {
-      case Some(instr) => instr.logDebug(msg)
-      case None => super.logDebug(msg)
-    }
-  }
-
-  protected override def logTrace(msg: => String) {
-    instrument match {
-      case Some(instr) => instr.logTrace(msg)
-      case None => super.logTrace(msg)
-    }
-  }
-
   protected override def logWarning(msg: => String) {
     instrument match {
       case Some(instr) => instr.logWarning(msg)
