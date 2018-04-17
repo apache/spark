@@ -600,13 +600,14 @@ case class MapConcat(children: Seq[Expression]) extends Expression
     val vaName = ctx.freshName("va")
     val keyName = ctx.freshName("key")
     val valueName = ctx.freshName("value")
+    val isNullCheckName = ctx.freshName("isNull")
 
     val mapMerge =
       s"""
         |$hashMapClass<Object, Object> $unionMapName = new $hashMapClass<Object, Object>();
         |for (int $index1Name = 0; $index1Name < $mapRefArrayName.length; $index1Name++) {
-        |  boolean isNull = $mapNullArrayName[$index1Name];
-        |  if (isNull) {
+        |  boolean $isNullCheckName = $mapNullArrayName[$index1Name];
+        |  if ($isNullCheckName) {
         |    continue;
         |  }
         |  MapData $mapDataName = ($mapDataClass) $mapRefArrayName[$index1Name];
