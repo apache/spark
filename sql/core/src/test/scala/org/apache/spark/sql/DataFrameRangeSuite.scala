@@ -154,8 +154,6 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
   }
 
   test("Cancelling stage in a query with Range.") {
-    val slices = 10
-
     // Save and restore the value because SparkContext is shared
     val savedInterruptOnCancel = sparkContext
       .getLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL)
@@ -164,6 +162,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
       sparkContext.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "true")
 
       for (codegen <- Seq(true, false)) {
+        // This countdown latch used to make sure with all the stages cancelStage called in listener
         val latch = new CountDownLatch(2)
 
         val listener = new SparkListener {
@@ -176,7 +175,7 @@ class DataFrameRangeSuite extends QueryTest with SharedSQLContext with Eventuall
         sparkContext.addSparkListener(listener)
         withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString()) {
           val ex = intercept[SparkException] {
-            sparkContext.range(0, 10000L, numSlices = slices).mapPartitions { x =>
+            sparkContext.range(0, 10000L, numSlices = 10).mapPartitions { x =>
               x.synchronized {
                 x.wait()
               }
