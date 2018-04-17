@@ -36,7 +36,7 @@ import org.apache.spark.util.Utils
  * Constructs a parser for a given schema that translates a json string to an [[InternalRow]].
  */
 class JacksonParser(
-    schema: StructType,
+    schema: DataType,
     val options: JSONOptions) extends Logging {
 
   import JacksonUtils._
@@ -57,7 +57,14 @@ class JacksonParser(
    * to a value according to a desired schema. This is a wrapper for the method
    * `makeConverter()` to handle a row wrapped with an array.
    */
-  private def makeRootConverter(st: StructType): JsonParser => Seq[InternalRow] = {
+  private def makeRootConverter(dt: DataType): JsonParser => Seq[InternalRow] = {
+    dt match {
+      case st: StructType => makeStructRootConverter(st)
+      case mt: MapType => makeMapRootConverter(mt)
+    }
+  }
+
+  private def makeStructRootConverter(st: StructType): JsonParser => Seq[InternalRow] = {
     val elementConverter = makeConverter(st)
     val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
     (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, st) {
@@ -85,6 +92,18 @@ class JacksonParser(
           array.toArray[InternalRow](schema).toSeq
         }
     }
+  }
+
+  private def makeMapRootConverter(mt: MapType): JsonParser => Seq[InternalRow] = {
+    val valueConverter = makeConverter(mt.valueType)
+    (parser: JsonParser) =>
+      val mapData = parseJsonToken[MapData](parser, mt) {
+        case START_OBJECT => convertMap(parser, valueConverter)
+      }
+      val row = new GenericInternalRow(1)
+
+      row.update(0, mapData)
+      Seq(row)
   }
 
   /**
