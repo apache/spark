@@ -1958,11 +1958,11 @@ setMethod("levenshtein", signature(y = "Column"),
           })
 
 #' @details
-#'
 #' \code{months_between}: Returns number of months between dates \code{y} and \code{x}. 
 #' If \code{y} is later than \code{x}, then the result is positive. If \code{y} and \code{x}
 #' are on the same day of month, or both are the last day of month, time of day will be ignored.
 #' Otherwise, the difference is calculated based on 31 days per month, and rounded to 8 digits.
+#'
 #' @rdname column_datetime_diff_functions
 #' @aliases months_between months_between,Column-method
 #' @note months_between since 1.5.0
