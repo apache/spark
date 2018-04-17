@@ -463,7 +463,7 @@ case class Flatten(child: Expression) extends UnaryExpression {
       val numberOfElements = arrayData.foldLeft(0L)((sum, e) => sum + e.numElements())
       if (numberOfElements > MAX_ARRAY_LENGTH) {
         throw new RuntimeException("Unsuccessful try to flatten an array of arrays with " +
-          s" $numberOfElements elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.")
+          s"$numberOfElements elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.")
       }
       val flattenedData = new Array(numberOfElements.toInt)
       var position = 0
