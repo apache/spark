@@ -365,8 +365,8 @@ class SummaryBuilder(JavaWrapper):
     .. versionadded:: 2.4.0
 
     """
-    def __init__(self, js):
-        self._js = js
+    def __init__(self, jSummaryBuilder):
+        super(SummaryBuilder, self).__init__(jSummaryBuilder)
 
     @since("2.4.0")
     def summary(self, featuresCol, weightCol=None):
@@ -383,7 +383,7 @@ class SummaryBuilder(JavaWrapper):
          structure is determined during the creation of the builder.
         """
         featuresCol, weightCol = Summarizer._check_param(featuresCol, weightCol)
-        return Column(self._js.summary(featuresCol._jc, weightCol._jc))
+        return Column(self._java_obj.summary(featuresCol._jc, weightCol._jc))
 
 
 if __name__ == "__main__":
