@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeArrayData}
 import org.apache.spark.sql.types._
 
@@ -175,33 +176,14 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
  */
 class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends IndexedSeq[T] {
 
-  private def getAccessor(dataType: DataType): (Int) => Any = dataType match {
-    case BooleanType => (idx: Int) => arrayData.getBoolean(idx)
-    case ByteType => (idx: Int) => arrayData.getByte(idx)
-    case ShortType => (idx: Int) => arrayData.getShort(idx)
-    case IntegerType => (idx: Int) => arrayData.getInt(idx)
-    case LongType => (idx: Int) => arrayData.getLong(idx)
-    case FloatType => (idx: Int) => arrayData.getFloat(idx)
-    case DoubleType => (idx: Int) => arrayData.getDouble(idx)
-    case d: DecimalType => (idx: Int) => arrayData.getDecimal(idx, d.precision, d.scale)
-    case CalendarIntervalType => (idx: Int) => arrayData.getInterval(idx)
-    case StringType => (idx: Int) => arrayData.getUTF8String(idx)
-    case BinaryType => (idx: Int) => arrayData.getBinary(idx)
-    case s: StructType => (idx: Int) => arrayData.getStruct(idx, s.length)
-    case _: ArrayType => (idx: Int) => arrayData.getArray(idx)
-    case _: MapType => (idx: Int) => arrayData.getMap(idx)
-    case u: UserDefinedType[_] => getAccessor(u.sqlType)
-    case _ => (idx: Int) => arrayData.get(idx, dataType)
-  }
-
-  private val accessor: (Int) => Any = getAccessor(dataType)
+  private val accessor: (SpecializedGetters, Int) => Any = InternalRow.getAccessor(dataType)
 
   override def apply(idx: Int): T =
     if (0 <= idx && idx < arrayData.numElements()) {
       if (arrayData.isNullAt(idx)) {
         null.asInstanceOf[T]
       } else {
-        accessor(idx).asInstanceOf[T]
+        accessor(arrayData, idx).asInstanceOf[T]
       }
     } else {
       throw new IndexOutOfBoundsException(
