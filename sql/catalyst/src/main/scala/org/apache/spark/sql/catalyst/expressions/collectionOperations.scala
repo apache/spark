@@ -565,7 +565,6 @@ case class MapConcat(children: Seq[Expression]) extends Expression
     val keyType = children.head.dataType.asInstanceOf[MapType].keyType
     val valueType = children.head.dataType.asInstanceOf[MapType].valueType
     val mapRefArrayName = ctx.freshName("mapRefArray")
-    val mapNullArrayName = ctx.freshName("mapNullArray")
     val unionMapName = ctx.freshName("union")
 
     val mapDataClass = classOf[MapData].getName
@@ -577,23 +576,16 @@ case class MapConcat(children: Seq[Expression]) extends Expression
 
     val init =
       s"""
-        |boolean[] $mapNullArrayName = new boolean[${mapCodes.size}];
         |$mapDataClass[] $mapRefArrayName = new $mapDataClass[${mapCodes.size}];
         |boolean ${ev.isNull} = false;
       """.stripMargin
 
     val assignments = mapCodes.zipWithIndex.map { case (m, i) =>
       val initCode = mapCodes(i).code
-      val isNullVarname = mapCodes(i).isNull
-      val valueVarname = mapCodes(i).value.code
+      val valueVarName = mapCodes(i).value.code
       s"""
          |$initCode
-         |$mapNullArrayName[$i] = $isNullVarname;
-         | if (!$mapNullArrayName[$i]) {
-         |   $mapRefArrayName[$i] = $valueVarname;
-         | } else {
-         |   $mapRefArrayName[$i] = null;
-         | }
+         |$mapRefArrayName[$i] = $valueVarName;
        """.stripMargin
     }.mkString("\n")
 
@@ -610,11 +602,10 @@ case class MapConcat(children: Seq[Expression]) extends Expression
       s"""
         |$hashMapClass<Object, Object> $unionMapName = new $hashMapClass<Object, Object>();
         |for (int $index1Name = 0; $index1Name < $mapRefArrayName.length; $index1Name++) {
-        |  boolean $isNullCheckName = $mapNullArrayName[$index1Name];
-        |  if ($isNullCheckName) {
+        |  $mapDataClass $mapDataName = $mapRefArrayName[$index1Name];
+        |  if ($mapDataName == null) {
         |    continue;
         |  }
-        |  $mapDataClass $mapDataName = $mapRefArrayName[$index1Name];
         |  $arrayDataClass $kaName = $mapDataName.keyArray();
         |  $arrayDataClass $vaName = $mapDataName.valueArray();
         |  for (int $index2Name = 0; $index2Name < $kaName.numElements(); $index2Name++) {

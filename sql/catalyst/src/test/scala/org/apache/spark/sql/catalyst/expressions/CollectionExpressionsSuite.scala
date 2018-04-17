@@ -116,6 +116,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     // null map
     checkEvaluation(MapConcat(Seq(m0, mNull)),
       mutable.LinkedHashMap("a" -> "1", "b" -> "2"))
+    // Only null maps
+    checkEvaluation(MapConcat(Seq(mNull, mNull)),
+      Map())
   }
 
   test("MapFromEntries") {
