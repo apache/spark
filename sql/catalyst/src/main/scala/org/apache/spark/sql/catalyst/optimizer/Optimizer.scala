@@ -738,7 +738,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
 /**
  * Removes redundant Sort operation. This can happen:
  * 1) if the child is already sorted
- * 2) if the there is another Sort operator separated by 0...n Project/Filter operators
+ * 2) if there is another Sort operator separated by 0...n Project/Filter operators
  */
 object RemoveRedundantSorts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {

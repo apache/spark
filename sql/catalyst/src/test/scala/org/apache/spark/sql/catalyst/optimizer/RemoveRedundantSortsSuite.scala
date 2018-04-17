@@ -17,16 +17,12 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, ORDER_BY_ORDINAL}
 
 class RemoveRedundantSortsSuite extends PlanTest {
 
@@ -69,6 +65,14 @@ class RemoveRedundantSortsSuite extends PlanTest {
     val filteredAndReordered = orderedPlan.limit(Literal(10)).orderBy('a.asc, 'b.desc)
     val optimized = Optimize.execute(filteredAndReordered.analyze)
     val correctAnswer = orderedPlan.limit(Literal(10)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("different sorts are not simplified if limit is in between") {
+    val orderedPlan = testRelation.select('a, 'b).orderBy('b.desc).limit(Literal(10))
+      .orderBy('a.asc)
+    val optimized = Optimize.execute(orderedPlan.analyze)
+    val correctAnswer = orderedPlan.analyze
     comparePlans(optimized, correctAnswer)
   }
 
@@ -124,5 +128,11 @@ class RemoveRedundantSortsSuite extends PlanTest {
     val correctAnswerWithBoth =
       testRelation.select('b).where('b > Literal(0)).orderBy('b.desc).analyze
     comparePlans(optimizedWithBoth, correctAnswerWithBoth)
+
+    val orderedThrice = orderedTwiceWithBoth.select(('b + 1).as('c)).orderBy('c.asc)
+    val optimizedThrice = Optimize.execute(orderedThrice.analyze)
+    val correctAnswerThrice = testRelation.select('b).where('b > Literal(0))
+      .select(('b + 1).as('c)).orderBy('c.asc).analyze
+    comparePlans(optimizedThrice, correctAnswerThrice)
   }
 }
