@@ -166,7 +166,7 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
           val prevLastReportTimestamp = lastReportTimestamp
           lastReportTimestamp = System.currentTimeMillis()
           val previous = new java.util.Date(prevLastReportTimestamp)
-          logWarning(s"Dropped $droppedEvents events from $name since $previous.")
+          logWarning(s"Dropped $droppedCount events from $name since $previous.")
         }
       }
     }

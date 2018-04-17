@@ -138,6 +138,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     operatorOptimizationBatch) :+
     Batch("Join Reorder", Once,
       CostBasedJoinReorder) :+
+    Batch("Remove Redundant Sorts", Once,
+      RemoveRedundantSorts) :+
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) :+
     Batch("Object Expressions Optimization", fixedPoint,
@@ -730,6 +732,16 @@ object EliminateSorts extends Rule[LogicalPlan] {
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) child else s.copy(order = newOrders)
+  }
+}
+
+/**
+ * Removes Sort operation if the child is already sorted
+ */
+object RemoveRedundantSorts extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Sort(orders, true, child) if SortOrder.orderingSatisfies(child.outputOrdering, orders) =>
+      child
   }
 }
 

@@ -29,7 +29,6 @@ import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc.RpcEndpointRef
-import org.apache.spark.util.Utils
 
 /**
  * Handles registering and unregistering the application with the YARN ResourceManager.
@@ -71,7 +70,8 @@ private[spark] class YarnRMClient extends Logging {
 
     logInfo("Registering the ApplicationMaster")
     synchronized {
-      amClient.registerApplicationMaster(Utils.localHostName(), 0, trackingUrl)
+      amClient.registerApplicationMaster(driverRef.address.host, driverRef.address.port,
+        trackingUrl)
       registered = true
     }
     new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), securityMgr,

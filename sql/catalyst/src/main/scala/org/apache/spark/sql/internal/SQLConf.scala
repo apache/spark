@@ -930,6 +930,13 @@ object SQLConf {
       .intConf
       .createWithDefault(100)
 
+  val STREAMING_CHECKPOINT_FILE_MANAGER_CLASS =
+    buildConf("spark.sql.streaming.checkpointFileManagerClass")
+      .doc("The class used to write checkpoint files atomically. This class must be a subclass " +
+        "of the interface CheckpointFileManager.")
+      .internal()
+      .stringConf
+
   val NDV_MAX_ERROR =
     buildConf("spark.sql.statistics.ndv.maxError")
       .internal()
@@ -1156,6 +1163,14 @@ object SQLConf {
   val ELT_OUTPUT_AS_STRING = buildConf("spark.sql.function.eltOutputAsString")
     .doc("When this option is set to false and all inputs are binary, `elt` returns " +
       "an output as binary. Otherwise, it returns as a string. ")
+    .booleanConf
+    .createWithDefault(false)
+
+  val ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION =
+    buildConf("spark.sql.allowCreatingManagedTableUsingNonemptyLocation")
+    .internal()
+    .doc("When this option is set to true, creating managed tables with nonempty location " +
+      "is allowed. Otherwise, an analysis exception is thrown. ")
     .booleanConf
     .createWithDefault(false)
 
@@ -1580,6 +1595,9 @@ class SQLConf extends Serializable with Logging {
   def concatBinaryAsString: Boolean = getConf(CONCAT_BINARY_AS_STRING)
 
   def eltOutputAsString: Boolean = getConf(ELT_OUTPUT_AS_STRING)
+
+  def allowCreatingManagedTableUsingNonemptyLocation: Boolean =
+    getConf(ALLOW_CREATING_MANAGED_TABLE_USING_NONEMPTY_LOCATION)
 
   def partitionOverwriteMode: PartitionOverwriteMode.Value =
     PartitionOverwriteMode.withName(getConf(PARTITION_OVERWRITE_MODE))

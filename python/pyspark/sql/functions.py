@@ -138,6 +138,17 @@ _functions_1_4 = {
     'bitwiseNOT': 'Computes bitwise not.',
 }
 
+_functions_2_4 = {
+    'asc_nulls_first': 'Returns a sort expression based on the ascending order of the given' +
+                       ' column name, and null values return before non-null values.',
+    'asc_nulls_last': 'Returns a sort expression based on the ascending order of the given' +
+                      ' column name, and null values appear after non-null values.',
+    'desc_nulls_first': 'Returns a sort expression based on the descending order of the given' +
+                        ' column name, and null values appear before non-null values.',
+    'desc_nulls_last': 'Returns a sort expression based on the descending order of the given' +
+                       ' column name, and null values appear after non-null values',
+}
+
 _collect_list_doc = """
     Aggregate function: returns a list of objects with duplicates.
 
@@ -250,6 +261,8 @@ for _name, _doc in _functions_2_1.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
 for _name, _message in _functions_deprecated.items():
     globals()[_name] = _wrap_deprecated_function(globals()[_name], _message)
+for _name, _doc in _functions_2_4.items():
+    globals()[_name] = since(2.4)(_create_function(_name, _doc))
 del _name, _doc
 
 
@@ -2065,6 +2078,21 @@ def size(col):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.size(_to_java_column(col)))
+
+
+@since(2.4)
+def array_max(col):
+    """
+    Collection function: returns the maximum value of the array.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([2, 1, 3],), ([None, 10, -1],)], ['data'])
+    >>> df.select(array_max(df.data).alias('max')).collect()
+    [Row(max=3), Row(max=10)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_max(_to_java_column(col)))
 
 
 @since(1.5)

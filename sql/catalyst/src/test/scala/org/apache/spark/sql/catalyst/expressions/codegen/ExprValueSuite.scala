@@ -14,25 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s.submit.steps
 
-import org.apache.spark.deploy.k8s.MountSecretsBootstrap
-import org.apache.spark.deploy.k8s.submit.KubernetesDriverSpec
+package org.apache.spark.sql.catalyst.expressions.codegen
 
-/**
- * A driver configuration step for mounting user-specified secrets onto user-specified paths.
- *
- * @param bootstrap a utility actually handling mounting of the secrets.
- */
-private[spark] class DriverMountSecretsStep(
-    bootstrap: MountSecretsBootstrap) extends DriverConfigurationStep {
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.BooleanType
 
-  override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
-    val pod = bootstrap.addSecretVolumes(driverSpec.driverPod)
-    val container = bootstrap.mountSecrets(driverSpec.driverContainer)
-    driverSpec.copy(
-      driverPod = pod,
-      driverContainer = container
-    )
+class ExprValueSuite extends SparkFunSuite {
+
+  test("TrueLiteral and FalseLiteral should be LiteralValue") {
+    val trueLit = TrueLiteral
+    val falseLit = FalseLiteral
+
+    assert(trueLit.value == "true")
+    assert(falseLit.value == "false")
+
+    assert(trueLit.isPrimitive)
+    assert(falseLit.isPrimitive)
+
+    assert(trueLit === JavaCode.literal("true", BooleanType))
+    assert(falseLit === JavaCode.literal("false", BooleanType))
   }
 }

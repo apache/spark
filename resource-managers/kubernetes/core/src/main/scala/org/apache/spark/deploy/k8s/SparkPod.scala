@@ -14,41 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.deploy.k8s
 
-package org.apache.spark.unsafe.memory;
+import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, Pod, PodBuilder}
 
-import javax.annotation.Nullable;
+private[spark] case class SparkPod(pod: Pod, container: Container)
 
-/**
- * A memory location. Tracked either by a memory address (with off-heap allocation),
- * or by an offset from a JVM object (in-heap allocation).
- */
-public class MemoryLocation {
-
-  @Nullable
-  Object obj;
-
-  long offset;
-
-  public MemoryLocation(@Nullable Object obj, long offset) {
-    this.obj = obj;
-    this.offset = offset;
-  }
-
-  public MemoryLocation() {
-    this(null, 0);
-  }
-
-  public void setObjAndOffset(Object newObj, long newOffset) {
-    this.obj = newObj;
-    this.offset = newOffset;
-  }
-
-  public final Object getBaseObject() {
-    return obj;
-  }
-
-  public final long getBaseOffset() {
-    return offset;
+private[spark] object SparkPod {
+  def initialPod(): SparkPod = {
+    SparkPod(
+      new PodBuilder()
+        .withNewMetadata()
+        .endMetadata()
+        .withNewSpec()
+        .endSpec()
+        .build(),
+      new ContainerBuilder().build())
   }
 }
