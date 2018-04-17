@@ -426,19 +426,11 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
   """,
   since = "2.3.0")
 // scalastyle:on line.size.limit
-case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
-
-  override def dataType: DataType = IntegerType
-
-  @transient private lazy val c = {
-    Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
-  }
+case class DayOfWeek(child: Expression) extends DayWeek {
 
   override protected def nullSafeEval(date: Any): Any = {
-    c.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
-    c.get(Calendar.DAY_OF_WEEK)
+    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
+    cal.get(Calendar.DAY_OF_WEEK)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -453,6 +445,49 @@ case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCas
         ${ev.value} = $c.get($cal.DAY_OF_WEEK);
       """
     })
+  }
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(date) - Returns the day of the week for date/timestamp (0 = Monday, 1 = Tuesday, ..., 6 = Sunday).",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2009-07-30');
+       3
+  """,
+  since = "2.4.0")
+// scalastyle:on line.size.limit
+case class WeekDay(child: Expression) extends DayWeek {
+
+  override protected def nullSafeEval(date: Any): Any = {
+    cal.setTimeInMillis(date.asInstanceOf[Int] * 1000L * 3600L * 24L)
+    (cal.get(Calendar.DAY_OF_WEEK) + 5 ) % 7
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, time => {
+      val cal = classOf[Calendar].getName
+      val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+      val c = "calWeekDay"
+      ctx.addImmutableStateIfNotExists(cal, c,
+        v => s"""$v = $cal.getInstance($dtu.getTimeZone("UTC"));""")
+      s"""
+        $c.setTimeInMillis($time * 1000L * 3600L * 24L);
+        ${ev.value} = ($c.get($cal.DAY_OF_WEEK) + 5) % 7;
+      """
+    })
+  }
+}
+
+abstract class DayWeek extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
+
+  override def dataType: DataType = IntegerType
+
+  @transient protected lazy val cal: Calendar = {
+    Calendar.getInstance(DateTimeUtils.getTimeZone("UTC"))
   }
 }
 
@@ -813,8 +848,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     val df = classOf[DateFormat].getName
     if (format.foldable) {
       if (formatter == null) {
-        ExprCode("", TrueLiteral, LiteralValue("(UTF8String) null",
-          CodeGenerator.javaType(dataType)))
+        ExprCode.forNullValue(StringType)
       } else {
         val formatterName = ctx.addReferenceObj("formatter", formatter, df)
         val t = left.genCode(ctx)
