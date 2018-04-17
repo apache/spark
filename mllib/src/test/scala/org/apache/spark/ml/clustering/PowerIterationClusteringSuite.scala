@@ -19,17 +19,18 @@ package org.apache.spark.ml.clustering
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.{SparkException, SparkFunSuite}
+
 
 class PowerIterationClusteringSuite extends SparkFunSuite
   with MLlibTestSparkContext with DefaultReadWriteTest {
 
   @transient var data: Dataset[_] = _
-  @transient var malData: Dataset[_] = _
   final val r1 = 1.0
   final val n1 = 10
   final val r2 = 4.0
@@ -47,40 +48,27 @@ class PowerIterationClusteringSuite extends SparkFunSuite
     assert(pic.getK === 2)
     assert(pic.getMaxIter === 20)
     assert(pic.getInitMode === "random")
-    assert(pic.getFeaturesCol === "features")
     assert(pic.getPredictionCol === "prediction")
     assert(pic.getIdCol === "id")
-    assert(pic.getWeightCol === "weight")
     assert(pic.getNeighborsCol === "neighbors")
+    assert(pic.getSimilaritiesCol === "similarities")
   }
 
-  test("set parameters") {
-    val pic = new PowerIterationClustering()
-      .setK(9)
-      .setMaxIter(33)
-      .setInitMode("degree")
-      .setFeaturesCol("test_feature")
-      .setPredictionCol("test_prediction")
-      .setIdCol("test_id")
-      .setWeightCol("test_weight")
-      .setNeighborsCol("test_neighbor")
-
-    assert(pic.getK === 9)
-    assert(pic.getMaxIter === 33)
-    assert(pic.getInitMode === "degree")
-    assert(pic.getFeaturesCol === "test_feature")
-    assert(pic.getPredictionCol === "test_prediction")
-    assert(pic.getIdCol === "test_id")
-    assert(pic.getWeightCol === "test_weight")
-    assert(pic.getNeighborsCol === "test_neighbor")
-  }
-
-  test("parameters validation") {
+  test("parameter validation") {
     intercept[IllegalArgumentException] {
       new PowerIterationClustering().setK(1)
     }
     intercept[IllegalArgumentException] {
       new PowerIterationClustering().setInitMode("no_such_a_mode")
+    }
+    intercept[IllegalArgumentException] {
+      new PowerIterationClustering().setIdCol("")
+    }
+    intercept[IllegalArgumentException] {
+      new PowerIterationClustering().setNeighborsCol("")
+    }
+    intercept[IllegalArgumentException] {
+      new PowerIterationClustering().setSimilaritiesCol("")
     }
   }
 
@@ -108,11 +96,92 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       case Row(id: Long, cluster: Integer) => predictions2(cluster) += id
     }
     assert(predictions2.toSet == Set((1 until n1).toSet, (n1 until n).toSet))
+  }
 
-    val expectedColumns = Array("id", "prediction")
-    expectedColumns.foreach { column =>
-      assert(result2.columns.contains(column))
+  test("supported input types") {
+    val model = new PowerIterationClustering()
+      .setK(2)
+      .setMaxIter(1)
+
+    def runTest(idType: DataType, neighborType: DataType, similarityType: DataType): Unit = {
+      val typedData = data.select(
+        col("id").cast(idType).alias("id"),
+        col("neighbors").cast(ArrayType(neighborType, containsNull = false)).alias("neighbors"),
+        col("similarities").cast(ArrayType(similarityType, containsNull = false))
+          .alias("similarities")
+      )
+      model.transform(typedData).collect()
     }
+
+    for (idType <- Seq(IntegerType, LongType)) {
+      runTest(idType, LongType, DoubleType)
+    }
+    for (neighborType <- Seq(IntegerType, LongType)) {
+      runTest(LongType, neighborType, DoubleType)
+    }
+    for (similarityType <- Seq(FloatType, DoubleType)) {
+      runTest(LongType, LongType, similarityType)
+    }
+  }
+
+  test("invalid input: wrong types") {
+    val model = new PowerIterationClustering()
+      .setK(2)
+      .setMaxIter(1)
+    intercept[IllegalArgumentException] {
+      val typedData = data.select(
+        col("id").cast(DoubleType).alias("id"),
+        col("neighbors"),
+        col("similarities")
+      )
+      model.transform(typedData)
+    }
+    intercept[IllegalArgumentException] {
+      val typedData = data.select(
+        col("id"),
+        col("neighbors").cast(ArrayType(DoubleType, containsNull = false)).alias("neighbors"),
+        col("similarities")
+      )
+      model.transform(typedData)
+    }
+    intercept[IllegalArgumentException] {
+
+      val typedData = data.select(
+        col("id"),
+        col("neighbors"),
+        col("neighbors").alias("similarities")
+      )
+      model.transform(typedData)
+    }
+  }
+
+  test("invalid input: negative similarity") {
+    val model = new PowerIterationClustering()
+      .setMaxIter(1)
+    val badData = spark.createDataFrame(Seq(
+      (0, Array(1), Array(-1.0)),
+      (1, Array(0), Array(-1.0))
+    )).toDF("id", "neighbors", "similarities")
+    val msg = intercept[SparkException] {
+      model.transform(badData)
+    }.getCause.getMessage
+    assert(msg.contains("Similarity must be nonnegative"))
+  }
+
+  test("invalid input: mismatched lengths for neighbor and similarity arrays") {
+    val model = new PowerIterationClustering()
+      .setMaxIter(1)
+    val badData = spark.createDataFrame(Seq(
+      (0, Array(1), Array(0.5)),
+      (1, Array(0, 2), Array(0.5)),
+      (2, Array(1), Array(0.5))
+    )).toDF("id", "neighbors", "similarities")
+    val msg = intercept[SparkException] {
+      model.transform(badData)
+    }.getCause.getMessage
+    assert(msg.contains("The length of the neighbor ID list must be equal to the the length of " +
+      "the neighbor similarity list."))
+    assert(msg.contains(s"Row for ID ${model.getIdCol}=1"))
   }
 
   test("read/write") {
@@ -120,16 +189,15 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       .setK(4)
       .setMaxIter(100)
       .setInitMode("degree")
-      .setFeaturesCol("test_feature")
-      .setPredictionCol("test_prediction")
       .setIdCol("test_id")
+      .setNeighborsCol("myNeighborsCol")
+      .setSimilaritiesCol("mySimilaritiesCol")
+      .setPredictionCol("test_prediction")
     testDefaultReadWrite(t)
   }
 }
 
 object PowerIterationClusteringSuite {
-
-  case class TestRow2(id: Long, neighbors: Vector, weight: Vector)
 
   /** Generates a circle of points. */
   private def genCircle(r: Double, n: Int): Array[(Double, Double)] = {
@@ -155,23 +223,17 @@ object PowerIterationClusteringSuite {
     val n = n1 + n2
     val points = genCircle(r1, n1) ++ genCircle(r2, n2)
 
-    val similarities = for (i <- 1 until n) yield {
+    val rows = for (i <- 1 until n) yield {
       val neighbors = for (j <- 0 until i) yield {
         j.toLong
       }
-      val weights = for (j <- 0 until i) yield {
+      val similarities = for (j <- 0 until i) yield {
         sim(points(i), points(j))
       }
-      (i.toLong, neighbors.toArray, weights.toArray)
+      (i.toLong, neighbors.toArray, similarities.toArray)
     }
 
-    val sc = spark.sparkContext
-
-    val rdd = sc.parallelize(similarities).map {
-      case (id: Long, nbr: Array[Long], weight: Array[Double]) =>
-        TestRow2(id, Vectors.dense(nbr.map(i => i.toDouble)), Vectors.dense(weight))
-    }
-    spark.createDataFrame(rdd)
+    spark.createDataFrame(rows).toDF("id", "neighbors", "similarities")
   }
 
 }
