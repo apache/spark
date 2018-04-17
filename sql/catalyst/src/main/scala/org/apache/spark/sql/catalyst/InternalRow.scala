@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
-import org.apache.spark.sql.types.{DataType, Decimal, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -118,5 +118,29 @@ object InternalRow {
     case v: ArrayData => v.copy()
     case v: MapData => v.copy()
     case _ => value
+  }
+
+  /**
+   * Returns an accessor for an `InternalRow` with given data type. The returned accessor
+   * actually takes a `SpecializedGetters` input because it can be generalized to other classes
+   * that implements `SpecializedGetters` (e.g., `ArrayData`) too.
+   */
+  def getAccessor(dataType: DataType): (SpecializedGetters, Int) => Any = dataType match {
+    case BooleanType => (input, ordinal) => input.getBoolean(ordinal)
+    case ByteType => (input, ordinal) => input.getByte(ordinal)
+    case ShortType => (input, ordinal) => input.getShort(ordinal)
+    case IntegerType | DateType => (input, ordinal) => input.getInt(ordinal)
+    case LongType | TimestampType => (input, ordinal) => input.getLong(ordinal)
+    case FloatType => (input, ordinal) => input.getFloat(ordinal)
+    case DoubleType => (input, ordinal) => input.getDouble(ordinal)
+    case StringType => (input, ordinal) => input.getUTF8String(ordinal)
+    case BinaryType => (input, ordinal) => input.getBinary(ordinal)
+    case CalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
+    case t: DecimalType => (input, ordinal) => input.getDecimal(ordinal, t.precision, t.scale)
+    case t: StructType => (input, ordinal) => input.getStruct(ordinal, t.size)
+    case _: ArrayType => (input, ordinal) => input.getArray(ordinal)
+    case _: MapType => (input, ordinal) => input.getMap(ordinal)
+    case u: UserDefinedType[_] => getAccessor(u.sqlType)
+    case _ => (input, ordinal) => input.get(ordinal, dataType)
   }
 }

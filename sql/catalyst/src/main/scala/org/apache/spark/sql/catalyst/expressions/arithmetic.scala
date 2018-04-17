@@ -595,11 +595,7 @@ case class Least(children: Seq[Expression]) extends Expression {
     val evals = evalChildren.map(eval =>
       s"""
          |${eval.code}
-         |if (!${eval.isNull} && (${ev.isNull} ||
-         |  ${ctx.genGreater(dataType, ev.value, eval.value)})) {
-         |  ${ev.isNull} = false;
-         |  ${ev.value} = ${eval.value};
-         |}
+         |${ctx.reassignIfSmaller(dataType, ev, eval)}
       """.stripMargin
     )
 

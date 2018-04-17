@@ -409,6 +409,7 @@ object FunctionRegistry {
     expression[MapValues]("map_values"),
     expression[Size]("size"),
     expression[SortArray]("sort_array"),
+    expression[ArrayMin]("array_min"),
     expression[ArrayMax]("array_max"),
     expression[Flatten]("flatten"),
     CreateStruct.registryEntry,

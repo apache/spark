@@ -106,6 +106,16 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
   }
 
+  test("Array Min") {
+    checkEvaluation(ArrayMin(Literal.create(Seq(-11, 10, 2), ArrayType(IntegerType))), -11)
+    checkEvaluation(
+      ArrayMin(Literal.create(Seq[String](null, "abc", ""), ArrayType(StringType))), "")
+    checkEvaluation(ArrayMin(Literal.create(Seq(null), ArrayType(LongType))), null)
+    checkEvaluation(ArrayMin(Literal.create(null, ArrayType(StringType))), null)
+    checkEvaluation(
+      ArrayMin(Literal.create(Seq(1.123, 0.1234, 1.121), ArrayType(DoubleType))), 0.1234)
+  }
+
   test("Array max") {
     checkEvaluation(ArrayMax(Literal.create(Seq(1, 10, 2), ArrayType(IntegerType))), 10)
     checkEvaluation(
