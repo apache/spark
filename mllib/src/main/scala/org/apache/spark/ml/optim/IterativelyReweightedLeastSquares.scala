@@ -63,7 +63,7 @@ private[ml] class IterativelyReweightedLeastSquares(
     val regParam: Double,
     val maxIter: Int,
     val tol: Double,
-    override val instrument: Option[Instrumentation[_]])
+    @transient override val instrument: Option[Instrumentation[_]] = None)
   extends OptionalLogging with Serializable {
 
   def fit(instances: RDD[OffsetInstance]): IterativelyReweightedLeastSquaresModel = {
