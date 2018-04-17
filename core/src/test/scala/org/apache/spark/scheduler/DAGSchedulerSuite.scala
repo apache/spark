@@ -2182,7 +2182,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       Success,
       makeMapStatus("hostD", rdd2.partitions.length)))
     // stage1 listener still should not have a result, though there's no missing partitions
-    // in it. Because stage1 is not inside runningStages at this moment.
+    // in it. Because stage1 has been failed and is not inside `runningStages` at this moment.
     assert(listener2.results.size === 0)
 
     // Stage0 should now be running as task set 2; make its task succeed
@@ -2190,11 +2190,12 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     complete(taskSets(2), Seq(
       (Success, makeMapStatus("hostC", rdd2.partitions.length))))
     assert(mapOutputTracker.getMapSizesByExecutorId(dep1.shuffleId, 0).map(_._1).toSet ===
-        HashSet(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
+        Set(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
 
     // After stage0 is finished, stage1 will be submitted and found there is no missing
     // partitions in it. Then listener got triggered.
     assert(listener2.results.size === 1)
+    assertDataStructuresEmpty()
   }
 
   /**
