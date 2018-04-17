@@ -16,11 +16,13 @@
  */
 package org.apache.spark.deploy.k8s
 
+import scala.collection.mutable.Map
+
 private[spark] case class KubernetesVolumeSpec(
     var mountPath: Option[String],
     var mountReadOnly: Option[Boolean],
-    var optionsSpec: Option[Map[String, String]])
+    var optionsSpec: Map[String, String])
 
 private[spark] object KubernetesVolumeSpec {
-  def emptySpec(): KubernetesVolumeSpec = new KubernetesVolumeSpec(None, None, None)
+  def emptySpec(): KubernetesVolumeSpec = new KubernetesVolumeSpec(None, None, Map())
 }

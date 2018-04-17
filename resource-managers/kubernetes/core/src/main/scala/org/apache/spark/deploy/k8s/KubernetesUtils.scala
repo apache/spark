@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
-import scala.collection.immutable.HashMap
+import scala.collection.mutable.HashMap
 
 import io.fabric8.kubernetes.api.model._
 
@@ -51,14 +51,14 @@ private[spark] object KubernetesUtils {
   def parseHostPathVolumesWithPrefix(
       sparkConf: SparkConf,
       prefix: String): Map[String, KubernetesVolumeSpec] = {
-    val volumes : Map[String, KubernetesVolumeSpec] = HashMap[String, KubernetesVolumeSpec]()
+    val volumes = HashMap[String, KubernetesVolumeSpec]()
     val properties = sparkConf.getAllWithPrefix(s"$prefix$KUBERNETES_VOLUMES_HOSTPATH_KEY")
     // Extract volume names
     properties foreach {
       case (k, _) =>
         val keys = k.split(".")
         if (keys.nonEmpty && !volumes.contains(keys(0))) {
-          volumes(keys(0)) = KubernetesVolumeSpec.emptySpec()
+          volumes.update(keys(0), KubernetesVolumeSpec.emptySpec())
         }
     }
     // Populate spec
@@ -72,16 +72,13 @@ private[spark] object KubernetesUtils {
               case Array(`name`, KUBERNETES_VOLUMES_MOUNT_KEY, KUBERNETES_VOLUMES_READONLY_KEY) =>
                 spec.mountReadOnly = Some(v.toBoolean)
               case Array(`name`, KUBERNETES_VOLUMES_OPTIONS_KEY, option) =>
-                if (!spec.optionsSpec.isDefined) {
-                  spec.optionsSpec = Some(Map.empty)
-                }
-                spec.optionsSpec(option) = Some(v)
+                spec.optionsSpec.update(option, v)
               case _ =>
                 None
             }
         }
     }
-    volumes
+    volumes.toMap
   }
 
   /**
@@ -101,7 +98,7 @@ private[spark] object KubernetesUtils {
     volumes foreach {
       case (name, spec) =>
         var hostPath: Option[String] = None
-        if (spec.optionsSpec.isDefined && spec.optionsSpec.contains(KUBERNETES_VOLUMES_PATH_KEY)) {
+        if (spec.optionsSpec.contains(KUBERNETES_VOLUMES_PATH_KEY)) {
           hostPath = Some(spec.optionsSpec(KUBERNETES_VOLUMES_PATH_KEY))
         }
         if (hostPath.isDefined && spec.mountPath.isDefined) {
