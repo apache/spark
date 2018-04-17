@@ -55,12 +55,13 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
 
   protected def checkEvaluation(
       expression: => Expression, expected: Any, inputRow: InternalRow = EmptyRow): Unit = {
-    val expr = prepareEvaluation(expression)
+    // Make it as method to obtain fresh expression everytime.
+    def expr = prepareEvaluation(expression)
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
     checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expr, catalystValue, inputRow)
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
-      checkEvalutionWithUnsafeProjection(expr, catalystValue, inputRow)
+      checkEvaluationWithUnsafeProjection(expr, catalystValue, inputRow)
     }
     checkEvaluationWithOptimization(expr, catalystValue, inputRow)
   }
@@ -69,7 +70,9 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
    * Check the equality between result of expression and expected value, it will handle
    * Array[Byte], Spread[Double], MapData and Row.
    */
-  protected def checkResult(result: Any, expected: Any, dataType: DataType): Boolean = {
+  protected def checkResult(result: Any, expected: Any, exprDataType: DataType): Boolean = {
+    val dataType = UserDefinedType.sqlType(exprDataType)
+
     (result, expected) match {
       case (result: Array[Byte], expected: Array[Byte]) =>
         java.util.Arrays.equals(result, expected)
@@ -111,12 +114,14 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
         val errMsg = intercept[T] {
           eval
         }.getMessage
-        if (errMsg != expectedErrMsg) {
+        if (!errMsg.contains(expectedErrMsg)) {
           fail(s"Expected error message is `$expectedErrMsg`, but `$errMsg` found")
         }
       }
     }
-    val expr = prepareEvaluation(expression)
+
+    // Make it as method to obtain fresh expression everytime.
+    def expr = prepareEvaluation(expression)
     checkException(evaluateWithoutCodegen(expr, inputRow), "non-codegen mode")
     checkException(evaluateWithGeneratedMutableProjection(expr, inputRow), "codegen mode")
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
@@ -176,7 +181,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
   }
 
-  private def evaluateWithGeneratedMutableProjection(
+  protected def evaluateWithGeneratedMutableProjection(
       expression: Expression,
       inputRow: InternalRow = EmptyRow): Any = {
     val plan = generateProject(
@@ -187,11 +192,20 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     plan(inputRow).get(0, expression.dataType)
   }
 
-  protected def checkEvalutionWithUnsafeProjection(
+  protected def checkEvaluationWithUnsafeProjection(
       expression: Expression,
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
-    val unsafeRow = evaluateWithUnsafeProjection(expression, inputRow)
+    checkEvaluationWithUnsafeProjection(expression, expected, inputRow, UnsafeProjection)
+    checkEvaluationWithUnsafeProjection(expression, expected, inputRow, InterpretedUnsafeProjection)
+  }
+
+  protected def checkEvaluationWithUnsafeProjection(
+      expression: Expression,
+      expected: Any,
+      inputRow: InternalRow,
+      factory: UnsafeProjectionCreator): Unit = {
+    val unsafeRow = evaluateWithUnsafeProjection(expression, inputRow, factory)
     val input = if (inputRow == EmptyRow) "" else s", input: $inputRow"
 
     if (expected == null) {
@@ -203,7 +217,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     } else {
       val lit = InternalRow(expected, expected)
       val expectedRow =
-        UnsafeProjection.create(Array(expression.dataType, expression.dataType)).apply(lit)
+        factory.create(Array(expression.dataType, expression.dataType)).apply(lit)
       if (unsafeRow != expectedRow) {
         fail("Incorrect evaluation in unsafe mode: " +
           s"$expression, actual: $unsafeRow, expected: $expectedRow$input")
@@ -211,9 +225,10 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
   }
 
-  private def evaluateWithUnsafeProjection(
+  protected def evaluateWithUnsafeProjection(
       expression: Expression,
-      inputRow: InternalRow = EmptyRow): InternalRow = {
+      inputRow: InternalRow = EmptyRow,
+      factory: UnsafeProjectionCreator = UnsafeProjection): InternalRow = {
     // SPARK-16489 Explicitly doing code generation twice so code gen will fail if
     // some expression is reusing variable names across different instances.
     // This behavior is tested in ExpressionEvalHelperSuite.
@@ -223,6 +238,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
           Alias(expression, s"Optimized($expression)2")() :: Nil),
       expression)
 
+    plan.initialize(0)
     plan(inputRow)
   }
 
