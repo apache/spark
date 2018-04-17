@@ -123,7 +123,9 @@ class SparkHadoopUtil extends Logging {
    */
   def addCredentials(conf: JobConf): Unit = {
     val jobCreds = conf.getCredentials()
-    jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
+    val userCreds = UserGroupInformation.getCurrentUser().getCredentials()
+    logInfo(s"Adding user credentials: ${SparkHadoopUtil.get.dumpTokens(userCreds)}")
+    jobCreds.mergeAll(userCreds)
   }
 
   def addCurrentUserCredentials(creds: Credentials): Unit = {

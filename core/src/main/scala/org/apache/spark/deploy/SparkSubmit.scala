@@ -567,7 +567,8 @@ private[spark] class SparkSubmit extends Logging {
       // An internal option used only for spark-shell to add user jars to repl's classloader,
       // previously it uses "spark.jars" or "spark.yarn.dist.jars" which now may be pointed to
       // remote jars, so adding a new option to only specify local jars for spark-shell internally.
-      OptionAssigner(localJars, ALL_CLUSTER_MGRS, CLIENT, confKey = "spark.repl.local.jars")
+      OptionAssigner(localJars, ALL_CLUSTER_MGRS, CLIENT, confKey = "spark.repl.local.jars"),
+      OptionAssigner(args.proxyUser, MESOS, CLUSTER, confKey = "spark.mesos.proxyUser")
     )
 
     // In client mode, launch the application main class directly

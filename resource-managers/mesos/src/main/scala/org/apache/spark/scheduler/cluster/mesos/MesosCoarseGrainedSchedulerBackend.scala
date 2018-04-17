@@ -31,6 +31,7 @@ import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkException, TaskState}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.internal.config
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
@@ -61,6 +62,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private lazy val hadoopDelegationTokenManager: MesosHadoopDelegationTokenManager =
     new MesosHadoopDelegationTokenManager(conf, sc.hadoopConfiguration, driverEndpoint)
+
+  private val isProxyUser = SparkHadoopUtil.get.isProxyUser(UserGroupInformation.getCurrentUser())
 
   // Blacklist a slave after this many failures
   private val MAX_SLAVE_FAILURES = 2
@@ -194,8 +197,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     super.start()
 
     if (sc.deployMode == "client") {
+      if (isProxyUser) {
+        fetchHadoopDelegationTokens()
+      }
       launcherBackend.connect()
     }
+
     val startedBefore = IdHelper.startedBefore.getAndSet(true)
 
     val suffix = if (startedBefore) {
