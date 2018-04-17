@@ -62,6 +62,14 @@ case "$SPARK_K8S_CMD" in
       "$@"
     )
     ;;
+  driver-py)
+    CMD=(
+      "$SPARK_HOME/bin/spark-submit"
+      --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
+      --deploy-mode client
+      $PYSPARK_PRIMARY $PYSPARK_FILES "$@"
+    )
+    ;;
 
   executor)
     CMD=(

@@ -25,6 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesUtils, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
+import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 
@@ -44,6 +45,10 @@ private[spark] class BasicDriverFeatureStep(
   private val driverCpuCores = conf.get("spark.driver.cores", "1")
   private val driverLimitCores = conf.get(KUBERNETES_DRIVER_LIMIT_CORES)
 
+  private val driverDockerContainer = conf.roleSpecificConf.mainAppResource.map {
+    case JavaMainAppResource(_) => "driver"
+    case PythonMainAppResource(_) => "driver-py"
+  }.getOrElse(throw new SparkException("Must specify a JVM or Python Resource"))
   // Memory settings
   private val driverMemoryMiB = conf.get(DRIVER_MEMORY)
   private val memoryOverheadMiB = conf
@@ -89,7 +94,7 @@ private[spark] class BasicDriverFeatureStep(
         .addToRequests("memory", driverMemoryQuantity)
         .addToLimits("memory", driverMemoryQuantity)
         .endResources()
-      .addToArgs("driver")
+      .addToArgs(driverDockerContainer)
       .addToArgs("--properties-file", SPARK_CONF_PATH)
       .addToArgs("--class", conf.roleSpecificConf.mainClass)
       // The user application jar is merged into the spark.jars list and managed through that
