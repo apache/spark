@@ -23,6 +23,7 @@ import java.sql.Timestamp
 import com.google.common.io.Files
 import org.apache.hadoop.fs.FileSystem
 
+import org.apache.spark.internal.config._
 import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -60,6 +61,45 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
       tmpDir.listFiles
         .find { f => f.isDirectory && f.getName().startsWith("ds=") }
         .foreach { f => Utils.deleteRecursively(f) }
+
+      // test for after delete the path
+      checkAnswer(sql("select key,value from table_with_partition"),
+        testData.toDF.collect ++ testData.toDF.collect ++ testData.toDF.collect)
+
+      sql("DROP TABLE IF EXISTS table_with_partition")
+      sql("DROP TABLE IF EXISTS createAndInsertTest")
+    }
+  }
+
+  test("Replace spark.sql.hive.verifyPartitionPath by spark.files.ignoreMissingFiles") {
+    withSQLConf((SQLConf.HIVE_VERIFY_PARTITION_PATH.key, "false")) {
+      sparkContext.conf.set(IGNORE_MISSING_FILES.key, "true")
+      val testData = sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString))).toDF()
+      testData.createOrReplaceTempView("testData")
+
+      val tmpDir = Files.createTempDir()
+      // create the table for test
+      sql(s"CREATE TABLE table_with_partition(key int,value string) " +
+          s"PARTITIONED by (ds string) location '${tmpDir.toURI}' ")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
+          "SELECT key,value FROM testData")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2') " +
+          "SELECT key,value FROM testData")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='3') " +
+          "SELECT key,value FROM testData")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='4') " +
+          "SELECT key,value FROM testData")
+
+      // test for the exist path
+      checkAnswer(sql("select key,value from table_with_partition"),
+        testData.toDF.collect ++ testData.toDF.collect
+            ++ testData.toDF.collect ++ testData.toDF.collect)
+
+      // delete the path of one partition
+      tmpDir.listFiles
+          .find { f => f.isDirectory && f.getName().startsWith("ds=") }
+          .foreach { f => Utils.deleteRecursively(f) }
 
       // test for after delete the path
       checkAnswer(sql("select key,value from table_with_partition"),
