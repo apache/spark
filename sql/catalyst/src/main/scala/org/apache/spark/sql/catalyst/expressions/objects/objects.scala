@@ -65,7 +65,7 @@ trait InvokeLike extends Expression with NonSQLExpression {
 
     val resultIsNull = if (needNullCheck) {
       val resultIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "resultIsNull")
-      GlobalValue(resultIsNull, CodeGenerator.JAVA_BOOLEAN)
+      JavaCode.isNullGlobal(resultIsNull)
     } else {
       FalseLiteral
     }
@@ -560,21 +560,26 @@ case class LambdaVariable(
     dataType: DataType,
     nullable: Boolean = true) extends LeafExpression with NonSQLExpression {
 
+  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType)
+
   // Interpreted execution of `LambdaVariable` always get the 0-index element from input row.
   override def eval(input: InternalRow): Any = {
     assert(input.numFields == 1,
       "The input row of interpreted LambdaVariable should have only 1 field.")
-    input.get(0, dataType)
+    if (nullable && input.isNullAt(0)) {
+      null
+    } else {
+      accessor(input, 0)
+    }
   }
 
   override def genCode(ctx: CodegenContext): ExprCode = {
     val isNullValue = if (nullable) {
-      VariableValue(isNull, CodeGenerator.JAVA_BOOLEAN)
+      JavaCode.isNullVariable(isNull)
     } else {
       FalseLiteral
     }
-    ExprCode(code = "", value = VariableValue(value, CodeGenerator.javaType(dataType)),
-      isNull = isNullValue)
+    ExprCode(value = JavaCode.variable(value, dataType), isNull = isNullValue)
   }
 
   // This won't be called as `genCode` is overrided, just overriding it to make

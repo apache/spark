@@ -92,7 +92,7 @@ case class AssertTrue(child: Expression) extends UnaryExpression with ImplicitCa
        |if (${eval.isNull} || !${eval.value}) {
        |  throw new RuntimeException($errMsgField);
        |}""".stripMargin, isNull = TrueLiteral,
-      value = LiteralValue("null", CodeGenerator.javaType(dataType)))
+      value = JavaCode.defaultLiteral(dataType))
   }
 
   override def sql: String = s"assert_true(${child.sql})"

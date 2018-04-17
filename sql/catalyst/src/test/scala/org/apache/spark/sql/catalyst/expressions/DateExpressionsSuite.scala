@@ -211,6 +211,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(DayOfWeek, DateType)
   }
 
+  test("WeekDay") {
+    checkEvaluation(WeekDay(Literal.create(null, DateType)), null)
+    checkEvaluation(WeekDay(Literal(d)), 2)
+    checkEvaluation(WeekDay(Cast(Literal(sdfDate.format(d)), DateType, gmtId)), 2)
+    checkEvaluation(WeekDay(Cast(Literal(ts), DateType, gmtId)), 4)
+    checkEvaluation(WeekDay(Cast(Literal("2011-05-06"), DateType, gmtId)), 4)
+    checkEvaluation(WeekDay(Literal(new Date(sdf.parse("2017-05-27 13:10:15").getTime))), 5)
+    checkEvaluation(WeekDay(Literal(new Date(sdf.parse("1582-10-15 13:10:15").getTime))), 4)
+    checkConsistencyBetweenInterpretedAndCodegen(WeekDay, DateType)
+  }
+
   test("WeekOfYear") {
     checkEvaluation(WeekOfYear(Literal.create(null, DateType)), null)
     checkEvaluation(WeekOfYear(Literal(d)), 15)
