@@ -16,9 +16,12 @@
  */
 package org.apache.spark.deploy.k8s
 
+import scala.collection.immutable.HashMap
+
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.util.Utils
 
 private[spark] object KubernetesUtils {
@@ -38,52 +41,86 @@ private[spark] object KubernetesUtils {
   }
 
   /**
-   * Parse a comma-delimited list of volume specs, each of which takes the form
-   * hostPath:containerPath[:ro|rw]; and add volume to pod and volume mount to container.
+   * Extract Spark hostPath volume configuration properties with a given name prefix and
+   * return the result as a Map.
+   *
+   * @param sparkConf Spark configuration
+   * @param prefix the given property name prefix
+   * @return a Map storing with volume name as key and spec as value
+   */
+  def parseHostPathVolumesWithPrefix(
+      sparkConf: SparkConf,
+      prefix: String): Map[String, KubernetesVolumeSpec] = {
+    val volumes : Map[String, KubernetesVolumeSpec] = HashMap[String, KubernetesVolumeSpec]()
+    val properties = sparkConf.getAllWithPrefix(s"$prefix$KUBERNETES_VOLUMES_HOSTPATH_KEY")
+    // Extract volume names
+    properties foreach {
+      case (k, _) =>
+        val keys = k.split(".")
+        if (keys.nonEmpty && !volumes.contains(keys(0))) {
+          volumes(keys(0)) = KubernetesVolumeSpec.emptySpec()
+        }
+    }
+    // Populate spec
+    volumes foreach {
+      case (name, spec) =>
+        properties foreach {
+          case (k, v) =>
+            k.split(".") match {
+              case Array(`name`, KUBERNETES_VOLUMES_MOUNT_KEY, KUBERNETES_VOLUMES_PATH_KEY) =>
+                spec.mountPath = Some(v)
+              case Array(`name`, KUBERNETES_VOLUMES_MOUNT_KEY, KUBERNETES_VOLUMES_READONLY_KEY) =>
+                spec.mountReadOnly = Some(v.toBoolean)
+              case Array(`name`, KUBERNETES_VOLUMES_OPTIONS_KEY, option) =>
+                if (!spec.optionsSpec.isDefined) {
+                  spec.optionsSpec = Some(Map.empty)
+                }
+                spec.optionsSpec(option) = Some(v)
+              case _ =>
+                None
+            }
+        }
+    }
+    volumes
+  }
+
+  /**
+   * Given hostPath volume specs, add volume to pod and volume mount to container.
    *
    * @param pod original specification of the pod
    * @param container original specification of the container
-   * @param volumes list of volume specs
+   * @param volumes list of named volume specs
    * @return a tuple of (pod with the volume(s) added, container with mount(s) added)
    */
-  def addVolumes(pod: Pod, container : Container, volumes: String): (Pod, Container) = {
+  def addHostPathVolumes(
+      pod: Pod,
+      container: Container,
+      volumes: Map[String, KubernetesVolumeSpec]): (Pod, Container) = {
     val podBuilder = new PodBuilder(pod).editOrNewSpec()
     val containerBuilder = new ContainerBuilder(container)
-    var volumeCount = 0
-    volumes.split(",").map(_.split(":")).map { spec =>
-      var hostPath: Option[String] = None
-      var containerPath: Option[String] = None
-      var readOnly: Option[Boolean] = None
-      spec match {
-        case Array(hostPathV, containerPathV) =>
-          hostPath = Some(hostPathV)
-          containerPath = Some(containerPathV)
-        case Array(hostPathV, containerPathV, "ro") =>
-          hostPath = Some(hostPathV)
-          containerPath = Some(containerPathV)
-          readOnly = Some(true)
-        case Array(hostPathV, containerPathV, "rw") =>
-          hostPath = Some(hostPathV)
-          containerPath = Some(containerPathV)
-          readOnly = Some(false)
-        case spec =>
-          None
-      }
-      if (hostPath.isDefined && containerPath.isDefined) {
-        podBuilder.addToVolumes(new VolumeBuilder()
-            .withHostPath(new HostPathVolumeSource(hostPath.get))
-            .withName(s"hostPath-volume-$volumeCount")
-            .build())
-        val volumeBuilder = new VolumeMountBuilder()
-          .withMountPath(containerPath.get)
-          .withName(s"hostPath-volume-$volumeCount")
-        if (readOnly.isDefined) {
-          containerBuilder.addToVolumeMounts(volumeBuilder.withReadOnly(readOnly.get).build())
-        } else {
-          containerBuilder.addToVolumeMounts(volumeBuilder.build())
+    volumes foreach {
+      case (name, spec) =>
+        var hostPath: Option[String] = None
+        if (spec.optionsSpec.isDefined && spec.optionsSpec.contains(KUBERNETES_VOLUMES_PATH_KEY)) {
+          hostPath = Some(spec.optionsSpec(KUBERNETES_VOLUMES_PATH_KEY))
         }
-        volumeCount += 1
-      }
+        if (hostPath.isDefined && spec.mountPath.isDefined) {
+          podBuilder.addToVolumes(new VolumeBuilder()
+            .withHostPath(new HostPathVolumeSource(hostPath.get))
+            .withName(name)
+            .build())
+          val volumeBuilder = new VolumeMountBuilder()
+            .withMountPath(spec.mountPath.get)
+            .withName(name)
+          if (spec.mountReadOnly.isDefined) {
+            containerBuilder
+              .addToVolumeMounts(volumeBuilder
+                .withReadOnly(spec.mountReadOnly.get)
+                .build())
+          } else {
+            containerBuilder.addToVolumeMounts(volumeBuilder.build())
+          }
+        }
     }
     (podBuilder.endSpec().build(), containerBuilder.build())
   }

@@ -170,12 +170,14 @@ private[spark] class BasicExecutorFeatureStep(
         .endSpec()
       .build()
 
-    val (executorPodWithVolumes, executorContainerWithVolumes) =
-      KubernetesUtils.addVolumes(executorPod,
+    val executorHostPathVolumesSpec = KubernetesUtils.parseHostPathVolumesWithPrefix(
+      kubernetesConf.sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
+    val (executorPodWithHostPathVolumes, executorContainerWithHostPathVolumes) =
+      KubernetesUtils.addHostPathVolumes(executorPod,
         containerWithLimitCores,
-        kubernetesConf.get(KUBERNETES_EXECUTOR_VOLUMES))
+        executorHostPathVolumesSpec)
 
-    SparkPod(executorPodWithVolumes, executorContainerWithVolumes)
+    SparkPod(executorPodWithHostPathVolumes, executorContainerWithHostPathVolumes)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty

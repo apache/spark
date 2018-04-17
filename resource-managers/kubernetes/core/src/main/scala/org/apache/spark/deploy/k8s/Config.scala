@@ -117,13 +117,6 @@ private[spark] object Config extends Logging {
       .stringConf
       .createWithDefault("spark")
 
-  val KUBERNETES_EXECUTOR_VOLUMES =
-    ConfigBuilder("spark.kubernetes.executor.volumes")
-      .doc("List of volumes mounted into the executor container. The format of this property is " +
-        "a comma-separated list of mappings following the form hostPath:containerPath[:ro|rw]")
-      .stringConf
-      .createWithDefault("")
-
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
       .doc("Number of pods to launch at once in each round of executor allocation.")
@@ -169,10 +162,18 @@ private[spark] object Config extends Logging {
   val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
+  val KUBERNETES_DRIVER_VOLUMES_PREFIX = "spark.kubernetes.driver.volumes."
 
   val KUBERNETES_EXECUTOR_LABEL_PREFIX = "spark.kubernetes.executor.label."
   val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
   val KUBERNETES_EXECUTOR_SECRETS_PREFIX = "spark.kubernetes.executor.secrets."
+  val KUBERNETES_EXECUTOR_VOLUMES_PREFIX = "spark.kubernetes.executor.volumes."
+
+  val KUBERNETES_VOLUMES_HOSTPATH_KEY = "hostPath"
+  val KUBERNETES_VOLUMES_MOUNT_KEY = "mount"
+  val KUBERNETES_VOLUMES_PATH_KEY = "path"
+  val KUBERNETES_VOLUMES_READONLY_KEY = "readOnly"
+  val KUBERNETES_VOLUMES_OPTIONS_KEY = "options"
 
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 }
