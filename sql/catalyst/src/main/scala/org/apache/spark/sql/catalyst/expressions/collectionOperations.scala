@@ -3352,7 +3352,7 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
     val genericArrayData = classOf[GenericArrayData].getName
     val unsafeArrayData = classOf[UnsafeArrayData].getName
     val openHashSet = classOf[OpenHashSet[_]].getName
-    val ot = "org.apache.spark.sql.types.ObjectType$.MODULE$.apply(Object.class)"
+    val et = s"org.apache.spark.sql.types.DataTypes.$elementType"
     val (postFix, classTag, getter, arrayBuilder, castType) = if (!cn1 && !cn2) {
       val ptName = CodeGenerator.primitiveTypeName(elementType)
       elementType match {
@@ -3363,7 +3363,7 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
           (s"$$mcJ$$sp", s"scala.reflect.ClassTag$$.MODULE$$.$ptName()", s"get$ptName($i)",
             s"$unsafeArrayData.fromPrimitiveArray", "long")
         case _ =>
-          ("", s"scala.reflect.ClassTag$$.MODULE$$.Object()", s"get($i, $ot)",
+          ("", s"scala.reflect.ClassTag$$.MODULE$$.Object()", s"get($i, $et)",
             s"new $genericArrayData", "Object")
       }
     } else {
@@ -3383,8 +3383,7 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
            |${ev.value} = $arrayBuilder(($castType[]) $hs.iterator().toArray($classTag));
          """.stripMargin
       } else {
-        val dt = "org.apache.spark.sql.types.ObjectType$.MODULE$.apply(Object.class)"
-        s"${ev.value} = $ArraySetUtils$$.MODULE$$.arrayUnion($ary1, $ary2, $ot);"
+        s"${ev.value} = $ArraySetUtils$$.MODULE$$.arrayUnion($ary1, $ary2, $et);"
       }
     })
   }
