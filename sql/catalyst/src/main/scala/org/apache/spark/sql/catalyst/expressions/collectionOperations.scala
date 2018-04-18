@@ -509,9 +509,11 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
 
 /**
  * Returns the position of the first occurrence of element in the given array as long.
- * Returns 0 if substr could not be found in str. Returns null if either of the arguments are null
+ * Returns 0 if the given value could not be found in the array. Returns null if either of
+ * the arguments are null
  *
- * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
+ * NOTE: that this is not zero based, but 1-based index. The first element in the array has
+ *       index 1.
  */
 @ExpressionDescription(
   usage = """
@@ -529,10 +531,6 @@ case class ArrayPosition(left: Expression, right: Expression)
   override def dataType: DataType = LongType
   override def inputTypes: Seq[AbstractDataType] =
     Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
-
-  override def nullable: Boolean = {
-    left.nullable || right.nullable
-  }
 
   override def nullSafeEval(arr: Any, value: Any): Any = {
     arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
