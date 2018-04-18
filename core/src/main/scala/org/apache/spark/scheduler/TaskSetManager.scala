@@ -87,8 +87,6 @@ private[spark] class TaskSetManager(
   // should not resubmit while executor lost.
   private val killedByOtherAttempt: Array[Boolean] = new Array[Boolean](numTasks)
 
-  private val fetchFailedTaskIndexSet = new HashSet[Int]
-
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   private[scheduler] var tasksSuccessful = 0
 
@@ -752,10 +750,6 @@ private[spark] class TaskSetManager(
       if (tasksSuccessful == numTasks) {
         isZombie = true
       }
-    } else if (fetchFailedTaskIndexSet.contains(index)) {
-      logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
-        " because task " + index + " has already failed by FetchFailed")
-      return
     } else {
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
@@ -799,7 +793,6 @@ private[spark] class TaskSetManager(
           blacklistTracker.foreach(_.updateBlacklistForFetchFailure(
             fetchFailed.bmAddress.host, fetchFailed.bmAddress.executorId))
         }
-        fetchFailedTaskIndexSet.add(index)
 
         None
 
