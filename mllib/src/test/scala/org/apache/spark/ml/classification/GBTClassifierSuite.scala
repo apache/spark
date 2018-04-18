@@ -18,14 +18,14 @@
 package org.apache.spark.ml.classification
 
 import com.github.fommil.netlib.BLAS
-
 import org.apache.spark.{SparkException, SparkFunSuite}
+
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree.RegressionLeafNode
-import org.apache.spark.ml.tree.impl.TreeTests
+import org.apache.spark.ml.tree.impl.{GradientBoostedTrees, TreeTests}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
@@ -363,6 +363,20 @@ class GBTClassifierSuite extends MLTest with DefaultReadWriteTest {
     val importanceFeatures = gbtWithFeatureSubset.fit(df).featureImportances
     val mostIF = importanceFeatures.argmax
     assert(mostImportantFeature !== mostIF)
+  }
+
+  test("model evaluateEachIteration") {
+    for (lossType <- Seq("logistic")) {
+      val gbt = new GBTClassifier()
+        .setMaxDepth(2)
+        .setMaxIter(2)
+        .setLossType(lossType)
+      val model = gbt.fit(trainData.toDF)
+      val eval1 = model.evaluateEachIteration(validationData.toDF)
+      val eval2 = GradientBoostedTrees.evaluateEachIteration(validationData,
+        model.trees, model.treeWeights, model.getOldLossType, OldAlgo.Classification)
+      assert(eval1 === eval2)
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////

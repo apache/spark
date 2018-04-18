@@ -18,9 +18,10 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
+
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.tree.impl.TreeTests
+import org.apache.spark.ml.tree.impl.{GradientBoostedTrees, TreeTests}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
@@ -201,7 +202,19 @@ class GBTRegressorSuite extends MLTest with DefaultReadWriteTest {
     assert(mostImportantFeature !== mostIF)
   }
 
-
+  test("model evaluateEachIteration") {
+    for (lossType <- Seq("squared", "absolute")) {
+      val gbt = new GBTRegressor()
+        .setMaxDepth(2)
+        .setMaxIter(2)
+        .setLossType(lossType)
+      val model = gbt.fit(trainData.toDF)
+      val eval1 = model.evaluateEachIteration(validationData.toDF)
+      val eval2 = GradientBoostedTrees.evaluateEachIteration(validationData,
+        model.trees, model.treeWeights, model.getOldLossType, OldAlgo.Regression)
+      assert(eval1 === eval2)
+    }
+  }
 
   /////////////////////////////////////////////////////////////////////////////
   // Tests of model save/load
