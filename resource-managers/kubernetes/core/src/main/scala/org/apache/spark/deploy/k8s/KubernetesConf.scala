@@ -67,10 +67,8 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
     .map(str => str.split(",").toSeq)
     .getOrElse(Seq.empty[String])
 
-  def pyFiles(): Seq[String] = sparkConf
+  def pyFiles(): Option[String] = sparkConf
     .get(KUBERNETES_PYSPARK_PY_FILES)
-    .map(str => str.split(",").toSeq)
-    .getOrElse(Seq.empty[String])
 
   def pySparkMainResource(): Option[String] = sparkConf
     .get(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE)

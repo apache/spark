@@ -77,7 +77,7 @@ private[spark] class BasicDriverFeatureStep(
       ("cpu", new QuantityBuilder(false).withAmount(limitCores).build())
     }
 
-    val driverContainer = new ContainerBuilder(pod.container)
+    val withoutArgsDriverContainer: ContainerBuilder = new ContainerBuilder(pod.container)
       .withName(DRIVER_CONTAINER_NAME)
       .withImage(driverContainerImage)
       .withImagePullPolicy(conf.imagePullPolicy())
@@ -97,12 +97,20 @@ private[spark] class BasicDriverFeatureStep(
       .addToArgs(driverDockerContainer)
       .addToArgs("--properties-file", SPARK_CONF_PATH)
       .addToArgs("--class", conf.roleSpecificConf.mainClass)
-      // The user application jar is merged into the spark.jars list and managed through that
-      // property, so there is no need to reference it explicitly here.
-      .addToArgs(SparkLauncher.NO_RESOURCE)
-      .addToArgs(conf.roleSpecificConf.appArgs: _*)
-      .build()
 
+    val driverContainer =
+      if (driverDockerContainer == "driver-py") {
+        withoutArgsDriverContainer
+          .addToArgs(conf.roleSpecificConf.appArgs: _*)
+          .build()
+      } else {
+        // The user application jar is merged into the spark.jars list and managed through that
+        // property, so there is no need to reference it explicitly here.
+        withoutArgsDriverContainer
+          .addToArgs(SparkLauncher.NO_RESOURCE)
+          .addToArgs(conf.roleSpecificConf.appArgs: _*)
+          .build()
+      }
     val driverPod = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(driverPodName)

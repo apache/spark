@@ -65,4 +65,35 @@ class PythonDriverFeatureStepSuite extends SparkFunSuite {
     assert(envs(ENV_PYSPARK_PRIMARY) === expectedMainResource)
     assert(envs(ENV_PYSPARK_FILES) === expectedPySparkFiles)
   }
+  test("Python Step testing empty pyfiles") {
+    val mainResource = "local:///main.py"
+    val baseDriverPod = SparkPod.initialPod()
+    val sparkConf = new SparkConf(false)
+      .set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, mainResource)
+      .set(KUBERNETES_PYSPARK_PY_FILES, "")
+    val kubernetesConf = KubernetesConf(
+      sparkConf,
+      KubernetesDriverSpecificConf(
+        Some(PythonMainAppResource("local:///main.py")),
+        "test-app",
+        "python-runner",
+        Seq.empty[String]),
+      "",
+      "",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Seq.empty[String])
+    val step = new PythonDriverFeatureStep(kubernetesConf)
+    val driverPod = step.configurePod(baseDriverPod).pod
+    val driverContainerwithPySpark = step.configurePod(baseDriverPod).container
+    assert(driverContainerwithPySpark.getEnv.size === 2)
+    val envs = driverContainerwithPySpark
+      .getEnv
+      .asScala
+      .map(env => (env.getName, env.getValue))
+      .toMap
+    assert(envs(ENV_PYSPARK_FILES) === "null")
+  }
 }

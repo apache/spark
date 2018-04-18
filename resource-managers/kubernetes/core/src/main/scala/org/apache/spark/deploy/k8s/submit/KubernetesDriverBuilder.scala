@@ -45,9 +45,11 @@ private[spark] class KubernetesDriverBuilder(
       provideServiceStep(kubernetesConf))
     val maybeRoleSecretNamesStep = if (kubernetesConf.roleSecretNamesToMountPaths.nonEmpty) {
       Some(provideSecretsStep(kubernetesConf)) } else None
-    val maybeNonJVMBindings = kubernetesConf.roleSpecificConf.mainAppResource.map {
-      case PythonMainAppResource(_) =>
-         providePythonStep(kubernetesConf)
+    val maybeNonJVMBindings = kubernetesConf.roleSpecificConf.mainAppResource.getOrElse(None)
+      match {
+        case PythonMainAppResource(_) =>
+          Some(providePythonStep(kubernetesConf))
+        case _ => None
     }
     val allFeatures: Seq[KubernetesFeatureConfigStep] =
       baseFeatures ++

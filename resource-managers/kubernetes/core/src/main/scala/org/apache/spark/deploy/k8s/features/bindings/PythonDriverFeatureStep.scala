@@ -30,7 +30,9 @@ private[spark] class PythonDriverFeatureStep(
   override def configurePod(pod: SparkPod): SparkPod = {
     val mainResource = kubernetesConf.pySparkMainResource()
     require(mainResource.isDefined, "PySpark Main Resource must be defined")
-    val otherPyFiles = kubernetesConf.pyFiles()
+    val otherPyFiles = kubernetesConf.pyFiles().map(pyFile =>
+      KubernetesUtils.resolveFileUrisAndPath(pyFile.split(","))
+        .mkString(",")).getOrElse("null")
     val withPythonPrimaryFileContainer = new ContainerBuilder(pod.container)
       .addNewEnv()
         .withName(ENV_PYSPARK_PRIMARY)
@@ -38,7 +40,7 @@ private[spark] class PythonDriverFeatureStep(
         .endEnv()
       .addNewEnv()
         .withName(ENV_PYSPARK_FILES)
-        .withValue(KubernetesUtils.resolveFileUrisAndPath(otherPyFiles).mkString(","))
+        .withValue(if (otherPyFiles == "") {"null"} else otherPyFiles)
         .endEnv()
       .build()
     SparkPod(pod.pod, withPythonPrimaryFileContainer)
