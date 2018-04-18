@@ -176,7 +176,7 @@ class BasicExecutorFeatureStepSuite
       conf.set(s"spark.kubernetes.executor.volumes.hostPath.hostPath-$i.options.path",
         s"/tmp/mount$i")
       if (readOnly) {
-        conf.set(s"spark.kubernetes.executor.volumes.hostPath.hostPath-$i.options.readOnly",
+        conf.set(s"spark.kubernetes.executor.volumes.hostPath.hostPath-$i.mount.readOnly",
           "true")
       }
     }
