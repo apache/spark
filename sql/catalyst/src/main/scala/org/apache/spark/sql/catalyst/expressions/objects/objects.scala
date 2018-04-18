@@ -560,11 +560,17 @@ case class LambdaVariable(
     dataType: DataType,
     nullable: Boolean = true) extends LeafExpression with NonSQLExpression {
 
+  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType)
+
   // Interpreted execution of `LambdaVariable` always get the 0-index element from input row.
   override def eval(input: InternalRow): Any = {
     assert(input.numFields == 1,
       "The input row of interpreted LambdaVariable should have only 1 field.")
-    input.get(0, dataType)
+    if (nullable && input.isNullAt(0)) {
+      null
+    } else {
+      accessor(input, 0)
+    }
   }
 
   override def genCode(ctx: CodegenContext): ExprCode = {
@@ -702,7 +708,7 @@ case class MapObjects private(
         }
       }
     case ArrayType(et, _) =>
-      _.asInstanceOf[ArrayData].array
+      _.asInstanceOf[ArrayData].toSeq[Any](et)
   }
 
   private lazy val mapElements: Seq[_] => Any = customCollectionCls match {

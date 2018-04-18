@@ -1414,7 +1414,6 @@ _string_functions = {
                'uppercase. Words are delimited by whitespace.',
     'lower': 'Converts a string column to lower case.',
     'upper': 'Converts a string column to upper case.',
-    'reverse': 'Reverses the string column and returns it as a new string column.',
     'ltrim': 'Trim the spaces from left end for the specified string value.',
     'rtrim': 'Trim the spaces from right end for the specified string value.',
     'trim': 'Trim the spaces from both ends for the specified string column.',
@@ -2085,6 +2084,21 @@ def size(col):
 
 
 @since(2.4)
+def array_min(col):
+    """
+    Collection function: returns the minimum value of the array.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([([2, 1, 3],), ([None, 10, -1],)], ['data'])
+    >>> df.select(array_min(df.data).alias('min')).collect()
+    [Row(min=1), Row(min=-1)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.array_min(_to_java_column(col)))
+
+
+@since(2.4)
 def array_max(col):
     """
     Collection function: returns the maximum value of the array.
@@ -2112,9 +2126,28 @@ def sort_array(col, asc=True):
     [Row(r=[1, 2, 3]), Row(r=[1]), Row(r=[])]
     >>> df.select(sort_array(df.data, asc=False).alias('r')).collect()
     [Row(r=[3, 2, 1]), Row(r=[1]), Row(r=[])]
-     """
+    """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
+
+
+@since(1.5)
+@ignore_unicode_prefix
+def reverse(col):
+    """
+    Collection function: returns a reversed string or an array with reverse order of elements.
+
+    :param col: name of column or expression
+
+    >>> df = spark.createDataFrame([('Spark SQL',)], ['data'])
+    >>> df.select(reverse(df.data).alias('s')).collect()
+    [Row(s=u'LQS krapS')]
+    >>> df = spark.createDataFrame([([2, 1, 3],) ,([1],) ,([],)], ['data'])
+    >>> df.select(reverse(df.data).alias('r')).collect()
+    [Row(r=[3, 1, 2]), Row(r=[1]), Row(r=[])]
+     """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.reverse(_to_java_column(col)))
 
 
 @since(2.3)
