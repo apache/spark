@@ -151,6 +151,9 @@ class DAGScheduler(
   private[scheduler] val shuffleIdToMapStage = new HashMap[Int, ShuffleMapStage]
   private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]
 
+  private[scheduler] val rddToImmediateShuffleDependency =
+    new HashMap[Int, HashSet[ShuffleDependency[_, _, _]]]
+
   // Stages we need to run whose parents aren't done
   private[scheduler] val waitingStages = new HashSet[Stage]
 
@@ -432,23 +435,30 @@ class DAGScheduler(
    */
   private[scheduler] def getShuffleDependencies(
       rdd: RDD[_]): HashSet[ShuffleDependency[_, _, _]] = {
-    val parents = new HashSet[ShuffleDependency[_, _, _]]
-    val visited = new HashSet[RDD[_]]
-    val waitingForVisit = new ArrayStack[RDD[_]]
-    waitingForVisit.push(rdd)
-    while (waitingForVisit.nonEmpty) {
-      val toVisit = waitingForVisit.pop()
-      if (!visited(toVisit)) {
-        visited += toVisit
-        toVisit.dependencies.foreach {
-          case shuffleDep: ShuffleDependency[_, _, _] =>
-            parents += shuffleDep
-          case dependency =>
-            waitingForVisit.push(dependency.rdd)
+
+    if (rdd.isCheckpointedAndMaterialized) {
+      rddToImmediateShuffleDependency(rdd.id) = HashSet.empty
+    }
+
+    rddToImmediateShuffleDependency.getOrElseUpdate(rdd.id, {
+      val parents = new HashSet[ShuffleDependency[_, _, _]]
+      val visited = new HashSet[RDD[_]]
+      val waitingForVisit = new ArrayStack[RDD[_]]
+      waitingForVisit.push(rdd)
+      while (waitingForVisit.nonEmpty) {
+        val toVisit = waitingForVisit.pop()
+        if (!visited(toVisit)) {
+          visited += toVisit
+          toVisit.dependencies.foreach {
+            case shuffleDep: ShuffleDependency[_, _, _] =>
+              parents += shuffleDep
+            case dependency =>
+              waitingForVisit.push(dependency.rdd)
+          }
         }
       }
-    }
-    parents
+      parents
+    })
   }
 
   private def getMissingParentStages(stage: Stage): List[Stage] = {
