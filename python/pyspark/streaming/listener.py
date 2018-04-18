@@ -22,6 +22,10 @@ class StreamingListener(object):
 
     def __init__(self):
         pass
+    
+    def onStreamingStarted(self, streamingStarted):
+       pass
+    
 
     def onReceiverStarted(self, receiverStarted):
         """
