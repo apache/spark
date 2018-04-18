@@ -53,6 +53,13 @@ if [ -n "$SPARK_MOUNTED_FILES_DIR" ]; then
   cp -R "$SPARK_MOUNTED_FILES_DIR/." .
 fi
 
+PYSPARK_SECONDARY="$PYSPARK_APP_ARGS"
+if [ ! -z "$PYSPARK_FILES" ]; then
+    PYSPARK_SECONDARY="$PYSPARK_FILES $PYSPARK_APP_ARGS"
+fi
+
+
+
 case "$SPARK_K8S_CMD" in
   driver)
     CMD=(
@@ -67,7 +74,7 @@ case "$SPARK_K8S_CMD" in
       "$SPARK_HOME/bin/spark-submit"
       --conf "spark.driver.bindAddress=$SPARK_DRIVER_BIND_ADDRESS"
       --deploy-mode client
-      $PYSPARK_PRIMARY $PYSPARK_FILES "$@"
+      "$@" $PYSPARK_PRIMARY $PYSPARK_SECONDARY
     )
     ;;
 

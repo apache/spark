@@ -73,6 +73,9 @@ private[spark] case class KubernetesConf[T <: KubernetesRoleSpecificConf](
   def pySparkMainResource(): Option[String] = sparkConf
     .get(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE)
 
+  def pySparkAppArgs(): Option[String] = sparkConf
+    .get(KUBERNETES_PYSPARK_APP_ARGS)
+
   def imagePullPolicy(): String = sparkConf.get(CONTAINER_IMAGE_PULL_POLICY)
 
   def imagePullSecrets(): Seq[LocalObjectReference] = {
@@ -107,7 +110,7 @@ private[spark] object KubernetesConf {
       mainAppResource: Option[MainAppResource],
       mainClass: String,
       appArgs: Array[String],
-      maybePyFiles: Seq[String]): KubernetesConf[KubernetesDriverSpecificConf] = {
+      maybePyFiles: Option[String]): KubernetesConf[KubernetesDriverSpecificConf] = {
     val sparkConfWithMainAppJar = sparkConf.clone()
     val additionalFiles = mutable.ArrayBuffer.empty[String]
     mainAppResource.foreach {
@@ -123,8 +126,10 @@ private[spark] object KubernetesConf {
           nonJVM match {
             case PythonMainAppResource(res) =>
               additionalFiles += res
-              additionalFiles.appendAll(maybePyFiles)
+              maybePyFiles.foreach{maybePyFiles =>
+                additionalFiles.appendAll(maybePyFiles.split(","))}
               sparkConfWithMainAppJar.set(KUBERNETES_PYSPARK_MAIN_APP_RESOURCE, res)
+              sparkConfWithMainAppJar.set(KUBERNETES_PYSPARK_APP_ARGS, appArgs.mkString(" "))
           }
           sparkConfWithMainAppJar.set(MEMORY_OVERHEAD_FACTOR, 0.4)
     }

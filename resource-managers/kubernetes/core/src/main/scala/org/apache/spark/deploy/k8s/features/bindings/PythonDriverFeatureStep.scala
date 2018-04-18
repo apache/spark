@@ -20,7 +20,7 @@ import io.fabric8.kubernetes.api.model.ContainerBuilder
 import io.fabric8.kubernetes.api.model.HasMetadata
 
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesRoleSpecificConf, SparkPod}
-import org.apache.spark.deploy.k8s.Constants.{ENV_PYSPARK_FILES, ENV_PYSPARK_PRIMARY}
+import org.apache.spark.deploy.k8s.Constants.{ENV_PYSPARK_ARGS, ENV_PYSPARK_FILES, ENV_PYSPARK_PRIMARY}
 import org.apache.spark.deploy.k8s.KubernetesUtils
 import org.apache.spark.deploy.k8s.features.KubernetesFeatureConfigStep
 
@@ -32,15 +32,19 @@ private[spark] class PythonDriverFeatureStep(
     require(mainResource.isDefined, "PySpark Main Resource must be defined")
     val otherPyFiles = kubernetesConf.pyFiles().map(pyFile =>
       KubernetesUtils.resolveFileUrisAndPath(pyFile.split(","))
-        .mkString(",")).getOrElse("null")
+        .mkString(",")).getOrElse("")
     val withPythonPrimaryFileContainer = new ContainerBuilder(pod.container)
+      .addNewEnv()
+        .withName(ENV_PYSPARK_ARGS)
+        .withValue(kubernetesConf.pySparkAppArgs().getOrElse(""))
+        .endEnv()
       .addNewEnv()
         .withName(ENV_PYSPARK_PRIMARY)
         .withValue(KubernetesUtils.resolveFileUri(mainResource.get))
         .endEnv()
       .addNewEnv()
         .withName(ENV_PYSPARK_FILES)
-        .withValue(if (otherPyFiles == "") {"null"} else otherPyFiles)
+        .withValue(if (otherPyFiles == "") {""} else otherPyFiles)
         .endEnv()
       .build()
     SparkPod(pod.pod, withPythonPrimaryFileContainer)

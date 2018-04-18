@@ -101,7 +101,6 @@ private[spark] class BasicDriverFeatureStep(
     val driverContainer =
       if (driverDockerContainer == "driver-py") {
         withoutArgsDriverContainer
-          .addToArgs(conf.roleSpecificConf.appArgs: _*)
           .build()
       } else {
         // The user application jar is merged into the spark.jars list and managed through that

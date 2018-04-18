@@ -131,6 +131,13 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
+  val KUBERNETES_PYSPARK_APP_ARGS =
+    ConfigBuilder("spark.kubernetes.python.appArgs")
+      .doc("The app arguments for PySpark Jobs")
+      .internal()
+      .stringConf
+      .createOptional
+
 
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")

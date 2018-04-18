@@ -45,7 +45,7 @@ private[spark] case class ClientArguments(
     mainAppResource: Option[MainAppResource],
     mainClass: String,
     driverArgs: Array[String],
-    maybePyFiles: Seq[String])
+    maybePyFiles: Option[String])
 
 private[spark] object ClientArguments {
 
@@ -53,7 +53,7 @@ private[spark] object ClientArguments {
     var mainAppResource: Option[MainAppResource] = None
     var mainClass: Option[String] = None
     val driverArgs = mutable.ArrayBuffer.empty[String]
-    var maybePyFiles : Seq[String] = Seq.empty[String]
+    var maybePyFiles : Option[String] = None
 
     args.sliding(2, 2).toList.foreach {
       case Array("--primary-java-resource", primaryJavaResource: String) =>
@@ -61,7 +61,7 @@ private[spark] object ClientArguments {
       case Array("--primary-py-file", primaryPythonResource: String) =>
         mainAppResource = Some(PythonMainAppResource(primaryPythonResource))
       case Array("--other-py-files", pyFiles: String) =>
-        maybePyFiles = pyFiles.split(",")
+        maybePyFiles = Some(pyFiles)
       case Array("--main-class", clazz: String) =>
         mainClass = Some(clazz)
       case Array("--arg", arg: String) =>
@@ -214,7 +214,7 @@ private[spark] class KubernetesClientApplication extends SparkApplication {
     val kubernetesResourceNamePrefix = {
       s"$appName-$launchTime".toLowerCase.replaceAll("\\.", "-")
     }
-    sparkConf.set("spark.kubernetes.python.pyFiles", clientArguments.maybePyFiles.mkString(","))
+    sparkConf.set("spark.kubernetes.python.pyFiles", clientArguments.maybePyFiles.getOrElse(""))
     val kubernetesConf = KubernetesConf.createDriverConf(
       sparkConf,
       appName,
