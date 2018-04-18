@@ -3106,27 +3106,24 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
   val kindIntersect = 2
   def typeId: Int
 
-  def array1: Expression
-  def array2: Expression
-
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val r = super.checkInputDataTypes()
     if ((r == TypeCheckResult.TypeCheckSuccess) &&
-      (array1.dataType.asInstanceOf[ArrayType].elementType !=
-        array2.dataType.asInstanceOf[ArrayType].elementType)) {
+      (left.dataType.asInstanceOf[ArrayType].elementType !=
+        right.dataType.asInstanceOf[ArrayType].elementType)) {
       TypeCheckResult.TypeCheckFailure("Element type in both arrays must be the same")
     } else {
       r
     }
   }
 
-  override def dataType: DataType = array1.dataType
+  override def dataType: DataType = left.dataType
 
   private def elementType = dataType.asInstanceOf[ArrayType].elementType
-  private def cn1 = array1.dataType.asInstanceOf[ArrayType].containsNull
-  private def cn2 = array2.dataType.asInstanceOf[ArrayType].containsNull
+  private def cn1 = left.dataType.asInstanceOf[ArrayType].containsNull
+  private def cn2 = right.dataType.asInstanceOf[ArrayType].containsNull
 
   override def nullSafeEval(input1: Any, input2: Any): Any = {
     val ary1 = input1.asInstanceOf[ArrayData]
@@ -4188,8 +4185,6 @@ object ArrayUnion {
   since = "2.4.0")
 case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetUtils {
   override def typeId: Int = kindIntersect
-  override def array1: Expression = left
-  override def array2: Expression = right
 
   override def prettyName: String = "array_intersect"
 }
