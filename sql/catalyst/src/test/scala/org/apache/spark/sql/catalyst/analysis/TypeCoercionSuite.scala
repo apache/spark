@@ -572,6 +572,11 @@ class TypeCoercionSuite extends AnalysisTest {
       Coalesce(Seq(nullLit, floatNullLit, doubleLit, stringLit)),
       Coalesce(Seq(Cast(nullLit, StringType), Cast(floatNullLit, StringType),
         Cast(doubleLit, StringType), Cast(stringLit, StringType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(timestampLit, intLit, stringLit)),
+      Coalesce(Seq(Cast(timestampLit, StringType), Cast(intLit, StringType),
+        Cast(stringLit, StringType))))
   }
 
   test("CreateArray casts") {
@@ -1090,27 +1095,32 @@ class TypeCoercionSuite extends AnalysisTest {
       AttributeReference("i", IntegerType)(),
       AttributeReference("u", DecimalType.SYSTEM_DEFAULT)(),
       AttributeReference("b", ByteType)(),
-      AttributeReference("d", DoubleType)())
+      AttributeReference("d", DoubleType)(),
+      AttributeReference("a", DateType)())
     val secondTable = LocalRelation(
       AttributeReference("s", StringType)(),
       AttributeReference("d", DecimalType(2, 1))(),
       AttributeReference("f", FloatType)(),
-      AttributeReference("l", LongType)())
+      AttributeReference("l", LongType)(),
+      AttributeReference("t", TimestampType)())
     val thirdTable = LocalRelation(
       AttributeReference("m", StringType)(),
       AttributeReference("n", DecimalType.SYSTEM_DEFAULT)(),
       AttributeReference("p", FloatType)(),
-      AttributeReference("q", DoubleType)())
-    val forthTable = LocalRelation(
+      AttributeReference("q", DoubleType)(),
+      AttributeReference("l", LongType)())
+    val fourthTable = LocalRelation(
       AttributeReference("m", StringType)(),
       AttributeReference("n", DecimalType.SYSTEM_DEFAULT)(),
       AttributeReference("p", ByteType)(),
-      AttributeReference("q", DoubleType)())
+      AttributeReference("q", DoubleType)(),
+      AttributeReference("s", StringType)())
 
-    val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType)
+    val expectedTypes = Seq(StringType, DecimalType.SYSTEM_DEFAULT, FloatType, DoubleType,
+      StringType)
 
     val unionRelation = widenSetOperationTypes(
-      Union(firstTable :: secondTable :: thirdTable :: forthTable :: Nil)).asInstanceOf[Union]
+      Union(firstTable :: secondTable :: thirdTable :: fourthTable :: Nil)).asInstanceOf[Union]
     assert(unionRelation.children.length == 4)
     checkOutput(unionRelation.children.head, expectedTypes)
     checkOutput(unionRelation.children(1), expectedTypes)

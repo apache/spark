@@ -176,9 +176,27 @@ object TypeCoercion {
   }
 
   private def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
+    var awaitingString = false
     types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
-      case Some(d) => findWiderTypeForTwo(d, c)
-      case None => None
+      case Some(d) => (d, c) match {
+        case (DateType, _: NumericType) | (_: NumericType, DateType) |
+            (TimestampType, _: NumericType) | (_: NumericType, TimestampType) =>
+          awaitingString = true
+          None
+        case _ => findWiderTypeForTwo(d, c)
+      }
+      case None if awaitingString => c match {
+        case DateType => None
+        case TimestampType => None
+        case (_: NumericType) => None
+        case StringType =>
+          awaitingString = false
+          Some(StringType)
+        case _ =>
+          awaitingString = false
+          None
+        }
+      case _ => None
     })
   }
 
