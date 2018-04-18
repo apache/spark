@@ -187,9 +187,9 @@ object TypeCoercion {
 
   private def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
     // findWiderTypeForTwo doesn't satisfy the associative law, i.e. (a op b) op c may not equal
-    // to a op (b op c). This is only a problem for StringType. Excluding StringType,
-    // findWiderTypeForTwo satisfies the associative law. For instance, (TimestampType,
-    // IntegerType, StringType) should have StringType as the wider common type.
+    // to a op (b op c). This is only a problem for StringType or nested StringType in ArrayType.
+    // Excluding these types, findWiderTypeForTwo satisfies the associative law. For instance,
+    // (TimestampType, IntegerType, StringType) should have StringType as the wider common type.
     val (stringTypes, nonStringTypes) = types.partition(hasStringType(_))
     (stringTypes.distinct ++ nonStringTypes).foldLeft[Option[DataType]](Some(NullType))((r, c) =>
       r match {
