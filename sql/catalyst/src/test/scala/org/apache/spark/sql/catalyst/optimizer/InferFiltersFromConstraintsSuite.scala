@@ -213,24 +213,6 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y.where(IsNotNull('a)), LeftSemi)
   }
 
-  test("SPARK-23564: left anti join should filter out null join keys on right side") {
-    val x = testRelation.subquery('x)
-    val y = testRelation.subquery('y)
-    testConstraintsAfterJoin(x, y, x, y.where(IsNotNull('a)), LeftAnti)
-  }
-
-  test("SPARK-23564: left outer join should filter out null join keys on right side") {
-    val x = testRelation.subquery('x)
-    val y = testRelation.subquery('y)
-    testConstraintsAfterJoin(x, y, x, y.where(IsNotNull('a)), LeftOuter)
-  }
-
-  test("SPARK-23564: right outer join should filter out null join keys on left side") {
-    val x = testRelation.subquery('x)
-    val y = testRelation.subquery('y)
-    testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y, RightOuter)
-  }
-
   test("SPARK-21479: Outer join after-join filters push down to null-supplying side") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
@@ -262,5 +244,23 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       x, y.where("a".attr === 1),
       x, y.where(IsNotNull('a) && 'a === 1),
       LeftOuter)
+  }
+
+  test("SPARK-23564: left anti join should filter out null join keys on right side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    testConstraintsAfterJoin(x, y, x, y.where(IsNotNull('a)), LeftAnti)
+  }
+
+  test("SPARK-23564: left outer join should filter out null join keys on right side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    testConstraintsAfterJoin(x, y, x, y.where(IsNotNull('a)), LeftOuter)
+  }
+
+  test("SPARK-23564: right outer join should filter out null join keys on left side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    testConstraintsAfterJoin(x, y, x.where(IsNotNull('a)), y, RightOuter)
   }
 }
