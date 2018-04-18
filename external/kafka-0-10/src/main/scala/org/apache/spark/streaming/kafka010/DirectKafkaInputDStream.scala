@@ -190,8 +190,20 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
     // make sure new partitions are reflected in currentOffsets
     val newPartitions = parts.diff(currentOffsets.keySet)
+
+    // Check if there's any partition been revoked because of consumer rebalance.
+    val revokedPartitions = currentOffsets.keySet.diff(parts)
+    if (revokedPartitions.nonEmpty) {
+      throw new IllegalStateException(s"Previously tracked partitions " +
+        s"${revokedPartitions.mkString("[", ",", "]")} been revoked by Kafka because of consumer " +
+        s"rebalance. This is mostly due to another stream with same group id joined, " +
+        s"please check if there're different streaming application misconfigure to use same " +
+        s"group id. Fundamentally different stream should use different group id")
+    }
+
     // position for new partitions determined by auto.offset.reset if no commit
     currentOffsets = currentOffsets ++ newPartitions.map(tp => tp -> c.position(tp)).toMap
+
     // don't want to consume messages, so pause
     c.pause(newPartitions.asJava)
     // find latest available offsets
