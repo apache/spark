@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.continuous._
 import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.streaming.{StreamTest, Trigger}
+import org.apache.spark.sql.streaming.{OutputMode, StreamTest, Trigger}
 import org.apache.spark.sql.test.TestSparkSession
 
 class ContinuousSuiteBase extends StreamTest {
@@ -64,16 +64,19 @@ class ContinuousSuite extends ContinuousSuiteBase {
 
   test("basic") {
     val input = ContinuousMemoryStream[Int]
-    val df = input.toDF().dropDuplicates()
+    val df = input.toDF().agg(max('value))
     df.explain()
 
-    testStream(df)(
+    testStream(df, OutputMode.Complete)(
+      AwaitEpoch(0),
+      Execute { _.explain() },
       AddData(input, 0, 1, 2),
-      CheckAnswer(0, 1, 2),
+      CheckAnswer(2),
+      Execute { _.explain() },
       StopStream,
       AddData(input, 2, 3, 4, 5),
       StartStream(),
-      CheckAnswer(0, 1, 2, 3, 4, 5))
+      CheckAnswer(5))
   }
 
   test("map") {
