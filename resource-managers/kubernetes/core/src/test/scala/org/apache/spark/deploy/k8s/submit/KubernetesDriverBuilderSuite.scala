@@ -19,6 +19,7 @@ package org.apache.spark.deploy.k8s.submit
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpec, KubernetesDriverSpecificConf}
 import org.apache.spark.deploy.k8s.features.{BasicDriverFeatureStep, DriverKubernetesCredentialsFeatureStep, DriverServiceFeatureStep, KubernetesFeaturesTestUtils, MountSecretsFeatureStep}
+import org.apache.spark.deploy.k8s.features.bindings.PythonDriverFeatureStep
 
 class KubernetesDriverBuilderSuite extends SparkFunSuite {
 
@@ -26,6 +27,7 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val CREDENTIALS_STEP_TYPE = "credentials"
   private val SERVICE_STEP_TYPE = "service"
   private val SECRETS_STEP_TYPE = "mount-secrets"
+  private val PYSPARK_STEP_TYPE = "pyspark-bindings"
 
   private val basicFeatureStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     BASIC_STEP_TYPE, classOf[BasicDriverFeatureStep])
@@ -39,12 +41,16 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
   private val secretsStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
     SECRETS_STEP_TYPE, classOf[MountSecretsFeatureStep])
 
+  private val pythonStep = KubernetesFeaturesTestUtils.getMockConfigStepForStepType(
+    PYSPARK_STEP_TYPE, classOf[PythonDriverFeatureStep])
+
   private val builderUnderTest: KubernetesDriverBuilder =
     new KubernetesDriverBuilder(
       _ => basicFeatureStep,
       _ => credentialsStep,
       _ => serviceStep,
-      _ => secretsStep)
+      _ => secretsStep,
+      _ => pythonStep)
 
   test("Apply fundamental steps all the time.") {
     val conf = KubernetesConf(
@@ -59,7 +65,8 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map.empty,
-      Map.empty)
+      Map.empty,
+      Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
@@ -80,13 +87,37 @@ class KubernetesDriverBuilderSuite extends SparkFunSuite {
       Map.empty,
       Map.empty,
       Map("secret" -> "secretMountPath"),
-      Map.empty)
+      Map.empty,
+      Seq.empty[String])
     validateStepTypesApplied(
       builderUnderTest.buildFromFeatures(conf),
       BASIC_STEP_TYPE,
       CREDENTIALS_STEP_TYPE,
       SERVICE_STEP_TYPE,
       SECRETS_STEP_TYPE)
+  }
+
+  test("Apply Python step if main resource is python.") {
+    val conf = KubernetesConf(
+      new SparkConf(false),
+      KubernetesDriverSpecificConf(
+        Some(PythonMainAppResource("example.py")),
+        "test-app",
+        "main",
+        Seq.empty),
+      "prefix",
+      "appId",
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Map.empty,
+      Seq.empty[String])
+    validateStepTypesApplied(
+      builderUnderTest.buildFromFeatures(conf),
+      BASIC_STEP_TYPE,
+      CREDENTIALS_STEP_TYPE,
+      SERVICE_STEP_TYPE,
+      PYSPARK_STEP_TYPE)
   }
 
   private def validateStepTypesApplied(resolvedSpec: KubernetesDriverSpec, stepTypes: String*)
