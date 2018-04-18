@@ -150,4 +150,63 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       "spark.files" -> "https://localhost:9000/file1.txt,/opt/spark/file2.txt")
     assert(additionalProperties === expectedSparkConf)
   }
+
+  test("single driver hostPath volume gets mounted") {
+    hostPathVolumeTest(1, false)
+  }
+
+  test("multiple driver hostPath volumes get mounted") {
+    hostPathVolumeTest(2, false)
+  }
+
+  test("single driver hostPath volume gets mounted w/ readOnly option") {
+    hostPathVolumeTest(1, true)
+  }
+
+  test("multiple driver hostPath volumes get mounted w/ readOnly option") {
+    hostPathVolumeTest(2, true)
+  }
+
+  private def hostPathVolumeTest(numVolumes: Int, readOnly: Boolean): Unit = {
+    val sparkConf = new SparkConf()
+      .set(KUBERNETES_DRIVER_POD_NAME, "spark-driver-pod")
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+    for (i <- 0 until numVolumes) {
+      sparkConf.set(s"spark.kubernetes.driver.volumes.hostPath.hostPath-$i.mount.path",
+        s"/opt/mount$i")
+      sparkConf.set(s"spark.kubernetes.driver.volumes.hostPath.hostPath-$i.options.path",
+        s"/tmp/mount$i")
+      if (readOnly) {
+        sparkConf.set(s"spark.kubernetes.driver.volumes.hostPath.hostPath-$i.mount.readOnly",
+          "true")
+      }
+    }
+    val kubernetesConf = KubernetesConf(
+      sparkConf,
+      KubernetesDriverSpecificConf(
+        None,
+        APP_NAME,
+        MAIN_CLASS,
+        APP_ARGS),
+      RESOURCE_NAME_PREFIX,
+      APP_ID,
+      DRIVER_LABELS,
+      DRIVER_ANNOTATIONS,
+      Map.empty,
+      Map.empty)
+    val step = new BasicDriverFeatureStep(kubernetesConf)
+    val driver = step.configurePod(SparkPod.initialPod())
+
+    assert(driver.container.getVolumeMounts.size() === numVolumes)
+    assert(driver.pod.getSpec.getVolumes.size() === numVolumes)
+    for (i <- 0 until numVolumes) {
+      assert(driver.container.getVolumeMounts.asScala
+        .exists(v => (v.getName == s"hostPath-$i" && v.getMountPath == s"/opt/mount$i")))
+      assert(driver.pod.getSpec.getVolumes.asScala
+        .exists(v => (v.getName == s"hostPath-$i" && v.getHostPath.getPath == s"/tmp/mount$i")))
+      if (readOnly) {
+        assert(driver.container.getVolumeMounts.get(i).getReadOnly == true)
+      }
+    }
+  }
 }

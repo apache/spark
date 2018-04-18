@@ -109,7 +109,13 @@ private[spark] class BasicDriverFeatureStep(
         .addToImagePullSecrets(conf.imagePullSecrets(): _*)
         .endSpec()
       .build()
-    SparkPod(driverPod, driverContainer)
+
+    val driverHostPathVolumesSpec = KubernetesUtils.parseHostPathVolumesWithPrefix(
+      conf.sparkConf, KUBERNETES_DRIVER_VOLUMES_PREFIX)
+    val (driverPodWithHostPathVolumes, driverContainerWithHostPathVolumes) =
+      KubernetesUtils.addHostPathVolumes(driverPod, driverContainer, driverHostPathVolumesSpec)
+
+    SparkPod(driverPodWithHostPathVolumes, driverContainerWithHostPathVolumes)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
