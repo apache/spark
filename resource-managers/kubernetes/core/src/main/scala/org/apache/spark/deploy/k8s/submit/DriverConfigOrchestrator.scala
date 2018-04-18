@@ -107,7 +107,7 @@ private[spark] class DriverConfigOrchestrator(
     if (existSubmissionLocalFiles(sparkJars)) {
       throw new SparkException(s"The Kubernetes mode does not yet support referencing " +
         s"application dependencies in the local file system. All provided jars:" +
-        s" ${sparkJars.mkString{","}")
+        s" ${sparkJars.mkString(",")}")
     }
 
     val mountLocalFilesStep = if (existSubmissionLocalFiles(sparkFiles)) {
