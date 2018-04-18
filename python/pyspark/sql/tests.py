@@ -2482,12 +2482,12 @@ class SQLTests(ReusedSQLTestCase):
         self.assertEqual(df.schema.simpleString(), "struct<key:string,value:string>")
         self.assertEqual(df.collect(), [Row(key=str(i), value=str(i)) for i in range(100)])
 
-        # field order can differ since Rows have kwargs.
+        # field order can differ since Rows created with named arguments.
         df = rdd.toDF(" value: string, key: int ")
         self.assertEqual(df.schema.simpleString(), "struct<value:string,key:int>")
         self.assertEqual(df.select("key", "value").collect(), data)
 
-        # schema field must be a kwarg of the row.
+        # schema field must be also be a field in the row.
         with QuietTest(self.sc):
             self.assertRaisesRegexp(Exception, "ValueError: foo",
                                     lambda: rdd.toDF("foo: int").collect())

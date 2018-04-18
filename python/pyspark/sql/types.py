@@ -1447,15 +1447,15 @@ class Row(tuple):
             raise ValueError("Can not use both args "
                              "and kwargs to create Row")
         if kwargs:
-            # create row objects
+            # create row object from named arguments, order not guaranteed so will be sorted
             names = sorted(kwargs.keys())
             row = tuple.__new__(self, [kwargs[n] for n in names])
             row.__fields__ = names
-            row.__from_dict__ = True
+            row.__from_dict__ = True  # Row elements will be accessed by field name, not position
             return row
 
         else:
-            # create row class or objects
+            # create a row class for generating objects or a tuple-like object
             return tuple.__new__(self, args)
 
     def asDict(self, recursive=False):
@@ -1534,8 +1534,10 @@ class Row(tuple):
     def __reduce__(self):
         """Returns a tuple so Python knows how to pickle Row."""
         if hasattr(self, "__fields__"):
-            from_dict = getattr(self, "__from_dict__", False)
-            return (_create_row, (self.__fields__, tuple(self), from_dict))
+            if hasattr(self, "__from_dict__"):
+                return (_create_row, (self.__fields__, tuple(self), True))
+            else:
+                return (_create_row, (self.__fields__, tuple(self)))
         else:
             return tuple.__reduce__(self)
 
