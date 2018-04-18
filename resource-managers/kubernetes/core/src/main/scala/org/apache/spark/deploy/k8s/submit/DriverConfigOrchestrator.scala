@@ -106,7 +106,8 @@ private[spark] class DriverConfigOrchestrator(
     // TODO(SPARK-23153): remove once submission client local dependencies are supported.
     if (existSubmissionLocalFiles(sparkJars)) {
       throw new SparkException(s"The Kubernetes mode does not yet support referencing " +
-        s"application dependencies in the local file system. All provided jars: $sparkJars.")
+        s"application dependencies in the local file system. All provided jars:" +
+        s" ${sparkJars.mkString{","}")
     }
 
     val mountLocalFilesStep = if (existSubmissionLocalFiles(sparkFiles)) {
