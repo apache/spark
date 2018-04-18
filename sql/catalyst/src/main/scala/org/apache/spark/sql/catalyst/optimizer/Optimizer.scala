@@ -640,7 +640,8 @@ object CollapseWindow extends Rule[LogicalPlan] {
  * Note: While this optimization is applicable to a lot of types of join, it primarily benefits
  * Inner and LeftSemi joins.
  */
-object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelper {
+object InferFiltersFromConstraints extends Rule[LogicalPlan]
+  with PredicateHelper with ConstraintHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     if (SQLConf.get.constraintPropagationEnabled) {
@@ -692,12 +693,12 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
       conditionOpt: Option[Expression]): Set[Expression] = {
     val baseConstraints = left.constraints.union(right.constraints)
       .union(conditionOpt.map(splitConjunctivePredicates).getOrElse(Nil).toSet)
-    baseConstraints.union(ConstraintsUtils.inferAdditionalConstraints(baseConstraints))
+    baseConstraints.union(inferAdditionalConstraints(baseConstraints))
   }
 
   private def inferNewFilter(plan: LogicalPlan, constraints: Set[Expression]): LogicalPlan = {
     val newPredicates = constraints
-      .union(ConstraintsUtils.constructIsNotNullConstraints(constraints, plan.output))
+      .union(constructIsNotNullConstraints(constraints, plan.output))
       .filter { c =>
         c.references.nonEmpty && c.references.subsetOf(plan.outputSet) && c.deterministic
       } -- plan.constraints

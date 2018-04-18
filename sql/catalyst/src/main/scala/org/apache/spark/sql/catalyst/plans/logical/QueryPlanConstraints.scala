@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.expressions._
 
 
-trait QueryPlanConstraints { self: LogicalPlan =>
+trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
 
   /**
    * An [[ExpressionSet]] that contains invariants about the rows output by this operator. For
@@ -31,8 +31,8 @@ trait QueryPlanConstraints { self: LogicalPlan =>
     if (conf.constraintPropagationEnabled) {
       ExpressionSet(
         validConstraints
-          .union(ConstraintsUtils.inferAdditionalConstraints(validConstraints))
-          .union(ConstraintsUtils.constructIsNotNullConstraints(validConstraints, output))
+          .union(inferAdditionalConstraints(validConstraints))
+          .union(constructIsNotNullConstraints(validConstraints, output))
           .filter { c =>
             c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
           }
@@ -53,7 +53,7 @@ trait QueryPlanConstraints { self: LogicalPlan =>
   protected def validConstraints: Set[Expression] = Set.empty
 }
 
-object ConstraintsUtils {
+trait ConstraintHelper {
 
   /**
    * Infers an additional set of constraints from a given set of equality constraints.
