@@ -39,14 +39,13 @@ private[spark] class YarnAllocatorBlacklistTracker(
   private val BLACKLIST_TIMEOUT_MILLIS =
     sparkConf.get(BLACKLIST_TIMEOUT_CONF).getOrElse(Utils.timeStringAsMs(DEFAULT_TIMEOUT))
 
-  private val IS_YARN_ALLOCATION_BLACKLIST_ENABLED =
-    sparkConf.get(YARN_ALLOCATION_BLACKLIST_ENABLED).getOrElse(false)
+  private val IS_YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =
+    sparkConf.get(YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED).getOrElse(false)
 
   private val BLACKLIST_MAX_FAILED_EXEC_PER_NODE = sparkConf.get(MAX_FAILED_EXEC_PER_NODE)
 
-  private val BLACKLIST_SIZE_LIMIT = sparkConf.get(YARN_BLACKLIST_SIZE_LIMIT)
-
-  private val BLACKLIST_SIZE_DEFAULT_WEIGHT = sparkConf.get(YARN_BLACKLIST_SIZE_DEFAULT_WEIGHT)
+  private val BLACKLIST_MAX_NODE_BLACKLIST_RATIO =
+    sparkConf.get(YARN_BLACKLIST_MAX_NODE_BLACKLIST_RATIO)
 
   private var clock: Clock = new SystemClock
 
@@ -56,7 +55,7 @@ private[spark] class YarnAllocatorBlacklistTracker(
 
   private var schedulerBlacklistedNodesWithExpiry = Map.empty[String, Long]
 
-  private var numClusterNodes = (Int.MaxValue / BLACKLIST_SIZE_DEFAULT_WEIGHT).toInt
+  private var numClusterNodes = (Int.MaxValue / BLACKLIST_MAX_NODE_BLACKLIST_RATIO).toInt
 
   def setNumClusterNodes(numClusterNodes: Int): Unit = {
     this.numClusterNodes = numClusterNodes
@@ -87,10 +86,10 @@ private[spark] class YarnAllocatorBlacklistTracker(
   }
 
   private def updateAllocationBlacklistedNodes(hostname: String): Unit = {
-    if (IS_YARN_ALLOCATION_BLACKLIST_ENABLED) {
+    if (IS_YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED) {
       val failuresOnHost = failureWithinTimeIntervalTracker.getNumExecutorFailuresOnHost(hostname)
       if (failuresOnHost > BLACKLIST_MAX_FAILED_EXEC_PER_NODE) {
-        logInfo("blacklisting host as YARN allocation failed: %s".format(hostname))
+        logInfo(s"blacklisting $hostname as YARN allocation failed $failuresOnHost times")
         allocationBlacklistedNodesWithExpiry.put(
           hostname,
           clock.getTimeMillis() + BLACKLIST_TIMEOUT_MILLIS)
@@ -106,8 +105,7 @@ private[spark] class YarnAllocatorBlacklistTracker(
 
   private def refreshBlacklistedNodes(): Unit = {
     removeExpiredYarnBlacklistedNodes()
-    val limit =
-      BLACKLIST_SIZE_LIMIT.getOrElse((numClusterNodes * BLACKLIST_SIZE_DEFAULT_WEIGHT).toInt)
+    val limit = (numClusterNodes * BLACKLIST_MAX_NODE_BLACKLIST_RATIO).toInt
     val nodesToBlacklist =
       if (schedulerBlacklistedNodesWithExpiry.size +
           allocationBlacklistedNodesWithExpiry.size > limit) {

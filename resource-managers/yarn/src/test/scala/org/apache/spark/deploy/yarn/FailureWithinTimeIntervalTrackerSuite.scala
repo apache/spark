@@ -27,7 +27,7 @@ class FailureWithinTimeIntervalTrackerSuite extends SparkFunSuite with Matchers 
     super.beforeAll()
   }
 
-  test("failures are expires if validity interval is set") {
+  test("failures expire if validity interval is set") {
     val sparkConf = new SparkConf()
     sparkConf.set(config.EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS, 100L)
 
@@ -66,7 +66,7 @@ class FailureWithinTimeIntervalTrackerSuite extends SparkFunSuite with Matchers 
   }
 
 
-  test("failures are never expires if validity interval is not set (-1)") {
+  test("failures never expire if validity interval is not set (-1)") {
     val sparkConf = new SparkConf()
 
     val failureWithinTimeIntervalTracker = new FailureWithinTimeIntervalTracker(sparkConf)

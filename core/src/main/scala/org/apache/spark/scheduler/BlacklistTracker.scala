@@ -126,7 +126,7 @@ private[scheduler] class BlacklistTracker (
           nodeIdToBlacklistExpiryTime.remove(node)
           listenerBus.post(SparkListenerNodeUnblacklisted(now, node))
         }
-        updateNodeBlacklist()
+        _nodeBlacklist.set(collection.immutable.Map(nodeIdToBlacklistExpiryTime.toSeq: _*))
       }
       updateNextExpiryTime()
     }
@@ -196,7 +196,7 @@ private[scheduler] class BlacklistTracker (
 
           nodeIdToBlacklistExpiryTime.put(host, expiryTimeForNewBlacklists)
           listenerBus.post(SparkListenerNodeBlacklisted(now, host, 1))
-          updateNodeBlacklist()
+          _nodeBlacklist.set(collection.immutable.Map(nodeIdToBlacklistExpiryTime.toSeq: _*))
           killExecutorsOnBlacklistedNode(host)
           updateNextExpiryTime()
         }
@@ -214,10 +214,6 @@ private[scheduler] class BlacklistTracker (
         blacklistedExecsOnNode += exec
       }
     }
-  }
-
-  private def updateNodeBlacklist(): Unit = {
-    _nodeBlacklist.set(collection.immutable.Map(nodeIdToBlacklistExpiryTime.toSeq: _*))
   }
 
   def updateBlacklistForSuccessfulTaskSet(
@@ -262,7 +258,7 @@ private[scheduler] class BlacklistTracker (
             s"executors blacklisted: ${blacklistedExecsOnNode}")
           nodeIdToBlacklistExpiryTime.put(node, expiryTimeForNewBlacklists)
           listenerBus.post(SparkListenerNodeBlacklisted(now, node, blacklistedExecsOnNode.size))
-          updateNodeBlacklist()
+          _nodeBlacklist.set(collection.immutable.Map(nodeIdToBlacklistExpiryTime.toSeq: _*))
           killExecutorsOnBlacklistedNode(node)
         }
       }

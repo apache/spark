@@ -25,7 +25,7 @@ import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.yarn.config.YARN_ALLOCATION_BLACKLIST_ENABLED
+import org.apache.spark.deploy.yarn.config.YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED
 import org.apache.spark.internal.config.{MAX_FAILED_EXEC_PER_NODE, _}
 import org.apache.spark.util.ManualClock
 
@@ -43,7 +43,7 @@ class YarnAllocatorBlacklistTrackerSuite extends SparkFunSuite with Matchers
   override def beforeEach(): Unit = {
     val sparkConf = new SparkConf()
     sparkConf.set(BLACKLIST_TIMEOUT_CONF, BLACKLIST_TIMEOUT)
-    sparkConf.set(YARN_ALLOCATION_BLACKLIST_ENABLED, true)
+    sparkConf.set(YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED, true)
     sparkConf.set(MAX_FAILED_EXEC_PER_NODE, MAX_FAILED_EXEC_PER_NODE_VALUE)
 
     amClientMock = mock(classOf[AMRMClient[ContainerRequest]])

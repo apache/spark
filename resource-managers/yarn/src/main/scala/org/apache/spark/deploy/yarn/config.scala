@@ -329,24 +329,17 @@ package object config {
     CACHED_CONF_ARCHIVE)
 
   /* YARN allocator-level blacklisting related config entries. */
-  private[spark] val YARN_ALLOCATION_BLACKLIST_ENABLED =
-    ConfigBuilder("spark.yarn.allocation.blacklist.enabled")
+  private[spark] val YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =
+    ConfigBuilder("spark.yarn.executor.launch.blacklist.enabled")
       .booleanConf
       .createOptional
 
-  private[spark] val YARN_BLACKLIST_SIZE_LIMIT =
-    ConfigBuilder("spark.yarn.blacklist.size.limit")
-      .doc("Limit for blacklisted nodes. This is the maximum for the number of blacklisted nodes " +
-        "(including task and stage blacklisted nodes) sent to YARN.")
-      .intConf
-      .createOptional
-
-  private[spark] val YARN_BLACKLIST_SIZE_DEFAULT_WEIGHT =
-  ConfigBuilder("spark.yarn.blacklist.size.default.weight")
-    .doc("If blacklist size limit is not specified then the default limit will be the number of " +
-      "cluster nodes multiplied by this weight.")
+  private[spark] val YARN_BLACKLIST_MAX_NODE_BLACKLIST_RATIO =
+  ConfigBuilder("spark.yarn.blacklist.maxNodeBlacklistRatio")
+    .doc("There is limit for the number of blacklisted nodes sent to YARN. " +
+      "And it is calculated by multiplying the number of cluster nodes with this ratio.")
     .doubleConf
-    .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
+    .checkValue(weight => weight >= 0 && weight <= 1, "The value of this ratio must be in [0, 1].")
     .createWithDefault(0.75)
 
 
