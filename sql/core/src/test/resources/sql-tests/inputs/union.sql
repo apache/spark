@@ -35,6 +35,11 @@ FROM   (SELECT col AS col
               SELECT col
               FROM p3) T1) T2;
 
+-- SPARK-24012 Union of map and other compatible columns.
+SELECT map(1, 2), 'str'
+UNION ALL
+SELECT map(1, 2, 3, NULL), 1;
+
 -- Clean-up
 DROP VIEW IF EXISTS t1;
 DROP VIEW IF EXISTS t2;

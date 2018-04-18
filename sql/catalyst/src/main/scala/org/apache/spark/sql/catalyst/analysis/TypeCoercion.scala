@@ -267,7 +267,11 @@ object TypeCoercion {
       case s: Union if s.childrenResolved &&
           s.children.forall(_.output.length == s.children.head.output.length) && !s.resolved =>
         val newChildren: Seq[LogicalPlan] = buildNewChildrenWithWiderTypes(s.children)
-        s.makeCopy(Array(newChildren))
+        if(newChildren != s.children) {
+          s.makeCopy(Array(newChildren))
+        } else {
+          s
+        }
     }
 
     /** Build new children with the widest types for each attribute among all the children */
@@ -279,7 +283,7 @@ object TypeCoercion {
       val targetTypes: Seq[DataType] =
         getWidestTypes(children, attrIndex = 0, mutable.Queue[DataType]())
 
-      if (targetTypes.nonEmpty) {
+      if (!targetTypes.forall(null == _)) {
         // Add an extra Project if the targetTypes are different from the original types.
         children.map(widenTypes(_, targetTypes))
       } else {
@@ -296,24 +300,35 @@ object TypeCoercion {
       // Return the result after the widen data types have been found for all the children
       if (attrIndex >= children.head.output.length) return castedTypes.toSeq
 
+      val types = children.map(_.output(attrIndex).dataType)
       // For the attrIndex-th attribute, find the widest type
-      findWiderCommonType(children.map(_.output(attrIndex).dataType)) match {
+      findWiderCommonType(types) match {
         // If unable to find an appropriate widen type for this column, return an empty Seq
-        case None => Seq.empty[DataType]
+        case None =>
+          castedTypes.enqueue(null)
         // Otherwise, record the result in the queue and find the type for the next column
-        case Some(widenType) =>
+        case Some(widenType) if types.exists(_ != widenType) =>
           castedTypes.enqueue(widenType)
-          getWidestTypes(children, attrIndex + 1, castedTypes)
+        case _ =>
+          castedTypes.enqueue(null)
       }
+      getWidestTypes(children, attrIndex + 1, castedTypes)
     }
 
     /** Given a plan, add an extra project on top to widen some columns' data types. */
     private def widenTypes(plan: LogicalPlan, targetTypes: Seq[DataType]): LogicalPlan = {
+      var changed = false
       val casted = plan.output.zip(targetTypes).map {
-        case (e, dt) if e.dataType != dt => Alias(Cast(e, dt), e.name)()
+        case (e, dt) if null != dt && e.dataType != dt =>
+          changed = true
+          Alias(Cast(e, dt), e.name)()
         case (e, _) => e
       }
-      Project(casted, plan)
+      if(changed) {
+        Project(casted, plan)
+      } else {
+        plan
+      }
     }
   }
 

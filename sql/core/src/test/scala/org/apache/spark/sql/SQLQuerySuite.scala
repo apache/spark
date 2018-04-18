@@ -896,6 +896,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-24012 Union of map and other compatible columns") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT map(1, 2), 'str'
+          |UNION ALL
+          |SELECT map(1, 2, 3, NULL), 1""".stripMargin),
+      Row.fromSeq(Seq(Map(1 -> 2), "str"))::
+      Row.fromSeq(Seq(Map(1 -> 2, 3 -> null), "1"))::
+      Nil
+    )
+  }
+
   test("EXCEPT") {
     checkAnswer(
       sql("SELECT * FROM lowerCaseData EXCEPT SELECT * FROM upperCaseData"),
