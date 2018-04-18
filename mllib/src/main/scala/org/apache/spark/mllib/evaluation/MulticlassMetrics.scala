@@ -27,11 +27,13 @@ import org.apache.spark.sql.DataFrame
 /**
  * Evaluator for multiclass classification.
  *
- * @param predAndLabelsWithOptWeight an RDD of (prediction, label, weight) or
- *                                   (prediction, label) pairs.
+ * @param predLabelsWeight an RDD of (prediction, label, weight).
  */
 @Since("1.1.0")
-class MulticlassMetrics @Since("1.1.0") (predAndLabelsWithOptWeight: RDD[_]) {
+class MulticlassMetrics @Since("2.4.0") (predLabelsWeight: RDD[(Double, Double, Double)]) {
+  @Since("1.1.0")
+  def this(predAndLabels: RDD[(Double, Double)]) =
+    this(predAndLabels.map(r => (r._1, r._2, 1.0)))
 
   /**
    * An auxiliary constructor taking a DataFrame.
@@ -41,32 +43,27 @@ class MulticlassMetrics @Since("1.1.0") (predAndLabelsWithOptWeight: RDD[_]) {
     this(predictionAndLabels.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
 
   private lazy val labelCountByClass: Map[Double, Double] =
-    predAndLabelsWithOptWeight.map {
-      case (prediction: Double, label: Double) =>
-        (label, 1.0)
+    predLabelsWeight.map {
       case (prediction: Double, label: Double, weight: Double) =>
         (label, weight)
     }.mapValues(weight => weight).reduceByKey(_ + _).collect().toMap
   private lazy val labelCount: Double = labelCountByClass.values.sum
-  private lazy val tpByClass: Map[Double, Double] = predAndLabelsWithOptWeight
-    .map { case (prediction: Double, label: Double) =>
-      (label, if (label == prediction) 1.0 else 0.0)
-    case (prediction: Double, label: Double, weight: Double) =>
-      (label, if (label == prediction) weight else 0.0)
+  private lazy val tpByClass: Map[Double, Double] = predLabelsWeight
+    .map {
+      case (prediction: Double, label: Double, weight: Double) =>
+        (label, if (label == prediction) weight else 0.0)
     }.reduceByKey(_ + _)
     .collectAsMap()
-  private lazy val fpByClass: Map[Double, Double] = predAndLabelsWithOptWeight
-    .map { case (prediction: Double, label: Double) =>
-      (prediction, if (prediction != label) 1.0 else 0.0)
-    case (prediction: Double, label: Double, weight: Double) =>
-      (prediction, if (prediction != label) weight else 0.0)
+  private lazy val fpByClass: Map[Double, Double] = predLabelsWeight
+    .map {
+      case (prediction: Double, label: Double, weight: Double) =>
+        (prediction, if (prediction != label) weight else 0.0)
     }.reduceByKey(_ + _)
     .collectAsMap()
-  private lazy val confusions = predAndLabelsWithOptWeight
-    .map { case (prediction: Double, label: Double) =>
-      ((label, prediction), 1.0)
-    case (prediction: Double, label: Double, weight: Double) =>
-      ((label, prediction), weight)
+  private lazy val confusions = predLabelsWeight
+    .map {
+      case (prediction: Double, label: Double, weight: Double) =>
+        ((label, prediction), weight)
     }.reduceByKey(_ + _)
     .collectAsMap()
 

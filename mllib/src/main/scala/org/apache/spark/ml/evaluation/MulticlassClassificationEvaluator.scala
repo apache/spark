@@ -69,7 +69,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** @group setParam */
-  @Since("2.2.0")
+  @Since("2.4.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   setDefault(metricName -> "f1")
@@ -86,9 +86,6 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
         .rdd.map {
         case Row(prediction: Double, label: Double, weight: Double) => (prediction, label, weight)
       }
-    dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType)).rdd.map {
-      case Row(prediction: Double, label: Double) => (prediction, label)
-    }.values.countByValue()
     val metrics = new MulticlassMetrics(predictionAndLabelsWithWeights)
     val metric = $(metricName) match {
       case "f1" => metrics.weightedFMeasure
