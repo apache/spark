@@ -109,6 +109,7 @@ class DriverConfigOrchestratorSuite extends SparkFunSuite {
     }
 
     sparkConf.set("spark.files", "/path/to/file1,/path/to/file2")
+      .set("spark.jars", "")
     orchestrator = new DriverConfigOrchestrator(
       APP_ID,
       KUBERNETES_RESOURCE_PREFIX,

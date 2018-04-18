@@ -95,13 +95,17 @@ private[spark] class DriverConfigOrchestrator(
       None
     }
 
-    val sparkJars = sparkConf.getOption("spark.jars")
+    val sparkJars = (sparkConf.getOption("spark.jars")
       .map(_.split(","))
       .getOrElse(Array.empty[String]) ++
-      additionalMainAppJar.toSeq
+      additionalMainAppJar.toSeq)
+      .map(_.trim)
+      .filterNot(_.isEmpty)
     val sparkFiles = sparkConf.getOption("spark.files")
       .map(_.split(","))
       .getOrElse(Array.empty[String])
+      .map(_.trim)
+      .filterNot(_.isEmpty)
 
     // TODO(SPARK-23153): remove once submission client local dependencies are supported.
     if (existSubmissionLocalFiles(sparkJars)) {
@@ -142,7 +146,7 @@ private[spark] class DriverConfigOrchestrator(
   }
 
   private def existSubmissionLocalFiles(files: Seq[String]): Boolean = {
-    files.exists { uri =>
+    files.nonEmpty && files.exists { uri =>
       Utils.resolveURI(uri).getScheme == "file"
     }
   }
