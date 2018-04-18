@@ -395,6 +395,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
   lazy val javaType: String = CodeGenerator.javaType(dataType)
 
   override def nullable: Boolean = children.exists(_.nullable)
+
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def eval(input: InternalRow): Any = dataType match {
@@ -455,11 +456,11 @@ case class Concat(children: Seq[Expression]) extends Expression {
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = inputs,
       funcName = "valueConcat",
-      extraArguments = (s"${javaType}[]", args) :: Nil)
+      extraArguments = (s"$javaType[]", args) :: Nil)
     ev.copy(s"""
       $initCode
       $codes
-      ${javaType} ${ev.value} = $concatenator.concat($args);
+      $javaType ${ev.value} = $concatenator.concat($args);
       boolean ${ev.isNull} = ${ev.value} == null;
     """)
   }
@@ -515,7 +516,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
 
     s"""
        |new Object() {
-       |  public ArrayData concat(${CodeGenerator.javaType(dataType)}[] args) {
+       |  public ArrayData concat($javaType[] args) {
        |    ${nullArgumentProtection()}
        |    $numElemCode
        |    $unsafeArraySizeInBytes
@@ -551,7 +552,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
 
     s"""
        |new Object() {
-       |  public ArrayData concat(${CodeGenerator.javaType(dataType)}[] args) {
+       |  public ArrayData concat($javaType[] args) {
        |    ${nullArgumentProtection()}
        |    $numElemCode
        |    Object[] $arrayData = new Object[(int)$numElemName];
