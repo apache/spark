@@ -3101,6 +3101,214 @@ object Sequence {
   }
 }
 
+abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
+  val kindUnion = 1
+  val kindIntersect = 2
+  def typeId: Int
+
+  def array1: Expression
+  def array2: Expression
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val r = super.checkInputDataTypes()
+    if ((r == TypeCheckResult.TypeCheckSuccess) &&
+      (array1.dataType.asInstanceOf[ArrayType].elementType !=
+        array2.dataType.asInstanceOf[ArrayType].elementType)) {
+      TypeCheckResult.TypeCheckFailure("Element type in both arrays must be the same")
+    } else {
+      r
+    }
+  }
+
+  override def dataType: DataType = array1.dataType
+
+  private def elementType = dataType.asInstanceOf[ArrayType].elementType
+  private def cn1 = array1.dataType.asInstanceOf[ArrayType].containsNull
+  private def cn2 = array2.dataType.asInstanceOf[ArrayType].containsNull
+
+  override def nullSafeEval(input1: Any, input2: Any): Any = {
+    val ary1 = input1.asInstanceOf[ArrayData]
+    val ary2 = input2.asInstanceOf[ArrayData]
+
+    if (!cn1 && !cn2) {
+      elementType match {
+        case IntegerType =>
+          // avoid boxing of primitive int array elements
+          var hs: OpenHashSet[Int] = null
+          val hs1 = new OpenHashSet[Int]
+          var i = 0
+          while (i < ary1.numElements()) {
+            hs1.add(ary1.getInt(i))
+            i += 1
+          }
+          if (typeId == kindUnion) {
+            i = 0
+            while (i < ary2.numElements()) {
+              hs1.add(ary2.getInt(i))
+              i += 1
+            }
+            hs = hs1
+          } else if (typeId == kindIntersect) {
+            hs = new OpenHashSet[Int]
+            i = 0
+            while (i < ary2.numElements()) {
+              val k = ary2.getInt(i)
+              if (hs1.contains(k)) {
+                hs.add(k)
+              }
+              i += 1
+            }
+          }
+          UnsafeArrayData.fromPrimitiveArray(hs.iterator.toArray)
+        case LongType =>
+          // avoid boxing of primitive long array elements
+          var hs: OpenHashSet[Long] = null
+          val hs1 = new OpenHashSet[Long]
+          var i = 0
+          while (i < ary1.numElements()) {
+            hs1.add(ary1.getLong(i))
+            i += 1
+          }
+          if (typeId == kindUnion) {
+            i = 0
+            while (i < ary2.numElements()) {
+              hs1.add(ary2.getLong(i))
+              i += 1
+            }
+            hs = hs1
+          } else if (typeId == kindIntersect) {
+            hs = new OpenHashSet[Long]
+            i = 0
+            while (i < ary2.numElements()) {
+              val k = ary2.getLong(i)
+              if (hs1.contains(k)) {
+                hs.add(k)
+              }
+              i += 1
+            }
+          }
+          UnsafeArrayData.fromPrimitiveArray(hs.iterator.toArray)
+        case _ =>
+          var hs: OpenHashSet[Any] = null
+          val hs1 = new OpenHashSet[Any]
+          var i = 0
+          while (i < ary1.numElements()) {
+            hs1.add(ary1.get(i, elementType))
+            i += 1
+          }
+          if (typeId == kindUnion) {
+            i = 0
+            while (i < ary2.numElements()) {
+              hs1.add(ary2.get(i, elementType))
+              i += 1
+            }
+            hs = hs1
+          } else if (typeId == kindIntersect) {
+            hs = new OpenHashSet[Any]
+            i = 0
+            while (i < ary2.numElements()) {
+              val k = ary2.get(i, elementType)
+              if (hs1.contains(k)) {
+                hs.add(k)
+              }
+              i += 1
+            }
+          }
+          new GenericArrayData(hs.iterator.toArray)
+      }
+    } else {
+      if (typeId == kindUnion) {
+        ArraySetUtils.arrayUnion(ary1, ary2, elementType)
+      } else if (typeId == kindIntersect) {
+        ArraySetUtils.arrayIntersect(ary1, ary2, elementType)
+      }
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val hs = ctx.freshName("hs")
+    val hs1 = ctx.freshName("hs1")
+    val i = ctx.freshName("i")
+    val ArraySetUtils = "org.apache.spark.sql.catalyst.expressions.ArraySetUtils"
+    val genericArrayData = classOf[GenericArrayData].getName
+    val unsafeArrayData = classOf[UnsafeArrayData].getName
+    val openHashSet = classOf[OpenHashSet[_]].getName
+    val et = s"org.apache.spark.sql.types.DataTypes.$elementType"
+    val (postFix, classTag, getter, arrayBuilder, castType) = if (!cn1 && !cn2) {
+      val ptName = CodeGenerator.primitiveTypeName(elementType)
+      elementType match {
+        case ByteType | ShortType | IntegerType =>
+          (s"$$mcI$$sp", s"scala.reflect.ClassTag$$.MODULE$$.$ptName()", s"get$ptName($i)",
+            s"$unsafeArrayData.fromPrimitiveArray", CodeGenerator.javaType(elementType))
+        case LongType =>
+          (s"$$mcJ$$sp", s"scala.reflect.ClassTag$$.MODULE$$.$ptName()", s"get$ptName($i)",
+            s"$unsafeArrayData.fromPrimitiveArray", "long")
+        case _ =>
+          ("", s"scala.reflect.ClassTag$$.MODULE$$.Object()", s"get($i, $et)",
+            s"new $genericArrayData", "Object")
+      }
+    } else {
+      ("", "", "", "", "")
+    }
+
+    nullSafeCodeGen(ctx, ev, (ary1, ary2) => {
+      if (classTag != "") {
+        if (typeId == kindUnion) {
+          s"""
+             |$openHashSet $hs = new $openHashSet$postFix($classTag);
+             |for (int $i = 0; $i < $ary1.numElements(); $i++) {
+             |  $hs.add$postFix($ary1.$getter);
+             |}
+             |for (int $i = 0; $i < $ary2.numElements(); $i++) {
+             |  $hs.add$postFix($ary2.$getter);
+             |}
+             |${ev.value} = $arrayBuilder(($castType[]) $hs.iterator().toArray($classTag));
+         """.stripMargin
+        } else if (typeId == kindIntersect) {
+          s"""
+             |$openHashSet $hs1 = new $openHashSet$postFix($classTag);
+             |for (int $i = 0; $i < $ary1.numElements(); $i++) {
+             |  $hs1.add$postFix($ary1.$getter);
+             |}
+             |$openHashSet $hs = new $openHashSet$postFix($classTag);
+             |for (int $i = 0; $i < $ary2.numElements(); $i++) {
+             |  if ($hs1.contains$postFix($ary2.$getter)) {
+             |    $hs.add$postFix($ary2.$getter);
+             |  }
+             |}
+             |${ev.value} = $arrayBuilder(($castType[]) $hs.iterator().toArray($classTag));
+         """.stripMargin
+        } else {
+          throw new UnsupportedOperationException("typeId=" + typeId + "is not supported.")
+        }
+      } else {
+        val setOp = if (typeId == kindUnion) {
+          "Union"
+        } else if (typeId == kindIntersect) {
+          "Intersect"
+        } else {
+          throw new UnsupportedOperationException("typeId=" + typeId + "is not supported.")
+        }
+        s"${ev.value} = $ArraySetUtils$$.MODULE$$.array$setOp($ary1, $ary2, $et);"
+      }
+    })
+  }
+}
+
+object ArraySetUtils {
+  def arrayUnion(array1: ArrayData, array2: ArrayData, et: DataType): ArrayData = {
+    new GenericArrayData(array1.toArray[AnyRef](et).union(array2.toArray[AnyRef](et))
+      .distinct.asInstanceOf[Array[Any]])
+  }
+
+  def arrayIntersect(array1: ArrayData, array2: ArrayData, et: DataType): ArrayData = {
+    new GenericArrayData(array1.toArray[AnyRef](et).intersect(array2.toArray[AnyRef](et))
+      .distinct.asInstanceOf[Array[Any]])
+  }
+}
+
 /**
  * Returns the array containing the given input value (left) count (right) times.
  */
@@ -3963,6 +4171,27 @@ object ArrayUnion {
     }))
     new GenericArrayData(arrayBuffer)
   }
+
+  /**
+   * Returns an array of the elements in the intersect of x and y, without duplicates
+   */
+  @ExpressionDescription(
+    usage = """
+    _FUNC_(array1, array2) - Returns an array of the elements in the intersection of array1 and
+      array2, without duplicates. The order of elements in the result is not determined.
+  """,
+  examples = """
+    Examples:Fun
+      > SELECT _FUNC_(array(1, 2, 3), array(1, 3, 5));
+       array(1, 3)
+  """,
+  since = "2.4.0")
+case class ArrayIntersect(left: Expression, right: Expression) extends ArraySetUtils {
+  override def typeId: Int = kindIntersect
+  override def array1: Expression = left
+  override def array2: Expression = right
+
+  override def prettyName: String = "array_intersect"
 }
 
 /**

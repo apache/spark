@@ -1618,4 +1618,45 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(ArrayExcept(a20, a21).dataType.asInstanceOf[ArrayType].containsNull === false)
     assert(ArrayExcept(a24, a22).dataType.asInstanceOf[ArrayType].containsNull === true)
   }
+
+  test("Array Intersect") {
+    val a00 = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType, false))
+    val a01 = Literal.create(Seq(4, 2), ArrayType(IntegerType, false))
+    val a02 = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType))
+    val a03 = Literal.create(Seq(1, 2, null, 4, 5), ArrayType(IntegerType))
+    val a04 = Literal.create(Seq(-5, 4, null, 2, -1), ArrayType(IntegerType))
+    val a05 = Literal.create(Seq.empty[Int], ArrayType(IntegerType))
+
+    val a10 = Literal.create(Seq(1L, 2L, 4L), ArrayType(LongType, false))
+    val a11 = Literal.create(Seq(4L, 2L), ArrayType(LongType, false))
+    val a12 = Literal.create(Seq(1L, 2L, 4L), ArrayType(LongType))
+    val a13 = Literal.create(Seq(1L, 2L, null, 4L, 5L), ArrayType(LongType))
+    val a14 = Literal.create(Seq(-5L, 4L, null, 2L, -1L), ArrayType(LongType))
+    val a15 = Literal.create(Seq.empty[Long], ArrayType(LongType))
+
+    val a20 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType))
+    val a21 = Literal.create(Seq("c", null, "a", "f"), ArrayType(StringType))
+    val a22 = Literal.create(Seq("b", null, "a", "g"), ArrayType(StringType))
+    val a23 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
+    val a24 = Literal.create(Seq("c", "d", "a", "f"), ArrayType(StringType, false))
+
+    val a30 = Literal.create(Seq(null, null), ArrayType(NullType))
+
+    checkEvaluation(ArrayIntersect(a00, a01), UnsafeArrayData.fromPrimitiveArray(Array(4, 2)))
+    checkEvaluation(ArrayIntersect(a01, a02), Seq(4, 2))
+    checkEvaluation(ArrayIntersect(a03, a04), Seq(2, null, 4))
+    checkEvaluation(ArrayIntersect(a03, a05), Seq.empty)
+
+    checkEvaluation(
+      ArrayIntersect(a10, a11), UnsafeArrayData.fromPrimitiveArray(Array(4L, 2L)))
+    checkEvaluation(ArrayIntersect(a11, a12), Seq(4L, 2L))
+    checkEvaluation(ArrayIntersect(a13, a14), Seq(2L, null, 4L))
+    checkEvaluation(ArrayIntersect(a13, a15), Seq.empty)
+
+    checkEvaluation(ArrayIntersect(a20, a21), Seq("a", "c"))
+    checkEvaluation(ArrayIntersect(a21, a22), Seq(null, "a"))
+    checkEvaluation(ArrayIntersect(a23, a24), Seq("c", "a"))
+
+    checkEvaluation(ArrayIntersect(a30, a30), Seq(null))
+  }
 }

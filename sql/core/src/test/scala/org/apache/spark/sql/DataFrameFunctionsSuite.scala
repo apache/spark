@@ -1173,8 +1173,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("concat function - arrays") {
-    val nseqi : Seq[Int] = null
-    val nseqs : Seq[String] = null
+    val nseqi: Seq[Int] = null
+    val nseqs: Seq[String] = null
     val df = Seq(
       (Seq(1), Seq(2, 3), Seq(5L, 6L), nseqi, Seq("a", "b", "c"), Seq("d", "e"), Seq("f"), nseqs),
       (Seq(1, 0), Seq.empty[Int], Seq(2L), nseqi, Seq("a"), Seq.empty[String], Seq(null), nseqs)
@@ -1645,6 +1645,46 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     val result10 = df10.select(array_except($"a", $"b"))
     val expectedType10 = ArrayType(IntegerType, containsNull = true)
     assert(result10.first.schema(0).dataType === expectedType10)
+  }
+
+  test("array_intersect functions") {
+    val df1 = Seq((Array(1, 2, 4), Array(4, 2))).toDF("a", "b")
+    val ans1 = Row(Seq(4, 2))
+    checkAnswer(df1.select(array_intersect($"a", $"b")), ans1)
+    checkAnswer(df1.selectExpr("array_intersect(a, b)"), ans1)
+
+    val df2 = Seq((Array[Integer](1, 2, null, 4, 5), Array[Integer](-5, 4, null, 2, -1)))
+      .toDF("a", "b")
+    val ans2 = Row(Seq(2, null, 4))
+    checkAnswer(df2.select(array_intersect($"a", $"b")), ans2)
+    checkAnswer(df2.selectExpr("array_intersect(a, b)"), ans2)
+
+    val df3 = Seq((Array(1L, 2L, 4L), Array(4L, 2L))).toDF("a", "b")
+    val ans3 = Row(Seq(4L, 2L))
+    checkAnswer(df3.select(array_intersect($"a", $"b")), ans3)
+    checkAnswer(df3.selectExpr("array_intersect(a, b)"), ans3)
+
+    val ans4 = Row(Seq(2L, null, 4L))
+    checkAnswer(df4.select(array_intersect($"a", $"b")), ans4)
+    checkAnswer(df4.selectExpr("array_intersect(a, b)"), ans4)
+
+    val df5 = Seq((Array("c", null, "a", "f"), Array("b", null, "a", "g"))).toDF("a", "b")
+    val ans5 = Row(Seq(null, "a"))
+    checkAnswer(df5.select(array_intersect($"a", $"b")), ans5)
+    checkAnswer(df5.selectExpr("array_intersect(a, b)"), ans5)
+
+    val df6 = Seq((null, null)).toDF("a", "b")
+    val ans6 = Row(null)
+    checkAnswer(df6.select(array_intersect($"a", $"b")), ans6)
+    checkAnswer(df6.selectExpr("array_intersect(a, b)"), ans6)
+
+    val df0 = Seq((Array(1), Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df0.select(array_intersect($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df0.selectExpr("array_intersect(a, b)")
+    }
   }
 
   test("transform function - array for primitive type not containing null") {
