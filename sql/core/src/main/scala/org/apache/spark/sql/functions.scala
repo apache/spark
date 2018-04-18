@@ -2465,14 +2465,6 @@ object functions {
   }
 
   /**
-   * Reverses the string column and returns it as a new string column.
-   *
-   * @group string_funcs
-   * @since 1.5.0
-   */
-  def reverse(str: Column): Column = withExpr { StringReverse(str.expr) }
-
-  /**
    * Trim the spaces from right end for the specified string value.
    *
    * @group string_funcs
@@ -3315,6 +3307,13 @@ object functions {
    * @since 2.4.0
    */
   def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
+
+  /**
+   * Returns a reversed string or an array with reverse order of elements.
+   * @group collection_funcs
+   * @since 1.5.0
+   */
+  def reverse(e: Column): Column = withExpr { Reverse(e.expr) }
 
   /**
    * Returns an unordered array containing the keys of the map.
