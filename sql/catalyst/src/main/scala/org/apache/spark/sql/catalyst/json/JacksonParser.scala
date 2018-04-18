@@ -95,15 +95,10 @@ class JacksonParser(
   }
 
   private def makeMapRootConverter(mt: MapType): JsonParser => Seq[InternalRow] = {
-    val valueConverter = makeConverter(mt.valueType)
-    (parser: JsonParser) =>
-      val mapData = parseJsonToken[MapData](parser, mt) {
-        case START_OBJECT => convertMap(parser, valueConverter)
-      }
-      val row = new GenericInternalRow(1)
-
-      row.update(0, mapData)
-      Seq(row)
+    val fieldConverter = makeConverter(mt.valueType)
+    (parser: JsonParser) => parseJsonToken[Seq[InternalRow]](parser, mt) {
+      case START_OBJECT => Seq(InternalRow(convertMap(parser, fieldConverter)))
+    }
   }
 
   /**

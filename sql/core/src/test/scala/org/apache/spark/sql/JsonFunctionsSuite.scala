@@ -326,4 +326,12 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(errMsg4.getMessage.startsWith(
       "A type of keys and values in map() must be string, but got"))
   }
+
+  test("from_json - map[string, integer]") {
+    val in = Seq("""{"a": 1}""").toDS()
+    val schema = MapType(StringType, IntegerType, true)
+    val out = in.select(from_json($"value", schema))
+
+    checkAnswer(out, Row(Map("a" -> 1)))
+  }
 }
