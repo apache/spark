@@ -74,7 +74,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
     if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
-      c.putIntsLittleEndian(rowId, total, buffer.array(), offset - Platform.BYTE_ARRAY_OFFSET);
+      c.putIntsLittleEndian(rowId, total, buffer.array(), offset);
     } else {
       for (int i = 0; i < total; i += 1) {
         c.putInt(rowId + i, buffer.getInt());
@@ -89,7 +89,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
     if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
-      c.putLongsLittleEndian(rowId, total, buffer.array(), offset - Platform.BYTE_ARRAY_OFFSET);
+      c.putLongsLittleEndian(rowId, total, buffer.array(), offset);
     } else {
       for (int i = 0; i < total; i += 1) {
         c.putLong(rowId + i, buffer.getLong());
@@ -104,7 +104,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
     if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
-      c.putFloats(rowId, total, buffer.array(), offset - Platform.BYTE_ARRAY_OFFSET);
+      c.putFloats(rowId, total, buffer.array(), offset);
     } else {
       for (int i = 0; i < total; i += 1) {
         c.putFloat(rowId + i, buffer.getFloat());
@@ -119,7 +119,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
     if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
-      c.putDoubles(rowId, total, buffer.array(), offset - Platform.BYTE_ARRAY_OFFSET);
+      c.putDoubles(rowId, total, buffer.array(), offset);
     } else {
       for (int i = 0; i < total; i += 1) {
         c.putDouble(rowId + i, buffer.getDouble());
@@ -127,16 +127,10 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
   }
 
-  private byte getByte() {
-    try {
-      return (byte) in.read();
-    } catch (IOException e) {
-      throw new ParquetDecodingException("Failed to read a byte", e);
-    }
-  }
-
   @Override
   public final void readBytes(int total, WritableColumnVector c, int rowId) {
+    // Bytes are stored as a 4-byte little endian int. Just read the first byte.
+    // TODO: consider pushing this in ColumnVector by adding a readBytes with a stride.
     int requiredBytes = total * 4;
     ByteBuffer buffer = getBuffer(requiredBytes);
 
@@ -151,7 +145,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   public final boolean readBoolean() {
     // TODO: vectorize decoding and keep boolean[] instead of currentByte
     if (bitOffset == 0) {
-      currentByte = getByte();
+      try {
+        currentByte = (byte) in.read();
+      } catch (IOException e) {
+        throw new ParquetDecodingException("Failed to read a byte", e);
+      }
     }
 
     boolean v = (currentByte & (1 << bitOffset)) != 0;
