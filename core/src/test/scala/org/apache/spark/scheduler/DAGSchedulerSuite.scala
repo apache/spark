@@ -2400,6 +2400,50 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   /**
+   * This tests the case where origin task success after speculative task got FetchFailed
+   * before.
+   */
+  test("[SPARK-23811] FetchFailed comes before Success of same task will cause child stage" +
+    " never succeed") {
+    // Create 3 RDDs with shuffle dependencies on each other: rddA <--- rddB <--- rddC
+    val rddA = new MyRDD(sc, 2, Nil)
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(2))
+    val shuffleIdA = shuffleDepA.shuffleId
+
+    val rddB = new MyRDD(sc, 2, List(shuffleDepA), tracker = mapOutputTracker)
+    val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(2))
+
+    val rddC = new MyRDD(sc, 2, List(shuffleDepB), tracker = mapOutputTracker)
+
+    submit(rddC, Array(0, 1))
+
+    // Complete both tasks in rddA.
+    assert(taskSets(0).stageId === 0 && taskSets(0).stageAttemptId === 0)
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 2)),
+      (Success, makeMapStatus("hostB", 2))))
+
+    // The first task success
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0), Success, makeMapStatus("hostB", 2)))
+
+    // The second task's speculative attempt fails first, but task self still running.
+    // This may caused by ExecutorLost.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleIdA, 0, 0, "ignored"),
+      null))
+    // Check currently missing partition.
+    assert(mapOutputTracker.findMissingPartitions(shuffleDepB.shuffleId).get.size === 1)
+    // The second result task self success soon.
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1), Success, makeMapStatus("hostB", 2)))
+    // Missing partition number should not change, otherwise it will cause child stage
+    // never succeed.
+    assert(mapOutputTracker.findMissingPartitions(shuffleDepB.shuffleId).get.size === 1)
+  }
+
+  /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
    */

@@ -1266,6 +1266,9 @@ class DAGScheduler(
             }
             if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
               logInfo(s"Ignoring possibly bogus $smt completion from executor $execId")
+            } else if (failedStages.contains(shuffleStage)) {
+              logInfo(s"Ignoring task $smt because of stage $shuffleStage have " +
+                s"been marked as failed")
             } else {
               // The epoch of the task is acceptable (i.e., the task was launched after the most
               // recent failure we're aware of for the executor), so mark the task's output as
