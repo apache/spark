@@ -1851,7 +1851,7 @@ def array_contains(col, value):
 def array_join(col, delimiter, null_replacement=None):
     """
     Concatenates the elements of `column` using the `delimiter`. Null values are replaced with
-    `nullReplacement` if set, otherwise they are ignored.
+    `null_replacement` if set, otherwise they are ignored.
 
     >>> df = spark.createDataFrame([(["a", "b", "c"],), (["a", None],)], ['data'])
     >>> df.select(array_join(df.data, ",").alias("joined")).collect()
