@@ -567,8 +567,9 @@ case class ArrayPosition(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = """
-    _FUNC_(array, index) - Returns element of array at given index. If index < 0, accesses elements
-      from the last to the first. Returns NULL if the index exceeds the length of the array.
+    _FUNC_(array, index) - Returns element of array at given (1-based) index. If index < 0,
+      accesses elements from the last to the first. Returns NULL if the index exceeds the length
+      of the array.
 
     _FUNC_(map, key) - Returns value for given key, or NULL if the key is not contained in the map
   """,
@@ -583,8 +584,8 @@ case class ArrayPosition(left: Expression, right: Expression)
 case class ElementAt(left: Expression, right: Expression) extends GetMapValueUtil {
 
   override def dataType: DataType = left.dataType match {
-    case _: ArrayType => left.dataType.asInstanceOf[ArrayType].elementType
-    case _: MapType => left.dataType.asInstanceOf[MapType].valueType
+    case ArrayType(elementType, _) => elementType
+    case MapType(_, valueType, _) => valueType
   }
 
   override def inputTypes: Seq[AbstractDataType] = {

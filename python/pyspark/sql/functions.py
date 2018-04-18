@@ -1864,13 +1864,15 @@ def array_position(col, value):
 
 
 @since(2.4)
-def element_at(col, value):
+def element_at(col, index):
     """
     Collection function: returns element of array at given index in value if col is array.
     returns value for the given key in value if col is map.
 
     :param col: name of column containing array or map
-    :param value: value to check for in array or key to check for in map
+    :param index: index to check for in array or key to check for in map
+
+    .. note:: The position is not zero based, but 1 based index.
 
     >>> df = spark.createDataFrame([(["a", "b", "c"],), ([],)], ['data'])
     >>> df.select(element_at(df.data, 1)).collect()
