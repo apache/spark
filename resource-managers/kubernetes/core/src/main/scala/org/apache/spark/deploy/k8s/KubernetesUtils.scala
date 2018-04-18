@@ -52,7 +52,7 @@ private[spark] object KubernetesUtils {
       sparkConf: SparkConf,
       prefix: String): Map[String, KubernetesVolumeSpec] = {
     val volumes = HashMap[String, KubernetesVolumeSpec]()
-    val properties = sparkConf.getAllWithPrefix(s"$prefix$KUBERNETES_VOLUMES_HOSTPATH_KEY")
+    val properties = sparkConf.getAllWithPrefix(s"$prefix$KUBERNETES_VOLUMES_HOSTPATH_KEY.")
     // Extract volume names
     properties foreach {
       case (k, _) =>
