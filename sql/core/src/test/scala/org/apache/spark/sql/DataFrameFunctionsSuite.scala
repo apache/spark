@@ -691,6 +691,107 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("zip_with_index function") {
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // switch codegen on
+    val oneRowDF = Seq(("Spark", 3215, true)).toDF("s", "i", "b")
+
+    // Test cases with primitive-type elements
+    val idf = Seq(
+      Seq(1, 9, 8, 7),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    checkAnswer(
+      idf.select(zip_with_index('i)),
+      Seq(Row(Seq(Row(1, 0), Row(9, 1), Row(8, 2), Row(7, 3))), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      idf.filter(dummyFilter('i)).select(zip_with_index('i)),
+      Seq(Row(Seq(Row(1, 0), Row(9, 1), Row(8, 2), Row(7, 3))), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      idf.select(zip_with_index('i, true)),
+      Seq(Row(Seq(Row(0, 1), Row(1, 9), Row(2, 8), Row(3, 7))), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      idf.selectExpr("zip_with_index(i)"),
+      Seq(Row(Seq(Row(1, 0), Row(9, 1), Row(8, 2), Row(7, 3))), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      idf.selectExpr("zip_with_index(i, true)"),
+      Seq(Row(Seq(Row(0, 1), Row(1, 9), Row(2, 8), Row(3, 7))), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("zip_with_index(array(null, 2, null), false)"),
+      Seq(Row(Seq(Row(null, 0), Row(2, 1), Row(null, 2))))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("zip_with_index(array(null, 2, null), true)"),
+      Seq(Row(Seq(Row(0, null), Row(1, 2), Row(2, null))))
+    )
+
+    // Test cases with non-primitive-type elements
+    val sdf = Seq(
+      Seq("c", "a", "d", "b"),
+      Seq(null, "x", null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    checkAnswer(
+      sdf.select(zip_with_index('s)),
+      Seq(
+        Row(Seq(Row("c", 0), Row("a", 1), Row("d", 2), Row("b", 3))),
+        Row(Seq(Row(null, 0), Row("x", 1), Row(null, 2))),
+        Row(Seq.empty),
+        Row(null))
+    )
+    checkAnswer(
+      sdf.filter(dummyFilter('s)).select(zip_with_index('s)),
+      Seq(
+        Row(Seq(Row("c", 0), Row("a", 1), Row("d", 2), Row("b", 3))),
+        Row(Seq(Row(null, 0), Row("x", 1), Row(null, 2))),
+        Row(Seq.empty),
+        Row(null))
+    )
+    checkAnswer(
+      sdf.select(zip_with_index('s, true)),
+      Seq(
+        Row(Seq(Row(0, "c"), Row(1, "a"), Row(2, "d"), Row(3, "b"))),
+        Row(Seq(Row(0, null), Row(1, "x"), Row(2, null))),
+        Row(Seq.empty),
+        Row(null))
+    )
+    checkAnswer(
+      sdf.selectExpr("zip_with_index(s)"),
+      Seq(
+        Row(Seq(Row("c", 0), Row("a", 1), Row("d", 2), Row("b", 3))),
+        Row(Seq(Row(null, 0), Row("x", 1), Row(null, 2))),
+        Row(Seq.empty),
+        Row(null))
+    )
+    checkAnswer(
+      sdf.selectExpr("zip_with_index(s, true)"),
+      Seq(
+        Row(Seq(Row(0, "c"), Row(1, "a"), Row(2, "d"), Row(3, "b"))),
+        Row(Seq(Row(0, null), Row(1, "x"), Row(2, null))),
+        Row(Seq.empty),
+        Row(null))
+    )
+
+    // Error test cases
+    intercept[AnalysisException] {
+      oneRowDF.select(zip_with_index('s))
+    }
+    intercept[AnalysisException] {
+      oneRowDF.selectExpr("zip_with_index(array(1, 2, 3), b)")
+    }
+    intercept[AnalysisException] {
+      oneRowDF.selectExpr("zip_with_index(array(1, 2, 3), 1)")
+    }
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {

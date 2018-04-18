@@ -2172,23 +2172,22 @@ def sort_array(col, asc=True):
     return Column(sc._jvm.functions.sort_array(_to_java_column(col), asc))
 
 
-@since(1.5)
-@ignore_unicode_prefix
-def reverse(col):
+@since(2.4)
+def zip_with_index(col, indexFirst=False):
     """
-    Collection function: returns a reversed string or an array with reverse order of elements.
+    Collection function: transforms the input array by encapsulating elements into pairs
+    with indexes indicating the order.
 
     :param col: name of column or expression
 
-    >>> df = spark.createDataFrame([('Spark SQL',)], ['data'])
-    >>> df.select(reverse(df.data).alias('s')).collect()
-    [Row(s=u'LQS krapS')]
-    >>> df = spark.createDataFrame([([2, 1, 3],) ,([1],) ,([],)], ['data'])
-    >>> df.select(reverse(df.data).alias('r')).collect()
-    [Row(r=[3, 1, 2]), Row(r=[1]), Row(r=[])]
+    >>> df = spark.createDataFrame([([2, 5, 3],), ([],)], ['data'])
+    >>> df.select(zip_with_index(df.data).alias('r')).collect()
+    [Row(r=[[value=2, index=0], [value=5, index=1], [value=3, index=2]]), Row(r=[])]
+    >>> df.select(zip_with_index(df.data, indexFirst=True).alias('r')).collect()
+    [Row(r=[[index=0, value=2], [index=1, value=5], [index=2, value=3]]), Row(r=[])]
      """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.reverse(_to_java_column(col)))
+    return Column(sc._jvm.functions.zip_with_index(_to_java_column(col), indexFirst))
 
 
 @since(2.3)

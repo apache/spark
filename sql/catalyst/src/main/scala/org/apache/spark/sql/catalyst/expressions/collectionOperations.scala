@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.Comparator
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -883,3 +884,139 @@ case class Concat(children: Seq[Expression]) extends Expression {
 
   override def sql: String = s"concat(${children.map(_.sql).mkString(", ")})"
 }
+
+/**
+ * Returns the maximum value in the array.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(array[, indexFirst]) - Transforms the input array by encapsulating elements into pairs with indexes indicating the order.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array("d", "a", null, "b"));
+       [("d",0),("a",1),(null,2),("b",3)]
+      > SELECT _FUNC_(array("d", "a", null, "b"), true);
+       [(0,"d"),(1,"a"),(2,null),(3,"b")]
+  """,
+  since = "2.4.0")
+case class ZipWithIndex(child: Expression, indexFirst: Expression)
+  extends UnaryExpression with ExpectsInputTypes {
+
+  def this(e: Expression) = this(e, Literal.FalseLiteral)
+
+  val indexFirstValue: Boolean = indexFirst match {
+    case Literal(v: Boolean, BooleanType) => v
+    case _ => throw new AnalysisException("The second argument has to be a boolean constant.")
+  }
+
+  private val MAX_ARRAY_LENGTH: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  lazy val childArrayType: ArrayType = child.dataType.asInstanceOf[ArrayType]
+
+  override def dataType: DataType = {
+    val elementField = StructField("value", childArrayType.elementType, childArrayType.containsNull)
+    val indexField = StructField("index", IntegerType, false)
+
+    val fields = if (indexFirstValue) Seq(indexField, elementField) else Seq(elementField, indexField)
+
+    ArrayType(StructType(fields), false)
+  }
+
+  override protected def nullSafeEval(input: Any): Any = {
+    val array = input.asInstanceOf[ArrayData].toObjectArray(childArrayType.elementType)
+
+    val makeStruct = (v: Any, i: Int) => if (indexFirstValue) InternalRow(i, v) else InternalRow(v, i)
+    val resultData = array.zipWithIndex.map{case (v, i) => makeStruct(v, i)}
+
+    new GenericArrayData(resultData)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      if (CodeGenerator.isPrimitiveType(childArrayType.elementType)) {
+        genCodeForPrimitiveElements(ctx, c, ev.value)
+      } else {
+        genCodeForNonPrimitiveElements(ctx, c, ev.value)
+      }
+    })
+  }
+
+  private def genCodeForPrimitiveElements(
+      ctx: CodegenContext,
+      childVariableName: String,
+      arrayData: String): String = {
+    val numElements = ctx.freshName("numElements")
+    val byteArraySize = ctx.freshName("byteArraySize")
+    val data = ctx.freshName("byteArray")
+    val unsafeRow = ctx.freshName("unsafeRow")
+    val structSize = ctx.freshName("structSize")
+    val unsafeArrayData = ctx.freshName("unsafeArrayData")
+    val structsOffset = ctx.freshName("structsOffset")
+    val calculateArraySize = "UnsafeArrayData.calculateSizeOfUnderlyingByteArray"
+    val calculateHeader = "UnsafeArrayData.calculateHeaderPortionInBytes"
+
+    val baseOffset = Platform.BYTE_ARRAY_OFFSET
+    val longSize = LongType.defaultSize
+    val primitiveValueTypeName = CodeGenerator.primitiveTypeName(childArrayType.elementType)
+    val valuePosition = if (indexFirstValue) "1" else "0"
+    val indexPosition = if (indexFirstValue) "0" else "1"
+    s"""
+       |final int $numElements = $childVariableName.numElements();
+       |final int $structSize = ${UnsafeRow.calculateBitSetWidthInBytes(2) + longSize * 2};
+       |final long $byteArraySize = $calculateArraySize($numElements, $longSize + $structSize);
+       |final int $structsOffset = $calculateHeader($numElements) + $numElements * $longSize;
+       |if ($byteArraySize > $MAX_ARRAY_LENGTH) {
+       |  throw new RuntimeException("Unsuccessful try to zip array with index due to exceeding" +
+       |    " the limit $MAX_ARRAY_LENGTH bytes for UnsafeArrayData. " + $byteArraySize +
+       |    " bytes of data are required for performing the operation with the given array.");
+       |}
+       |final byte[] $data = new byte[(int)$byteArraySize];
+       |UnsafeArrayData $unsafeArrayData = new UnsafeArrayData();
+       |Platform.putLong($data, $baseOffset, $numElements);
+       |$unsafeArrayData.pointTo($data, $baseOffset, (int)$byteArraySize);
+       |UnsafeRow $unsafeRow = new UnsafeRow(2);
+       |for (int z = 0; z < $numElements; z++) {
+       |  long offset = $structsOffset + z * $structSize;
+       |  $unsafeArrayData.setLong(z, (offset << 32) + $structSize);
+       |  $unsafeRow.pointTo($data, $baseOffset + offset, $structSize);
+       |  if ($childVariableName.isNullAt(z)) {
+       |    $unsafeRow.setNullAt($valuePosition);
+       |  } else {
+       |    $unsafeRow.set$primitiveValueTypeName(
+       |      $valuePosition,
+       |      ${CodeGenerator.getValue(childVariableName, childArrayType.elementType, "z")}
+       |    );
+       |  }
+       |  $unsafeRow.setInt($indexPosition, z);
+       |}
+       |$arrayData = $unsafeArrayData;
+     """.stripMargin
+  }
+
+  private def genCodeForNonPrimitiveElements(
+      ctx: CodegenContext,
+      childVariableName: String,
+      arrayData: String): String = {
+    val genericArrayClass = classOf[GenericArrayData].getName
+    val rowClass = classOf[GenericInternalRow].getName
+    val numberOfElements = ctx.freshName("numElements")
+    val data = ctx.freshName("internalRowArray")
+
+    val elementValue = CodeGenerator.getValue(childVariableName, childArrayType.elementType, "z")
+    val arguments = if (indexFirstValue) s"z, $elementValue" else s"$elementValue, z"
+
+    s"""
+       |final int $numberOfElements = $childVariableName.numElements();
+       |final Object[] $data = new Object[$numberOfElements];
+       |for (int z = 0; z < $numberOfElements; z++) {
+       |  $data[z] = new $rowClass(new Object[]{$arguments});
+       |}
+       |$arrayData = new $genericArrayClass($data);
+     """.stripMargin
+  }
+
+  override def prettyName: String = "zip_with_index"
+}
+
