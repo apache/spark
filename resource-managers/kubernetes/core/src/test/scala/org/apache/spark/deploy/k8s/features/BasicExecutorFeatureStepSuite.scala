@@ -153,39 +153,21 @@ class BasicExecutorFeatureStepSuite
   }
 
   test("single executor hostPath volume gets mounted") {
-    val conf = baseConf.clone()
-    conf.set("spark.kubernetes.executor.volumes.hostPath.hostPath-1.mount.path", "/opt/mount")
-    conf.set("spark.kubernetes.executor.volumes.hostPath.hostPath-1.options.path", "/tmp/mount")
-
-    val step = new BasicExecutorFeatureStep(
-      KubernetesConf(
-        conf,
-        KubernetesExecutorSpecificConf("1", DRIVER_POD),
-        RESOURCE_NAME_PREFIX,
-        APP_ID,
-        LABELS,
-        ANNOTATIONS,
-        Map.empty,
-        Map.empty))
-    val executor = step.configurePod(SparkPod.initialPod())
-
-    assert(executor.container.getImage === EXECUTOR_IMAGE)
-    assert(executor.container.getVolumeMounts.size() === 1)
-    assert(executor.container.getVolumeMounts.get(0).getName === "hostPath-1")
-    assert(executor.container.getVolumeMounts.get(0).getMountPath === "/opt/mount")
-
-    assert(executor.pod.getSpec.getVolumes.size() === 1)
-    assert(executor.pod.getSpec.getVolumes.get(0).getHostPath.getPath === "/tmp/mount")
-
-    checkOwnerReferences(executor.pod, DRIVER_POD_UID)
+    hostPathVolumeTest(1)
   }
 
   test("multiple executor hostPath volumes get mounted") {
+    hostPathVolumeTest(2)
+  }
+
+  private def hostPathVolumeTest(numVolumes: Int): Unit = {
     val conf = baseConf.clone()
-    conf.set("spark.kubernetes.executor.volumes.hostPath.hostPath-1.mount.path", "/opt/mount1")
-    conf.set("spark.kubernetes.executor.volumes.hostPath.hostPath-1.options.path", "/tmp/mount1")
-    conf.set("spark.kubernetes.executor.volumes.hostPath.hostPath-2.mount.path", "/opt/mount2")
-    conf.set("spark.kubernetes.executor.volumes.hostPath.hostPath-2.options.path", "/tmp/mount2")
+    for (i <- 0 until numVolumes) {
+      conf.set(s"spark.kubernetes.executor.volumes.hostPath.hostPath-$i.mount.path",
+        s"/opt/mount$i")
+      conf.set(s"spark.kubernetes.executor.volumes.hostPath.hostPath-$i.options.path",
+        s"/tmp/mount$i")
+    }
     val step = new BasicExecutorFeatureStep(
       KubernetesConf(
         conf,
@@ -199,15 +181,17 @@ class BasicExecutorFeatureStepSuite
     val executor = step.configurePod(SparkPod.initialPod())
 
     assert(executor.container.getImage === EXECUTOR_IMAGE)
-    assert(executor.container.getVolumeMounts.size() === 2)
-    assert(executor.container.getVolumeMounts.get(0).getName === "hostPath-1")
-    assert(executor.container.getVolumeMounts.get(0).getMountPath === "/opt/mount1")
-    assert(executor.container.getVolumeMounts.get(1).getName === "hostPath-2")
-    assert(executor.container.getVolumeMounts.get(1).getMountPath === "/opt/mount2")
+    assert(executor.container.getVolumeMounts.size() === numVolumes)
+    assert(executor.pod.getSpec.getVolumes.size() === numVolumes)
+    for (i <- 0 until numVolumes) {
+      assert(executor.container.getVolumeMounts.asScala
+        .exists(_.getName == s"hostPath-$i"))
+      assert(executor.container.getVolumeMounts.asScala
+        .exists(_.getMountPath == s"/opt/mount$i"))
+      assert(executor.pod.getSpec.getVolumes.asScala
+        .exists(_.getHostPath.getPath == s"/tmp/mount$i"))
+    }
 
-    assert(executor.pod.getSpec.getVolumes.size() === 2)
-    assert(executor.pod.getSpec.getVolumes.get(0).getHostPath.getPath === "/tmp/mount1")
-    assert(executor.pod.getSpec.getVolumes.get(1).getHostPath.getPath === "/tmp/mount2")
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
   }
 
