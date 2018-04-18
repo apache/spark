@@ -2027,7 +2027,7 @@ def array_union(col1, col2):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
     >>> df.select(array_union(df.c1, df.c2)).collect()
-    [Row(array_union(c1, c2)=[u'b', u'c', u'd', u'a', u'f']))]
+    [Row(array_union(c1, c2)=[u'b', u'a', u'c', u'd', u'f']))]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_union(_to_java_column(col1), _to_java_column(col2)))
