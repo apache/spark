@@ -340,4 +340,11 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val infinity = Literal(Double.PositiveInfinity)
     checkEvaluation(EqualTo(infinity, infinity), true)
   }
+
+  test("SPARK-24007: EqualNullSafe for FloatType and DoubleType might generate a wrong result") {
+    checkEvaluation(EqualNullSafe(Literal(null, FloatType), Literal(-1.0f)), false)
+    checkEvaluation(EqualNullSafe(Literal(-1.0f), Literal(null, FloatType)), false)
+    checkEvaluation(EqualNullSafe(Literal(null, DoubleType), Literal(-1.0d)), false)
+    checkEvaluation(EqualNullSafe(Literal(-1.0d), Literal(null, DoubleType)), false)
+  }
 }
