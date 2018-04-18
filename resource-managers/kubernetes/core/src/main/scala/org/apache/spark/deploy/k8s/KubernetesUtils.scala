@@ -52,27 +52,27 @@ private[spark] object KubernetesUtils {
       sparkConf: SparkConf,
       prefix: String): Map[String, KubernetesVolumeSpec] = {
     val volumes = HashMap[String, KubernetesVolumeSpec]()
-    val properties = sparkConf.getAllWithPrefix(s"$prefix$KUBERNETES_VOLUMES_HOSTPATH_KEY.")
+    val properties = sparkConf.getAllWithPrefix(s"$prefix$KUBERNETES_VOLUMES_HOSTPATH_KEY.").toList
     // Extract volume names
-    properties foreach {
-      case (k, _) =>
-        val keys = k.split(".")
+    properties.foreach {
+      k =>
+        val keys = k._1.split("\\.")
         if (keys.nonEmpty && !volumes.contains(keys(0))) {
           volumes.update(keys(0), KubernetesVolumeSpec.emptySpec())
         }
     }
     // Populate spec
-    volumes foreach {
+    volumes.foreach {
       case (name, spec) =>
-        properties foreach {
-          case (k, v) =>
-            k.split(".") match {
+        properties.foreach {
+          k =>
+            k._1.split("\\.") match {
               case Array(`name`, KUBERNETES_VOLUMES_MOUNT_KEY, KUBERNETES_VOLUMES_PATH_KEY) =>
-                spec.mountPath = Some(v)
+                spec.mountPath = Some(k._2)
               case Array(`name`, KUBERNETES_VOLUMES_MOUNT_KEY, KUBERNETES_VOLUMES_READONLY_KEY) =>
-                spec.mountReadOnly = Some(v.toBoolean)
+                spec.mountReadOnly = Some(k._2.toBoolean)
               case Array(`name`, KUBERNETES_VOLUMES_OPTIONS_KEY, option) =>
-                spec.optionsSpec.update(option, v)
+                spec.optionsSpec.update(option, k._2)
               case _ =>
                 None
             }

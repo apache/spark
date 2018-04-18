@@ -171,11 +171,11 @@ class BasicExecutorFeatureStepSuite
 
     assert(executor.container.getImage === EXECUTOR_IMAGE)
     assert(executor.container.getVolumeMounts.size() === 1)
-    assert(executor.container.getVolumeMounts.get(0).getName === "hostPath-volume-0")
+    assert(executor.container.getVolumeMounts.get(0).getName === "hostPath-1")
     assert(executor.container.getVolumeMounts.get(0).getMountPath === "/opt/mount")
 
     assert(executor.pod.getSpec.getVolumes.size() === 1)
-    assert(executor.pod.getSpec.getVolumes.get(0).getHostPath === "/tmp/mount")
+    assert(executor.pod.getSpec.getVolumes.get(0).getHostPath.getPath === "/tmp/mount")
 
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
   }
@@ -206,8 +206,8 @@ class BasicExecutorFeatureStepSuite
     assert(executor.container.getVolumeMounts.get(1).getMountPath === "/opt/mount2")
 
     assert(executor.pod.getSpec.getVolumes.size() === 2)
-    assert(executor.pod.getSpec.getVolumes.get(0).getHostPath === "/tmp/mount1")
-    assert(executor.pod.getSpec.getVolumes.get(1).getHostPath === "/tmp/mount2")
+    assert(executor.pod.getSpec.getVolumes.get(0).getHostPath.getPath === "/tmp/mount1")
+    assert(executor.pod.getSpec.getVolumes.get(1).getHostPath.getPath === "/tmp/mount2")
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
   }
 
