@@ -38,7 +38,7 @@ case class SortMergeJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
-    rangeConditions: Seq[Expression],
+    rangeConditions: Seq[BinaryComparison],
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan) extends BinaryExecNode with PredicateHelper with CodegenSupport {
@@ -71,6 +71,9 @@ case class SortMergeJoinExec(
   val useSecondaryRange = shouldUseSecondaryRangeJoin()
 
   logDebug(s"Use secondary range join resolved to $useSecondaryRange.")
+
+  val lrKeys = rangeConditions.flatMap(c => c.left.references.toSeq.distinct).distinct
+  val rrKeys = rangeConditions.flatMap(c => c.right.references.toSeq.distinct).distinct
 
 //  private def findBucketSpec(plan: SparkPlan): Option[BucketSpec] = {
 //    if(plan.isInstanceOf[FileSourceScanExec]) {
@@ -126,9 +129,15 @@ case class SortMergeJoinExec(
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
     // For inner join, orders of both sides keys should be kept.
+
     case _: InnerLike =>
-      val leftKeyOrdering = getKeyOrdering(leftKeys, left.outputOrdering)
-      val rightKeyOrdering = getKeyOrdering(rightKeys, right.outputOrdering)
+
+      logDebug(s"Left range ordering: ${leftKeys ++ lrKeys}")
+      logDebug(s"Right range ordering: ${rightKeys ++ rrKeys}")
+
+      val leftKeyOrdering = getKeyOrdering(leftKeys ++ lrKeys, left.outputOrdering)
+      val rightKeyOrdering = getKeyOrdering(rightKeys ++ rrKeys, right.outputOrdering)
+      logDebug(s"outputOrdering results: $leftKeyOrdering  and  $rightKeyOrdering")
       leftKeyOrdering.zip(rightKeyOrdering).map { case (lKey, rKey) =>
         // Also add the right key and its `sameOrderExpressions`
         SortOrder(lKey.child, Ascending, lKey.sameOrderExpressions + rKey.child ++ rKey
@@ -166,7 +175,7 @@ case class SortMergeJoinExec(
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
+    requiredOrders(leftKeys ++ lrKeys) :: requiredOrders(rightKeys ++ rrKeys) :: Nil
 
   private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] = {
     // This must be ascending in order to agree with the `keyOrdering` defined in `doExecute()`.

@@ -103,7 +103,7 @@ object PhysicalOperation extends PredicateHelper {
 object ExtractEquiJoinKeys extends Logging with PredicateHelper {
   /** (joinType, leftKeys, rightKeys, condition, leftChild, rightChild) */
   type ReturnType =
-    (JoinType, Seq[Expression], Seq[Expression], Seq[Expression],
+    (JoinType, Seq[Expression], Seq[Expression], Seq[BinaryComparison],
       Option[Expression], LogicalPlan, LogicalPlan)
 
   def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
@@ -177,8 +177,8 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
             rangeConditions.filter(x => x.isInstanceOf[GreaterThan] ||
               x.isInstanceOf[GreaterThanOrEqual]).size == 0 ||
             // Check if both comparisons reference the same columns:
-            rangeConditions.map(c => c.left.references).distinct.size != 1 ||
-            rangeConditions.map(c => c.right.references).distinct.size != 1) {
+            rangeConditions.flatMap(c => c.left.references.toSeq.distinct).distinct.size != 1 ||
+            rangeConditions.flatMap(c => c.right.references.toSeq.distinct).distinct.size != 1) {
           logDebug(s"Clearing range conditions because: " +
             s"${rangeConditions.size}, " +
             s"${rangeConditions.filter(x => x.isInstanceOf[LessThan] ||

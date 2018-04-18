@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{BinaryComparison, Expression}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.Join
@@ -134,7 +134,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         leftKeys: Seq[Expression],
         rightKeys: Seq[Expression],
         boundCondition: Option[Expression],
-        rangeConditions: Seq[Expression],
+        rangeConditions: Seq[BinaryComparison],
         leftPlan: SparkPlan,
         rightPlan: SparkPlan) = {
       val sortMergeJoin = joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, rangeConditions,
