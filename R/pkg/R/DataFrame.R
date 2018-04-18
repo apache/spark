@@ -36,7 +36,6 @@ setOldClass("structType")
 #' @slot sdf A Java object reference to the backing Scala DataFrame
 #' @seealso \link{createDataFrame}, \link{read.json}, \link{table}
 #' @seealso \url{https://spark.apache.org/docs/latest/sparkr.html#sparkr-dataframes}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -77,7 +76,6 @@ setWriteMode <- function(write, mode) {
   write
 }
 
-#' @export
 #' @param sdf A Java object reference to the backing Scala DataFrame
 #' @param isCached TRUE if the SparkDataFrame is cached
 #' @noRd
@@ -97,7 +95,6 @@ dataFrame <- function(sdf, isCached = FALSE) {
 #' @rdname printSchema
 #' @name printSchema
 #' @aliases printSchema,SparkDataFrame-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -123,7 +120,6 @@ setMethod("printSchema",
 #' @rdname schema
 #' @name schema
 #' @aliases schema,SparkDataFrame-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -146,7 +142,6 @@ setMethod("schema",
 #' @aliases explain,SparkDataFrame-method
 #' @rdname explain
 #' @name explain
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -178,7 +173,6 @@ setMethod("explain",
 #' @rdname isLocal
 #' @name isLocal
 #' @aliases isLocal,SparkDataFrame-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -209,7 +203,6 @@ setMethod("isLocal",
 #' @aliases showDF,SparkDataFrame-method
 #' @rdname showDF
 #' @name showDF
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -241,7 +234,6 @@ setMethod("showDF",
 #' @rdname show
 #' @aliases show,SparkDataFrame-method
 #' @name show
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -269,7 +261,6 @@ setMethod("show", "SparkDataFrame",
 #' @rdname dtypes
 #' @name dtypes
 #' @aliases dtypes,SparkDataFrame-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -296,7 +287,6 @@ setMethod("dtypes",
 #' @rdname columns
 #' @name columns
 #' @aliases columns,SparkDataFrame-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -388,7 +378,6 @@ setMethod("colnames<-",
 #' @aliases coltypes,SparkDataFrame-method
 #' @name coltypes
 #' @family SparkDataFrame functions
-#' @export
 #' @examples
 #'\dontrun{
 #' irisDF <- createDataFrame(iris)
@@ -445,7 +434,6 @@ setMethod("coltypes",
 #' @rdname coltypes
 #' @name coltypes<-
 #' @aliases coltypes<-,SparkDataFrame,character-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -494,7 +482,6 @@ setMethod("coltypes<-",
 #' @rdname createOrReplaceTempView
 #' @name createOrReplaceTempView
 #' @aliases createOrReplaceTempView,SparkDataFrame,character-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -521,7 +508,6 @@ setMethod("createOrReplaceTempView",
 #' @rdname registerTempTable-deprecated
 #' @name registerTempTable
 #' @aliases registerTempTable,SparkDataFrame,character-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -552,7 +538,6 @@ setMethod("registerTempTable",
 #' @rdname insertInto
 #' @name insertInto
 #' @aliases insertInto,SparkDataFrame,character-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -580,7 +565,6 @@ setMethod("insertInto",
 #' @aliases cache,SparkDataFrame-method
 #' @rdname cache
 #' @name cache
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -611,7 +595,6 @@ setMethod("cache",
 #' @rdname persist
 #' @name persist
 #' @aliases persist,SparkDataFrame,character-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -641,7 +624,6 @@ setMethod("persist",
 #' @rdname unpersist
 #' @aliases unpersist,SparkDataFrame-method
 #' @name unpersist
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -669,7 +651,6 @@ setMethod("unpersist",
 #' @rdname storageLevel
 #' @aliases storageLevel,SparkDataFrame-method
 #' @name storageLevel
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -706,8 +687,7 @@ setMethod("storageLevel",
 #' @rdname coalesce
 #' @name coalesce
 #' @aliases coalesce,SparkDataFrame-method
-#' @seealso \link{repartition}
-#' @export
+#' @seealso \link{repartition}, \link{repartitionByRange}
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -743,8 +723,7 @@ setMethod("coalesce",
 #' @rdname repartition
 #' @name repartition
 #' @aliases repartition,SparkDataFrame-method
-#' @seealso \link{coalesce}
-#' @export
+#' @seealso \link{coalesce}, \link{repartitionByRange}
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -780,6 +759,67 @@ setMethod("repartition",
             dataFrame(sdf)
           })
 
+
+#' Repartition by range
+#'
+#' The following options for repartition by range are possible:
+#' \itemize{
+#'  \item{1.} {Return a new SparkDataFrame range partitioned by
+#'                      the given columns into \code{numPartitions}.}
+#'  \item{2.} {Return a new SparkDataFrame range partitioned by the given column(s),
+#'                      using \code{spark.sql.shuffle.partitions} as number of partitions.}
+#'}
+#'
+#' @param x a SparkDataFrame.
+#' @param numPartitions the number of partitions to use.
+#' @param col the column by which the range partitioning will be performed.
+#' @param ... additional column(s) to be used in the range partitioning.
+#'
+#' @family SparkDataFrame functions
+#' @rdname repartitionByRange
+#' @name repartitionByRange
+#' @aliases repartitionByRange,SparkDataFrame-method
+#' @seealso \link{repartition}, \link{coalesce}
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' newDF <- repartitionByRange(df, col = df$col1, df$col2)
+#' newDF <- repartitionByRange(df, 3L, col = df$col1, df$col2)
+#'}
+#' @note repartitionByRange since 2.4.0
+setMethod("repartitionByRange",
+          signature(x = "SparkDataFrame"),
+          function(x, numPartitions = NULL, col = NULL, ...) {
+            if (!is.null(numPartitions) && !is.null(col)) {
+              # number of partitions and columns both are specified
+              if (is.numeric(numPartitions) && class(col) == "Column") {
+                cols <- list(col, ...)
+                jcol <- lapply(cols, function(c) { c@jc })
+                sdf <- callJMethod(x@sdf, "repartitionByRange", numToInt(numPartitions), jcol)
+              } else {
+                stop(paste("numPartitions and col must be numeric and Column; however, got",
+                           class(numPartitions), "and", class(col)))
+              }
+            } else if (!is.null(col))  {
+              # only columns are specified
+              if (class(col) == "Column") {
+                cols <- list(col, ...)
+                jcol <- lapply(cols, function(c) { c@jc })
+                sdf <- callJMethod(x@sdf, "repartitionByRange", jcol)
+              } else {
+                stop(paste("col must be Column; however, got", class(col)))
+              }
+            } else if (!is.null(numPartitions)) {
+              # only numPartitions is specified
+              stop("At least one partition-by column must be specified.")
+            } else {
+              stop("Please, specify a column(s) or the number of partitions with a column(s)")
+            }
+            dataFrame(sdf)
+          })
+
 #' toJSON
 #'
 #' Converts a SparkDataFrame into a SparkDataFrame of JSON string.
@@ -793,7 +833,6 @@ setMethod("repartition",
 #' @rdname toJSON
 #' @name toJSON
 #' @aliases toJSON,SparkDataFrame-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -826,7 +865,6 @@ setMethod("toJSON",
 #' @rdname write.json
 #' @name write.json
 #' @aliases write.json,SparkDataFrame,character-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -858,7 +896,6 @@ setMethod("write.json",
 #' @aliases write.orc,SparkDataFrame,character-method
 #' @rdname write.orc
 #' @name write.orc
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -890,7 +927,6 @@ setMethod("write.orc",
 #' @rdname write.parquet
 #' @name write.parquet
 #' @aliases write.parquet,SparkDataFrame,character-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -911,7 +947,6 @@ setMethod("write.parquet",
 #' @rdname write.parquet
 #' @name saveAsParquetFile
 #' @aliases saveAsParquetFile,SparkDataFrame,character-method
-#' @export
 #' @note saveAsParquetFile since 1.4.0
 setMethod("saveAsParquetFile",
           signature(x = "SparkDataFrame", path = "character"),
@@ -936,7 +971,6 @@ setMethod("saveAsParquetFile",
 #' @aliases write.text,SparkDataFrame,character-method
 #' @rdname write.text
 #' @name write.text
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -963,7 +997,6 @@ setMethod("write.text",
 #' @aliases distinct,SparkDataFrame-method
 #' @rdname distinct
 #' @name distinct
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -1004,7 +1037,6 @@ setMethod("unique",
 #' @aliases sample,SparkDataFrame-method
 #' @rdname sample
 #' @name sample
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -1061,7 +1093,6 @@ setMethod("sample_frac",
 #' @rdname nrow
 #' @name nrow
 #' @aliases count,SparkDataFrame-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -1094,7 +1125,6 @@ setMethod("nrow",
 #' @rdname ncol
 #' @name ncol
 #' @aliases ncol,SparkDataFrame-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -1118,7 +1148,6 @@ setMethod("ncol",
 #' @rdname dim
 #' @aliases dim,SparkDataFrame-method
 #' @name dim
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -1144,7 +1173,6 @@ setMethod("dim",
 #' @rdname collect
 #' @aliases collect,SparkDataFrame-method
 #' @name collect
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -1229,7 +1257,6 @@ setMethod("collect",
 #' @rdname limit
 #' @name limit
 #' @aliases limit,SparkDataFrame,numeric-method
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()
@@ -1253,7 +1280,6 @@ setMethod("limit",
 #' @rdname take
 #' @name take
 #' @aliases take,SparkDataFrame,numeric-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -1282,7 +1308,6 @@ setMethod("take",
 #' @aliases head,SparkDataFrame-method
 #' @rdname head
 #' @name head
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -1307,7 +1332,6 @@ setMethod("head",
 #' @aliases first,SparkDataFrame-method
 #' @rdname first
 #' @name first
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -1359,7 +1383,6 @@ setMethod("toRDD",
 #' @aliases groupBy,SparkDataFrame-method
 #' @rdname groupBy
 #' @name groupBy
-#' @export
 #' @examples
 #' \dontrun{
 #'   # Compute the average for all numeric columns grouped by department.
@@ -1401,7 +1424,6 @@ setMethod("group_by",
 #' @aliases agg,SparkDataFrame-method
 #' @rdname summarize
 #' @name agg
-#' @export
 #' @note agg since 1.4.0
 setMethod("agg",
           signature(x = "SparkDataFrame"),
@@ -1460,7 +1482,6 @@ setClassUnion("characterOrstructType", c("character", "structType"))
 #' @aliases dapply,SparkDataFrame,function,characterOrstructType-method
 #' @name dapply
 #' @seealso \link{dapplyCollect}
-#' @export
 #' @examples
 #' \dontrun{
 #'   df <- createDataFrame(iris)
@@ -1519,7 +1540,6 @@ setMethod("dapply",
 #' @aliases dapplyCollect,SparkDataFrame,function-method
 #' @name dapplyCollect
 #' @seealso \link{dapply}
-#' @export
 #' @examples
 #' \dontrun{
 #'   df <- createDataFrame(iris)
@@ -1576,7 +1596,6 @@ setMethod("dapplyCollect",
 #' @rdname gapply
 #' @name gapply
 #' @seealso \link{gapplyCollect}
-#' @export
 #' @examples
 #'
 #' \dontrun{
@@ -1673,7 +1692,6 @@ setMethod("gapply",
 #' @rdname gapplyCollect
 #' @name gapplyCollect
 #' @seealso \link{gapply}
-#' @export
 #' @examples
 #'
 #' \dontrun{
@@ -1947,7 +1965,6 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' @param ... currently not used.
 #' @return A new SparkDataFrame containing only the rows that meet the condition with selected
 #'         columns.
-#' @export
 #' @family SparkDataFrame functions
 #' @aliases subset,SparkDataFrame-method
 #' @seealso \link{withColumn}
@@ -1992,7 +2009,6 @@ setMethod("subset", signature(x = "SparkDataFrame"),
 #'            If more than one column is assigned in \code{col}, \code{...}
 #'            should be left empty.
 #' @return A new SparkDataFrame with selected columns.
-#' @export
 #' @family SparkDataFrame functions
 #' @rdname select
 #' @aliases select,SparkDataFrame,character-method
@@ -2024,7 +2040,6 @@ setMethod("select", signature(x = "SparkDataFrame", col = "character"),
           })
 
 #' @rdname select
-#' @export
 #' @aliases select,SparkDataFrame,Column-method
 #' @note select(SparkDataFrame, Column) since 1.4.0
 setMethod("select", signature(x = "SparkDataFrame", col = "Column"),
@@ -2037,7 +2052,6 @@ setMethod("select", signature(x = "SparkDataFrame", col = "Column"),
           })
 
 #' @rdname select
-#' @export
 #' @aliases select,SparkDataFrame,list-method
 #' @note select(SparkDataFrame, list) since 1.4.0
 setMethod("select",
@@ -2066,7 +2080,6 @@ setMethod("select",
 #' @aliases selectExpr,SparkDataFrame,character-method
 #' @rdname selectExpr
 #' @name selectExpr
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2090,14 +2103,14 @@ setMethod("selectExpr",
 #'
 #' @param x a SparkDataFrame.
 #' @param colName a column name.
-#' @param col a Column expression, or an atomic vector in the length of 1 as literal value.
+#' @param col a Column expression (which must refer only to this SparkDataFrame), or an atomic
+#' vector in the length of 1 as literal value.
 #' @return A SparkDataFrame with the new column added or the existing column replaced.
 #' @family SparkDataFrame functions
 #' @aliases withColumn,SparkDataFrame,character-method
 #' @rdname withColumn
 #' @name withColumn
 #' @seealso \link{rename} \link{mutate} \link{subset}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2136,7 +2149,6 @@ setMethod("withColumn",
 #' @rdname mutate
 #' @name mutate
 #' @seealso \link{rename} \link{withColumn}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2207,7 +2219,6 @@ setMethod("mutate",
           })
 
 #' @param _data a SparkDataFrame.
-#' @export
 #' @rdname mutate
 #' @aliases transform,SparkDataFrame-method
 #' @name transform
@@ -2231,7 +2242,6 @@ setMethod("transform",
 #' @name withColumnRenamed
 #' @aliases withColumnRenamed,SparkDataFrame,character,character-method
 #' @seealso \link{mutate}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2257,7 +2267,6 @@ setMethod("withColumnRenamed",
 #' @rdname rename
 #' @name rename
 #' @aliases rename,SparkDataFrame-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2303,7 +2312,6 @@ setClassUnion("characterOrColumn", c("character", "Column"))
 #' @aliases arrange,SparkDataFrame,Column-method
 #' @rdname arrange
 #' @name arrange
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2334,7 +2342,6 @@ setMethod("arrange",
 #' @rdname arrange
 #' @name arrange
 #' @aliases arrange,SparkDataFrame,character-method
-#' @export
 #' @note arrange(SparkDataFrame, character) since 1.4.0
 setMethod("arrange",
           signature(x = "SparkDataFrame", col = "character"),
@@ -2367,7 +2374,6 @@ setMethod("arrange",
 
 #' @rdname arrange
 #' @aliases orderBy,SparkDataFrame,characterOrColumn-method
-#' @export
 #' @note orderBy(SparkDataFrame, characterOrColumn) since 1.4.0
 setMethod("orderBy",
           signature(x = "SparkDataFrame", col = "characterOrColumn"),
@@ -2388,7 +2394,6 @@ setMethod("orderBy",
 #' @rdname filter
 #' @name filter
 #' @family subsetting functions
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2431,7 +2436,6 @@ setMethod("where",
 #' @aliases dropDuplicates,SparkDataFrame-method
 #' @rdname dropDuplicates
 #' @name dropDuplicates
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2480,7 +2484,6 @@ setMethod("dropDuplicates",
 #' @rdname join
 #' @name join
 #' @seealso \link{merge} \link{crossJoin}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2532,7 +2535,6 @@ setMethod("join",
 #' @rdname crossJoin
 #' @name crossJoin
 #' @seealso \link{merge} \link{join}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2580,7 +2582,6 @@ setMethod("crossJoin",
 #' @aliases merge,SparkDataFrame,SparkDataFrame-method
 #' @rdname merge
 #' @seealso \link{join} \link{crossJoin}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2720,7 +2721,6 @@ genAliasesForIntersectedCols <- function(x, intersectedColNames, suffix) {
 #' @name union
 #' @aliases union,SparkDataFrame,SparkDataFrame-method
 #' @seealso \link{rbind} \link{unionByName}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2741,7 +2741,6 @@ setMethod("union",
 #' @rdname union
 #' @name unionAll
 #' @aliases unionAll,SparkDataFrame,SparkDataFrame-method
-#' @export
 #' @note unionAll since 1.4.0
 setMethod("unionAll",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
@@ -2768,7 +2767,6 @@ setMethod("unionAll",
 #' @name unionByName
 #' @aliases unionByName,SparkDataFrame,SparkDataFrame-method
 #' @seealso \link{rbind} \link{union}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2801,7 +2799,6 @@ setMethod("unionByName",
 #' @rdname rbind
 #' @name rbind
 #' @seealso \link{union} \link{unionByName}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2834,7 +2831,6 @@ setMethod("rbind",
 #' @aliases intersect,SparkDataFrame,SparkDataFrame-method
 #' @rdname intersect
 #' @name intersect
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2853,7 +2849,7 @@ setMethod("intersect",
 #' except
 #'
 #' Return a new SparkDataFrame containing rows in this SparkDataFrame
-#' but not in another SparkDataFrame. This is equivalent to \code{EXCEPT} in SQL.
+#' but not in another SparkDataFrame. This is equivalent to \code{EXCEPT DISTINCT} in SQL.
 #'
 #' @param x a SparkDataFrame.
 #' @param y a SparkDataFrame.
@@ -2862,7 +2858,6 @@ setMethod("intersect",
 #' @aliases except,SparkDataFrame,SparkDataFrame-method
 #' @rdname except
 #' @name except
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2871,7 +2866,6 @@ setMethod("intersect",
 #' exceptDF <- except(df, df2)
 #' }
 #' @rdname except
-#' @export
 #' @note except since 1.4.0
 setMethod("except",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
@@ -2908,7 +2902,6 @@ setMethod("except",
 #' @aliases write.df,SparkDataFrame-method
 #' @rdname write.df
 #' @name write.df
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -2943,7 +2936,6 @@ setMethod("write.df",
 #' @rdname write.df
 #' @name saveDF
 #' @aliases saveDF,SparkDataFrame,character-method
-#' @export
 #' @note saveDF since 1.4.0
 setMethod("saveDF",
           signature(df = "SparkDataFrame", path = "character"),
@@ -2977,7 +2969,6 @@ setMethod("saveDF",
 #' @aliases saveAsTable,SparkDataFrame,character-method
 #' @rdname saveAsTable
 #' @name saveAsTable
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -3014,7 +3005,6 @@ setMethod("saveAsTable",
 #' @aliases describe,SparkDataFrame,character-method describe,SparkDataFrame,ANY-method
 #' @rdname describe
 #' @name describe
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -3070,7 +3060,6 @@ setMethod("describe",
 #' @rdname summary
 #' @name summary
 #' @aliases summary,SparkDataFrame-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -3116,7 +3105,6 @@ setMethod("summary",
 #' @rdname nafunctions
 #' @aliases dropna,SparkDataFrame-method
 #' @name dropna
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -3147,7 +3135,6 @@ setMethod("dropna",
 #' @rdname nafunctions
 #' @name na.omit
 #' @aliases na.omit,SparkDataFrame-method
-#' @export
 #' @note na.omit since 1.5.0
 setMethod("na.omit",
           signature(object = "SparkDataFrame"),
@@ -3167,7 +3154,6 @@ setMethod("na.omit",
 #' @rdname nafunctions
 #' @name fillna
 #' @aliases fillna,SparkDataFrame-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -3398,7 +3384,6 @@ setMethod("str",
 #' @rdname drop
 #' @name drop
 #' @aliases drop,SparkDataFrame-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -3426,7 +3411,6 @@ setMethod("drop",
 #' @name drop
 #' @rdname drop
 #' @aliases drop,ANY-method
-#' @export
 setMethod("drop",
           signature(x = "ANY"),
           function(x) {
@@ -3445,7 +3429,6 @@ setMethod("drop",
 #' @rdname histogram
 #' @aliases histogram,SparkDataFrame,characterOrColumn-method
 #' @family SparkDataFrame functions
-#' @export
 #' @examples
 #' \dontrun{
 #'
@@ -3581,7 +3564,6 @@ setMethod("histogram",
 #' @rdname write.jdbc
 #' @name write.jdbc
 #' @aliases write.jdbc,SparkDataFrame,character,character-method
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -3610,7 +3592,6 @@ setMethod("write.jdbc",
 #' @aliases randomSplit,SparkDataFrame,numeric-method
 #' @rdname randomSplit
 #' @name randomSplit
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -3644,7 +3625,6 @@ setMethod("randomSplit",
 #' @aliases getNumPartitions,SparkDataFrame-method
 #' @rdname getNumPartitions
 #' @name getNumPartitions
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -3671,7 +3651,6 @@ setMethod("getNumPartitions",
 #' @rdname isStreaming
 #' @name isStreaming
 #' @seealso \link{read.stream} \link{write.stream}
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -3725,7 +3704,6 @@ setMethod("isStreaming",
 #' @aliases write.stream,SparkDataFrame-method
 #' @rdname write.stream
 #' @name write.stream
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -3818,7 +3796,6 @@ setMethod("write.stream",
 #' @rdname checkpoint
 #' @name checkpoint
 #' @seealso \link{setCheckpointDir}
-#' @export
 #' @examples
 #'\dontrun{
 #' setCheckpointDir("/checkpoint")
@@ -3846,7 +3823,6 @@ setMethod("checkpoint",
 #' @aliases localCheckpoint,SparkDataFrame-method
 #' @rdname localCheckpoint
 #' @name localCheckpoint
-#' @export
 #' @examples
 #'\dontrun{
 #' df <- localCheckpoint(df)
@@ -3873,7 +3849,6 @@ setMethod("localCheckpoint",
 #' @aliases cube,SparkDataFrame-method
 #' @rdname cube
 #' @name cube
-#' @export
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(mtcars)
@@ -3908,7 +3883,6 @@ setMethod("cube",
 #' @aliases rollup,SparkDataFrame-method
 #' @rdname rollup
 #' @name rollup
-#' @export
 #' @examples
 #'\dontrun{
 #' df <- createDataFrame(mtcars)
@@ -3941,7 +3915,6 @@ setMethod("rollup",
 #' @aliases hint,SparkDataFrame,character-method
 #' @rdname hint
 #' @name hint
-#' @export
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(mtcars)
@@ -3965,7 +3938,6 @@ setMethod("hint",
 #' @family SparkDataFrame functions
 #' @rdname alias
 #' @name alias
-#' @export
 #' @examples
 #' \dontrun{
 #' df <- alias(createDataFrame(mtcars), "mtcars")
@@ -3996,7 +3968,6 @@ setMethod("alias",
 #' @family SparkDataFrame functions
 #' @rdname broadcast
 #' @name broadcast
-#' @export
 #' @examples
 #' \dontrun{
 #' df <- createDataFrame(mtcars)
@@ -4040,7 +4011,6 @@ setMethod("broadcast",
 #' @family SparkDataFrame functions
 #' @rdname withWatermark
 #' @name withWatermark
-#' @export
 #' @examples
 #' \dontrun{
 #' sparkR.session()

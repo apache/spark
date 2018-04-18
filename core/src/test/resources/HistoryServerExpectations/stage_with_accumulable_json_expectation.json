@@ -465,7 +465,8 @@
       "shuffleWrite" : 0,
       "shuffleWriteRecords" : 0,
       "memoryBytesSpilled" : 0,
-      "diskBytesSpilled" : 0
+      "diskBytesSpilled" : 0,
+      "isBlacklistedForStage" : false
     }
   },
   "killedTasksSummary" : { }

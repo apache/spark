@@ -20,17 +20,18 @@ package org.apache.spark.sql.execution.streaming
 import java.util.Optional
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, Map => MutableMap}
+import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, WriteToDataSourceV2}
-import org.apache.spark.sql.sources.v2.DataSourceV2Options
-import org.apache.spark.sql.sources.v2.streaming.{MicroBatchReadSupport, MicroBatchWriteSupport}
-import org.apache.spark.sql.sources.v2.streaming.reader.{MicroBatchReader, Offset => OffsetV2}
+import org.apache.spark.sql.execution.streaming.sources.{InternalRowMicroBatchWriter, MicroBatchWriter}
+import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, MicroBatchReadSupport, StreamWriteSupport}
+import org.apache.spark.sql.sources.v2.reader.streaming.{MicroBatchReader, Offset => OffsetV2}
+import org.apache.spark.sql.sources.v2.writer.SupportsWriteInternalRow
 import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.{Clock, Utils}
 
@@ -50,6 +51,9 @@ class MicroBatchExecution(
     trigger, triggerClock, outputMode, deleteCheckpointOnStop) {
 
   @volatile protected var sources: Seq[BaseStreamingSource] = Seq.empty
+
+  private val readerToDataSourceMap =
+    MutableMap.empty[MicroBatchReader, (DataSourceV2, Map[String, String])]
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
@@ -71,33 +75,47 @@ class MicroBatchExecution(
     // Note that we have to use the previous `output` as attributes in StreamingExecutionRelation,
     // since the existing logical plan has already used those attributes. The per-microbatch
     // transformation is responsible for replacing attributes with their final values.
+
+    val disabledSources =
+      sparkSession.sqlContext.conf.disabledV2StreamingMicroBatchReaders.split(",")
+
     val _logicalPlan = analyzedPlan.transform {
-      case streamingRelation@StreamingRelation(dataSource, _, output) =>
+      case streamingRelation@StreamingRelation(dataSourceV1, sourceName, output) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-          val source = dataSource.createSource(metadataPath)
+          val source = dataSourceV1.createSource(metadataPath)
           nextSourceId += 1
+          logInfo(s"Using Source [$source] from DataSourceV1 named '$sourceName' [$dataSourceV1]")
           StreamingExecutionRelation(source, output)(sparkSession)
         })
-      case s @ StreamingRelationV2(source: MicroBatchReadSupport, _, options, output, _) =>
+      case s @ StreamingRelationV2(
+        dataSourceV2: MicroBatchReadSupport, sourceName, options, output, _) if
+          !disabledSources.contains(dataSourceV2.getClass.getCanonicalName) =>
         v2ToExecutionRelationMap.getOrElseUpdate(s, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-          val reader = source.createMicroBatchReader(
+          val reader = dataSourceV2.createMicroBatchReader(
             Optional.empty(), // user specified schema
             metadataPath,
-            new DataSourceV2Options(options.asJava))
+            new DataSourceOptions(options.asJava))
           nextSourceId += 1
+          readerToDataSourceMap(reader) = dataSourceV2 -> options
+          logInfo(s"Using MicroBatchReader [$reader] from " +
+            s"DataSourceV2 named '$sourceName' [$dataSourceV2]")
           StreamingExecutionRelation(reader, output)(sparkSession)
         })
-      case s @ StreamingRelationV2(_, _, _, output, v1Relation) =>
+      case s @ StreamingRelationV2(dataSourceV2, sourceName, _, output, v1Relation) =>
         v2ToExecutionRelationMap.getOrElseUpdate(s, {
           // Materialize source to avoid creating it in every batch
           val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
-          assert(v1Relation.isDefined, "v2 execution didn't match but v1 was unavailable")
+          if (v1Relation.isEmpty) {
+            throw new UnsupportedOperationException(
+              s"Data source $sourceName does not support microbatch processing.")
+          }
           val source = v1Relation.get.dataSource.createSource(metadataPath)
           nextSourceId += 1
+          logInfo(s"Using Source [$source] from DataSourceV2 named '$sourceName' [$dataSourceV2]")
           StreamingExecutionRelation(source, output)(sparkSession)
         })
     }
@@ -208,10 +226,8 @@ class MicroBatchExecution(
                * batch will be executed before getOffset is called again. */
               availableOffsets.foreach {
                 case (source: Source, end: Offset) =>
-                  if (committedOffsets.get(source).map(_ != end).getOrElse(true)) {
-                    val start = committedOffsets.get(source)
-                    source.getBatch(start, end)
-                  }
+                  val start = committedOffsets.get(source)
+                  source.getBatch(start, end)
                 case nonV1Tuple =>
                   // The V2 API does not have the same edge case requiring getBatch to be called
                   // here, so we do nothing here.
@@ -267,16 +283,17 @@ class MicroBatchExecution(
             }
           case s: MicroBatchReader =>
             updateStatusMessage(s"Getting offsets from $s")
-            reportTimeTaken("getOffset") {
-            // Once v1 streaming source execution is gone, we can refactor this away.
-            // For now, we set the range here to get the source to infer the available end offset,
-            // get that offset, and then set the range again when we later execute.
-            s.setOffsetRange(
-              toJava(availableOffsets.get(s).map(off => s.deserializeOffset(off.json))),
-              Optional.empty())
-
-              (s, Some(s.getEndOffset))
+            reportTimeTaken("setOffsetRange") {
+              // Once v1 streaming source execution is gone, we can refactor this away.
+              // For now, we set the range here to get the source to infer the available end offset,
+              // get that offset, and then set the range again when we later execute.
+              s.setOffsetRange(
+                toJava(availableOffsets.get(s).map(off => s.deserializeOffset(off.json))),
+                Optional.empty())
             }
+
+            val currentOffset = reportTimeTaken("getEndOffset") { s.getEndOffset() }
+            (s, Option(currentOffset))
         }.toMap
         availableOffsets ++= latestOffsets.filter { case (_, o) => o.nonEmpty }.mapValues(_.get)
 
@@ -398,18 +415,31 @@ class MicroBatchExecution(
         case (reader: MicroBatchReader, available)
           if committedOffsets.get(reader).map(_ != available).getOrElse(true) =>
           val current = committedOffsets.get(reader).map(off => reader.deserializeOffset(off.json))
+          val availableV2: OffsetV2 = available match {
+            case v1: SerializedOffset => reader.deserializeOffset(v1.json)
+            case v2: OffsetV2 => v2
+          }
           reader.setOffsetRange(
             toJava(current),
-            Optional.of(available.asInstanceOf[OffsetV2]))
-          logDebug(s"Retrieving data from $reader: $current -> $available")
-          Some(reader ->
-            new StreamingDataSourceV2Relation(reader.readSchema().toAttributes, reader))
+            Optional.of(availableV2))
+          logDebug(s"Retrieving data from $reader: $current -> $availableV2")
+
+          val (source, options) = reader match {
+            // `MemoryStream` is special. It's for test only and doesn't have a `DataSourceV2`
+            // implementation. We provide a fake one here for explain.
+            case _: MemoryStream[_] => MemoryStreamDataSource -> Map.empty[String, String]
+            // Provide a fake value here just in case something went wrong, e.g. the reader gives
+            // a wrong `equals` implementation.
+            case _ => readerToDataSourceMap.getOrElse(reader, {
+              FakeDataSourceV2 -> Map.empty[String, String]
+            })
+          }
+          Some(reader -> StreamingDataSourceV2Relation(
+            reader.readSchema().toAttributes, source, options, reader))
         case _ => None
       }
     }
 
-    // A list of attributes that will need to be updated.
-    val replacements = new ArrayBuffer[(Attribute, Attribute)]
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val newBatchesPlan = logicalPlan transform {
       case StreamingExecutionRelation(source, output) =>
@@ -417,18 +447,18 @@ class MicroBatchExecution(
           assert(output.size == dataPlan.output.size,
             s"Invalid batch: ${Utils.truncatedString(output, ",")} != " +
               s"${Utils.truncatedString(dataPlan.output, ",")}")
-          replacements ++= output.zip(dataPlan.output)
-          dataPlan
+
+          val aliases = output.zip(dataPlan.output).map { case (to, from) =>
+            Alias(from, to.name)(exprId = to.exprId, explicitMetadata = Some(from.metadata))
+          }
+          Project(aliases, dataPlan)
         }.getOrElse {
           LocalRelation(output, isStreaming = true)
         }
     }
 
     // Rewire the plan to use the new attributes that were returned by the source.
-    val replacementMap = AttributeMap(replacements)
     val newAttributePlan = newBatchesPlan transformAllExpressions {
-      case a: Attribute if replacementMap.contains(a) =>
-        replacementMap(a).withMetadata(a.metadata)
       case ct: CurrentTimestamp =>
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           ct.dataType)
@@ -439,17 +469,23 @@ class MicroBatchExecution(
 
     val triggerLogicalPlan = sink match {
       case _: Sink => newAttributePlan
-      case s: MicroBatchWriteSupport =>
-        val writer = s.createMicroBatchWriter(
+      case s: StreamWriteSupport =>
+        val writer = s.createStreamWriter(
           s"$runId",
-          currentBatchId,
           newAttributePlan.schema,
           outputMode,
-          new DataSourceV2Options(extraOptions.asJava))
-        assert(writer.isPresent, "microbatch writer must always be present")
-        WriteToDataSourceV2(writer.get, newAttributePlan)
+          new DataSourceOptions(extraOptions.asJava))
+        if (writer.isInstanceOf[SupportsWriteInternalRow]) {
+          WriteToDataSourceV2(
+            new InternalRowMicroBatchWriter(currentBatchId, writer), newAttributePlan)
+        } else {
+          WriteToDataSourceV2(new MicroBatchWriter(currentBatchId, writer), newAttributePlan)
+        }
       case _ => throw new IllegalArgumentException(s"unknown sink type for $sink")
     }
+
+    sparkSessionToRunBatch.sparkContext.setLocalProperty(
+      MicroBatchExecution.BATCH_ID_KEY, currentBatchId.toString)
 
     reportTimeTaken("queryPlanning") {
       lastExecution = new IncrementalExecution(
@@ -470,7 +506,7 @@ class MicroBatchExecution(
       SQLExecution.withNewExecutionId(sparkSessionToRunBatch, lastExecution) {
         sink match {
           case s: Sink => s.addBatch(currentBatchId, nextBatch)
-          case s: MicroBatchWriteSupport =>
+          case _: StreamWriteSupport =>
             // This doesn't accumulate any data - it just forces execution of the microbatch writer.
             nextBatch.collect()
         }
@@ -486,7 +522,25 @@ class MicroBatchExecution(
     }
   }
 
+  /** Execute a function while locking the stream from making an progress */
+  private[sql] def withProgressLocked(f: => Unit): Unit = {
+    awaitProgressLock.lock()
+    try {
+      f
+    } finally {
+      awaitProgressLock.unlock()
+    }
+  }
+
   private def toJava(scalaOption: Option[OffsetV2]): Optional[OffsetV2] = {
     Optional.ofNullable(scalaOption.orNull)
   }
 }
+
+object MicroBatchExecution {
+  val BATCH_ID_KEY = "streaming.sql.batchId"
+}
+
+object MemoryStreamDataSource extends DataSourceV2
+
+object FakeDataSourceV2 extends DataSourceV2

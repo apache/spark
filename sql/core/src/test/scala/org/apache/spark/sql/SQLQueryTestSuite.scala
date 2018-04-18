@@ -230,7 +230,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
         .replaceAll("Location.*/sql/core/", s"Location ${notIncludedMsg}sql/core/")
         .replaceAll("Created By.*", s"Created By $notIncludedMsg")
         .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
-        .replaceAll("Last Access.*", s"Last Access $notIncludedMsg"))
+        .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
+        .replaceAll("\\*\\(\\d+\\) ", "*"))  // remove the WholeStageCodegen codegenStageIds
 
       // If the output is not pre-sorted, sort it.
       if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
@@ -291,7 +292,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSQLContext {
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
-    RuleExecutor.resetTime()
+    RuleExecutor.resetMetrics()
   }
 
   override def afterAll(): Unit = {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.security
 
+import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.security.Credentials
@@ -110,7 +111,64 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
     creds.getAllTokens.size should be (0)
   }
 
+  test("SPARK-23209: obtain tokens when Hive classes are not available") {
+    // This test needs a custom class loader to hide Hive classes which are in the classpath.
+    // Because the manager code loads the Hive provider directly instead of using reflection, we
+    // need to drive the test through the custom class loader so a new copy that cannot find
+    // Hive classes is loaded.
+    val currentLoader = Thread.currentThread().getContextClassLoader()
+    val noHive = new ClassLoader() {
+      override def loadClass(name: String, resolve: Boolean): Class[_] = {
+        if (name.startsWith("org.apache.hive") || name.startsWith("org.apache.hadoop.hive")) {
+          throw new ClassNotFoundException(name)
+        }
+
+        if (name.startsWith("java") || name.startsWith("scala")) {
+          currentLoader.loadClass(name)
+        } else {
+          val classFileName = name.replaceAll("\\.", "/") + ".class"
+          val in = currentLoader.getResourceAsStream(classFileName)
+          if (in != null) {
+            val bytes = IOUtils.toByteArray(in)
+            defineClass(name, bytes, 0, bytes.length)
+          } else {
+            throw new ClassNotFoundException(name)
+          }
+        }
+      }
+    }
+
+    try {
+      Thread.currentThread().setContextClassLoader(noHive)
+      val test = noHive.loadClass(NoHiveTest.getClass.getName().stripSuffix("$"))
+      test.getMethod("runTest").invoke(null)
+    } finally {
+      Thread.currentThread().setContextClassLoader(currentLoader)
+    }
+  }
+
   private[spark] def hadoopFSsToAccess(hadoopConf: Configuration): Set[FileSystem] = {
     Set(FileSystem.get(hadoopConf))
   }
+}
+
+/** Test code for SPARK-23209 to avoid using too much reflection above. */
+private object NoHiveTest extends Matchers {
+
+  def runTest(): Unit = {
+    try {
+      val manager = new HadoopDelegationTokenManager(new SparkConf(), new Configuration(),
+        _ => Set())
+      manager.getServiceDelegationTokenProvider("hive") should be (None)
+    } catch {
+      case e: Throwable =>
+        // Throw a better exception in case the test fails, since there may be a lot of nesting.
+        var cause = e
+        while (cause.getCause() != null) {
+          cause = cause.getCause()
+        }
+        throw cause
+    }
+  }
+
 }

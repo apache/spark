@@ -25,7 +25,7 @@ import org.apache.spark.annotation.InterfaceStability;
  * session.
  */
 @InterfaceStability.Evolving
-public interface SessionConfigSupport {
+public interface SessionConfigSupport extends DataSourceV2 {
 
     /**
      * Key prefix of the session configs to propagate. Spark will extract all session configs that

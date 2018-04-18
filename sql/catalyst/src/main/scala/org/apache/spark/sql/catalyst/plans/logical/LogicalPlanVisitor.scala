@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 /**
- * A visitor pattern for traversing a [[LogicalPlan]] tree and compute some properties.
+ * A visitor pattern for traversing a [[LogicalPlan]] tree and computing some properties.
  */
 trait LogicalPlanVisitor[T] {
 

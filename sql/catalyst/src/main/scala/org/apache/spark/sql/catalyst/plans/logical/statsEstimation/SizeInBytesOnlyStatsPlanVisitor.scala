@@ -48,8 +48,8 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   }
 
   /**
-   * For leaf nodes, use its computeStats. For other nodes, we assume the size in bytes is the
-   * sum of all of the children's.
+   * For leaf nodes, use its `computeStats`. For other nodes, we assume the size in bytes is the
+   * product of all of the children's `computeStats`.
    */
   override def default(p: LogicalPlan): Statistics = p match {
     case p: LeafNode => p.computeStats()

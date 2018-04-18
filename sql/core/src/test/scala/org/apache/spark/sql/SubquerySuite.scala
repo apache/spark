@@ -950,4 +950,9 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     assert(join.duplicateResolved)
     assert(optimizedPlan.resolved)
   }
+
+  test("SPARK-23316: AnalysisException after max iteration reached for IN query") {
+    // before the fix this would throw AnalysisException
+    spark.range(10).where("(id,id) in (select id, null from range(3))").count
+  }
 }
