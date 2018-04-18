@@ -1173,8 +1173,8 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("concat function - arrays") {
-    val nseqi : Seq[Int] = null
-    val nseqs : Seq[String] = null
+    val nseqi: Seq[Int] = null
+    val nseqs: Seq[String] = null
     val df = Seq(
       (Seq(1), Seq(2, 3), Seq(5L, 6L), nseqi, Seq("a", "b", "c"), Seq("d", "e"), Seq("f"), nseqs),
       (Seq(1, 0), Seq.empty[Int], Seq(2L), nseqi, Seq("a"), Seq.empty[String], Seq(null), nseqs)
@@ -1204,11 +1204,42 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       )
     }
 
+<<<<<<< HEAD
     // Test with local relation, the Project will be evaluated without codegen
     simpleTest()
     // Test with cached relation, the Project will be evaluated with codegen
     df.cache()
     simpleTest()
+=======
+    checkAnswer(
+      df.select(concat($"i1", $"s1")),
+      Seq(Row(Seq("1", "a", "b", "c")), Row(Seq("1", "0", "a")))
+    )
+    checkAnswer(
+      df.select(concat($"i1", $"i2", $"i3")),
+      Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
+    )
+    checkAnswer(
+      df.filter(dummyFilter($"i1")).select(concat($"i1", $"i2", $"i3")),
+      Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
+    )
+    checkAnswer(
+      df.selectExpr("concat(array(1, null), i2, i3)"),
+      Seq(Row(Seq(1, null, 2, 3, 5, 6)), Row(Seq(1, null, 2)))
+    )
+    checkAnswer(
+      df.select(concat($"s1", $"s2", $"s3")),
+      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+    )
+    checkAnswer(
+      df.selectExpr("concat(s1, s2, s3)"),
+      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+    )
+    checkAnswer(
+      df.filter(dummyFilter($"s1")) select (concat($"s1", $"s2", $"s3")),
+      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+    )
+>>>>>>> initial commit
 
     // Null test cases
     def nullTest(): Unit = {
@@ -1513,6 +1544,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+<<<<<<< HEAD
   // Shuffle expressions should produce same results at retries in the same DataFrame.
   private def checkShuffleResult(df: DataFrame): Unit = {
     checkAnswer(df, df.collect())
@@ -1576,6 +1608,49 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     // Test with cached relation, the Project will be evaluated with codegen
     sdf.cache()
     testNonPrimitiveType()
+  }
+
+  test("array_except functions") {
+    val df1 = Seq((Array(1, 2, 4), Array(4, 2))).toDF("a", "b")
+    val ans1 = Row(Seq(1))
+    checkAnswer(df1.select(array_except($"a", $"b")), ans1)
+    checkAnswer(df1.selectExpr("array_except(a, b)"), ans1)
+
+    val df2 = Seq((Array[Integer](1, 2, null, 4, 5), Array[Integer](-5, 4, null, 2, -1)))
+      .toDF("a", "b")
+    val ans2 = Row(Seq(1, 5))
+    checkAnswer(df2.select(array_except($"a", $"b")), ans2)
+    checkAnswer(df2.selectExpr("array_except(a, b)"), ans2)
+
+    val df3 = Seq((Array(1L, 2L, 4L), Array(4L, 2L))).toDF("a", "b")
+    val ans3 = Row(Seq(1L))
+    checkAnswer(df3.select(array_except($"a", $"b")), ans3)
+    checkAnswer(df3.selectExpr("array_except(a, b)"), ans3)
+
+    val df4 = Seq(
+      (Array[java.lang.Long](1L, 2L, null, 4L, 5L), Array[java.lang.Long](-5L, 4L, null, 2L, -1L)))
+      .toDF("a", "b")
+    val ans4 = Row(Seq(1L, 5L))
+    checkAnswer(df4.select(array_except($"a", $"b")), ans4)
+    checkAnswer(df4.selectExpr("array_except(a, b)"), ans4)
+
+    val df5 = Seq((Array("c", null, "a", "f"), Array("b", null, "a", "g"))).toDF("a", "b")
+    val ans5 = Row(Seq("c", "f"))
+    checkAnswer(df5.select(array_except($"a", $"b")), ans5)
+    checkAnswer(df5.selectExpr("array_except(a, b)"), ans5)
+
+    val df6 = Seq((null, null)).toDF("a", "b")
+    val ans6 = Row(null)
+    checkAnswer(df6.select(array_except($"a", $"b")), ans6)
+    checkAnswer(df6.selectExpr("array_except(a, b)"), ans6)
+
+    val df0 = Seq((Array(1), Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df0.select(array_except($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df0.selectExpr("array_except(a, b)")
+    }
   }
 
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {

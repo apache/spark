@@ -1032,7 +1032,9 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     intercept[Exception] {
       checkEvaluation(ElementAt(a0, Literal(0)), null)
     }.getMessage.contains("SQL array indices start at 1")
-    intercept[Exception] { checkEvaluation(ElementAt(a0, Literal(1.1)), null) }
+    intercept[Exception] {
+      checkEvaluation(ElementAt(a0, Literal(1.1)), null)
+    }
     checkEvaluation(ElementAt(a0, Literal(4)), null)
     checkEvaluation(ElementAt(a0, Literal(-4)), null)
 
@@ -1502,5 +1504,50 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     assert(!shuffle.fastEquals(Shuffle(ai0, seed1)))
     assert(!shuffle.fastEquals(shuffle.freshCopy()))
     assert(!shuffle.fastEquals(Shuffle(ai0, seed2)))
+  }
+
+  test("Array Except") {
+    val a00 = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType, false))
+    val a01 = Literal.create(Seq(4, 2), ArrayType(IntegerType, false))
+    val a02 = Literal.create(Seq(1, 2, 4), ArrayType(IntegerType))
+    val a03 = Literal.create(Seq(1, 2, null, 4, 5), ArrayType(IntegerType))
+    val a04 = Literal.create(Seq(-5, 4, null, 2, -1), ArrayType(IntegerType))
+    val a05 = Literal.create(Seq.empty[Int], ArrayType(IntegerType))
+
+    val a10 = Literal.create(Seq(1L, 2L, 4L), ArrayType(LongType, false))
+    val a11 = Literal.create(Seq(4L, 2L), ArrayType(LongType, false))
+    val a12 = Literal.create(Seq(1L, 2L, 4L), ArrayType(LongType))
+    val a13 = Literal.create(Seq(1L, 2L, null, 4L, 5L), ArrayType(LongType))
+    val a14 = Literal.create(Seq(-5L, 4L, null, 2L, -1L), ArrayType(LongType))
+    val a15 = Literal.create(Seq.empty[Long], ArrayType(LongType))
+
+    val a20 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType))
+    val a21 = Literal.create(Seq("c", null, "a", "f"), ArrayType(StringType))
+    val a22 = Literal.create(Seq("b", null, "a", "g"), ArrayType(StringType))
+    val a23 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType, false))
+    val a24 = Literal.create(Seq("c", "d", "a", "f"), ArrayType(StringType, false))
+
+    val a30 = Literal.create(Seq(null, null), ArrayType(NullType))
+
+    checkEvaluation(ArrayExcept(a00, a01), UnsafeArrayData.fromPrimitiveArray(Array(1)))
+    checkEvaluation(ArrayExcept(a02, a01), Seq(1))
+    checkEvaluation(ArrayExcept(a03, a02), Seq(null, 5))
+    checkEvaluation(ArrayExcept(a03, a04), Seq(1, 5))
+    checkEvaluation(ArrayExcept(a03, a05), Seq(1, 2, null, 4, 5))
+    checkEvaluation(ArrayExcept(a05, a03), Seq.empty)
+
+    checkEvaluation(ArrayExcept(a10, a11), UnsafeArrayData.fromPrimitiveArray(Array(1L)))
+    checkEvaluation(ArrayExcept(a12, a11), Seq(1L))
+    checkEvaluation(ArrayExcept(a13, a12), Seq(null, 5L))
+    checkEvaluation(ArrayExcept(a13, a14), Seq(1L, 5L))
+    checkEvaluation(ArrayExcept(a13, a15), Seq(1L, 2L, null, 4L, 5L))
+    checkEvaluation(ArrayExcept(a15, a13), Seq.empty)
+
+    checkEvaluation(ArrayExcept(a20, a21), Seq("b"))
+    checkEvaluation(ArrayExcept(a21, a22), Seq("c", "f"))
+    checkEvaluation(ArrayExcept(a22, a23), Seq(null, "g"))
+    checkEvaluation(ArrayExcept(a23, a24), Seq("b"))
+
+    checkEvaluation(ArrayExcept(a30, a30), Seq.empty)
   }
 }
