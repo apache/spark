@@ -153,20 +153,32 @@ class BasicExecutorFeatureStepSuite
   }
 
   test("single executor hostPath volume gets mounted") {
-    hostPathVolumeTest(1)
+    hostPathVolumeTest(1, false)
   }
 
   test("multiple executor hostPath volumes get mounted") {
-    hostPathVolumeTest(2)
+    hostPathVolumeTest(2, false)
   }
 
-  private def hostPathVolumeTest(numVolumes: Int): Unit = {
+  test("single executor hostPath volume gets mounted w/ readOnly option") {
+    hostPathVolumeTest(1, true)
+  }
+
+  test("multiple executor hostPath volumes get mounted w/ readOnly option") {
+    hostPathVolumeTest(2, true)
+  }
+
+  private def hostPathVolumeTest(numVolumes: Int, readOnly: Boolean): Unit = {
     val conf = baseConf.clone()
     for (i <- 0 until numVolumes) {
       conf.set(s"spark.kubernetes.executor.volumes.hostPath.hostPath-$i.mount.path",
         s"/opt/mount$i")
       conf.set(s"spark.kubernetes.executor.volumes.hostPath.hostPath-$i.options.path",
         s"/tmp/mount$i")
+      if (readOnly) {
+        conf.set(s"spark.kubernetes.executor.volumes.hostPath.hostPath-$i.options.readOnly",
+          "true")
+      }
     }
     val step = new BasicExecutorFeatureStep(
       KubernetesConf(
@@ -185,11 +197,12 @@ class BasicExecutorFeatureStepSuite
     assert(executor.pod.getSpec.getVolumes.size() === numVolumes)
     for (i <- 0 until numVolumes) {
       assert(executor.container.getVolumeMounts.asScala
-        .exists(_.getName == s"hostPath-$i"))
-      assert(executor.container.getVolumeMounts.asScala
-        .exists(_.getMountPath == s"/opt/mount$i"))
+        .exists(v => (v.getName == s"hostPath-$i" && v.getMountPath == s"/opt/mount$i")))
       assert(executor.pod.getSpec.getVolumes.asScala
-        .exists(_.getHostPath.getPath == s"/tmp/mount$i"))
+        .exists(v => (v.getName == s"hostPath-$i" && v.getHostPath.getPath == s"/tmp/mount$i")))
+      if (readOnly) {
+        assert(executor.container.getVolumeMounts.get(i).getReadOnly == true)
+      }
     }
 
     checkOwnerReferences(executor.pod, DRIVER_POD_UID)
