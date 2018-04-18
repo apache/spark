@@ -21,8 +21,8 @@ import java.util.{Locale, Properties}
 
 import scala.collection.JavaConverters._
 
-import com.univocity.parsers.csv.CsvParser
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.univocity.parsers.csv.CsvParser
 
 import org.apache.spark.Partition
 import org.apache.spark.annotation.InterfaceStability
