@@ -629,9 +629,9 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("REVERSE") {
     val s = 'a.string.at(0)
     val row1 = create_row("abccc")
-    checkEvaluation(StringReverse(Literal("abccc")), "cccba", row1)
-    checkEvaluation(StringReverse(s), "cccba", row1)
-    checkEvaluation(StringReverse(Literal.create(null, StringType)), null, row1)
+    checkEvaluation(Reverse(Literal("abccc")), "cccba", row1)
+    checkEvaluation(Reverse(s), "cccba", row1)
+    checkEvaluation(Reverse(Literal.create(null, StringType)), null, row1)
   }
 
   test("SPACE") {
