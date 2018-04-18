@@ -180,7 +180,9 @@ object TypeCoercion {
     // to a op (b op c). This is only a problem for StringType. Excluding StringType,
     // findWiderTypeForTwo satisfies the associative law. For instance, (TimestampType,
     // IntegerType, StringType) should have StringType as the wider common type.
-    val (stringTypes, nonStringTypes) = types.partition(_ == StringType)
+    val (stringTypes, nonStringTypes) = types.partition { t =>
+      t == StringType || t == ArrayType(StringType)
+    }
     (stringTypes.distinct ++ nonStringTypes).foldLeft[Option[DataType]](Some(NullType))((r, c) =>
       r match {
         case Some(d) => findWiderTypeForTwo(d, c)
