@@ -1867,7 +1867,7 @@ def array_position(col, value):
 def element_at(col, extraction):
     """
     Collection function: Returns element of array at given index in extraction if col is array.
-    returns value for the given key in extraction if col is map.
+    Returns value for the given key in extraction if col is map.
 
     :param col: name of column containing array or map
     :param extraction: index to check for in array or key to check for in map
