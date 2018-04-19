@@ -559,6 +559,8 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a2 = Literal.create(Seq[String](null, "", null, ""), ArrayType(StringType))
     val a3 = Literal.create(Seq.empty[Integer], ArrayType(IntegerType))
     val a4 = Literal.create(null, ArrayType(StringType))
+    val a5 = Literal.create(Seq(1, null, 8, 9, null), ArrayType(IntegerType))
+    val a6 = Literal.create(Seq(true, false, false, true), ArrayType(BooleanType))
 
     checkEvaluation(ArrayRemove(a0, Literal(0)), Seq(1, 2, 3, 2, 2, 5))
     checkEvaluation(ArrayRemove(a0, Literal(1)), Seq(2, 3, 2, 2, 5))
@@ -572,10 +574,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayRemove(a1, Literal("c")), Seq("b", "a", "a", "b"))
 
     checkEvaluation(ArrayRemove(a2, Literal("")), Seq(null, null))
-    checkEvaluation(ArrayRemove(a2, Literal(null)), Seq("", ""))
+    checkEvaluation(ArrayRemove(a2, Literal.create(null, StringType)), null)
 
-    checkEvaluation(ArrayRemove(a3, Literal("a")), Seq.empty[Integer])
+    checkEvaluation(ArrayRemove(a3, Literal(1)), Seq.empty[Integer])
 
     checkEvaluation(ArrayRemove(a4, Literal("a")), null)
+
+    checkEvaluation(ArrayRemove(a5, Literal(9)), Seq(1, null, 8, null))
+    checkEvaluation(ArrayRemove(a6, Literal(false)), Seq(true, true))
   }
 }

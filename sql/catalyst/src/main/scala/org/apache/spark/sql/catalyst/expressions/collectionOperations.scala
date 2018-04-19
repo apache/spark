@@ -1901,24 +1901,50 @@ case class ArrayRemove(left: Expression, right: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
 
-  override def nullable: Boolean = {
-    left.nullable || right.nullable || left.dataType.asInstanceOf[ArrayType].containsNull
-  }
-
-  override def eval(input: InternalRow): Any = {
-    val value1 = left.eval(input)
-    if (value1 == null) {
-      null
-    } else {
-      val value2 = right.eval(input)
-      nullSafeEval(value1, value2)
-    }
-  }
-
   override def nullSafeEval(arr: Any, value: Any): Any = {
     val elementType = left.dataType.asInstanceOf[ArrayType].elementType
     val data = arr.asInstanceOf[ArrayData].toArray[AnyRef](elementType).filter(_ != value)
     new GenericArrayData(data.asInstanceOf[Array[Any]])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val elementType = left.dataType.asInstanceOf[ArrayType].elementType
+    nullSafeCodeGen(ctx, ev, (arr, value) => {
+      val arrayClass = classOf[GenericArrayData].getName
+      val values = ctx.freshName("values")
+      val i = ctx.freshName("i")
+      val pos = ctx.freshName("arrayPosition")
+      val numsToRemove = ctx.freshName("newArrLen")
+      val getValue = CodeGenerator.getValue(arr, right.dataType, i)
+      s"""
+         |int $pos = 0;
+         |int $numsToRemove = 0;
+         |Object[] $values;
+         |
+         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
+         |  if (!$arr.isNullAt($i) && ${ctx.genEqual(right.dataType, value, getValue)}) {
+         |    $numsToRemove = $numsToRemove + 1;
+         |  }
+         |}
+         |$values = new Object[$arr.numElements() - $numsToRemove];
+         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
+         |   if ($arr.isNullAt($i)) {
+         |     $values[$pos] = null;
+         |     $pos = $pos + 1;
+         |   }
+         |   else {
+         |     if (${ctx.genEqual(right.dataType, value, getValue)}) {
+         |       ;
+         |     }
+         |     else {
+         |      $values[$pos] = ${CodeGenerator.getValue(arr, elementType, s"$i")};
+         |      $pos = $pos + 1;
+         |     }
+         |   }
+         |}
+         |${ev.value} = new $arrayClass($values);
+       """.stripMargin
+    })
   }
 
   override def prettyName: String = "array_remove"
