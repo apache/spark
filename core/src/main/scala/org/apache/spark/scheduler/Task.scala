@@ -147,7 +147,7 @@ private[spark] abstract class Task[T](
     }
   }
 
-  private var taskMemoryManager: TaskMemoryManager = _
+  @transient private var taskMemoryManager: TaskMemoryManager = _
 
   def setTaskMemoryManager(taskMemoryManager: TaskMemoryManager): Unit = {
     this.taskMemoryManager = taskMemoryManager
