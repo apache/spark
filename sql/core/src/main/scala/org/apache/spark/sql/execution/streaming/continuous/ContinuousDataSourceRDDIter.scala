@@ -38,6 +38,7 @@ class ContinuousDataSourceRDD(
     @transient private val readerFactories: Seq[DataReaderFactory[UnsafeRow]])
   extends RDD[UnsafeRow](sc, Nil) {
 
+  private var readerForTask: ContinuousReaderForTask = _
   private val dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize
   private val epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs
 
@@ -53,57 +54,32 @@ class ContinuousDataSourceRDD(
       throw new ContinuousTaskRetryException()
     }
 
-    val reader = split.asInstanceOf[DataSourceRDDPartition[UnsafeRow]]
-      .readerFactory.createDataReader()
+    if (readerForTask == null) {
+      readerForTask =
+        new ContinuousReaderForTask(split, context, dataQueueSize, epochPollIntervalMs)
+    }
 
     val coordinatorId = context.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY)
-
-    // This queue contains two types of messages:
-    // * (null, null) representing an epoch boundary.
-    // * (row, off) containing a data row and its corresponding PartitionOffset.
-    val queue = new ArrayBlockingQueue[(UnsafeRow, PartitionOffset)](dataQueueSize)
-
-    val epochPollFailed = new AtomicBoolean(false)
-    val epochPollExecutor = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
-      s"epoch-poll--$coordinatorId--${context.partitionId()}")
-    val epochPollRunnable = new EpochPollRunnable(queue, context, epochPollFailed)
-    epochPollExecutor.scheduleWithFixedDelay(
-      epochPollRunnable, 0, epochPollIntervalMs, TimeUnit.MILLISECONDS)
-
-    // Important sequencing - we must get start offset before the data reader thread begins
-    val startOffset = ContinuousDataSourceRDD.getBaseReader(reader).getOffset
-
-    val dataReaderFailed = new AtomicBoolean(false)
-    val dataReaderThread = new DataReaderThread(reader, queue, context, dataReaderFailed)
-    dataReaderThread.setDaemon(true)
-    dataReaderThread.start()
-
-    context.addTaskCompletionListener(_ => {
-      dataReaderThread.interrupt()
-      epochPollExecutor.shutdown()
-    })
-
     val epochEndpoint = EpochCoordinatorRef.get(coordinatorId, SparkEnv.get)
     new Iterator[UnsafeRow] {
       private val POLL_TIMEOUT_MS = 1000
 
       private var currentEntry: (UnsafeRow, PartitionOffset) = _
-      private var currentOffset: PartitionOffset = startOffset
-      private var currentEpoch =
-        context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
       override def hasNext(): Boolean = {
         while (currentEntry == null) {
           if (context.isInterrupted() || context.isCompleted()) {
             currentEntry = (null, null)
           }
-          if (dataReaderFailed.get()) {
-            throw new SparkException("data read failed", dataReaderThread.failureReason)
+          if (readerForTask.dataReaderFailed.get()) {
+            throw new SparkException(
+              "data read failed", readerForTask.dataReaderThread.failureReason)
           }
-          if (epochPollFailed.get()) {
-            throw new SparkException("epoch poll failed", epochPollRunnable.failureReason)
+          if (readerForTask.epochPollFailed.get()) {
+            throw new SparkException(
+              "epoch poll failed", readerForTask.epochPollRunnable.failureReason)
           }
-          currentEntry = queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+          currentEntry = readerForTask.queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
         }
 
         currentEntry match {
@@ -111,14 +87,14 @@ class ContinuousDataSourceRDD(
           case (null, null) =>
             epochEndpoint.send(ReportPartitionOffset(
               context.partitionId(),
-              currentEpoch,
-              currentOffset))
-            currentEpoch += 1
+              readerForTask.currentEpoch,
+              readerForTask.currentOffset))
+            readerForTask.currentEpoch += 1
             currentEntry = null
             false
           // real row
           case (_, offset) =>
-            currentOffset = offset
+            readerForTask.currentOffset = offset
             true
         }
       }
