@@ -28,12 +28,12 @@ import scala.util.Try
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{InternalRow, ScalaReflection}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.ScalaReflection.universe.TermName
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -449,8 +449,32 @@ case class NewInstance(
     childrenResolved && !needOuterPointer
   }
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+  @transient private lazy val constructor: (Seq[AnyRef]) => Any = {
+    val paramTypes = ScalaReflection.expressionJavaClasses(arguments)
+    val getConstructor = (paramClazz: Seq[Class[_]]) => {
+      ScalaReflection.findConstructor(cls, paramClazz).getOrElse {
+        sys.error(s"Couldn't find a valid constructor on $cls")
+      }
+    }
+    outerPointer.map { p =>
+      val outerObj = p()
+      val d = outerObj.getClass +: paramTypes
+      val c = getConstructor(outerObj.getClass +: paramTypes)
+      (args: Seq[AnyRef]) => {
+        c.newInstance(outerObj +: args: _*)
+      }
+    }.getOrElse {
+      val c = getConstructor(paramTypes)
+      (args: Seq[AnyRef]) => {
+        c.newInstance(args: _*)
+      }
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val argValues = arguments.map(_.eval(input))
+    constructor(argValues.map(_.asInstanceOf[AnyRef]))
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
@@ -560,11 +584,17 @@ case class LambdaVariable(
     dataType: DataType,
     nullable: Boolean = true) extends LeafExpression with NonSQLExpression {
 
+  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType)
+
   // Interpreted execution of `LambdaVariable` always get the 0-index element from input row.
   override def eval(input: InternalRow): Any = {
     assert(input.numFields == 1,
       "The input row of interpreted LambdaVariable should have only 1 field.")
-    input.get(0, dataType)
+    if (nullable && input.isNullAt(0)) {
+      null
+    } else {
+      accessor(input, 0)
+    }
   }
 
   override def genCode(ctx: CodegenContext): ExprCode = {
@@ -702,7 +732,7 @@ case class MapObjects private(
         }
       }
     case ArrayType(et, _) =>
-      _.asInstanceOf[ArrayData].array
+      _.asInstanceOf[ArrayData].toSeq[Any](et)
   }
 
   private lazy val mapElements: Seq[_] => Any = customCollectionCls match {
@@ -1003,8 +1033,39 @@ case class CatalystToExternalMap private(
   override def children: Seq[Expression] =
     keyLambdaFunction :: valueLambdaFunction :: inputData :: Nil
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+  private lazy val inputMapType = inputData.dataType.asInstanceOf[MapType]
+
+  private lazy val keyConverter =
+    CatalystTypeConverters.createToScalaConverter(inputMapType.keyType)
+  private lazy val valueConverter =
+    CatalystTypeConverters.createToScalaConverter(inputMapType.valueType)
+
+  private def newMapBuilder(): Builder[AnyRef, AnyRef] = {
+    val clazz = Utils.classForName(collClass.getCanonicalName + "$")
+    val module = clazz.getField("MODULE$").get(null)
+    val method = clazz.getMethod("newBuilder")
+    method.invoke(module).asInstanceOf[Builder[AnyRef, AnyRef]]
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val result = inputData.eval(input).asInstanceOf[MapData]
+    if (result != null) {
+      val builder = newMapBuilder()
+      builder.sizeHint(result.numElements())
+      val keyArray = result.keyArray()
+      val valueArray = result.valueArray()
+      var i = 0
+      while (i < result.numElements()) {
+        val key = keyConverter(keyArray.get(i, inputMapType.keyType))
+        val value = valueConverter(valueArray.get(i, inputMapType.valueType))
+        builder += Tuple2(key, value)
+        i += 1
+      }
+      builder.result()
+    } else {
+      null
+    }
+  }
 
   override def dataType: DataType = ObjectType(collClass)
 

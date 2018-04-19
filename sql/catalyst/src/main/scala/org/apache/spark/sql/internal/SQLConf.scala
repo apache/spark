@@ -441,7 +441,8 @@ object SQLConf {
 
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
-         "when reading data stored in HDFS.")
+         "when reading data stored in HDFS. This configuration will be deprecated in the future " +
+         "releases and replaced by spark.files.ignoreMissingFiles.")
     .booleanConf
     .createWithDefault(false)
 

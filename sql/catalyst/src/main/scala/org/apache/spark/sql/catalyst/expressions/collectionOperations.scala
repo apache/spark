@@ -21,8 +21,9 @@ import java.util.Comparator
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Given an array or map, returns its size. Returns -1 if null.
@@ -213,6 +214,93 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
 }
 
 /**
+ * Returns a reversed string or an array with reverse order of elements.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Returns a reversed string or an array with reverse order of elements.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark SQL');
+       LQS krapS
+      > SELECT _FUNC_(array(2, 1, 4, 3));
+       [3, 4, 1, 2]
+  """,
+  since = "1.5.0",
+  note = "Reverse logic for arrays is available since 2.4.0."
+)
+case class Reverse(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  // Input types are utilized by type coercion in ImplicitTypeCasts.
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, ArrayType))
+
+  override def dataType: DataType = child.dataType
+
+  lazy val elementType: DataType = dataType.asInstanceOf[ArrayType].elementType
+
+  override def nullSafeEval(input: Any): Any = input match {
+    case a: ArrayData => new GenericArrayData(a.toObjectArray(elementType).reverse)
+    case s: UTF8String => s.reverse()
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => dataType match {
+      case _: StringType => stringCodeGen(ev, c)
+      case _: ArrayType => arrayCodeGen(ctx, ev, c)
+    })
+  }
+
+  private def stringCodeGen(ev: ExprCode, childName: String): String = {
+    s"${ev.value} = ($childName).reverse();"
+  }
+
+  private def arrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {
+    val length = ctx.freshName("length")
+    val javaElementType = CodeGenerator.javaType(elementType)
+    val isPrimitiveType = CodeGenerator.isPrimitiveType(elementType)
+
+    val initialization = if (isPrimitiveType) {
+      s"$childName.copy()"
+    } else {
+      s"new ${classOf[GenericArrayData].getName()}(new Object[$length])"
+    }
+
+    val numberOfIterations = if (isPrimitiveType) s"$length / 2" else length
+
+    val swapAssigments = if (isPrimitiveType) {
+      val setFunc = "set" + CodeGenerator.primitiveTypeName(elementType)
+      val getCall = (index: String) => CodeGenerator.getValue(ev.value, elementType, index)
+      s"""|boolean isNullAtK = ${ev.value}.isNullAt(k);
+          |boolean isNullAtL = ${ev.value}.isNullAt(l);
+          |if(!isNullAtK) {
+          |  $javaElementType el = ${getCall("k")};
+          |  if(!isNullAtL) {
+          |    ${ev.value}.$setFunc(k, ${getCall("l")});
+          |  } else {
+          |    ${ev.value}.setNullAt(k);
+          |  }
+          |  ${ev.value}.$setFunc(l, el);
+          |} else if (!isNullAtL) {
+          |  ${ev.value}.$setFunc(k, ${getCall("l")});
+          |  ${ev.value}.setNullAt(l);
+          |}""".stripMargin
+    } else {
+      s"${ev.value}.update(k, ${CodeGenerator.getValue(childName, elementType, "l")});"
+    }
+
+    s"""
+       |final int $length = $childName.numElements();
+       |${ev.value} = $initialization;
+       |for(int k = 0; k < $numberOfIterations; k++) {
+       |  int l = $length - k - 1;
+       |  $swapAssigments
+       |}
+     """.stripMargin
+  }
+
+  override def prettyName: String = "reverse"
+}
+
+/**
  * Checks if the array (left) has the element (right)
  */
 @ExpressionDescription(
@@ -286,4 +374,294 @@ case class ArrayContains(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "array_contains"
+}
+
+/**
+ * Returns the minimum value in the array.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Returns the minimum value in the array. NULL elements are skipped.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 20, null, 3));
+       1
+  """, since = "2.4.0")
+case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def nullable: Boolean = true
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val typeCheckResult = super.checkInputDataTypes()
+    if (typeCheckResult.isSuccess) {
+      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+    } else {
+      typeCheckResult
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childGen = child.genCode(ctx)
+    val javaType = CodeGenerator.javaType(dataType)
+    val i = ctx.freshName("i")
+    val item = ExprCode("",
+      isNull = JavaCode.isNullExpression(s"${childGen.value}.isNullAt($i)"),
+      value = JavaCode.expression(CodeGenerator.getValue(childGen.value, dataType, i), dataType))
+    ev.copy(code =
+      s"""
+         |${childGen.code}
+         |boolean ${ev.isNull} = true;
+         |$javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${childGen.isNull}) {
+         |  for (int $i = 0; $i < ${childGen.value}.numElements(); $i ++) {
+         |    ${ctx.reassignIfSmaller(dataType, ev, item)}
+         |  }
+         |}
+      """.stripMargin)
+  }
+
+  override protected def nullSafeEval(input: Any): Any = {
+    var min: Any = null
+    input.asInstanceOf[ArrayData].foreach(dataType, (_, item) =>
+      if (item != null && (min == null || ordering.lt(item, min))) {
+        min = item
+      }
+    )
+    min
+  }
+
+  override def dataType: DataType = child.dataType match {
+    case ArrayType(dt, _) => dt
+    case _ => throw new IllegalStateException(s"$prettyName accepts only arrays.")
+  }
+
+  override def prettyName: String = "array_min"
+}
+
+/**
+ * Returns the maximum value in the array.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Returns the maximum value in the array. NULL elements are skipped.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 20, null, 3));
+       20
+  """, since = "2.4.0")
+case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def nullable: Boolean = true
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val typeCheckResult = super.checkInputDataTypes()
+    if (typeCheckResult.isSuccess) {
+      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+    } else {
+      typeCheckResult
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childGen = child.genCode(ctx)
+    val javaType = CodeGenerator.javaType(dataType)
+    val i = ctx.freshName("i")
+    val item = ExprCode("",
+      isNull = JavaCode.isNullExpression(s"${childGen.value}.isNullAt($i)"),
+      value = JavaCode.expression(CodeGenerator.getValue(childGen.value, dataType, i), dataType))
+    ev.copy(code =
+      s"""
+         |${childGen.code}
+         |boolean ${ev.isNull} = true;
+         |$javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${childGen.isNull}) {
+         |  for (int $i = 0; $i < ${childGen.value}.numElements(); $i ++) {
+         |    ${ctx.reassignIfGreater(dataType, ev, item)}
+         |  }
+         |}
+      """.stripMargin)
+  }
+
+  override protected def nullSafeEval(input: Any): Any = {
+    var max: Any = null
+    input.asInstanceOf[ArrayData].foreach(dataType, (_, item) =>
+      if (item != null && (max == null || ordering.gt(item, max))) {
+        max = item
+      }
+    )
+    max
+  }
+
+  override def dataType: DataType = child.dataType match {
+    case ArrayType(dt, _) => dt
+    case _ => throw new IllegalStateException(s"$prettyName accepts only arrays.")
+  }
+
+  override def prettyName: String = "array_max"
+}
+
+
+/**
+ * Returns the position of the first occurrence of element in the given array as long.
+ * Returns 0 if the given value could not be found in the array. Returns null if either of
+ * the arguments are null
+ *
+ * NOTE: that this is not zero based, but 1-based index. The first element in the array has
+ *       index 1.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, element) - Returns the (1-based) index of the first element of the array as long.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(3, 2, 1), 1);
+       3
+  """,
+  since = "2.4.0")
+case class ArrayPosition(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def dataType: DataType = LongType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
+
+  override def nullSafeEval(arr: Any, value: Any): Any = {
+    arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
+      if (v == value) {
+        return (i + 1).toLong
+      }
+    )
+    0L
+  }
+
+  override def prettyName: String = "array_position"
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (arr, value) => {
+      val pos = ctx.freshName("arrayPosition")
+      val i = ctx.freshName("i")
+      val getValue = CodeGenerator.getValue(arr, right.dataType, i)
+      s"""
+         |int $pos = 0;
+         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
+         |  if (!$arr.isNullAt($i) && ${ctx.genEqual(right.dataType, value, getValue)}) {
+         |    $pos = $i + 1;
+         |    break;
+         |  }
+         |}
+         |${ev.value} = (long) $pos;
+       """.stripMargin
+    })
+  }
+}
+
+/**
+ * Returns the value of index `right` in Array `left` or the value for key `right` in Map `left`.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, index) - Returns element of array at given (1-based) index. If index < 0,
+      accesses elements from the last to the first. Returns NULL if the index exceeds the length
+      of the array.
+
+    _FUNC_(map, key) - Returns value for given key, or NULL if the key is not contained in the map
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), 2);
+       2
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), 2);
+       "b"
+  """,
+  since = "2.4.0")
+case class ElementAt(left: Expression, right: Expression) extends GetMapValueUtil {
+
+  override def dataType: DataType = left.dataType match {
+    case ArrayType(elementType, _) => elementType
+    case MapType(_, valueType, _) => valueType
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    Seq(TypeCollection(ArrayType, MapType),
+      left.dataType match {
+        case _: ArrayType => IntegerType
+        case _: MapType => left.dataType.asInstanceOf[MapType].keyType
+      }
+    )
+  }
+
+  override def nullable: Boolean = true
+
+  override def nullSafeEval(value: Any, ordinal: Any): Any = {
+    left.dataType match {
+      case _: ArrayType =>
+        val array = value.asInstanceOf[ArrayData]
+        val index = ordinal.asInstanceOf[Int]
+        if (array.numElements() < math.abs(index)) {
+          null
+        } else {
+          val idx = if (index == 0) {
+            throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1")
+          } else if (index > 0) {
+            index - 1
+          } else {
+            array.numElements() + index
+          }
+          if (left.dataType.asInstanceOf[ArrayType].containsNull && array.isNullAt(idx)) {
+            null
+          } else {
+            array.get(idx, dataType)
+          }
+        }
+      case _: MapType =>
+        getValueEval(value, ordinal, left.dataType.asInstanceOf[MapType].keyType)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    left.dataType match {
+      case _: ArrayType =>
+        nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+          val index = ctx.freshName("elementAtIndex")
+          val nullCheck = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
+            s"""
+               |if ($eval1.isNullAt($index)) {
+               |  ${ev.isNull} = true;
+               |} else
+             """.stripMargin
+          } else {
+            ""
+          }
+          s"""
+             |int $index = (int) $eval2;
+             |if ($eval1.numElements() < Math.abs($index)) {
+             |  ${ev.isNull} = true;
+             |} else {
+             |  if ($index == 0) {
+             |    throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1");
+             |  } else if ($index > 0) {
+             |    $index--;
+             |  } else {
+             |    $index += $eval1.numElements();
+             |  }
+             |  $nullCheck
+             |  {
+             |    ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};
+             |  }
+             |}
+           """.stripMargin
+        })
+      case _: MapType =>
+        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType])
+    }
+  }
+
+  override def prettyName: String = "element_at"
 }

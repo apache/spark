@@ -204,4 +204,40 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-21479: Outer join after-join filters push down to null-supplying side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val condition = Some("x.a".attr === "y.a".attr)
+    val originalQuery = x.join(y, LeftOuter, condition).where("x.a".attr === 2).analyze
+    val left = x.where(IsNotNull('a) && 'a === 2)
+    val right = y.where(IsNotNull('a) && 'a === 2)
+    val correctAnswer = left.join(right, LeftOuter, condition).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-21479: Outer join pre-existing filters push down to null-supplying side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val condition = Some("x.a".attr === "y.a".attr)
+    val originalQuery = x.join(y.where("y.a".attr > 5), RightOuter, condition).analyze
+    val left = x.where(IsNotNull('a) && 'a > 5)
+    val right = y.where(IsNotNull('a) && 'a > 5)
+    val correctAnswer = left.join(right, RightOuter, condition).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-21479: Outer join no filter push down to preserved side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    val condition = Some("x.a".attr === "y.a".attr)
+    val originalQuery = x.join(y.where("y.a".attr === 1), LeftOuter, condition).analyze
+    val left = x
+    val right = y.where(IsNotNull('a) && 'a === 1)
+    val correctAnswer = left.join(right, LeftOuter, condition).analyze
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+  }
 }
