@@ -2065,7 +2065,7 @@ def array_except(col1, col2):
     >>> from pyspark.sql import Row
     >>> df = spark.createDataFrame([Row(c1=["b", "a", "c"], c2=["c", "d", "a", "f"])])
     >>> df.select(array_except(df.c1, df.c2)).collect()
-    [Row(array_except(c1, c2)=[u'b']))]
+    [Row(array_except(c1, c2)=[u'b'])]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.array_except(_to_java_column(col1), _to_java_column(col2)))
