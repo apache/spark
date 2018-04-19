@@ -1644,12 +1644,26 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df6.select(array_except($"a", $"b")), ans6)
     checkAnswer(df6.selectExpr("array_except(a, b)"), ans6)
 
-    val df0 = Seq((Array(1), Array("a"))).toDF("a", "b")
+    val df7 = Seq((Array(1), Array("a"))).toDF("a", "b")
     intercept[AnalysisException] {
-      df0.select(array_except($"a", $"b"))
+      df7.select(array_except($"a", $"b"))
     }
     intercept[AnalysisException] {
-      df0.selectExpr("array_except(a, b)")
+      df7.selectExpr("array_except(a, b)")
+    }
+    val df8 = Seq((Array("a"), null)).toDF("a", "b")
+    intercept[AnalysisException] {
+      df8.select(array_except($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df8.selectExpr("array_except(a, b)")
+    }
+    val df9 = Seq((null, Array("a"))).toDF("a", "b")
+    intercept[AnalysisException] {
+      df9.select(array_except($"a", $"b"))
+    }
+    intercept[AnalysisException] {
+      df9.selectExpr("array_except(a, b)")
     }
   }
 
