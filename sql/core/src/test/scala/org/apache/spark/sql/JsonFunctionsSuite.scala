@@ -327,15 +327,23 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       "A type of keys and values in map() must be string, but got"))
   }
 
-  test("from_json - map[string, integer]") {
+  test("from_json - map<string, int>") {
     val in = Seq("""{"a": 1, "b": 2, "c": 3}""").toDS()
-    val schema = MapType(StringType, IntegerType, true)
-    val out = in.select(from_json($"value", schema))
+    val schema =
+      """
+        |{
+        |  "type" : "map",
+        |  "keyType" : "string",
+        |  "valueType" : "integer",
+        |  "valueContainsNull" : true
+        |}
+      """.stripMargin
+    val out = in.select(from_json($"value", schema, Map[String, String]()))
 
     checkAnswer(out, Row(Map("a" -> 1, "b" -> 2, "c" -> 3)))
   }
 
-  test("from_json - map[string, struct]") {
+  test("from_json - map<string, struct>") {
     val in = Seq("""{"a": {"b": 1}}""").toDS()
     val schema = MapType(StringType, new StructType().add("b", IntegerType), true)
     val out = in.select(from_json($"value", schema))
@@ -343,7 +351,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(out, Row(Map("a" -> Row(1))))
   }
 
-  test("from_json - map[string, map[string, integer]]") {
+  test("from_json - map<string, map<string, int>>") {
     val in = Seq("""{"a": {"b": 1}}""").toDS()
     val schema = MapType(StringType, MapType(StringType, IntegerType))
     val out = in.select(from_json($"value", schema))
@@ -351,7 +359,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(out, Row(Map("a" -> Map("b" -> 1))))
   }
 
-  test("roundtrip - from_json -> to_json  - map[string, string]") {
+  test("roundtrip - from_json -> to_json  - map<string, string>") {
     val json = """{"a":1,"b":2,"c":3}"""
     val schema = MapType(StringType, IntegerType, true)
     val out = Seq(json).toDS().select(to_json(from_json($"value", schema)))
@@ -359,7 +367,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(out, Row(json))
   }
 
-  test("roundtrip - to_json -> from_json  - map[string, string]") {
+  test("roundtrip - to_json -> from_json  - map<string, string>") {
     val in = Seq(Map("a" -> 1)).toDF()
     val schema = MapType(StringType, IntegerType, true)
     val out = in.select(from_json(to_json($"value"), schema))
