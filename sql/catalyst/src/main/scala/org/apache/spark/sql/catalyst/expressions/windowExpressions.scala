@@ -21,7 +21,7 @@ import java.util.Locale
 
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedException}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{DeclarativeAggregate, NoOp}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateFunction, DeclarativeAggregate, NoOp}
 import org.apache.spark.sql.types._
 
 /**
@@ -296,6 +296,26 @@ trait WindowFunction extends Expression {
   /** Frame in which the window operator must be executed. */
   def frame: WindowFrame = UnspecifiedFrame
 }
+
+/**
+ * Case objects that describe whether a window function is a SQL window function or a Python
+ * user-defined window function.
+ */
+sealed trait WindowFunctionType
+
+object WindowFunctionType {
+  case object SQL extends WindowFunctionType
+  case object Python extends WindowFunctionType
+
+  def functionType(windowExpression: NamedExpression): Option[WindowFunctionType] = {
+    windowExpression.collectFirst {
+      case _: WindowFunction => SQL
+      case _: AggregateFunction => SQL
+      case udf: PythonUDF if PythonUDF.isWindowPandasUDF(udf) => Python
+    }
+  }
+}
+
 
 /**
  * An offset window function is a window function that returns the value of the input column offset

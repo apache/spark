@@ -31,7 +31,6 @@ import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableS
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight, BuildSide}
-import org.apache.spark.sql.execution.python.WindowInPandasExec
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlanV2
 import org.apache.spark.sql.internal.SQLConf
@@ -432,13 +431,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object Window extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalWindow(
-      PhysicalWindow.Scala, windowExprs, partitionSpec, orderSpec, resultExprs, child) =>
+      WindowFunctionType.SQL, windowExprs, partitionSpec, orderSpec, resultExprs, child) =>
         execution.window.WindowExec(
           windowExprs, partitionSpec, orderSpec, resultExprs, planLater(child)) :: Nil
 
       case PhysicalWindow(
-      PhysicalWindow.Python, windowExprs, partitionSpec, orderSpec, resultExprs, child) =>
-        WindowInPandasExec(
+      WindowFunctionType.Python, windowExprs, partitionSpec, orderSpec, resultExprs, child) =>
+        execution.python.WindowInPandasExec(
           windowExprs, partitionSpec, orderSpec, resultExprs, planLater(child)) :: Nil
       case _ => Nil
     }

@@ -1890,6 +1890,9 @@ class Analyzer(
           case window: WindowExpression => window.windowSpec
         }.distinct
 
+        val windowFunctionType = WindowFunctionType.functionType(expr).getOrElse(
+          failAnalysis(s"$expr does not have any WindowFunction."))
+
         // We do a final check and see if we only have a single Window Spec defined in an
         // expressions.
         if (distinctWindowSpec.isEmpty) {
@@ -1901,7 +1904,7 @@ class Analyzer(
             s"Please file a bug report with this error message, stack trace, and the query.")
         } else {
           val spec = distinctWindowSpec.head
-          (spec.partitionSpec, spec.orderSpec)
+          (spec.partitionSpec, spec.orderSpec, windowFunctionType)
         }
       }.toSeq
 
@@ -1909,7 +1912,7 @@ class Analyzer(
       // setting this to the child of the next Window operator.
       val windowOps =
         groupedWindowExpressions.foldLeft(child) {
-          case (last, ((partitionSpec, orderSpec), windowExpressions)) =>
+          case (last, ((partitionSpec, orderSpec, _), windowExpressions)) =>
             Window(windowExpressions, partitionSpec, orderSpec, last)
         }
 

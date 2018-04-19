@@ -272,13 +272,10 @@ object PhysicalAggregation {
 
 object PhysicalWindow {
 
-  sealed trait WindowFunctionType
-
   // Whether the window function is a Scalar window function or a Python window function.
   // We don't current support mixes of these two types so we use a single enum to present all
   // window functions in the window expression.
-  case object Scala extends WindowFunctionType
-  case object Python extends WindowFunctionType
+
 
   // windowFunctionType, windowExpression, partitionSpec, orderSpec, resultExpression, child
   type ReturnType =
@@ -294,12 +291,18 @@ object PhysicalWindow {
         }
       }
 
-      val windowFunctionType = newWindowExpressions.map(_.windowFunction) match {
-        case wfs: Seq[Expression] if wfs.forall(PythonUDF.isWindowPandasUDF) => Python
-        case wfs: Seq[Expression] if !wfs.exists(PythonUDF.isWindowPandasUDF) => Scala
-        case _ => throw new AnalysisException(
-          "Cannot use a mixture of window function and window Pandas UDF")
-      }
+      val windowFunctionType = windowExpressions.map(WindowFunctionType.functionType)
+        .reduceLeft ( (t1: Option[WindowFunctionType], t2: Option[WindowFunctionType]) =>
+          if (t1.isEmpty || t2.isEmpty) {
+            throw new AnalysisException(
+              s"Window function type is None in $windowExpressions.")
+          } else if (t1 != t2) {
+            throw new AnalysisException(
+              s"Found different window function type in $windowExpressions")
+          } else {
+            t1
+          }
+        ).getOrElse(throw new AnalysisException("Window expressions are empty."))
 
       val resultExpressions = windowExpressions.map(_.toAttribute)
 
