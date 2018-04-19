@@ -1548,8 +1548,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayExcept(a22, a23), Seq(null, "g"))
     checkEvaluation(ArrayExcept(a23, a24), Seq("b"))
 
-    //checkEvaluation(ArrayExcept(a20, a30), Seq("b", "a", "c"))
-    //checkEvaluation(ArrayExcept(a30, a20), Seq(null))
     checkEvaluation(ArrayExcept(a30, a30), Seq.empty)
   }
 }
