@@ -27,13 +27,17 @@ import org.apache.spark.sql.DataFrame
 /**
  * Evaluator for multiclass classification.
  *
- * @param predLabelsWeight an RDD of (prediction, label, weight).
+ * @param predAndLabelsWithOptWeight an RDD of (prediction, label, weight) or
+ *                         (prediction, label) pairs.
  */
 @Since("1.1.0")
-class MulticlassMetrics @Since("2.4.0") (predLabelsWeight: RDD[(Double, Double, Double)]) {
-  @Since("1.1.0")
-  def this(predAndLabels: RDD[(Double, Double)]) =
-    this(predAndLabels.map(r => (r._1, r._2, 1.0)))
+class MulticlassMetrics @Since("2.4.0") (predAndLabelsWithOptWeight: RDD[_]) {
+  val predLabelsWeight: RDD[(Double, Double, Double)] = predAndLabelsWithOptWeight.map {
+    case (prediction: Double, label: Double, weight: Double) =>
+      (prediction, label, weight)
+    case (prediction: Double, label: Double) =>
+      (prediction, label, 1.0)
+  }
 
   /**
    * An auxiliary constructor taking a DataFrame.
