@@ -667,7 +667,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Seq(
         Row(Map(1 -> 100, 2 -> 200, 3 -> 300, 4 -> 400)),
         Row(Map(1 -> 400, 2 -> 200, 3 -> 300)),
-        Row(Map(3 -> 300, 4 -> 400))
+        Row(null)
       )
     )
 
@@ -683,16 +683,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(intercept[AnalysisException] {
       df2.selectExpr("map_concat()").collect()
     }.getMessage().contains("expects at least two input maps"))
-
-    val df3 = Seq(
-      (null.asInstanceOf[Map[Int, Int]], null.asInstanceOf[Map[Int, Int]])
-    ).toDF("map1", "map2")
-    checkAnswer(
-      df3.selectExpr("map_concat(map1, map2)"),
-      Seq(
-        Row(Map())
-      )
-    )
   }
 
   test("map_from_entries function") {

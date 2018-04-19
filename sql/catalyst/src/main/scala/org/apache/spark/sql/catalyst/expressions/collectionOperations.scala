@@ -541,17 +541,18 @@ case class MapConcat(children: Seq[Expression]) extends Expression
       .getOrElse(MapType(keyType = StringType, valueType = StringType))
   }
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = true
 
   override def eval(input: InternalRow): Any = {
     val union = new util.LinkedHashMap[Any, Any]()
     children.map(_.eval(input)).foreach { raw =>
-      if (raw != null) {
-        val map = raw.asInstanceOf[MapData]
-        map.foreach(dataType.keyType, dataType.valueType, (k, v) =>
-          union.put(k, v)
-        )
+      if (raw == null) {
+        return null
       }
+      val map = raw.asInstanceOf[MapData]
+      map.foreach(dataType.keyType, dataType.valueType, (k, v) =>
+        union.put(k, v)
+      )
     }
     val (keyArray, valueArray) = union.entrySet().toArray().map { e =>
       val e2 = e.asInstanceOf[java.util.Map.Entry[Any, Any]]
@@ -578,6 +579,7 @@ case class MapConcat(children: Seq[Expression]) extends Expression
       s"""
         |$mapDataClass[] $mapRefArrayName = new $mapDataClass[${mapCodes.size}];
         |boolean ${ev.isNull} = false;
+        |$mapDataClass ${ev.value} = null;
       """.stripMargin
 
     val assignments = mapCodes.zipWithIndex.map { case (m, i) =>
@@ -586,6 +588,9 @@ case class MapConcat(children: Seq[Expression]) extends Expression
       s"""
          |$initCode
          |$mapRefArrayName[$i] = $valueVarName;
+         |if ($valueVarName == null) {
+         |  ${ev.isNull} = true;
+         |}
        """.stripMargin
     }.mkString("\n")
 
@@ -630,7 +635,7 @@ case class MapConcat(children: Seq[Expression]) extends Expression
         |  $mergedKeyArrayName[$index1Name] = (Object) entry.getKey();
         |  $mergedValueArrayName[$index1Name] = (Object) entry.getValue();
         |}
-        |$mapDataClass ${ev.value} =
+        |${ev.value} =
         |  new $arrayBasedMapDataClass(new $genericArrayDataClass($mergedKeyArrayName),
         |  new $genericArrayDataClass($mergedValueArrayName));
       """.stripMargin
@@ -638,8 +643,10 @@ case class MapConcat(children: Seq[Expression]) extends Expression
       s"""
         |$init
         |$assignments
-        |$mapMerge
-         $createMapData
+        | if (!${ev.isNull}) {
+        |  $mapMerge
+        |  $createMapData
+        |}
       """.stripMargin
     ev.copy(code = code)
   }
