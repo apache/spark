@@ -162,11 +162,11 @@ class StringIndexer @Since("1.4.0") (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
-  @Since("2.3.0")
+  @Since("2.4.0")
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
   /** @group setParam */
-  @Since("2.3.0")
+  @Since("2.4.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
   @Since("2.0.0")
@@ -251,7 +251,7 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
 @Since("1.4.0")
 class StringIndexerModel (
     @Since("1.4.0") override val uid: String,
-    @Since("2.3.0") val labelsArray: Array[Array[String]])
+    @Since("2.4.0") val labelsArray: Array[Array[String]])
   extends Model[StringIndexerModel] with StringIndexerBase with MLWritable {
 
   import StringIndexerModel._
@@ -259,7 +259,7 @@ class StringIndexerModel (
   @Since("1.5.0")
   def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), Array(labels))
 
-  @Since("2.3.0")
+  @Since("2.4.0")
   def this(labelsArray: Array[Array[String]]) = this(Identifiable.randomUID("strIdx"), labelsArray)
 
   @Since("1.5.0")
@@ -296,11 +296,11 @@ class StringIndexerModel (
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
-  @Since("2.3.0")
+  @Since("2.4.0")
   def setInputCols(value: Array[String]): this.type = set(inputCols, value)
 
   /** @group setParam */
-  @Since("2.3.0")
+  @Since("2.4.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
   private def filterInvalidData(dataset: Dataset[_], inputColNames: Seq[String]): Dataset[_] = {
@@ -432,15 +432,15 @@ object StringIndexerModel extends MLReadable[StringIndexerModel] {
       val dataPath = new Path(path, "data").toString
 
       val (majorVersion, minorVersion) = majorMinorVersion(metadata.sparkVersion)
-      val labelsArray = if (majorVersion < 2 || (majorVersion == 2 && minorVersion <= 2)) {
-        // Spark 2.2 and before.
+      val labelsArray = if (majorVersion < 2 || (majorVersion == 2 && minorVersion <= 3)) {
+        // Spark 2.3 and before.
         val data = sparkSession.read.parquet(dataPath)
           .select("labels")
           .head()
         val labels = data.getAs[Seq[String]](0).toArray
         Array(labels)
       } else {
-        // After Spark 2.3.
+        // After Spark 2.4.
         val data = sparkSession.read.parquet(dataPath)
           .select("labelsArray")
           .head()
