@@ -34,6 +34,7 @@ if __name__ == "__main__":
         .builder \
         .appName("SummarizerExample") \
         .getOrCreate()
+    sc = spark.sparkContext
 
     # $example on$
     df = sc.parallelize([Row(weight=1.0, features=Vectors.dense(1.0, 1.0, 1.0)),
