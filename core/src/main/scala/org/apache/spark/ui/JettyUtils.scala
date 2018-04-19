@@ -344,6 +344,7 @@ private[spark] object JettyUtils extends Logging {
           connectionFactories: _*)
         connector.setPort(port)
         connector.setHost(hostName)
+        connector.setReuseAddress(!Utils.isWindows)
 
         // Currently we only use "SelectChannelConnector"
         // Limit the max acceptor number to 8 so that we don't waste a lot of threads
