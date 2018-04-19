@@ -565,6 +565,110 @@ case class ArrayPosition(left: Expression, right: Expression)
 }
 
 /**
+ * Returns the value of index `right` in Array `left` or the value for key `right` in Map `left`.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, index) - Returns element of array at given (1-based) index. If index < 0,
+      accesses elements from the last to the first. Returns NULL if the index exceeds the length
+      of the array.
+
+    _FUNC_(map, key) - Returns value for given key, or NULL if the key is not contained in the map
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 2, 3), 2);
+       2
+      > SELECT _FUNC_(map(1, 'a', 2, 'b'), 2);
+       "b"
+  """,
+  since = "2.4.0")
+case class ElementAt(left: Expression, right: Expression) extends GetMapValueUtil {
+
+  override def dataType: DataType = left.dataType match {
+    case ArrayType(elementType, _) => elementType
+    case MapType(_, valueType, _) => valueType
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    Seq(TypeCollection(ArrayType, MapType),
+      left.dataType match {
+        case _: ArrayType => IntegerType
+        case _: MapType => left.dataType.asInstanceOf[MapType].keyType
+      }
+    )
+  }
+
+  override def nullable: Boolean = true
+
+  override def nullSafeEval(value: Any, ordinal: Any): Any = {
+    left.dataType match {
+      case _: ArrayType =>
+        val array = value.asInstanceOf[ArrayData]
+        val index = ordinal.asInstanceOf[Int]
+        if (array.numElements() < math.abs(index)) {
+          null
+        } else {
+          val idx = if (index == 0) {
+            throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1")
+          } else if (index > 0) {
+            index - 1
+          } else {
+            array.numElements() + index
+          }
+          if (left.dataType.asInstanceOf[ArrayType].containsNull && array.isNullAt(idx)) {
+            null
+          } else {
+            array.get(idx, dataType)
+          }
+        }
+      case _: MapType =>
+        getValueEval(value, ordinal, left.dataType.asInstanceOf[MapType].keyType)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    left.dataType match {
+      case _: ArrayType =>
+        nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+          val index = ctx.freshName("elementAtIndex")
+          val nullCheck = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
+            s"""
+               |if ($eval1.isNullAt($index)) {
+               |  ${ev.isNull} = true;
+               |} else
+             """.stripMargin
+          } else {
+            ""
+          }
+          s"""
+             |int $index = (int) $eval2;
+             |if ($eval1.numElements() < Math.abs($index)) {
+             |  ${ev.isNull} = true;
+             |} else {
+             |  if ($index == 0) {
+             |    throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1");
+             |  } else if ($index > 0) {
+             |    $index--;
+             |  } else {
+             |    $index += $eval1.numElements();
+             |  }
+             |  $nullCheck
+             |  {
+             |    ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};
+             |  }
+             |}
+           """.stripMargin
+        })
+      case _: MapType =>
+        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType])
+    }
+  }
+
+  override def prettyName: String = "element_at"
+}
+
+/**
  * Transforms an array of arrays into a single array.
  */
 @ExpressionDescription(
@@ -740,106 +844,3 @@ case class Flatten(child: Expression) extends UnaryExpression {
   override def prettyName: String = "flatten"
 }
 
-/**
- * Returns the value of index `right` in Array `left` or the value for key `right` in Map `left`.
- */
-@ExpressionDescription(
-  usage = """
-    _FUNC_(array, index) - Returns element of array at given (1-based) index. If index < 0,
-      accesses elements from the last to the first. Returns NULL if the index exceeds the length
-      of the array.
-
-    _FUNC_(map, key) - Returns value for given key, or NULL if the key is not contained in the map
-  """,
-  examples = """
-    Examples:
-      > SELECT _FUNC_(array(1, 2, 3), 2);
-       2
-      > SELECT _FUNC_(map(1, 'a', 2, 'b'), 2);
-       "b"
-  """,
-  since = "2.4.0")
-case class ElementAt(left: Expression, right: Expression) extends GetMapValueUtil {
-
-  override def dataType: DataType = left.dataType match {
-    case ArrayType(elementType, _) => elementType
-    case MapType(_, valueType, _) => valueType
-  }
-
-  override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(ArrayType, MapType),
-      left.dataType match {
-        case _: ArrayType => IntegerType
-        case _: MapType => left.dataType.asInstanceOf[MapType].keyType
-      }
-    )
-  }
-
-  override def nullable: Boolean = true
-
-  override def nullSafeEval(value: Any, ordinal: Any): Any = {
-    left.dataType match {
-      case _: ArrayType =>
-        val array = value.asInstanceOf[ArrayData]
-        val index = ordinal.asInstanceOf[Int]
-        if (array.numElements() < math.abs(index)) {
-          null
-        } else {
-          val idx = if (index == 0) {
-            throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1")
-          } else if (index > 0) {
-            index - 1
-          } else {
-            array.numElements() + index
-          }
-          if (left.dataType.asInstanceOf[ArrayType].containsNull && array.isNullAt(idx)) {
-            null
-          } else {
-            array.get(idx, dataType)
-          }
-        }
-      case _: MapType =>
-        getValueEval(value, ordinal, left.dataType.asInstanceOf[MapType].keyType)
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    left.dataType match {
-      case _: ArrayType =>
-        nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-          val index = ctx.freshName("elementAtIndex")
-          val nullCheck = if (left.dataType.asInstanceOf[ArrayType].containsNull) {
-            s"""
-               |if ($eval1.isNullAt($index)) {
-               |  ${ev.isNull} = true;
-               |} else
-             """.stripMargin
-          } else {
-            ""
-          }
-          s"""
-             |int $index = (int) $eval2;
-             |if ($eval1.numElements() < Math.abs($index)) {
-             |  ${ev.isNull} = true;
-             |} else {
-             |  if ($index == 0) {
-             |    throw new ArrayIndexOutOfBoundsException("SQL array indices start at 1");
-             |  } else if ($index > 0) {
-             |    $index--;
-             |  } else {
-             |    $index += $eval1.numElements();
-             |  }
-             |  $nullCheck
-             |  {
-             |    ${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};
-             |  }
-             |}
-           """.stripMargin
-        })
-      case _: MapType =>
-        doGetValueGenCode(ctx, ev, left.dataType.asInstanceOf[MapType])
-    }
-  }
-
-  override def prettyName: String = "element_at"
-}
