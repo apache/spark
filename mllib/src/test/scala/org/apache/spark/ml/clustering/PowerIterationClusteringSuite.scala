@@ -19,12 +19,12 @@ package org.apache.spark.ml.clustering
 
 import scala.collection.mutable
 
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.{SparkException, SparkFunSuite}
 
 
 class PowerIterationClusteringSuite extends SparkFunSuite
@@ -145,7 +145,6 @@ class PowerIterationClusteringSuite extends SparkFunSuite
       model.transform(typedData)
     }
     intercept[IllegalArgumentException] {
-
       val typedData = data.select(
         col("id"),
         col("neighbors"),
