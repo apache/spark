@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesExecutorSpecificConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.config.{EXECUTOR_CLASS_PATH, EXECUTOR_JAVA_OPTIONS, EXECUTOR_MEMORY, EXECUTOR_MEMORY_OVERHEAD}
@@ -171,14 +171,13 @@ private[spark] class BasicExecutorFeatureStep(
         .endSpec()
       .build()
 
-    val executorHostPathVolumesSpec = KubernetesUtils.parseHostPathVolumesWithPrefix(
-      kubernetesConf.sparkConf, KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
-    val (executorPodWithHostPathVolumes, executorContainerWithHostPathVolumes) =
-      KubernetesUtils.addHostPathVolumes(executorPod,
+    val (executorPodWithVolumes, executorContainerWithVolumes) =
+      KubernetesVolumeUtils.addVolumes(executorPod,
         containerWithLimitCores,
-        executorHostPathVolumesSpec)
+        kubernetesConf.sparkConf,
+        KUBERNETES_EXECUTOR_VOLUMES_PREFIX)
 
-    SparkPod(executorPodWithHostPathVolumes, executorContainerWithHostPathVolumes)
+    SparkPod(executorPodWithVolumes, executorContainerWithVolumes)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = Map.empty

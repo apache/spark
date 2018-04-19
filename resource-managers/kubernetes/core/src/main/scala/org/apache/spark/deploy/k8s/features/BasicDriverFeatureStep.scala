@@ -19,10 +19,10 @@ package org.apache.spark.deploy.k8s.features
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVarBuilder, EnvVarSourceBuilder, HasMetadata, PodBuilder, QuantityBuilder}
+import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesDriverSpecificConf, KubernetesUtils, SparkPod}
+import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.config._
@@ -110,12 +110,14 @@ private[spark] class BasicDriverFeatureStep(
         .endSpec()
       .build()
 
-    val driverHostPathVolumesSpec = KubernetesUtils.parseHostPathVolumesWithPrefix(
-      conf.sparkConf, KUBERNETES_DRIVER_VOLUMES_PREFIX)
-    val (driverPodWithHostPathVolumes, driverContainerWithHostPathVolumes) =
-      KubernetesUtils.addHostPathVolumes(driverPod, driverContainer, driverHostPathVolumesSpec)
+    val (driverPodWithVolumes, driverContainerVolumes) =
+      KubernetesVolumeUtils.addVolumes(
+        driverPod,
+        driverContainer,
+        conf.sparkConf,
+        KUBERNETES_DRIVER_VOLUMES_PREFIX)
 
-    SparkPod(driverPodWithHostPathVolumes, driverContainerWithHostPathVolumes)
+    SparkPod(driverPodWithVolumes, driverContainerVolumes)
   }
 
   override def getAdditionalPodSystemProperties(): Map[String, String] = {
