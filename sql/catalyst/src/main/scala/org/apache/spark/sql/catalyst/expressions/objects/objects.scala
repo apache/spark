@@ -1675,20 +1675,6 @@ case class ValidateExternalType(child: Expression, expected: DataType)
 
   private val errMsg = s" is not a valid external type for schema of ${expected.simpleString}"
 
-  // This function is corresponding to `CodeGenerator.boxedType`
-  private def boxedType(dt: DataType): Class[_] = dataType match {
-    case _: DecimalType => classOf[Decimal]
-    case BinaryType => classOf[Array[Byte]]
-    case StringType => classOf[UTF8String]
-    case CalendarIntervalType => classOf[CalendarInterval]
-    case _: StructType => classOf[InternalRow]
-    case _: ArrayType => classOf[ArrayType]
-    case _: MapType => classOf[MapType]
-    case udt: UserDefinedType[_] => boxedType(udt.sqlType)
-    case ObjectType(cls) => cls
-    case _ => ScalaReflection.typeBoxedJavaMapping.getOrElse(dt, classOf[java.lang.Object])
-  }
-
   private lazy val checkType: (Any) => Boolean = expected match {
     case _: DecimalType =>
       (value: Any) => {
@@ -1700,7 +1686,7 @@ case class ValidateExternalType(child: Expression, expected: DataType)
         value.getClass.isArray || value.isInstanceOf[Seq[_]]
       }
     case _ =>
-      val dataTypeClazz = boxedType(dataType)
+      val dataTypeClazz = ScalaReflection.javaBoxedType(dataType)
       (value: Any) => {
         dataTypeClazz.isInstance(value)
       }
