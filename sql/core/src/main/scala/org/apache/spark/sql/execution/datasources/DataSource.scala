@@ -600,12 +600,10 @@ object DataSource extends Logging {
     val provider1 = backwardCompatibilityMap.getOrElse(provider, provider) match {
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "native" =>
-        // SPARK-23817 Since datasource V2 didn't support reading multiple files yet,
-        // ORC V2 is only used when loading single file path.
-        if (paths.length == 1 && !disabledV2Readers.contains("orc")) {
-          classOf[OrcDataSourceV2].getCanonicalName
-        } else {
+        if (disabledV2Readers.contains("orc") || paths.length == 0) {
           classOf[OrcFileFormat].getCanonicalName
+        } else {
+          classOf[OrcDataSourceV2].getCanonicalName
         }
       case name if name.equalsIgnoreCase("orc") &&
           conf.getConf(SQLConf.ORC_IMPLEMENTATION) == "hive" =>

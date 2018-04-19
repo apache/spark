@@ -225,7 +225,7 @@ class FallBackToOrcV1(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   private def convertToOrcV1(v2Relation: DataSourceV2Relation): LogicalPlan = {
     val v1 = DataSource.apply(
       sparkSession = sparkSession,
-      paths = Seq.empty,
+      paths = v2Relation.v2Options.paths(),
       userSpecifiedSchema = v2Relation.userSpecifiedSchema,
       className = classOf[OrcFileFormat].getCanonicalName,
       options = v2Relation.options).resolveRelation()

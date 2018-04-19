@@ -52,7 +52,7 @@ case class DataSourceV2Relation(
       AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()))
   }
 
-  private lazy val v2Options: DataSourceOptions = makeV2Options(options)
+  private[sql] lazy val v2Options: DataSourceOptions = makeV2Options(options)
 
   // postScanFilters: filters that need to be evaluated after the scan.
   // pushedFilters: filters that will be pushed down and evaluated in the underlying data sources.

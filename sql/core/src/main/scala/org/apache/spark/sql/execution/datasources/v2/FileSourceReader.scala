@@ -65,12 +65,12 @@ trait FileSourceReader extends DataSourceReader
   protected val ignoreCorruptFiles = sqlConf.ignoreCorruptFiles
   protected val ignoreMissingFiles = sqlConf.ignoreMissingFiles
   private lazy val rootPathsSpecified = {
-    val filePath = options.get("path")
-    if (!filePath.isPresent) {
+    val filePaths = options.paths()
+    if (filePaths.isEmpty) {
       throw new AnalysisException("Reading data source requires a" +
         " path (e.g. data backed by a local or distributed file system).")
     }
-    DataSource.checkAndGlobPathIfNecessary(Seq(filePath.get), hadoopConf,
+    DataSource.checkAndGlobPathIfNecessary(filePaths, hadoopConf,
       checkEmptyGlobPath = false, checkFilesExist = false)
   }
 
