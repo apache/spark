@@ -3039,6 +3039,20 @@ object functions {
   def concat(exprs: Column*): Column = withExpr { Concat(exprs.map(_.expr)) }
 
   /**
+   * Locates the position of the first occurrence of the value in the given array as long.
+   * Returns null if either of the arguments are null.
+   *
+   * @note The position is not zero based, but 1 based index. Returns 0 if value
+   * could not be found in array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_position(column: Column, value: Any): Column = withExpr {
+    ArrayPosition(column.expr, Literal(value))
+  }
+
+  /**
    * Creates a new row for each element in the given array or map column.
    *
    * @group collection_funcs
