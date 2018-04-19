@@ -27,12 +27,14 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
-import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer, UnresolvedDeserializer}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{SQLDate, SQLTimestamp}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -162,9 +164,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "fromPrimitiveArray", ObjectType(classOf[Array[Int]]),
         Array[Int](1, 2, 3), UnsafeArrayData.fromPrimitiveArray(Array[Int](1, 2, 3))),
       (DateTimeUtils.getClass, ObjectType(classOf[Date]),
-        "toJavaDate", ObjectType(classOf[SQLDate]), 77777, DateTimeUtils.toJavaDate(77777)),
+        "toJavaDate", ObjectType(classOf[DateTimeUtils.SQLDate]), 77777,
+        DateTimeUtils.toJavaDate(77777)),
       (DateTimeUtils.getClass, ObjectType(classOf[Timestamp]),
-        "toJavaTimestamp", ObjectType(classOf[SQLTimestamp]),
+        "toJavaTimestamp", ObjectType(classOf[DateTimeUtils.SQLTimestamp]),
         88888888.toLong, DateTimeUtils.toJavaTimestamp(88888888))
     ).foreach { case (cls, dataType, methodName, argType, arg, expected) =>
       checkObjectExprEvaluation(StaticInvoke(cls, dataType, methodName,
@@ -449,6 +452,25 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)
       }
     }
+  }
+
+  implicit private def mapIntStrEncoder = ExpressionEncoder[Map[Int, String]]()
+
+  test("SPARK-23588 CatalystToExternalMap should support interpreted execution") {
+    // To get a resolved `CatalystToExternalMap` expression, we build a deserializer plan
+    // with dummy input, resolve the plan by the analyzer, and replace the dummy input
+    // with a literal for tests.
+    val unresolvedDeser = UnresolvedDeserializer(encoderFor[Map[Int, String]].deserializer)
+    val dummyInputPlan = LocalRelation('value.map(MapType(IntegerType, StringType)))
+    val plan = Project(Alias(unresolvedDeser, "none")() :: Nil, dummyInputPlan)
+
+    val analyzedPlan = SimpleAnalyzer.execute(plan)
+    val Alias(toMapExpr: CatalystToExternalMap, _) = analyzedPlan.expressions.head
+
+    // Replaces the dummy input with a literal for tests here
+    val data = Map[Int, String](0 -> "v0", 1 -> "v1", 2 -> null, 3 -> "v3")
+    val deserializer = toMapExpr.copy(inputData = Literal.create(data))
+    checkObjectExprEvaluation(deserializer, expected = data)
   }
 }
 
