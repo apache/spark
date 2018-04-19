@@ -109,6 +109,18 @@ abstract class UnsafeProjection extends Projection {
 }
 
 trait UnsafeProjectionCreator {
+  protected def toBoundExprs(
+      exprs: Seq[Expression],
+      inputSchema: Seq[Attribute]): Seq[Expression] = {
+    exprs.map(BindReferences.bindReference(_, inputSchema))
+  }
+
+  protected def toUnsafeExprs(exprs: Seq[Expression]): Seq[Expression] = {
+    exprs.map(_ transform {
+      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
+    })
+  }
+
   /**
    * Returns an UnsafeProjection for given StructType.
    *
@@ -129,10 +141,7 @@ trait UnsafeProjectionCreator {
    * Returns an UnsafeProjection for given sequence of bound Expressions.
    */
   def create(exprs: Seq[Expression]): UnsafeProjection = {
-    val unsafeExprs = exprs.map(_ transform {
-      case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
-    })
-    createProjection(unsafeExprs)
+    createProjection(toUnsafeExprs(exprs))
   }
 
   def create(expr: Expression): UnsafeProjection = create(Seq(expr))
@@ -142,18 +151,18 @@ trait UnsafeProjectionCreator {
    * `inputSchema`.
    */
   def create(exprs: Seq[Expression], inputSchema: Seq[Attribute]): UnsafeProjection = {
-    create(exprs.map(BindReferences.bindReference(_, inputSchema)))
+    create(toBoundExprs(exprs, inputSchema))
   }
 
   /**
    * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
    */
-  protected def createProjection(exprs: Seq[Expression]): UnsafeProjection
+  protected[sql] def createProjection(exprs: Seq[Expression]): UnsafeProjection
 }
 
 object UnsafeProjection extends UnsafeProjectionCreator {
 
-  override protected def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
+  override protected[sql] def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
     GenerateUnsafeProjection.generate(exprs)
   }
 
@@ -165,11 +174,8 @@ object UnsafeProjection extends UnsafeProjectionCreator {
       exprs: Seq[Expression],
       inputSchema: Seq[Attribute],
       subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
-    val e = exprs.map(BindReferences.bindReference(_, inputSchema))
-      .map(_ transform {
-        case CreateNamedStruct(children) => CreateNamedStructUnsafe(children)
-    })
-    GenerateUnsafeProjection.generate(e, subexpressionEliminationEnabled)
+    val unsafeExprs = toUnsafeExprs(toBoundExprs(exprs, inputSchema))
+    GenerateUnsafeProjection.generate(unsafeExprs, subexpressionEliminationEnabled)
   }
 }
 
