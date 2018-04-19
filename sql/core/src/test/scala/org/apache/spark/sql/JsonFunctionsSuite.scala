@@ -328,10 +328,26 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("from_json - map[string, integer]") {
-    val in = Seq("""{"a": 1}""").toDS()
+    val in = Seq("""{"a": 1, "b": 2, "c": 3}""").toDS()
     val schema = MapType(StringType, IntegerType, true)
     val out = in.select(from_json($"value", schema))
 
-    checkAnswer(out, Row(Map("a" -> 1)))
+    checkAnswer(out, Row(Map("a" -> 1, "b" -> 2, "c" -> 3)))
+  }
+
+  test("from_json - map[string, struct]") {
+    val in = Seq("""{"a": {"b": 1}}""").toDS()
+    val schema = MapType(StringType, new StructType().add("b", IntegerType), true)
+    val out = in.select(from_json($"value", schema))
+
+    checkAnswer(out, Row(Map("a" -> Row(1))))
+  }
+
+  test("from_json - map[string, map[string, integer]]") {
+    val in = Seq("""{"a": {"b": 1}}""").toDS()
+    val schema = MapType(StringType, MapType(StringType, IntegerType))
+    val out = in.select(from_json($"value", schema))
+
+    checkAnswer(out, Row(Map("a" -> Map("b" -> 1))))
   }
 }
