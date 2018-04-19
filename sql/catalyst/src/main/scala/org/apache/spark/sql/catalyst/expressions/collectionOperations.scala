@@ -505,3 +505,59 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
 
   override def prettyName: String = "array_max"
 }
+
+
+/**
+ * Returns the position of the first occurrence of element in the given array as long.
+ * Returns 0 if the given value could not be found in the array. Returns null if either of
+ * the arguments are null
+ *
+ * NOTE: that this is not zero based, but 1-based index. The first element in the array has
+ *       index 1.
+ */
+@ExpressionDescription(
+  usage = """
+    _FUNC_(array, element) - Returns the (1-based) index of the first element of the array as long.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(3, 2, 1), 1);
+       3
+  """,
+  since = "2.4.0")
+case class ArrayPosition(left: Expression, right: Expression)
+  extends BinaryExpression with ImplicitCastInputTypes {
+
+  override def dataType: DataType = LongType
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
+
+  override def nullSafeEval(arr: Any, value: Any): Any = {
+    arr.asInstanceOf[ArrayData].foreach(right.dataType, (i, v) =>
+      if (v == value) {
+        return (i + 1).toLong
+      }
+    )
+    0L
+  }
+
+  override def prettyName: String = "array_position"
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (arr, value) => {
+      val pos = ctx.freshName("arrayPosition")
+      val i = ctx.freshName("i")
+      val getValue = CodeGenerator.getValue(arr, right.dataType, i)
+      s"""
+         |int $pos = 0;
+         |for (int $i = 0; $i < $arr.numElements(); $i ++) {
+         |  if (!$arr.isNullAt($i) && ${ctx.genEqual(right.dataType, value, getValue)}) {
+         |    $pos = $i + 1;
+         |    break;
+         |  }
+         |}
+         |${ev.value} = (long) $pos;
+       """.stripMargin
+    })
+  }
+}
