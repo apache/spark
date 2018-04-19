@@ -215,14 +215,20 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }
-        if (expectRangeJoin) {
-          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1",
-              SQLConf.USE_SMJ_INNER_RANGE_OPTIMIZATION.key -> "false") {
-            checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
-              makeSortMergeJoin(leftKeys, rightKeys, boundCondition, rangeConditions,
-                leftPlan, rightPlan),
-              expectedAnswer.map(Row.fromTuple),
-              sortAnswers = true)
+      }
+      if (expectRangeJoin) {
+        withSQLConf(SQLConf.USE_SMJ_INNER_RANGE_OPTIMIZATION.key -> "false") {
+          extractJoinParts().foreach { case (_, leftKeys, rightKeys, rangeConditions,
+              boundCondition, _, _) =>
+            assert(!expectRangeJoin && rangeConditions.isEmpty ||
+              expectRangeJoin && rangeConditions.size == 2)
+            withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+              checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
+                makeSortMergeJoin(leftKeys, rightKeys, boundCondition, rangeConditions,
+                  leftPlan, rightPlan),
+                expectedAnswer.map(Row.fromTuple),
+                sortAnswers = true)
+            }
           }
         }
       }
