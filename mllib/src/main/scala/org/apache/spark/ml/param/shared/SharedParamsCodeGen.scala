@@ -91,7 +91,11 @@ private[shared] object SharedParamsCodeGen {
         "after fitting. If set to true, then all sub-models will be available. Warning: For " +
         "large models, collecting all sub-models can cause OOMs on the Spark driver",
         Some("false"), isExpertParam = true),
-      ParamDesc[String]("loss", "the loss function to be optimized", finalFields = false)
+      ParamDesc[String]("loss", "the loss function to be optimized", finalFields = false),
+      ParamDesc[String]("distanceMeasure", "The distance measure. Supported options: 'euclidean'" +
+        " and 'cosine'", Some("org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN"),
+        isValid = "(value: String) => " +
+        "org.apache.spark.mllib.clustering.DistanceMeasure.validateDistanceMeasure(value)")
     )
 
     val code = genSharedParams(params)

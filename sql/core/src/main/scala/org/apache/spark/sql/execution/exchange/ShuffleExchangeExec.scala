@@ -257,7 +257,11 @@ object ShuffleExchangeExec {
       //
       // Currently we following the most straight-forward way that perform a local sort before
       // partitioning.
+      //
+      // Note that we don't perform local sort if the new partitioning has only 1 partition, under
+      // that case all output rows go to the same partition.
       val newRdd = if (SQLConf.get.sortBeforeRepartition &&
+          newPartitioning.numPartitions > 1 &&
           newPartitioning.isInstanceOf[RoundRobinPartitioning]) {
         rdd.mapPartitionsInternal { iter =>
           val recordComparatorSupplier = new Supplier[RecordComparator] {

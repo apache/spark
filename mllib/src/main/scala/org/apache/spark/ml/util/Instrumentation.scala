@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.util
 
-import java.util.concurrent.atomic.AtomicLong
+import java.util.UUID
 
 import org.json4s._
 import org.json4s.JsonDSL._
@@ -42,7 +42,7 @@ import org.apache.spark.sql.Dataset
 private[spark] class Instrumentation[E <: Estimator[_]] private (
     estimator: E, dataset: RDD[_]) extends Logging {
 
-  private val id = Instrumentation.counter.incrementAndGet()
+  private val id = UUID.randomUUID()
   private val prefix = {
     val className = estimator.getClass.getSimpleName
     s"$className-${estimator.uid}-${dataset.hashCode()}-$id: "
@@ -56,11 +56,30 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   }
 
   /**
-   * Logs a message with a prefix that uniquely identifies the training session.
+   * Logs a warning message with a prefix that uniquely identifies the training session.
    */
-  def log(msg: String): Unit = {
-    logInfo(prefix + msg)
+  override def logWarning(msg: => String): Unit = {
+    super.logWarning(prefix + msg)
   }
+
+  /**
+   * Logs a error message with a prefix that uniquely identifies the training session.
+   */
+  override def logError(msg: => String): Unit = {
+    super.logError(prefix + msg)
+  }
+
+  /**
+   * Logs an info message with a prefix that uniquely identifies the training session.
+   */
+  override def logInfo(msg: => String): Unit = {
+    super.logInfo(prefix + msg)
+  }
+
+  /**
+   * Alias for logInfo, see above.
+   */
+  def log(msg: String): Unit = logInfo(msg)
 
   /**
    * Logs the value of the given parameters for the estimator being used in this session.
@@ -77,11 +96,11 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
   }
 
   def logNumFeatures(num: Long): Unit = {
-    log(compact(render("numFeatures" -> num)))
+    logNamedValue(Instrumentation.loggerTags.numFeatures, num)
   }
 
   def logNumClasses(num: Long): Unit = {
-    log(compact(render("numClasses" -> num)))
+    logNamedValue(Instrumentation.loggerTags.numClasses, num)
   }
 
   /**
@@ -107,7 +126,12 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
  * Some common methods for logging information about a training session.
  */
 private[spark] object Instrumentation {
-  private val counter = new AtomicLong(0)
+
+  object loggerTags {
+    val numFeatures = "numFeatures"
+    val numClasses = "numClasses"
+    val numExamples = "numExamples"
+  }
 
   /**
    * Creates an instrumentation object for a training session.

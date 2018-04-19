@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
-import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.vectorized._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
@@ -37,6 +37,11 @@ case class InMemoryTableScanExec(
   extends LeafExecNode with ColumnarBatchScan {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
+
+  override def doCanonicalize(): SparkPlan =
+    copy(attributes = attributes.map(QueryPlan.normalizeExprId(_, relation.output)),
+      predicates = predicates.map(QueryPlan.normalizeExprId(_, relation.output)),
+      relation = relation.canonicalized.asInstanceOf[InMemoryRelation])
 
   override def vectorTypes: Option[Seq[String]] =
     Option(Seq.fill(attributes.length)(
@@ -54,12 +59,15 @@ case class InMemoryTableScanExec(
   override val supportsBatch: Boolean = {
     // In the initial implementation, for ease of review
     // support only primitive data types and # of fields is less than wholeStageMaxNumFields
-    relation.schema.fields.forall(f => f.dataType match {
+    conf.cacheVectorizedReaderEnabled && relation.schema.fields.forall(f => f.dataType match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType |
            FloatType | DoubleType => true
       case _ => false
     }) && !WholeStageCodegenExec.isTooManyFields(conf, relation.schema)
   }
+
+  // TODO: revisit this. Shall we always turn off whole stage codegen if the output data are rows?
+  override def supportCodegen: Boolean = supportsBatch
 
   override protected def needsUnsafeRowConversion: Boolean = false
 
@@ -166,11 +174,13 @@ case class InMemoryTableScanExec(
   override def outputOrdering: Seq[SortOrder] =
     relation.child.outputOrdering.map(updateAttribute(_).asInstanceOf[SortOrder])
 
-  private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute(a)
+  // Keeps relation's partition statistics because we don't serialize relation.
+  private val stats = relation.partitionStatistics
+  private def statsFor(a: Attribute) = stats.forAttribute(a)
 
   // Returned filter predicate should return false iff it is impossible for the input expression
   // to evaluate to `true' based on statistics collected about this partition batch.
-  @transient val buildFilter: PartialFunction[Expression, Expression] = {
+  @transient lazy val buildFilter: PartialFunction[Expression, Expression] = {
     case And(lhs: Expression, rhs: Expression)
       if buildFilter.isDefinedAt(lhs) || buildFilter.isDefinedAt(rhs) =>
       (buildFilter.lift(lhs) ++ buildFilter.lift(rhs)).reduce(_ && _)
@@ -210,14 +220,14 @@ case class InMemoryTableScanExec(
         l.asInstanceOf[Literal] <= statsFor(a).upperBound).reduce(_ || _)
   }
 
-  val partitionFilters: Seq[Expression] = {
+  lazy val partitionFilters: Seq[Expression] = {
     predicates.flatMap { p =>
       val filter = buildFilter.lift(p)
       val boundFilter =
         filter.map(
           BindReferences.bindReference(
             _,
-            relation.partitionStatistics.schema,
+            stats.schema,
             allowFailures = true))
 
       boundFilter.foreach(_ =>
@@ -240,7 +250,7 @@ case class InMemoryTableScanExec(
   private def filteredCachedBatches(): RDD[CachedBatch] = {
     // Using these variables here to avoid serialization of entire objects (if referenced directly)
     // within the map Partitions closure.
-    val schema = relation.partitionStatistics.schema
+    val schema = stats.schema
     val schemaIndex = schema.zipWithIndex
     val buffers = relation.cachedColumnBuffers
 

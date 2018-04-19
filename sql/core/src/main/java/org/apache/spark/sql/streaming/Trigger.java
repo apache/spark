@@ -50,7 +50,7 @@ public class Trigger {
    *
    * {{{
    *    import java.util.concurrent.TimeUnit
-   *    df.writeStream.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
+   *    df.writeStream().trigger(Trigger.ProcessingTime(10, TimeUnit.SECONDS))
    * }}}
    *
    * @since 2.2.0
@@ -66,7 +66,7 @@ public class Trigger {
    *
    * {{{
    *    import scala.concurrent.duration._
-   *    df.writeStream.trigger(ProcessingTime(10.seconds))
+   *    df.writeStream.trigger(Trigger.ProcessingTime(10.seconds))
    * }}}
    * @since 2.2.0
    */

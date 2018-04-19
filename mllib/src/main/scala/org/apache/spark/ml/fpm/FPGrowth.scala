@@ -32,6 +32,7 @@ import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Common params for FPGrowth and FPGrowthModel
@@ -158,18 +159,30 @@ class FPGrowth @Since("2.2.0") (
   }
 
   private def genericFit[T: ClassTag](dataset: Dataset[_]): FPGrowthModel = {
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+
     val data = dataset.select($(itemsCol))
-    val items = data.where(col($(itemsCol)).isNotNull).rdd.map(r => r.getSeq[T](0).toArray)
+    val items = data.where(col($(itemsCol)).isNotNull).rdd.map(r => r.getSeq[Any](0).toArray)
     val mllibFP = new MLlibFPGrowth().setMinSupport($(minSupport))
     if (isSet(numPartitions)) {
       mllibFP.setNumPartitions($(numPartitions))
     }
+
+    if (handlePersistence) {
+      items.persist(StorageLevel.MEMORY_AND_DISK)
+    }
+
     val parentModel = mllibFP.run(items)
     val rows = parentModel.freqItemsets.map(f => Row(f.items, f.freq))
     val schema = StructType(Seq(
       StructField("items", dataset.schema($(itemsCol)).dataType, nullable = false),
       StructField("freq", LongType, nullable = false)))
     val frequentItems = dataset.sparkSession.createDataFrame(rows, schema)
+
+    if (handlePersistence) {
+      items.unpersist()
+    }
+
     copyValues(new FPGrowthModel(uid, frequentItems)).setParent(this)
   }
 

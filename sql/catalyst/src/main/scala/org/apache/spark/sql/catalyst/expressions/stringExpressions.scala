@@ -102,11 +102,11 @@ case class Concat(children: Seq[Expression]) extends Expression {
     val codes = ctx.splitExpressionsWithCurrentInputs(
       expressions = inputs,
       funcName = "valueConcat",
-      extraArguments = (s"${ctx.javaType(dataType)}[]", args) :: Nil)
+      extraArguments = (s"${CodeGenerator.javaType(dataType)}[]", args) :: Nil)
     ev.copy(s"""
       $initCode
       $codes
-      ${ctx.javaType(dataType)} ${ev.value} = $concatenator.concat($args);
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = $concatenator.concat($args);
       boolean ${ev.isNull} = ${ev.value} == null;
     """)
   }
@@ -196,7 +196,7 @@ case class ConcatWs(children: Seq[Expression])
     } else {
       val array = ctx.freshName("array")
       val varargNum = ctx.freshName("varargNum")
-      val idxInVararg = ctx.freshName("idxInVararg")
+      val idxVararg = ctx.freshName("idxInVararg")
 
       val evals = children.map(_.genCode(ctx))
       val (varargCount, varargBuild) = children.tail.zip(evals.tail).map { case (child, eval) =>
@@ -206,7 +206,7 @@ case class ConcatWs(children: Seq[Expression])
              if (eval.isNull == "true") {
                ""
              } else {
-               s"$array[$idxInVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};"
+               s"$array[$idxVararg ++] = ${eval.isNull} ? (UTF8String) null : ${eval.value};"
              })
           case _: ArrayType =>
             val size = ctx.freshName("n")
@@ -222,7 +222,7 @@ case class ConcatWs(children: Seq[Expression])
                 if (!${eval.isNull}) {
                   final int $size = ${eval.value}.numElements();
                   for (int j = 0; j < $size; j ++) {
-                    $array[$idxInVararg ++] = ${ctx.getValue(eval.value, StringType, "j")};
+                    $array[$idxVararg ++] = ${CodeGenerator.getValue(eval.value, StringType, "j")};
                   }
                 }
                 """)
@@ -247,20 +247,20 @@ case class ConcatWs(children: Seq[Expression])
       val varargBuilds = ctx.splitExpressionsWithCurrentInputs(
         expressions = varargBuild,
         funcName = "varargBuildsConcatWs",
-        extraArguments = ("UTF8String []", array) :: ("int", idxInVararg) :: Nil,
+        extraArguments = ("UTF8String []", array) :: ("int", idxVararg) :: Nil,
         returnType = "int",
         makeSplitFunction = body =>
           s"""
              |$body
-             |return $idxInVararg;
+             |return $idxVararg;
            """.stripMargin,
-        foldFunctions = _.map(funcCall => s"$idxInVararg = $funcCall;").mkString("\n"))
+        foldFunctions = _.map(funcCall => s"$idxVararg = $funcCall;").mkString("\n"))
 
       ev.copy(
         s"""
         $codes
         int $varargNum = ${children.count(_.dataType == StringType) - 1};
-        int $idxInVararg = 0;
+        int $idxVararg = 0;
         $varargCounts
         UTF8String[] $array = new UTF8String[$varargNum];
         $varargBuilds
@@ -333,7 +333,7 @@ case class Elt(children: Seq[Expression]) extends Expression {
     val indexVal = ctx.freshName("index")
     val indexMatched = ctx.freshName("eltIndexMatched")
 
-    val inputVal = ctx.addMutableState(ctx.javaType(dataType), "inputVal")
+    val inputVal = ctx.addMutableState(CodeGenerator.javaType(dataType), "inputVal")
 
     val assignInputValue = inputs.zipWithIndex.map { case (eval, index) =>
       s"""
@@ -350,10 +350,10 @@ case class Elt(children: Seq[Expression]) extends Expression {
       expressions = assignInputValue,
       funcName = "eltFunc",
       extraArguments = ("int", indexVal) :: Nil,
-      returnType = ctx.JAVA_BOOLEAN,
+      returnType = CodeGenerator.JAVA_BOOLEAN,
       makeSplitFunction = body =>
         s"""
-           |${ctx.JAVA_BOOLEAN} $indexMatched = false;
+           |${CodeGenerator.JAVA_BOOLEAN} $indexMatched = false;
            |do {
            |  $body
            |} while (false);
@@ -372,12 +372,12 @@ case class Elt(children: Seq[Expression]) extends Expression {
       s"""
          |${index.code}
          |final int $indexVal = ${index.value};
-         |${ctx.JAVA_BOOLEAN} $indexMatched = false;
+         |${CodeGenerator.JAVA_BOOLEAN} $indexMatched = false;
          |$inputVal = null;
          |do {
          |  $codes
          |} while (false);
-         |final ${ctx.javaType(dataType)} ${ev.value} = $inputVal;
+         |final ${CodeGenerator.javaType(dataType)} ${ev.value} = $inputVal;
          |final boolean ${ev.isNull} = ${ev.value} == null;
        """.stripMargin)
   }
@@ -1410,10 +1410,10 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     val numArgLists = argListGen.length
     val argListCode = argListGen.zipWithIndex.map { case(v, index) =>
       val value =
-        if (ctx.boxedType(v._1) != ctx.javaType(v._1)) {
+        if (CodeGenerator.boxedType(v._1) != CodeGenerator.javaType(v._1)) {
           // Java primitives get boxed in order to allow null values.
-          s"(${v._2.isNull}) ? (${ctx.boxedType(v._1)}) null : " +
-            s"new ${ctx.boxedType(v._1)}(${v._2.value})"
+          s"(${v._2.isNull}) ? (${CodeGenerator.boxedType(v._1)}) null : " +
+            s"new ${CodeGenerator.boxedType(v._1)}(${v._2.value})"
         } else {
           s"(${v._2.isNull}) ? null : ${v._2.value}"
         }
@@ -1434,7 +1434,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     ev.copy(code = s"""
       ${pattern.code}
       boolean ${ev.isNull} = ${pattern.isNull};
-      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
       if (!${ev.isNull}) {
         $stringBuffer $sb = new $stringBuffer();
         $formatter $form = new $formatter($sb, ${classOf[Locale].getName}.US);
@@ -1501,26 +1501,6 @@ case class StringRepeat(str: Expression, times: Expression)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     defineCodeGen(ctx, ev, (l, r) => s"($l).repeat($r)")
-  }
-}
-
-/**
- * Returns the reversed given string.
- */
-@ExpressionDescription(
-  usage = "_FUNC_(str) - Returns the reversed given string.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_('Spark SQL');
-       LQS krapS
-  """)
-case class StringReverse(child: Expression) extends UnaryExpression with String2StringExpression {
-  override def convert(v: UTF8String): UTF8String = v.reverse()
-
-  override def prettyName: String = "reverse"
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, c => s"($c).reverse()")
   }
 }
 
@@ -1653,19 +1633,19 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
  * A function that returns the char length of the given string expression or
  * number of bytes of the given binary expression.
  */
-// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the character length of `expr` or number of bytes in binary data.",
+  usage = "_FUNC_(expr) - Returns the character length of string data or number of bytes of " +
+    "binary data. The length of string data includes the trailing spaces. The length of binary " +
+    "data includes binary zeros.",
   examples = """
     Examples:
-      > SELECT _FUNC_('Spark SQL');
-       9
-      > SELECT CHAR_LENGTH('Spark SQL');
-       9
-      > SELECT CHARACTER_LENGTH('Spark SQL');
-       9
+      > SELECT _FUNC_('Spark SQL ');
+       10
+      > SELECT CHAR_LENGTH('Spark SQL ');
+       10
+      > SELECT CHARACTER_LENGTH('Spark SQL ');
+       10
   """)
-// scalastyle:on line.size.limit
 case class Length(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(StringType, BinaryType))
@@ -1687,7 +1667,7 @@ case class Length(child: Expression) extends UnaryExpression with ImplicitCastIn
  * A function that returns the bit length of the given string or binary expression.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the bit length of `expr` or number of bits in binary data.",
+  usage = "_FUNC_(expr) - Returns the bit length of string data or number of bits of binary data.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
@@ -1716,7 +1696,8 @@ case class BitLength(child: Expression) extends UnaryExpression with ImplicitCas
  * A function that returns the byte length of the given string or binary expression.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the byte length of `expr` or number of bytes in binary data.",
+  usage = "_FUNC_(expr) - Returns the byte length of string data or number of bytes of binary " +
+    "data.",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
@@ -2109,7 +2090,8 @@ case class FormatNumber(x: Expression, d: Expression)
       val usLocale = "US"
       val i = ctx.freshName("i")
       val dFormat = ctx.freshName("dFormat")
-      val lastDValue = ctx.addMutableState(ctx.JAVA_INT, "lastDValue", v => s"$v = -100;")
+      val lastDValue =
+        ctx.addMutableState(CodeGenerator.JAVA_INT, "lastDValue", v => s"$v = -100;")
       val pattern = ctx.addMutableState(sb, "pattern", v => s"$v = new $sb();")
       val numberFormat = ctx.addMutableState(df, "numberFormat",
         v => s"""$v = new $df("", new $dfs($l.$usLocale));""")

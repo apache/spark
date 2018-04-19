@@ -64,8 +64,8 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
       GenArrayData.genCodeToCreateArrayData(ctx, et, evals, false)
     ev.copy(
       code = preprocess + assigns + postprocess,
-      value = arrayData,
-      isNull = "false")
+      value = JavaCode.variable(arrayData, dataType),
+      isNull = FalseLiteral)
   }
 
   override def prettyName: String = "array"
@@ -90,7 +90,7 @@ private [sql] object GenArrayData {
     val arrayDataName = ctx.freshName("arrayData")
     val numElements = elementsCode.length
 
-    if (!ctx.isPrimitiveType(elementType)) {
+    if (!CodeGenerator.isPrimitiveType(elementType)) {
       val arrayName = ctx.freshName("arrayObject")
       val genericArrayClass = classOf[GenericArrayData].getName
 
@@ -124,7 +124,7 @@ private [sql] object GenArrayData {
         ByteArrayMethods.roundNumberOfBytesToNearestWord(elementType.defaultSize * numElements)
       val baseOffset = Platform.BYTE_ARRAY_OFFSET
 
-      val primitiveValueTypeName = ctx.primitiveTypeName(elementType)
+      val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
       val assignments = elementsCode.zipWithIndex.map { case (eval, i) =>
         val isNullAssignment = if (!isMapKey) {
           s"$arrayDataName.setNullAt($i);"
@@ -378,7 +378,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
          |$valuesCode
          |final InternalRow ${ev.value} = new $rowClass($values);
          |$values = null;
-       """.stripMargin, isNull = "false")
+       """.stripMargin, isNull = FalseLiteral)
   }
 
   override def prettyName: String = "named_struct"
@@ -394,7 +394,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends CreateNamedStruc
 case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateNamedStructLike {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
-    ExprCode(code = eval.code, isNull = "false", value = eval.value)
+    ExprCode(code = eval.code, isNull = FalseLiteral, value = eval.value)
   }
 
   override def prettyName: String = "named_struct_unsafe"

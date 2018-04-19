@@ -101,7 +101,7 @@ class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
           if (check) {
             result = Some(MarkingFileOutput.checkMarker(
               destPath,
-              spark.sparkContext.hadoopConfiguration))
+              spark.sessionState.newHadoopConf()))
           }
         }
     }

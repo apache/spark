@@ -23,24 +23,25 @@ import org.apache.spark.sql.catalyst.expressions._
 trait QueryPlanConstraints { self: LogicalPlan =>
 
   /**
-   * An [[ExpressionSet]] that contains invariants about the rows output by this operator. For
-   * example, if this set contains the expression `a = 2` then that expression is guaranteed to
-   * evaluate to `true` for all rows produced.
+   * An [[ExpressionSet]] that contains an additional set of constraints, such as equality
+   * constraints and `isNotNull` constraints, etc.
    */
-  lazy val constraints: ExpressionSet = {
+  lazy val allConstraints: ExpressionSet = {
     if (conf.constraintPropagationEnabled) {
-      ExpressionSet(
-        validConstraints
-          .union(inferAdditionalConstraints(validConstraints))
-          .union(constructIsNotNullConstraints(validConstraints))
-          .filter { c =>
-            c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
-          }
-      )
+      ExpressionSet(validConstraints
+        .union(inferAdditionalConstraints(validConstraints))
+        .union(constructIsNotNullConstraints(validConstraints)))
     } else {
       ExpressionSet(Set.empty)
     }
   }
+
+  /**
+   * An [[ExpressionSet]] that contains invariants about the rows output by this operator. For
+   * example, if this set contains the expression `a = 2` then that expression is guaranteed to
+   * evaluate to `true` for all rows produced.
+   */
+  lazy val constraints: ExpressionSet = ExpressionSet(allConstraints.filter(selfReferenceOnly))
 
   /**
    * This method can be overridden by any child class of QueryPlan to specify a set of constraints
@@ -51,6 +52,23 @@ trait QueryPlanConstraints { self: LogicalPlan =>
    * See [[Canonicalize]] for more details.
    */
   protected def validConstraints: Set[Expression] = Set.empty
+
+  /**
+   * Returns an [[ExpressionSet]] that contains an additional set of constraints, such as
+   * equality constraints and `isNotNull` constraints, etc., and that only contains references
+   * to this [[LogicalPlan]] node.
+   */
+  def getRelevantConstraints(constraints: Set[Expression]): ExpressionSet = {
+    val allRelevantConstraints =
+      if (conf.constraintPropagationEnabled) {
+        constraints
+          .union(inferAdditionalConstraints(constraints))
+          .union(constructIsNotNullConstraints(constraints))
+      } else {
+        constraints
+      }
+    ExpressionSet(allRelevantConstraints.filter(selfReferenceOnly))
+  }
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
@@ -117,4 +135,8 @@ trait QueryPlanConstraints { self: LogicalPlan =>
       destination: Attribute): Set[Expression] = constraints.map(_ transform {
     case e: Expression if e.semanticEquals(source) => destination
   })
+
+  private def selfReferenceOnly(e: Expression): Boolean = {
+    e.references.nonEmpty && e.references.subsetOf(outputSet) && e.deterministic
+  }
 }

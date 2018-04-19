@@ -21,13 +21,12 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.tree.LeafNode
+import org.apache.spark.ml.tree.ClassificationLeafNode
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
@@ -35,8 +34,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 /**
  * Test suite for [[RandomForestClassifier]].
  */
-class RandomForestClassifierSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class RandomForestClassifierSuite extends MLTest with DefaultReadWriteTest {
 
   import RandomForestClassifierSuite.compareAPIs
   import testImplicits._
@@ -73,7 +71,8 @@ class RandomForestClassifierSuite
   test("params") {
     ParamsSuite.checkParams(new RandomForestClassifier)
     val model = new RandomForestClassificationModel("rfc",
-      Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 1, 2)), 2, 2)
+      Array(new DecisionTreeClassificationModel("dtc",
+        new ClassificationLeafNode(0.0, 0.0, null), 1, 2)), 2, 2)
     ParamsSuite.checkParams(model)
   }
 
@@ -143,11 +142,8 @@ class RandomForestClassifierSuite
 
     MLTestingUtils.checkCopyAndUids(rf, model)
 
-    val predictions = model.transform(df)
-      .select(rf.getPredictionCol, rf.getRawPredictionCol, rf.getProbabilityCol)
-      .collect()
-
-    predictions.foreach { case Row(pred: Double, rawPred: Vector, probPred: Vector) =>
+    testTransformer[(Vector, Double)](df, model, "prediction", "rawPrediction",
+      "probability") { case Row(pred: Double, rawPred: Vector, probPred: Vector) =>
       assert(pred === rawPred.argmax,
         s"Expected prediction $pred but calculated ${rawPred.argmax} from rawPrediction.")
       val sum = rawPred.toArray.sum
@@ -155,8 +151,25 @@ class RandomForestClassifierSuite
         "probability prediction mismatch")
       assert(probPred.toArray.sum ~== 1.0 relTol 1E-5)
     }
+
     ProbabilisticClassifierSuite.testPredictMethods[
-      Vector, RandomForestClassificationModel](model, df)
+      Vector, RandomForestClassificationModel](this, model, df)
+  }
+
+  test("prediction on single instance") {
+    val rdd = orderedLabeledPoints5_20
+    val rf = new RandomForestClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(3)
+      .setNumTrees(3)
+      .setSeed(123)
+    val categoricalFeatures = Map.empty[Int, Int]
+    val numClasses = 2
+
+    val df: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val model = rf.fit(df)
+
+    testPredictionModelSinglePrediction(model, df)
   }
 
   test("Fitting without numClasses in metadata") {

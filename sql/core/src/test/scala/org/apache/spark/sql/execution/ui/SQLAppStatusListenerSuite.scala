@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.status.ElementTrackingStore
 import org.apache.spark.status.config._
@@ -510,6 +511,50 @@ class SQLAppStatusListenerSuite extends SparkFunSuite with SharedSQLContext with
     }
   }
 
+  test("eviction should respect execution completion time") {
+    val conf = sparkContext.conf.clone().set(UI_RETAINED_EXECUTIONS.key, "2")
+    val store = new ElementTrackingStore(new InMemoryStore, conf)
+    val listener = new SQLAppStatusListener(conf, store, live = true)
+    val statusStore = new SQLAppStatusStore(store, Some(listener))
+
+    var time = 0
+    val df = createTestDataFrame
+    // Start execution 1 and execution 2
+    time += 1
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      1,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      time))
+    time += 1
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      2,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      time))
+
+    // Stop execution 2 before execution 1
+    time += 1
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(2, time))
+    time += 1
+    listener.onOtherEvent(SparkListenerSQLExecutionEnd(1, time))
+
+    // Start execution 3 and execution 2 should be evicted.
+    time += 1
+    listener.onOtherEvent(SparkListenerSQLExecutionStart(
+      3,
+      "test",
+      "test",
+      df.queryExecution.toString,
+      SparkPlanInfo.fromSparkPlan(df.queryExecution.executedPlan),
+      time))
+    assert(statusStore.executionsCount === 2)
+    assert(statusStore.execution(2) === None)
+  }
 }
 
 
@@ -566,6 +611,7 @@ class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
         sc.listenerBus.waitUntilEmpty(10000)
         val statusStore = spark.sharedState.statusStore
         assert(statusStore.executionsCount() <= 50)
+        assert(statusStore.planGraphCount() <= 50)
         // No live data should be left behind after all executions end.
         assert(statusStore.listener.get.noLiveData())
       }

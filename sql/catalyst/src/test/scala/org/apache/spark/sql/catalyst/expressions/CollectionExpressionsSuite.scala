@@ -105,4 +105,68 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayContains(a3, Literal("")), null)
     checkEvaluation(ArrayContains(a3, Literal.create(null, StringType)), null)
   }
+
+  test("Array Min") {
+    checkEvaluation(ArrayMin(Literal.create(Seq(-11, 10, 2), ArrayType(IntegerType))), -11)
+    checkEvaluation(
+      ArrayMin(Literal.create(Seq[String](null, "abc", ""), ArrayType(StringType))), "")
+    checkEvaluation(ArrayMin(Literal.create(Seq(null), ArrayType(LongType))), null)
+    checkEvaluation(ArrayMin(Literal.create(null, ArrayType(StringType))), null)
+    checkEvaluation(
+      ArrayMin(Literal.create(Seq(1.123, 0.1234, 1.121), ArrayType(DoubleType))), 0.1234)
+  }
+
+  test("Array max") {
+    checkEvaluation(ArrayMax(Literal.create(Seq(1, 10, 2), ArrayType(IntegerType))), 10)
+    checkEvaluation(
+      ArrayMax(Literal.create(Seq[String](null, "abc", ""), ArrayType(StringType))), "abc")
+    checkEvaluation(ArrayMax(Literal.create(Seq(null), ArrayType(LongType))), null)
+    checkEvaluation(ArrayMax(Literal.create(null, ArrayType(StringType))), null)
+    checkEvaluation(
+      ArrayMax(Literal.create(Seq(1.123, 0.1234, 1.121), ArrayType(DoubleType))), 1.123)
+  }
+
+  test("Reverse") {
+    // Primitive-type elements
+    val ai0 = Literal.create(Seq(2, 1, 4, 3), ArrayType(IntegerType))
+    val ai1 = Literal.create(Seq(2, 1, 3), ArrayType(IntegerType))
+    val ai2 = Literal.create(Seq(null, 1, null, 3), ArrayType(IntegerType))
+    val ai3 = Literal.create(Seq(2, null, 4, null), ArrayType(IntegerType))
+    val ai4 = Literal.create(Seq(null, null, null), ArrayType(IntegerType))
+    val ai5 = Literal.create(Seq(1), ArrayType(IntegerType))
+    val ai6 = Literal.create(Seq.empty, ArrayType(IntegerType))
+    val ai7 = Literal.create(null, ArrayType(IntegerType))
+
+    checkEvaluation(Reverse(ai0), Seq(3, 4, 1, 2))
+    checkEvaluation(Reverse(ai1), Seq(3, 1, 2))
+    checkEvaluation(Reverse(ai2), Seq(3, null, 1, null))
+    checkEvaluation(Reverse(ai3), Seq(null, 4, null, 2))
+    checkEvaluation(Reverse(ai4), Seq(null, null, null))
+    checkEvaluation(Reverse(ai5), Seq(1))
+    checkEvaluation(Reverse(ai6), Seq.empty)
+    checkEvaluation(Reverse(ai7), null)
+
+    // Non-primitive-type elements
+    val as0 = Literal.create(Seq("b", "a", "d", "c"), ArrayType(StringType))
+    val as1 = Literal.create(Seq("b", "a", "c"), ArrayType(StringType))
+    val as2 = Literal.create(Seq(null, "a", null, "c"), ArrayType(StringType))
+    val as3 = Literal.create(Seq("b", null, "d", null), ArrayType(StringType))
+    val as4 = Literal.create(Seq(null, null, null), ArrayType(StringType))
+    val as5 = Literal.create(Seq("a"), ArrayType(StringType))
+    val as6 = Literal.create(Seq.empty, ArrayType(StringType))
+    val as7 = Literal.create(null, ArrayType(StringType))
+    val aa = Literal.create(
+      Seq(Seq("a", "b"), Seq("c", "d"), Seq("e")),
+      ArrayType(ArrayType(StringType)))
+
+    checkEvaluation(Reverse(as0), Seq("c", "d", "a", "b"))
+    checkEvaluation(Reverse(as1), Seq("c", "a", "b"))
+    checkEvaluation(Reverse(as2), Seq("c", null, "a", null))
+    checkEvaluation(Reverse(as3), Seq(null, "d", null, "b"))
+    checkEvaluation(Reverse(as4), Seq(null, null, null))
+    checkEvaluation(Reverse(as5), Seq("a"))
+    checkEvaluation(Reverse(as6), Seq.empty)
+    checkEvaluation(Reverse(as7), null)
+    checkEvaluation(Reverse(aa), Seq(Seq("e"), Seq("c", "d"), Seq("a", "b")))
+  }
 }

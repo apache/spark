@@ -301,6 +301,12 @@ package object config {
     .booleanConf
     .createWithDefault(false)
 
+  private[spark] val IGNORE_MISSING_FILES = ConfigBuilder("spark.files.ignoreMissingFiles")
+    .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
+        "encountering missing files and the contents that have been read will still be returned.")
+    .booleanConf
+    .createWithDefault(false)
+
   private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
     .stringConf
     .createOptional
@@ -519,5 +525,22 @@ package object config {
       .intConf
       .checkValue(v => v > 0, "The threshold should be positive.")
       .createWithDefault(10000000)
+
+  private[spark] val MAX_RESULT_SIZE = ConfigBuilder("spark.driver.maxResultSize")
+    .doc("Size limit for results.")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefaultString("1g")
+
+  private[spark] val CREDENTIALS_RENEWAL_INTERVAL_RATIO =
+    ConfigBuilder("spark.security.credentials.renewalRatio")
+      .doc("Ratio of the credential's expiration time when Spark should fetch new credentials.")
+      .doubleConf
+      .createWithDefault(0.75d)
+
+  private[spark] val CREDENTIALS_RENEWAL_RETRY_WAIT =
+    ConfigBuilder("spark.security.credentials.retryWait")
+      .doc("How long to wait before retrying to fetch new credentials after a failure.")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefaultString("1h")
 
 }

@@ -40,7 +40,7 @@ import org.apache.spark.util.VersionUtils.majorVersion
  * Common params for KMeans and KMeansModel
  */
 private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
-  with HasSeed with HasPredictionCol with HasTol {
+  with HasSeed with HasPredictionCol with HasTol with HasDistanceMeasure {
 
   /**
    * The number of clusters to create (k). Must be &gt; 1. Note that it is possible for fewer than
@@ -70,15 +70,6 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   /** @group expertGetParam */
   @Since("1.5.0")
   def getInitMode: String = $(initMode)
-
-  @Since("2.4.0")
-  final val distanceMeasure = new Param[String](this, "distanceMeasure", "The distance measure. " +
-    "Supported options: 'euclidean' and 'cosine'.",
-    (value: String) => MLlibKMeans.validateDistanceMeasure(value))
-
-  /** @group expertGetParam */
-  @Since("2.4.0")
-  def getDistanceMeasure: String = $(distanceMeasure)
 
   /**
    * Param for the number of steps for the k-means|| initialization mode. This is an advanced

@@ -50,8 +50,9 @@ import org.apache.spark.sql.types.StructType;
  * TODO: make this always return ColumnarBatches.
  */
 public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBase<Object> {
-  // TODO: make this configurable.
-  private static final int CAPACITY = 4 * 1024;
+
+  // The capacity of vectorized batch.
+  private int capacity;
 
   /**
    * Batch of rows that we assemble and the current index we've returned. Every time this
@@ -115,13 +116,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    */
   private final MemoryMode MEMORY_MODE;
 
-  public VectorizedParquetRecordReader(TimeZone convertTz, boolean useOffHeap) {
+  public VectorizedParquetRecordReader(TimeZone convertTz, boolean useOffHeap, int capacity) {
     this.convertTz = convertTz;
     MEMORY_MODE = useOffHeap ? MemoryMode.OFF_HEAP : MemoryMode.ON_HEAP;
-  }
-
-  public VectorizedParquetRecordReader(boolean useOffHeap) {
-    this(null, useOffHeap);
+    this.capacity = capacity;
   }
 
   /**
@@ -199,9 +197,9 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     }
 
     if (memMode == MemoryMode.OFF_HEAP) {
-      columnVectors = OffHeapColumnVector.allocateColumns(CAPACITY, batchSchema);
+      columnVectors = OffHeapColumnVector.allocateColumns(capacity, batchSchema);
     } else {
-      columnVectors = OnHeapColumnVector.allocateColumns(CAPACITY, batchSchema);
+      columnVectors = OnHeapColumnVector.allocateColumns(capacity, batchSchema);
     }
     columnarBatch = new ColumnarBatch(columnVectors);
     if (partitionColumns != null) {
@@ -215,7 +213,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     // Initialize missing columns with nulls.
     for (int i = 0; i < missingColumns.length; i++) {
       if (missingColumns[i]) {
-        columnVectors[i].putNulls(0, CAPACITY);
+        columnVectors[i].putNulls(0, capacity);
         columnVectors[i].setIsConstant();
       }
     }
@@ -257,7 +255,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     if (rowsReturned >= totalRowCount) return false;
     checkEndOfRowGroup();
 
-    int num = (int) Math.min((long) CAPACITY, totalCountLoadedSoFar - rowsReturned);
+    int num = (int) Math.min((long) capacity, totalCountLoadedSoFar - rowsReturned);
     for (int i = 0; i < columnReaders.length; ++i) {
       if (columnReaders[i] == null) continue;
       columnReaders[i].readBatch(num, columnVectors[i]);

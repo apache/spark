@@ -136,7 +136,7 @@ case class AggregateInPandasExec(
 
       val columnarBatchIter = new ArrowPythonRunner(
         pyFuncs, bufferSize, reuseWorker,
-        PythonEvalType.SQL_PANDAS_GROUP_AGG_UDF, argOffsets, aggInputSchema,
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF, argOffsets, aggInputSchema,
         sessionLocalTimeZone, pandasRespectSessionTimeZone)
         .compute(projectedRowIter, context.partitionId(), context)
 

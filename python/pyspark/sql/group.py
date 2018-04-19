@@ -15,11 +15,12 @@
 # limitations under the License.
 #
 
+import sys
+
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix, PythonEvalType
-from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
+from pyspark.sql.column import Column, _to_seq
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.types import *
 
 __all__ = ["GroupedData"]
@@ -98,7 +99,7 @@ class GroupedData(object):
         [Row(name=u'Alice', min(age)=2), Row(name=u'Bob', min(age)=5)]
 
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
-        >>> @pandas_udf('int', PandasUDFType.GROUP_AGG)  # doctest: +SKIP
+        >>> @pandas_udf('int', PandasUDFType.GROUPED_AGG)  # doctest: +SKIP
         ... def min_udf(v):
         ...     return v.min()
         >>> sorted(gdf.agg(min_udf(df.age)).collect())  # doctest: +SKIP
@@ -235,14 +236,14 @@ class GroupedData(object):
             into memory, so the user should be aware of the potential OOM risk if data is skewed
             and certain groups are too large to fit in memory.
 
-        :param udf: a group map user-defined function returned by
+        :param udf: a grouped map user-defined function returned by
             :func:`pyspark.sql.functions.pandas_udf`.
 
         >>> from pyspark.sql.functions import pandas_udf, PandasUDFType
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))
-        >>> @pandas_udf("id long, v double", PandasUDFType.GROUP_MAP)  # doctest: +SKIP
+        >>> @pandas_udf("id long, v double", PandasUDFType.GROUPED_MAP)  # doctest: +SKIP
         ... def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
@@ -262,9 +263,9 @@ class GroupedData(object):
         """
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
-           or udf.evalType != PythonEvalType.SQL_PANDAS_GROUP_MAP_UDF:
+           or udf.evalType != PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF:
             raise ValueError("Invalid udf: the udf argument must be a pandas_udf of type "
-                             "GROUP_MAP.")
+                             "GROUPED_MAP.")
         df = self._df
         udf_column = udf(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
@@ -299,7 +300,7 @@ def _test():
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
     spark.stop()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)
 
 
 if __name__ == "__main__":

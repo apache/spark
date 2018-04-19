@@ -164,8 +164,6 @@ if [[ "$1" == "package" ]]; then
   tar cvzf spark-$SPARK_VERSION.tgz spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz
-  echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md MD5 spark-$SPARK_VERSION.tgz > \
-    spark-$SPARK_VERSION.tgz.md5
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
     SHA512 spark-$SPARK_VERSION.tgz > spark-$SPARK_VERSION.tgz.sha512
   rm -rf spark-$SPARK_VERSION
@@ -216,9 +214,6 @@ if [[ "$1" == "package" ]]; then
         --output $R_DIST_NAME.asc \
         --detach-sig $R_DIST_NAME
       echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-        MD5 $R_DIST_NAME > \
-        $R_DIST_NAME.md5
-      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
         SHA512 $R_DIST_NAME > \
         $R_DIST_NAME.sha512
     else
@@ -235,9 +230,6 @@ if [[ "$1" == "package" ]]; then
         --output $PYTHON_DIST_NAME.asc \
         --detach-sig $PYTHON_DIST_NAME
       echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-        MD5 $PYTHON_DIST_NAME > \
-        $PYTHON_DIST_NAME.md5
-      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
         SHA512 $PYTHON_DIST_NAME > \
         $PYTHON_DIST_NAME.sha512
     fi
@@ -247,9 +239,6 @@ if [[ "$1" == "package" ]]; then
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
       --output spark-$SPARK_VERSION-bin-$NAME.tgz.asc \
       --detach-sig spark-$SPARK_VERSION-bin-$NAME.tgz
-    echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-      MD5 spark-$SPARK_VERSION-bin-$NAME.tgz > \
-      spark-$SPARK_VERSION-bin-$NAME.tgz.md5
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
       SHA512 spark-$SPARK_VERSION-bin-$NAME.tgz > \
       spark-$SPARK_VERSION-bin-$NAME.tgz.sha512
@@ -382,18 +371,11 @@ if [[ "$1" == "publish-release" ]]; then
   find . -type f |grep -v \.jar |grep -v \.pom | xargs rm
 
   echo "Creating hash and signature files"
-  # this must have .asc, .md5 and .sha1 - it really doesn't like anything else there
+  # this must have .asc and .sha1 - it really doesn't like anything else there
   for file in $(find . -type f)
   do
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --output $file.asc \
       --detach-sig --armour $file;
-    if [ $(command -v md5) ]; then
-      # Available on OS X; -q to keep only hash
-      md5 -q $file > $file.md5
-    else
-      # Available on Linux; cut to keep only hash
-      md5sum $file | cut -f1 -d' ' > $file.md5
-    fi
     sha1sum $file | cut -f1 -d' ' > $file.sha1
   done
 
