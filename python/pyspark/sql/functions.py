@@ -1862,6 +1862,7 @@ def array_position(col, value):
     return Column(sc._jvm.functions.array_position(_to_java_column(col), value))
 
 
+@ignore_unicode_prefix
 @since(2.4)
 def element_at(col, extraction):
     """
