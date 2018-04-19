@@ -47,6 +47,20 @@ class InvokeTargetSubClass extends InvokeTargetClass {
   override def binOp(e1: Int, e2: Double): Double = e1 - e2
 }
 
+// Tests for NewInstance
+class Outer extends Serializable {
+  class Inner(val value: Int) {
+    override def hashCode(): Int = super.hashCode()
+    override def equals(other: Any): Boolean = {
+      if (other.isInstanceOf[Inner]) {
+        value == other.asInstanceOf[Inner].value
+      } else {
+        false
+      }
+    }
+  }
+}
+
 class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-16622: The returned value of the called method in Invoke can be null") {
@@ -383,6 +397,27 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-23584 NewInstance should support interpreted execution") {
+    // Normal case test
+    val newInst1 = NewInstance(
+      cls = classOf[GenericArrayData],
+      arguments = Literal.fromObject(List(1, 2, 3)) :: Nil,
+      propagateNull = false,
+      dataType = ArrayType(IntegerType),
+      outerPointer = None)
+    checkObjectExprEvaluation(newInst1, new GenericArrayData(List(1, 2, 3)))
+
+    // Inner class case test
+    val outerObj = new Outer()
+    val newInst2 = NewInstance(
+      cls = classOf[outerObj.Inner],
+      arguments = Literal(1) :: Nil,
+      propagateNull = false,
+      dataType = ObjectType(classOf[outerObj.Inner]),
+      outerPointer = Some(() => outerObj))
+    checkObjectExprEvaluation(newInst2, new outerObj.Inner(1))
+  }
+
   test("LambdaVariable should support interpreted execution") {
     def genSchema(dt: DataType): Seq[StructType] = {
       Seq(StructType(StructField("col_1", dt, nullable = false) :: Nil),
@@ -421,6 +456,7 @@ class TestBean extends Serializable {
   private var x: Int = 0
 
   def setX(i: Int): Unit = x = i
+
   def setNonPrimitive(i: AnyRef): Unit =
     assert(i != null, "this setter should not be called with null.")
 }
