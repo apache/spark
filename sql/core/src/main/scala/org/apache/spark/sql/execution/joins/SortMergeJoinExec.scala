@@ -578,10 +578,10 @@ case class SortMergeJoinExec(
       case LessThan(_, _) => ">="
       case _ => ""
     }.getOrElse("")
-    val lowerCompExp = if (lowerSecondaryRangeExpression.isEmpty) ""
+    val lowerCompExp = if (!useInnerRange || lowerSecondaryRangeExpression.isEmpty) ""
       else s" || (comp == 0 && ${leftLowerSecRangeKey.value} " +
         s"$lowerCompop ${rightLowerSecRangeKey.value})"
-    val upperCompExp = if (upperSecondaryRangeExpression.isEmpty) ""
+    val upperCompExp = if (!useInnerRange || upperSecondaryRangeExpression.isEmpty) ""
       else s" || (comp == 0 && ${leftUpperSecRangeKey.value} " +
         s"$upperCompop ${rightUpperSecRangeKey.value})"
 
