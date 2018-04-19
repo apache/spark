@@ -157,25 +157,31 @@ private[spark] object Instrumentation {
 
 }
 
-private[spark] trait OptionalLogging extends Logging {
+private[spark] class OptionalInstrument private (
+    val instrument: Option[Instrumentation[_]],
+    val className: String) extends Logging {
 
-  protected def instrument: Option[Instrumentation[_]]
+  def this(instr: Instrumentation[_]) = this(Some(instr), "")
 
-  protected override def logInfo(msg: => String) {
+  def this(clazz: Class[_]) = this(None, clazz.getName.stripSuffix("$"))
+
+  protected override def logName = className
+
+  override def logInfo(msg: => String) {
     instrument match {
       case Some(instr) => instr.logInfo(msg)
       case None => super.logInfo(msg)
     }
   }
 
-  protected override def logWarning(msg: => String) {
+  override def logWarning(msg: => String) {
     instrument match {
       case Some(instr) => instr.logWarning(msg)
       case None => super.logWarning(msg)
     }
   }
 
-  protected override def logError(msg: => String) {
+  override def logError(msg: => String) {
     instrument match {
       case Some(instr) => instr.logError(msg)
       case None => super.logError(msg)
