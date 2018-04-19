@@ -3053,6 +3053,17 @@ object functions {
   }
 
   /**
+   * Returns element of array at given index in value if column is array. Returns value for
+   * the given key in value if column is map.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def element_at(column: Column, value: Any): Column = withExpr {
+    ElementAt(column.expr, Literal(value))
+  }
+
+  /**
    * Creates a new row for each element in the given array or map column.
    *
    * @group collection_funcs
