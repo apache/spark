@@ -1845,7 +1845,6 @@ def array_contains(col, value):
     return Column(sc._jvm.functions.array_contains(_to_java_column(col), value))
 
 
-@ignore_unicode_prefix
 @since(2.4)
 def array_position(col, value):
     """
@@ -1866,7 +1865,7 @@ def array_position(col, value):
 @since(2.4)
 def element_at(col, extraction):
     """
-    Collection function: returns element of array at given index in extraction if col is array.
+    Collection function: Returns element of array at given index in extraction if col is array.
     returns value for the given key in extraction if col is map.
 
     :param col: name of column containing array or map
