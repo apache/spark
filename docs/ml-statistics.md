@@ -111,4 +111,10 @@ to compute the mean and variance for a vector column of the input dataframe, wit
 {% include_example java/org/apache/spark/examples/ml/JavaSummarizerExample.java %}
 </div>
 
+<div data-lang="python" markdown="1">
+Refer to the [`Summarizer` Python docs](api/python/index.html#pyspark.ml.stat.Summarizer$) for details on the API.
+
+{% include_example python/ml/summarizer_example.py %}
+</div>
+
 </div>
