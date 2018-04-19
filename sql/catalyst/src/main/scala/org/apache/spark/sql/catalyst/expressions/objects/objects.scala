@@ -449,8 +449,32 @@ case class NewInstance(
     childrenResolved && !needOuterPointer
   }
 
-  override def eval(input: InternalRow): Any =
-    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
+  @transient private lazy val constructor: (Seq[AnyRef]) => Any = {
+    val paramTypes = ScalaReflection.expressionJavaClasses(arguments)
+    val getConstructor = (paramClazz: Seq[Class[_]]) => {
+      ScalaReflection.findConstructor(cls, paramClazz).getOrElse {
+        sys.error(s"Couldn't find a valid constructor on $cls")
+      }
+    }
+    outerPointer.map { p =>
+      val outerObj = p()
+      val d = outerObj.getClass +: paramTypes
+      val c = getConstructor(outerObj.getClass +: paramTypes)
+      (args: Seq[AnyRef]) => {
+        c.newInstance(outerObj +: args: _*)
+      }
+    }.getOrElse {
+      val c = getConstructor(paramTypes)
+      (args: Seq[AnyRef]) => {
+        c.newInstance(args: _*)
+      }
+    }
+  }
+
+  override def eval(input: InternalRow): Any = {
+    val argValues = arguments.map(_.eval(input))
+    constructor(argValues.map(_.asInstanceOf[AnyRef]))
+  }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
