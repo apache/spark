@@ -350,4 +350,20 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(out, Row(Map("a" -> Map("b" -> 1))))
   }
+
+  test("roundtrip - from_json -> to_json  - map[string, string]") {
+    val json = """{"a":1,"b":2,"c":3}"""
+    val schema = MapType(StringType, IntegerType, true)
+    val out = Seq(json).toDS().select(to_json(from_json($"value", schema)))
+
+    checkAnswer(out, Row(json))
+  }
+
+  test("roundtrip - to_json -> from_json  - map[string, string]") {
+    val in = Seq(Map("a" -> 1)).toDF()
+    val schema = MapType(StringType, IntegerType, true)
+    val out = in.select(from_json(to_json($"value"), schema))
+
+    checkAnswer(out, in)
+  }
 }
