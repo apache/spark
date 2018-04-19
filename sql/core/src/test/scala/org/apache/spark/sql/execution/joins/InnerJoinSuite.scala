@@ -142,6 +142,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       EnsureRequirements(spark.sessionState.conf).apply(sortMergeJoin)
     }
 
+    //disabling these because the code would never follow this path in case of a inner range join
     if(!expectRangeJoin) {
       test(s"$testName using BroadcastHashJoin (build=left)") {
         extractJoinParts().foreach { case (_, leftKeys, rightKeys, _,
@@ -213,6 +214,16 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
               leftPlan, rightPlan),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
+        }
+        if (expectRangeJoin) {
+          withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+              SQLConf.USE_SMJ_INNER_RANGE_OPTIMIZATION.key -> "false") {
+            checkAnswer2(leftRows, rightRows, (leftPlan: SparkPlan, rightPlan: SparkPlan) =>
+              makeSortMergeJoin(leftKeys, rightKeys, boundCondition, rangeConditions,
+                leftPlan, rightPlan),
+              expectedAnswer.map(Row.fromTuple),
+              sortAnswers = true)
+          }
         }
       }
     }
