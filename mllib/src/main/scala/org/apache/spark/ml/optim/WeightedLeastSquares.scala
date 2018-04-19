@@ -81,16 +81,11 @@ private[ml] class WeightedLeastSquares(
     val standardizeLabel: Boolean,
     val solverType: WeightedLeastSquares.Solver = WeightedLeastSquares.Auto,
     val maxIter: Int = 100,
-    val tol: Double = 1e-6,
-    @transient val instr: OptionalInstrument = new OptionalInstrument(
-      classOf[WeightedLeastSquares])
+    val tol: Double = 1e-6
   ) extends Serializable {
   import WeightedLeastSquares._
 
   require(regParam >= 0.0, s"regParam cannot be negative: $regParam")
-  if (regParam == 0.0) {
-    instr.logWarning("regParam is zero, which might cause numerical instability and overfitting.")
-  }
   require(elasticNetParam >= 0.0 && elasticNetParam <= 1.0,
     s"elasticNetParam must be in [0, 1]: $elasticNetParam")
   require(maxIter >= 0, s"maxIter must be a positive integer: $maxIter")
@@ -99,7 +94,14 @@ private[ml] class WeightedLeastSquares(
   /**
    * Creates a [[WeightedLeastSquaresModel]] from an RDD of [[Instance]]s.
    */
-  def fit(instances: RDD[Instance]): WeightedLeastSquaresModel = {
+  def fit(
+      instances: RDD[Instance],
+      instr: OptionalInstrument = new OptionalInstrument(classOf[WeightedLeastSquares])
+    ): WeightedLeastSquaresModel = {
+    if (regParam == 0.0) {
+      instr.logWarning("regParam is zero, which might cause numerical instability and overfitting.")
+    }
+
     val summary = instances.treeAggregate(new Aggregator)(_.add(_), _.merge(_))
     summary.validate()
     instr.logInfo(s"Number of instances: ${summary.count}.")

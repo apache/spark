@@ -158,10 +158,10 @@ private[spark] object Instrumentation {
 }
 
 private[spark] class OptionalInstrument private (
-    val instrument: Option[Instrumentation[_]],
+    val instrument: Option[Instrumentation[_ <: Estimator[_]]],
     val className: String) extends Logging {
 
-  def this(instr: Instrumentation[_]) = this(Some(instr), "")
+  def this(instr: Instrumentation[_ <: Estimator[_]]) = this(Some(instr), "")
 
   def this(clazz: Class[_]) = this(None, clazz.getName.stripSuffix("$"))
 

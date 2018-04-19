@@ -61,12 +61,12 @@ private[ml] class IterativelyReweightedLeastSquares(
     val fitIntercept: Boolean,
     val regParam: Double,
     val maxIter: Int,
-    val tol: Double,
-    @transient val instr: OptionalInstrument = new OptionalInstrument(
-      classOf[IterativelyReweightedLeastSquares])
-  ) extends Serializable {
+    val tol: Double) extends Serializable {
 
-  def fit(instances: RDD[OffsetInstance]): IterativelyReweightedLeastSquaresModel = {
+  def fit(
+      instances: RDD[OffsetInstance],
+      instr: OptionalInstrument = new OptionalInstrument(
+        classOf[IterativelyReweightedLeastSquares])): IterativelyReweightedLeastSquaresModel = {
 
     var converged = false
     var iter = 0
@@ -86,8 +86,8 @@ private[ml] class IterativelyReweightedLeastSquares(
 
       // Estimate new model
       model = new WeightedLeastSquares(fitIntercept, regParam, elasticNetParam = 0.0,
-        standardizeFeatures = false, standardizeLabel = false, instr = instr)
-        .fit(newInstances)
+        standardizeFeatures = false, standardizeLabel = false)
+        .fit(newInstances, instr = instr)
 
       // Check convergence
       val oldCoefficients = oldModel.coefficients
