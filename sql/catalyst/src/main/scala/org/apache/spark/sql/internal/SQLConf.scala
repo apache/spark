@@ -1447,6 +1447,19 @@ object SQLConf {
       .intConf
       .createWithDefault(Int.MaxValue)
 
+  val USE_SMJ_INNER_RANGE_OPTIMIZATION =
+    buildConf("spark.sql.join.smj.useInnerRangeOptimization")
+      .internal()
+      .doc("Sort-merge join 'inner range optimization' is applicable in cases where the join " +
+        "condition includes equality expressions on pairs of columns and a range expression " +
+        "involving two other columns, (e.g. t1.x = t2.x AND t1.y BETWEEN t2.y - d AND t2.y + d)." +
+        " If the inner range optimization is enabled, the number of rows considered for each " +
+        "match of equality conditions can be reduced considerably because a moving window, " +
+        "corresponding to the range conditions, will be used for iterating over matched rows " +
+        "in the right relation.")
+      .booleanConf
+      .createWithDefault(true)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1718,7 +1731,11 @@ class SQLConf extends Serializable with Logging {
 
   def sortBeforeRepartition: Boolean = getConf(SORT_BEFORE_REPARTITION)
 
+<<<<<<< HEAD
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
+=======
+  def useSmjInnerRangeOptimization: Boolean = getConf(USE_SMJ_INNER_RANGE_OPTIMIZATION)
+>>>>>>> Parameter for turning off inner range optimization
 
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
 
