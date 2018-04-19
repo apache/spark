@@ -142,7 +142,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       EnsureRequirements(spark.sessionState.conf).apply(sortMergeJoin)
     }
 
-    //disabling these because the code would never follow this path in case of a inner range join
+    // Disabling these because the code would never follow this path in case of a inner range join
     if (!expectRangeJoin) {
       test(s"$testName using BroadcastHashJoin (build=left)") {
         extractJoinParts().foreach { case (_, leftKeys, rightKeys, _,
