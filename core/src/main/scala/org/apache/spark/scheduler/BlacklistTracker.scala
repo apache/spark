@@ -210,7 +210,7 @@ private[scheduler] class BlacklistTracker (
         updateNextExpiryTime()
         killBlacklistedExecutor(exec)
 
-        val blacklistedExecsOnNode = nodeToBlacklistedExecs.getOrElseUpdate(exec, HashSet[String]())
+        val blacklistedExecsOnNode = nodeToBlacklistedExecs.getOrElseUpdate(host, HashSet[String]())
         blacklistedExecsOnNode += exec
       }
     }
