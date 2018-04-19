@@ -608,9 +608,6 @@ case class MapConcat(children: Seq[Expression]) extends Expression
         |$hashMapClass<Object, Object> $unionMapName = new $hashMapClass<Object, Object>();
         |for (int $index1Name = 0; $index1Name < $mapRefArrayName.length; $index1Name++) {
         |  $mapDataClass $mapDataName = $mapRefArrayName[$index1Name];
-        |  if ($mapDataName == null) {
-        |    continue;
-        |  }
         |  $arrayDataClass $kaName = $mapDataName.keyArray();
         |  $arrayDataClass $vaName = $mapDataName.valueArray();
         |  for (int $index2Name = 0; $index2Name < $kaName.numElements(); $index2Name++) {
