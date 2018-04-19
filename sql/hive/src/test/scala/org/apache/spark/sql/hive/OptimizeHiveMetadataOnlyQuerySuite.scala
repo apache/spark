@@ -21,22 +21,48 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.expressions.NamedExpression
+import org.apache.spark.sql.catalyst.plans.logical.{Distinct, Filter, Project, SubqueryAlias}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class OptimizeHiveMetadataOnlyQuerySuite extends QueryTest with TestHiveSingleton
     with BeforeAndAfter with SQLTestUtils {
 
+  import spark.implicits._
+
+  before {
+    sql("CREATE TABLE metadata_only (id bigint, data string) PARTITIONED BY (part int)")
+    (0 to 10).foreach(p => sql(s"ALTER TABLE metadata_only ADD PARTITION (part=$p)"))
+  }
+
   test("SPARK-23877: validate metadata-only query pushes filters to metastore") {
     withTable("metadata_only") {
-      sql("CREATE TABLE metadata_only (id bigint, data string) PARTITIONED BY (part int)")
-      (0 to 100).foreach(p => sql(s"ALTER TABLE metadata_only ADD PARTITION (part=$p)"))
+      val startCount = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
 
       // verify the number of matching partitions
-      assert(sql("SELECT DISTINCT part FROM metadata_only WHERE part < 10").collect.size === 10)
+      assert(sql("SELECT DISTINCT part FROM metadata_only WHERE part < 5").collect().length === 5)
 
       // verify that the partition predicate was pushed down to the metastore
-      assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount === 10)
+      assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount - startCount === 5)
+    }
+  }
+
+  test("SPARK-23877: filter on projected expression") {
+    withTable("metadata_only") {
+      val startCount = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
+
+      // verify the matching partitions
+      val partitions = spark.internalCreateDataFrame(Distinct(Filter(($"x" < 5).expr,
+        Project(Seq(($"part" + 1).as("x").expr.asInstanceOf[NamedExpression]),
+          spark.table("metadata_only").logicalPlan.asInstanceOf[SubqueryAlias].child)))
+          .queryExecution.toRdd, StructType(Seq(StructField("x", IntegerType))))
+
+      checkAnswer(partitions, Seq(1, 2, 3, 4).toDF("x"))
+
+      // verify that the partition predicate was not pushed down to the metastore
+      assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount - startCount == 11)
     }
   }
 }

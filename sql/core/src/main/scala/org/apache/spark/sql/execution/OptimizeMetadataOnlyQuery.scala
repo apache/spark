@@ -49,9 +49,9 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
     }
 
     plan.transform {
-      case a @ Aggregate(_, aggExprs, child @ PartitionedRelation(partAttrs, filters, relation)) =>
+      case a @ Aggregate(_, aggExprs, child @ PartitionedRelation(_, attrs, filters, rel)) =>
         // We only apply this optimization when only partitioned attributes are scanned.
-        if (a.references.subsetOf(partAttrs)) {
+        if (a.references.subsetOf(attrs)) {
           val aggFunctions = aggExprs.flatMap(_.collect {
             case agg: AggregateExpression => agg
           })
@@ -67,7 +67,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
             })
           }
           if (isAllDistinctAgg) {
-            a.withNewChildren(Seq(replaceTableScanWithPartitionMetadata(child, relation, filters)))
+            a.withNewChildren(Seq(replaceTableScanWithPartitionMetadata(child, rel, filters)))
           } else {
             a
           }
@@ -159,26 +159,32 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
    */
   object PartitionedRelation extends PredicateHelper {
 
-    def unapply(plan: LogicalPlan): Option[(AttributeSet, Seq[Expression], LogicalPlan)] = {
+    def unapply(
+        plan: LogicalPlan): Option[(AttributeSet, AttributeSet, Seq[Expression], LogicalPlan)] = {
       plan match {
         case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _)
           if fsRelation.partitionSchema.nonEmpty =>
-          val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
-          Some((AttributeSet(partAttrs), Nil, l))
+          val partAttrs = AttributeSet(getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l))
+          Some((partAttrs, partAttrs, Nil, l))
 
         case relation: HiveTableRelation if relation.tableMeta.partitionColumnNames.nonEmpty =>
-          val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
-          Some((AttributeSet(partAttrs), Nil, relation))
+          val partAttrs = AttributeSet(
+            getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation))
+          Some((partAttrs, partAttrs, Nil, relation))
 
         case p @ Project(projectList, child) if projectList.forall(_.deterministic) =>
-          unapply(child).flatMap { case (partAttrs, filters, relation) =>
-            if (p.references.subsetOf(partAttrs)) Some((p.outputSet, filters, relation)) else None
+          unapply(child).flatMap { case (partAttrs, attrs, filters, relation) =>
+            if (p.references.subsetOf(attrs)) {
+              Some((partAttrs, p.outputSet, filters, relation))
+            } else {
+              None
+            }
           }
 
         case f @ Filter(condition, child) if condition.deterministic =>
-          unapply(child).flatMap { case (partAttrs, filters, relation) =>
+          unapply(child).flatMap { case (partAttrs, attrs, filters, relation) =>
             if (f.references.subsetOf(partAttrs)) {
-              Some((partAttrs, splitConjunctivePredicates(condition) ++ filters, relation))
+              Some((partAttrs, attrs, splitConjunctivePredicates(condition) ++ filters, relation))
             } else {
               None
             }
