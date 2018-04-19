@@ -506,6 +506,7 @@ case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCast
   override def prettyName: String = "array_max"
 }
 
+
 /**
  * Returns the position of the first occurrence of element in the given array as long.
  * Returns 0 if the given value could not be found in the array. Returns null if either of
@@ -528,7 +529,6 @@ case class ArrayPosition(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
   override def dataType: DataType = LongType
-
   override def inputTypes: Seq[AbstractDataType] =
     Seq(ArrayType, left.dataType.asInstanceOf[ArrayType].elementType)
 

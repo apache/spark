@@ -535,7 +535,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-<<<<<<< HEAD
   test("array position function") {
     val df = Seq(
       (Seq[Int](1, 2), "x"),
