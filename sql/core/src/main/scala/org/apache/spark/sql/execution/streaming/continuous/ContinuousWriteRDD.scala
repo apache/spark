@@ -37,12 +37,12 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writeTask: DataWriterFactor
       SparkEnv.get)
     var currentEpoch = context.getLocalProperty(ContinuousExecution.START_EPOCH_KEY).toLong
 
-    val dataIterator = prev.compute(split, context)
     do {
       var dataWriter: DataWriter[InternalRow] = null
       // write the data and commit this writer.
       Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
         try {
+          val dataIterator = prev.compute(split, context)
           dataWriter = writeTask.createDataWriter(
             context.partitionId(), context.attemptNumber(), currentEpoch)
           while (dataIterator.hasNext) {
