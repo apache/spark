@@ -23,6 +23,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit.{JavaMainAppResource, MainAppResource}
 import org.apache.spark.internal.config.ConfigEntry
+import org.apache.spark.launcher.SparkLauncher
 
 private[spark] sealed trait KubernetesRoleSpecificConf
 
@@ -105,7 +106,7 @@ private[spark] object KubernetesConf {
       appArgs: Array[String]): KubernetesConf[KubernetesDriverSpecificConf] = {
     val sparkConfWithMainAppJar = sparkConf.clone()
     mainAppResource.foreach {
-      case JavaMainAppResource(res) =>
+      case JavaMainAppResource(res) if res != SparkLauncher.NO_RESOURCE =>
         val previousJars = sparkConf
           .getOption("spark.jars")
           .map(_.split(","))
@@ -114,6 +115,21 @@ private[spark] object KubernetesConf {
           sparkConfWithMainAppJar.setJars(previousJars ++ Seq(res))
         }
     }
+
+    sparkConfWithMainAppJar.setJars(
+      sparkConfWithMainAppJar.getOption("spark.jars")
+        .map(_.split(","))
+        .getOrElse(Array.empty)
+        .map(_.trim)
+        .filterNot(_.isEmpty))
+
+    sparkConfWithMainAppJar.set("spark.files",
+      sparkConfWithMainAppJar.getOption("spark.files")
+        .map(_.split(","))
+        .getOrElse(Array.empty)
+        .map(_.trim)
+        .filterNot(_.isEmpty)
+        .mkString(","))
 
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_LABEL_PREFIX)
