@@ -116,8 +116,9 @@ def run_individual_python_test(test_name, pyspark_python):
             # Here expects skipped test output from unittest when verbosity level is
             # 2 (or --verbose option is enabled).
             decoded_lines = map(lambda line: line.decode(), iter(per_test_output))
-            skipped_tests = list(
-                filter(lambda line: re.search('\) ... skipped ', line), decoded_lines))
+            skipped_tests = list(filter(
+                lambda line: re.search('test_.* \(pyspark\..*\) ... skipped ', line),
+                decoded_lines))
             if len(skipped_tests) > 0:
                 key = (pyspark_python, test_name)
                 SKIPPED_TESTS[key] = skipped_tests
@@ -253,7 +254,7 @@ def main():
     total_duration = time.time() - start_time
     LOGGER.info("Tests passed in %i seconds", total_duration)
 
-    for key, lines in SKIPPED_TESTS.items():
+    for key, lines in sorted(SKIPPED_TESTS.items()):
         pyspark_python, test_name = key
         LOGGER.info("\nSkipped tests in %s with %s:" % (test_name, pyspark_python))
         for line in lines:
