@@ -151,12 +151,12 @@ class CSVOptions(
 
   val isCommentSet = this.comment != '\u0000'
 
-  def dateFormatter: DateTimeFormatter = {
+  lazy val dateFormatter: DateTimeFormatter = {
     DateTimeFormatter.ofPattern(dateFormat.getPattern)
       .withLocale(Locale.US).withZone(timeZone.toZoneId).withResolverStyle(ResolverStyle.SMART)
   }
 
-  def timestampFormatter: DateTimeFormatter = {
+  lazy val timestampFormatter: DateTimeFormatter = {
     DateTimeFormatter.ofPattern(timestampFormat.getPattern)
       .withLocale(Locale.US).withZone(timeZone.toZoneId).withResolverStyle(ResolverStyle.SMART)
   }
