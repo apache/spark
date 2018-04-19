@@ -133,10 +133,8 @@ def wrap_window_agg_pandas_udf(f, return_type):
 
     def wrapped(*series):
         import pandas as pd
-        import numpy as np
         result = f(*series)
-        # This doesn't work with non primitive types
-        return pd.Series(np.repeat(result, len(series[0])))
+        return pd.Series([result]).repeat(len(series[0]))
 
     return lambda *a: (wrapped(*a), arrow_return_type)
 

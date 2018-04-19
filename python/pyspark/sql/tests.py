@@ -5454,6 +5454,15 @@ class GroupedAggPandasUDFTests(ReusedSQLTestCase):
             expected1 = df.groupby(df.id).agg(sum(df.v))
             self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 
+    def test_array_type(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        df = self.data
+
+        array_udf = pandas_udf(lambda x: [1.0, 2.0], 'array<double>', PandasUDFType.GROUPED_AGG)
+        result1 = df.groupby('id').agg(array_udf(df['v']).alias('v2'))
+        self.assertEquals(result1.first()['v2'], [1.0, 2.0])
+
     def test_invalid_args(self):
         from pyspark.sql.functions import mean
 
@@ -5556,9 +5565,6 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
                       .withColumn('max_v', max(df['v']).over(w)) \
                       .withColumn('min_w', min(df['w']).over(w))
 
-        result1.explain(True)
-        expected1.explain(True)
-
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
 
     def test_replace_existing(self):
@@ -5646,29 +5652,46 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         expected3 = expected1
 
         # Test mixing sql window function and udf
-        result4 = df.withColumn('max_v', max_udf(df['v']).over(w)).withColumn('rank', rank().over(ow))
-        expected4 = df.withColumn('max_v', max(df['v']).over(w)).withColumn('rank', rank().over(ow))
+        result4 = df.withColumn('max_v', max_udf(df['v']).over(w)) \
+                    .withColumn('rank', rank().over(ow))
+        expected4 = df.withColumn('max_v', max(df['v']).over(w)) \
+                      .withColumn('rank', rank().over(ow))
 
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
         self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
         self.assertPandasEqual(expected3.toPandas(), result3.toPandas())
         self.assertPandasEqual(expected4.toPandas(), result4.toPandas())
 
+    def test_array_type(self):
+        from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+        df = self.data
+        w = self.unbounded_window
+
+        array_udf = pandas_udf(lambda x: [1.0, 2.0], 'array<double>', PandasUDFType.GROUPED_AGG)
+        result1 = df.withColumn('v2', array_udf(df['v']).over(w))
+        self.assertEquals(result1.first()['v2'], [1.0, 2.0])
+
     def test_invalid_args(self):
         from pyspark.sql.functions import mean, pandas_udf, PandasUDFType
 
         df = self.data
         w = self.unbounded_window
-
+        ow = self.ordered_window
         mean_udf = self.pandas_agg_mean_udf
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     AnalysisException,
-                    '.*not supported within a window function'):
+                    '.*does not have any WindowFunction'):
                 foo_udf = pandas_udf(lambda x: x, 'v double', PandasUDFType.GROUPED_MAP)
                 df.withColumn('v2', foo_udf(df['v']).over(w))
 
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    AnalysisException,
+                    'Only unbounded window frame is supported with Python UDFs.'):
+                df.withColumn('mean_v', mean_udf(df['v']).over(ow))
 
 
 if __name__ == "__main__":

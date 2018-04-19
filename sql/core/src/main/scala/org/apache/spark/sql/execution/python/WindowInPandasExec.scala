@@ -122,21 +122,17 @@ case class WindowInPandasExec(
       }
 
       val inputProj = UnsafeProjection.create(allInputs, child.output)
-      val pythonInput = grouped.map{ case (k, rows) =>
+      val pythonInput = grouped.map { case (k, rows) =>
           rows.map { row =>
             queue.add(row.asInstanceOf[UnsafeRow])
             inputProj(row)
           }
       }
 
-      val pythonEvalType = udfExpressions.head.evalType match {
-        case PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF =>
-          PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF
-      }
-
       val windowFunctionResult = new ArrowPythonRunner(
         pyFuncs, bufferSize, reuseWorker,
-        pythonEvalType, argOffsets, windowInputSchema,
+        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        argOffsets, windowInputSchema,
         sessionLocalTimeZone, pandasRespectSessionTimeZone)
         .compute(pythonInput, context.partitionId(), context)
 

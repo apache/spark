@@ -309,8 +309,7 @@ object WindowFunctionType {
 
   def functionType(windowExpression: NamedExpression): Option[WindowFunctionType] = {
     windowExpression.collectFirst {
-      case _: WindowFunction => SQL
-      case _: AggregateFunction => SQL
+      case _: WindowFunction | _: AggregateFunction => SQL
       case udf: PythonUDF if PythonUDF.isWindowPandasUDF(udf) => Python
     }
   }
