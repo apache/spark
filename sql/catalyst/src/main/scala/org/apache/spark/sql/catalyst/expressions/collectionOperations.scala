@@ -20,6 +20,7 @@ import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.expressions.ArraySortUtil.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
@@ -124,7 +125,7 @@ trait ArraySortUtil extends ExpectsInputTypes with CodegenFallback {
 
   // If -1, place null element at the end of the array
   // If 1, place null element at the beginning of the array
-  protected def placeNullAtEnd: Int
+  protected def nullOrder: Int
 
   @transient
   private lazy val lt: Comparator[Any] = {
@@ -139,9 +140,9 @@ trait ArraySortUtil extends ExpectsInputTypes with CodegenFallback {
         if (o1 == null && o2 == null) {
           0
         } else if (o1 == null) {
-          -1 * placeNullAtEnd
+          -1 * nullOrder
         } else if (o2 == null) {
-          1 * placeNullAtEnd
+          1 * nullOrder
         } else {
           ordering.compare(o1, o2)
         }
@@ -162,9 +163,9 @@ trait ArraySortUtil extends ExpectsInputTypes with CodegenFallback {
         if (o1 == null && o2 == null) {
           0
         } else if (o1 == null) {
-          1 * placeNullAtEnd
+          1 * nullOrder
         } else if (o2 == null) {
-          -1 * placeNullAtEnd
+          -1 * nullOrder
         } else {
           -ordering.compare(o1, o2)
         }
@@ -179,6 +180,14 @@ trait ArraySortUtil extends ExpectsInputTypes with CodegenFallback {
       java.util.Arrays.sort(data, if (ascending) lt else gt)
     }
     new GenericArrayData(data.asInstanceOf[Array[Any]])
+  }
+}
+
+object ArraySortUtil {
+  type NullOrder = Int
+  object NullOrder {
+    val Least: NullOrder = -1
+    val Greatest: NullOrder = 1
   }
 }
 
@@ -211,7 +220,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, BooleanType)
 
   override def arrayExpression: Expression = base
-  override def placeNullAtEnd: Int = 1
+  override def nullOrder: Int = NullOrder.Greatest
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
@@ -347,7 +356,7 @@ case class ArraySort(child: Expression) extends UnaryExpression with ArraySortUt
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
   override def arrayExpression: Expression = child
-  override def placeNullAtEnd: Int = -1
+  override def nullOrder: Int = NullOrder.Least
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
