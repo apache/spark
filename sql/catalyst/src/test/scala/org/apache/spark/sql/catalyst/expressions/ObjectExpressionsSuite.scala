@@ -29,7 +29,7 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, JavaTypeInference, ScalaReflection}
-import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedDeserializer}
+import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer, UnresolvedDeserializer}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -513,6 +513,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-23589 ExternalMapToCatalyst should support interpreted execution") {
+    // Simple test
     val scalaMap = scala.collection.Map[Int, String](0 -> "v0", 1 -> "v1", 2 -> null, 3 -> "v3")
     val javaMap = new java.util.HashMap[java.lang.Integer, java.lang.String]() {
       {
@@ -534,6 +535,30 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ScalaReflection.serializerFor[scala.collection.Map[Int, String]](
         Literal.fromObject(scalaMap)), 0)
     checkEvaluation(serializer2, expected)
+
+    // NULL key test
+    val scalaMapHasNullKey = scala.collection.Map[java.lang.Integer, String](
+      null.asInstanceOf[java.lang.Integer] -> "v0", new java.lang.Integer(1) -> "v1")
+    val javaMapHasNullKey = new java.util.HashMap[java.lang.Integer, java.lang.String]() {
+      {
+        put(null, "v0")
+        put(1, "v1")
+      }
+    }
+
+    // Java Map
+    val serializer3 = GetStructField(
+      javaSerializerFor(javaMap.getClass)(Literal.fromObject(javaMapHasNullKey)), 0)
+    checkExceptionInExpression[RuntimeException](
+      serializer3, EmptyRow, "Cannot use null as map key!")
+
+    // Scala Map
+    val serializer4 = GetStructField(
+      ScalaReflection.serializerFor[scala.collection.Map[java.lang.Integer, String]](
+        Literal.fromObject(scalaMapHasNullKey)), 0)
+
+    checkExceptionInExpression[RuntimeException](
+      serializer4, EmptyRow, "Cannot use null as map key!")
   }
 }
 

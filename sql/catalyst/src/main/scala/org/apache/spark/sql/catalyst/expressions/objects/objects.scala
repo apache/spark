@@ -1308,7 +1308,7 @@ case class ExternalMapToCatalyst private(
     val result = child.eval(input)
     if (result != null) {
       val (keys, values) = mapCatalystConverter(result)
-      new ArrayBasedMapData(ArrayData.toArrayData(keys), ArrayData.toArrayData(values))
+      new ArrayBasedMapData(new GenericArrayData(keys), new GenericArrayData(values))
     } else {
       null
     }

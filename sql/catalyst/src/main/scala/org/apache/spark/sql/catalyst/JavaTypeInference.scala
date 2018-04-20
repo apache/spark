@@ -358,7 +358,8 @@ object JavaTypeInference {
   }
 
   private[catalyst] def serializerFor(
-      inputObject: Expression, typeToken: TypeToken[_]): Expression = {
+      inputObject: Expression,
+      typeToken: TypeToken[_]): Expression = {
 
     def toCatalystArray(input: Expression, elementType: TypeToken[_]): Expression = {
       val (dataType, nullable) = inferDataType(elementType)
