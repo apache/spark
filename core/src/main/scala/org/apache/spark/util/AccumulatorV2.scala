@@ -258,14 +258,8 @@ private[spark] object AccumulatorContext {
    * Returns the [[AccumulatorV2]] registered with the given ID, if any.
    */
   def get(id: Long): Option[AccumulatorV2[_, _]] = {
-    Option(originals.get(id)).map { ref =>
-      // Since we are storing weak references, we must check whether the underlying data is valid.
-      val acc = ref.get
-      if (acc eq null) {
-        throw new IllegalStateException(s"Attempted to access garbage collected accumulator $id")
-      }
-      acc
-    }
+    val ref = originals.get(id)
+    Option(if (ref != null) ref.get else null)
   }
 
   /**
