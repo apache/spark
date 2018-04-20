@@ -116,20 +116,25 @@ private[spark] object KubernetesConf {
         }
     }
 
-    sparkConfWithMainAppJar.setJars(
-      sparkConfWithMainAppJar.getOption("spark.jars")
-        .map(_.split(","))
-        .getOrElse(Array.empty)
-        .map(_.trim)
-        .filterNot(_.isEmpty))
+    val trimmedJars = sparkConfWithMainAppJar.getOption("spark.jars")
+      .map(_.split(","))
+      .getOrElse(Array.empty)
+      .map(_.trim)
+      .filterNot(_.isEmpty)
 
-    sparkConfWithMainAppJar.set("spark.files",
-      sparkConfWithMainAppJar.getOption("spark.files")
-        .map(_.split(","))
-        .getOrElse(Array.empty)
-        .map(_.trim)
-        .filterNot(_.isEmpty)
-        .mkString(","))
+    if (trimmedJars.nonEmpty) {
+      sparkConfWithMainAppJar.setJars(trimmedJars)
+    }
+
+    val trimmedFiles = sparkConfWithMainAppJar.getOption("spark.files")
+      .map(_.split(","))
+      .getOrElse(Array.empty)
+      .map(_.trim)
+      .filterNot(_.isEmpty)
+
+    if (trimmedFiles.nonEmpty) {
+      sparkConfWithMainAppJar.set("spark.files", trimmedFiles.mkString(","))
+    }
 
     val driverCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_DRIVER_LABEL_PREFIX)
