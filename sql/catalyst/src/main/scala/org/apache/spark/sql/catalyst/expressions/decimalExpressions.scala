@@ -99,20 +99,10 @@ case class CheckOverflow(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, eval => {
-      val tmp = ctx.freshName("tmp")
-      val onOverflow = if (nullOnOverflow) {
-        s"${ev.isNull} = true"
-      } else {
-        s"""throw new ArithmeticException($tmp.toDebugString() + " cannot be represented as " +
-           | "Decimal(${dataType.precision}, ${dataType.scale}).")""".stripMargin
-      }
       s"""
-         | Decimal $tmp = $eval.clone();
-         | if ($tmp.changePrecision(${dataType.precision}, ${dataType.scale})) {
-         |   ${ev.value} = $tmp;
-         | } else {
-         |   $onOverflow;
-         | }
+         |${ev.value} = $eval.toPrecision(
+         |  ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP, $nullOnOverflow);
+         |${ev.isNull} = ${ev.value} == null;
        """.stripMargin
     })
   }
