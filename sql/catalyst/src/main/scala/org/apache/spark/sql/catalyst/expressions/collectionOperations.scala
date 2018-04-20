@@ -294,7 +294,7 @@ case class ArrayContains(left: Expression, right: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(a1, a2) - Subsets array x starting from index start (or starting from the end if start is negative) with the specified length.",
+  usage = "_FUNC_(x, start, length) - Subsets array x starting from index start (or starting from the end if start is negative) with the specified length.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3, 4), 2, 2);
@@ -309,10 +309,6 @@ case class Slice(x: Expression, start: Expression, length: Expression)
   override def dataType: DataType = x.dataType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, IntegerType, IntegerType)
-
-  override def nullable: Boolean = children.exists(_.nullable)
-
-  override def foldable: Boolean = children.forall(_.foldable)
 
   override def children: Seq[Expression] = Seq(x, start, length)
 
