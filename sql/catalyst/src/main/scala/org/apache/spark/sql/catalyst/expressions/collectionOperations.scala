@@ -4014,25 +4014,27 @@ object ArraySetUtils {
 
 abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
   def typeId: Int
+  def array1: Expression
+  def array2: Expression
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val r = super.checkInputDataTypes()
     if ((r == TypeCheckResult.TypeCheckSuccess) &&
-      (left.dataType.asInstanceOf[ArrayType].elementType !=
-        right.dataType.asInstanceOf[ArrayType].elementType)) {
+      (array1.dataType.asInstanceOf[ArrayType].elementType !=
+        array2.dataType.asInstanceOf[ArrayType].elementType)) {
       TypeCheckResult.TypeCheckFailure("Element type in both arrays must be the same")
     } else {
       r
     }
   }
 
-  override def dataType: DataType = left.dataType
+  override def dataType: DataType = array1.dataType
 
   private def elementType = dataType.asInstanceOf[ArrayType].elementType
-  private def cn = left.dataType.asInstanceOf[ArrayType].containsNull ||
-  right.dataType.asInstanceOf[ArrayType].containsNull
+  private def cn = array1.dataType.asInstanceOf[ArrayType].containsNull ||
+    array2.dataType.asInstanceOf[ArrayType].containsNull
 
   def intEval(ary: ArrayData, hs1: OpenHashSet[Int]): OpenHashSet[Int]
   def longEval(ary: ArrayData, hs1: OpenHashSet[Long]): OpenHashSet[Long]
@@ -4163,10 +4165,10 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
        array(2)
   """,
   since = "2.4.0")
-case class ArrayExcept(array1: Expression, array2: Expression) extends ArraySetUtils {
+case class ArrayExcept(left: Expression, right: Expression) extends ArraySetUtils {
   override def typeId: Int = ArraySetUtils.kindExcept
-  override def left: Expression = array2
-  override def right: Expression = array1
+  override def array1: Expression = right
+  override def array2: Expression = left
 
   override def intEval(ary: ArrayData, hs1: OpenHashSet[Int]): OpenHashSet[Int] = {
     val hs = new OpenHashSet[Int]
