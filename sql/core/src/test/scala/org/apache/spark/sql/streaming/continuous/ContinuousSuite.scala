@@ -71,12 +71,12 @@ class ContinuousSuite extends ContinuousSuiteBase {
       AwaitEpoch(0),
       Execute { _.explain() },
       AddData(input, 0, 1, 2),
-      CheckAnswer(2))
-      /* Execute { _.explain() },
+      CheckAnswer(2),
+      Execute { _.explain() },
       StopStream,
       AddData(input, 2, 3, 4, 5),
       StartStream(),
-      CheckAnswer(5)) */
+      CheckAnswer(5))
   }
 
   test("map") {
