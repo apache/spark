@@ -55,8 +55,8 @@ import org.apache.spark.unsafe.types.UTF8String;
 
 public final class UnsafeArrayData extends ArrayData {
 
-  public static int calculateHeaderPortionInBytes(int numElements) {
-    return (int)calculateHeaderPortionInBytes((long)numElements);
+  public static int calculateHeaderPortionInBytes(int numFields) {
+    return (int)calculateHeaderPortionInBytes((long)numFields);
   }
 
   public static long calculateHeaderPortionInBytes(long numFields) {

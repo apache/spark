@@ -308,7 +308,6 @@ object FunctionRegistry {
     expression[BitLength]("bit_length"),
     expression[Length]("char_length"),
     expression[Length]("character_length"),
-    expression[Concat]("concat"),
     expression[ConcatWs]("concat_ws"),
     expression[Decode]("decode"),
     expression[Elt]("elt"),
@@ -413,6 +412,7 @@ object FunctionRegistry {
     expression[ArrayMin]("array_min"),
     expression[ArrayMax]("array_max"),
     expression[Reverse]("reverse"),
+    expression[Concat]("concat"),
     expression[Flatten]("flatten"),
     CreateStruct.registryEntry,
 

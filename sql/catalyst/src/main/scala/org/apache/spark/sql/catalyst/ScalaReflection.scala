@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql.catalyst
 
+import java.lang.reflect.Constructor
+
+import org.apache.commons.lang3.reflect.ConstructorUtils
+
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
@@ -779,6 +783,15 @@ object ScalaReflection extends ScalaReflection {
       case other =>
         throw new UnsupportedOperationException(s"Schema for type $other is not supported")
     }
+  }
+
+  /**
+   * Finds an accessible constructor with compatible parameters. This is a more flexible search
+   * than the exact matching algorithm in `Class.getConstructor`. The first assignment-compatible
+   * matching constructor is returned. Otherwise, it returns `None`.
+   */
+  def findConstructor(cls: Class[_], paramTypes: Seq[Class[_]]): Option[Constructor[_]] = {
+    Option(ConstructorUtils.getMatchingAccessibleConstructor(cls, paramTypes: _*))
   }
 
   /**
