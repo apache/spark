@@ -132,7 +132,7 @@ object functions {
    * Returns a sort expression based on ascending order of the column,
    * and null values return before non-null values.
    * {{{
-   *   df.sort(asc_nulls_last("dept"), desc("age"))
+   *   df.sort(asc_nulls_first("dept"), desc("age"))
    * }}}
    *
    * @group sort_funcs
@@ -3299,6 +3299,22 @@ object functions {
    * @since 1.5.0
    */
   def sort_array(e: Column, asc: Boolean): Column = withExpr { SortArray(e.expr, lit(asc).expr) }
+
+  /**
+   * Returns the minimum value in the array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_min(e: Column): Column = withExpr { ArrayMin(e.expr) }
+
+  /**
+   * Returns the maximum value in the array.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
+  def array_max(e: Column): Column = withExpr { ArrayMax(e.expr) }
 
   /**
    * Returns an unordered array containing the keys of the map.

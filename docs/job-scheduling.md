@@ -23,7 +23,7 @@ run tasks and store data for that application. If multiple users need to share y
 different options to manage allocation, depending on the cluster manager.
 
 The simplest option, available on all cluster managers, is _static partitioning_ of resources. With
-this approach, each application is given a maximum amount of resources it can use, and holds onto them
+this approach, each application is given a maximum amount of resources it can use and holds onto them
 for its whole duration. This is the approach used in Spark's [standalone](spark-standalone.html)
 and [YARN](running-on-yarn.html) modes, as well as the
 [coarse-grained Mesos mode](running-on-mesos.html#mesos-run-modes).
@@ -230,7 +230,7 @@ properties:
 * `minShare`: Apart from an overall weight, each pool can be given a _minimum shares_ (as a number of
   CPU cores) that the administrator would like it to have. The fair scheduler always attempts to meet
   all active pools' minimum shares before redistributing extra resources according to the weights.
-  The `minShare` property can therefore be another way to ensure that a pool can always get up to a
+  The `minShare` property can, therefore, be another way to ensure that a pool can always get up to a
   certain number of resources (e.g. 10 cores) quickly without giving it a high priority for the rest
   of the cluster. By default, each pool's `minShare` is 0.
 

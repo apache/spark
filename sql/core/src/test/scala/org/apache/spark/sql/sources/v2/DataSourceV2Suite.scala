@@ -25,7 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanExec}
-import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
@@ -191,6 +191,11 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-23574: no shuffle exchange with single partition") {
+    val df = spark.read.format(classOf[SimpleSinglePartitionSource].getName).load().agg(count("*"))
+    assert(df.queryExecution.executedPlan.collect { case e: Exchange => e }.isEmpty)
+  }
+
   test("simple writable data source") {
     // TODO: java implementation.
     Seq(classOf[SimpleWritableDataSource]).foreach { cls =>
@@ -334,6 +339,19 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
     checkCanonicalizedOutput(df, 2)
     checkCanonicalizedOutput(df.select('i), 1)
   }
+}
+
+class SimpleSinglePartitionSource extends DataSourceV2 with ReadSupport {
+
+  class Reader extends DataSourceReader {
+    override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
+
+    override def createDataReaderFactories(): JList[DataReaderFactory[Row]] = {
+      java.util.Arrays.asList(new SimpleDataReaderFactory(0, 5))
+    }
+  }
+
+  override def createReader(options: DataSourceOptions): DataSourceReader = new Reader
 }
 
 class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {

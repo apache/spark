@@ -34,6 +34,7 @@ trait SQLMetricsTestUtils extends SQLTestUtils {
   import testImplicits._
 
   protected def currentExecutionIds(): Set[Long] = {
+    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
     statusStore.executionsList.map(_.executionId).toSet
   }
 

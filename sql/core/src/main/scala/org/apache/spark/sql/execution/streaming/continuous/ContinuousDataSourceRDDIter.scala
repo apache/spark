@@ -35,14 +35,14 @@ import org.apache.spark.util.ThreadUtils
 class ContinuousDataSourceRDD(
     sc: SparkContext,
     sqlContext: SQLContext,
-    @transient private val readerFactories: java.util.List[DataReaderFactory[UnsafeRow]])
+    @transient private val readerFactories: Seq[DataReaderFactory[UnsafeRow]])
   extends RDD[UnsafeRow](sc, Nil) {
 
   private val dataQueueSize = sqlContext.conf.continuousStreamingExecutorQueueSize
   private val epochPollIntervalMs = sqlContext.conf.continuousStreamingExecutorPollIntervalMs
 
   override protected def getPartitions: Array[Partition] = {
-    readerFactories.asScala.zipWithIndex.map {
+    readerFactories.zipWithIndex.map {
       case (readerFactory, index) => new DataSourceRDDPartition(index, readerFactory)
     }.toArray
   }

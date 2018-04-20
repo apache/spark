@@ -56,6 +56,9 @@ private[spark] class DirectKafkaInputDStream[K, V](
     ppc: PerPartitionConfig
   ) extends InputDStream[ConsumerRecord[K, V]](_ssc) with Logging with CanCommitOffsets {
 
+  private val initialRate = context.sparkContext.getConf.getLong(
+    "spark.streaming.backpressure.initialRate", 0)
+
   val executorKafkaParams = {
     val ekp = new ju.HashMap[String, Object](consumerStrategy.executorKafkaParams)
     KafkaUtils.fixKafkaParams(ekp)
@@ -126,7 +129,10 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
   protected[streaming] def maxMessagesPerPartition(
     offsets: Map[TopicPartition, Long]): Option[Map[TopicPartition, Long]] = {
-    val estimatedRateLimit = rateController.map(_.getLatestRate())
+    val estimatedRateLimit = rateController.map { x => {
+      val lr = x.getLatestRate()
+      if (lr > 0) lr else initialRate
+    }}
 
     // calculate a per-partition rate limit based on current lag
     val effectiveRateLimitPerPartition = estimatedRateLimit.filter(_ > 0) match {

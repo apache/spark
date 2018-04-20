@@ -186,16 +186,12 @@ class MyObject(object):
         self.value = value
 
 
-class ReusedSQLTestCase(ReusedPySparkTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedPySparkTestCase.setUpClass()
-        cls.spark = SparkSession(cls.sc)
-
-    @classmethod
-    def tearDownClass(cls):
-        ReusedPySparkTestCase.tearDownClass()
-        cls.spark.stop()
+class SQLTestUtils(object):
+    """
+    This util assumes the instance of this to have 'spark' attribute, having a spark session.
+    It is usually used with 'ReusedSQLTestCase' class but can be used if you feel sure the
+    the implementation of this class has 'spark' attribute.
+    """
 
     @contextmanager
     def sql_conf(self, pairs):
@@ -204,6 +200,7 @@ class ReusedSQLTestCase(ReusedPySparkTestCase):
         `value` to the configuration `key` and then restores it back when it exits.
         """
         assert isinstance(pairs, dict), "pairs should be a dictionary."
+        assert hasattr(self, "spark"), "it should have 'spark' attribute, having a spark session."
 
         keys = pairs.keys()
         new_values = pairs.values()
@@ -218,6 +215,18 @@ class ReusedSQLTestCase(ReusedPySparkTestCase):
                     self.spark.conf.unset(key)
                 else:
                     self.spark.conf.set(key, old_value)
+
+
+class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils):
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.spark = SparkSession(cls.sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+        cls.spark.stop()
 
     def assertPandasEqual(self, expected, result):
         msg = ("DataFrames are not equal: " +
@@ -648,11 +657,50 @@ class SQLTests(ReusedSQLTestCase):
         self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udaf",
                                 lambda: spark.udf.registerJavaUDAF("udaf1", "non_existed_udaf"))
 
-    def test_multiLine_json(self):
+    def test_linesep_text(self):
+        df = self.spark.read.text("python/test_support/sql/ages_newlines.csv", lineSep=",")
+        expected = [Row(value=u'Joe'), Row(value=u'20'), Row(value=u'"Hi'),
+                    Row(value=u'\nI am Jeo"\nTom'), Row(value=u'30'),
+                    Row(value=u'"My name is Tom"\nHyukjin'), Row(value=u'25'),
+                    Row(value=u'"I am Hyukjin\n\nI love Spark!"\n')]
+        self.assertEqual(df.collect(), expected)
+
+        tpath = tempfile.mkdtemp()
+        shutil.rmtree(tpath)
+        try:
+            df.write.text(tpath, lineSep="!")
+            expected = [Row(value=u'Joe!20!"Hi!'), Row(value=u'I am Jeo"'),
+                        Row(value=u'Tom!30!"My name is Tom"'),
+                        Row(value=u'Hyukjin!25!"I am Hyukjin'),
+                        Row(value=u''), Row(value=u'I love Spark!"'),
+                        Row(value=u'!')]
+            readback = self.spark.read.text(tpath)
+            self.assertEqual(readback.collect(), expected)
+        finally:
+            shutil.rmtree(tpath)
+
+    def test_multiline_json(self):
         people1 = self.spark.read.json("python/test_support/sql/people.json")
         people_array = self.spark.read.json("python/test_support/sql/people_array.json",
                                             multiLine=True)
         self.assertEqual(people1.collect(), people_array.collect())
+
+    def test_linesep_json(self):
+        df = self.spark.read.json("python/test_support/sql/people.json", lineSep=",")
+        expected = [Row(_corrupt_record=None, name=u'Michael'),
+                    Row(_corrupt_record=u' "age":30}\n{"name":"Justin"', name=None),
+                    Row(_corrupt_record=u' "age":19}\n', name=None)]
+        self.assertEqual(df.collect(), expected)
+
+        tpath = tempfile.mkdtemp()
+        shutil.rmtree(tpath)
+        try:
+            df = self.spark.read.json("python/test_support/sql/people.json")
+            df.write.json(tpath, lineSep="!!")
+            readback = self.spark.read.json(tpath, lineSep="!!")
+            self.assertEqual(readback.collect(), df.collect())
+        finally:
+            shutil.rmtree(tpath)
 
     def test_multiline_csv(self):
         ages_newlines = self.spark.read.csv(
@@ -2952,6 +3000,24 @@ class SQLTests(ReusedSQLTestCase):
                 os.environ['TZ'] = orig_env_tz
             time.tzset()
 
+    def test_sort_with_nulls_order(self):
+        from pyspark.sql import functions
+
+        df = self.spark.createDataFrame(
+            [('Tom', 80), (None, 60), ('Alice', 50)], ["name", "height"])
+        self.assertEquals(
+            df.select(df.name).orderBy(functions.asc_nulls_first('name')).collect(),
+            [Row(name=None), Row(name=u'Alice'), Row(name=u'Tom')])
+        self.assertEquals(
+            df.select(df.name).orderBy(functions.asc_nulls_last('name')).collect(),
+            [Row(name=u'Alice'), Row(name=u'Tom'), Row(name=None)])
+        self.assertEquals(
+            df.select(df.name).orderBy(functions.desc_nulls_first('name')).collect(),
+            [Row(name=None), Row(name=u'Tom'), Row(name=u'Alice')])
+        self.assertEquals(
+            df.select(df.name).orderBy(functions.desc_nulls_last('name')).collect(),
+            [Row(name=u'Tom'), Row(name=u'Alice'), Row(name=None)])
+
 
 class HiveSparkSubmitTests(SparkSubmitTests):
 
@@ -3007,6 +3073,64 @@ class SQLTests2(ReusedSQLTestCase):
         finally:
             spark.stop()
             sc.stop()
+
+
+class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
+    # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
+    # static and immutable. This can't be set or unset, for example, via `spark.conf`.
+
+    @classmethod
+    def setUpClass(cls):
+        import glob
+        from pyspark.find_spark_home import _find_spark_home
+
+        SPARK_HOME = _find_spark_home()
+        filename_pattern = (
+            "sql/core/target/scala-*/test-classes/org/apache/spark/sql/"
+            "TestQueryExecutionListener.class")
+        if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
+            raise unittest.SkipTest(
+                "'org.apache.spark.sql.TestQueryExecutionListener' is not "
+                "available. Will skip the related tests.")
+
+        # Note that 'spark.sql.queryExecutionListeners' is a static immutable configuration.
+        cls.spark = SparkSession.builder \
+            .master("local[4]") \
+            .appName(cls.__name__) \
+            .config(
+                "spark.sql.queryExecutionListeners",
+                "org.apache.spark.sql.TestQueryExecutionListener") \
+            .getOrCreate()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.spark.stop()
+
+    def tearDown(self):
+        self.spark._jvm.OnSuccessCall.clear()
+
+    def test_query_execution_listener_on_collect(self):
+        self.assertFalse(
+            self.spark._jvm.OnSuccessCall.isCalled(),
+            "The callback from the query execution listener should not be called before 'collect'")
+        self.spark.sql("SELECT * FROM range(1)").collect()
+        self.assertTrue(
+            self.spark._jvm.OnSuccessCall.isCalled(),
+            "The callback from the query execution listener should be called after 'collect'")
+
+    @unittest.skipIf(
+        not _have_pandas or not _have_pyarrow,
+        _pandas_requirement_message or _pyarrow_requirement_message)
+    def test_query_execution_listener_on_collect_with_arrow(self):
+        with self.sql_conf({"spark.sql.execution.arrow.enabled": True}):
+            self.assertFalse(
+                self.spark._jvm.OnSuccessCall.isCalled(),
+                "The callback from the query execution listener should not be "
+                "called before 'toPandas'")
+            self.spark.sql("SELECT * FROM range(1)").toPandas()
+            self.assertTrue(
+                self.spark._jvm.OnSuccessCall.isCalled(),
+                "The callback from the query execution listener should be called after 'toPandas'")
 
 
 class SparkSessionTests(PySparkTestCase):
@@ -3537,7 +3661,7 @@ class ArrowTests(ReusedSQLTestCase):
                         warn.message for warn in warns if isinstance(warn.message, UserWarning)]
                     self.assertTrue(len(user_warns) > 0)
                     self.assertTrue(
-                        "Attempts non-optimization" in _exception_message(user_warns[-1]))
+                        "Attempting non-optimization" in _exception_message(user_warns[-1]))
                     self.assertPandasEqual(pdf, pd.DataFrame({u'map': [{u'a': 1}]}))
 
     def test_toPandas_fallback_disabled(self):
@@ -3660,7 +3784,7 @@ class ArrowTests(ReusedSQLTestCase):
         pdf = self.create_pandas_data_frame()
         wrong_schema = StructType(list(reversed(self.schema)))
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(RuntimeError, ".*No cast.*string.*timestamp.*"):
+            with self.assertRaisesRegexp(Exception, ".*No cast.*string.*timestamp.*"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_createDataFrame_with_names(self):
@@ -3685,7 +3809,7 @@ class ArrowTests(ReusedSQLTestCase):
     def test_createDataFrame_with_single_data_type(self):
         import pandas as pd
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(RuntimeError, ".*IntegerType.*not supported.*"):
+            with self.assertRaisesRegexp(ValueError, ".*IntegerType.*not supported.*"):
                 self.spark.createDataFrame(pd.DataFrame({"a": [1]}), schema="int")
 
     def test_createDataFrame_does_not_modify_input(self):
@@ -3753,14 +3877,14 @@ class ArrowTests(ReusedSQLTestCase):
                         warn.message for warn in warns if isinstance(warn.message, UserWarning)]
                     self.assertTrue(len(user_warns) > 0)
                     self.assertTrue(
-                        "Attempts non-optimization" in _exception_message(user_warns[-1]))
+                        "Attempting non-optimization" in _exception_message(user_warns[-1]))
                     self.assertEqual(df.collect(), [Row(a={u'a': 1})])
 
     def test_createDataFrame_fallback_disabled(self):
         import pandas as pd
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Unsupported type'):
+            with self.assertRaisesRegexp(TypeError, 'Unsupported type'):
                 self.spark.createDataFrame(
                     pd.DataFrame([[{u'a': 1}]]), "a: map<string, int>")
 

@@ -20,8 +20,8 @@ import java.util.Comparator
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.types._
 
 /**
@@ -55,7 +55,7 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
       boolean ${ev.isNull} = false;
       ${childGen.code}
       ${CodeGenerator.javaType(dataType)} ${ev.value} = ${childGen.isNull} ? -1 :
-        (${childGen.value}).numElements();""", isNull = "false")
+        (${childGen.value}).numElements();""", isNull = FalseLiteral)
   }
 }
 
@@ -286,4 +286,134 @@ case class ArrayContains(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "array_contains"
+}
+
+/**
+ * Returns the minimum value in the array.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Returns the minimum value in the array. NULL elements are skipped.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 20, null, 3));
+       1
+  """, since = "2.4.0")
+case class ArrayMin(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def nullable: Boolean = true
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val typeCheckResult = super.checkInputDataTypes()
+    if (typeCheckResult.isSuccess) {
+      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+    } else {
+      typeCheckResult
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childGen = child.genCode(ctx)
+    val javaType = CodeGenerator.javaType(dataType)
+    val i = ctx.freshName("i")
+    val item = ExprCode("",
+      isNull = JavaCode.isNullExpression(s"${childGen.value}.isNullAt($i)"),
+      value = JavaCode.expression(CodeGenerator.getValue(childGen.value, dataType, i), dataType))
+    ev.copy(code =
+      s"""
+         |${childGen.code}
+         |boolean ${ev.isNull} = true;
+         |$javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${childGen.isNull}) {
+         |  for (int $i = 0; $i < ${childGen.value}.numElements(); $i ++) {
+         |    ${ctx.reassignIfSmaller(dataType, ev, item)}
+         |  }
+         |}
+      """.stripMargin)
+  }
+
+  override protected def nullSafeEval(input: Any): Any = {
+    var min: Any = null
+    input.asInstanceOf[ArrayData].foreach(dataType, (_, item) =>
+      if (item != null && (min == null || ordering.lt(item, min))) {
+        min = item
+      }
+    )
+    min
+  }
+
+  override def dataType: DataType = child.dataType match {
+    case ArrayType(dt, _) => dt
+    case _ => throw new IllegalStateException(s"$prettyName accepts only arrays.")
+  }
+
+  override def prettyName: String = "array_min"
+}
+
+/**
+ * Returns the maximum value in the array.
+ */
+@ExpressionDescription(
+  usage = "_FUNC_(array) - Returns the maximum value in the array. NULL elements are skipped.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(array(1, 20, null, 3));
+       20
+  """, since = "2.4.0")
+case class ArrayMax(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def nullable: Boolean = true
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
+
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(dataType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val typeCheckResult = super.checkInputDataTypes()
+    if (typeCheckResult.isSuccess) {
+      TypeUtils.checkForOrderingExpr(dataType, s"function $prettyName")
+    } else {
+      typeCheckResult
+    }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childGen = child.genCode(ctx)
+    val javaType = CodeGenerator.javaType(dataType)
+    val i = ctx.freshName("i")
+    val item = ExprCode("",
+      isNull = JavaCode.isNullExpression(s"${childGen.value}.isNullAt($i)"),
+      value = JavaCode.expression(CodeGenerator.getValue(childGen.value, dataType, i), dataType))
+    ev.copy(code =
+      s"""
+         |${childGen.code}
+         |boolean ${ev.isNull} = true;
+         |$javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+         |if (!${childGen.isNull}) {
+         |  for (int $i = 0; $i < ${childGen.value}.numElements(); $i ++) {
+         |    ${ctx.reassignIfGreater(dataType, ev, item)}
+         |  }
+         |}
+      """.stripMargin)
+  }
+
+  override protected def nullSafeEval(input: Any): Any = {
+    var max: Any = null
+    input.asInstanceOf[ArrayData].foreach(dataType, (_, item) =>
+      if (item != null && (max == null || ordering.gt(item, max))) {
+        max = item
+      }
+    )
+    max
+  }
+
+  override def dataType: DataType = child.dataType match {
+    case ArrayType(dt, _) => dt
+    case _ => throw new IllegalStateException(s"$prettyName accepts only arrays.")
+  }
+
+  override def prettyName: String = "array_max"
 }

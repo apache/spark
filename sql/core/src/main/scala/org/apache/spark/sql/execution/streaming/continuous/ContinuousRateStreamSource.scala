@@ -24,8 +24,8 @@ import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.streaming.{RateSourceProvider, RateStreamOffset, ValueRunTimeMsPair}
-import org.apache.spark.sql.execution.streaming.sources.RateStreamSourceV2
+import org.apache.spark.sql.execution.streaming.{RateStreamOffset, ValueRunTimeMsPair}
+import org.apache.spark.sql.execution.streaming.sources.RateStreamProvider
 import org.apache.spark.sql.sources.v2.DataSourceOptions
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.sources.v2.reader.streaming.{ContinuousDataReader, ContinuousReader, Offset, PartitionOffset}
@@ -40,8 +40,8 @@ class RateStreamContinuousReader(options: DataSourceOptions)
 
   val creationTime = System.currentTimeMillis()
 
-  val numPartitions = options.get(RateStreamSourceV2.NUM_PARTITIONS).orElse("5").toInt
-  val rowsPerSecond = options.get(RateStreamSourceV2.ROWS_PER_SECOND).orElse("6").toLong
+  val numPartitions = options.get(RateStreamProvider.NUM_PARTITIONS).orElse("5").toInt
+  val rowsPerSecond = options.get(RateStreamProvider.ROWS_PER_SECOND).orElse("6").toLong
   val perPartitionRate = rowsPerSecond.toDouble / numPartitions.toDouble
 
   override def mergeOffsets(offsets: Array[PartitionOffset]): Offset = {
@@ -57,12 +57,12 @@ class RateStreamContinuousReader(options: DataSourceOptions)
     RateStreamOffset(Serialization.read[Map[Int, ValueRunTimeMsPair]](json))
   }
 
-  override def readSchema(): StructType = RateSourceProvider.SCHEMA
+  override def readSchema(): StructType = RateStreamProvider.SCHEMA
 
   private var offset: Offset = _
 
   override def setStartOffset(offset: java.util.Optional[Offset]): Unit = {
-    this.offset = offset.orElse(RateStreamSourceV2.createInitialOffset(numPartitions, creationTime))
+    this.offset = offset.orElse(createInitialOffset(numPartitions, creationTime))
   }
 
   override def getStartOffset(): Offset = offset
@@ -97,6 +97,19 @@ class RateStreamContinuousReader(options: DataSourceOptions)
 
   override def commit(end: Offset): Unit = {}
   override def stop(): Unit = {}
+
+  private def createInitialOffset(numPartitions: Int, creationTimeMs: Long) = {
+    RateStreamOffset(
+      Range(0, numPartitions).map { i =>
+        // Note that the starting offset is exclusive, so we have to decrement the starting value
+        // by the increment that will later be applied. The first row output in each
+        // partition will have a value equal to the partition index.
+        (i,
+          ValueRunTimeMsPair(
+            (i - numPartitions).toLong,
+            creationTimeMs))
+      }.toMap)
+  }
 
 }
 

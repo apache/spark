@@ -54,6 +54,13 @@ private[spark] object Config extends Logging {
       .checkValues(Set("Always", "Never", "IfNotPresent"))
       .createWithDefault("IfNotPresent")
 
+  val IMAGE_PULL_SECRETS =
+    ConfigBuilder("spark.kubernetes.container.image.pullSecrets")
+      .doc("Comma separated list of the Kubernetes secrets used " +
+        "to access private image registries.")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX =
       "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_DRIVER_MOUNTED_CONF_PREFIX =
@@ -88,6 +95,12 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
       .doc("Specify the hard cpu limit for each executor pod")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_REQUEST_CORES =
+    ConfigBuilder("spark.kubernetes.executor.request.cores")
+      .doc("Specify the cpu request for each executor pod")
       .stringConf
       .createOptional
 
@@ -154,5 +167,5 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
   val KUBERNETES_EXECUTOR_SECRETS_PREFIX = "spark.kubernetes.executor.secrets."
 
-  val KUBERNETES_DRIVER_ENV_KEY = "spark.kubernetes.driverEnv."
+  val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 }

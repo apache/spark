@@ -22,8 +22,6 @@ from py4j.protocol import Py4JJavaError
 
 __all__ = []
 
-import sys
-
 
 def _exception_message(excp):
     """Return the message from an exception as either a str or unicode object.  Supports both
