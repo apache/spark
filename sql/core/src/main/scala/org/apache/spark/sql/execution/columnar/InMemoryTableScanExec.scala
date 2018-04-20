@@ -247,27 +247,14 @@ case class InMemoryTableScanExec(
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
-  private[sql] lazy val cachedColumnBuffers: RDD[CachedBatch] = {
-    // If `relation._cachedColumnBuffers` is null, the cache in `CacheManager` has not been
-    // materialized yet. So, we try to materialize the cache here.
-    if (relation._cachedColumnBuffers == null) {
-      val cacheManager = sqlContext.sparkSession.sharedState.cacheManager
-      cacheManager.materializeCacheData(relation.child).map(_.cachedColumnBuffers).getOrElse {
-        // In the case where the cache already has been cleared, we need to build a RDD here
-        relation.cachedColumnBuffers
-      }
-    } else {
-      relation._cachedColumnBuffers
-    }
-  }
-
   private def filteredCachedBatches(): RDD[CachedBatch] = {
     // Using these variables here to avoid serialization of entire objects (if referenced directly)
     // within the map Partitions closure.
     val schema = stats.schema
     val schemaIndex = schema.zipWithIndex
+    val buffers = relation.cachedColumnBuffers
 
-    cachedColumnBuffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
+    buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
       val partitionFilter = newPredicate(
         partitionFilters.reduceOption(And).getOrElse(Literal(true)),
         schema)

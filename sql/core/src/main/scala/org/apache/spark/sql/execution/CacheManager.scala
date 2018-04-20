@@ -71,7 +71,7 @@ class CacheManager extends Logging {
 
   /** Clears all cached tables. */
   def clearCache(): Unit = writeLock {
-    cachedData.asScala.foreach(_.cachedRepresentation.clearCache())
+    cachedData.asScala.foreach(_.cachedRepresentation.cachedColumnBuffers.unpersist())
     cachedData.clear()
   }
 
@@ -119,37 +119,10 @@ class CacheManager extends Logging {
     while (it.hasNext) {
       val cd = it.next()
       if (cd.plan.find(_.sameResult(plan)).isDefined) {
-        cd.cachedRepresentation.clearCache(blocking)
+        cd.cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
         it.remove()
       }
     }
-  }
-
-  /**
-   * Materialize the cache that refers to the given physical plan.
-   * [[InMemoryTableScanExec]] calls this function to build a [[RDD]] for the cache and
-   * it may trigger a job like sampling job for range partitioner, or broadcast job.
-   */
-  private[execution] def materializeCacheData(plan: SparkPlan)
-    : Option[InMemoryRelation] = writeLock {
-    val it = cachedData.iterator()
-    val needToRecache = scala.collection.mutable.ArrayBuffer.empty[CachedData]
-    while (it.hasNext) {
-      val cd = it.next()
-      if (cd.cachedRepresentation.child.find(_.sameResult(plan)).isDefined &&
-          cd.cachedRepresentation._cachedColumnBuffers == null) {
-        it.remove()
-        val newCache = cd.cachedRepresentation.copy()(
-          _cachedColumnBuffers = cd.cachedRepresentation.cachedColumnBuffers,
-          sizeInBytesStats = cd.cachedRepresentation.sizeInBytesStats,
-          statsOfPlanToCache = cd.cachedRepresentation.statsOfPlanToCache,
-          outputOrdering = cd.cachedRepresentation.outputOrdering)
-        needToRecache += cd.copy(cachedRepresentation = newCache)
-      }
-    }
-
-    needToRecache.foreach(cachedData.add)
-    needToRecache.headOption.map(_.cachedRepresentation)
   }
 
   /**
@@ -165,7 +138,7 @@ class CacheManager extends Logging {
     while (it.hasNext) {
       val cd = it.next()
       if (condition(cd.plan)) {
-        cd.cachedRepresentation.clearCache()
+        cd.cachedRepresentation.cachedColumnBuffers.unpersist()
         // Remove the cache entry before we create a new one, so that we can have a different
         // physical plan.
         it.remove()
@@ -176,14 +149,7 @@ class CacheManager extends Logging {
           child = spark.sessionState.executePlan(cd.plan).executedPlan,
           tableName = cd.cachedRepresentation.tableName,
           logicalPlan = cd.plan)
-
-        val newCacheData = cd.copy(cachedRepresentation = newCache)
-
-        // Since `FileIndex` is used to build the `SparkPlan` for this cache, we need to refresh
-        // file indices again to pass the existing tests.
-        newCacheData.plan.foreach(refreshMetadata)
-
-        needToRecache += newCacheData
+        needToRecache += cd.copy(cachedRepresentation = newCache)
       }
     }
 
@@ -236,15 +202,6 @@ class CacheManager extends Logging {
   }
 
   /**
-   * If `HadoopFsRelation` found, we refresh the metadata. Otherwise, this method does nothing.
-   */
-  private def refreshMetadata(plan: LogicalPlan): Unit = plan match {
-    case LogicalRelation(hr: HadoopFsRelation, _, _, _) =>
-      hr.location.refresh()
-    case _ =>
-  }
-
-  /**
    * Traverses a given `plan` and searches for the occurrences of `qualifiedPath` in the
    * [[org.apache.spark.sql.execution.datasources.FileIndex]] of any [[HadoopFsRelation]] nodes
    * in the plan. If found, we refresh the metadata and return true. Otherwise, this method returns
@@ -252,13 +209,16 @@ class CacheManager extends Logging {
    */
   private def lookupAndRefresh(plan: LogicalPlan, fs: FileSystem, qualifiedPath: Path): Boolean = {
     plan match {
-      case LogicalRelation(hr: HadoopFsRelation, _, _, _) =>
-        val prefixToInvalidate = qualifiedPath.toString
-        val invalidate = hr.location.rootPaths
-          .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory).toString)
-          .exists(_.startsWith(prefixToInvalidate))
-        if (invalidate) hr.location.refresh()
-        invalidate
+      case lr: LogicalRelation => lr.relation match {
+        case hr: HadoopFsRelation =>
+          val prefixToInvalidate = qualifiedPath.toString
+          val invalidate = hr.location.rootPaths
+            .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory).toString)
+            .exists(_.startsWith(prefixToInvalidate))
+          if (invalidate) hr.location.refresh()
+          invalidate
+        case _ => false
+      }
       case _ => false
     }
   }

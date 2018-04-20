@@ -48,13 +48,11 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
   }
 
-  def rddIdOf(tableName: String): Int = rddIdOf(spark.table(tableName))
-
-  def rddIdOf(df: DataFrame): Int = {
-    val plan = df.queryExecution.sparkPlan
+  def rddIdOf(tableName: String): Int = {
+    val plan = spark.table(tableName).queryExecution.sparkPlan
     plan.collect {
-      case m: InMemoryTableScanExec =>
-        m.cachedColumnBuffers.id
+      case InMemoryTableScanExec(_, _, relation) =>
+        relation.cachedColumnBuffers.id
       case _ =>
         fail(s"Table $tableName is not cached\n" + plan)
     }.head
@@ -267,8 +265,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
       spark.catalog.uncacheTable("testCacheTable")
       eventually(timeout(10 seconds)) {
-        assert(!isMaterialized(rddId),
-          "Uncached in-memory table should have been unpersisted")
+        assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
       }
     }
   }
@@ -294,20 +291,19 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     sql("CACHE LAZY TABLE testData")
     assertCached(spark.table("testData"))
 
+    val rddId = rddIdOf("testData")
     assert(
-      !isMaterialized(rddIdOf("testData")),
+      !isMaterialized(rddId),
       "Lazily cached in-memory table shouldn't be materialized eagerly")
 
     sql("SELECT COUNT(*) FROM testData").collect()
-    val rddId = rddIdOf("testData")
     assert(
       isMaterialized(rddId),
       "Lazily cached in-memory table should have been materialized")
 
     spark.catalog.uncacheTable("testData")
     eventually(timeout(10 seconds)) {
-      assert(!isMaterialized(rddId),
-        "Uncached in-memory table should have been unpersisted")
+      assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
     }
   }
 
@@ -797,19 +793,5 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         }
       }
     }
-  }
-
-  def isMaterialized(df: DataFrame): Boolean = {
-    val cache = spark.sharedState.cacheManager.lookupCachedData(df)
-    assert(cache.isDefined, "DataFrame is not cached\n" + df.queryExecution.analyzed)
-    cache.get.cachedRepresentation._cachedColumnBuffers != null &&
-      isMaterialized(rddIdOf(df))
-  }
-
-  test("SPARK-23880 table cache should be lazy and don't trigger any jobs") {
-    val df = spark.range(100L).filter('id > 10).groupBy().sum("id").cache
-    assert(!isMaterialized(df))
-    checkAnswer(df, Row(4895L))
-    assert(isMaterialized(df))
   }
 }

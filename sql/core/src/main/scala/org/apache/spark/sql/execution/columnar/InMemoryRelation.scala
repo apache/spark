@@ -62,9 +62,9 @@ case class InMemoryRelation(
     storageLevel: StorageLevel,
     @transient child: SparkPlan,
     tableName: Option[String])(
-    @transient val _cachedColumnBuffers: RDD[CachedBatch] = null,
+    @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
     val sizeInBytesStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator,
-    val statsOfPlanToCache: Statistics,
+    statsOfPlanToCache: Statistics,
     override val outputOrdering: Seq[SortOrder])
   extends logical.LeafNode with MultiInstanceRelation {
 
@@ -98,17 +98,13 @@ case class InMemoryRelation(
     }
   }
 
-  @transient lazy val cachedColumnBuffers: RDD[CachedBatch] = if (_cachedColumnBuffers != null) {
-    _cachedColumnBuffers
-  } else {
+  // If the cached column buffers were not passed in, we calculate them in the constructor.
+  // As in Spark, the actual work of caching is lazy.
+  if (_cachedColumnBuffers == null) {
     buildBuffers()
   }
 
-  def clearCache(blocking: Boolean = true): Unit = if (_cachedColumnBuffers != null) {
-    _cachedColumnBuffers.unpersist(blocking)
-  }
-
-  private def buildBuffers(): RDD[CachedBatch] = {
+  private def buildBuffers(): Unit = {
     val output = child.output
     val cached = child.execute().mapPartitionsInternal { rowIterator =>
       new Iterator[CachedBatch] {
@@ -159,7 +155,7 @@ case class InMemoryRelation(
     cached.setName(
       tableName.map(n => s"In-memory table $n")
         .getOrElse(StringUtils.abbreviate(child.toString, 1024)))
-    cached
+    _cachedColumnBuffers = cached
   }
 
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
@@ -181,6 +177,8 @@ case class InMemoryRelation(
         statsOfPlanToCache,
         outputOrdering).asInstanceOf[this.type]
   }
+
+  def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 
   override protected def otherCopyArgs: Seq[AnyRef] =
     Seq(_cachedColumnBuffers, sizeInBytesStats, statsOfPlanToCache)
