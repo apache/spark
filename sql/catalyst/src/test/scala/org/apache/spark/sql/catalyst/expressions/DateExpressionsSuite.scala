@@ -488,6 +488,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(MonthsBetween(tnull, t, Literal.TrueLiteral, timeZoneId = timeZoneId), null)
       checkEvaluation(
         MonthsBetween(tnull, tnull, Literal.TrueLiteral, timeZoneId = timeZoneId), null)
+      checkEvaluation(
+        MonthsBetween(t, t, Literal.create(null, BooleanType), timeZoneId = timeZoneId), null)
       checkConsistencyBetweenInterpretedAndCodegen(
         (time1: Expression, time2: Expression, roundOff: Expression) =>
           MonthsBetween(time1, time2, roundOff, timeZoneId = timeZoneId),
