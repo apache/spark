@@ -58,27 +58,15 @@ object BufferHolderSparkSubmitSuite {
     val holder = new BufferHolder(new UnsafeRow(1000))
 
     holder.reset()
-    // execute here since reset() updates holder.cursor
-    val smallBuffer = new Array[Byte](holder.getCursor)
+
+    // while to reuse a buffer may happen, this test checks whether the buffer can be grown
     holder.grow(roundToWord(ARRAY_MAX / 2))
 
-    holder.reset()
-    setBuffer(holder, smallBuffer)  // avoid to reuse an allocated large byte array
     holder.grow(roundToWord(ARRAY_MAX / 2 + 8))
 
-    holder.reset()
-    setBuffer(holder, smallBuffer)  // avoid to reuse an allocated large byte array
     holder.grow(roundToWord(Integer.MAX_VALUE / 2))
 
-    holder.reset()
-    setBuffer(holder, smallBuffer)  // avoid to reuse an allocated large byte array
     holder.grow(roundToWord(Integer.MAX_VALUE))
-  }
-
-  def setBuffer(holder: BufferHolder, smallBuffer: Array[Byte]): Unit = {
-    val field = holder.getClass.getDeclaredField("buffer")
-    field.setAccessible(true)
-    field.set(holder, smallBuffer)
   }
 
   private def roundToWord(len: Int): Int = {

@@ -61,6 +61,10 @@ final class BufferHolder {
    * Grows the buffer by at least neededSize and points the row to the buffer.
    */
   void grow(int neededSize) {
+    if (neededSize < 0) {
+      throw new UnsupportedOperationException(
+        "Cannot grow BufferHolder by size " + neededSize + " because the size is negative");
+    }
     if (neededSize > ARRAY_MAX - totalSize()) {
       throw new UnsupportedOperationException(
         "Cannot grow BufferHolder by size " + neededSize + " because the size after growing " +
