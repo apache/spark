@@ -3274,8 +3274,6 @@ case class ArrayDistinct(child: Expression)
 
 object ArraySetUtils {
   val kindUnion = 1
-  val kindIntersect = 2
-  val kindExcept = 3
 
   def toUnsafeIntArray(hs: OpenHashSet[Int]): UnsafeArrayData = {
     val array = new Array[Int](hs.size)
@@ -3312,39 +3310,37 @@ object ArraySetUtils {
   }
 
   def arrayExcept(array1: ArrayData, array2: ArrayData, et: DataType): ArrayData = {
-    new GenericArrayData(array2.toArray[AnyRef](et).diff(array1.toArray[AnyRef](et))
+    new GenericArrayData(array1.toArray[AnyRef](et).diff(array2.toArray[AnyRef](et))
       .distinct.asInstanceOf[Array[Any]])
   }
 }
 
 abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
   def typeId: Int
-  def array1: Expression
-  def array2: Expression
 
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, ArrayType)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val r = super.checkInputDataTypes()
     if ((r == TypeCheckResult.TypeCheckSuccess) &&
-      (array1.dataType.asInstanceOf[ArrayType].elementType !=
-        array2.dataType.asInstanceOf[ArrayType].elementType)) {
+      (left.dataType.asInstanceOf[ArrayType].elementType !=
+        right.dataType.asInstanceOf[ArrayType].elementType)) {
       TypeCheckResult.TypeCheckFailure("Element type in both arrays must be the same")
     } else {
       r
     }
   }
 
-  override def dataType: DataType = array1.dataType
+  override def dataType: DataType = left.dataType
 
   private def elementType = dataType.asInstanceOf[ArrayType].elementType
-  private def cn = array1.dataType.asInstanceOf[ArrayType].containsNull ||
-    array2.dataType.asInstanceOf[ArrayType].containsNull
+  private def cn = left.dataType.asInstanceOf[ArrayType].containsNull ||
+    right.dataType.asInstanceOf[ArrayType].containsNull
 
-  def intEval(ary: ArrayData, hs1: OpenHashSet[Int]): OpenHashSet[Int]
-  def longEval(ary: ArrayData, hs1: OpenHashSet[Long]): OpenHashSet[Long]
-  def genericEval(ary: ArrayData, hs1: OpenHashSet[Any], et: DataType): OpenHashSet[Any]
-  def codeGen(ctx: CodegenContext, hs1: String, hs: String, len: String, getter: String, i: String,
+  def intEval(ary: ArrayData, hs2: OpenHashSet[Int]): OpenHashSet[Int]
+  def longEval(ary: ArrayData, hs2: OpenHashSet[Long]): OpenHashSet[Long]
+  def genericEval(ary: ArrayData, hs2: OpenHashSet[Any], et: DataType): OpenHashSet[Any]
+  def codeGen(ctx: CodegenContext, hs2: String, hs: String, len: String, getter: String, i: String,
     postFix: String, newOpenHashSet: String): String
 
   override def nullSafeEval(input1: Any, input2: Any): Any = {
@@ -3355,39 +3351,36 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
       elementType match {
         case IntegerType =>
           // avoid boxing of primitive int array elements
-          val hs1 = new OpenHashSet[Int]
+          val hs2 = new OpenHashSet[Int]
           var i = 0
-          while (i < ary1.numElements()) {
-            hs1.add(ary1.getInt(i))
+          while (i < ary2.numElements()) {
+            hs2.add(ary2.getInt(i))
             i += 1
           }
-          ArraySetUtils.toUnsafeIntArray(intEval(ary2, hs1))
+          ArraySetUtils.toUnsafeIntArray(intEval(ary1, hs2))
         case LongType =>
           // avoid boxing of primitive long array elements
-          val hs1 = new OpenHashSet[Long]
+          val hs2 = new OpenHashSet[Long]
           var i = 0
-          while (i < ary1.numElements()) {
-            hs1.add(ary1.getLong(i))
+          while (i < ary2.numElements()) {
+            hs2.add(ary2.getLong(i))
             i += 1
           }
-          ArraySetUtils.toUnsafeLongArray(longEval(ary2, hs1))
+          ArraySetUtils.toUnsafeLongArray(longEval(ary1, hs2))
         case _ =>
-          var hs: OpenHashSet[Any] = null
-          val hs1 = new OpenHashSet[Any]
+          val hs2 = new OpenHashSet[Any]
           var i = 0
-          while (i < ary1.numElements()) {
-            hs1.add(ary1.get(i, elementType))
+          while (i < ary2.numElements()) {
+            hs2.add(ary2.get(i, elementType))
             i += 1
           }
-          new GenericArrayData(genericEval(ary2, hs1, elementType).iterator.toArray)
+          new GenericArrayData(genericEval(ary1, hs2, elementType).iterator.toArray)
       }
     } else {
       if (typeId == ArraySetUtils.kindUnion) {
         ArraySetUtils.arrayUnion(ary1, ary2, elementType)
-      } else if (typeId == ArraySetUtils.kindIntersect) {
-        ArraySetUtils.arrayIntersect(ary1, ary2, elementType)
       } else {
-        ArraySetUtils.arrayExcept(ary1, ary2, elementType)
+        null
       }
     }
   }
@@ -3417,18 +3410,18 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
     }
 
     val hs = ctx.freshName("hs")
-    val hs1 = ctx.freshName("hs1")
+    val hs2 = ctx.freshName("hs2")
     val invalidPos = ctx.freshName("invalidPos")
     val pos = ctx.freshName("pos")
     val ary = ctx.freshName("ary")
     nullSafeCodeGen(ctx, ev, (ary1, ary2) => {
       if (classTag != "") {
-        val secondLoop = codeGen(ctx, hs1, hs, s"$ary2.numElements()", s"$ary2.$getter", i,
+        val secondLoop = codeGen(ctx, hs2, hs, s"$ary1.numElements()", s"$ary1.$getter", i,
           postFix, s"new $openHashSet$postFix($classTag)")
         s"""
-           |$openHashSet $hs1 = new $openHashSet$postFix($classTag);
-           |for (int $i = 0; $i < $ary1.numElements(); $i++) {
-           |  $hs1.add$postFix($ary1.$getter);
+           |$openHashSet $hs2 = new $openHashSet$postFix($classTag);
+           |for (int $i = 0; $i < $ary2.numElements(); $i++) {
+           |  $hs2.add$postFix($ary2.$getter);
            |}
            |$secondLoop
            |$javaTypeName[] $ary = new $javaTypeName[$hs.size()];
@@ -3445,10 +3438,8 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
       } else {
         val setOp = if (typeId == ArraySetUtils.kindUnion) {
           "Union"
-        } else if (typeId == ArraySetUtils.kindIntersect) {
-          "Intersect"
         } else {
-          "Except"
+          ""
         }
         s"${ev.value} = $arraySetUtils$$.MODULE$$.array$setOp($ary1, $ary2, $et);"
       }
@@ -3472,42 +3463,40 @@ abstract class ArraySetUtils extends BinaryExpression with ExpectsInputTypes {
   since = "2.4.0")
 case class ArrayUnion(left: Expression, right: Expression) extends ArraySetUtils {
   override def typeId: Int = ArraySetUtils.kindUnion
-  override def array1: Expression = left
-  override def array2: Expression = right
 
-  override def intEval(ary: ArrayData, hs1: OpenHashSet[Int]): OpenHashSet[Int] = {
+  override def intEval(ary: ArrayData, hs2: OpenHashSet[Int]): OpenHashSet[Int] = {
     var i = 0
     while (i < ary.numElements()) {
-      hs1.add(ary.getInt(i))
+      hs2.add(ary.getInt(i))
       i += 1
     }
-    hs1
+    hs2
   }
 
-  override def longEval(ary: ArrayData, hs1: OpenHashSet[Long]): OpenHashSet[Long] = {
+  override def longEval(ary: ArrayData, hs2: OpenHashSet[Long]): OpenHashSet[Long] = {
     var i = 0
     while (i < ary.numElements()) {
-      hs1.add(ary.getLong(i))
+      hs2.add(ary.getLong(i))
       i += 1
     }
-    hs1
+    hs2
   }
 
   override def genericEval(
       ary: ArrayData,
-      hs1: OpenHashSet[Any],
+      hs2: OpenHashSet[Any],
       et: DataType): OpenHashSet[Any] = {
     var i = 0
     while (i < ary.numElements()) {
-      hs1.add(ary.get(i, et))
+      hs2.add(ary.get(i, et))
       i += 1
     }
-    hs1
+    hs2
   }
 
   override def codeGen(
       ctx: CodegenContext,
-      hs1: String,
+      hs2: String,
       hs: String,
       len: String,
       getter: String,
@@ -3517,9 +3506,9 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArraySetUtils
     val openHashSet = classOf[OpenHashSet[_]].getName
     s"""
        |for (int $i = 0; $i < $len; $i++) {
-       |  $hs1.add$postFix($getter);
+       |  $hs2.add$postFix($getter);
        |}
-       |$openHashSet $hs = $hs1;
+       |$openHashSet $hs = $hs2;
      """.stripMargin
   }
 

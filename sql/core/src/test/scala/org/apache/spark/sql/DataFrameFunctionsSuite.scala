@@ -1161,7 +1161,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     }
 
     val df8 = Seq((null, Array("a"))).toDF("a", "b")
-    df8.select(array_union($"a", $"b"))
     intercept[AnalysisException] {
       df8.select(array_union($"a", $"b"))
     }
