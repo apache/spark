@@ -1991,7 +1991,7 @@ def json_tuple(col, *fields):
     jc = sc._jvm.functions.json_tuple(_to_java_column(col), _to_seq(sc, fields))
     return Column(jc)
 
-
+@ignore_unicode_prefix
 @since(2.1)
 def from_json(col, schema, options={}):
     """
@@ -2016,7 +2016,7 @@ def from_json(col, schema, options={}):
     [Row(json=Row(a=1))]
     >>> schema = MapType(StringType(), IntegerType())
     >>> df.select(from_json(df.value, schema).alias("json")).collect()
-    [Row(json={'a': 1})]
+    [Row(json={u'a': 1})]
     >>> data = [(1, '''[{"a": 1}]''')]
     >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))
     >>> df = spark.createDataFrame(data, ("key", "value"))
