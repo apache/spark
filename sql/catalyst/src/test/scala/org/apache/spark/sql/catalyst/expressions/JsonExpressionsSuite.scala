@@ -708,13 +708,4 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       }
     }
   }
-
-  test("from_json - input=object, schema=map, output=array based map") {
-    val input = """{"a": 1, "b": 2, "c": 3}"""
-    val schema = MapType(StringType, IntegerType)
-    val output = InternalRow(ArrayBasedMapData(
-      keys = Array("a", "b", "c"), values = Array[Int](1, 2, 3)))
-
-    checkEvaluation(JsonToStructs(schema, Map.empty, Literal(input), gmtId), output)
-  }
 }
