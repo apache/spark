@@ -16,6 +16,10 @@
 # limitations under the License.
 #
 
+import sys
+import inspect
+from py4j.protocol import Py4JJavaError
+
 __all__ = []
 
 
@@ -33,13 +37,32 @@ def _exception_message(excp):
     >>> msg == _exception_message(excp)
     True
     """
+    if isinstance(excp, Py4JJavaError):
+        # 'Py4JJavaError' doesn't contain the stack trace available on the Java side in 'message'
+        # attribute in Python 2. We should call 'str' function on this exception in general but
+        # 'Py4JJavaError' has an issue about addressing non-ascii strings. So, here we work
+        # around by the direct call, '__str__()'. Please see SPARK-23517.
+        return excp.__str__()
     if hasattr(excp, "message"):
         return excp.message
     return str(excp)
+
+
+def _get_argspec(f):
+    """
+    Get argspec of a function. Supports both Python 2 and Python 3.
+    """
+    # `getargspec` is deprecated since python3.0 (incompatible with function annotations).
+    # See SPARK-23569.
+    if sys.version_info[0] < 3:
+        argspec = inspect.getargspec(f)
+    else:
+        argspec = inspect.getfullargspec(f)
+    return argspec
 
 
 if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

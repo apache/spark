@@ -35,8 +35,8 @@ final class UnsafeSorterSpillMerger {
         prefixComparator.compare(left.getKeyPrefix(), right.getKeyPrefix());
       if (prefixComparisonResult == 0) {
         return recordComparator.compare(
-          left.getBaseObject(), left.getBaseOffset(),
-          right.getBaseObject(), right.getBaseOffset());
+          left.getBaseObject(), left.getBaseOffset(), left.getRecordLength(),
+          right.getBaseObject(), right.getBaseOffset(), right.getRecordLength());
       } else {
         return prefixComparisonResult;
       }

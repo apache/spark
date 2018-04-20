@@ -369,13 +369,14 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
           case ne => (ne.exprId, evalAggOnZeroTups(ne))
         }.toMap
 
-      case _ => sys.error(s"Unexpected operator in scalar subquery: $lp")
+      case _ =>
+        sys.error(s"Unexpected operator in scalar subquery: $lp")
     }
 
     val resultMap = evalPlan(plan)
 
     // By convention, the scalar subquery result is the leftmost field.
-    resultMap(plan.output.head.exprId)
+    resultMap.getOrElse(plan.output.head.exprId, None)
   }
 
   /**

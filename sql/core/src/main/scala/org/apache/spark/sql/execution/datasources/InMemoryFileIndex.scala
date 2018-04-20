@@ -41,17 +41,17 @@ import org.apache.spark.util.SerializableConfiguration
  * @param rootPathsSpecified the list of root table paths to scan (some of which might be
  *                           filtered out later)
  * @param parameters as set of options to control discovery
- * @param partitionSchema an optional partition schema that will be use to provide types for the
- *                        discovered partitions
+ * @param userSpecifiedSchema an optional user specified schema that will be use to provide
+ *                            types for the discovered partitions
  */
 class InMemoryFileIndex(
     sparkSession: SparkSession,
     rootPathsSpecified: Seq[Path],
     parameters: Map[String, String],
-    partitionSchema: Option[StructType],
+    userSpecifiedSchema: Option[StructType],
     fileStatusCache: FileStatusCache = NoopCache)
   extends PartitioningAwareFileIndex(
-    sparkSession, parameters, partitionSchema, fileStatusCache) {
+    sparkSession, parameters, userSpecifiedSchema, fileStatusCache) {
 
   // Filter out streaming metadata dirs or files such as "/.../_spark_metadata" (the metadata dir)
   // or "/.../_spark_metadata/0" (a file in the metadata dir). `rootPathsSpecified` might contain

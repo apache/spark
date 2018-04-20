@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-"""
+r"""
  Counts words in UTF8 encoded, '\n' delimited text directly received from Kafka in every 2 seconds.
  Usage: direct_kafka_wordcount.py <broker_list> <topic>
 
@@ -39,7 +39,7 @@ from pyspark.streaming.kafka import KafkaUtils
 if __name__ == "__main__":
     if len(sys.argv) != 3:
         print("Usage: direct_kafka_wordcount.py <broker_list> <topic>", file=sys.stderr)
-        exit(-1)
+        sys.exit(-1)
 
     sc = SparkContext(appName="PythonStreamingDirectKafkaWordCount")
     ssc = StreamingContext(sc, 2)

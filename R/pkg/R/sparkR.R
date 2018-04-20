@@ -35,7 +35,6 @@ connExists <- function(env) {
 #' Also terminates the backend this R session is connected to.
 #' @rdname sparkR.session.stop
 #' @name sparkR.session.stop
-#' @export
 #' @note sparkR.session.stop since 2.0.0
 sparkR.session.stop <- function() {
   env <- .sparkREnv
@@ -84,7 +83,6 @@ sparkR.session.stop <- function() {
 
 #' @rdname sparkR.session.stop
 #' @name sparkR.stop
-#' @export
 #' @note sparkR.stop since 1.4.0
 sparkR.stop <- function() {
   sparkR.session.stop()
@@ -103,7 +101,6 @@ sparkR.stop <- function() {
 #' @param sparkPackages Character vector of package coordinates
 #' @seealso \link{sparkR.session}
 #' @rdname sparkR.init-deprecated
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init("local[2]", "SparkR", "/home/spark")
@@ -270,7 +267,6 @@ sparkR.sparkContext <- function(
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
 #' @seealso \link{sparkR.session}
 #' @rdname sparkRSQL.init-deprecated
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -298,7 +294,6 @@ sparkRSQL.init <- function(jsc = NULL) {
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
 #' @seealso \link{sparkR.session}
 #' @rdname sparkRHive.init-deprecated
-#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -347,7 +342,6 @@ sparkRHive.init <- function(jsc = NULL) {
 #' @param enableHiveSupport enable support for Hive, fallback if not built with Hive support; once
 #'        set, this cannot be turned off on an existing session
 #' @param ... named Spark properties passed to the method.
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()
@@ -442,7 +436,6 @@ sparkR.session <- function(
 #' @return the SparkUI URL, or NA if it is disabled, or not started.
 #' @rdname sparkR.uiWebUrl
 #' @name sparkR.uiWebUrl
-#' @export
 #' @examples
 #'\dontrun{
 #' sparkR.session()

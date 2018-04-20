@@ -20,7 +20,6 @@
 #' S4 class that represents an ALSModel
 #'
 #' @param jobj a Java object reference to the backing Scala ALSWrapper
-#' @export
 #' @note ALSModel since 2.1.0
 setClass("ALSModel", representation(jobj = "jobj"))
 
@@ -48,12 +47,13 @@ setClass("ALSModel", representation(jobj = "jobj"))
 #' @param numUserBlocks number of user blocks used to parallelize computation (> 0).
 #' @param numItemBlocks number of item blocks used to parallelize computation (> 0).
 #' @param checkpointInterval number of checkpoint intervals (>= 1) or disable checkpoint (-1).
+#'                           Note: this setting will be ignored if the checkpoint directory is not
+#'                           set.
 #' @param ... additional argument(s) passed to the method.
 #' @return \code{spark.als} returns a fitted ALS model.
 #' @rdname spark.als
 #' @aliases spark.als,SparkDataFrame-method
 #' @name spark.als
-#' @export
 #' @examples
 #' \dontrun{
 #' ratings <- list(list(0, 0, 4.0), list(0, 1, 2.0), list(1, 1, 3.0), list(1, 2, 4.0),
@@ -116,7 +116,6 @@ setMethod("spark.als", signature(data = "SparkDataFrame"),
 #'         and \code{rank} (rank of the matrix factorization model).
 #' @rdname spark.als
 #' @aliases summary,ALSModel-method
-#' @export
 #' @note summary(ALSModel) since 2.1.0
 setMethod("summary", signature(object = "ALSModel"),
           function(object) {
@@ -137,7 +136,6 @@ setMethod("summary", signature(object = "ALSModel"),
 #' @return \code{predict} returns a SparkDataFrame containing predicted values.
 #' @rdname spark.als
 #' @aliases predict,ALSModel-method
-#' @export
 #' @note predict(ALSModel) since 2.1.0
 setMethod("predict", signature(object = "ALSModel"),
           function(object, newData) {
@@ -153,7 +151,6 @@ setMethod("predict", signature(object = "ALSModel"),
 #'
 #' @rdname spark.als
 #' @aliases write.ml,ALSModel,character-method
-#' @export
 #' @seealso \link{read.ml}
 #' @note write.ml(ALSModel, character) since 2.1.0
 setMethod("write.ml", signature(object = "ALSModel", path = "character"),

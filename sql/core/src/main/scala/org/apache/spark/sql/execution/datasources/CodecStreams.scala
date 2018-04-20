@@ -45,11 +45,11 @@ object CodecStreams {
   }
 
   /**
-   * Creates an input stream from the string path and add a closure for the input stream to be
+   * Creates an input stream from the given path and add a closure for the input stream to be
    * closed on task completion.
    */
-  def createInputStreamWithCloseResource(config: Configuration, path: String): InputStream = {
-    val inputStream = createInputStream(config, new Path(path))
+  def createInputStreamWithCloseResource(config: Configuration, path: Path): InputStream = {
+    val inputStream = createInputStream(config, path)
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => inputStream.close()))
     inputStream
   }

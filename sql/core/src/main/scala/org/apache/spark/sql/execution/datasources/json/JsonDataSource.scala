@@ -18,11 +18,12 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.InputStream
+import java.net.URI
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
@@ -34,7 +35,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.execution.datasources.text.{TextFileFormat, TextOptions}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -91,7 +92,8 @@ object TextInputJsonDataSource extends JsonDataSource {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType = {
-    val json: Dataset[String] = createBaseDataset(sparkSession, inputPaths)
+    val json: Dataset[String] = createBaseDataset(
+      sparkSession, inputPaths, parsedOptions.lineSeparator)
     inferFromDataset(json, parsedOptions)
   }
 
@@ -103,13 +105,19 @@ object TextInputJsonDataSource extends JsonDataSource {
 
   private def createBaseDataset(
       sparkSession: SparkSession,
-      inputPaths: Seq[FileStatus]): Dataset[String] = {
+      inputPaths: Seq[FileStatus],
+      lineSeparator: Option[String]): Dataset[String] = {
+    val textOptions = lineSeparator.map { lineSep =>
+      Map(TextOptions.LINE_SEPARATOR -> lineSep)
+    }.getOrElse(Map.empty[String, String])
+
     val paths = inputPaths.map(_.getPath.toString)
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
         paths = paths,
-        className = classOf[TextFileFormat].getName
+        className = classOf[TextFileFormat].getName,
+        options = textOptions
       ).resolveRelation(checkFilesExist = false))
       .select("value").as(Encoders.STRING)
   }
@@ -119,7 +127,7 @@ object TextInputJsonDataSource extends JsonDataSource {
       file: PartitionedFile,
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
-    val linesReader = new HadoopFileLinesReader(file, conf)
+    val linesReader = new HadoopFileLinesReader(file, parser.options.lineSeparatorInRead, conf)
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
     val safeParser = new FailureSafeParser[Text](
       input => parser.parse(input, CreateJacksonParser.text, textToUTF8String),
@@ -168,9 +176,10 @@ object MultiLineJsonDataSource extends JsonDataSource {
   }
 
   private def createParser(jsonFactory: JsonFactory, record: PortableDataStream): JsonParser = {
+    val path = new Path(record.getPath())
     CreateJacksonParser.inputStream(
       jsonFactory,
-      CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, record.getPath()))
+      CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, path))
   }
 
   override def readFile(
@@ -180,7 +189,7 @@ object MultiLineJsonDataSource extends JsonDataSource {
       schema: StructType): Iterator[InternalRow] = {
     def partitionedFileString(ignored: Any): UTF8String = {
       Utils.tryWithResource {
-        CodecStreams.createInputStreamWithCloseResource(conf, file.filePath)
+        CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath)))
       } { inputStream =>
         UTF8String.fromBytes(ByteStreams.toByteArray(inputStream))
       }
@@ -193,6 +202,6 @@ object MultiLineJsonDataSource extends JsonDataSource {
       parser.options.columnNameOfCorruptRecord)
 
     safeParser.parse(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.filePath))
+      CodecStreams.createInputStreamWithCloseResource(conf, new Path(new URI(file.filePath))))
   }
 }

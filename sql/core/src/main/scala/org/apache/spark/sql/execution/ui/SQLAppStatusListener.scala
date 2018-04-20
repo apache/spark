@@ -88,7 +88,7 @@ class SQLAppStatusListener(
 
     exec.jobs = exec.jobs + (jobId -> JobExecutionStatus.RUNNING)
     exec.stages ++= event.stageIds.toSet
-    update(exec)
+    update(exec, force = true)
   }
 
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
@@ -99,7 +99,7 @@ class SQLAppStatusListener(
     // Reset the metrics tracking object for the new attempt.
     Option(stageMetrics.get(event.stageInfo.stageId)).foreach { metrics =>
       metrics.taskMetrics.clear()
-      metrics.attemptId = event.stageInfo.attemptId
+      metrics.attemptId = event.stageInfo.attemptNumber
     }
   }
 
@@ -308,11 +308,13 @@ class SQLAppStatusListener(
       })
   }
 
-  private def update(exec: LiveExecutionData): Unit = {
+  private def update(exec: LiveExecutionData, force: Boolean = false): Unit = {
     val now = System.nanoTime()
     if (exec.endEvents >= exec.jobs.size + 1) {
       exec.write(kvstore, now)
       liveExecutions.remove(exec.executionId)
+    } else if (force) {
+      exec.write(kvstore, now)
     } else if (liveUpdatePeriodNs >= 0) {
       if (now - exec.lastWriteTime > liveUpdatePeriodNs) {
         exec.write(kvstore, now)
@@ -332,9 +334,12 @@ class SQLAppStatusListener(
       return
     }
 
-    val toDelete = KVUtils.viewToSeq(kvstore.view(classOf[SQLExecutionUIData]),
-        countToDelete.toInt) { e => e.completionTime.isDefined }
-    toDelete.foreach { e => kvstore.delete(e.getClass(), e.executionId) }
+    val view = kvstore.view(classOf[SQLExecutionUIData]).index("completionTime").first(0L)
+    val toDelete = KVUtils.viewToSeq(view, countToDelete.toInt)(_.completionTime.isDefined)
+    toDelete.foreach { e =>
+      kvstore.delete(e.getClass(), e.executionId)
+      kvstore.delete(classOf[SparkPlanGraphWrapper], e.executionId)
+    }
   }
 
 }

@@ -326,8 +326,6 @@ object Vectors {
    */
   @Since("1.0.0")
   def sparse(size: Int, elements: Seq[(Int, Double)]): Vector = {
-    require(size > 0, "The size of the requested sparse vector must be greater than 0.")
-
     val (indices, values) = elements.sortBy(_._1).unzip
     var prev = -1
     indices.foreach { i =>
@@ -758,6 +756,7 @@ class SparseVector @Since("1.0.0") (
     @Since("1.0.0") val indices: Array[Int],
     @Since("1.0.0") val values: Array[Double]) extends Vector {
 
+  require(size >= 0, "The size of the requested sparse vector must be no less than 0.")
   require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
     s" indices match the dimension of the values. You provided ${indices.length} indices and " +
     s" ${values.length} values.")

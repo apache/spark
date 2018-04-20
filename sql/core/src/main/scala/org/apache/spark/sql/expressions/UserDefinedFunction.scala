@@ -27,8 +27,8 @@ import org.apache.spark.sql.types.DataType
  *
  * As an example:
  * {{{
- *   // Defined a UDF that returns true or false based on some numeric score.
- *   val predict = udf((score: Double) => if (score > 0.5) true else false)
+ *   // Define a UDF that returns true or false based on some numeric score.
+ *   val predict = udf((score: Double) => score > 0.5)
  *
  *   // Projects a column that adds a prediction column based on the score column.
  *   df.select( predict(df("score")) )

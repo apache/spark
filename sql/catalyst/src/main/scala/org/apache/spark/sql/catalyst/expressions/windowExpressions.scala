@@ -265,27 +265,6 @@ case class SpecifiedWindowFrame(
   }
 }
 
-object SpecifiedWindowFrame {
-  /**
-   * @param hasOrderSpecification If the window spec has order by expressions.
-   * @param acceptWindowFrame If the window function accepts user-specified frame.
-   * @return the default window frame.
-   */
-  def defaultWindowFrame(
-      hasOrderSpecification: Boolean,
-      acceptWindowFrame: Boolean): SpecifiedWindowFrame = {
-    if (hasOrderSpecification && acceptWindowFrame) {
-      // If order spec is defined and the window function supports user specified window frames,
-      // the default frame is RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW.
-      SpecifiedWindowFrame(RangeFrame, UnboundedPreceding, CurrentRow)
-    } else {
-      // Otherwise, the default frame is
-      // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING.
-      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, UnboundedFollowing)
-    }
-  }
-}
-
 case class UnresolvedWindowExpression(
     child: Expression,
     windowSpec: WindowSpecReference) extends UnaryExpression with Unevaluable {

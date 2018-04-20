@@ -316,7 +316,7 @@ class LinearSVCModel private[classification] (
     BLAS.dot(features, coefficients) + intercept
   }
 
-  override protected def predict(features: Vector): Double = {
+  override def predict(features: Vector): Double = {
     if (margin(features) > $(threshold)) 1.0 else 0.0
   }
 

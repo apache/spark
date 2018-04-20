@@ -77,24 +77,60 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
       </div>
       <div class="row-fluid"> <!-- Executors and Drivers -->
         <div class="span12">
-          <h4> Running Executors ({runningExecutors.size}) </h4>
-          {runningExecutorTable}
+          <span class="collapse-aggregated-runningExecutors collapse-table"
+              onClick="collapseTable('collapse-aggregated-runningExecutors',
+              'aggregated-runningExecutors')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Running Executors ({runningExecutors.size})</a>
+            </h4>
+          </span>
+          <div class="aggregated-runningExecutors collapsible-table">
+            {runningExecutorTable}
+          </div>
           {
             if (runningDrivers.nonEmpty) {
-              <h4> Running Drivers ({runningDrivers.size}) </h4> ++
-              runningDriverTable
+              <span class="collapse-aggregated-runningDrivers collapse-table"
+                  onClick="collapseTable('collapse-aggregated-runningDrivers',
+                  'aggregated-runningDrivers')">
+                <h4>
+                  <span class="collapse-table-arrow arrow-open"></span>
+                  <a>Running Drivers ({runningDrivers.size})</a>
+                </h4>
+              </span> ++
+              <div class="aggregated-runningDrivers collapsible-table">
+                {runningDriverTable}
+              </div>
             }
           }
           {
             if (finishedExecutors.nonEmpty) {
-              <h4>Finished Executors ({finishedExecutors.size}) </h4> ++
-              finishedExecutorTable
+              <span class="collapse-aggregated-finishedExecutors collapse-table"
+                  onClick="collapseTable('collapse-aggregated-finishedExecutors',
+                  'aggregated-finishedExecutors')">
+                <h4>
+                  <span class="collapse-table-arrow arrow-open"></span>
+                  <a>Finished Executors ({finishedExecutors.size})</a>
+                </h4>
+              </span> ++
+              <div class="aggregated-finishedExecutors collapsible-table">
+                {finishedExecutorTable}
+              </div>
             }
           }
           {
             if (finishedDrivers.nonEmpty) {
-              <h4> Finished Drivers ({finishedDrivers.size}) </h4> ++
-              finishedDriverTable
+              <span class="collapse-aggregated-finishedDrivers collapse-table"
+                  onClick="collapseTable('collapse-aggregated-finishedDrivers',
+                  'aggregated-finishedDrivers')">
+                <h4>
+                  <span class="collapse-table-arrow arrow-open"></span>
+                  <a>Finished Drivers ({finishedDrivers.size})</a>
+                </h4>
+              </span> ++
+              <div class="aggregated-finishedDrivers collapsible-table">
+                {finishedDriverTable}
+              </div>
             }
           }
         </div>

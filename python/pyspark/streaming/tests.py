@@ -507,6 +507,10 @@ class StreamingListenerTests(PySparkStreamingTestCase):
             self.batchInfosCompleted = []
             self.batchInfosStarted = []
             self.batchInfosSubmitted = []
+            self.streamingStartedTime = []
+
+        def onStreamingStarted(self, streamingStarted):
+            self.streamingStartedTime.append(streamingStarted.time)
 
         def onBatchSubmitted(self, batchSubmitted):
             self.batchInfosSubmitted.append(batchSubmitted.batchInfo())
@@ -530,8 +534,11 @@ class StreamingListenerTests(PySparkStreamingTestCase):
         batchInfosSubmitted = batch_collector.batchInfosSubmitted
         batchInfosStarted = batch_collector.batchInfosStarted
         batchInfosCompleted = batch_collector.batchInfosCompleted
+        streamingStartedTime = batch_collector.streamingStartedTime
 
         self.wait_for(batchInfosCompleted, 4)
+
+        self.assertEqual(len(streamingStartedTime), 1)
 
         self.assertGreaterEqual(len(batchInfosSubmitted), 4)
         for info in batchInfosSubmitted:
@@ -1477,8 +1484,8 @@ def search_kafka_assembly_jar():
         raise Exception(
             ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
             "You need to build Spark with "
-            "'build/sbt assembly/package streaming-kafka-0-8-assembly/assembly' or "
-            "'build/mvn -Pkafka-0-8 package' before running this test.")
+            "'build/sbt -Pkafka-0-8 assembly/package streaming-kafka-0-8-assembly/assembly' or "
+            "'build/mvn -DskipTests -Pkafka-0-8 package' before running this test.")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Kafka assembly JARs: %s; please "
                          "remove all but one") % (", ".join(jars)))
@@ -1494,8 +1501,8 @@ def search_flume_assembly_jar():
         raise Exception(
             ("Failed to find Spark Streaming Flume assembly jar in %s. " % flume_assembly_dir) +
             "You need to build Spark with "
-            "'build/sbt assembly/assembly streaming-flume-assembly/assembly' or "
-            "'build/mvn -Pflume package' before running this test.")
+            "'build/sbt -Pflume assembly/package streaming-flume-assembly/assembly' or "
+            "'build/mvn -DskipTests -Pflume package' before running this test.")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Flume assembly JARs: %s; please "
                         "remove all but one") % (", ".join(jars)))
@@ -1503,10 +1510,13 @@ def search_flume_assembly_jar():
         return jars[0]
 
 
-def search_kinesis_asl_assembly_jar():
+def _kinesis_asl_assembly_dir():
     SPARK_HOME = os.environ["SPARK_HOME"]
-    kinesis_asl_assembly_dir = os.path.join(SPARK_HOME, "external/kinesis-asl-assembly")
-    jars = search_jar(kinesis_asl_assembly_dir, "spark-streaming-kinesis-asl-assembly")
+    return os.path.join(SPARK_HOME, "external/kinesis-asl-assembly")
+
+
+def search_kinesis_asl_assembly_jar():
+    jars = search_jar(_kinesis_asl_assembly_dir(), "spark-streaming-kinesis-asl-assembly")
     if not jars:
         return None
     elif len(jars) > 1:
@@ -1569,7 +1579,7 @@ if __name__ == "__main__":
     else:
         raise Exception(
             ("Failed to find Spark Streaming Kinesis assembly jar in %s. "
-             % kinesis_asl_assembly_dir) +
+             % _kinesis_asl_assembly_dir()) +
             "You need to build Spark with 'build/sbt -Pkinesis-asl "
             "assembly/package streaming-kinesis-asl-assembly/assembly'"
             "or 'build/mvn -Pkinesis-asl package' before running this test.")
