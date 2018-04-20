@@ -1189,6 +1189,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a24 = Literal.create(Seq("c", "d", "a", "f"), ArrayType(StringType, false))
 
     val a30 = Literal.create(Seq(null, null), ArrayType(NullType))
+    val a31 = Literal.create(null, ArrayType(StringType))
 
     checkEvaluation(ArrayUnion(a00, a01), UnsafeArrayData.fromPrimitiveArray(Array(4, 1, 3, 2)))
     checkEvaluation(ArrayUnion(a01, a02), Seq(4, 2, 1, 3))
@@ -1206,5 +1207,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArrayUnion(a23, a24), Seq("b", "c", "d", "a", "f"))
 
     checkEvaluation(ArrayUnion(a30, a30), Seq(null))
+    checkEvaluation(ArrayUnion(a20, a31), null)
+    checkEvaluation(ArrayUnion(a31, a20), null)
   }
 }
