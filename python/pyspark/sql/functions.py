@@ -1991,6 +1991,7 @@ def json_tuple(col, *fields):
     jc = sc._jvm.functions.json_tuple(_to_java_column(col), _to_seq(sc, fields))
     return Column(jc)
 
+
 @ignore_unicode_prefix
 @since(2.1)
 def from_json(col, schema, options={}):
