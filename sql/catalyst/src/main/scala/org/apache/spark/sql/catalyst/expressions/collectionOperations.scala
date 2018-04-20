@@ -2021,7 +2021,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
       ByteArray.concat(inputs: _*)
     case StringType =>
       val inputs = children.map(_.eval(input).asInstanceOf[UTF8String])
-      UTF8String.concat(inputs: _*)
+      UTF8String.concat(inputs : _*)
     case ArrayType(elementType, _) =>
       val inputs = children.toStream.map(_.eval(input))
       if (inputs.contains(null)) {
@@ -2035,7 +2035,7 @@ case class Concat(children: Seq[Expression]) extends Expression {
         }
         val finalData = new Array[AnyRef](numberOfElements.toInt)
         var position = 0
-        for (ad <- arrayData) {
+        for(ad <- arrayData) {
           val arr = ad.toObjectArray(elementType)
           Array.copy(arr, 0, finalData, position, arr.length)
           position += arr.length
@@ -2082,24 +2082,23 @@ case class Concat(children: Seq[Expression]) extends Expression {
     """)
   }
 
-  private def genCodeForNumberOfElements(ctx: CodegenContext): (String, String) = {
+  private def genCodeForNumberOfElements(ctx: CodegenContext) : (String, String) = {
     val numElements = ctx.freshName("numElements")
-    val code =
-      s"""
-         |long $numElements = 0L;
-         |for (int z = 0; z < ${children.length}; z++) {
-         |  $numElements += args[z].numElements();
-         |}
-         |if ($numElements > $MAX_ARRAY_LENGTH) {
-         |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $numElements +
-         |    " elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
-         |}
+    val code = s"""
+        |long $numElements = 0L;
+        |for (int z = 0; z < ${children.length}; z++) {
+        |  $numElements += args[z].numElements();
+        |}
+        |if ($numElements > $MAX_ARRAY_LENGTH) {
+        |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $numElements +
+        |    " elements due to exceeding the array size limit $MAX_ARRAY_LENGTH.");
+        |}
       """.stripMargin
 
     (code, numElements)
   }
 
-  private def nullArgumentProtection(): String = {
+  private def nullArgumentProtection() : String = {
     if (nullable) {
       s"""
          |for (int z = 0; z < ${children.length}; z++) {
@@ -2117,6 +2116,17 @@ case class Concat(children: Seq[Expression]) extends Expression {
 
     val (numElemCode, numElemName) = genCodeForNumberOfElements(ctx)
 
+    val unsafeArraySizeInBytes = s"""
+      |long $arraySizeName = UnsafeArrayData.calculateSizeOfUnderlyingByteArray(
+      |  $numElemName,
+      |  ${elementType.defaultSize});
+      |if ($arraySizeName > $MAX_ARRAY_LENGTH) {
+      |  throw new RuntimeException("Unsuccessful try to concat arrays with " + $arraySizeName +
+      |    " bytes of data due to exceeding the limit $MAX_ARRAY_LENGTH bytes" +
+      |    " for UnsafeArrayData.");
+      |}
+      """.stripMargin
+    val baseOffset = Platform.BYTE_ARRAY_OFFSET
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(elementType)
 
     s"""
