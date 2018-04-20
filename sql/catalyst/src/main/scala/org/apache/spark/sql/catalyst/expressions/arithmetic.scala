@@ -591,16 +591,11 @@ case class Least(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    ev.isNull = GlobalValue(ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, ev.isNull),
-      CodeGenerator.JAVA_BOOLEAN)
+    ev.isNull = JavaCode.isNullGlobal(ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, ev.isNull))
     val evals = evalChildren.map(eval =>
       s"""
          |${eval.code}
-         |if (!${eval.isNull} && (${ev.isNull} ||
-         |  ${ctx.genGreater(dataType, ev.value, eval.value)})) {
-         |  ${ev.isNull} = false;
-         |  ${ev.value} = ${eval.value};
-         |}
+         |${ctx.reassignIfSmaller(dataType, ev, eval)}
       """.stripMargin
     )
 
@@ -671,16 +666,11 @@ case class Greatest(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val evalChildren = children.map(_.genCode(ctx))
-    ev.isNull = GlobalValue(ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, ev.isNull),
-      CodeGenerator.JAVA_BOOLEAN)
+    ev.isNull = JavaCode.isNullGlobal(ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, ev.isNull))
     val evals = evalChildren.map(eval =>
       s"""
          |${eval.code}
-         |if (!${eval.isNull} && (${ev.isNull} ||
-         |  ${ctx.genGreater(dataType, eval.value, ev.value)})) {
-         |  ${ev.isNull} = false;
-         |  ${ev.value} = ${eval.value};
-         |}
+         |${ctx.reassignIfGreater(dataType, ev, eval)}
       """.stripMargin
     )
 

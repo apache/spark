@@ -368,7 +368,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
     val number = ctx.addMutableState(CodeGenerator.JAVA_LONG, "number")
 
     val value = ctx.freshName("value")
-    val ev = ExprCode("", FalseLiteral, VariableValue(value, CodeGenerator.JAVA_LONG))
+    val ev = ExprCode.forNonNullValue(JavaCode.variable(value, LongType))
     val BigInt = classOf[java.math.BigInteger].getName
 
     // Inline mutable state since not many Range operations in a task

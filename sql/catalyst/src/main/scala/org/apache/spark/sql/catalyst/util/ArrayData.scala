@@ -19,8 +19,9 @@ package org.apache.spark.sql.catalyst.util
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, UnsafeArrayData}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 
 object ArrayData {
   def toArrayData(input: Any): ArrayData = input match {
@@ -41,6 +42,9 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
   def copy(): ArrayData
 
   def array: Array[Any]
+
+  def toSeq[T](dataType: DataType): IndexedSeq[T] =
+    new ArrayDataIndexedSeq[T](this, dataType)
 
   def setNullAt(i: Int): Unit
 
@@ -137,30 +141,55 @@ abstract class ArrayData extends SpecializedGetters with Serializable {
 
   def toArray[T: ClassTag](elementType: DataType): Array[T] = {
     val size = numElements()
+    val accessor = InternalRow.getAccessor(elementType)
     val values = new Array[T](size)
     var i = 0
     while (i < size) {
       if (isNullAt(i)) {
         values(i) = null.asInstanceOf[T]
       } else {
-        values(i) = get(i, elementType).asInstanceOf[T]
+        values(i) = accessor(this, i).asInstanceOf[T]
       }
       i += 1
     }
     values
   }
 
-  // todo: specialize this.
   def foreach(elementType: DataType, f: (Int, Any) => Unit): Unit = {
     val size = numElements()
+    val accessor = InternalRow.getAccessor(elementType)
     var i = 0
     while (i < size) {
       if (isNullAt(i)) {
         f(i, null)
       } else {
-        f(i, get(i, elementType))
+        f(i, accessor(this, i))
       }
       i += 1
     }
   }
+}
+
+/**
+ * Implements an `IndexedSeq` interface for `ArrayData`. Notice that if the original `ArrayData`
+ * is a primitive array and contains null elements, it is better to ask for `IndexedSeq[Any]`,
+ * instead of `IndexedSeq[Int]`, in order to keep the null elements.
+ */
+class ArrayDataIndexedSeq[T](arrayData: ArrayData, dataType: DataType) extends IndexedSeq[T] {
+
+  private val accessor: (SpecializedGetters, Int) => Any = InternalRow.getAccessor(dataType)
+
+  override def apply(idx: Int): T =
+    if (0 <= idx && idx < arrayData.numElements()) {
+      if (arrayData.isNullAt(idx)) {
+        null.asInstanceOf[T]
+      } else {
+        accessor(arrayData, idx).asInstanceOf[T]
+      }
+    } else {
+      throw new IndexOutOfBoundsException(
+        s"Index $idx must be between 0 and the length of the ArrayData.")
+    }
+
+  override def length: Int = arrayData.numElements()
 }

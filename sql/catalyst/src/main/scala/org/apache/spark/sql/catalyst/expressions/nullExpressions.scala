@@ -72,8 +72,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ev.isNull = GlobalValue(ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, ev.isNull),
-      CodeGenerator.JAVA_BOOLEAN)
+    ev.isNull = JavaCode.isNullGlobal(ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, ev.isNull))
 
     // all the evals are meant to be in a do { ... } while (false); loop
     val evals = children.map { e =>
@@ -321,12 +320,7 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    val value = if (eval.isNull.isInstanceOf[LiteralValue]) {
-      LiteralValue(eval.isNull, CodeGenerator.JAVA_BOOLEAN)
-    } else {
-      VariableValue(eval.isNull, CodeGenerator.JAVA_BOOLEAN)
-    }
-    ExprCode(code = eval.code, isNull = FalseLiteral, value = value)
+    ExprCode(code = eval.code, isNull = FalseLiteral, value = eval.isNull)
   }
 
   override def sql: String = s"(${child.sql} IS NULL)"
@@ -352,12 +346,10 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = child.genCode(ctx)
-    val value = if (eval.isNull == TrueLiteral) {
-      FalseLiteral
-    } else if (eval.isNull == FalseLiteral) {
-      TrueLiteral
-    } else {
-      StatementValue(s"(!(${eval.isNull}))", CodeGenerator.javaType(dataType))
+    val value = eval.isNull match {
+      case TrueLiteral => FalseLiteral
+      case FalseLiteral => TrueLiteral
+      case v => JavaCode.isNullExpression(s"!$v")
     }
     ExprCode(code = eval.code, isNull = FalseLiteral, value = value)
   }

@@ -51,6 +51,14 @@ class MinHashLSHModel private[ml](
     private[ml] val randCoefficients: Array[(Int, Int)])
   extends LSHModel[MinHashLSHModel] {
 
+  /** @group setParam */
+  @Since("2.4.0")
+  override def setInputCol(value: String): this.type = super.set(inputCol, value)
+
+  /** @group setParam */
+  @Since("2.4.0")
+  override def setOutputCol(value: String): this.type = super.set(outputCol, value)
+
   @Since("2.1.0")
   override protected[ml] val hashFunction: Vector => Array[Vector] = {
     elems: Vector => {
