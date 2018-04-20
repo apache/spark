@@ -128,6 +128,13 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     checkEvaluation(ArraysOverlap(a5, a6), true)
     checkEvaluation(ArraysOverlap(a5, a7), null)
     checkEvaluation(ArraysOverlap(a6, a7), false)
+
+    // null handling
+    checkEvaluation(ArraysOverlap(Literal.create(null, ArrayType(IntegerType)), a0), null)
+    checkEvaluation(ArraysOverlap(a0, Literal.create(null, ArrayType(IntegerType))), null)
+    checkEvaluation(ArraysOverlap(
+      Literal.create(Seq(null), ArrayType(IntegerType)),
+      Literal.create(Seq(null), ArrayType(IntegerType))), null)
   }
 
   test("Array Min") {

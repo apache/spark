@@ -291,13 +291,15 @@ case class ArrayContains(left: Expression, right: Expression)
 /**
  * Checks if the two arrays contain at least one common element.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(a1, a2) - Returns true if a1 contains at least an element present also in a2.",
+  usage = "_FUNC_(a1, a2) - Returns true if a1 contains at least an element present also in a2. If the arrays have no common element and either of them contains a null element null is returned, false otherwise.",
   examples = """
     Examples:
       > SELECT _FUNC_(array(1, 2, 3), array(3, 4, 5));
        true
   """, since = "2.4.0")
+// scalastyle:off line.size.limit
 case class ArraysOverlap(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -307,7 +309,7 @@ case class ArraysOverlap(left: Expression, right: Expression)
 
   override def inputTypes: Seq[AbstractDataType] = left.dataType match {
     case la: ArrayType if la.sameType(right.dataType) =>
-      Seq(la, la)
+      Seq(la, right.dataType)
     case _ => Seq.empty
   }
 
@@ -363,36 +365,62 @@ case class ArraysOverlap(left: Expression, right: Expression)
       val i2 = ctx.freshName("i")
       val getValue1 = CodeGenerator.getValue(a1, elementType, i1)
       val getValue2 = CodeGenerator.getValue(a2, elementType, i2)
+      val leftEmptyCode = if (right.dataType.asInstanceOf[ArrayType].containsNull) {
+        s"""
+           |else {
+           |  for (int $i2 = 0; $i2 < $a2.numElements(); $i2 ++) {
+           |    if ($a2.isNullAt($i2)) {
+           |      ${ev.isNull} = true;
+           |      break;
+           |    }
+           |  }
+           |}
+         """.stripMargin
+      } else {
+        ""
+      }
       s"""
          |if ($a1.numElements() > 0) {
          |  for (int $i1 = 0; $i1 < $a1.numElements(); $i1 ++) {
-         |    if ($a1.isNullAt($i1)) {
-         |      ${ev.isNull} = true;
-         |    } else {
-         |      for (int $i2 = 0; $i2 < $a2.numElements(); $i2 ++) {
-         |        if ($a2.isNullAt($i2)) {
-         |          ${ev.isNull} = true;
-         |        } else if (${ctx.genEqual(elementType, getValue1, getValue2)}) {
-         |          ${ev.isNull} = false;
-         |          ${ev.value} = true;
-         |          break;
-         |        }
-         |      }
-         |      if (${ev.value}) {
-         |        break;
-         |      }
-         |    }
+         |    ${nullSafeElementCodegen(left.dataType.asInstanceOf[ArrayType], a1, i1,
+                s"""
+                   |for (int $i2 = 0; $i2 < $a2.numElements(); $i2 ++) {
+                   |  ${nullSafeElementCodegen(right.dataType.asInstanceOf[ArrayType], a2, i2,
+                  s"""
+                     |if (${ctx.genEqual(elementType, getValue1, getValue2)}) {
+                     |  ${ev.isNull} = false;
+                     |  ${ev.value} = true;
+                     |  break;
+                     |}
+                      """.stripMargin, s"${ev.isNull} = true;")}
+                   |}
+                   |if (${ev.value}) {
+                   |  break;
+                   |}
+                 """.stripMargin, s"${ev.isNull} = true;")}
          |  }
-         |} else {
-         |  for (int $i2 = 0; $i2 < $a2.numElements(); $i2 ++) {
-         |    if ($a2.isNullAt($i2)) {
-         |      ${ev.isNull} = true;
-         |      break;
-         |    }
-         |  }
-         |}
+         |} $leftEmptyCode
          |""".stripMargin
     })
+  }
+
+  def nullSafeElementCodegen(
+      arrayType: ArrayType,
+      arrayVar: String,
+      index: String,
+      code: String,
+      isNullCode: String): String = {
+    if (arrayType.containsNull) {
+      s"""
+         |if ($arrayVar.isNullAt($index)) {
+         |  $isNullCode
+         |} else {
+         |  $code
+         |}
+       """.stripMargin
+    } else {
+      code
+    }
   }
 }
 
