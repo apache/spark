@@ -73,7 +73,7 @@ private[stat] sealed trait StreamingTestMethod extends Serializable {
  * This test does not assume equal variance between the two samples and does not assume equal
  * sample size.
  *
- * @see http://en.wikipedia.org/wiki/Welch%27s_t_test
+ * @see <a href="http://en.wikipedia.org/wiki/Welch%27s_t_test">Welch's t-test (Wikipedia)</a>
  */
 private[stat] object WelchTTest extends StreamingTestMethod with Logging {
 
@@ -115,7 +115,7 @@ private[stat] object WelchTTest extends StreamingTestMethod with Logging {
  * mean. This test assumes equal variance between the two samples and does not assume equal sample
  * size. For unequal variances, Welch's t-test should be used instead.
  *
- * @see http://en.wikipedia.org/wiki/Student%27s_t-test
+ * @see <a href="http://en.wikipedia.org/wiki/Student%27s_t-test">Student's t-test (Wikipedia)</a>
  */
 private[stat] object StudentTTest extends StreamingTestMethod with Logging {
 

@@ -30,7 +30,7 @@ import org.apache.hadoop.mapred.{FileSplit, TextInputFormat}
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.rdd.RDDSuiteUtils._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class RDDSuite extends SparkFunSuite with SharedSparkContext {
   var tempDir: File = _
@@ -192,6 +192,23 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(ser.serialize(union.partitions.head).limit() < 2000)
   }
 
+  test("fold") {
+    val rdd = sc.makeRDD(-1000 until 1000, 10)
+    def op: (Int, Int) => Int = (c: Int, x: Int) => c + x
+    val sum = rdd.fold(0)(op)
+    assert(sum === -1000)
+  }
+
+  test("fold with op modifying first arg") {
+    val rdd = sc.makeRDD(-1000 until 1000, 10).map(x => Array(x))
+    def op: (Array[Int], Array[Int]) => Array[Int] = { (c: Array[Int], x: Array[Int]) =>
+      c(0) += x(0)
+      c
+    }
+    val sum = rdd.fold(Array(0))(op)
+    assert(sum(0) === -1000)
+  }
+
   test("aggregate") {
     val pairs = sc.makeRDD(Array(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3)))
     type StringMap = HashMap[String, Int]
@@ -218,7 +235,19 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     def combOp: (Long, Long) => Long = (c1: Long, c2: Long) => c1 + c2
     for (depth <- 1 until 10) {
       val sum = rdd.treeAggregate(0L)(seqOp, combOp, depth)
-      assert(sum === -1000L)
+      assert(sum === -1000)
+    }
+  }
+
+  test("treeAggregate with ops modifying first args") {
+    val rdd = sc.makeRDD(-1000 until 1000, 10).map(x => Array(x))
+    def op: (Array[Int], Array[Int]) => Array[Int] = { (c: Array[Int], x: Array[Int]) =>
+      c(0) += x(0)
+      c
+    }
+    for (depth <- 1 until 10) {
+      val sum = rdd.treeAggregate(Array(0))(op, op, depth)
+      assert(sum(0) === -1000)
     }
   }
 
@@ -318,16 +347,18 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
       val partitions = repartitioned.glom().collect()
       // assert all elements are present
       assert(repartitioned.collect().sortWith(_ > _).toSeq === input.toSeq.sortWith(_ > _).toSeq)
-      // assert no bucket is overloaded
+      // assert no bucket is overloaded or empty
       for (partition <- partitions) {
         val avg = input.size / finalPartitions
         val maxPossible = avg + initialPartitions
-        assert(partition.length <=  maxPossible)
+        assert(partition.length <= maxPossible)
+        assert(!partition.isEmpty)
       }
     }
 
     testSplitPartitions(Array.fill(100)(1), 10, 20)
     testSplitPartitions(Array.fill(10000)(1) ++ Array.fill(10000)(2), 20, 100)
+    testSplitPartitions(Array.fill(1000)(1), 250, 128)
   }
 
   test("coalesced RDDs") {
@@ -1082,6 +1113,51 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(totalPartitionCount == 10)
   }
 
+  test("SPARK-18406: race between end-of-task and completion iterator read lock release") {
+    val rdd = sc.parallelize(1 to 1000, 10)
+    rdd.cache()
+
+    rdd.mapPartitions { iter =>
+      ThreadUtils.runInNewThread("TestThread") {
+        // Iterate to the end of the input iterator, to cause the CompletionIterator completion to
+        // fire outside of the task's main thread.
+        while (iter.hasNext) {
+          iter.next()
+        }
+        iter
+      }
+    }.collect()
+  }
+
+  test("SPARK-23496: order of input partitions can result in severe skew in coalesce") {
+    val numInputPartitions = 100
+    val numCoalescedPartitions = 50
+    val locations = Array("locA", "locB")
+
+    val inputRDD = sc.makeRDD(Range(0, numInputPartitions).toArray[Int], numInputPartitions)
+    assert(inputRDD.getNumPartitions == numInputPartitions)
+
+    val locationPrefRDD = new LocationPrefRDD(inputRDD, { (p: Partition) =>
+      if (p.index < numCoalescedPartitions) {
+        Seq(locations(0))
+      } else {
+        Seq(locations(1))
+      }
+    })
+    val coalescedRDD = new CoalescedRDD(locationPrefRDD, numCoalescedPartitions)
+
+    val numPartsPerLocation = coalescedRDD
+      .getPartitions
+      .map(coalescedRDD.getPreferredLocations(_).head)
+      .groupBy(identity)
+      .mapValues(_.size)
+
+    // Make sure the coalesced partitions are distributed fairly evenly between the two locations.
+    // This should not become flaky since the DefaultPartitionsCoalescer uses a fixed seed.
+    assert(numPartsPerLocation(locations(0)) > 0.4 * numCoalescedPartitions)
+    assert(numPartsPerLocation(locations(1)) > 0.4 * numCoalescedPartitions)
+  }
+
   // NOTE
   // Below tests calling sc.stop() have to be the last tests in this suite. If there are tests
   // running after them and if they access sc those tests will fail as sc is already closed, because
@@ -1162,4 +1238,17 @@ class SizeBasedCoalescer(val maxSize: Int) extends PartitionCoalescer with Seria
     }
     groups.toArray
   }
+}
+
+/** Alters the preferred locations of the parent RDD using provided function. */
+class LocationPrefRDD[T: ClassTag](
+    @transient var prev: RDD[T],
+    val locationPicker: Partition => Seq[String]) extends RDD[T](prev) {
+  override protected def getPartitions: Array[Partition] = prev.partitions
+
+  override def compute(partition: Partition, context: TaskContext): Iterator[T] =
+    null.asInstanceOf[Iterator[T]]
+
+  override def getPreferredLocations(partition: Partition): Seq[String] =
+    locationPicker(partition)
 }

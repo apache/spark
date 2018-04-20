@@ -28,7 +28,7 @@ import org.apache.spark.network.BlockDataManager
 class NettyBlockTransferServiceSuite
   extends SparkFunSuite
   with BeforeAndAfterEach
-  with ShouldMatchers {
+  with Matchers {
 
   private var service0: NettyBlockTransferService = _
   private var service1: NettyBlockTransferService = _
@@ -80,16 +80,18 @@ class NettyBlockTransferServiceSuite
   private def verifyServicePort(expectedPort: Int, actualPort: Int): Unit = {
     actualPort should be >= expectedPort
     // avoid testing equality in case of simultaneous tests
-    actualPort should be <= (expectedPort + 10)
+    // if `spark.testing` is true,
+    // the default value for `spark.port.maxRetries` is 100 under test
+    actualPort should be <= (expectedPort + 100)
   }
 
   private def createService(port: Int): NettyBlockTransferService = {
     val conf = new SparkConf()
       .set("spark.app.id", s"test-${getClass.getName}")
-      .set("spark.blockManager.port", port.toString)
     val securityManager = new SecurityManager(conf)
     val blockDataManager = mock(classOf[BlockDataManager])
-    val service = new NettyBlockTransferService(conf, securityManager, "localhost", numCores = 1)
+    val service = new NettyBlockTransferService(conf, securityManager, "localhost", "localhost",
+      port, 1)
     service.init(blockDataManager)
     service
   }

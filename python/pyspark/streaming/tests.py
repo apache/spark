@@ -55,7 +55,7 @@ from pyspark.streaming.listener import StreamingListener
 
 class PySparkStreamingTestCase(unittest.TestCase):
 
-    timeout = 10  # seconds
+    timeout = 30  # seconds
     duration = .5
 
     @classmethod
@@ -507,6 +507,10 @@ class StreamingListenerTests(PySparkStreamingTestCase):
             self.batchInfosCompleted = []
             self.batchInfosStarted = []
             self.batchInfosSubmitted = []
+            self.streamingStartedTime = []
+
+        def onStreamingStarted(self, streamingStarted):
+            self.streamingStartedTime.append(streamingStarted.time)
 
         def onBatchSubmitted(self, batchSubmitted):
             self.batchInfosSubmitted.append(batchSubmitted.batchInfo())
@@ -530,8 +534,11 @@ class StreamingListenerTests(PySparkStreamingTestCase):
         batchInfosSubmitted = batch_collector.batchInfosSubmitted
         batchInfosStarted = batch_collector.batchInfosStarted
         batchInfosCompleted = batch_collector.batchInfosCompleted
+        streamingStartedTime = batch_collector.streamingStartedTime
 
         self.wait_for(batchInfosCompleted, 4)
+
+        self.assertEqual(len(streamingStartedTime), 1)
 
         self.assertGreaterEqual(len(batchInfosSubmitted), 4)
         for info in batchInfosSubmitted:
@@ -903,11 +910,11 @@ class CheckpointTests(unittest.TestCase):
         def setup():
             conf = SparkConf().set("spark.default.parallelism", 1)
             sc = SparkContext(conf=conf)
-            ssc = StreamingContext(sc, 0.5)
+            ssc = StreamingContext(sc, 2)
             dstream = ssc.textFileStream(inputd).map(lambda x: (x, 1))
             wc = dstream.updateStateByKey(updater)
             wc.map(lambda x: "%s,%d" % x).saveAsTextFiles(outputd + "test")
-            wc.checkpoint(.5)
+            wc.checkpoint(2)
             self.setupCalled = True
             return ssc
 
@@ -921,21 +928,22 @@ class CheckpointTests(unittest.TestCase):
 
         def check_output(n):
             while not os.listdir(outputd):
-                time.sleep(0.01)
+                if self.ssc.awaitTerminationOrTimeout(0.5):
+                    raise Exception("ssc stopped")
             time.sleep(1)  # make sure mtime is larger than the previous one
             with open(os.path.join(inputd, str(n)), 'w') as f:
                 f.writelines(["%d\n" % i for i in range(10)])
 
             while True:
+                if self.ssc.awaitTerminationOrTimeout(0.5):
+                    raise Exception("ssc stopped")
                 p = os.path.join(outputd, max(os.listdir(outputd)))
                 if '_SUCCESS' not in os.listdir(p):
                     # not finished
-                    time.sleep(0.01)
                     continue
                 ordd = self.ssc.sparkContext.textFile(p).map(lambda line: line.split(","))
                 d = ordd.values().map(int).collect()
                 if not d:
-                    time.sleep(0.01)
                     continue
                 self.assertEqual(10, len(d))
                 s = set(d)
@@ -1420,7 +1428,7 @@ class KinesisStreamTests(PySparkStreamingTestCase):
 
         import random
         kinesisAppName = ("KinesisStreamTests-%d" % abs(random.randint(0, 10000000)))
-        kinesisTestUtils = self.ssc._jvm.org.apache.spark.streaming.kinesis.KinesisTestUtils()
+        kinesisTestUtils = self.ssc._jvm.org.apache.spark.streaming.kinesis.KinesisTestUtils(2)
         try:
             kinesisTestUtils.createStream()
             aWSCredentials = kinesisTestUtils.getAWSCredentials()
@@ -1476,8 +1484,8 @@ def search_kafka_assembly_jar():
         raise Exception(
             ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
             "You need to build Spark with "
-            "'build/sbt assembly/package streaming-kafka-0-8-assembly/assembly' or "
-            "'build/mvn package' before running this test.")
+            "'build/sbt -Pkafka-0-8 assembly/package streaming-kafka-0-8-assembly/assembly' or "
+            "'build/mvn -DskipTests -Pkafka-0-8 package' before running this test.")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Kafka assembly JARs: %s; please "
                          "remove all but one") % (", ".join(jars)))
@@ -1493,8 +1501,8 @@ def search_flume_assembly_jar():
         raise Exception(
             ("Failed to find Spark Streaming Flume assembly jar in %s. " % flume_assembly_dir) +
             "You need to build Spark with "
-            "'build/sbt assembly/assembly streaming-flume-assembly/assembly' or "
-            "'build/mvn package' before running this test.")
+            "'build/sbt -Pflume assembly/package streaming-flume-assembly/assembly' or "
+            "'build/mvn -DskipTests -Pflume package' before running this test.")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Flume assembly JARs: %s; please "
                         "remove all but one") % (", ".join(jars)))
@@ -1502,10 +1510,13 @@ def search_flume_assembly_jar():
         return jars[0]
 
 
-def search_kinesis_asl_assembly_jar():
+def _kinesis_asl_assembly_dir():
     SPARK_HOME = os.environ["SPARK_HOME"]
-    kinesis_asl_assembly_dir = os.path.join(SPARK_HOME, "external/kinesis-asl-assembly")
-    jars = search_jar(kinesis_asl_assembly_dir, "spark-streaming-kinesis-asl-assembly")
+    return os.path.join(SPARK_HOME, "external/kinesis-asl-assembly")
+
+
+def search_kinesis_asl_assembly_jar():
+    jars = search_jar(_kinesis_asl_assembly_dir(), "spark-streaming-kinesis-asl-assembly")
     if not jars:
         return None
     elif len(jars) > 1:
@@ -1515,7 +1526,13 @@ def search_kinesis_asl_assembly_jar():
         return jars[0]
 
 
-# Must be same as the variable and condition defined in KinesisTestUtils.scala
+# Must be same as the variable and condition defined in modules.py
+flume_test_environ_var = "ENABLE_FLUME_TESTS"
+are_flume_tests_enabled = os.environ.get(flume_test_environ_var) == '1'
+# Must be same as the variable and condition defined in modules.py
+kafka_test_environ_var = "ENABLE_KAFKA_0_8_TESTS"
+are_kafka_tests_enabled = os.environ.get(kafka_test_environ_var) == '1'
+# Must be same as the variable and condition defined in KinesisTestUtils.scala and modules.py
 kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
 are_kinesis_tests_enabled = os.environ.get(kinesis_test_environ_var) == '1'
 
@@ -1534,8 +1551,22 @@ if __name__ == "__main__":
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
-                 KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests,
                  StreamingListenerTests]
+
+    if are_flume_tests_enabled:
+        testcases.append(FlumeStreamTests)
+        testcases.append(FlumePollingStreamTests)
+    else:
+        sys.stderr.write(
+            "Skipped test_flume_stream (enable by setting environment variable %s=1"
+            % flume_test_environ_var)
+
+    if are_kafka_tests_enabled:
+        testcases.append(KafkaStreamTests)
+    else:
+        sys.stderr.write(
+            "Skipped test_kafka_stream (enable by setting environment variable %s=1"
+            % kafka_test_environ_var)
 
     if kinesis_jar_present is True:
         testcases.append(KinesisStreamTests)
@@ -1548,7 +1579,7 @@ if __name__ == "__main__":
     else:
         raise Exception(
             ("Failed to find Spark Streaming Kinesis assembly jar in %s. "
-             % kinesis_asl_assembly_dir) +
+             % _kinesis_asl_assembly_dir()) +
             "You need to build Spark with 'build/sbt -Pkinesis-asl "
             "assembly/package streaming-kinesis-asl-assembly/assembly'"
             "or 'build/mvn -Pkinesis-asl package' before running this test.")

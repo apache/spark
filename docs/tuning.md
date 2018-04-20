@@ -12,7 +12,7 @@ Because of the in-memory nature of most Spark computations, Spark programs can b
 by any resource in the cluster: CPU, network bandwidth, or memory.
 Most often, if the data fits in memory, the bottleneck is network bandwidth, but sometimes, you
 also need to do some tuning, such as
-[storing RDDs in serialized form](programming-guide.html#rdd-persistence), to
+[storing RDDs in serialized form](rdd-programming-guide.html#rdd-persistence), to
 decrease memory usage.
 This guide will cover two main topics: data serialization, which is crucial for good network
 performance and can also reduce memory use, and memory tuning. We also sketch several smaller topics.
@@ -45,6 +45,7 @@ and calling `conf.set("spark.serializer", "org.apache.spark.serializer.KryoSeria
 This setting configures the serializer used for not only shuffling data between worker
 nodes but also when serializing RDDs to disk.  The only reason Kryo is not the default is because of the custom
 registration requirement, but we recommend trying it in any network-intensive application.
+Since Spark 2.0.0, we internally use Kryo serializer when shuffling RDDs with simple types, arrays of simple types, or string type.
 
 Spark automatically includes Kryo serializers for the many commonly-used core Scala classes covered
 in the AllScalaRegistrar from the [Twitter chill](https://github.com/twitter/chill) library.
@@ -154,7 +155,7 @@ pointer-based data structures and wrapper objects. There are several ways to do 
 
 When your objects are still too large to efficiently store despite this tuning, a much simpler way
 to reduce memory usage is to store them in *serialized* form, using the serialized StorageLevels in
-the [RDD persistence API](programming-guide.html#rdd-persistence), such as `MEMORY_ONLY_SER`.
+the [RDD persistence API](rdd-programming-guide.html#rdd-persistence), such as `MEMORY_ONLY_SER`.
 Spark will then store each RDD partition as one large byte array.
 The only downside of storing data in serialized form is slower access times, due to having to
 deserialize each object on the fly.
@@ -195,7 +196,7 @@ To further tune garbage collection, we first need to understand some basic infor
 
 * A simplified description of the garbage collection procedure: When Eden is full, a minor GC is run on Eden and objects
   that are alive from Eden and Survivor1 are copied to Survivor2. The Survivor regions are swapped. If an object is old
-  enough or Survivor2 is full, it is moved to Old. Finally when Old is close to full, a full GC is invoked.
+  enough or Survivor2 is full, it is moved to Old. Finally, when Old is close to full, a full GC is invoked.
 
 The goal of GC tuning in Spark is to ensure that only long-lived RDDs are stored in the Old generation and that
 the Young generation is sufficiently sized to store short-lived objects. This will help avoid full GCs to collect
@@ -218,13 +219,13 @@ temporary objects created during task execution. Some steps which may be useful 
   
 * Try the G1GC garbage collector with `-XX:+UseG1GC`. It can improve performance in some situations where
   garbage collection is a bottleneck. Note that with large executor heap sizes, it may be important to
-  increase the [G1 region size](https://blogs.oracle.com/g1gc/entry/g1_gc_tuning_a_case) 
+  increase the [G1 region size](http://www.oracle.com/technetwork/articles/java/g1gc-1984535.html) 
   with `-XX:G1HeapRegionSize`
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
   the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the
-  size of the block. So if we wish to have 3 or 4 tasks' worth of working space, and the HDFS block size is 64 MB,
-  we can estimate size of Eden to be `4*3*64MB`.
+  size of the block. So if we wish to have 3 or 4 tasks' worth of working space, and the HDFS block size is 128 MB,
+  we can estimate size of Eden to be `4*3*128MB`.
 
 * Monitor how the frequency and time taken by garbage collection changes with the new settings.
 
@@ -261,7 +262,7 @@ number of cores in your clusters.
 
 ## Broadcasting Large Variables
 
-Using the [broadcast functionality](programming-guide.html#broadcast-variables)
+Using the [broadcast functionality](rdd-programming-guide.html#broadcast-variables)
 available in `SparkContext` can greatly reduce the size of each serialized task, and the cost
 of launching a job over a cluster. If your tasks use any large object from the driver program
 inside of them (e.g. a static lookup table), consider turning it into a broadcast variable.

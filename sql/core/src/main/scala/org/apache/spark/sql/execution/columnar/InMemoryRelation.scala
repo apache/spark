@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import scala.collection.JavaConverters._
-
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.network.util.JavaUtils
@@ -28,10 +26,10 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.CollectionAccumulator
+import org.apache.spark.util.LongAccumulator
 
 
 object InMemoryRelation {
@@ -40,8 +38,10 @@ object InMemoryRelation {
       batchSize: Int,
       storageLevel: StorageLevel,
       child: SparkPlan,
-      tableName: Option[String]): InMemoryRelation =
-    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
+      tableName: Option[String],
+      logicalPlan: LogicalPlan): InMemoryRelation =
+    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)(
+      statsOfPlanToCache = logicalPlan.stats, outputOrdering = logicalPlan.outputOrdering)
 }
 
 
@@ -63,44 +63,44 @@ case class InMemoryRelation(
     @transient child: SparkPlan,
     tableName: Option[String])(
     @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
-    val batchStats: CollectionAccumulator[InternalRow] =
-      child.sqlContext.sparkContext.collectionAccumulator[InternalRow])
+    val sizeInBytesStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator,
+    statsOfPlanToCache: Statistics,
+    override val outputOrdering: Seq[SortOrder])
   extends logical.LeafNode with MultiInstanceRelation {
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
+  override protected def innerChildren: Seq[SparkPlan] = Seq(child)
+
+  override def doCanonicalize(): logical.LogicalPlan =
+    copy(output = output.map(QueryPlan.normalizeExprId(_, child.output)),
+      storageLevel = StorageLevel.NONE,
+      child = child.canonicalized,
+      tableName = None)(
+      _cachedColumnBuffers,
+      sizeInBytesStats,
+      statsOfPlanToCache,
+      outputOrdering)
 
   override def producedAttributes: AttributeSet = outputSet
 
   @transient val partitionStatistics = new PartitionStatistics(output)
 
-  override lazy val statistics: Statistics = {
-    if (batchStats.value.isEmpty) {
-      // Underlying columnar RDD hasn't been materialized, no useful statistics information
-      // available, return the default statistics.
-      Statistics(sizeInBytes = child.sqlContext.conf.defaultSizeInBytes)
+  override def computeStats(): Statistics = {
+    if (sizeInBytesStats.value == 0L) {
+      // Underlying columnar RDD hasn't been materialized, use the stats from the plan to cache.
+      // Note that we should drop the hint info here. We may cache a plan whose root node is a hint
+      // node. When we lookup the cache with a semantically same plan without hint info, the plan
+      // returned by cache lookup should not have hint info. If we lookup the cache with a
+      // semantically same plan with a different hint info, `CacheManager.useCachedData` will take
+      // care of it and retain the hint info in the lookup input plan.
+      statsOfPlanToCache.copy(hints = HintInfo())
     } else {
-      // Underlying columnar RDD has been materialized, required information has also been
-      // collected via the `batchStats` accumulator.
-      val sizeOfRow: Expression =
-        BindReferences.bindReference(
-          output.map(a => partitionStatistics.forAttribute(a).sizeInBytes).reduce(Add),
-          partitionStatistics.schema)
-
-      val sizeInBytes =
-        batchStats.value.asScala.map(row => sizeOfRow.eval(row).asInstanceOf[Long]).sum
-      Statistics(sizeInBytes = sizeInBytes)
+      Statistics(sizeInBytes = sizeInBytesStats.value.longValue)
     }
   }
 
   // If the cached column buffers were not passed in, we calculate them in the constructor.
   // As in Spark, the actual work of caching is lazy.
   if (_cachedColumnBuffers == null) {
-    buildBuffers()
-  }
-
-  def recache(): Unit = {
-    _cachedColumnBuffers.unpersist()
-    _cachedColumnBuffers = null
     buildBuffers()
   }
 
@@ -139,10 +139,10 @@ case class InMemoryRelation(
             rowCount += 1
           }
 
-          val stats = InternalRow.fromSeq(columnBuilders.map(_.columnStats.collectedStatistics)
-            .flatMap(_.values))
+          sizeInBytesStats.add(totalSize)
 
-          batchStats.add(stats)
+          val stats = InternalRow.fromSeq(
+            columnBuilders.flatMap(_.columnStats.collectedStatistics))
           CachedBatch(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
           }, stats)
@@ -161,7 +161,7 @@ case class InMemoryRelation(
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
       newOutput, useCompression, batchSize, storageLevel, child, tableName)(
-        _cachedColumnBuffers, batchStats)
+        _cachedColumnBuffers, sizeInBytesStats, statsOfPlanToCache, outputOrdering)
   }
 
   override def newInstance(): this.type = {
@@ -173,11 +173,13 @@ case class InMemoryRelation(
       child,
       tableName)(
         _cachedColumnBuffers,
-        batchStats).asInstanceOf[this.type]
+        sizeInBytesStats,
+        statsOfPlanToCache,
+        outputOrdering).asInstanceOf[this.type]
   }
 
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers
 
   override protected def otherCopyArgs: Seq[AnyRef] =
-    Seq(_cachedColumnBuffers, batchStats)
+    Seq(_cachedColumnBuffers, sizeInBytesStats, statsOfPlanToCache)
 }

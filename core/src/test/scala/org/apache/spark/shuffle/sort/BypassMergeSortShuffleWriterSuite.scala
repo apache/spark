@@ -33,7 +33,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
-import org.apache.spark.serializer.{JavaSerializer, SerializerInstance}
+import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -90,11 +90,12 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     )).thenAnswer(new Answer[DiskBlockObjectWriter] {
       override def answer(invocation: InvocationOnMock): DiskBlockObjectWriter = {
         val args = invocation.getArguments
+        val manager = new SerializerManager(new JavaSerializer(conf), conf)
         new DiskBlockObjectWriter(
           args(1).asInstanceOf[File],
+          manager,
           args(2).asInstanceOf[SerializerInstance],
           args(3).asInstanceOf[Int],
-          wrapStream = identity,
           syncWrites = false,
           args(4).asInstanceOf[ShuffleWriteMetrics],
           blockId = args(0).asInstanceOf[BlockId]

@@ -91,10 +91,10 @@ class QuantileSummaries(
     var sampleIdx = 0
     // The index of the sample currently being inserted.
     var opsIdx: Int = 0
-    while(opsIdx < sorted.length) {
+    while (opsIdx < sorted.length) {
       val currentSample = sorted(opsIdx)
       // Add all the samples before the next observation.
-      while(sampleIdx < sampled.size && sampled(sampleIdx).value <= currentSample) {
+      while (sampleIdx < sampled.length && sampled(sampleIdx).value <= currentSample) {
         newSamples += sampled(sampleIdx)
         sampleIdx += 1
       }
@@ -102,10 +102,10 @@ class QuantileSummaries(
       // If it is the first one to insert, of if it is the last one
       currentCount += 1
       val delta =
-        if (newSamples.isEmpty || (sampleIdx == sampled.size && opsIdx == sorted.length - 1)) {
+        if (newSamples.isEmpty || (sampleIdx == sampled.length && opsIdx == sorted.length - 1)) {
           0
         } else {
-          math.floor(2 * relativeError * currentCount).toInt
+          math.floor(2 * relativeError * currentCount).toLong
         }
 
       val tuple = Stats(currentSample, 1, delta)
@@ -114,7 +114,7 @@ class QuantileSummaries(
     }
 
     // Add all the remaining existing samples
-    while(sampleIdx < sampled.size) {
+    while (sampleIdx < sampled.length) {
       newSamples += sampled(sampleIdx)
       sampleIdx += 1
     }
@@ -176,35 +176,37 @@ class QuantileSummaries(
    * @param quantile the target quantile
    * @return
    */
-  def query(quantile: Double): Double = {
+  def query(quantile: Double): Option[Double] = {
     require(quantile >= 0 && quantile <= 1.0, "quantile should be in the range [0.0, 1.0]")
     require(headSampled.isEmpty,
       "Cannot operate on an uncompressed summary, call compress() first")
 
+    if (sampled.isEmpty) return None
+
     if (quantile <= relativeError) {
-      return sampled.head.value
+      return Some(sampled.head.value)
     }
 
     if (quantile >= 1 - relativeError) {
-      return sampled.last.value
+      return Some(sampled.last.value)
     }
 
     // Target rank
-    val rank = math.ceil(quantile * count).toInt
-    val targetError = math.ceil(relativeError * count)
+    val rank = math.ceil(quantile * count).toLong
+    val targetError = relativeError * count
     // Minimum rank at current sample
-    var minRank = 0
-    var i = 1
-    while (i < sampled.size - 1) {
+    var minRank = 0L
+    var i = 0
+    while (i < sampled.length - 1) {
       val curSample = sampled(i)
       minRank += curSample.g
       val maxRank = minRank + curSample.delta
       if (maxRank - targetError <= rank && rank <= minRank + targetError) {
-        return curSample.value
+        return Some(curSample.value)
       }
       i += 1
     }
-    sampled.last.value
+    Some(sampled.last.value)
   }
 }
 
@@ -233,7 +235,7 @@ object QuantileSummaries {
    * @param g the minimum rank jump from the previous value's minimum rank
    * @param delta the maximum span of the rank.
    */
-  case class Stats(value: Double, g: Int, delta: Int)
+  case class Stats(value: Double, g: Long, delta: Long)
 
   private def compressImmut(
       currentSamples: IndexedSeq[Stats],
@@ -264,7 +266,9 @@ object QuantileSummaries {
     res.prepend(head)
     // If necessary, add the minimum element:
     val currHead = currentSamples.head
-    if (currHead.value < head.value) {
+    // don't add the minimum element if `currentSamples` has only one element (both `currHead` and
+    // `head` point to the same element)
+    if (currHead.value <= head.value && currentSamples.length > 1) {
       res.prepend(currentSamples.head)
     }
     res.toArray

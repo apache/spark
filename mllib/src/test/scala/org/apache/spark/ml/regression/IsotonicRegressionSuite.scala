@@ -17,25 +17,22 @@
 
 package org.apache.spark.ml.regression
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.sql.{DataFrame, Row}
 
-class IsotonicRegressionSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class IsotonicRegressionSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
 
   private def generateIsotonicInput(labels: Seq[Double]): DataFrame = {
-    spark.createDataFrame(
-      labels.zipWithIndex.map { case (label, i) => (label, i.toDouble, 1.0) }
-    ).toDF("label", "features", "weight")
+    labels.zipWithIndex.map { case (label, i) => (label, i.toDouble, 1.0) }
+      .toDF("label", "features", "weight")
   }
 
   private def generatePredictionInput(features: Seq[Double]): DataFrame = {
-    spark.createDataFrame(features.map(Tuple1.apply))
-      .toDF("features")
+    features.map(Tuple1.apply).toDF("features")
   }
 
   test("isotonic regression predictions") {
@@ -44,13 +41,11 @@ class IsotonicRegressionSuite
 
     val model = ir.fit(dataset)
 
-    val predictions = model
-      .transform(dataset)
-      .select("prediction").rdd.map { case Row(pred) =>
-        pred
-      }.collect()
-
-    assert(predictions === Array(1, 2, 2, 2, 6, 16.5, 16.5, 17, 18))
+    testTransformerByGlobalCheckFunc[(Double, Double, Double)](dataset, model,
+      "prediction") { case rows: Seq[Row] =>
+      val predictions = rows.map(_.getDouble(0))
+      assert(predictions === Array(1, 2, 2, 2, 6, 16.5, 16.5, 17, 18))
+    }
 
     assert(model.boundaries === Vectors.dense(0, 1, 3, 4, 5, 6, 7, 8))
     assert(model.predictions === Vectors.dense(1, 2, 2, 6, 16.5, 16.5, 17.0, 18.0))
@@ -64,13 +59,11 @@ class IsotonicRegressionSuite
     val model = ir.fit(dataset)
     val features = generatePredictionInput(Seq(-2.0, -1.0, 0.5, 0.75, 1.0, 2.0, 9.0))
 
-    val predictions = model
-      .transform(features)
-      .select("prediction").rdd.map {
-        case Row(pred) => pred
-      }.collect()
-
-    assert(predictions === Array(7, 7, 6, 5.5, 5, 4, 1))
+    testTransformerByGlobalCheckFunc[Tuple1[Double]](features, model,
+      "prediction") { case rows: Seq[Row] =>
+      val predictions = rows.map(_.getDouble(0))
+      assert(predictions === Array(7, 7, 6, 5.5, 5, 4, 1))
+    }
   }
 
   test("params validation") {
@@ -93,8 +86,7 @@ class IsotonicRegressionSuite
 
     val model = ir.fit(dataset)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(ir, model)
 
     model.transform(dataset)
       .select("label", "features", "prediction", "weight")
@@ -145,10 +137,10 @@ class IsotonicRegressionSuite
   }
 
   test("vector features column with feature index") {
-    val dataset = spark.createDataFrame(Seq(
+    val dataset = Seq(
       (4.0, Vectors.dense(0.0, 1.0)),
       (3.0, Vectors.dense(0.0, 2.0)),
-      (5.0, Vectors.sparse(2, Array(1), Array(3.0))))
+      (5.0, Vectors.sparse(2, Array(1), Array(3.0)))
     ).toDF("label", "features")
 
     val ir = new IsotonicRegression()
@@ -158,13 +150,11 @@ class IsotonicRegressionSuite
 
     val features = generatePredictionInput(Seq(2.0, 3.0, 4.0, 5.0))
 
-    val predictions = model
-      .transform(features)
-      .select("prediction").rdd.map {
-      case Row(pred) => pred
-    }.collect()
-
-    assert(predictions === Array(3.5, 5.0, 5.0, 5.0))
+    testTransformerByGlobalCheckFunc[Tuple1[Double]](features, model,
+      "prediction") { case rows: Seq[Row] =>
+      val predictions = rows.map(_.getDouble(0))
+      assert(predictions === Array(3.5, 5.0, 5.0, 5.0))
+    }
   }
 
   test("read/write") {
@@ -178,10 +168,10 @@ class IsotonicRegressionSuite
 
     val ir = new IsotonicRegression()
     testEstimatorAndModelReadWrite(ir, dataset, IsotonicRegressionSuite.allParamSettings,
-      checkModelData)
+      IsotonicRegressionSuite.allParamSettings, checkModelData)
   }
 
-  test("should support all NumericType labels and not support other types") {
+  test("should support all NumericType labels and weights, and not support other types") {
     val ir = new IsotonicRegression()
     MLTestingUtils.checkNumericTypes[IsotonicRegressionModel, IsotonicRegression](
       ir, spark, isClassification = false) { (expected, actual) =>

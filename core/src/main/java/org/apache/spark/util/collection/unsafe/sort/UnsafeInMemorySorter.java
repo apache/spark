@@ -22,9 +22,11 @@ import java.util.LinkedList;
 
 import org.apache.avro.reflect.Nullable;
 
+import org.apache.spark.TaskContext;
 import org.apache.spark.memory.MemoryConsumer;
+import org.apache.spark.memory.SparkOutOfMemoryError;
 import org.apache.spark.memory.TaskMemoryManager;
-import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.UnsafeAlignedOffset;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.Sorter;
@@ -56,12 +58,16 @@ public final class UnsafeInMemorySorter {
     @Override
     public int compare(RecordPointerAndKeyPrefix r1, RecordPointerAndKeyPrefix r2) {
       final int prefixComparisonResult = prefixComparator.compare(r1.keyPrefix, r2.keyPrefix);
+      int uaoSize = UnsafeAlignedOffset.getUaoSize();
       if (prefixComparisonResult == 0) {
         final Object baseObject1 = memoryManager.getPage(r1.recordPointer);
-        final long baseOffset1 = memoryManager.getOffsetInPage(r1.recordPointer) + 4; // skip length
+        final long baseOffset1 = memoryManager.getOffsetInPage(r1.recordPointer) + uaoSize;
+        final int baseLength1 = UnsafeAlignedOffset.getSize(baseObject1, baseOffset1 - uaoSize);
         final Object baseObject2 = memoryManager.getPage(r2.recordPointer);
-        final long baseOffset2 = memoryManager.getOffsetInPage(r2.recordPointer) + 4; // skip length
-        return recordComparator.compare(baseObject1, baseOffset1, baseObject2, baseOffset2);
+        final long baseOffset2 = memoryManager.getOffsetInPage(r2.recordPointer) + uaoSize;
+        final int baseLength2 = UnsafeAlignedOffset.getSize(baseObject2, baseOffset2 - uaoSize);
+        return recordComparator.compare(baseObject1, baseOffset1, baseLength1, baseObject2,
+          baseOffset2, baseLength2);
       } else {
         return prefixComparisonResult;
       }
@@ -80,7 +86,7 @@ public final class UnsafeInMemorySorter {
   private final PrefixComparators.RadixSortSupport radixSortSupport;
 
   /**
-   * Within this buffer, position {@code 2 * i} holds a pointer pointer to the record at
+   * Within this buffer, position {@code 2 * i} holds a pointer to the record at
    * index {@code i}, while position {@code 2 * i + 1} in the array holds an 8-byte key prefix.
    *
    * Only part of the array will be used to store the pointers, the rest part is preserved as
@@ -118,7 +124,7 @@ public final class UnsafeInMemorySorter {
     int initialSize,
     boolean canUseRadixSort) {
     this(consumer, memoryManager, recordComparator, prefixComparator,
-      consumer.allocateArray(initialSize * 2), canUseRadixSort);
+      consumer.allocateArray(initialSize * 2L), canUseRadixSort);
   }
 
   public UnsafeInMemorySorter(
@@ -157,7 +163,9 @@ public final class UnsafeInMemorySorter {
    */
   public void free() {
     if (consumer != null) {
-      consumer.freeArray(array);
+      if (array != null) {
+        consumer.freeArray(array);
+      }
       array = null;
     }
   }
@@ -165,6 +173,15 @@ public final class UnsafeInMemorySorter {
   public void reset() {
     if (consumer != null) {
       consumer.freeArray(array);
+      // the call to consumer.allocateArray may trigger a spill which in turn access this instance
+      // and eventually re-enter this method and try to free the array again.  by setting the array
+      // to null and its length to 0 we effectively make the spill code-path a no-op.  setting the
+      // array to null also indicates that it has already been de-allocated which prevents a double
+      // de-allocation in free().
+      array = null;
+      usableCapacity = 0;
+      pos = 0;
+      nullBoundaryPos = 0;
       array = consumer.allocateArray(initialSize);
       usableCapacity = getUsableCapacity();
     }
@@ -196,14 +213,9 @@ public final class UnsafeInMemorySorter {
 
   public void expandPointerArray(LongArray newArray) {
     if (newArray.size() < array.size()) {
-      throw new OutOfMemoryError("Not enough memory to grow pointer array");
+      throw new SparkOutOfMemoryError("Not enough memory to grow pointer array");
     }
-    Platform.copyMemory(
-      array.getBaseObject(),
-      array.getBaseOffset(),
-      newArray.getBaseObject(),
-      newArray.getBaseOffset(),
-      pos * 8L);
+    MemoryBlock.copyMemory(array.memoryBlock(), newArray.memoryBlock(), pos * 8L);
     consumer.freeArray(array);
     array = newArray;
     usableCapacity = getUsableCapacity();
@@ -249,6 +261,7 @@ public final class UnsafeInMemorySorter {
     private long keyPrefix;
     private int recordLength;
     private long currentPageNumber;
+    private final TaskContext taskContext = TaskContext.get();
 
     private SortedIterator(int numRecords, int offset) {
       this.numRecords = numRecords;
@@ -279,12 +292,22 @@ public final class UnsafeInMemorySorter {
 
     @Override
     public void loadNext() {
+      // Kill the task in case it has been marked as killed. This logic is from
+      // InterruptibleIterator, but we inline it here instead of wrapping the iterator in order
+      // to avoid performance overhead. This check is added here in `loadNext()` instead of in
+      // `hasNext()` because it's technically possible for the caller to be relying on
+      // `getNumRecords()` instead of `hasNext()` to know when to stop.
+      if (taskContext != null) {
+        taskContext.killTaskIfInterrupted();
+      }
       // This pointer points to a 4-byte record length, followed by the record's bytes
       final long recordPointer = array.get(offset + position);
-      currentPageNumber = memoryManager.decodePageNumber(recordPointer);
+      currentPageNumber = TaskMemoryManager.decodePageNumber(recordPointer);
+      int uaoSize = UnsafeAlignedOffset.getUaoSize();
       baseObject = memoryManager.getPage(recordPointer);
-      baseOffset = memoryManager.getOffsetInPage(recordPointer) + 4;  // Skip over record length
-      recordLength = Platform.getInt(baseObject, baseOffset - 4);
+      // Skip over record length
+      baseOffset = memoryManager.getOffsetInPage(recordPointer) + uaoSize;
+      recordLength = UnsafeAlignedOffset.getSize(baseObject, baseOffset - uaoSize);
       keyPrefix = array.get(offset + position + 1);
       position += 2;
     }
@@ -316,13 +339,10 @@ public final class UnsafeInMemorySorter {
     if (sortComparator != null) {
       if (this.radixSortSupport != null) {
         offset = RadixSort.sortKeyPrefixArray(
-          array, nullBoundaryPos, (pos - nullBoundaryPos) / 2, 0, 7,
+          array, nullBoundaryPos, (pos - nullBoundaryPos) / 2L, 0, 7,
           radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
       } else {
-        MemoryBlock unused = new MemoryBlock(
-          array.getBaseObject(),
-          array.getBaseOffset() + pos * 8L,
-          (array.size() - pos) * 8L);
+        MemoryBlock unused = array.memoryBlock().subBlock(pos * 8L, (array.size() - pos) * 8L);
         LongArray buffer = new LongArray(unused);
         Sorter<RecordPointerAndKeyPrefix, LongArray> sorter =
           new Sorter<>(new UnsafeSortDataFormat(buffer));
@@ -333,13 +353,14 @@ public final class UnsafeInMemorySorter {
     if (nullBoundaryPos > 0) {
       assert radixSortSupport != null : "Nulls are only stored separately with radix sort";
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
-      if (radixSortSupport.sortDescending()) {
-        // Nulls are smaller than non-nulls
-        queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
+
+      // The null order is either LAST or FIRST, regardless of sorting direction (ASC|DESC)
+      if (radixSortSupport.nullsFirst()) {
         queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
+        queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
       } else {
-        queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
         queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
+        queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
       }
       return new UnsafeExternalSorter.ChainedIterator(queue);
     } else {

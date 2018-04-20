@@ -21,6 +21,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.spark.SparkConf;
+import org.apache.spark.unsafe.memory.MemoryAllocator;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class TaskMemoryManagerSuite {
@@ -54,6 +55,7 @@ public class TaskMemoryManagerSuite {
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, offset);
     Assert.assertEquals(null, manager.getPage(encodedAddress));
     Assert.assertEquals(offset, manager.getOffsetInPage(encodedAddress));
+    manager.freePage(dataPage, c);
   }
 
   @Test
@@ -65,6 +67,34 @@ public class TaskMemoryManagerSuite {
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 64);
     Assert.assertEquals(dataPage.getBaseObject(), manager.getPage(encodedAddress));
     Assert.assertEquals(64, manager.getOffsetInPage(encodedAddress));
+  }
+
+  @Test
+  public void freeingPageSetsPageNumberToSpecialConstant() {
+    final TaskMemoryManager manager = new TaskMemoryManager(
+      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
+    final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
+    final MemoryBlock dataPage = manager.allocatePage(256, c);
+    c.freePage(dataPage);
+    Assert.assertEquals(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER, dataPage.getPageNumber());
+  }
+
+  @Test(expected = AssertionError.class)
+  public void freeingPageDirectlyInAllocatorTriggersAssertionError() {
+    final TaskMemoryManager manager = new TaskMemoryManager(
+      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
+    final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
+    final MemoryBlock dataPage = manager.allocatePage(256, c);
+    MemoryAllocator.HEAP.free(dataPage);
+  }
+
+  @Test(expected = AssertionError.class)
+  public void callingFreePageOnDirectlyAllocatedPageTriggersAssertionError() {
+    final TaskMemoryManager manager = new TaskMemoryManager(
+      new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
+    final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
+    final MemoryBlock dataPage = MemoryAllocator.HEAP.allocate(256);
+    manager.freePage(dataPage, c);
   }
 
   @Test
@@ -106,6 +136,41 @@ public class TaskMemoryManagerSuite {
 
     c1.free(0);
     c2.free(100);
+    Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void cooperativeSpilling2() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    TestMemoryConsumer c1 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c2 = new TestMemoryConsumer(manager);
+    TestMemoryConsumer c3 = new TestMemoryConsumer(manager);
+
+    c1.use(20);
+    Assert.assertEquals(20, c1.getUsed());
+    c2.use(80);
+    Assert.assertEquals(80, c2.getUsed());
+    c3.use(80);
+    Assert.assertEquals(20, c1.getUsed());  // c1: not spilled
+    Assert.assertEquals(0, c2.getUsed());   // c2: spilled as it has required size of memory
+    Assert.assertEquals(80, c3.getUsed());
+
+    c2.use(80);
+    Assert.assertEquals(20, c1.getUsed());  // c1: not spilled
+    Assert.assertEquals(0, c3.getUsed());   // c3: spilled as it has required size of memory
+    Assert.assertEquals(80, c2.getUsed());
+
+    c3.use(10);
+    Assert.assertEquals(0, c1.getUsed());   // c1: spilled as it has required size of memory
+    Assert.assertEquals(80, c2.getUsed());  // c2: not spilled as spilling c1 already satisfies c3
+    Assert.assertEquals(10, c3.getUsed());
+
+    c1.free(0);
+    c2.free(80);
+    c3.free(10);
     Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
   }
 

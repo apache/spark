@@ -19,7 +19,13 @@ package org.apache.spark.sql
 
 import java.nio.charset.StandardCharsets
 
+import scala.util.Random
+
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -273,7 +279,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   test("sort_array function") {
     val df = Seq(
       (Array[Int](2, 1, 3), Array("b", "c", "a")),
-      (Array[Int](), Array[String]()),
+      (Array.empty[Int], Array.empty[String]),
       (null, null)
     ).toDF("a", "b")
     checkAnswer(
@@ -405,5 +411,365 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       df.selectExpr("array_contains(array(1, null), array(1, null)[0])"),
       Seq(Row(true), Row(true))
     )
+  }
+
+  test("array_min function") {
+    val df = Seq(
+      Seq[Option[Int]](Some(1), Some(3), Some(2)),
+      Seq.empty[Option[Int]],
+      Seq[Option[Int]](None),
+      Seq[Option[Int]](None, Some(1), Some(-100))
+    ).toDF("a")
+
+    val answer = Seq(Row(1), Row(null), Row(null), Row(-100))
+
+    checkAnswer(df.select(array_min(df("a"))), answer)
+    checkAnswer(df.selectExpr("array_min(a)"), answer)
+  }
+
+  test("array_max function") {
+    val df = Seq(
+      Seq[Option[Int]](Some(1), Some(3), Some(2)),
+      Seq.empty[Option[Int]],
+      Seq[Option[Int]](None),
+      Seq[Option[Int]](None, Some(1), Some(-100))
+    ).toDF("a")
+
+    val answer = Seq(Row(3), Row(null), Row(null), Row(1))
+
+    checkAnswer(df.select(array_max(df("a"))), answer)
+    checkAnswer(df.selectExpr("array_max(a)"), answer)
+  }
+
+  test("reverse function") {
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // switch codegen on
+
+    // String test cases
+    val oneRowDF = Seq(("Spark", 3215)).toDF("s", "i")
+
+    checkAnswer(
+      oneRowDF.select(reverse('s)),
+      Seq(Row("krapS"))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(s)"),
+      Seq(Row("krapS"))
+    )
+    checkAnswer(
+      oneRowDF.select(reverse('i)),
+      Seq(Row("5123"))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(i)"),
+      Seq(Row("5123"))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(null)"),
+      Seq(Row(null))
+    )
+
+    // Array test cases (primitive-type elements)
+    val idf = Seq(
+      Seq(1, 9, 8, 7),
+      Seq(5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    checkAnswer(
+      idf.select(reverse('i)),
+      Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      idf.filter(dummyFilter('i)).select(reverse('i)),
+      Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      idf.selectExpr("reverse(i)"),
+      Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(array(1, null, 2, null))"),
+      Seq(Row(Seq(null, 2, null, 1)))
+    )
+    checkAnswer(
+      oneRowDF.filter(dummyFilter('i)).selectExpr("reverse(array(1, null, 2, null))"),
+      Seq(Row(Seq(null, 2, null, 1)))
+    )
+
+    // Array test cases (non-primitive-type elements)
+    val sdf = Seq(
+      Seq("c", "a", "b"),
+      Seq("b", null, "c", null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    checkAnswer(
+      sdf.select(reverse('s)),
+      Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      sdf.filter(dummyFilter('s)).select(reverse('s)),
+      Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      sdf.selectExpr("reverse(s)"),
+      Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(array(array(1, 2), array(3, 4)))"),
+      Seq(Row(Seq(Seq(3, 4), Seq(1, 2))))
+    )
+    checkAnswer(
+      oneRowDF.filter(dummyFilter('s)).selectExpr("reverse(array(array(1, 2), array(3, 4)))"),
+      Seq(Row(Seq(Seq(3, 4), Seq(1, 2))))
+    )
+
+    // Error test cases
+    intercept[AnalysisException] {
+      oneRowDF.selectExpr("reverse(struct(1, 'a'))")
+    }
+    intercept[AnalysisException] {
+      oneRowDF.selectExpr("reverse(map(1, 'a'))")
+    }
+  }
+
+  test("array position function") {
+    val df = Seq(
+      (Seq[Int](1, 2), "x"),
+      (Seq[Int](), "x")
+    ).toDF("a", "b")
+
+    checkAnswer(
+      df.select(array_position(df("a"), 1)),
+      Seq(Row(1L), Row(0L))
+    )
+    checkAnswer(
+      df.selectExpr("array_position(a, 1)"),
+      Seq(Row(1L), Row(0L))
+    )
+
+    checkAnswer(
+      df.select(array_position(df("a"), null)),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("array_position(a, null)"),
+      Seq(Row(null), Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_position(array(array(1), null)[0], 1)"),
+      Seq(Row(1L), Row(1L))
+    )
+    checkAnswer(
+      df.selectExpr("array_position(array(1, null), array(1, null)[0])"),
+      Seq(Row(1L), Row(1L))
+    )
+  }
+
+  test("element_at function") {
+    val df = Seq(
+      (Seq[String]("1", "2", "3")),
+      (Seq[String](null, "")),
+      (Seq[String]())
+    ).toDF("a")
+
+    intercept[Exception] {
+      checkAnswer(
+        df.select(element_at(df("a"), 0)),
+        Seq(Row(null), Row(null), Row(null))
+      )
+    }.getMessage.contains("SQL array indices start at 1")
+    intercept[Exception] {
+      checkAnswer(
+        df.select(element_at(df("a"), 1.1)),
+        Seq(Row(null), Row(null), Row(null))
+      )
+    }
+    checkAnswer(
+      df.select(element_at(df("a"), 4)),
+      Seq(Row(null), Row(null), Row(null))
+    )
+
+    checkAnswer(
+      df.select(element_at(df("a"), 1)),
+      Seq(Row("1"), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(element_at(df("a"), -1)),
+      Seq(Row("3"), Row(""), Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("element_at(a, 4)"),
+      Seq(Row(null), Row(null), Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("element_at(a, 1)"),
+      Seq(Row("1"), Row(null), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("element_at(a, -1)"),
+      Seq(Row("3"), Row(""), Row(null))
+    )
+  }
+
+  test("concat function - arrays") {
+    val nseqi : Seq[Int] = null
+    val nseqs : Seq[String] = null
+    val df = Seq(
+
+      (Seq(1), Seq(2, 3), Seq(5L, 6L), nseqi, Seq("a", "b", "c"), Seq("d", "e"), Seq("f"), nseqs),
+      (Seq(1, 0), Seq.empty[Int], Seq(2L), nseqi, Seq("a"), Seq.empty[String], Seq(null), nseqs)
+    ).toDF("i1", "i2", "i3", "in", "s1", "s2", "s3", "sn")
+
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // switch codeGen on
+
+    // Simple test cases
+    checkAnswer(
+      df.selectExpr("array(1, 2, 3L)"),
+      Seq(Row(Seq(1L, 2L, 3L)), Row(Seq(1L, 2L, 3L)))
+    )
+
+    checkAnswer (
+      df.select(concat($"i1", $"s1")),
+      Seq(Row(Seq("1", "a", "b", "c")), Row(Seq("1", "0", "a")))
+    )
+    checkAnswer(
+      df.select(concat($"i1", $"i2", $"i3")),
+      Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
+    )
+    checkAnswer(
+      df.filter(dummyFilter($"i1")).select(concat($"i1", $"i2", $"i3")),
+      Seq(Row(Seq(1, 2, 3, 5, 6)), Row(Seq(1, 0, 2)))
+    )
+    checkAnswer(
+      df.selectExpr("concat(array(1, null), i2, i3)"),
+      Seq(Row(Seq(1, null, 2, 3, 5, 6)), Row(Seq(1, null, 2)))
+    )
+    checkAnswer(
+      df.select(concat($"s1", $"s2", $"s3")),
+      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+    )
+    checkAnswer(
+      df.selectExpr("concat(s1, s2, s3)"),
+      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+    )
+    checkAnswer(
+      df.filter(dummyFilter($"s1"))select(concat($"s1", $"s2", $"s3")),
+      Seq(Row(Seq("a", "b", "c", "d", "e", "f")), Row(Seq("a", null)))
+    )
+
+    // Null test cases
+    checkAnswer(
+      df.select(concat($"i1", $"in")),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(concat($"in", $"i1")),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(concat($"s1", $"sn")),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.select(concat($"sn", $"s1")),
+      Seq(Row(null), Row(null))
+    )
+
+    // Type error test cases
+    intercept[AnalysisException] {
+      df.selectExpr("concat(i1, i2, null)")
+    }
+
+    intercept[AnalysisException] {
+      df.selectExpr("concat(i1, array(i1, i2))")
+    }
+  }
+
+  private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
+    import DataFrameFunctionsSuite.CodegenFallbackExpr
+    for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {
+      val c = if (codegenFallback) {
+        Column(CodegenFallbackExpr(v.expr))
+      } else {
+        v
+      }
+      withSQLConf(
+        (SQLConf.CODEGEN_FALLBACK.key, codegenFallback.toString),
+        (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString)) {
+        val df = spark.range(0, 4, 1, 4).withColumn("c", c)
+        val rows = df.collect()
+        val rowsAfterCoalesce = df.coalesce(2).collect()
+        assert(rows === rowsAfterCoalesce, "Values changed after coalesce when " +
+          s"codegenFallback=$codegenFallback and wholeStage=$wholeStage.")
+
+        val df1 = spark.range(0, 2, 1, 2).withColumn("c", c)
+        val rows1 = df1.collect()
+        val df2 = spark.range(2, 4, 1, 2).withColumn("c", c)
+        val rows2 = df2.collect()
+        val rowsAfterUnion = df1.union(df2).collect()
+        assert(rowsAfterUnion === rows1 ++ rows2, "Values changed after union when " +
+          s"codegenFallback=$codegenFallback and wholeStage=$wholeStage.")
+      }
+    }
+  }
+
+  test("SPARK-14393: values generated by non-deterministic functions shouldn't change after " +
+    "coalesce or union") {
+    Seq(
+      monotonically_increasing_id(), spark_partition_id(),
+      rand(Random.nextLong()), randn(Random.nextLong())
+    ).foreach(assertValuesDoNotChangeAfterCoalesceOrUnion(_))
+  }
+
+  test("SPARK-21281 use string types by default if array and map have no argument") {
+    val ds = spark.range(1)
+    var expectedSchema = new StructType()
+      .add("x", ArrayType(StringType, containsNull = false), nullable = false)
+    assert(ds.select(array().as("x")).schema == expectedSchema)
+    expectedSchema = new StructType()
+      .add("x", MapType(StringType, StringType, valueContainsNull = false), nullable = false)
+    assert(ds.select(map().as("x")).schema == expectedSchema)
+  }
+
+  test("SPARK-21281 fails if functions have no argument") {
+    val df = Seq(1).toDF("a")
+
+    val funcsMustHaveAtLeastOneArg =
+      ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
+      ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
+      ("named_struct", (df: DataFrame) => df.select(struct())) ::
+      ("named_struct", (df: DataFrame) => df.selectExpr("named_struct()")) ::
+      ("hash", (df: DataFrame) => df.select(hash())) ::
+      ("hash", (df: DataFrame) => df.selectExpr("hash()")) :: Nil
+    funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>
+      val errMsg = intercept[AnalysisException] { func(df) }.getMessage
+      assert(errMsg.contains(s"input to function $name requires at least one argument"))
+    }
+
+    val funcsMustHaveAtLeastTwoArgs =
+      ("greatest", (df: DataFrame) => df.select(greatest())) ::
+      ("greatest", (df: DataFrame) => df.selectExpr("greatest()")) ::
+      ("least", (df: DataFrame) => df.select(least())) ::
+      ("least", (df: DataFrame) => df.selectExpr("least()")) :: Nil
+    funcsMustHaveAtLeastTwoArgs.foreach { case (name, func) =>
+      val errMsg = intercept[AnalysisException] { func(df) }.getMessage
+      assert(errMsg.contains(s"input to function $name requires at least two arguments"))
+    }
+  }
+}
+
+object DataFrameFunctionsSuite {
+  case class CodegenFallbackExpr(child: Expression) extends Expression with CodegenFallback {
+    override def children: Seq[Expression] = Seq(child)
+    override def nullable: Boolean = child.nullable
+    override def dataType: DataType = child.dataType
+    override lazy val resolved = true
+    override def eval(input: InternalRow): Any = child.eval(input)
   }
 }

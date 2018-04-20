@@ -47,12 +47,11 @@ object LocalKMeans {
   }
 
   def closestPoint(p: Vector[Double], centers: HashMap[Int, Vector[Double]]): Int = {
-    var index = 0
     var bestIndex = 0
     var closest = Double.PositiveInfinity
 
     for (i <- 1 to centers.size) {
-      val vCurr = centers.get(i).get
+      val vCurr = centers(i)
       val tempDist = squaredDistance(p, vCurr)
       if (tempDist < closest) {
         closest = tempDist
@@ -76,8 +75,8 @@ object LocalKMeans {
     showWarning()
 
     val data = generateData
-    var points = new HashSet[Vector[Double]]
-    var kPoints = new HashMap[Int, Vector[Double]]
+    val points = new HashSet[Vector[Double]]
+    val kPoints = new HashMap[Int, Vector[Double]]
     var tempDist = 1.0
 
     while (points.size < K) {
@@ -89,14 +88,14 @@ object LocalKMeans {
       kPoints.put(i, iter.next())
     }
 
-    println("Initial centers: " + kPoints)
+    println(s"Initial centers: $kPoints")
 
     while(tempDist > convergeDist) {
-      var closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
+      val closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
 
-      var mappings = closest.groupBy[Int] (x => x._1)
+      val mappings = closest.groupBy[Int] (x => x._1)
 
-      var pointStats = mappings.map { pair =>
+      val pointStats = mappings.map { pair =>
         pair._2.reduceLeft [(Int, (Vector[Double], Int))] {
           case ((id1, (p1, c1)), (id2, (p2, c2))) => (id1, (p1 + p2, c1 + c2))
         }
@@ -107,7 +106,7 @@ object LocalKMeans {
 
       tempDist = 0.0
       for (mapping <- newPoints) {
-        tempDist += squaredDistance(kPoints.get(mapping._1).get, mapping._2)
+        tempDist += squaredDistance(kPoints(mapping._1), mapping._2)
       }
 
       for (newP <- newPoints) {
@@ -115,7 +114,7 @@ object LocalKMeans {
       }
     }
 
-    println("Final centers: " + kPoints)
+    println(s"Final centers: $kPoints")
   }
 }
 // scalastyle:on println

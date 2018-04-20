@@ -20,14 +20,13 @@ package org.apache.spark.sql.execution
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.SparkException
-import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
+import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
+import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
@@ -57,9 +56,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val exprs = projectList.map(x =>
-      ExpressionCanonicalizer.execute(BindReferences.bindReference(x, child.output)))
-    ctx.currentVars = input
+    val exprs = projectList.map(x => BindReferences.bindReference[Expression](x, child.output))
     val resultVars = exprs.map(_.genCode(ctx))
     // Evaluation of non-deterministic expressions can't be deferred.
     val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)
@@ -70,14 +67,17 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().mapPartitionsInternal { iter =>
+    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val project = UnsafeProjection.create(projectList, child.output,
         subexpressionEliminationEnabled)
+      project.initialize(index)
       iter.map(project)
     }
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
 
@@ -87,7 +87,13 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
   // Split out all the IsNotNulls from condition.
   private val (notNullPreds, otherPreds) = splitConjunctivePredicates(condition).partition {
-    case IsNotNull(a: NullIntolerant) if a.references.subsetOf(child.outputSet) => true
+    case IsNotNull(a) => isNullIntolerant(a) && a.references.subsetOf(child.outputSet)
+    case _ => false
+  }
+
+  // If one expression and its children are null intolerant, it is null intolerant.
+  private def isNullIntolerant(expr: Expression): Boolean = expr match {
+    case e: NullIntolerant => e.children.forall(isNullIntolerant)
     case _ => false
   }
 
@@ -144,8 +150,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
        """.stripMargin
     }
 
-    ctx.currentVars = input
-
     // To generate the predicates we will follow this algorithm.
     // For each predicate that is not IsNotNull, we will generate them one by one loading attributes
     // as necessary. For each of both attributes, if there is an IsNotNull predicate we will
@@ -188,25 +192,29 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // generate better code (remove dead branches).
     val resultVars = input.zipWithIndex.map { case (ev, i) =>
       if (notNullAttributes.contains(child.output(i).exprId)) {
-        ev.isNull = "false"
+        ev.isNull = FalseLiteral
       }
       ev
     }
 
+    // Note: wrap in "do { } while(false);", so the generated checks can jump out with "continue;"
     s"""
-       |$generated
-       |$nullChecks
-       |$numOutput.add(1);
-       |${consume(ctx, resultVars)}
+       |do {
+       |  $generated
+       |  $nullChecks
+       |  $numOutput.add(1);
+       |  ${consume(ctx, resultVars)}
+       |} while(false);
      """.stripMargin
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    child.execute().mapPartitionsInternal { iter =>
+    child.execute().mapPartitionsWithIndexInternal { (index, iter) =>
       val predicate = newPredicate(condition, child.output)
+      predicate.initialize(0)
       iter.filter { row =>
-        val r = predicate(row)
+        val r = predicate.eval(row)
         if (r) numOutputRows += 1
         r
       }
@@ -214,6 +222,8 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   }
 
   override def outputOrdering: Seq[SortOrder] = child.outputOrdering
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
 /**
@@ -234,6 +244,8 @@ case class SampleExec(
     child: SparkPlan) extends UnaryExecNode with CodegenSupport {
   override def output: Seq[Attribute] = child.output
 
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
@@ -251,6 +263,10 @@ case class SampleExec(
     }
   }
 
+  // Mark this as empty. This plan doesn't need to evaluate any inputs and can defer the evaluation
+  // to the parent operator.
+  override def usedInputs: AttributeSet = AttributeSet.empty
+
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
@@ -259,31 +275,34 @@ case class SampleExec(
     child.asInstanceOf[CodegenSupport].produce(ctx, this)
   }
 
+  override def needCopyResult: Boolean = withReplacement
+
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
-    val sampler = ctx.freshName("sampler")
 
     if (withReplacement) {
       val samplerClass = classOf[PoissonSampler[UnsafeRow]].getName
       val initSampler = ctx.freshName("initSampler")
-      ctx.copyResult = true
-      ctx.addMutableState(s"$samplerClass<UnsafeRow>", sampler,
-        s"$initSampler();")
 
-      ctx.addNewFunction(initSampler,
-        s"""
-          | private void $initSampler() {
-          |   $sampler = new $samplerClass<UnsafeRow>($upperBound - $lowerBound, false);
-          |   java.util.Random random = new java.util.Random(${seed}L);
-          |   long randomSeed = random.nextLong();
-          |   int loopCount = 0;
-          |   while (loopCount < partitionIndex) {
-          |     randomSeed = random.nextLong();
-          |     loopCount += 1;
-          |   }
-          |   $sampler.setSeed(randomSeed);
-          | }
-         """.stripMargin.trim)
+      // Inline mutable state since not many Sample operations in a task
+      val sampler = ctx.addMutableState(s"$samplerClass<UnsafeRow>", "sampleReplace",
+        v => {
+          val initSamplerFuncName = ctx.addNewFunction(initSampler,
+            s"""
+              | private void $initSampler() {
+              |   $v = new $samplerClass<UnsafeRow>($upperBound - $lowerBound, false);
+              |   java.util.Random random = new java.util.Random(${seed}L);
+              |   long randomSeed = random.nextLong();
+              |   int loopCount = 0;
+              |   while (loopCount < partitionIndex) {
+              |     randomSeed = random.nextLong();
+              |     loopCount += 1;
+              |   }
+              |   $v.setSeed(randomSeed);
+              | }
+           """.stripMargin.trim)
+          s"$initSamplerFuncName();"
+        }, forceInline = true)
 
       val samplingCount = ctx.freshName("samplingCount")
       s"""
@@ -295,16 +314,17 @@ case class SampleExec(
        """.stripMargin.trim
     } else {
       val samplerClass = classOf[BernoulliCellSampler[UnsafeRow]].getName
-      ctx.addMutableState(s"$samplerClass<UnsafeRow>", sampler,
-        s"""
-          | $sampler = new $samplerClass<UnsafeRow>($lowerBound, $upperBound, false);
-          | $sampler.setSeed(${seed}L + partitionIndex);
+      val sampler = ctx.addMutableState(s"$samplerClass<UnsafeRow>", "sampler",
+        v => s"""
+          | $v = new $samplerClass<UnsafeRow>($lowerBound, $upperBound, false);
+          | $v.setSeed(${seed}L + partitionIndex);
          """.stripMargin.trim)
 
       s"""
-         | if ($sampler.sample() == 0) continue;
-         | $numOutput.add(1);
-         | ${consume(ctx, input)}
+         | if ($sampler.sample() != 0) {
+         |   $numOutput.add(1);
+         |   ${consume(ctx, input)}
+         | }
        """.stripMargin.trim
     }
   }
@@ -317,46 +337,66 @@ case class SampleExec(
 case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   extends LeafExecNode with CodegenSupport {
 
-  def start: Long = range.start
-  def step: Long = range.step
-  def numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
-  def numElements: BigInt = range.numElements
+  val start: Long = range.start
+  val end: Long = range.end
+  val step: Long = range.step
+  val numSlices: Int = range.numSlices.getOrElse(sparkContext.defaultParallelism)
+  val numElements: BigInt = range.numElements
 
   override val output: Seq[Attribute] = range.output
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  // output attributes should not affect the results
-  override lazy val cleanArgs: Seq[Any] = Seq(start, step, numSlices, numElements)
+  override def doCanonicalize(): SparkPlan = {
+    RangeExec(range.canonicalized.asInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Range])
+  }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    sqlContext.sparkContext.parallelize(0 until numSlices, numSlices)
-      .map(i => InternalRow(i)) :: Nil
+    val rdd = if (start == end || (start < end ^ 0 < step)) {
+      new EmptyRDD[InternalRow](sqlContext.sparkContext)
+    } else {
+      sqlContext.sparkContext.parallelize(0 until numSlices, numSlices).map(i => InternalRow(i))
+    }
+    rdd :: Nil
   }
 
   protected override def doProduce(ctx: CodegenContext): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    val initTerm = ctx.freshName("initRange")
-    ctx.addMutableState("boolean", initTerm, s"$initTerm = false;")
-    val partitionEnd = ctx.freshName("partitionEnd")
-    ctx.addMutableState("long", partitionEnd, s"$partitionEnd = 0L;")
-    val number = ctx.freshName("number")
-    ctx.addMutableState("long", number, s"$number = 0L;")
-    val overflow = ctx.freshName("overflow")
-    ctx.addMutableState("boolean", overflow, s"$overflow = false;")
+    val initTerm = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initRange")
+    val number = ctx.addMutableState(CodeGenerator.JAVA_LONG, "number")
 
     val value = ctx.freshName("value")
-    val ev = ExprCode("", "false", value)
+    val ev = ExprCode.forNonNullValue(JavaCode.variable(value, LongType))
     val BigInt = classOf[java.math.BigInteger].getName
-    val checkEnd = if (step > 0) {
-      s"$number < $partitionEnd"
-    } else {
-      s"$number > $partitionEnd"
-    }
 
-    ctx.addNewFunction("initRange",
+    // Inline mutable state since not many Range operations in a task
+    val taskContext = ctx.addMutableState("TaskContext", "taskContext",
+      v => s"$v = TaskContext.get();", forceInline = true)
+    val inputMetrics = ctx.addMutableState("InputMetrics", "inputMetrics",
+      v => s"$v = $taskContext.taskMetrics().inputMetrics();", forceInline = true)
+
+    // In order to periodically update the metrics without inflicting performance penalty, this
+    // operator produces elements in batches. After a batch is complete, the metrics are updated
+    // and a new batch is started.
+    // In the implementation below, the code in the inner loop is producing all the values
+    // within a batch, while the code in the outer loop is setting batch parameters and updating
+    // the metrics.
+
+    // Once number == batchEnd, it's time to progress to the next batch.
+    val batchEnd = ctx.addMutableState(CodeGenerator.JAVA_LONG, "batchEnd")
+
+    // How many values should still be generated by this range operator.
+    val numElementsTodo = ctx.addMutableState(CodeGenerator.JAVA_LONG, "numElementsTodo")
+
+    // How many values should be generated in the next batch.
+    val nextBatchTodo = ctx.freshName("nextBatchTodo")
+
+    // The default size of a batch, which must be positive integer
+    val batchSize = 1000
+
+    val initRangeFuncName = ctx.addNewFunction("initRange",
       s"""
         | private void initRange(int idx) {
         |   $BigInt index = $BigInt.valueOf(idx);
@@ -364,6 +404,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
         |   $BigInt numElement = $BigInt.valueOf(${numElements.toLong}L);
         |   $BigInt step = $BigInt.valueOf(${step}L);
         |   $BigInt start = $BigInt.valueOf(${start}L);
+        |   long partitionEnd;
         |
         |   $BigInt st = index.multiply(numElement).divide(numSlice).multiply(step).add(start);
         |   if (st.compareTo($BigInt.valueOf(Long.MAX_VALUE)) > 0) {
@@ -373,39 +414,71 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
         |   } else {
         |     $number = st.longValue();
         |   }
+        |   $batchEnd = $number;
         |
         |   $BigInt end = index.add($BigInt.ONE).multiply(numElement).divide(numSlice)
         |     .multiply(step).add(start);
         |   if (end.compareTo($BigInt.valueOf(Long.MAX_VALUE)) > 0) {
-        |     $partitionEnd = Long.MAX_VALUE;
+        |     partitionEnd = Long.MAX_VALUE;
         |   } else if (end.compareTo($BigInt.valueOf(Long.MIN_VALUE)) < 0) {
-        |     $partitionEnd = Long.MIN_VALUE;
+        |     partitionEnd = Long.MIN_VALUE;
         |   } else {
-        |     $partitionEnd = end.longValue();
+        |     partitionEnd = end.longValue();
         |   }
         |
-        |   $numOutput.add(($partitionEnd - $number) / ${step}L);
+        |   $BigInt startToEnd = $BigInt.valueOf(partitionEnd).subtract(
+        |     $BigInt.valueOf($number));
+        |   $numElementsTodo  = startToEnd.divide(step).longValue();
+        |   if ($numElementsTodo < 0) {
+        |     $numElementsTodo = 0;
+        |   } else if (startToEnd.remainder(step).compareTo($BigInt.valueOf(0L)) != 0) {
+        |     $numElementsTodo++;
+        |   }
         | }
        """.stripMargin)
 
-    val input = ctx.freshName("input")
-    // Right now, Range is only used when there is one upstream.
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    val localIdx = ctx.freshName("localIdx")
+    val localEnd = ctx.freshName("localEnd")
+    val range = ctx.freshName("range")
+    val shouldStop = if (parent.needStopCheck) {
+      s"if (shouldStop()) { $number = $value + ${step}L; return; }"
+    } else {
+      "// shouldStop check is eliminated"
+    }
     s"""
       | // initialize Range
       | if (!$initTerm) {
       |   $initTerm = true;
-      |   initRange(partitionIndex);
+      |   $initRangeFuncName(partitionIndex);
       | }
       |
-      | while (!$overflow && $checkEnd) {
-      |  long $value = $number;
-      |  $number += ${step}L;
-      |  if ($number < $value ^ ${step}L < 0) {
-      |    $overflow = true;
-      |  }
-      |  ${consume(ctx, Seq(ev))}
-      |  if (shouldStop()) return;
+      | while (true) {
+      |   long $range = $batchEnd - $number;
+      |   if ($range != 0L) {
+      |     int $localEnd = (int)($range / ${step}L);
+      |     for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
+      |       long $value = ((long)$localIdx * ${step}L) + $number;
+      |       ${consume(ctx, Seq(ev))}
+      |       $shouldStop
+      |     }
+      |     $number = $batchEnd;
+      |   }
+      |
+      |   $taskContext.killTaskIfInterrupted();
+      |
+      |   long $nextBatchTodo;
+      |   if ($numElementsTodo > ${batchSize}L) {
+      |     $nextBatchTodo = ${batchSize}L;
+      |     $numElementsTodo -= ${batchSize}L;
+      |   } else {
+      |     $nextBatchTodo = $numElementsTodo;
+      |     $numElementsTodo = 0;
+      |     if ($nextBatchTodo == 0) break;
+      |   }
+      |   $numOutput.add($nextBatchTodo);
+      |   $inputMetrics.incRecordsRead($nextBatchTodo);
+      |
+      |   $batchEnd += $nextBatchTodo * ${step}L;
       | }
      """.stripMargin
   }
@@ -430,10 +503,12 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
         val safePartitionEnd = getSafeMargin(partitionEnd)
         val rowSize = UnsafeRow.calculateBitSetWidthInBytes(1) + LongType.defaultSize
         val unsafeRow = UnsafeRow.createFromByteArray(rowSize, 1)
+        val taskContext = TaskContext.get()
 
-        new Iterator[InternalRow] {
+        val iter = new Iterator[InternalRow] {
           private[this] var number: Long = safePartitionStart
           private[this] var overflow: Boolean = false
+          private[this] val inputMetrics = taskContext.taskMetrics().inputMetrics
 
           override def hasNext =
             if (!overflow) {
@@ -455,18 +530,23 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
             }
 
             numOutputRows += 1
+            inputMetrics.incRecordsRead(1)
             unsafeRow.setLong(0, ret)
             unsafeRow
           }
         }
+        new InterruptibleIterator(taskContext, iter)
       }
   }
 
-  override def simpleString: String = range.simpleString
+  override def simpleString: String = s"Range ($start, $end, step=$step, splits=$numSlices)"
 }
 
 /**
  * Physical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
+ *
+ * If we change how this is implemented physically, we'd need to update
+ * [[org.apache.spark.sql.catalyst.plans.logical.Union.maxRowsPerPartition]].
  */
 case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
   override def output: Seq[Attribute] =
@@ -481,7 +561,15 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  * Physical plan for returning a new RDD that has exactly `numPartitions` partitions.
  * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
  * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
- * the 100 new partitions will claim 10 of the current partitions.
+ * the 100 new partitions will claim 10 of the current partitions.  If a larger number of partitions
+ * is requested, it will stay at the current number of partitions.
+ *
+ * However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
+ * this may result in your computation taking place on fewer nodes than
+ * you like (e.g. one node in the case of numPartitions = 1). To avoid this,
+ * you see ShuffleExchange. This will add a shuffle step, but means the
+ * current upstream partitions will be executed in parallel (per whatever
+ * the current partitioning is).
  */
 case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
@@ -492,19 +580,31 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().coalesce(numPartitions, shuffle = false)
+    if (numPartitions == 1 && child.execute().getNumPartitions < 1) {
+      // Make sure we don't output an RDD with 0 partitions, when claiming that we have a
+      // `SinglePartition`.
+      new CoalesceExec.EmptyRDDWithPartitions(sparkContext, numPartitions)
+    } else {
+      child.execute().coalesce(numPartitions, shuffle = false)
+    }
   }
 }
 
-/**
- * A plan node that does nothing but lie about the output of its child.  Used to spice a
- * (hopefully structurally equivalent) tree from a different optimization sequence into an already
- * resolved tree.
- */
-case class OutputFakerExec(output: Seq[Attribute], child: SparkPlan) extends SparkPlan {
-  def children: Seq[SparkPlan] = child :: Nil
+object CoalesceExec {
+  /** A simple RDD with no data, but with the given number of partitions. */
+  class EmptyRDDWithPartitions(
+      @transient private val sc: SparkContext,
+      numPartitions: Int) extends RDD[InternalRow](sc, Nil) {
 
-  protected override def doExecute(): RDD[InternalRow] = child.execute()
+    override def getPartitions: Array[Partition] =
+      Array.tabulate(numPartitions)(i => EmptyPartition(i))
+
+    override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
+      Iterator.empty
+    }
+  }
+
+  case class EmptyPartition(index: Int) extends Partition
 }
 
 /**
@@ -517,13 +617,10 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
 
   override def output: Seq[Attribute] = child.output
-  override def outputPartitioning: Partitioning = child.outputPartitioning
-  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
-  override def sameResult(o: SparkPlan): Boolean = o match {
-    case s: SubqueryExec => child.sameResult(s.child)
-    case _ => false
-  }
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def outputOrdering: Seq[SortOrder] = child.outputOrdering
 
   @transient
   private lazy val relationFuture: Future[Array[InternalRow]] = {
@@ -541,13 +638,7 @@ case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {
         val dataSize = rows.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
         longMetric("dataSize") += dataSize
 
-        // There are some cases we don't care about the metrics and call `SparkPlan.doExecute`
-        // directly without setting an execution id. We should be tolerant to it.
-        if (executionId != null) {
-          sparkContext.listenerBus.post(SparkListenerDriverAccumUpdates(
-            executionId.toLong, metrics.values.map(m => m.id -> m.value).toSeq))
-        }
-
+        SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toSeq)
         rows
       }
     }(SubqueryExec.executionContext)

@@ -21,6 +21,7 @@ import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.math.log10
 import scala.reflect.ClassTag
 import scala.util.hashing.byteswap32
 
@@ -42,28 +43,58 @@ object Partitioner {
   /**
    * Choose a partitioner to use for a cogroup-like operation between a number of RDDs.
    *
-   * If any of the RDDs already has a partitioner, choose that one.
+   * If spark.default.parallelism is set, we'll use the value of SparkContext defaultParallelism
+   * as the default partitions number, otherwise we'll use the max number of upstream partitions.
    *
-   * Otherwise, we use a default HashPartitioner. For the number of partitions, if
-   * spark.default.parallelism is set, then we'll use the value from SparkContext
-   * defaultParallelism, otherwise we'll use the max number of upstream partitions.
+   * When available, we choose the partitioner from rdds with maximum number of partitions. If this
+   * partitioner is eligible (number of partitions within an order of maximum number of partitions
+   * in rdds), or has partition number higher than default partitions number - we use this
+   * partitioner.
    *
-   * Unless spark.default.parallelism is set, the number of partitions will be the
-   * same as the number of partitions in the largest upstream RDD, as this should
-   * be least likely to cause out-of-memory errors.
+   * Otherwise, we'll use a new HashPartitioner with the default partitions number.
+   *
+   * Unless spark.default.parallelism is set, the number of partitions will be the same as the
+   * number of partitions in the largest upstream RDD, as this should be least likely to cause
+   * out-of-memory errors.
    *
    * We use two method parameters (rdd, others) to enforce callers passing at least 1 RDD.
    */
   def defaultPartitioner(rdd: RDD[_], others: RDD[_]*): Partitioner = {
-    val bySize = (Seq(rdd) ++ others).sortBy(_.partitions.length).reverse
-    for (r <- bySize if r.partitioner.isDefined && r.partitioner.get.numPartitions > 0) {
-      return r.partitioner.get
-    }
-    if (rdd.context.conf.contains("spark.default.parallelism")) {
-      new HashPartitioner(rdd.context.defaultParallelism)
+    val rdds = (Seq(rdd) ++ others)
+    val hasPartitioner = rdds.filter(_.partitioner.exists(_.numPartitions > 0))
+
+    val hasMaxPartitioner: Option[RDD[_]] = if (hasPartitioner.nonEmpty) {
+      Some(hasPartitioner.maxBy(_.partitions.length))
     } else {
-      new HashPartitioner(bySize.head.partitions.length)
+      None
     }
+
+    val defaultNumPartitions = if (rdd.context.conf.contains("spark.default.parallelism")) {
+      rdd.context.defaultParallelism
+    } else {
+      rdds.map(_.partitions.length).max
+    }
+
+    // If the existing max partitioner is an eligible one, or its partitions number is larger
+    // than the default number of partitions, use the existing partitioner.
+    if (hasMaxPartitioner.nonEmpty && (isEligiblePartitioner(hasMaxPartitioner.get, rdds) ||
+        defaultNumPartitions < hasMaxPartitioner.get.getNumPartitions)) {
+      hasMaxPartitioner.get.partitioner.get
+    } else {
+      new HashPartitioner(defaultNumPartitions)
+    }
+  }
+
+  /**
+   * Returns true if the number of partitions of the RDD is either greater than or is less than and
+   * within a single order of magnitude of the max number of upstream partitions, otherwise returns
+   * false.
+   */
+  private def isEligiblePartitioner(
+     hasMaxPartitioner: RDD[_],
+     rdds: Seq[RDD[_]]): Boolean = {
+    val maxPartitions = rdds.map(_.partitions.length).max
+    log10(maxPartitions) - log10(hasMaxPartitioner.getNumPartitions) < 1
   }
 }
 
@@ -99,18 +130,28 @@ class HashPartitioner(partitions: Int) extends Partitioner {
  * A [[org.apache.spark.Partitioner]] that partitions sortable records by range into roughly
  * equal ranges. The ranges are determined by sampling the content of the RDD passed in.
  *
- * Note that the actual number of partitions created by the RangePartitioner might not be the same
+ * @note The actual number of partitions created by the RangePartitioner might not be the same
  * as the `partitions` parameter, in the case where the number of sampled records is less than
  * the value of `partitions`.
  */
 class RangePartitioner[K : Ordering : ClassTag, V](
     partitions: Int,
     rdd: RDD[_ <: Product2[K, V]],
-    private var ascending: Boolean = true)
+    private var ascending: Boolean = true,
+    val samplePointsPerPartitionHint: Int = 20)
   extends Partitioner {
+
+  // A constructor declared in order to maintain backward compatibility for Java, when we add the
+  // 4th constructor parameter samplePointsPerPartitionHint. See SPARK-22160.
+  // This is added to make sure from a bytecode point of view, there is still a 3-arg ctor.
+  def this(partitions: Int, rdd: RDD[_ <: Product2[K, V]], ascending: Boolean) = {
+    this(partitions, rdd, ascending, samplePointsPerPartitionHint = 20)
+  }
 
   // We allow partitions = 0, which happens when sorting an empty RDD under the default settings.
   require(partitions >= 0, s"Number of partitions cannot be negative but found $partitions.")
+  require(samplePointsPerPartitionHint > 0,
+    s"Sample points per partition must be greater than 0 but found $samplePointsPerPartitionHint")
 
   private var ordering = implicitly[Ordering[K]]
 
@@ -120,7 +161,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
       Array.empty
     } else {
       // This is the sample size we need to have roughly balanced output partitions, capped at 1M.
-      val sampleSize = math.min(20.0 * partitions, 1e6)
+      // Cast to double to avoid overflowing ints or longs
+      val sampleSize = math.min(samplePointsPerPartitionHint.toDouble * partitions, 1e6)
       // Assume the input partitions are roughly balanced and over-sample a little bit.
       val sampleSizePerPartition = math.ceil(3.0 * sampleSize / rdd.partitions.length).toInt
       val (numItems, sketched) = RangePartitioner.sketch(rdd.map(_._1), sampleSizePerPartition)
@@ -151,7 +193,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
           val weight = (1.0 / fraction).toFloat
           candidates ++= reSampled.map(x => (x, weight))
         }
-        RangePartitioner.determineBounds(candidates, partitions)
+        RangePartitioner.determineBounds(candidates, math.min(partitions, candidates.size))
       }
     }
   }

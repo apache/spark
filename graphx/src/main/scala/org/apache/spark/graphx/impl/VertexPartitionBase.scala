@@ -57,7 +57,7 @@ private[graphx] object VertexPartitionBase {
  * concrete implementation. [[VertexPartitionBaseOps]] provides a variety of operations for
  * VertexPartitionBase and subclasses that provide implicit evidence of membership in the
  * `VertexPartitionBaseOpsConstructor` typeclass (for example,
- * [[VertexPartition.VertexPartitionOpsConstructor]]).
+ * `VertexPartition.VertexPartitionOpsConstructor`).
  */
 private[graphx] abstract class VertexPartitionBase[@specialized(Long, Int, Double) VD: ClassTag]
   extends Serializable {

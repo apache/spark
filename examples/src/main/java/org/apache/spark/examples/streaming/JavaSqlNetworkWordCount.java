@@ -18,20 +18,15 @@
 package org.apache.spark.examples.streaming;
 
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.regex.Pattern;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.FlatMapFunction;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.VoidFunction2;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.api.java.StorageLevels;
 import org.apache.spark.streaming.Durations;
-import org.apache.spark.streaming.Time;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
@@ -48,7 +43,6 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
  * and then run the example
  *    `$ bin/run-example org.apache.spark.examples.streaming.JavaSqlNetworkWordCount localhost 9999`
  */
-
 public final class JavaSqlNetworkWordCount {
   private static final Pattern SPACE = Pattern.compile(" ");
 
@@ -70,39 +64,28 @@ public final class JavaSqlNetworkWordCount {
     // Replication necessary in distributed scenario for fault tolerance.
     JavaReceiverInputDStream<String> lines = ssc.socketTextStream(
         args[0], Integer.parseInt(args[1]), StorageLevels.MEMORY_AND_DISK_SER);
-    JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
-      @Override
-      public Iterator<String> call(String x) {
-        return Arrays.asList(SPACE.split(x)).iterator();
-      }
-    });
+    JavaDStream<String> words = lines.flatMap(x -> Arrays.asList(SPACE.split(x)).iterator());
 
     // Convert RDDs of the words DStream to DataFrame and run SQL query
-    words.foreachRDD(new VoidFunction2<JavaRDD<String>, Time>() {
-      @Override
-      public void call(JavaRDD<String> rdd, Time time) {
-        SparkSession spark = JavaSparkSessionSingleton.getInstance(rdd.context().getConf());
+    words.foreachRDD((rdd, time) -> {
+      SparkSession spark = JavaSparkSessionSingleton.getInstance(rdd.context().getConf());
 
-        // Convert JavaRDD[String] to JavaRDD[bean class] to DataFrame
-        JavaRDD<JavaRecord> rowRDD = rdd.map(new Function<String, JavaRecord>() {
-          @Override
-          public JavaRecord call(String word) {
-            JavaRecord record = new JavaRecord();
-            record.setWord(word);
-            return record;
-          }
-        });
-        Dataset<Row> wordsDataFrame = spark.createDataFrame(rowRDD, JavaRecord.class);
+      // Convert JavaRDD[String] to JavaRDD[bean class] to DataFrame
+      JavaRDD<JavaRecord> rowRDD = rdd.map(word -> {
+        JavaRecord record = new JavaRecord();
+        record.setWord(word);
+        return record;
+      });
+      Dataset<Row> wordsDataFrame = spark.createDataFrame(rowRDD, JavaRecord.class);
 
-        // Creates a temporary view using the DataFrame
-        wordsDataFrame.createOrReplaceTempView("words");
+      // Creates a temporary view using the DataFrame
+      wordsDataFrame.createOrReplaceTempView("words");
 
-        // Do word count on table using SQL and print it
-        Dataset<Row> wordCountsDataFrame =
-            spark.sql("select word, count(*) as total from words group by word");
-        System.out.println("========= " + time + "=========");
-        wordCountsDataFrame.show();
-      }
+      // Do word count on table using SQL and print it
+      Dataset<Row> wordCountsDataFrame =
+          spark.sql("select word, count(*) as total from words group by word");
+      System.out.println("========= " + time + "=========");
+      wordCountsDataFrame.show();
     });
 
     ssc.start();

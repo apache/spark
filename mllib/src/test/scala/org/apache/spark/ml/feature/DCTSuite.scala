@@ -21,16 +21,16 @@ import scala.beans.BeanInfo
 
 import edu.emory.mathcs.jtransforms.dct.DoubleDCT_1D
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.sql.Row
 
 @BeanInfo
 case class DCTTestData(vec: Vector, wantedVec: Vector)
 
-class DCTSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class DCTSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
 
   test("forward transform of discrete cosine matches jTransforms result") {
     val data = Vectors.dense((0 until 128).map(_ => 2D * math.random - 1D).toArray)
@@ -57,26 +57,22 @@ class DCTSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   private def testDCT(data: Vector, inverse: Boolean): Unit = {
     val expectedResultBuffer = data.toArray.clone()
     if (inverse) {
-      (new DoubleDCT_1D(data.size)).inverse(expectedResultBuffer, true)
+      new DoubleDCT_1D(data.size).inverse(expectedResultBuffer, true)
     } else {
-      (new DoubleDCT_1D(data.size)).forward(expectedResultBuffer, true)
+      new DoubleDCT_1D(data.size).forward(expectedResultBuffer, true)
     }
     val expectedResult = Vectors.dense(expectedResultBuffer)
 
-    val dataset = spark.createDataFrame(Seq(
-      DCTTestData(data, expectedResult)
-    ))
+    val dataset = Seq(DCTTestData(data, expectedResult)).toDF()
 
     val transformer = new DCT()
       .setInputCol("vec")
       .setOutputCol("resultVec")
       .setInverse(inverse)
 
-    transformer.transform(dataset)
-      .select("resultVec", "wantedVec")
-      .collect()
-      .foreach { case Row(resultVec: Vector, wantedVec: Vector) =>
-      assert(Vectors.sqdist(resultVec, wantedVec) < 1e-6)
+    testTransformer[(Vector, Vector)](dataset, transformer, "resultVec", "wantedVec") {
+      case Row(resultVec: Vector, wantedVec: Vector) =>
+        assert(Vectors.sqdist(resultVec, wantedVec) < 1e-6)
     }
   }
 }

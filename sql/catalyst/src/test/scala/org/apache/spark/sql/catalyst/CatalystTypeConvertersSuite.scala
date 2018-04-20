@@ -19,6 +19,8 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
 class CatalystTypeConvertersSuite extends SparkFunSuite {
@@ -60,5 +62,36 @@ class CatalystTypeConvertersSuite extends SparkFunSuite {
 
   test("option handling in createToCatalystConverter") {
     assert(CatalystTypeConverters.createToCatalystConverter(IntegerType)(Some(123)) === 123)
+  }
+
+  test("primitive array handling") {
+    val intArray = Array(1, 100, 10000)
+    val intUnsafeArray = UnsafeArrayData.fromPrimitiveArray(intArray)
+    val intArrayType = ArrayType(IntegerType, false)
+    assert(CatalystTypeConverters.createToScalaConverter(intArrayType)(intUnsafeArray) === intArray)
+
+    val doubleArray = Array(1.1, 111.1, 11111.1)
+    val doubleUnsafeArray = UnsafeArrayData.fromPrimitiveArray(doubleArray)
+    val doubleArrayType = ArrayType(DoubleType, false)
+    assert(CatalystTypeConverters.createToScalaConverter(doubleArrayType)(doubleUnsafeArray)
+      === doubleArray)
+  }
+
+  test("An array with null handling") {
+    val intArray = Array(1, null, 100, null, 10000)
+    val intGenericArray = new GenericArrayData(intArray)
+    val intArrayType = ArrayType(IntegerType, true)
+    assert(CatalystTypeConverters.createToScalaConverter(intArrayType)(intGenericArray)
+      === intArray)
+    assert(CatalystTypeConverters.createToCatalystConverter(intArrayType)(intArray)
+      == intGenericArray)
+
+    val doubleArray = Array(1.1, null, 111.1, null, 11111.1)
+    val doubleGenericArray = new GenericArrayData(doubleArray)
+    val doubleArrayType = ArrayType(DoubleType, true)
+    assert(CatalystTypeConverters.createToScalaConverter(doubleArrayType)(doubleGenericArray)
+      === doubleArray)
+    assert(CatalystTypeConverters.createToCatalystConverter(doubleArrayType)(doubleArray)
+      == doubleGenericArray)
   }
 }

@@ -1,29 +1,35 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.sources
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.test.SharedSQLContext
 
-class ResolvedDataSourceSuite extends SparkFunSuite {
+class ResolvedDataSourceSuite extends SparkFunSuite with SharedSQLContext {
   private def getProvidingClass(name: String): Class[_] =
-    DataSource(sparkSession = null, className = name).providingClass
+    DataSource(
+      sparkSession = spark,
+      className = name,
+      options = Map(DateTimeUtils.TIMEZONE_OPTION -> DateTimeUtils.defaultTimeZone().getID)
+    ).providingClass
 
   test("jdbc") {
     assert(
@@ -74,16 +80,16 @@ class ResolvedDataSourceSuite extends SparkFunSuite {
     val error1 = intercept[AnalysisException] {
       getProvidingClass("avro")
     }
-    assert(error1.getMessage.contains("spark-packages"))
+    assert(error1.getMessage.contains("Failed to find data source: avro."))
 
     val error2 = intercept[AnalysisException] {
       getProvidingClass("com.databricks.spark.avro")
     }
-    assert(error2.getMessage.contains("spark-packages"))
+    assert(error2.getMessage.contains("Failed to find data source: com.databricks.spark.avro."))
 
     val error3 = intercept[ClassNotFoundException] {
       getProvidingClass("asfdwefasdfasdf")
     }
-    assert(error3.getMessage.contains("spark-packages"))
+    assert(error3.getMessage.contains("Failed to find data source: asfdwefasdfasdf."))
   }
 }

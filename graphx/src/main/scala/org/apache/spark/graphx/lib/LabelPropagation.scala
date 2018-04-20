@@ -55,7 +55,7 @@ object LabelPropagation {
         val count1Val = count1.getOrElse(i, 0L)
         val count2Val = count2.getOrElse(i, 0L)
         i -> (count1Val + count2Val)
-      }.toMap
+      }(collection.breakOut) // more efficient alternative to [[collection.Traversable.toMap]]
     }
     def vertexProgram(vid: VertexId, attr: Long, message: Map[VertexId, Long]): VertexId = {
       if (message.isEmpty) attr else message.maxBy(_._2)._1

@@ -17,18 +17,15 @@
 
 package org.apache.spark.ml.feature
 
-import org.scalatest.exceptions.TestFailedException
-
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
-class PolynomialExpansionSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class PolynomialExpansionSuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
 
   test("params") {
     ParamsSuite.checkParams(new PolynomialExpansion)
@@ -58,54 +55,58 @@ class PolynomialExpansionSuite
       -1.08, 3.3, 1.98, -3.63, 9.0, 5.4, -9.9, -27.0),
     Vectors.sparse(19, Array.empty, Array.empty))
 
+  def assertTypeOfVector(lhs: Vector, rhs: Vector): Unit = {
+    assert((lhs, rhs) match {
+      case (v1: DenseVector, v2: DenseVector) => true
+      case (v1: SparseVector, v2: SparseVector) => true
+      case _ => false
+    }, "The vector type should be preserved after polynomial expansion.")
+  }
+
+  def assertValues(lhs: Vector, rhs: Vector): Unit = {
+    assert(lhs ~== rhs absTol 1e-1, "The vector value is not correct after polynomial expansion.")
+  }
+
   test("Polynomial expansion with default parameter") {
-    val df = spark.createDataFrame(data.zip(twoDegreeExpansion)).toDF("features", "expected")
+    val df = data.zip(twoDegreeExpansion).toSeq.toDF("features", "expected")
 
     val polynomialExpansion = new PolynomialExpansion()
       .setInputCol("features")
       .setOutputCol("polyFeatures")
 
-    polynomialExpansion.transform(df).select("polyFeatures", "expected").collect().foreach {
-      case Row(expanded: DenseVector, expected: DenseVector) =>
-        assert(expanded ~== expected absTol 1e-1)
-      case Row(expanded: SparseVector, expected: SparseVector) =>
-        assert(expanded ~== expected absTol 1e-1)
-      case _ =>
-        throw new TestFailedException("Unmatched data types after polynomial expansion", 0)
+    testTransformer[(Vector, Vector)](df, polynomialExpansion, "polyFeatures", "expected") {
+      case Row(expanded: Vector, expected: Vector) =>
+        assertTypeOfVector(expanded, expected)
+        assertValues(expanded, expected)
     }
   }
 
   test("Polynomial expansion with setter") {
-    val df = spark.createDataFrame(data.zip(threeDegreeExpansion)).toDF("features", "expected")
+    val df = data.zip(threeDegreeExpansion).toSeq.toDF("features", "expected")
 
     val polynomialExpansion = new PolynomialExpansion()
       .setInputCol("features")
       .setOutputCol("polyFeatures")
       .setDegree(3)
 
-    polynomialExpansion.transform(df).select("polyFeatures", "expected").collect().foreach {
-      case Row(expanded: DenseVector, expected: DenseVector) =>
-        assert(expanded ~== expected absTol 1e-1)
-      case Row(expanded: SparseVector, expected: SparseVector) =>
-        assert(expanded ~== expected absTol 1e-1)
-      case _ =>
-        throw new TestFailedException("Unmatched data types after polynomial expansion", 0)
+    testTransformer[(Vector, Vector)](df, polynomialExpansion, "polyFeatures", "expected") {
+      case Row(expanded: Vector, expected: Vector) =>
+        assertTypeOfVector(expanded, expected)
+        assertValues(expanded, expected)
     }
   }
 
   test("Polynomial expansion with degree 1 is identity on vectors") {
-    val df = spark.createDataFrame(data.zip(data)).toDF("features", "expected")
+    val df = data.zip(data).toSeq.toDF("features", "expected")
 
     val polynomialExpansion = new PolynomialExpansion()
       .setInputCol("features")
       .setOutputCol("polyFeatures")
       .setDegree(1)
 
-    polynomialExpansion.transform(df).select("polyFeatures", "expected").collect().foreach {
+    testTransformer[(Vector, Vector)](df, polynomialExpansion, "polyFeatures", "expected") {
       case Row(expanded: Vector, expected: Vector) =>
-        assert(expanded ~== expected absTol 1e-1)
-      case _ =>
-        throw new TestFailedException("Unmatched data types after polynomial expansion", 0)
+        assertValues(expanded, expected)
     }
   }
 
@@ -124,20 +125,20 @@ class PolynomialExpansionSuite
       (Vectors.dense(1.0, 2.0, 3.0, 4.0, 5.0, 6.0), 8007, 12375)
     )
 
-    val df = spark.createDataFrame(data)
-      .toDF("features", "expectedPoly10size", "expectedPoly11size")
+    val df = data.toSeq.toDF("features", "expectedPoly10size", "expectedPoly11size")
 
     val t = new PolynomialExpansion()
       .setInputCol("features")
       .setOutputCol("polyFeatures")
 
     for (i <- Seq(10, 11)) {
-      val transformed = t.setDegree(i)
-        .transform(df)
-        .select(s"expectedPoly${i}size", "polyFeatures")
-        .rdd.map { case Row(expected: Int, v: Vector) => expected == v.size }
-
-      assert(transformed.collect.forall(identity))
+      testTransformer[(Vector, Int, Int)](
+        df,
+        t.setDegree(i),
+        s"expectedPoly${i}size",
+        "polyFeatures") { case Row(size: Int, expected: Vector) =>
+            assert(size === expected.size)
+      }
     }
   }
 }

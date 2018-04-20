@@ -20,27 +20,15 @@ package org.apache.spark.sql.execution
 import java.util.Properties
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.SparkSession
 
 class SQLExecutionSuite extends SparkFunSuite {
 
   test("concurrent query execution (SPARK-10548)") {
-    // Try to reproduce the issue with the old SparkContext
     val conf = new SparkConf()
       .setMaster("local[*]")
       .setAppName("test")
-    val badSparkContext = new BadSparkContext(conf)
-    try {
-      testConcurrentQueryExecution(badSparkContext)
-      fail("unable to reproduce SPARK-10548")
-    } catch {
-      case e: IllegalArgumentException =>
-        assert(e.getMessage.contains(SQLExecution.EXECUTION_ID_KEY))
-    } finally {
-      badSparkContext.stop()
-    }
-
-    // Verify that the issue is fixed with the latest SparkContext
     val goodSparkContext = new SparkContext(conf)
     try {
       testConcurrentQueryExecution(goodSparkContext)
@@ -102,15 +90,37 @@ class SQLExecutionSuite extends SparkFunSuite {
     }
   }
 
+
+  test("Finding QueryExecution for given executionId") {
+    val spark = SparkSession.builder.master("local[*]").appName("test").getOrCreate()
+    import spark.implicits._
+
+    var queryExecution: QueryExecution = null
+
+    spark.sparkContext.addSparkListener(new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        val executionIdStr = jobStart.properties.getProperty(SQLExecution.EXECUTION_ID_KEY)
+        if (executionIdStr != null) {
+          queryExecution = SQLExecution.getQueryExecution(executionIdStr.toLong)
+        }
+        SQLExecutionSuite.canProgress = true
+      }
+    })
+
+    val df = spark.range(1).map { x =>
+      while (!SQLExecutionSuite.canProgress) {
+        Thread.sleep(1)
+      }
+      x
+    }
+    df.collect()
+
+    assert(df.queryExecution === queryExecution)
+
+    spark.stop()
+  }
 }
 
-/**
- * A bad [[SparkContext]] that does not clone the inheritable thread local properties
- * when passing them to children threads.
- */
-private class BadSparkContext(conf: SparkConf) extends SparkContext(conf) {
-  protected[spark] override val localProperties = new InheritableThreadLocal[Properties] {
-    override protected def childValue(parent: Properties): Properties = new Properties(parent)
-    override protected def initialValue(): Properties = new Properties()
-  }
+object SQLExecutionSuite {
+  @volatile var canProgress = false
 }

@@ -164,6 +164,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
 
   /** Clear the old time-to-files mappings along with old RDDs */
   protected[streaming] override def clearMetadata(time: Time) {
+    super.clearMetadata(time)
     batchTimeToSelectedFiles.synchronized {
       val oldFiles = batchTimeToSelectedFiles.filter(_._1 < (time - rememberDuration))
       batchTimeToSelectedFiles --= oldFiles.keys
@@ -230,7 +231,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K, V]](
    * - It must pass the user-provided file filter.
    * - It must be newer than the ignore threshold. It is assumed that files older than the ignore
    *   threshold have already been considered or are existing files before start
-   *   (when newFileOnly = true).
+   *   (when newFilesOnly = true).
    * - It must not be present in the recently selected files that this class remembers.
    * - It must not be newer than the time of the batch (i.e. `currentTime` for which this
    *   file is being tested. This can occur if the driver was recovered, and the missing batches

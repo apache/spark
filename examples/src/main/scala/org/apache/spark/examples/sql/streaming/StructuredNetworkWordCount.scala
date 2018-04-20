@@ -18,7 +18,6 @@
 // scalastyle:off println
 package org.apache.spark.examples.sql.streaming
 
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.SparkSession
 
 /**

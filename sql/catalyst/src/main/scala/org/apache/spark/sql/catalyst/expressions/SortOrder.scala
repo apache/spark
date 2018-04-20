@@ -21,26 +21,47 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.BinaryPrefixComparator
-import org.apache.spark.util.collection.unsafe.sort.PrefixComparators.DoublePrefixComparator
+import org.apache.spark.util.collection.unsafe.sort.PrefixComparators._
 
 abstract sealed class SortDirection {
+  def sql: String
+  def defaultNullOrdering: NullOrdering
+}
+
+abstract sealed class NullOrdering {
   def sql: String
 }
 
 case object Ascending extends SortDirection {
   override def sql: String = "ASC"
+  override def defaultNullOrdering: NullOrdering = NullsFirst
 }
 
 case object Descending extends SortDirection {
   override def sql: String = "DESC"
+  override def defaultNullOrdering: NullOrdering = NullsLast
+}
+
+case object NullsFirst extends NullOrdering{
+  override def sql: String = "NULLS FIRST"
+}
+
+case object NullsLast extends NullOrdering{
+  override def sql: String = "NULLS LAST"
 }
 
 /**
  * An expression that can be used to sort a tuple.  This class extends expression primarily so that
  * transformations over expression will descend into its child.
+ * `sameOrderExpressions` is a set of expressions with the same sort order as the child. It is
+ * derived from equivalence relation in an operator, e.g. left/right keys of an inner sort merge
+ * join.
  */
-case class SortOrder(child: Expression, direction: SortDirection)
+case class SortOrder(
+    child: Expression,
+    direction: SortDirection,
+    nullOrdering: NullOrdering,
+    sameOrderExpressions: Set[Expression])
   extends UnaryExpression with Unevaluable {
 
   /** Sort order is not foldable because we don't have an eval for it. */
@@ -57,10 +78,47 @@ case class SortOrder(child: Expression, direction: SortDirection)
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
 
-  override def toString: String = s"$child ${direction.sql}"
-  override def sql: String = child.sql + " " + direction.sql
+  override def toString: String = s"$child ${direction.sql} ${nullOrdering.sql}"
+  override def sql: String = child.sql + " " + direction.sql + " " + nullOrdering.sql
 
   def isAscending: Boolean = direction == Ascending
+
+  def satisfies(required: SortOrder): Boolean = {
+    (sameOrderExpressions + child).exists(required.child.semanticEquals) &&
+      direction == required.direction && nullOrdering == required.nullOrdering
+  }
+}
+
+object SortOrder {
+  def apply(
+     child: Expression,
+     direction: SortDirection,
+     sameOrderExpressions: Set[Expression] = Set.empty): SortOrder = {
+    new SortOrder(child, direction, direction.defaultNullOrdering, sameOrderExpressions)
+  }
+
+  /**
+   * Returns if a sequence of SortOrder satisfies another sequence of SortOrder.
+   *
+   * SortOrder sequence A satisfies SortOrder sequence B if and only if B is an equivalent of A
+   * or of A's prefix. Here are examples of ordering A satisfying ordering B:
+   * <ul>
+   *   <li>ordering A is [x, y] and ordering B is [x]</li>
+   *   <li>ordering A is [x(sameOrderExpressions=x1)] and ordering B is [x1]</li>
+   *   <li>ordering A is [x(sameOrderExpressions=x1), y] and ordering B is [x1]</li>
+   * </ul>
+   */
+  def orderingSatisfies(ordering1: Seq[SortOrder], ordering2: Seq[SortOrder]): Boolean = {
+    if (ordering2.isEmpty) {
+      true
+    } else if (ordering2.length > ordering1.length) {
+      false
+    } else {
+      ordering2.zip(ordering1).forall {
+        case (o2, o1) => o1.satisfies(o2)
+      }
+    }
+  }
 }
 
 /**
@@ -71,12 +129,22 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
 
   val nullValue = child.child.dataType match {
     case BooleanType | DateType | TimestampType | _: IntegralType =>
-      Long.MinValue
+      if (nullAsSmallest) Long.MinValue else Long.MaxValue
     case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
-      Long.MinValue
+      if (nullAsSmallest) Long.MinValue else Long.MaxValue
     case _: DecimalType =>
-      DoublePrefixComparator.computePrefix(Double.NegativeInfinity)
-    case _ => 0L
+      if (nullAsSmallest) {
+        DoublePrefixComparator.computePrefix(Double.NegativeInfinity)
+      } else {
+        DoublePrefixComparator.computePrefix(Double.NaN)
+      }
+    case _ =>
+      if (nullAsSmallest) 0L else -1L
+  }
+
+  private def nullAsSmallest: Boolean = {
+    (child.isAscending && child.nullOrdering == NullsFirst) ||
+      (!child.isAscending && child.nullOrdering == NullsLast)
   }
 
   override def eval(input: InternalRow): Any = throw new UnsupportedOperationException
@@ -86,6 +154,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
     val input = childCode.value
     val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getName
     val DoublePrefixCmp = classOf[DoublePrefixComparator].getName
+    val StringPrefixCmp = classOf[StringPrefixComparator].getName
     val prefixCode = child.child.dataType match {
       case BooleanType =>
         s"$input ? 1L : 0L"
@@ -95,7 +164,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
         s"(long) $input"
       case FloatType | DoubleType =>
         s"$DoublePrefixCmp.computePrefix((double)$input)"
-      case StringType => s"$input.getPrefix()"
+      case StringType => s"$StringPrefixCmp.computePrefix($input)"
       case BinaryType => s"$BinaryPrefixCmp.computePrefix($input)"
       case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
         if (dt.precision <= Decimal.MAX_LONG_DIGITS) {

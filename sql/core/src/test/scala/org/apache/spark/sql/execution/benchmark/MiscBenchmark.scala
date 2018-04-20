@@ -102,7 +102,7 @@ class MiscBenchmark extends BenchmarkBase {
     }
     benchmark.run()
 
-    /**
+    /*
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     collect:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
@@ -124,7 +124,7 @@ class MiscBenchmark extends BenchmarkBase {
     }
     benchmark.run()
 
-    /**
+    /*
     model name      : Westmere E56xx/L56xx/X56xx (Nehalem-C)
     collect limit:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
@@ -132,4 +132,136 @@ class MiscBenchmark extends BenchmarkBase {
     collect limit 2 millions                 3348 / 4005          0.3        3193.3       0.2X
      */
   }
+
+  ignore("generate explode") {
+    val N = 1 << 24
+    runBenchmark("generate explode array", N) {
+      val df = sparkSession.range(N).selectExpr(
+        "id as key",
+        "array(rand(), rand(), rand(), rand(), rand()) as values")
+      df.selectExpr("key", "explode(values) value").count()
+    }
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.6
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+    generate explode array:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate explode array wholestage off         6920 / 7129          2.4         412.5       1.0X
+    generate explode array wholestage on           623 /  646         26.9          37.1      11.1X
+     */
+
+    runBenchmark("generate explode map", N) {
+      val df = sparkSession.range(N).selectExpr(
+        "id as key",
+        "map('a', rand(), 'b', rand(), 'c', rand(), 'd', rand(), 'e', rand()) pairs")
+      df.selectExpr("key", "explode(pairs) as (k, v)").count()
+    }
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.6
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+    generate explode map:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate explode map wholestage off         11978 / 11993          1.4         714.0       1.0X
+    generate explode map wholestage on             866 /  919         19.4          51.6      13.8X
+     */
+
+    runBenchmark("generate posexplode array", N) {
+      val df = sparkSession.range(N).selectExpr(
+        "id as key",
+        "array(rand(), rand(), rand(), rand(), rand()) as values")
+      df.selectExpr("key", "posexplode(values) as (idx, value)").count()
+    }
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.6
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+    generate posexplode array:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate posexplode array wholestage off      7502 / 7513          2.2         447.1       1.0X
+    generate posexplode array wholestage on        617 /  623         27.2          36.8      12.2X
+     */
+
+    runBenchmark("generate inline array", N) {
+      val df = sparkSession.range(N).selectExpr(
+        "id as key",
+        "array((rand(), rand()), (rand(), rand()), (rand(), 0.0d)) as values")
+      df.selectExpr("key", "inline(values) as (r1, r2)").count()
+    }
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.6
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+    generate inline array:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate inline array wholestage off          6901 / 6928          2.4         411.3       1.0X
+    generate inline array wholestage on           1001 / 1010         16.8          59.7       6.9X
+     */
+
+    val M = 60000
+    runBenchmark("generate big struct array", M) {
+      import sparkSession.implicits._
+      val df = sparkSession.sparkContext.parallelize(Seq(("1",
+        Array.fill(M)({
+          val i = math.random
+          (i.toString, (i + 1).toString, (i + 2).toString, (i + 3).toString)
+        })))).toDF("col", "arr")
+
+      df.selectExpr("*", "expode(arr) as arr_col")
+        .select("col", "arr_col.*").count
+    }
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_151-b12 on Mac OS X 10.12.6
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+    test the impact of adding the optimization of Generate.unrequiredChildIndex,
+    we can see enormous improvement of x250 in this case! and it grows O(n^2).
+
+    with Optimization ON:
+
+    generate big struct array:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate big struct array wholestage off       331 /  378          0.2        5524.9       1.0X
+    generate big struct array wholestage on        205 /  232          0.3        3413.1       1.6X
+
+    with Optimization OFF:
+
+    generate big struct array:               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate big struct array wholestage off    49697 / 51496          0.0      828277.7       1.0X
+    generate big struct array wholestage on     50558 / 51434          0.0      842641.6       1.0X
+     */
+
+  }
+
+  ignore("generate regular generator") {
+    val N = 1 << 24
+    runBenchmark("generate stack", N) {
+      val df = sparkSession.range(N).selectExpr(
+        "id as key",
+        "id % 2 as t1",
+        "id % 3 as t2",
+        "id % 5 as t3",
+        "id % 7 as t4",
+        "id % 13 as t5")
+      df.selectExpr("key", "stack(4, t1, t2, t3, t4, t5)").count()
+    }
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.6
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+    generate stack:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate stack wholestage off               12953 / 13070          1.3         772.1       1.0X
+    generate stack wholestage on                   836 /  847         20.1          49.8      15.5X
+     */
+  }
+
 }

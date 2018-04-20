@@ -17,10 +17,13 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.spark.SparkFunSuite
+import scala.util.Random
+
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans}
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
@@ -47,6 +50,13 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getInitMode === MLlibKMeans.K_MEANS_PARALLEL)
     assert(kmeans.getInitSteps === 2)
     assert(kmeans.getTol === 1e-4)
+    assert(kmeans.getDistanceMeasure === DistanceMeasure.EUCLIDEAN)
+    val model = kmeans.setMaxIter(1).fit(dataset)
+
+    MLTestingUtils.checkCopyAndUids(kmeans, model)
+    assert(model.hasSummary)
+    val copiedModel = model.copy(ParamMap.empty)
+    assert(copiedModel.hasSummary)
   }
 
   test("set parameters") {
@@ -59,6 +69,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       .setInitSteps(3)
       .setSeed(123)
       .setTol(1e-3)
+      .setDistanceMeasure(DistanceMeasure.COSINE)
 
     assert(kmeans.getK === 9)
     assert(kmeans.getFeaturesCol === "test_feature")
@@ -68,6 +79,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getInitSteps === 3)
     assert(kmeans.getSeed === 123)
     assert(kmeans.getTol === 1e-3)
+    assert(kmeans.getDistanceMeasure === DistanceMeasure.COSINE)
   }
 
   test("parameters validation") {
@@ -80,9 +92,12 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     intercept[IllegalArgumentException] {
       new KMeans().setInitSteps(0)
     }
+    intercept[IllegalArgumentException] {
+      new KMeans().setDistanceMeasure("no_such_a_measure")
+    }
   }
 
-  test("fit, transform, and summary") {
+  test("fit, transform and summary") {
     val predictionColName = "kmeans_prediction"
     val kmeans = new KMeans().setK(k).setPredictionCol(predictionColName).setSeed(1)
     val model = kmeans.fit(dataset)
@@ -115,6 +130,9 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(clusterSizes.length === k)
     assert(clusterSizes.sum === numRows)
     assert(clusterSizes.forall(_ >= 0))
+
+    model.setSummary(None)
+    assert(!model.hasSummary)
   }
 
   test("KMeansModel transform with non-default feature and prediction cols") {
@@ -132,12 +150,57 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(model.getPredictionCol == predictionColName)
   }
 
+  test("KMeans using cosine distance") {
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+      Vectors.dense(1.0, 1.0),
+      Vectors.dense(10.0, 10.0),
+      Vectors.dense(1.0, 0.5),
+      Vectors.dense(10.0, 4.4),
+      Vectors.dense(-1.0, 1.0),
+      Vectors.dense(-100.0, 90.0)
+    )).map(v => TestRow(v)))
+
+    val model = new KMeans()
+      .setK(3)
+      .setSeed(1)
+      .setInitMode(MLlibKMeans.RANDOM)
+      .setTol(1e-6)
+      .setDistanceMeasure(DistanceMeasure.COSINE)
+      .fit(df)
+
+    val predictionDf = model.transform(df)
+    assert(predictionDf.select("prediction").distinct().count() == 3)
+    val predictionsMap = predictionDf.collect().map(row =>
+      row.getAs[Vector]("features") -> row.getAs[Int]("prediction")).toMap
+    assert(predictionsMap(Vectors.dense(1.0, 1.0)) ==
+      predictionsMap(Vectors.dense(10.0, 10.0)))
+    assert(predictionsMap(Vectors.dense(1.0, 0.5)) ==
+      predictionsMap(Vectors.dense(10.0, 4.4)))
+    assert(predictionsMap(Vectors.dense(-1.0, 1.0)) ==
+      predictionsMap(Vectors.dense(-100.0, 90.0)))
+
+    model.clusterCenters.forall(Vectors.norm(_, 2) == 1.0)
+  }
+
+  test("KMeans with cosine distance is not supported for 0-length vectors") {
+    val model = new KMeans().setDistanceMeasure(DistanceMeasure.COSINE).setK(2)
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(Array(
+      Vectors.dense(0.0, 0.0),
+      Vectors.dense(10.0, 10.0),
+      Vectors.dense(1.0, 0.5)
+    )).map(v => TestRow(v)))
+    val e = intercept[SparkException](model.fit(df))
+    assert(e.getCause.isInstanceOf[AssertionError])
+    assert(e.getCause.getMessage.contains("Cosine distance is not defined"))
+  }
+
   test("read/write") {
     def checkModelData(model: KMeansModel, model2: KMeansModel): Unit = {
       assert(model.clusterCenters === model2.clusterCenters)
     }
     val kmeans = new KMeans()
-    testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings,
+      KMeansSuite.allParamSettings, checkModelData)
   }
 }
 
@@ -145,6 +208,17 @@ object KMeansSuite {
   def generateKMeansData(spark: SparkSession, rows: Int, dim: Int, k: Int): DataFrame = {
     val sc = spark.sparkContext
     val rdd = sc.parallelize(1 to rows).map(i => Vectors.dense(Array.fill(dim)((i % k).toDouble)))
+      .map(v => new TestRow(v))
+    spark.createDataFrame(rdd)
+  }
+
+  def generateSparseData(spark: SparkSession, rows: Int, dim: Int, seed: Int): DataFrame = {
+    val sc = spark.sparkContext
+    val random = new Random(seed)
+    val nnz = random.nextInt(dim)
+    val rdd = sc.parallelize(1 to rows)
+      .map(i => Vectors.sparse(dim, random.shuffle(0 to dim - 1).slice(0, nnz).sorted.toArray,
+        Array.fill(nnz)(random.nextDouble())))
       .map(v => new TestRow(v))
     spark.createDataFrame(rdd)
   }
@@ -158,6 +232,7 @@ object KMeansSuite {
     "predictionCol" -> "myPrediction",
     "k" -> 3,
     "maxIter" -> 2,
-    "tol" -> 0.01
+    "tol" -> 0.01,
+    "distanceMeasure" -> DistanceMeasure.EUCLIDEAN
   )
 }

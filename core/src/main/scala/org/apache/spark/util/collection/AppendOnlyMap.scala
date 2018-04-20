@@ -140,15 +140,15 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
     var i = 1
     while (true) {
       val curKey = data(2 * pos)
-      if (k.eq(curKey) || k.equals(curKey)) {
-        val newValue = updateFunc(true, data(2 * pos + 1).asInstanceOf[V])
-        data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
-        return newValue
-      } else if (curKey.eq(null)) {
+      if (curKey.eq(null)) {
         val newValue = updateFunc(false, null.asInstanceOf[V])
         data(2 * pos) = k
         data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
         incrementSize()
+        return newValue
+      } else if (k.eq(curKey) || k.equals(curKey)) {
+        val newValue = updateFunc(true, data(2 * pos + 1).asInstanceOf[V])
+        data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
         return newValue
       } else {
         val delta = i

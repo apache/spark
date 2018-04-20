@@ -13,7 +13,7 @@ of the model on some criteria, which depends on the application and its requirem
 suite of metrics for the purpose of evaluating the performance of machine learning models.
 
 Specific machine learning algorithms fall under broader types of machine learning applications like classification,
-regression, clustering, etc. Each of these types have well established metrics for performance evaluation and those
+regression, clustering, etc. Each of these types have well-established metrics for performance evaluation and those
 metrics that are currently available in `spark.mllib` are detailed in this section.
 
 ## Classification model evaluation
@@ -549,7 +549,7 @@ variable from a number of independent variables.
     </tr>
     <tr>
       <td>Mean Absolute Error (MAE)</td>
-      <td>$MAE=\sum_{i=0}^{N-1} \left|\mathbf{y}_i - \hat{\mathbf{y}}_i\right|$</td>
+      <td>$MAE=\frac{1}{N}\sum_{i=0}^{N-1} \left|\mathbf{y}_i - \hat{\mathbf{y}}_i\right|$</td>
     </tr>
     <tr>
       <td>Coefficient of Determination $(R^2)$</td>

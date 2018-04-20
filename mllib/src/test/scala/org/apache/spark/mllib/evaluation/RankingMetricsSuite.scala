@@ -28,7 +28,7 @@ class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
       Seq(
         (Array(1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Array(1, 2, 3, 4, 5)),
         (Array(4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Array(1, 2, 3)),
-        (Array(1, 2, 3, 4, 5), Array[Int]())
+        (Array(1, 2, 3, 4, 5), Array.empty[Int])
       ), 2)
     val eps = 1.0E-5
 
@@ -55,7 +55,7 @@ class RankingMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     val predictionAndLabels = sc.parallelize(
       Seq(
         (Array(1, 6, 2), Array(1, 2, 3, 4, 5)),
-        (Array[Int](), Array(1, 2, 3))
+        (Array.empty[Int], Array(1, 2, 3))
       ), 2)
     val eps = 1.0E-5
 

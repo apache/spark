@@ -19,9 +19,9 @@
 
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 SPARK_ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-PATHS_TO_CHECK="./python/pyspark/ ./examples/src/main/python/ ./dev/sparktestsupport"
-PATHS_TO_CHECK="$PATHS_TO_CHECK ./dev/run-tests.py ./python/run-tests.py ./dev/run-tests-jenkins.py"
-PEP8_REPORT_PATH="$SPARK_ROOT_DIR/dev/pep8-report.txt"
+# Exclude auto-generated configuration file.
+PATHS_TO_CHECK="$( cd "$SPARK_ROOT_DIR" && find . -name "*.py" )"
+PYCODESTYLE_REPORT_PATH="$SPARK_ROOT_DIR/dev/pycodestyle-report.txt"
 PYLINT_REPORT_PATH="$SPARK_ROOT_DIR/dev/pylint-report.txt"
 PYLINT_INSTALL_INFO="$SPARK_ROOT_DIR/dev/pylint-info.txt"
 SPHINXBUILD=${SPHINXBUILD:=sphinx-build}
@@ -30,23 +30,22 @@ SPHINX_REPORT_PATH="$SPARK_ROOT_DIR/dev/sphinx-report.txt"
 cd "$SPARK_ROOT_DIR"
 
 # compileall: https://docs.python.org/2/library/compileall.html
-python -B -m compileall -q -l $PATHS_TO_CHECK > "$PEP8_REPORT_PATH"
+python -B -m compileall -q -l $PATHS_TO_CHECK > "$PYCODESTYLE_REPORT_PATH"
 compile_status="${PIPESTATUS[0]}"
 
-# Get pep8 at runtime so that we don't rely on it being installed on the build server.
-#+ See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
-#+ TODOs:
-#+  - Download pep8 from PyPI. It's more "official".
-PEP8_VERSION="1.7.0"
-PEP8_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pep8-$PEP8_VERSION.py"
-PEP8_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/jcrocholl/pep8/$PEP8_VERSION/pep8.py"
+# Get pycodestyle at runtime so that we don't rely on it being installed on the build server.
+# See: https://github.com/apache/spark/pull/1744#issuecomment-50982162
+# Updated to the latest official version of pep8. pep8 is formally renamed to pycodestyle.
+PYCODESTYLE_VERSION="2.3.1"
+PYCODESTYLE_SCRIPT_PATH="$SPARK_ROOT_DIR/dev/pycodestyle-$PYCODESTYLE_VERSION.py"
+PYCODESTYLE_SCRIPT_REMOTE_PATH="https://raw.githubusercontent.com/PyCQA/pycodestyle/$PYCODESTYLE_VERSION/pycodestyle.py"
 
-if [ ! -e "$PEP8_SCRIPT_PATH" ]; then
-    curl --silent -o "$PEP8_SCRIPT_PATH" "$PEP8_SCRIPT_REMOTE_PATH"    
+if [ ! -e "$PYCODESTYLE_SCRIPT_PATH" ]; then
+    curl --silent -o "$PYCODESTYLE_SCRIPT_PATH" "$PYCODESTYLE_SCRIPT_REMOTE_PATH"
     curl_status="$?"
 
     if [ "$curl_status" -ne 0 ]; then
-        echo "Failed to download pep8.py from \"$PEP8_SCRIPT_REMOTE_PATH\"."
+        echo "Failed to download pycodestyle.py from \"$PYCODESTYLE_SCRIPT_REMOTE_PATH\"."
         exit "$curl_status"
     fi
 fi
@@ -61,26 +60,26 @@ export "PYLINT_HOME=$PYTHONPATH"
 export "PATH=$PYTHONPATH:$PATH"
 
 # There is no need to write this output to a file
-#+ first, but we do so so that the check status can
-#+ be output before the report, like with the
-#+ scalastyle and RAT checks.
-python "$PEP8_SCRIPT_PATH" --ignore=E402,E731,E241,W503,E226 --config=dev/tox.ini $PATHS_TO_CHECK >> "$PEP8_REPORT_PATH"
-pep8_status="${PIPESTATUS[0]}"
+# first, but we do so so that the check status can
+# be output before the report, like with the
+# scalastyle and RAT checks.
+python "$PYCODESTYLE_SCRIPT_PATH" --config=dev/tox.ini $PATHS_TO_CHECK >> "$PYCODESTYLE_REPORT_PATH"
+pycodestyle_status="${PIPESTATUS[0]}"
 
-if [ "$compile_status" -eq 0 -a "$pep8_status" -eq 0 ]; then
+if [ "$compile_status" -eq 0 -a "$pycodestyle_status" -eq 0 ]; then
     lint_status=0
 else
     lint_status=1
 fi
 
 if [ "$lint_status" -ne 0 ]; then
-    echo "PEP8 checks failed."
-    cat "$PEP8_REPORT_PATH"
-    rm "$PEP8_REPORT_PATH"
+    echo "pycodestyle checks failed."
+    cat "$PYCODESTYLE_REPORT_PATH"
+    rm "$PYCODESTYLE_REPORT_PATH"
     exit "$lint_status"
 else
-    echo "PEP8 checks passed."
-    rm "$PEP8_REPORT_PATH"
+    echo "pycodestyle checks passed."
+    rm "$PYCODESTYLE_REPORT_PATH"
 fi
 
 # Check that the documentation builds acceptably, skip check if sphinx is not installed.

@@ -46,5 +46,5 @@ trait BlockDataManager {
   /**
    * Release locks acquired by [[putBlockData()]] and [[getBlockData()]].
    */
-  def releaseLock(blockId: BlockId): Unit
+  def releaseLock(blockId: BlockId, taskAttemptId: Option[Long]): Unit
 }

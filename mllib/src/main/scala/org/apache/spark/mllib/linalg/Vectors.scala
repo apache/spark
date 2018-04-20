@@ -34,13 +34,13 @@ import org.apache.spark.annotation.{AlphaComponent, Since}
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
  *
- * Note: Users should not implement this interface.
+ * @note Users should not implement this interface.
  */
 @SQLUserDefinedType(udt = classOf[VectorUDT])
 @Since("1.0.0")
@@ -77,7 +77,7 @@ sealed trait Vector extends Serializable {
 
   /**
    * Returns a hash code value for the vector. The hash code is based on its size and its first 128
-   * nonzero entries, using a hash algorithm similar to [[java.util.Arrays.hashCode]].
+   * nonzero entries, using a hash algorithm similar to `java.util.Arrays.hashCode`.
    */
   override def hashCode(): Int = {
     // This is a reference implementation. It calls return in foreachActive, which is slow.
@@ -132,7 +132,9 @@ sealed trait Vector extends Serializable {
 
   /**
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
-   * regardless of its value.  Note that inactive entries have value 0.
+   * regardless of its value.
+   *
+   * @note Inactive entries have value 0.
    */
   @Since("1.4.0")
   def numActives: Int
@@ -147,7 +149,21 @@ sealed trait Vector extends Serializable {
    * Converts this vector to a sparse vector with all explicit zeros removed.
    */
   @Since("1.4.0")
-  def toSparse: SparseVector
+  def toSparse: SparseVector = toSparseWithSize(numNonzeros)
+
+  /**
+   * Converts this vector to a sparse vector with all explicit zeros removed when the size is known.
+   * This method is used to avoid re-computing the number of non-zero elements when it is
+   * already known. This method should only be called after computing the number of non-zero
+   * elements via [[numNonzeros]]. e.g.
+   * {{{
+   *   val nnz = numNonzeros
+   *   val sv = toSparse(nnz)
+   * }}}
+   *
+   * If `nnz` is under-specified, a [[java.lang.ArrayIndexOutOfBoundsException]] is thrown.
+   */
+  private[linalg] def toSparseWithSize(nnz: Int): SparseVector
 
   /**
    * Converts this vector to a dense vector.
@@ -163,7 +179,7 @@ sealed trait Vector extends Serializable {
     val nnz = numNonzeros
     // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
     if (1.5 * (nnz + 1.0) < size) {
-      toSparse
+      toSparseWithSize(nnz)
     } else {
       toDense
     }
@@ -214,14 +230,14 @@ class VectorUDT extends UserDefinedType[Vector] {
   override def serialize(obj: Vector): InternalRow = {
     obj match {
       case SparseVector(size, indices, values) =>
-        val row = new GenericMutableRow(4)
+        val row = new GenericInternalRow(4)
         row.setByte(0, 0)
         row.setInt(1, size)
         row.update(2, UnsafeArrayData.fromPrimitiveArray(indices))
         row.update(3, UnsafeArrayData.fromPrimitiveArray(values))
         row
       case DenseVector(values) =>
-        val row = new GenericMutableRow(4)
+        val row = new GenericInternalRow(4)
         row.setByte(0, 1)
         row.setNullAt(1)
         row.setNullAt(2)
@@ -271,7 +287,7 @@ class VectorUDT extends UserDefinedType[Vector] {
 /**
  * Factory methods for [[org.apache.spark.mllib.linalg.Vector]].
  * We don't use the name `Vector` because Scala imports
- * [[scala.collection.immutable.Vector]] by default.
+ * `scala.collection.immutable.Vector` by default.
  */
 @Since("1.0.0")
 object Vectors {
@@ -310,8 +326,6 @@ object Vectors {
    */
   @Since("1.0.0")
   def sparse(size: Int, elements: Seq[(Int, Double)]): Vector = {
-    require(size > 0, "The size of the requested sparse vector must be greater than 0.")
-
     val (indices, values) = elements.sortBy(_._1).unzip
     var prev = -1
     indices.foreach { i =>
@@ -349,7 +363,7 @@ object Vectors {
   }
 
   /**
-   * Parses a string resulted from [[Vector.toString]] into a [[Vector]].
+   * Parses a string resulted from `Vector.toString` into a [[Vector]].
    */
   @Since("1.1.0")
   def parse(s: String): Vector = {
@@ -667,9 +681,7 @@ class DenseVector @Since("1.0.0") (
     nnz
   }
 
-  @Since("1.4.0")
-  override def toSparse: SparseVector = {
-    val nnz = numNonzeros
+  private[linalg] override def toSparseWithSize(nnz: Int): SparseVector = {
     val ii = new Array[Int](nnz)
     val vv = new Array[Double](nnz)
     var k = 0
@@ -744,6 +756,7 @@ class SparseVector @Since("1.0.0") (
     @Since("1.0.0") val indices: Array[Int],
     @Since("1.0.0") val values: Array[Double]) extends Vector {
 
+  require(size >= 0, "The size of the requested sparse vector must be no less than 0.")
   require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
     s" indices match the dimension of the values. You provided ${indices.length} indices and " +
     s" ${values.length} values.")
@@ -820,9 +833,7 @@ class SparseVector @Since("1.0.0") (
     nnz
   }
 
-  @Since("1.4.0")
-  override def toSparse: SparseVector = {
-    val nnz = numNonzeros
+  private[linalg] override def toSparseWithSize(nnz: Int): SparseVector = {
     if (nnz == numActives) {
       this
     } else {
@@ -844,6 +855,8 @@ class SparseVector @Since("1.0.0") (
   override def argmax: Int = {
     if (size == 0) {
       -1
+    } else if (numActives == 0) {
+      0
     } else {
       // Find the max active entry.
       var maxIdx = indices(0)

@@ -72,7 +72,7 @@ trait Loader[M <: Saveable] {
   /**
    * Load a model from the given path.
    *
-   * The model should have been saved by [[Saveable.save]].
+   * The model should have been saved by `Saveable.save`.
    *
    * @param sc  Spark context used for loading model files.
    * @param path  Path specifying the directory to which the model was saved.

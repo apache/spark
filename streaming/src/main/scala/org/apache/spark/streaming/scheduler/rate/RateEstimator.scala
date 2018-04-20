@@ -24,7 +24,7 @@ import org.apache.spark.streaming.Duration
  * A component that estimates the rate at which an `InputDStream` should ingest
  * records, based on updates at every batch completion.
  *
- * @see [[org.apache.spark.streaming.scheduler.RateController]]
+ * Please see `org.apache.spark.streaming.scheduler.RateController` for more details.
  */
 private[streaming] trait RateEstimator extends Serializable {
 

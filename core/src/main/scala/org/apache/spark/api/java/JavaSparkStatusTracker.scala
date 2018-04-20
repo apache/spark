@@ -31,7 +31,7 @@ import org.apache.spark.{SparkContext, SparkJobInfo, SparkStageInfo}
  * will provide information for the last `spark.ui.retainedStages` stages and
  * `spark.ui.retainedJobs` jobs.
  *
- * NOTE: this class's constructor should be considered private and may be subject to change.
+ * @note This class's constructor should be considered private and may be subject to change.
  */
 class JavaSparkStatusTracker private[spark] (sc: SparkContext) {
 

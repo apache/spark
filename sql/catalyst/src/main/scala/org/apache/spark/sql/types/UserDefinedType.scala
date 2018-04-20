@@ -22,8 +22,6 @@ import java.util.Objects
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.DeveloperApi
-
 /**
  * The data type for User Defined Types (UDTs).
  *
@@ -80,8 +78,12 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
    */
   override private[spark] def asNullable: UserDefinedType[UserType] = this
 
-  override private[sql] def acceptsType(dataType: DataType) =
-    this.getClass == dataType.getClass
+  override private[sql] def acceptsType(dataType: DataType) = dataType match {
+    case other: UserDefinedType[_] =>
+      this.getClass == other.getClass ||
+        this.userClass.isAssignableFrom(other.userClass)
+    case _ => false
+  }
 
   override def sql: String = sqlType.sql
 
@@ -95,13 +97,21 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
   override def catalogString: String = sqlType.simpleString
 }
 
+private[spark] object UserDefinedType {
+  /**
+   * Get the sqlType of a (potential) [[UserDefinedType]].
+   */
+  def sqlType(dt: DataType): DataType = dt match {
+    case udt: UserDefinedType[_] => udt.sqlType
+    case _ => dt
+  }
+}
+
 /**
- * :: DeveloperApi ::
  * The user defined type in Python.
  *
  * Note: This can only be accessed via Python UDF, or accessed as serialized object.
  */
-@DeveloperApi
 private[sql] class PythonUserDefinedType(
     val sqlType: DataType,
     override val pyUDT: String,

@@ -19,15 +19,12 @@ package org.apache.spark.util
 
 import java.{lang => jl}
 import java.io.ObjectInputStream
-import java.util.ArrayList
+import java.util.{ArrayList, Collections}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
-
 import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.scheduler.AccumulableInfo
-
 
 private[spark] case class AccumulatorMetadata(
     id: Long,
@@ -38,6 +35,9 @@ private[spark] case class AccumulatorMetadata(
 /**
  * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output of
  * type `OUT`.
+ *
+ * `OUT` should be a type that can be read atomically (e.g., Int, Long), or thread-safely
+ * (e.g., synchronized collections) because it will be read from other threads.
  */
 abstract class AccumulatorV2[IN, OUT] extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
@@ -56,15 +56,16 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   }
 
   /**
-   * Returns true if this accumulator has been registered.  Note that all accumulators must be
-   * registered before use, or it will throw exception.
+   * Returns true if this accumulator has been registered.
+   *
+   * @note All accumulators must be registered before use, or it will throw exception.
    */
   final def isRegistered: Boolean =
     metadata != null && AccumulatorContext.get(metadata.id).isDefined
 
   private def assertMetadataNotNull(): Unit = {
     if (metadata == null) {
-      throw new IllegalAccessError("The metadata of this accumulator has not been assigned yet.")
+      throw new IllegalStateException("The metadata of this accumulator has not been assigned yet.")
     }
   }
 
@@ -81,7 +82,12 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    */
   final def name: Option[String] = {
     assertMetadataNotNull()
-    metadata.name
+
+    if (atDriverSide) {
+      metadata.name.orElse(AccumulatorContext.get(id).flatMap(_.metadata.name))
+    } else {
+      metadata.name
+    }
   }
 
   /**
@@ -157,7 +163,17 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
       }
       val copyAcc = copyAndReset()
       assert(copyAcc.isZero, "copyAndReset must return a zero value copy")
-      copyAcc.metadata = metadata
+      val isInternalAcc = name.isDefined && name.get.startsWith(InternalAccumulator.METRICS_PREFIX)
+      if (isInternalAcc) {
+        // Do not serialize the name of internal accumulator and send it to executor.
+        copyAcc.metadata = metadata.copy(name = None)
+      } else {
+        // For non-internal accumulators, we still need to send the name because users may need to
+        // access the accumulator name at executor side, or they may keep the accumulators sent from
+        // executors and access the name when the registered accumulator is already garbage
+        // collected(e.g. SQLMetrics).
+        copyAcc.metadata = metadata
+      }
       copyAcc
     } else {
       this
@@ -220,7 +236,7 @@ private[spark] object AccumulatorContext {
    * Registers an [[AccumulatorV2]] created on the driver such that it can be used on the executors.
    *
    * All accumulators registered here can later be used as a container for accumulating partial
-   * values across multiple tasks. This is what [[org.apache.spark.scheduler.DAGScheduler]] does.
+   * values across multiple tasks. This is what `org.apache.spark.scheduler.DAGScheduler` does.
    * Note: if an accumulator is registered here, it should also be registered with the active
    * context cleaner for cleanup so as to avoid memory leaks.
    *
@@ -246,7 +262,7 @@ private[spark] object AccumulatorContext {
       // Since we are storing weak references, we must check whether the underlying data is valid.
       val acc = ref.get
       if (acc eq null) {
-        throw new IllegalAccessError(s"Attempted to access garbage collected accumulator $id")
+        throw new IllegalStateException(s"Attempted to access garbage collected accumulator $id")
       }
       acc
     }
@@ -259,23 +275,13 @@ private[spark] object AccumulatorContext {
     originals.clear()
   }
 
-  /**
-   * Looks for a registered accumulator by accumulator name.
-   */
-  private[spark] def lookForAccumulatorByName(name: String): Option[AccumulatorV2[_, _]] = {
-    originals.values().asScala.find { ref =>
-      val acc = ref.get
-      acc != null && acc.name.isDefined && acc.name.get == name
-    }.map(_.get)
-  }
-
   // Identifier for distinguishing SQL metrics from other accumulators
   private[spark] val SQL_ACCUM_IDENTIFIER = "sql"
 }
 
 
 /**
- * An [[AccumulatorV2 accumulator]] for computing sum, count, and averages for 64-bit integers.
+ * An [[AccumulatorV2 accumulator]] for computing sum, count, and average of 64-bit integers.
  *
  * @since 2.0.0
  */
@@ -284,7 +290,8 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
   private var _count = 0L
 
   /**
-   * Adds v to the accumulator, i.e. increment sum by v and count by 1.
+   * Returns false if this accumulator has had any values added to it or the sum is non-zero.
+   *
    * @since 2.0.0
    */
   override def isZero: Boolean = _sum == 0L && _count == 0
@@ -362,6 +369,9 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   private var _sum = 0.0
   private var _count = 0L
 
+  /**
+   * Returns false if this accumulator has had any values added to it or the sum is non-zero.
+   */
   override def isZero: Boolean = _sum == 0.0 && _count == 0
 
   override def copy(): DoubleAccumulator = {
@@ -433,15 +443,20 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
  * @since 2.0.0
  */
 class CollectionAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
-  private val _list: java.util.List[T] = new ArrayList[T]
+  private val _list: java.util.List[T] = Collections.synchronizedList(new ArrayList[T]())
 
+  /**
+   * Returns false if this accumulator instance has any values in it.
+   */
   override def isZero: Boolean = _list.isEmpty
 
   override def copyAndReset(): CollectionAccumulator[T] = new CollectionAccumulator
 
   override def copy(): CollectionAccumulator[T] = {
     val newAcc = new CollectionAccumulator[T]
-    newAcc._list.addAll(_list)
+    _list.synchronized {
+      newAcc._list.addAll(_list)
+    }
     newAcc
   }
 

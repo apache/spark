@@ -29,12 +29,13 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 
 class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  test("extractLabeledPoints") {
-    def getTestData(labels: Seq[Double]): DataFrame = {
-      val data = labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }
-      spark.createDataFrame(data)
-    }
+  import testImplicits._
 
+  private def getTestData(labels: Seq[Double]): DataFrame = {
+    labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }.toDF()
+  }
+
+  test("extractLabeledPoints") {
     val c = new MockClassifier
     // Valid dataset
     val df0 = getTestData(Seq(0.0, 2.0, 1.0, 5.0))
@@ -70,11 +71,6 @@ class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("getNumClasses") {
-    def getTestData(labels: Seq[Double]): DataFrame = {
-      val data = labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }
-      spark.createDataFrame(data)
-    }
-
     val c = new MockClassifier
     // Valid dataset
     val df0 = getTestData(Seq(0.0, 2.0, 1.0, 5.0))
@@ -93,6 +89,13 @@ class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
         c.getNumClasses(df2)
       }
       assert(e.getMessage.contains("requires integers in range"))
+    }
+    val df3 = getTestData(Seq.empty[Double])
+    withClue("getNumClasses should fail if dataset is empty") {
+      val e: SparkException = intercept[SparkException] {
+        c.getNumClasses(df3)
+      }
+      assert(e.getMessage == "ML algorithm was given empty dataset.")
     }
   }
 }

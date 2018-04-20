@@ -26,16 +26,14 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Window;
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
 import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.hive.test.TestHive$;
-import org.apache.spark.sql.hive.aggregate.MyDoubleSum;
+import test.org.apache.spark.sql.MyDoubleSum;
 
 public class JavaDataFrameSuite {
-  private transient JavaSparkContext sc;
   private transient SQLContext hc;
 
   Dataset<Row> df;
@@ -50,13 +48,11 @@ public class JavaDataFrameSuite {
   @Before
   public void setUp() throws IOException {
     hc = TestHive$.MODULE$;
-    sc = new JavaSparkContext(hc.sparkContext());
-
     List<String> jsonObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"key\":" + i + ", \"value\":\"str" + i + "\"}");
     }
-    df = hc.read().json(sc.parallelize(jsonObjects));
+    df = hc.read().json(hc.createDataset(jsonObjects, Encoders.STRING()));
     df.createOrReplaceTempView("window_table");
   }
 

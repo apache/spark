@@ -164,6 +164,7 @@ object MasterFailureTest extends Logging {
     val mergedOutput = runStreams(ssc, lastExpectedOutput, maxTimeToRun)
 
     fileGeneratingThread.join()
+    ssc.stop()
     fs.delete(checkpointDir, true)
     fs.delete(testDir, true)
     logInfo("Finished test after " + killCount + " failures")

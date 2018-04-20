@@ -20,19 +20,19 @@ package org.apache.spark.examples.streaming;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
 import scala.Tuple2;
 
-import kafka.serializer.StringDecoder;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.function.*;
 import org.apache.spark.streaming.api.java.*;
-import org.apache.spark.streaming.kafka.KafkaUtils;
+import org.apache.spark.streaming.kafka010.ConsumerStrategies;
+import org.apache.spark.streaming.kafka010.KafkaUtils;
+import org.apache.spark.streaming.kafka010.LocationStrategies;
 import org.apache.spark.streaming.Durations;
 
 /**
@@ -67,46 +67,20 @@ public final class JavaDirectKafkaWordCount {
     JavaStreamingContext jssc = new JavaStreamingContext(sparkConf, Durations.seconds(2));
 
     Set<String> topicsSet = new HashSet<>(Arrays.asList(topics.split(",")));
-    Map<String, String> kafkaParams = new HashMap<>();
+    Map<String, Object> kafkaParams = new HashMap<>();
     kafkaParams.put("metadata.broker.list", brokers);
 
     // Create direct kafka stream with brokers and topics
-    JavaPairInputDStream<String, String> messages = KafkaUtils.createDirectStream(
+    JavaInputDStream<ConsumerRecord<String, String>> messages = KafkaUtils.createDirectStream(
         jssc,
-        String.class,
-        String.class,
-        StringDecoder.class,
-        StringDecoder.class,
-        kafkaParams,
-        topicsSet
-    );
+        LocationStrategies.PreferConsistent(),
+        ConsumerStrategies.Subscribe(topicsSet, kafkaParams));
 
     // Get the lines, split them into words, count the words and print
-    JavaDStream<String> lines = messages.map(new Function<Tuple2<String, String>, String>() {
-      @Override
-      public String call(Tuple2<String, String> tuple2) {
-        return tuple2._2();
-      }
-    });
-    JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
-      @Override
-      public Iterator<String> call(String x) {
-        return Arrays.asList(SPACE.split(x)).iterator();
-      }
-    });
-    JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
-      new PairFunction<String, String, Integer>() {
-        @Override
-        public Tuple2<String, Integer> call(String s) {
-          return new Tuple2<>(s, 1);
-        }
-      }).reduceByKey(
-        new Function2<Integer, Integer, Integer>() {
-        @Override
-        public Integer call(Integer i1, Integer i2) {
-          return i1 + i2;
-        }
-      });
+    JavaDStream<String> lines = messages.map(ConsumerRecord::value);
+    JavaDStream<String> words = lines.flatMap(x -> Arrays.asList(SPACE.split(x)).iterator());
+    JavaPairDStream<String, Integer> wordCounts = words.mapToPair(s -> new Tuple2<>(s, 1))
+        .reduceByKey((i1, i2) -> i1 + i2);
     wordCounts.print();
 
     // Start the computation

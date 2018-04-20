@@ -51,17 +51,18 @@ object LocalFileLR {
 
     showWarning()
 
-    val lines = scala.io.Source.fromFile(args(0)).getLines().toArray
-    val points = lines.map(parsePoint _)
+    val fileSrc = scala.io.Source.fromFile(args(0))
+    val lines = fileSrc.getLines().toArray
+    val points = lines.map(parsePoint)
     val ITERATIONS = args(1).toInt
 
     // Initialize w to a random value
-    var w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
-    println("Initial w: " + w)
+    val w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
+    println(s"Initial w: $w")
 
     for (i <- 1 to ITERATIONS) {
-      println("On iteration " + i)
-      var gradient = DenseVector.zeros[Double](D)
+      println(s"On iteration $i")
+      val gradient = DenseVector.zeros[Double](D)
       for (p <- points) {
         val scale = (1 / (1 + math.exp(-p.y * (w.dot(p.x)))) - 1) * p.y
         gradient += p.x * scale
@@ -69,7 +70,8 @@ object LocalFileLR {
       w -= gradient
     }
 
-    println("Final w: " + w)
+    fileSrc.close()
+    println(s"Final w: $w")
   }
 }
 // scalastyle:on println

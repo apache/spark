@@ -21,7 +21,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{MapOutputStatistics, SparkConf, SparkFunSuite}
 import org.apache.spark.sql._
-import org.apache.spark.sql.execution.exchange.{ExchangeCoordinator, ShuffleExchange}
+import org.apache.spark.sql.execution.exchange.{ExchangeCoordinator, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 
@@ -85,7 +85,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     {
       // There are a few large pre-shuffle partitions.
       val bytesByPartitionId = Array[Long](110, 10, 100, 110, 0)
-      val expectedPartitionStartIndices = Array[Int](0, 1, 3, 4)
+      val expectedPartitionStartIndices = Array[Int](0, 1, 2, 3, 4)
       checkEstimation(coordinator, Array(bytesByPartitionId), expectedPartitionStartIndices)
     }
 
@@ -146,7 +146,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       // 2 post-shuffle partition are needed.
       val bytesByPartitionId1 = Array[Long](0, 10, 0, 20, 0)
       val bytesByPartitionId2 = Array[Long](30, 0, 70, 0, 30)
-      val expectedPartitionStartIndices = Array[Int](0, 3)
+      val expectedPartitionStartIndices = Array[Int](0, 2, 4)
       checkEstimation(
         coordinator,
         Array(bytesByPartitionId1, bytesByPartitionId2),
@@ -154,10 +154,10 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
 
     {
-      // 2 post-shuffle partition are needed.
+      // 4 post-shuffle partition are needed.
       val bytesByPartitionId1 = Array[Long](0, 99, 0, 20, 0)
       val bytesByPartitionId2 = Array[Long](30, 0, 70, 0, 30)
-      val expectedPartitionStartIndices = Array[Int](0, 2)
+      val expectedPartitionStartIndices = Array[Int](0, 1, 2, 4)
       checkEstimation(
         coordinator,
         Array(bytesByPartitionId1, bytesByPartitionId2),
@@ -168,7 +168,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       // 2 post-shuffle partition are needed.
       val bytesByPartitionId1 = Array[Long](0, 100, 0, 30, 0)
       val bytesByPartitionId2 = Array[Long](30, 0, 70, 0, 30)
-      val expectedPartitionStartIndices = Array[Int](0, 2, 4)
+      val expectedPartitionStartIndices = Array[Int](0, 1, 2, 4)
       checkEstimation(
         coordinator,
         Array(bytesByPartitionId1, bytesByPartitionId2),
@@ -179,7 +179,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       // There are a few large pre-shuffle partitions.
       val bytesByPartitionId1 = Array[Long](0, 100, 40, 30, 0)
       val bytesByPartitionId2 = Array[Long](30, 0, 60, 0, 110)
-      val expectedPartitionStartIndices = Array[Int](0, 2, 3)
+      val expectedPartitionStartIndices = Array[Int](0, 1, 2, 3, 4)
       checkEstimation(
         coordinator,
         Array(bytesByPartitionId1, bytesByPartitionId2),
@@ -228,7 +228,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       // The number of post-shuffle partitions is determined by the coordinator.
       val bytesByPartitionId1 = Array[Long](10, 50, 20, 80, 20)
       val bytesByPartitionId2 = Array[Long](40, 10, 0, 10, 30)
-      val expectedPartitionStartIndices = Array[Int](0, 2, 4)
+      val expectedPartitionStartIndices = Array[Int](0, 1, 3, 4)
       checkEstimation(
         coordinator,
         Array(bytesByPartitionId1, bytesByPartitionId2),
@@ -272,15 +272,15 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         sparkConf.set(SQLConf.SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS.key, "-1")
     }
 
-    val spark = SparkSession.builder
+    val spark = SparkSession.builder()
       .config(sparkConf)
       .getOrCreate()
     try f(spark) finally spark.stop()
   }
 
-  Seq(Some(3), None).foreach { minNumPostShufflePartitions =>
+  Seq(Some(5), None).foreach { minNumPostShufflePartitions =>
     val testNameNote = minNumPostShufflePartitions match {
-      case Some(numPartitions) => "(minNumPostShufflePartitions: 3)"
+      case Some(numPartitions) => "(minNumPostShufflePartitions: " + numPartitions + ")"
       case None => ""
     }
 
@@ -290,7 +290,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
           spark
             .range(0, 1000, 1, numInputPartitions)
             .selectExpr("id % 20 as key", "id as value")
-        val agg = df.groupBy("key").count
+        val agg = df.groupBy("key").count()
 
         // Check the answer first.
         checkAnswer(
@@ -300,23 +300,23 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
         val exchanges = agg.queryExecution.executedPlan.collect {
-          case e: ShuffleExchange => e
+          case e: ShuffleExchangeExec => e
         }
         assert(exchanges.length === 1)
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
             exchanges.foreach {
-              case e: ShuffleExchange =>
+              case e: ShuffleExchangeExec =>
                 assert(e.coordinator.isDefined)
-                assert(e.outputPartitioning.numPartitions === 3)
+                assert(e.outputPartitioning.numPartitions === 5)
               case o =>
             }
 
           case None =>
             exchanges.foreach {
-              case e: ShuffleExchange =>
+              case e: ShuffleExchangeExec =>
                 assert(e.coordinator.isDefined)
-                assert(e.outputPartitioning.numPartitions === 2)
+                assert(e.outputPartitioning.numPartitions === 3)
               case o =>
             }
         }
@@ -351,21 +351,21 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
         val exchanges = join.queryExecution.executedPlan.collect {
-          case e: ShuffleExchange => e
+          case e: ShuffleExchangeExec => e
         }
         assert(exchanges.length === 2)
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
             exchanges.foreach {
-              case e: ShuffleExchange =>
+              case e: ShuffleExchangeExec =>
                 assert(e.coordinator.isDefined)
-                assert(e.outputPartitioning.numPartitions === 3)
+                assert(e.outputPartitioning.numPartitions === 5)
               case o =>
             }
 
           case None =>
             exchanges.foreach {
-              case e: ShuffleExchange =>
+              case e: ShuffleExchangeExec =>
                 assert(e.coordinator.isDefined)
                 assert(e.outputPartitioning.numPartitions === 2)
               case o =>
@@ -377,20 +377,20 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
 
     test(s"determining the number of reducers: complex query 1$testNameNote") {
-      val test = { spark: SparkSession =>
+      val test: (SparkSession) => Unit = { spark: SparkSession =>
         val df1 =
           spark
             .range(0, 1000, 1, numInputPartitions)
             .selectExpr("id % 500 as key1", "id as value1")
             .groupBy("key1")
-            .count
+            .count()
             .toDF("key1", "cnt1")
         val df2 =
           spark
             .range(0, 1000, 1, numInputPartitions)
             .selectExpr("id % 500 as key2", "id as value2")
             .groupBy("key2")
-            .count
+            .count()
             .toDF("key2", "cnt2")
 
         val join = df1.join(df2, col("key1") === col("key2")).select(col("key1"), col("cnt2"))
@@ -407,21 +407,21 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
         val exchanges = join.queryExecution.executedPlan.collect {
-          case e: ShuffleExchange => e
+          case e: ShuffleExchangeExec => e
         }
         assert(exchanges.length === 4)
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
             exchanges.foreach {
-              case e: ShuffleExchange =>
+              case e: ShuffleExchangeExec =>
                 assert(e.coordinator.isDefined)
-                assert(e.outputPartitioning.numPartitions === 3)
+                assert(e.outputPartitioning.numPartitions === 5)
               case o =>
             }
 
           case None =>
             assert(exchanges.forall(_.coordinator.isDefined))
-            assert(exchanges.map(_.outputPartitioning.numPartitions).toSeq.toSet === Set(1, 2))
+            assert(exchanges.map(_.outputPartitioning.numPartitions).toSet === Set(2, 3))
         }
       }
 
@@ -429,13 +429,13 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
 
     test(s"determining the number of reducers: complex query 2$testNameNote") {
-      val test = { spark: SparkSession =>
+      val test: (SparkSession) => Unit = { spark: SparkSession =>
         val df1 =
           spark
             .range(0, 1000, 1, numInputPartitions)
             .selectExpr("id % 500 as key1", "id as value1")
             .groupBy("key1")
-            .count
+            .count()
             .toDF("key1", "cnt1")
         val df2 =
           spark
@@ -459,21 +459,21 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
         val exchanges = join.queryExecution.executedPlan.collect {
-          case e: ShuffleExchange => e
+          case e: ShuffleExchangeExec => e
         }
         assert(exchanges.length === 3)
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
             exchanges.foreach {
-              case e: ShuffleExchange =>
+              case e: ShuffleExchangeExec =>
                 assert(e.coordinator.isDefined)
-                assert(e.outputPartitioning.numPartitions === 3)
+                assert(e.outputPartitioning.numPartitions === 5)
               case o =>
             }
 
           case None =>
             assert(exchanges.forall(_.coordinator.isDefined))
-            assert(exchanges.map(_.outputPartitioning.numPartitions).toSeq.toSet === Set(2, 3))
+            assert(exchanges.map(_.outputPartitioning.numPartitions).toSet === Set(5, 3))
         }
       }
 

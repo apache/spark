@@ -110,9 +110,9 @@ class TestingUtilsSuite extends SparkMLFunSuite {
     assert(!(Vectors.dense(Array(3.1, 3.5)) !~= Vectors.dense(Array(3.130, 3.534)) relTol 0.01))
     assert(!(Vectors.dense(Array(3.1, 3.5)) ~= Vectors.dense(Array(3.135, 3.534)) relTol 0.01))
     assert(Vectors.dense(Array(3.1)) !~= Vectors.dense(Array(3.130, 3.534)) relTol 0.01)
-    assert(Vectors.dense(Array[Double]()) !~= Vectors.dense(Array(3.130, 3.534)) relTol 0.01)
+    assert(Vectors.dense(Array.empty[Double]) !~= Vectors.dense(Array(3.130, 3.534)) relTol 0.01)
     assert(Vectors.dense(Array(3.1)) !~== Vectors.dense(Array(3.130, 3.534)) relTol 0.01)
-    assert(Vectors.dense(Array[Double]()) !~== Vectors.dense(Array(3.130, 3.534)) relTol 0.01)
+    assert(Vectors.dense(Array.empty[Double]) !~== Vectors.dense(Array(3.130, 3.534)) relTol 0.01)
 
     // Should throw exception with message when test fails.
     intercept[TestFailedException](
@@ -125,7 +125,7 @@ class TestingUtilsSuite extends SparkMLFunSuite {
       Vectors.dense(Array(3.1)) ~== Vectors.dense(Array(3.535, 3.534)) relTol 0.01)
 
     intercept[TestFailedException](
-      Vectors.dense(Array[Double]()) ~== Vectors.dense(Array(3.135)) relTol 0.01)
+      Vectors.dense(Array.empty[Double]) ~== Vectors.dense(Array(3.135)) relTol 0.01)
 
     // Comparing against zero should fail the test and throw exception with message
     // saying that the relative error is meaningless in this situation.
@@ -145,7 +145,7 @@ class TestingUtilsSuite extends SparkMLFunSuite {
     assert(Vectors.dense(Array(3.1)) !~==
       Vectors.sparse(2, Array(0, 1), Array(3.130, 3.534)) relTol 0.01)
 
-    assert(Vectors.dense(Array[Double]()) !~==
+    assert(Vectors.dense(Array.empty[Double]) !~==
       Vectors.sparse(2, Array(0, 1), Array(3.130, 3.534)) relTol 0.01)
   }
 
@@ -176,14 +176,14 @@ class TestingUtilsSuite extends SparkMLFunSuite {
     assert(!(Vectors.dense(Array(3.1)) ~=
       Vectors.dense(Array(3.1 + 1E-6, 3.5 + 2E-7)) absTol 1E-5))
 
-    assert(Vectors.dense(Array[Double]()) !~=
+    assert(Vectors.dense(Array.empty[Double]) !~=
       Vectors.dense(Array(3.1 + 1E-6, 3.5 + 2E-7)) absTol 1E-5)
 
-    assert(!(Vectors.dense(Array[Double]()) ~=
+    assert(!(Vectors.dense(Array.empty[Double]) ~=
       Vectors.dense(Array(3.1 + 1E-6, 3.5 + 2E-7)) absTol 1E-5))
 
-    assert(Vectors.dense(Array[Double]()) ~=
-      Vectors.dense(Array[Double]()) absTol 1E-5)
+    assert(Vectors.dense(Array.empty[Double]) ~=
+      Vectors.dense(Array.empty[Double]) absTol 1E-5)
 
     // Should throw exception with message when test fails.
     intercept[TestFailedException](Vectors.dense(Array(3.1, 3.5, 0.0)) !~==
@@ -195,7 +195,7 @@ class TestingUtilsSuite extends SparkMLFunSuite {
     intercept[TestFailedException](Vectors.dense(Array(3.1)) ~==
       Vectors.dense(Array(3.1 + 1E-5, 3.5 + 2E-7)) absTol 1E-6)
 
-    intercept[TestFailedException](Vectors.dense(Array[Double]()) ~==
+    intercept[TestFailedException](Vectors.dense(Array.empty[Double]) ~==
       Vectors.dense(Array(3.1 + 1E-5, 3.5 + 2E-7)) absTol 1E-6)
 
     // Comparisons of two sparse vectors
@@ -214,7 +214,7 @@ class TestingUtilsSuite extends SparkMLFunSuite {
     assert(Vectors.sparse(3, Array(0, 2), Array(3.1 + 1E-6, 2.4)) !~==
       Vectors.sparse(1, Array(0), Array(3.1)) absTol 1E-3)
 
-    assert(Vectors.sparse(0, Array[Int](), Array[Double]()) !~==
+    assert(Vectors.sparse(0, Array.empty[Int], Array.empty[Double]) !~==
       Vectors.sparse(1, Array(0), Array(3.1)) absTol 1E-3)
 
     // Comparisons of a dense vector and a sparse vector
@@ -230,14 +230,14 @@ class TestingUtilsSuite extends SparkMLFunSuite {
     assert(Vectors.sparse(3, Array(0, 2), Array(3.1, 2.4)) !~==
       Vectors.dense(Array(3.1)) absTol 1E-6)
 
-    assert(Vectors.dense(Array[Double]()) !~==
+    assert(Vectors.dense(Array.empty[Double]) !~==
       Vectors.sparse(3, Array(0, 2), Array(0, 2.4)) absTol 1E-6)
 
     assert(Vectors.sparse(1, Array(0), Array(3.1)) !~==
       Vectors.dense(Array(3.1, 3.2)) absTol 1E-6)
 
     assert(Vectors.dense(Array(3.1)) !~==
-      Vectors.sparse(0, Array[Int](), Array[Double]()) absTol 1E-6)
+      Vectors.sparse(0, Array.empty[Int], Array.empty[Double]) absTol 1E-6)
   }
 
   test("Comparing Matrices using absolute error.") {

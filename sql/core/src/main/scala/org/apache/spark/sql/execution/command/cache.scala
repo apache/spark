@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -30,9 +30,7 @@ case class CacheTableCommand(
   require(plan.isEmpty || tableIdent.database.isEmpty,
     "Database name is not allowed in CACHE TABLE AS SELECT")
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = {
-    plan.toSeq
-  }
+  override protected def innerChildren: Seq[QueryPlan[_]] = plan.toSeq
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     plan.foreach { logicalPlan =>
@@ -47,30 +45,32 @@ case class CacheTableCommand(
 
     Seq.empty[Row]
   }
-
-  override def output: Seq[Attribute] = Seq.empty
 }
 
 
-case class UncacheTableCommand(tableIdent: TableIdentifier) extends RunnableCommand {
+case class UncacheTableCommand(
+    tableIdent: TableIdentifier,
+    ifExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.catalog.uncacheTable(tableIdent.quotedString)
+    val tableId = tableIdent.quotedString
+    if (!ifExists || sparkSession.catalog.tableExists(tableId)) {
+      sparkSession.catalog.uncacheTable(tableId)
+    }
     Seq.empty[Row]
   }
-
-  override def output: Seq[Attribute] = Seq.empty
 }
 
 /**
  * Clear all cached data from the in-memory cache.
  */
-case object ClearCacheCommand extends RunnableCommand {
+case class ClearCacheCommand() extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.catalog.clearCache()
     Seq.empty[Row]
   }
 
-  override def output: Seq[Attribute] = Seq.empty
+  /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
+  override def makeCopy(newArgs: Array[AnyRef]): ClearCacheCommand = ClearCacheCommand()
 }

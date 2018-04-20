@@ -17,58 +17,25 @@
 
 package org.apache.spark.sql.test
 
-import org.apache.spark.SparkConf
-import org.apache.spark.sql.{SparkSession, SQLContext}
-
-
-/**
- * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
- */
-trait SharedSQLContext extends SQLTestUtils {
-
-  protected val sparkConf = new SparkConf()
+trait SharedSQLContext extends SQLTestUtils with SharedSparkSession {
 
   /**
-   * The [[TestSparkSession]] to use for all tests in this suite.
+   * Suites extending [[SharedSQLContext]] are sharing resources (eg. SparkSession) in their tests.
+   * That trait initializes the spark session in its [[beforeAll()]] implementation before the
+   * automatic thread snapshot is performed, so the audit code could fail to report threads leaked
+   * by that shared session.
    *
-   * By default, the underlying [[org.apache.spark.SparkContext]] will be run in local
-   * mode with the default test configurations.
+   * The behavior is overridden here to take the snapshot before the spark session is initialized.
    */
-  private var _spark: TestSparkSession = null
+  override protected val enableAutoThreadAudit = false
 
-  /**
-   * The [[TestSparkSession]] to use for all tests in this suite.
-   */
-  protected implicit def spark: SparkSession = _spark
-
-  /**
-   * The [[TestSQLContext]] to use for all tests in this suite.
-   */
-  protected implicit def sqlContext: SQLContext = _spark.sqlContext
-
-  /**
-   * Initialize the [[TestSparkSession]].
-   */
   protected override def beforeAll(): Unit = {
-    SparkSession.sqlListener.set(null)
-    if (_spark == null) {
-      _spark = new TestSparkSession(sparkConf)
-    }
-    // Ensure we have initialized the context before calling parent code
+    doThreadPreAudit()
     super.beforeAll()
   }
 
-  /**
-   * Stop the underlying [[org.apache.spark.SparkContext]], if any.
-   */
   protected override def afterAll(): Unit = {
-    try {
-      if (_spark != null) {
-        _spark.stop()
-        _spark = null
-      }
-    } finally {
-      super.afterAll()
-    }
+    super.afterAll()
+    doThreadPostAudit()
   }
 }

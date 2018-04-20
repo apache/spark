@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.util.{Map => JMap}
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
@@ -24,6 +25,7 @@ import scala.collection.mutable.LinkedHashSet
 
 import org.apache.avro.{Schema, SchemaNormalization}
 
+import org.apache.spark.deploy.history.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.serializer.KryoSerializer
@@ -42,10 +44,10 @@ import org.apache.spark.util.Utils
  * All setter methods in this class support chaining. For example, you can write
  * `new SparkConf().setMaster("local").setAppName("My app")`.
  *
- * Note that once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
- * by the user. Spark does not support modifying the configuration at runtime.
- *
  * @param loadDefaults whether to also load values from Java system properties
+ *
+ * @note Once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
+ * by the user. Spark does not support modifying the configuration at runtime.
  */
 class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Serializable {
 
@@ -262,7 +264,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a time parameter as seconds; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then seconds are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException If the time parameter is not set
    */
   def getTimeAsSeconds(key: String): Long = {
     Utils.timeStringAsSeconds(get(key))
@@ -279,7 +281,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a time parameter as milliseconds; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then milliseconds are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException If the time parameter is not set
    */
   def getTimeAsMs(key: String): Long = {
     Utils.timeStringAsMs(get(key))
@@ -296,7 +298,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as bytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then bytes are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException If the size parameter is not set
    */
   def getSizeAsBytes(key: String): Long = {
     Utils.byteStringAsBytes(get(key))
@@ -320,7 +322,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Kibibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Kibibytes are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException If the size parameter is not set
    */
   def getSizeAsKb(key: String): Long = {
     Utils.byteStringAsKb(get(key))
@@ -337,7 +339,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Mebibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Mebibytes are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException If the size parameter is not set
    */
   def getSizeAsMb(key: String): Long = {
     Utils.byteStringAsMb(get(key))
@@ -354,7 +356,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
   /**
    * Get a size parameter as Gibibytes; throws a NoSuchElementException if it's not set. If no
    * suffix is provided then Gibibytes are assumed.
-   * @throws NoSuchElementException
+   * @throws java.util.NoSuchElementException If the size parameter is not set
    */
   def getSizeAsGb(key: String): Long = {
     Utils.byteStringAsGb(get(key))
@@ -370,7 +372,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   /** Get a parameter as an Option */
   def getOption(key: String): Option[String] = {
-    Option(settings.get(key)).orElse(getDeprecatedConfig(key, this))
+    Option(settings.get(key)).orElse(getDeprecatedConfig(key, settings))
+  }
+
+  /** Get an optional value, applying variable substitution. */
+  private[spark] def getWithSubstitution(key: String): Option[String] = {
+    getOption(key).map(reader.substitute(_))
   }
 
   /** Get all parameters as a list of pairs */
@@ -378,7 +385,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     settings.entrySet().asScala.map(x => (x.getKey, x.getValue)).toArray
   }
 
-  /** Get all parameters that start with `prefix` */
+  /**
+   * Get all parameters that start with `prefix`
+   */
   def getAllWithPrefix(prefix: String): Array[(String, String)] = {
     getAll.filter { case (k, v) => k.startsWith(prefix) }
       .map { case (k, v) => (k.substring(prefix.length), v) }
@@ -421,6 +430,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
     settings.containsKey(key) ||
       configsWithAlternatives.get(key).toSeq.flatten.exists { alt => contains(alt.key) }
   }
+
+  private[spark] def contains(entry: ConfigEntry[_]): Boolean = contains(entry.key)
 
   /** Copy this object */
   override def clone: SparkConf = {
@@ -514,71 +525,6 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    // Check for legacy configs
-    sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
-      val warning =
-        s"""
-          |SPARK_JAVA_OPTS was detected (set to '$value').
-          |This is deprecated in Spark 1.0+.
-          |
-          |Please instead use:
-          | - ./spark-submit with conf/spark-defaults.conf to set defaults for an application
-          | - ./spark-submit with --driver-java-options to set -X options for a driver
-          | - spark.executor.extraJavaOptions to set -X options for executors
-          | - SPARK_DAEMON_JAVA_OPTS to set java options for standalone daemons (master or worker)
-        """.stripMargin
-      logWarning(warning)
-
-      for (key <- Seq(executorOptsKey, driverOptsKey)) {
-        if (getOption(key).isDefined) {
-          throw new SparkException(s"Found both $key and SPARK_JAVA_OPTS. Use only the former.")
-        } else {
-          logWarning(s"Setting '$key' to '$value' as a work-around.")
-          set(key, value)
-        }
-      }
-    }
-
-    sys.env.get("SPARK_CLASSPATH").foreach { value =>
-      val warning =
-        s"""
-          |SPARK_CLASSPATH was detected (set to '$value').
-          |This is deprecated in Spark 1.0+.
-          |
-          |Please instead use:
-          | - ./spark-submit with --driver-class-path to augment the driver classpath
-          | - spark.executor.extraClassPath to augment the executor classpath
-        """.stripMargin
-      logWarning(warning)
-
-      for (key <- Seq(executorClasspathKey, driverClassPathKey)) {
-        if (getOption(key).isDefined) {
-          throw new SparkException(s"Found both $key and SPARK_CLASSPATH. Use only the former.")
-        } else {
-          logWarning(s"Setting '$key' to '$value' as a work-around.")
-          set(key, value)
-        }
-      }
-    }
-
-    if (!contains(sparkExecutorInstances)) {
-      sys.env.get("SPARK_WORKER_INSTANCES").foreach { value =>
-        val warning =
-          s"""
-             |SPARK_WORKER_INSTANCES was detected (set to '$value').
-             |This is deprecated in Spark 1.0+.
-             |
-             |Please instead use:
-             | - ./spark-submit with --num-executors to specify the number of executors
-             | - Or set SPARK_EXECUTOR_INSTANCES
-             | - spark.executor.instances to configure the number of instances in the spark config.
-        """.stripMargin
-        logWarning(warning)
-
-        set("spark.executor.instances", value)
-      }
-    }
-
     if (contains("spark.master") && get("spark.master").startsWith("yarn-")) {
       val warning = s"spark.master ${get("spark.master")} is deprecated in Spark 2.0+, please " +
         "instead use \"yarn\" with specified deploy mode."
@@ -603,6 +549,29 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
           "\"client\".")
       }
     }
+
+    if (contains("spark.cores.max") && contains("spark.executor.cores")) {
+      val totalCores = getInt("spark.cores.max", 1)
+      val executorCores = getInt("spark.executor.cores", 1)
+      val leftCores = totalCores % executorCores
+      if (leftCores != 0) {
+        logWarning(s"Total executor cores: ${totalCores} is not " +
+          s"divisible by cores per executor: ${executorCores}, " +
+          s"the left cores: ${leftCores} will not be allocated")
+      }
+    }
+
+    val encryptionEnabled = get(NETWORK_ENCRYPTION_ENABLED) || get(SASL_ENCRYPTION_ENABLED)
+    require(!encryptionEnabled || get(NETWORK_AUTH_ENABLED),
+      s"${NETWORK_AUTH_ENABLED.key} must be enabled when enabling encryption.")
+
+    val executorTimeoutThreshold = getTimeAsSeconds("spark.network.timeout", "120s")
+    val executorHeartbeatInterval = getTimeAsSeconds("spark.executor.heartbeatInterval", "10s")
+    // If spark.executor.heartbeatInterval bigger than spark.network.timeout,
+    // it will almost always cause ExecutorLostFailure. See SPARK-22754.
+    require(executorTimeoutThreshold > executorHeartbeatInterval, "The value of " +
+      s"spark.network.timeout=${executorTimeoutThreshold}s must be no less than the value of " +
+      s"spark.executor.heartbeatInterval=${executorHeartbeatInterval}s.")
   }
 
   /**
@@ -634,7 +603,15 @@ private[spark] object SparkConf extends Logging {
         "Please use spark.kryoserializer.buffer instead. The default value for " +
           "spark.kryoserializer.buffer.mb was previously specified as '0.064'. Fractional values " +
           "are no longer accepted. To specify the equivalent now, one may use '64k'."),
-      DeprecatedConfig("spark.rpc", "2.0", "Not used any more.")
+      DeprecatedConfig("spark.rpc", "2.0", "Not used anymore."),
+      DeprecatedConfig("spark.scheduler.executorTaskBlacklistTime", "2.1.0",
+        "Please use the new blacklisting options, spark.blacklist.*"),
+      DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used anymore"),
+      DeprecatedConfig("spark.executor.port", "2.0.0", "Not used anymore"),
+      DeprecatedConfig("spark.shuffle.service.index.cache.entries", "2.3.0",
+        "Not used anymore. Please use spark.shuffle.service.index.cache.size"),
+      DeprecatedConfig("spark.yarn.credentials.file.retention.count", "2.4.0", "Not used anymore."),
+      DeprecatedConfig("spark.yarn.credentials.file.retention.days", "2.4.0", "Not used anymore.")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
@@ -645,6 +622,8 @@ private[spark] object SparkConf extends Logging {
    *
    * The alternates are used in the order defined in this map. If deprecated configs are
    * present in the user's configuration, a warning is logged.
+   *
+   * TODO: consolidate it with `ConfigBuilder.withAlternative`.
    */
   private val configsWithAlternatives = Map[String, Seq[AlternateConfig]](
     "spark.executor.userClassPathFirst" -> Seq(
@@ -655,7 +634,7 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.history.updateInterval", "1.3")),
     "spark.history.fs.cleaner.interval" -> Seq(
       AlternateConfig("spark.history.fs.cleaner.interval.seconds", "1.4")),
-    "spark.history.fs.cleaner.maxAge" -> Seq(
+    MAX_LOG_AGE_S.key -> Seq(
       AlternateConfig("spark.history.fs.cleaner.maxAge.seconds", "1.4")),
     "spark.yarn.am.waitTime" -> Seq(
       AlternateConfig("spark.yarn.applicationMaster.waitTries", "1.3",
@@ -663,9 +642,9 @@ private[spark] object SparkConf extends Logging {
         translation = s => s"${s.toLong * 10}s")),
     "spark.reducer.maxSizeInFlight" -> Seq(
       AlternateConfig("spark.reducer.maxMbInFlight", "1.4")),
-    "spark.kryoserializer.buffer" ->
-        Seq(AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
-          translation = s => s"${(s.toDouble * 1000).toInt}k")),
+    "spark.kryoserializer.buffer" -> Seq(
+      AlternateConfig("spark.kryoserializer.buffer.mb", "1.4",
+        translation = s => s"${(s.toDouble * 1000).toInt}k")),
     "spark.kryoserializer.buffer.max" -> Seq(
       AlternateConfig("spark.kryoserializer.buffer.max.mb", "1.4")),
     "spark.shuffle.file.buffer" -> Seq(
@@ -688,13 +667,23 @@ private[spark] object SparkConf extends Logging {
       AlternateConfig("spark.streaming.minRememberDuration", "1.5")),
     "spark.yarn.max.executor.failures" -> Seq(
       AlternateConfig("spark.yarn.max.worker.failures", "1.5")),
-    "spark.memory.offHeap.enabled" -> Seq(
+    MEMORY_OFFHEAP_ENABLED.key -> Seq(
       AlternateConfig("spark.unsafe.offHeap", "1.6")),
     "spark.rpc.message.maxSize" -> Seq(
       AlternateConfig("spark.akka.frameSize", "1.6")),
     "spark.yarn.jars" -> Seq(
-      AlternateConfig("spark.yarn.jar", "2.0"))
-    )
+      AlternateConfig("spark.yarn.jar", "2.0")),
+    "spark.yarn.access.hadoopFileSystems" -> Seq(
+      AlternateConfig("spark.yarn.access.namenodes", "2.2")),
+    MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM.key -> Seq(
+      AlternateConfig("spark.reducer.maxReqSizeShuffleToMem", "2.3")),
+    LISTENER_BUS_EVENT_QUEUE_CAPACITY.key -> Seq(
+      AlternateConfig("spark.scheduler.listenerbus.eventqueue.size", "2.3")),
+    DRIVER_MEMORY_OVERHEAD.key -> Seq(
+      AlternateConfig("spark.yarn.driver.memoryOverhead", "2.3")),
+    EXECUTOR_MEMORY_OVERHEAD.key -> Seq(
+      AlternateConfig("spark.yarn.executor.memoryOverhead", "2.3"))
+  )
 
   /**
    * A view of `configsWithAlternatives` that makes it more efficient to look up deprecated
@@ -718,6 +707,7 @@ private[spark] object SparkConf extends Logging {
     (name.startsWith("spark.auth") && name != SecurityManager.SPARK_AUTH_SECRET_CONF) ||
     name.startsWith("spark.ssl") ||
     name.startsWith("spark.rpc") ||
+    name.startsWith("spark.network") ||
     isSparkPortConf(name)
   }
 
@@ -732,9 +722,9 @@ private[spark] object SparkConf extends Logging {
    * Looks for available deprecated keys for the given config option, and return the first
    * value available.
    */
-  def getDeprecatedConfig(key: String, conf: SparkConf): Option[String] = {
+  def getDeprecatedConfig(key: String, conf: JMap[String, String]): Option[String] = {
     configsWithAlternatives.get(key).flatMap { alts =>
-      alts.collectFirst { case alt if conf.contains(alt.key) =>
+      alts.collectFirst { case alt if conf.containsKey(alt.key) =>
         val value = conf.get(alt.key)
         if (alt.translation != null) alt.translation(value) else value
       }
@@ -760,7 +750,7 @@ private[spark] object SparkConf extends Logging {
     }
     if (key.startsWith("spark.akka") || key.startsWith("spark.ssl.akka")) {
       logWarning(
-        s"The configuration key $key is not supported any more " +
+        s"The configuration key $key is not supported anymore " +
           s"because Spark doesn't use Akka since 2.0")
     }
   }

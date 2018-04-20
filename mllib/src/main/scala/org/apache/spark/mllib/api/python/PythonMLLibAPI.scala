@@ -634,8 +634,22 @@ private[python] class PythonMLLibAPI extends Serializable {
    * Extra care needs to be taken in the Python code to ensure it gets freed on
    * exit; see the Py4J documentation.
    */
-  def fitChiSqSelector(numTopFeatures: Int, data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
-    new ChiSqSelector(numTopFeatures).fit(data.rdd)
+  def fitChiSqSelector(
+      selectorType: String,
+      numTopFeatures: Int,
+      percentile: Double,
+      fpr: Double,
+      fdr: Double,
+      fwe: Double,
+      data: JavaRDD[LabeledPoint]): ChiSqSelectorModel = {
+    new ChiSqSelector()
+      .setSelectorType(selectorType)
+      .setNumTopFeatures(numTopFeatures)
+      .setPercentile(percentile)
+      .setFpr(fpr)
+      .setFdr(fdr)
+      .setFwe(fwe)
+      .fit(data.rdd)
   }
 
   /**

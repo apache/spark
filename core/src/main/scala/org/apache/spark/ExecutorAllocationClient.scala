@@ -54,13 +54,35 @@ private[spark] trait ExecutorAllocationClient {
 
   /**
    * Request that the cluster manager kill the specified executors.
+   *
+   * @param executorIds identifiers of executors to kill
+   * @param adjustTargetNumExecutors whether the target number of executors will be adjusted down
+   *                                 after these executors have been killed
+   * @param countFailures if there are tasks running on the executors when they are killed, whether
+    *                     to count those failures toward task failure limits
+   * @param force whether to force kill busy executors, default false
+   * @return the ids of the executors acknowledged by the cluster manager to be removed.
+   */
+  def killExecutors(
+    executorIds: Seq[String],
+    adjustTargetNumExecutors: Boolean,
+    countFailures: Boolean,
+    force: Boolean = false): Seq[String]
+
+  /**
+   * Request that the cluster manager kill every executor on the specified host.
+   *
    * @return whether the request is acknowledged by the cluster manager.
    */
-  def killExecutors(executorIds: Seq[String]): Boolean
+  def killExecutorsOnHost(host: String): Boolean
 
   /**
    * Request that the cluster manager kill the specified executor.
    * @return whether the request is acknowledged by the cluster manager.
    */
-  def killExecutor(executorId: String): Boolean = killExecutors(Seq(executorId))
+  def killExecutor(executorId: String): Boolean = {
+    val killedExecutors = killExecutors(Seq(executorId), adjustTargetNumExecutors = true,
+      countFailures = false)
+    killedExecutors.nonEmpty && killedExecutors(0).equals(executorId)
+  }
 }

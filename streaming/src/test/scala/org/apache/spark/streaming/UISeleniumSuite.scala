@@ -92,13 +92,13 @@ class UISeleniumSuite
       val sparkUI = ssc.sparkContext.ui.get
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        go to (sparkUI.appUIAddress.stripSuffix("/"))
+        go to (sparkUI.webUrl.stripSuffix("/"))
         find(cssSelector( """ul li a[href*="streaming"]""")) should not be (None)
       }
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         // check whether streaming page exists
-        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming")
+        go to (sparkUI.webUrl.stripSuffix("/") + "/streaming")
         val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
         h3Text should contain("Streaming Statistics")
 
@@ -121,11 +121,11 @@ class UISeleniumSuite
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
         findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+          List("Batch Time", "Records", "Scheduling Delay (?)", "Processing Time (?)",
             "Output Ops: Succeeded/Total", "Status")
         }
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+          List("Batch Time", "Records", "Scheduling Delay (?)", "Processing Time (?)",
             "Total Delay (?)", "Output Ops: Succeeded/Total")
         }
 
@@ -180,23 +180,23 @@ class UISeleniumSuite
         jobDetails should contain("Completed Stages:")
 
         // Check a batch page without id
-        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming/batch/")
+        go to (sparkUI.webUrl.stripSuffix("/") + "/streaming/batch/")
         webDriver.getPageSource should include ("Missing id parameter")
 
         // Check a non-exist batch
-        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming/batch/?id=12345")
+        go to (sparkUI.webUrl.stripSuffix("/") + "/streaming/batch/?id=12345")
         webDriver.getPageSource should include ("does not exist")
       }
 
       ssc.stop(false)
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        go to (sparkUI.appUIAddress.stripSuffix("/"))
+        go to (sparkUI.webUrl.stripSuffix("/"))
         find(cssSelector( """ul li a[href*="streaming"]""")) should be(None)
       }
 
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
-        go to (sparkUI.appUIAddress.stripSuffix("/") + "/streaming")
+        go to (sparkUI.webUrl.stripSuffix("/") + "/streaming")
         val h3Text = findAll(cssSelector("h3")).map(_.text).toSeq
         h3Text should not contain("Streaming Statistics")
       }

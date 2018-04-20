@@ -39,7 +39,8 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
 
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val parameterId = request.getParameter("id")
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
+    val parameterId = UIUtils.stripXSS(request.getParameter("id"))
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
     val content =
@@ -65,7 +66,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     val timeSinceStart = System.currentTimeMillis() - startTime.getTime
     <ul class ="unstyled">
       <li>
-        <strong>Started at: </strong> {startTime.toString}
+        <strong>Started at: </strong> {formatDate(startTime)}
       </li>
       <li>
         <strong>Time since start: </strong>{formatDurationVerbose(timeSinceStart)}
@@ -146,42 +147,6 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     <td>{errorSummary}{details}</td>
   }
 
-  /** Generate stats of batch sessions of the thrift server program */
-  private def generateSessionStatsTable(): Seq[Node] = {
-    val sessionList = listener.getSessionList
-    val numBatches = sessionList.size
-    val table = if (numBatches > 0) {
-      val dataRows =
-        sessionList.sortBy(_.startTimestamp).reverse.map ( session =>
-        Seq(
-          session.userName,
-          session.ip,
-          session.sessionId,
-          formatDate(session.startTimestamp),
-          formatDate(session.finishTimestamp),
-          formatDurationOption(Some(session.totalTime)),
-          session.totalExecution.toString
-        )
-      ).toSeq
-      val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
-        "Total Execute")
-      Some(listingTable(headerRow, dataRows))
-    } else {
-      None
-    }
-
-    val content =
-      <h5>Session Statistics</h5> ++
-      <div>
-        <ul class="unstyled">
-          {table.getOrElse("No statistics have been generated yet.")}
-        </ul>
-      </div>
-
-    content
-  }
-
-
   /**
    * Returns a human-readable string representing a duration such as "5 second 35 ms"
    */
@@ -197,4 +162,3 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     UIUtils.listingTable(headers, generateDataRow, data, fixedWidth = true)
   }
 }
-

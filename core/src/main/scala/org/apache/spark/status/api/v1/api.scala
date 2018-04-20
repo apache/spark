@@ -16,44 +16,62 @@
  */
 package org.apache.spark.status.api.v1
 
+import java.lang.{Long => JLong}
 import java.util.Date
 
-import scala.collection.Map
+import scala.xml.{NodeSeq, Text}
+
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
 import org.apache.spark.JobExecutionStatus
 
-class ApplicationInfo private[spark](
-    val id: String,
-    val name: String,
-    val coresGranted: Option[Int],
-    val maxCores: Option[Int],
-    val coresPerExecutor: Option[Int],
-    val memoryPerExecutorMB: Option[Int],
-    val attempts: Seq[ApplicationAttemptInfo])
+case class ApplicationInfo private[spark](
+    id: String,
+    name: String,
+    coresGranted: Option[Int],
+    maxCores: Option[Int],
+    coresPerExecutor: Option[Int],
+    memoryPerExecutorMB: Option[Int],
+    attempts: Seq[ApplicationAttemptInfo])
 
-class ApplicationAttemptInfo private[spark](
-    val attemptId: Option[String],
-    val startTime: Date,
-    val endTime: Date,
-    val lastUpdated: Date,
-    val duration: Long,
-    val sparkUser: String,
-    val completed: Boolean = false) {
-    def getStartTimeEpoch: Long = startTime.getTime
-    def getEndTimeEpoch: Long = endTime.getTime
-    def getLastUpdatedEpoch: Long = lastUpdated.getTime
+@JsonIgnoreProperties(
+  value = Array("startTimeEpoch", "endTimeEpoch", "lastUpdatedEpoch"),
+  allowGetters = true)
+case class ApplicationAttemptInfo private[spark](
+    attemptId: Option[String],
+    startTime: Date,
+    endTime: Date,
+    lastUpdated: Date,
+    duration: Long,
+    sparkUser: String,
+    completed: Boolean = false,
+    appSparkVersion: String) {
+
+  def getStartTimeEpoch: Long = startTime.getTime
+
+  def getEndTimeEpoch: Long = endTime.getTime
+
+  def getLastUpdatedEpoch: Long = lastUpdated.getTime
+
 }
 
 class ExecutorStageSummary private[spark](
     val taskTime : Long,
     val failedTasks : Int,
     val succeededTasks : Int,
+    val killedTasks : Int,
     val inputBytes : Long,
+    val inputRecords : Long,
     val outputBytes : Long,
+    val outputRecords : Long,
     val shuffleRead : Long,
+    val shuffleReadRecords : Long,
     val shuffleWrite : Long,
+    val shuffleWriteRecords : Long,
     val memoryBytesSpilled : Long,
-    val diskBytesSpilled : Long)
+    val diskBytesSpilled : Long,
+    val isBlacklistedForStage: Boolean)
 
 class ExecutorSummary private[spark](
     val id: String,
@@ -73,8 +91,20 @@ class ExecutorSummary private[spark](
     val totalInputBytes: Long,
     val totalShuffleRead: Long,
     val totalShuffleWrite: Long,
+    val isBlacklisted: Boolean,
     val maxMemory: Long,
-    val executorLogs: Map[String, String])
+    val addTime: Date,
+    val removeTime: Option[Date],
+    val removeReason: Option[String],
+    val executorLogs: Map[String, String],
+    val memoryMetrics: Option[MemoryMetrics],
+    val blacklistedInStages: Set[Int])
+
+class MemoryMetrics private[spark](
+    val usedOnHeapStorageMemory: Long,
+    val usedOffHeapStorageMemory: Long,
+    val totalOnHeapStorageMemory: Long,
+    val totalOffHeapStorageMemory: Long)
 
 class JobData private[spark](
     val jobId: Int,
@@ -90,10 +120,13 @@ class JobData private[spark](
     val numCompletedTasks: Int,
     val numSkippedTasks: Int,
     val numFailedTasks: Int,
+    val numKilledTasks: Int,
+    val numCompletedIndices: Int,
     val numActiveStages: Int,
     val numCompletedStages: Int,
     val numSkippedStages: Int,
-    val numFailedStages: Int)
+    val numFailedStages: Int,
+    val killedTasksSummary: Map[String, Int])
 
 class RDDStorageInfo private[spark](
     val id: Int,
@@ -110,7 +143,15 @@ class RDDDataDistribution private[spark](
     val address: String,
     val memoryUsed: Long,
     val memoryRemaining: Long,
-    val diskUsed: Long)
+    val diskUsed: Long,
+    @JsonDeserialize(contentAs = classOf[JLong])
+    val onHeapMemoryUsed: Option[Long],
+    @JsonDeserialize(contentAs = classOf[JLong])
+    val offHeapMemoryUsed: Option[Long],
+    @JsonDeserialize(contentAs = classOf[JLong])
+    val onHeapMemoryRemaining: Option[Long],
+    @JsonDeserialize(contentAs = classOf[JLong])
+    val offHeapMemoryRemaining: Option[Long])
 
 class RDDPartitionInfo private[spark](
     val blockName: String,
@@ -123,14 +164,19 @@ class StageData private[spark](
     val status: StageStatus,
     val stageId: Int,
     val attemptId: Int,
+    val numTasks: Int,
     val numActiveTasks: Int,
     val numCompleteTasks: Int,
     val numFailedTasks: Int,
+    val numKilledTasks: Int,
+    val numCompletedIndices: Int,
 
     val executorRunTime: Long,
+    val executorCpuTime: Long,
     val submissionTime: Option[Date],
     val firstTaskLaunchedTime: Option[Date],
     val completionTime: Option[Date],
+    val failureReason: Option[String],
 
     val inputBytes: Long,
     val inputRecords: Long,
@@ -144,20 +190,27 @@ class StageData private[spark](
     val diskBytesSpilled: Long,
 
     val name: String,
+    val description: Option[String],
     val details: String,
     val schedulingPool: String,
 
+    val rddIds: Seq[Int],
     val accumulatorUpdates: Seq[AccumulableInfo],
     val tasks: Option[Map[Long, TaskData]],
-    val executorSummary: Option[Map[String, ExecutorStageSummary]])
+    val executorSummary: Option[Map[String, ExecutorStageSummary]],
+    val killedTasksSummary: Map[String, Int])
 
 class TaskData private[spark](
     val taskId: Long,
     val index: Int,
     val attempt: Int,
     val launchTime: Date,
+    val resultFetchStart: Option[Date],
+    @JsonDeserialize(contentAs = classOf[JLong])
+    val duration: Option[Long],
     val executorId: String,
     val host: String,
+    val status: String,
     val taskLocality: String,
     val speculative: Boolean,
     val accumulatorUpdates: Seq[AccumulableInfo],
@@ -166,12 +219,15 @@ class TaskData private[spark](
 
 class TaskMetrics private[spark](
     val executorDeserializeTime: Long,
+    val executorDeserializeCpuTime: Long,
     val executorRunTime: Long,
+    val executorCpuTime: Long,
     val resultSize: Long,
     val jvmGcTime: Long,
     val resultSerializationTime: Long,
     val memoryBytesSpilled: Long,
     val diskBytesSpilled: Long,
+    val peakExecutionMemory: Long,
     val inputMetrics: InputMetrics,
     val outputMetrics: OutputMetrics,
     val shuffleReadMetrics: ShuffleReadMetrics,
@@ -190,6 +246,7 @@ class ShuffleReadMetrics private[spark](
     val localBlocksFetched: Long,
     val fetchWaitTime: Long,
     val remoteBytesRead: Long,
+    val remoteBytesReadToDisk: Long,
     val localBytesRead: Long,
     val recordsRead: Long)
 
@@ -202,10 +259,15 @@ class TaskMetricDistributions private[spark](
     val quantiles: IndexedSeq[Double],
 
     val executorDeserializeTime: IndexedSeq[Double],
+    val executorDeserializeCpuTime: IndexedSeq[Double],
     val executorRunTime: IndexedSeq[Double],
+    val executorCpuTime: IndexedSeq[Double],
     val resultSize: IndexedSeq[Double],
     val jvmGcTime: IndexedSeq[Double],
     val resultSerializationTime: IndexedSeq[Double],
+    val gettingResultTime: IndexedSeq[Double],
+    val schedulerDelay: IndexedSeq[Double],
+    val peakExecutionMemory: IndexedSeq[Double],
     val memoryBytesSpilled: IndexedSeq[Double],
     val diskBytesSpilled: IndexedSeq[Double],
 
@@ -229,6 +291,7 @@ class ShuffleReadMetricDistributions private[spark](
     val localBlocksFetched: IndexedSeq[Double],
     val fetchWaitTime: IndexedSeq[Double],
     val remoteBytesRead: IndexedSeq[Double],
+    val remoteBytesReadToDisk: IndexedSeq[Double],
     val totalBlocksFetched: IndexedSeq[Double])
 
 class ShuffleWriteMetricDistributions private[spark](
@@ -244,3 +307,43 @@ class AccumulableInfo private[spark](
 
 class VersionInfo private[spark](
   val spark: String)
+
+class ApplicationEnvironmentInfo private[spark] (
+    val runtime: RuntimeInfo,
+    val sparkProperties: Seq[(String, String)],
+    val systemProperties: Seq[(String, String)],
+    val classpathEntries: Seq[(String, String)])
+
+class RuntimeInfo private[spark](
+    val javaVersion: String,
+    val javaHome: String,
+    val scalaVersion: String)
+
+case class StackTrace(elems: Seq[String]) {
+  override def toString: String = elems.mkString
+
+  def html: NodeSeq = {
+    val withNewLine = elems.foldLeft(NodeSeq.Empty) { (acc, elem) =>
+      if (acc.isEmpty) {
+        acc :+ Text(elem)
+      } else {
+        acc :+ <br /> :+ Text(elem)
+      }
+    }
+
+    withNewLine
+  }
+
+  def mkString(start: String, sep: String, end: String): String = {
+    elems.mkString(start, sep, end)
+  }
+}
+
+case class ThreadStackTrace(
+    val threadId: Long,
+    val threadName: String,
+    val threadState: Thread.State,
+    val stackTrace: StackTrace,
+    val blockedByThreadId: Option[Long],
+    val blockedByLock: String,
+    val holdingLocks: Seq[String])

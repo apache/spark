@@ -24,7 +24,7 @@ import scala.xml.Node
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.ExecutorState
 import org.apache.spark.deploy.master.ExecutorDesc
-import org.apache.spark.ui.{UIUtils, WebUIPage}
+import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") {
@@ -33,8 +33,9 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
 
   /** Executor details for a particular application */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val appId = request.getParameter("appId")
-    val state = master.askWithRetry[MasterStateResponse](RequestMasterState)
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
+    val appId = UIUtils.stripXSS(request.getParameter("appId"))
+    val state = master.askSync[MasterStateResponse](RequestMasterState)
     val app = state.activeApps.find(_.id == appId)
       .getOrElse(state.completedApps.find(_.id == appId).orNull)
     if (app == null) {
@@ -70,10 +71,20 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
             }
             </li>
             <li>
+              <span data-toggle="tooltip" title={ToolTips.APPLICATION_EXECUTOR_LIMIT}
+                    data-placement="right">
+                <strong>Executor Limit: </strong>
+                {
+                  if (app.executorLimit == Int.MaxValue) "Unlimited" else app.executorLimit
+                }
+                ({app.executors.size} granted)
+              </span>
+            </li>
+            <li>
               <strong>Executor Memory:</strong>
               {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
             </li>
-            <li><strong>Submit Date:</strong> {app.submitDate}</li>
+            <li><strong>Submit Date:</strong> {UIUtils.formatDate(app.submitDate)}</li>
             <li><strong>State:</strong> {app.state}</li>
             {
               if (!app.isFinished) {
@@ -89,12 +100,29 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
 
       <div class="row-fluid"> <!-- Executors -->
         <div class="span12">
-          <h4> Executor Summary </h4>
-          {executorsTable}
+          <span class="collapse-aggregated-executors collapse-table"
+              onClick="collapseTable('collapse-aggregated-executors','aggregated-executors')">
+            <h4>
+              <span class="collapse-table-arrow arrow-open"></span>
+              <a>Executor Summary ({allExecutors.length})</a>
+            </h4>
+          </span>
+          <div class="aggregated-executors collapsible-table">
+            {executorsTable}
+          </div>
           {
             if (removedExecutors.nonEmpty) {
-              <h4> Removed Executors </h4> ++
-              removedExecutorsTable
+              <span class="collapse-aggregated-removedExecutors collapse-table"
+                  onClick="collapseTable('collapse-aggregated-removedExecutors',
+                  'aggregated-removedExecutors')">
+                <h4>
+                  <span class="collapse-table-arrow arrow-open"></span>
+                  <a>Removed Executors ({removedExecutors.length})</a>
+                </h4>
+              </span> ++
+              <div class="aggregated-removedExecutors collapsible-table">
+                {removedExecutorsTable}
+              </div>
             }
           }
         </div>
@@ -114,10 +142,10 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
       <td>{executor.memory}</td>
       <td>{executor.state}</td>
       <td>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout"
-          .format(workerUrlRef, executor.application.id, executor.id)}>stdout</a>
-        <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr"
-          .format(workerUrlRef, executor.application.id, executor.id)}>stderr</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor.application.id}&executorId=${executor.
+          id}&logType=stdout"}>stdout</a>
+        <a href={s"$workerUrlRef/logPage?appId=${executor.application.id}&executorId=${executor.
+          id}&logType=stderr"}>stderr</a>
       </td>
     </tr>
   }

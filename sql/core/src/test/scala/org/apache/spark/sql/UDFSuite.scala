@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.api.java._
+import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.execution.command.ExplainCommand
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData._
+import org.apache.spark.sql.types.{DataTypes, DoubleType}
 
 private case class FunctionResult(f1: String, f2: String)
 
@@ -64,18 +69,27 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       data.write.parquet(dir.getCanonicalPath)
       spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("test_table")
       val answer = sql("select input_file_name() from test_table").head().getString(0)
-      assert(answer.contains(dir.getCanonicalPath))
+      assert(answer.contains(dir.toURI.getPath))
       assert(sql("select input_file_name() from test_table").distinct().collect().length >= 2)
       spark.catalog.dropTempView("test_table")
     }
   }
 
-  test("error reporting for incorrect number of arguments") {
+  test("error reporting for incorrect number of arguments - builtin function") {
     val df = spark.emptyDataFrame
     val e = intercept[AnalysisException] {
       df.selectExpr("substr('abcd', 2, 3, 4)")
     }
-    assert(e.getMessage.contains("arguments"))
+    assert(e.getMessage.contains("Invalid number of arguments for function substr. Expected:"))
+  }
+
+  test("error reporting for incorrect number of arguments - udf") {
+    val df = spark.emptyDataFrame
+    val e = intercept[AnalysisException] {
+      spark.udf.register("foo", (_: String).length)
+      df.selectExpr("foo(2, 3, 4)")
+    }
+    assert(e.getMessage.contains("Invalid number of arguments for function foo. Expected:"))
   }
 
   test("error reporting for undefined functions") {
@@ -92,9 +106,36 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(sql("SELECT strLenScala('test')").head().getInt(0) === 4)
   }
 
-  test("ZeroArgument UDF") {
-    spark.udf.register("random0", () => { Math.random()})
-    assert(sql("SELECT random0()").head().getDouble(0) >= 0.0)
+  test("UDF defined using UserDefinedFunction") {
+    import functions.udf
+    val foo = udf((x: Int) => x + 1)
+    spark.udf.register("foo", foo)
+    assert(sql("select foo(5)").head().getInt(0) == 6)
+  }
+
+  test("ZeroArgument non-deterministic UDF") {
+    val foo = udf(() => Math.random())
+    spark.udf.register("random0", foo.asNondeterministic())
+    val df = sql("SELECT random0()")
+    assert(df.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+    assert(df.head().getDouble(0) >= 0.0)
+
+    val foo1 = foo.asNondeterministic()
+    val df1 = testData.select(foo1())
+    assert(df1.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+    assert(df1.head().getDouble(0) >= 0.0)
+
+    val bar = udf(() => Math.random(), DataTypes.DoubleType).asNondeterministic()
+    val df2 = testData.select(bar())
+    assert(df2.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+    assert(df2.head().getDouble(0) >= 0.0)
+
+    val javaUdf = udf(new UDF0[Double] {
+      override def call(): Double = Math.random()
+    }, DoubleType).asNondeterministic()
+    val df3 = testData.select(javaUdf())
+    assert(df3.logicalPlan.asInstanceOf[Project].projectList.forall(!_.deterministic))
+    assert(df3.head().getDouble(0) >= 0.0)
   }
 
   test("TwoArgument UDF") {
@@ -103,73 +144,81 @@ class UDFSuite extends QueryTest with SharedSQLContext {
   }
 
   test("UDF in a WHERE") {
-    spark.udf.register("oneArgFilter", (n: Int) => { n > 80 })
+    withTempView("integerData") {
+      spark.udf.register("oneArgFilter", (n: Int) => { n > 80 })
 
-    val df = sparkContext.parallelize(
-      (1 to 100).map(i => TestData(i, i.toString))).toDF()
-    df.createOrReplaceTempView("integerData")
+      val df = sparkContext.parallelize(
+        (1 to 100).map(i => TestData(i, i.toString))).toDF()
+      df.createOrReplaceTempView("integerData")
 
-    val result =
-      sql("SELECT * FROM integerData WHERE oneArgFilter(key)")
-    assert(result.count() === 20)
+      val result =
+        sql("SELECT * FROM integerData WHERE oneArgFilter(key)")
+      assert(result.count() === 20)
+    }
   }
 
   test("UDF in a HAVING") {
-    spark.udf.register("havingFilter", (n: Long) => { n > 5 })
+    withTempView("groupData") {
+      spark.udf.register("havingFilter", (n: Long) => { n > 5 })
 
-    val df = Seq(("red", 1), ("red", 2), ("blue", 10),
-      ("green", 100), ("green", 200)).toDF("g", "v")
-    df.createOrReplaceTempView("groupData")
+      val df = Seq(("red", 1), ("red", 2), ("blue", 10),
+        ("green", 100), ("green", 200)).toDF("g", "v")
+      df.createOrReplaceTempView("groupData")
 
-    val result =
-      sql(
-        """
-         | SELECT g, SUM(v) as s
-         | FROM groupData
-         | GROUP BY g
-         | HAVING havingFilter(s)
-        """.stripMargin)
+      val result =
+        sql(
+          """
+           | SELECT g, SUM(v) as s
+           | FROM groupData
+           | GROUP BY g
+           | HAVING havingFilter(s)
+          """.stripMargin)
 
-    assert(result.count() === 2)
+      assert(result.count() === 2)
+    }
   }
 
   test("UDF in a GROUP BY") {
-    spark.udf.register("groupFunction", (n: Int) => { n > 10 })
+    withTempView("groupData") {
+      spark.udf.register("groupFunction", (n: Int) => { n > 10 })
 
-    val df = Seq(("red", 1), ("red", 2), ("blue", 10),
-      ("green", 100), ("green", 200)).toDF("g", "v")
-    df.createOrReplaceTempView("groupData")
+      val df = Seq(("red", 1), ("red", 2), ("blue", 10),
+        ("green", 100), ("green", 200)).toDF("g", "v")
+      df.createOrReplaceTempView("groupData")
 
-    val result =
-      sql(
-        """
-         | SELECT SUM(v)
-         | FROM groupData
-         | GROUP BY groupFunction(v)
-        """.stripMargin)
-    assert(result.count() === 2)
+      val result =
+        sql(
+          """
+           | SELECT SUM(v)
+           | FROM groupData
+           | GROUP BY groupFunction(v)
+          """.stripMargin)
+      assert(result.count() === 2)
+    }
   }
 
   test("UDFs everywhere") {
-    spark.udf.register("groupFunction", (n: Int) => { n > 10 })
-    spark.udf.register("havingFilter", (n: Long) => { n > 2000 })
-    spark.udf.register("whereFilter", (n: Int) => { n < 150 })
-    spark.udf.register("timesHundred", (n: Long) => { n * 100 })
+    withTempView("groupData") {
+      spark.udf.register("groupFunction", (n: Int) => { n > 10 })
+      spark.udf.register("havingFilter", (n: Long) => { n > 2000 })
+      spark.udf.register("whereFilter", (n: Int) => { n < 150 })
+      spark.udf.register("timesHundred", (n: Long) => { n * 100 })
 
-    val df = Seq(("red", 1), ("red", 2), ("blue", 10),
-      ("green", 100), ("green", 200)).toDF("g", "v")
-    df.createOrReplaceTempView("groupData")
+      val df = Seq(("red", 1), ("red", 2), ("blue", 10),
+        ("green", 100), ("green", 200)).toDF("g", "v")
+      df.createOrReplaceTempView("groupData")
 
-    val result =
-      sql(
-        """
-         | SELECT timesHundred(SUM(v)) as v100
-         | FROM groupData
-         | WHERE whereFilter(v)
-         | GROUP BY groupFunction(v)
-         | HAVING havingFilter(v100)
-        """.stripMargin)
-    assert(result.count() === 1)
+      val result =
+        sql(
+          """
+           | SELECT timesHundred(SUM(v)) as v100
+           | FROM groupData
+           | WHERE whereFilter(v)
+           | GROUP BY groupFunction(v)
+           | HAVING havingFilter(v100)
+          """.stripMargin)
+      assert(result.count() === 1)
+    }
   }
 
   test("struct UDF") {
@@ -247,5 +296,32 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql("SELECT tmp.t.* FROM (SELECT testDataFunc(a, b) AS t from testData2) tmp").toDF(),
       testData2)
+  }
+
+  test("SPARK-19338 Provide identical names for UDFs in the EXPLAIN output") {
+    def explainStr(df: DataFrame): String = {
+      val explain = ExplainCommand(df.queryExecution.logical, extended = false)
+      val sparkPlan = spark.sessionState.executePlan(explain).executedPlan
+      sparkPlan.executeCollect().map(_.getString(0).trim).headOption.getOrElse("")
+    }
+    val udf1Name = "myUdf1"
+    val udf2Name = "myUdf2"
+    val udf1 = spark.udf.register(udf1Name, (n: Int) => n + 1)
+    val udf2 = spark.udf.register(udf2Name, (n: Int) => n * 1)
+    assert(explainStr(sql("SELECT myUdf1(myUdf2(1))")).contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
+    assert(explainStr(spark.range(1).select(udf1(udf2(functions.lit(1)))))
+      .contains(s"UDF:$udf1Name(UDF:$udf2Name(1))"))
+  }
+
+  test("SPARK-23666 Do not display exprId in argument names") {
+    withTempView("x") {
+      Seq(((1, 2), 3)).toDF("a", "b").createOrReplaceTempView("x")
+      spark.udf.register("f", (a: Int) => a)
+      val outputStream = new java.io.ByteArrayOutputStream()
+      Console.withOut(outputStream) {
+        spark.sql("SELECT f(a._1) FROM x").show
+      }
+      assert(outputStream.toString.contains("UDF:f(a._1 AS `_1`)"))
+    }
   }
 }

@@ -2,12 +2,15 @@
 layout: global
 title: Spark Streaming + Kafka Integration Guide (Kafka broker version 0.8.2.1 or higher)
 ---
+
+**Note: Kafka 0.8 support is deprecated as of Spark 2.3.0.**
+
 Here we explain how to configure Spark Streaming to receive data from Kafka. There are two approaches to this - the old approach using Receivers and Kafka's high-level API, and a new approach (introduced in Spark 1.3) without using Receivers. They have different programming models, performance characteristics, and semantics guarantees, so read on for more details.  Both approaches are considered stable APIs as of the current version of Spark.
 
 ## Approach 1: Receiver-based Approach
 This approach uses a Receiver to receive the data. The Receiver is implemented using the Kafka high-level consumer API. As with all receivers, the data received from Kafka through a Receiver is stored in Spark executors, and then jobs launched by Spark Streaming processes the data.
 
-However, under default configuration, this approach can lose data under failures (see [receiver reliability](streaming-programming-guide.html#receiver-reliability). To ensure zero-data loss, you have to additionally enable Write Ahead Logs in Spark Streaming (introduced in Spark 1.2). This synchronously saves all the received Kafka data into write ahead logs on a distributed file system (e.g HDFS), so that all the data can be recovered on failure. See [Deploying section](streaming-programming-guide.html#deploying-applications) in the streaming programming guide for more details on Write Ahead Logs.
+However, under default configuration, this approach can lose data under failures (see [receiver reliability](streaming-programming-guide.html#receiver-reliability). To ensure zero-data loss, you have to additionally enable Write-Ahead Logs in Spark Streaming (introduced in Spark 1.2). This synchronously saves all the received Kafka data into write-ahead logs on a distributed file system (e.g HDFS), so that all the data can be recovered on failure. See [Deploying section](streaming-programming-guide.html#deploying-applications) in the streaming programming guide for more details on Write-Ahead Logs.
 
 Next, we discuss how to use this approach in your streaming application.
 
@@ -28,8 +31,7 @@ Next, we discuss how to use this approach in your streaming application.
 		val kafkaStream = KafkaUtils.createStream(streamingContext,
             [ZK quorum], [consumer group id], [per-topic number of Kafka partitions to consume])
 
-    You can also specify the key and value classes and their corresponding decoder classes using variations of `createStream`. See the [API docs](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/KafkaWordCount.scala).
+    You can also specify the key and value classes and their corresponding decoder classes using variations of `createStream`. See the [API docs](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$).
 	</div>
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.kafka.*;
@@ -38,8 +40,7 @@ Next, we discuss how to use this approach in your streaming application.
 			KafkaUtils.createStream(streamingContext,
             [ZK quorum], [consumer group id], [per-topic number of Kafka partitions to consume]);
 
-    You can also specify the key and value classes and their corresponding decoder classes using variations of `createStream`. See the [API docs](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaKafkaWordCount.java).
+    You can also specify the key and value classes and their corresponding decoder classes using variations of `createStream`. See the [API docs](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html).
 
 	</div>
 	<div data-lang="python" markdown="1">
@@ -48,18 +49,17 @@ Next, we discuss how to use this approach in your streaming application.
 		kafkaStream = KafkaUtils.createStream(streamingContext, \
 			[ZK quorum], [consumer group id], [per-topic number of Kafka partitions to consume])
 
-	By default, the Python API will decode Kafka data as UTF8 encoded strings. You can specify your custom decoding function to decode the byte arrays in Kafka records to any arbitrary data type. See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/kafka_wordcount.py).
+	By default, the Python API will decode Kafka data as UTF8 encoded strings. You can specify your custom decoding function to decode the byte arrays in Kafka records to any arbitrary data type. See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils).
 	</div>
 	</div>
 
 	**Points to remember:**
 
-	- Topic partitions in Kafka does not correlate to partitions of RDDs generated in Spark Streaming. So increasing the number of topic-specific partitions in the `KafkaUtils.createStream()` only increases the number of threads using which topics that are consumed within a single receiver. It does not increase the parallelism of Spark in processing the data. Refer to the main document for more information on that.
+	- Topic partitions in Kafka do not correlate to partitions of RDDs generated in Spark Streaming. So increasing the number of topic-specific partitions in the `KafkaUtils.createStream()` only increases the number of threads using which topics that are consumed within a single receiver. It does not increase the parallelism of Spark in processing the data. Refer to the main document for more information on that.
 
 	- Multiple Kafka input DStreams can be created with different groups and topics for parallel receiving of data using multiple receivers.
 
-	- If you have enabled Write Ahead Logs with a replicated file system like HDFS, the received data is already being replicated in the log. Hence, the storage level in storage level for the input stream to `StorageLevel.MEMORY_AND_DISK_SER` (that is, use
+	- If you have enabled Write-Ahead Logs with a replicated file system like HDFS, the received data is already being replicated in the log. Hence, the storage level in storage level for the input stream to `StorageLevel.MEMORY_AND_DISK_SER` (that is, use
 `KafkaUtils.createStream(..., StorageLevel.MEMORY_AND_DISK_SER)`).
 
 3. **Deploying:** As with any Spark applications, `spark-submit` is used to launch your application. However, the details are slightly different for Scala/Java applications and Python applications.
@@ -71,7 +71,7 @@ Next, we discuss how to use this approach in your streaming application.
 	    ./bin/spark-submit --packages org.apache.spark:spark-streaming-kafka-0-8_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} ...
 
 	Alternatively, you can also download the JAR of the Maven artifact `spark-streaming-kafka-0-8-assembly` from the
-	[Maven repository](http://search.maven.org/#search|ga|1|a%3A%22spark-streaming-kafka-0-8-assembly_{{site.SCALA_BINARY_VERSION}}%22%20AND%20v%3A%22{{site.SPARK_VERSION_SHORT}}%22) and add it to `spark-submit` with `--jars`.
+	[Maven repository](https://search.maven.org/#search|ga|1|a%3A%22spark-streaming-kafka-0-8-assembly_{{site.SCALA_BINARY_VERSION}}%22%20AND%20v%3A%22{{site.SPARK_VERSION_SHORT}}%22) and add it to `spark-submit` with `--jars`.
 
 ## Approach 2: Direct Approach (No Receivers)
 This new receiver-less "direct" approach has been introduced in Spark 1.3 to ensure stronger end-to-end guarantees. Instead of using receivers to receive data, this approach periodically queries Kafka for the latest offsets in each topic+partition, and accordingly defines the offset ranges to process in each batch. When the jobs to process the data are launched, Kafka's simple consumer API is used to read the defined ranges of offsets from Kafka (similar to read files from a file system). Note that this feature was introduced in Spark 1.3 for the Scala and Java API, in Spark 1.4 for the Python API.
@@ -80,9 +80,9 @@ This approach has the following advantages over the receiver-based approach (i.e
 
 - *Simplified Parallelism:* No need to create multiple input Kafka streams and union them. With `directStream`, Spark Streaming will create as many RDD partitions as there are Kafka partitions to consume, which will all read data from Kafka in parallel. So there is a one-to-one mapping between Kafka and RDD partitions, which is easier to understand and tune.
 
-- *Efficiency:* Achieving zero-data loss in the first approach required the data to be stored in a Write Ahead Log, which further replicated the data. This is actually inefficient as the data effectively gets replicated twice - once by Kafka, and a second time by the Write Ahead Log. This second approach eliminates the problem as there is no receiver, and hence no need for Write Ahead Logs. As long as you have sufficient Kafka retention, messages can be recovered from Kafka.
+- *Efficiency:* Achieving zero-data loss in the first approach required the data to be stored in a Write-Ahead Log, which further replicated the data. This is actually inefficient as the data effectively gets replicated twice - once by Kafka, and a second time by the Write-Ahead Log. This second approach eliminates the problem as there is no receiver, and hence no need for Write-Ahead Logs. As long as you have sufficient Kafka retention, messages can be recovered from Kafka.
 
-- *Exactly-once semantics:* The first approach uses Kafka's high level API to store consumed offsets in Zookeeper. This is traditionally the way to consume data from Kafka. While this approach (in combination with write ahead logs) can ensure zero data loss (i.e. at-least once semantics), there is a small chance some records may get consumed twice under some failures. This occurs because of inconsistencies between data reliably received by Spark Streaming and offsets tracked by Zookeeper. Hence, in this second approach, we use simple Kafka API that does not use Zookeeper. Offsets are tracked by Spark Streaming within its checkpoints. This eliminates inconsistencies between Spark Streaming and Zookeeper/Kafka, and so each record is received by Spark Streaming effectively exactly once despite failures. In order to achieve exactly-once semantics for output of your results, your output operation that saves the data to an external data store must be either idempotent, or an atomic transaction that saves results and offsets (see [Semantics of output operations](streaming-programming-guide.html#semantics-of-output-operations) in the main programming guide for further information).
+- *Exactly-once semantics:* The first approach uses Kafka's high-level API to store consumed offsets in Zookeeper. This is traditionally the way to consume data from Kafka. While this approach (in combination with-write-ahead logs) can ensure zero data loss (i.e. at-least once semantics), there is a small chance some records may get consumed twice under some failures. This occurs because of inconsistencies between data reliably received by Spark Streaming and offsets tracked by Zookeeper. Hence, in this second approach, we use simple Kafka API that does not use Zookeeper. Offsets are tracked by Spark Streaming within its checkpoints. This eliminates inconsistencies between Spark Streaming and Zookeeper/Kafka, and so each record is received by Spark Streaming effectively exactly once despite failures. In order to achieve exactly-once semantics for output of your results, your output operation that saves the data to an external data store must be either idempotent, or an atomic transaction that saves results and offsets (see [Semantics of output operations](streaming-programming-guide.html#semantics-of-output-operations) in the main programming guide for further information).
 
 Note that one disadvantage of this approach is that it does not update offsets in Zookeeper, hence Zookeeper-based Kafka monitoring tools will not show progress. However, you can access the offsets processed by this approach in each batch and update Zookeeper yourself (see below).
 
@@ -105,8 +105,7 @@ Next, we discuss how to use this approach in your streaming application.
 			streamingContext, [map of Kafka parameters], [set of topics to consume])
 
 	You can also pass a `messageHandler` to `createDirectStream` to access `MessageAndMetadata` that contains metadata about the current message and transform it to any desired type.
-	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/scala/org/apache/spark/examples/streaming/DirectKafkaWordCount.scala).
+	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$).
 	</div>
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.kafka.*;
@@ -117,8 +116,7 @@ Next, we discuss how to use this approach in your streaming application.
 				[map of Kafka parameters], [set of topics to consume]);
 
 	You can also pass a `messageHandler` to `createDirectStream` to access `MessageAndMetadata` that contains metadata about the current message and transform it to any desired type.
-	See the [API docs](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/java/org/apache/spark/examples/streaming/JavaDirectKafkaWordCount.java).
+	See the [API docs](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html).
 
 	</div>
 	<div data-lang="python" markdown="1">
@@ -126,8 +124,7 @@ Next, we discuss how to use this approach in your streaming application.
 		directKafkaStream = KafkaUtils.createDirectStream(ssc, [topic], {"metadata.broker.list": brokers})
 
 	You can also pass a `messageHandler` to `createDirectStream` to access `KafkaMessageAndMetadata` that contains metadata about the current message and transform it to any desired type.
-	By default, the Python API will decode Kafka data as UTF8 encoded strings. You can specify your custom decoding function to decode the byte arrays in Kafka records to any arbitrary data type. See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/examples/src/main/python/streaming/direct_kafka_wordcount.py).
+	By default, the Python API will decode Kafka data as UTF8 encoded strings. You can specify your custom decoding function to decode the byte arrays in Kafka records to any arbitrary data type. See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils).
 	</div>
 	</div>
 
@@ -155,33 +152,22 @@ Next, we discuss how to use this approach in your streaming application.
 	</div>
 	<div data-lang="java" markdown="1">
 		// Hold a reference to the current offset ranges, so it can be used downstream
-		final AtomicReference<OffsetRange[]> offsetRanges = new AtomicReference<>();
+		AtomicReference<OffsetRange[]> offsetRanges = new AtomicReference<>();
 
-		directKafkaStream.transformToPair(
-		  new Function<JavaPairRDD<String, String>, JavaPairRDD<String, String>>() {
-		    @Override
-		    public JavaPairRDD<String, String> call(JavaPairRDD<String, String> rdd) throws Exception {
-		      OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
-		      offsetRanges.set(offsets);
-		      return rdd;
-		    }
-		  }
-		).map(
+		directKafkaStream.transformToPair(rdd -> {
+      OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+      offsetRanges.set(offsets);
+      return rdd;
+		}).map(
 		  ...
-		).foreachRDD(
-		  new Function<JavaPairRDD<String, String>, Void>() {
-		    @Override
-		    public Void call(JavaPairRDD<String, String> rdd) throws IOException {
-		      for (OffsetRange o : offsetRanges.get()) {
-		        System.out.println(
-		          o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset()
-		        );
-		      }
-		      ...
-		      return null;
-		    }
-		  }
-		);
+		).foreachRDD(rdd -> {
+      for (OffsetRange o : offsetRanges.get()) {
+        System.out.println(
+          o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset()
+        );
+      }
+      ...
+		});
 	</div>
 	<div data-lang="python" markdown="1">
 		offsetRanges = []

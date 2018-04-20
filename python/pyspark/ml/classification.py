@@ -16,7 +16,8 @@
 #
 
 import operator
-import warnings
+import sys
+from multiprocessing.pool import ThreadPool
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
@@ -26,13 +27,14 @@ from pyspark.ml.regression import DecisionTreeModel, DecisionTreeRegressionModel
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.wrapper import JavaWrapper
-from pyspark.ml.common import inherit_doc
+from pyspark.ml.common import inherit_doc, _java2py, _py2java
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
 from pyspark.storagelevel import StorageLevel
 
-__all__ = ['LogisticRegression', 'LogisticRegressionModel',
+__all__ = ['LinearSVC', 'LinearSVCModel',
+           'LogisticRegression', 'LogisticRegressionModel',
            'LogisticRegressionSummary', 'LogisticRegressionTrainingSummary',
            'BinaryLogisticRegressionSummary', 'BinaryLogisticRegressionTrainingSummary',
            'DecisionTreeClassifier', 'DecisionTreeClassificationModel',
@@ -61,51 +63,181 @@ class JavaClassificationModel(JavaPredictionModel):
 
 
 @inherit_doc
+class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
+                HasRegParam, HasTol, HasRawPredictionCol, HasFitIntercept, HasStandardization,
+                HasWeightCol, HasAggregationDepth, HasThreshold, JavaMLWritable, JavaMLReadable):
+    """
+    .. note:: Experimental
+
+    `Linear SVM Classifier <https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM>`_
+
+    This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
+    Only supports L2 regularization currently.
+
+    >>> from pyspark.sql import Row
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = sc.parallelize([
+    ...     Row(label=1.0, features=Vectors.dense(1.0, 1.0, 1.0)),
+    ...     Row(label=0.0, features=Vectors.dense(1.0, 2.0, 3.0))]).toDF()
+    >>> svm = LinearSVC(maxIter=5, regParam=0.01)
+    >>> model = svm.fit(df)
+    >>> model.coefficients
+    DenseVector([0.0, -0.2792, -0.1833])
+    >>> model.intercept
+    1.0206118982229047
+    >>> model.numClasses
+    2
+    >>> model.numFeatures
+    3
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, -1.0, -1.0))]).toDF()
+    >>> result = model.transform(test0).head()
+    >>> result.prediction
+    1.0
+    >>> result.rawPrediction
+    DenseVector([-1.4831, 1.4831])
+    >>> svm_path = temp_path + "/svm"
+    >>> svm.save(svm_path)
+    >>> svm2 = LinearSVC.load(svm_path)
+    >>> svm2.getMaxIter()
+    5
+    >>> model_path = temp_path + "/svm_model"
+    >>> model.save(model_path)
+    >>> model2 = LinearSVCModel.load(model_path)
+    >>> model.coefficients[0] == model2.coefficients[0]
+    True
+    >>> model.intercept == model2.intercept
+    True
+
+    .. versionadded:: 2.2.0
+    """
+
+    threshold = Param(Params._dummy(), "threshold",
+                      "The threshold in binary classification applied to the linear model"
+                      " prediction.  This threshold can be any real number, where Inf will make"
+                      " all predictions 0.0 and -Inf will make all predictions 1.0.",
+                      typeConverter=TypeConverters.toFloat)
+
+    @keyword_only
+    def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                 maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
+                 fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
+                 aggregationDepth=2):
+        """
+        __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                 maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
+                 fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
+                 aggregationDepth=2):
+        """
+        super(LinearSVC, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.classification.LinearSVC", self.uid)
+        self._setDefault(maxIter=100, regParam=0.0, tol=1e-6, fitIntercept=True,
+                         standardization=True, threshold=0.0, aggregationDepth=2)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.2.0")
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
+                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None,
+                  aggregationDepth=2):
+        """
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction", \
+                  fitIntercept=True, standardization=True, threshold=0.0, weightCol=None, \
+                  aggregationDepth=2):
+        Sets params for Linear SVM Classifier.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+    def _create_model(self, java_model):
+        return LinearSVCModel(java_model)
+
+
+class LinearSVCModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
+    """
+    .. note:: Experimental
+
+    Model fitted by LinearSVC.
+
+    .. versionadded:: 2.2.0
+    """
+
+    @property
+    @since("2.2.0")
+    def coefficients(self):
+        """
+        Model coefficients of Linear SVM Classifier.
+        """
+        return self._call_java("coefficients")
+
+    @property
+    @since("2.2.0")
+    def intercept(self):
+        """
+        Model intercept of Linear SVM Classifier.
+        """
+        return self._call_java("intercept")
+
+
+@inherit_doc
 class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                          HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol,
                          HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
                          HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
     """
     Logistic regression.
-    Currently, this class only supports binary classification.
+    This class supports multinomial logistic (softmax) and binomial logistic regression.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
-    >>> df = sc.parallelize([
-    ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
-    ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], []))]).toDF()
-    >>> lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
-    >>> model = lr.fit(df)
-    >>> model.coefficients
-    DenseVector([5.5...])
-    >>> model.intercept
-    -2.68...
-    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
-    >>> result = model.transform(test0).head()
+    >>> bdf = sc.parallelize([
+    ...     Row(label=1.0, weight=1.0, features=Vectors.dense(0.0, 5.0)),
+    ...     Row(label=0.0, weight=2.0, features=Vectors.dense(1.0, 2.0)),
+    ...     Row(label=1.0, weight=3.0, features=Vectors.dense(2.0, 1.0)),
+    ...     Row(label=0.0, weight=4.0, features=Vectors.dense(3.0, 3.0))]).toDF()
+    >>> blor = LogisticRegression(regParam=0.01, weightCol="weight")
+    >>> blorModel = blor.fit(bdf)
+    >>> blorModel.coefficients
+    DenseVector([-1.080..., -0.646...])
+    >>> blorModel.intercept
+    3.112...
+    >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
+    >>> mdf = spark.read.format("libsvm").load(data_path)
+    >>> mlor = LogisticRegression(regParam=0.1, elasticNetParam=1.0, family="multinomial")
+    >>> mlorModel = mlor.fit(mdf)
+    >>> mlorModel.coefficientMatrix
+    SparseMatrix(3, 4, [0, 1, 2, 3], [3, 2, 1], [1.87..., -2.75..., -0.50...], 1)
+    >>> mlorModel.interceptVector
+    DenseVector([0.04..., -0.42..., 0.37...])
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 1.0))]).toDF()
+    >>> result = blorModel.transform(test0).head()
     >>> result.prediction
-    0.0
-    >>> result.probability
-    DenseVector([0.99..., 0.00...])
-    >>> result.rawPrediction
-    DenseVector([8.22..., -8.22...])
-    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
-    >>> model.transform(test1).head().prediction
     1.0
-    >>> lr.setParams("vector")
+    >>> result.probability
+    DenseVector([0.02..., 0.97...])
+    >>> result.rawPrediction
+    DenseVector([-3.54..., 3.54...])
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
+    >>> blorModel.transform(test1).head().prediction
+    1.0
+    >>> blor.setParams("vector")
     Traceback (most recent call last):
         ...
     TypeError: Method setParams forces keyword arguments.
     >>> lr_path = temp_path + "/lr"
-    >>> lr.save(lr_path)
+    >>> blor.save(lr_path)
     >>> lr2 = LogisticRegression.load(lr_path)
-    >>> lr2.getMaxIter()
-    5
+    >>> lr2.getRegParam()
+    0.01
     >>> model_path = temp_path + "/lr_model"
-    >>> model.save(model_path)
+    >>> blorModel.save(model_path)
     >>> model2 = LogisticRegressionModel.load(model_path)
-    >>> model.coefficients[0] == model2.coefficients[0]
+    >>> blorModel.coefficients[0] == model2.coefficients[0]
     True
-    >>> model.intercept == model2.intercept
+    >>> blorModel.intercept == model2.intercept
     True
 
     .. versionadded:: 1.3.0
@@ -117,25 +249,67 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                       "e.g. if threshold is p, then thresholds must be equal to [1-p, p].",
                       typeConverter=TypeConverters.toFloat)
 
+    family = Param(Params._dummy(), "family",
+                   "The name of family which is a description of the label distribution to " +
+                   "be used in the model. Supported options: auto, binomial, multinomial",
+                   typeConverter=TypeConverters.toString)
+
+    lowerBoundsOnCoefficients = Param(Params._dummy(), "lowerBoundsOnCoefficients",
+                                      "The lower bounds on coefficients if fitting under bound "
+                                      "constrained optimization. The bound matrix must be "
+                                      "compatible with the shape "
+                                      "(1, number of features) for binomial regression, or "
+                                      "(number of classes, number of features) "
+                                      "for multinomial regression.",
+                                      typeConverter=TypeConverters.toMatrix)
+
+    upperBoundsOnCoefficients = Param(Params._dummy(), "upperBoundsOnCoefficients",
+                                      "The upper bounds on coefficients if fitting under bound "
+                                      "constrained optimization. The bound matrix must be "
+                                      "compatible with the shape "
+                                      "(1, number of features) for binomial regression, or "
+                                      "(number of classes, number of features) "
+                                      "for multinomial regression.",
+                                      typeConverter=TypeConverters.toMatrix)
+
+    lowerBoundsOnIntercepts = Param(Params._dummy(), "lowerBoundsOnIntercepts",
+                                    "The lower bounds on intercepts if fitting under bound "
+                                    "constrained optimization. The bounds vector size must be"
+                                    "equal with 1 for binomial regression, or the number of"
+                                    "lasses for multinomial regression.",
+                                    typeConverter=TypeConverters.toVector)
+
+    upperBoundsOnIntercepts = Param(Params._dummy(), "upperBoundsOnIntercepts",
+                                    "The upper bounds on intercepts if fitting under bound "
+                                    "constrained optimization. The bound vector size must be "
+                                    "equal with 1 for binomial regression, or the number of "
+                                    "classes for multinomial regression.",
+                                    typeConverter=TypeConverters.toVector)
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                  threshold=0.5, thresholds=None, probabilityCol="probability",
                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None,
-                 aggregationDepth=2):
+                 aggregationDepth=2, family="auto",
+                 lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
+                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
+
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                  threshold=0.5, thresholds=None, probabilityCol="probability", \
                  rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
-                 aggregationDepth=2)
+                 aggregationDepth=2, family="auto", \
+                 lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
+                 lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
         super(LogisticRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.LogisticRegression", self.uid)
-        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5)
-        kwargs = self.__init__._input_kwargs
+        self._setDefault(maxIter=100, regParam=0.0, tol=1E-6, threshold=0.5, family="auto")
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
         self._checkThresholdConsistency()
 
@@ -145,17 +319,21 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True,
                   threshold=0.5, thresholds=None, probabilityCol="probability",
                   rawPredictionCol="rawPrediction", standardization=True, weightCol=None,
-                  aggregationDepth=2):
+                  aggregationDepth=2, family="auto",
+                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None,
+                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, regParam=0.0, elasticNetParam=0.0, tol=1e-6, fitIntercept=True, \
                   threshold=0.5, thresholds=None, probabilityCol="probability", \
                   rawPredictionCol="rawPrediction", standardization=True, weightCol=None, \
-                  aggregationDepth=2)
+                  aggregationDepth=2, family="auto", \
+                  lowerBoundsOnCoefficients=None, upperBoundsOnCoefficients=None, \
+                  lowerBoundsOnIntercepts=None, upperBoundsOnIntercepts=None):
         Sets params for logistic regression.
         If the threshold and thresholds Params are both set, they must be equivalent.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         self._set(**kwargs)
         self._checkThresholdConsistency()
         return self
@@ -221,16 +399,86 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     def _checkThresholdConsistency(self):
         if self.isSet(self.threshold) and self.isSet(self.thresholds):
-            ts = self.getParam(self.thresholds)
+            ts = self.getOrDefault(self.thresholds)
             if len(ts) != 2:
                 raise ValueError("Logistic Regression getThreshold only applies to" +
                                  " binary classification, but thresholds has length != 2." +
-                                 " thresholds: " + ",".join(ts))
+                                 " thresholds: {0}".format(str(ts)))
             t = 1.0/(1.0 + ts[0]/ts[1])
-            t2 = self.getParam(self.threshold)
+            t2 = self.getOrDefault(self.threshold)
             if abs(t2 - t) >= 1E-5:
                 raise ValueError("Logistic Regression getThreshold found inconsistent values for" +
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
+
+    @since("2.1.0")
+    def setFamily(self, value):
+        """
+        Sets the value of :py:attr:`family`.
+        """
+        return self._set(family=value)
+
+    @since("2.1.0")
+    def getFamily(self):
+        """
+        Gets the value of :py:attr:`family` or its default value.
+        """
+        return self.getOrDefault(self.family)
+
+    @since("2.3.0")
+    def setLowerBoundsOnCoefficients(self, value):
+        """
+        Sets the value of :py:attr:`lowerBoundsOnCoefficients`
+        """
+        return self._set(lowerBoundsOnCoefficients=value)
+
+    @since("2.3.0")
+    def getLowerBoundsOnCoefficients(self):
+        """
+        Gets the value of :py:attr:`lowerBoundsOnCoefficients`
+        """
+        return self.getOrDefault(self.lowerBoundsOnCoefficients)
+
+    @since("2.3.0")
+    def setUpperBoundsOnCoefficients(self, value):
+        """
+        Sets the value of :py:attr:`upperBoundsOnCoefficients`
+        """
+        return self._set(upperBoundsOnCoefficients=value)
+
+    @since("2.3.0")
+    def getUpperBoundsOnCoefficients(self):
+        """
+        Gets the value of :py:attr:`upperBoundsOnCoefficients`
+        """
+        return self.getOrDefault(self.upperBoundsOnCoefficients)
+
+    @since("2.3.0")
+    def setLowerBoundsOnIntercepts(self, value):
+        """
+        Sets the value of :py:attr:`lowerBoundsOnIntercepts`
+        """
+        return self._set(lowerBoundsOnIntercepts=value)
+
+    @since("2.3.0")
+    def getLowerBoundsOnIntercepts(self):
+        """
+        Gets the value of :py:attr:`lowerBoundsOnIntercepts`
+        """
+        return self.getOrDefault(self.lowerBoundsOnIntercepts)
+
+    @since("2.3.0")
+    def setUpperBoundsOnIntercepts(self, value):
+        """
+        Sets the value of :py:attr:`upperBoundsOnIntercepts`
+        """
+        return self._set(upperBoundsOnIntercepts=value)
+
+    @since("2.3.0")
+    def getUpperBoundsOnIntercepts(self):
+        """
+        Gets the value of :py:attr:`upperBoundsOnIntercepts`
+        """
+        return self.getOrDefault(self.upperBoundsOnIntercepts)
 
 
 class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
@@ -244,7 +492,8 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
     @since("2.0.0")
     def coefficients(self):
         """
-        Model coefficients.
+        Model coefficients of binomial logistic regression.
+        An exception is thrown in the case of multinomial logistic regression.
         """
         return self._call_java("coefficients")
 
@@ -252,21 +501,43 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
     @since("1.4.0")
     def intercept(self):
         """
-        Model intercept.
+        Model intercept of binomial logistic regression.
+        An exception is thrown in the case of multinomial logistic regression.
         """
         return self._call_java("intercept")
+
+    @property
+    @since("2.1.0")
+    def coefficientMatrix(self):
+        """
+        Model coefficients.
+        """
+        return self._call_java("coefficientMatrix")
+
+    @property
+    @since("2.1.0")
+    def interceptVector(self):
+        """
+        Model intercept.
+        """
+        return self._call_java("interceptVector")
 
     @property
     @since("2.0.0")
     def summary(self):
         """
-        Gets summary (e.g. residuals, mse, r-squared ) of model on
-        training set. An exception is thrown if
-        `trainingSummary is None`.
+        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
-        java_blrt_summary = self._call_java("summary")
-        # Note: Once multiclass is added, update this to return correct summary
-        return BinaryLogisticRegressionTrainingSummary(java_blrt_summary)
+        if self.hasSummary:
+            java_lrt_summary = self._call_java("summary")
+            if self.numClasses <= 2:
+                return BinaryLogisticRegressionTrainingSummary(java_lrt_summary)
+            else:
+                return LogisticRegressionTrainingSummary(java_lrt_summary)
+        else:
+            raise RuntimeError("No training summary available for this %s" %
+                               self.__class__.__name__)
 
     @property
     @since("2.0.0")
@@ -319,6 +590,14 @@ class LogisticRegressionSummary(JavaWrapper):
         return self._call_java("probabilityCol")
 
     @property
+    @since("2.3.0")
+    def predictionCol(self):
+        """
+        Field in "predictions" which gives the prediction of each class.
+        """
+        return self._call_java("predictionCol")
+
+    @property
     @since("2.0.0")
     def labelCol(self):
         """
@@ -335,6 +614,110 @@ class LogisticRegressionSummary(JavaWrapper):
         as a vector.
         """
         return self._call_java("featuresCol")
+
+    @property
+    @since("2.3.0")
+    def labels(self):
+        """
+        Returns the sequence of labels in ascending order. This order matches the order used
+        in metrics which are specified as arrays over labels, e.g., truePositiveRateByLabel.
+
+        Note: In most cases, it will be values {0.0, 1.0, ..., numClasses-1}, However, if the
+        training set is missing a label, then all of the arrays over labels
+        (e.g., from truePositiveRateByLabel) will be of length numClasses-1 instead of the
+        expected numClasses.
+        """
+        return self._call_java("labels")
+
+    @property
+    @since("2.3.0")
+    def truePositiveRateByLabel(self):
+        """
+        Returns true positive rate for each label (category).
+        """
+        return self._call_java("truePositiveRateByLabel")
+
+    @property
+    @since("2.3.0")
+    def falsePositiveRateByLabel(self):
+        """
+        Returns false positive rate for each label (category).
+        """
+        return self._call_java("falsePositiveRateByLabel")
+
+    @property
+    @since("2.3.0")
+    def precisionByLabel(self):
+        """
+        Returns precision for each label (category).
+        """
+        return self._call_java("precisionByLabel")
+
+    @property
+    @since("2.3.0")
+    def recallByLabel(self):
+        """
+        Returns recall for each label (category).
+        """
+        return self._call_java("recallByLabel")
+
+    @since("2.3.0")
+    def fMeasureByLabel(self, beta=1.0):
+        """
+        Returns f-measure for each label (category).
+        """
+        return self._call_java("fMeasureByLabel", beta)
+
+    @property
+    @since("2.3.0")
+    def accuracy(self):
+        """
+        Returns accuracy.
+        (equals to the total number of correctly classified instances
+        out of the total number of instances.)
+        """
+        return self._call_java("accuracy")
+
+    @property
+    @since("2.3.0")
+    def weightedTruePositiveRate(self):
+        """
+        Returns weighted true positive rate.
+        (equals to precision, recall and f-measure)
+        """
+        return self._call_java("weightedTruePositiveRate")
+
+    @property
+    @since("2.3.0")
+    def weightedFalsePositiveRate(self):
+        """
+        Returns weighted false positive rate.
+        """
+        return self._call_java("weightedFalsePositiveRate")
+
+    @property
+    @since("2.3.0")
+    def weightedRecall(self):
+        """
+        Returns weighted averaged recall.
+        (equals to precision, recall and f-measure)
+        """
+        return self._call_java("weightedRecall")
+
+    @property
+    @since("2.3.0")
+    def weightedPrecision(self):
+        """
+        Returns weighted averaged precision.
+        """
+        return self._call_java("weightedPrecision")
+
+    @since("2.3.0")
+    def weightedFMeasure(self, beta=1.0):
+        """
+        Returns weighted averaged f-measure.
+        """
+        return self._call_java("weightedFMeasure", beta)
 
 
 @inherit_doc
@@ -388,9 +771,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         .. seealso:: `Wikipedia reference \
         <http://en.wikipedia.org/wiki/Receiver_operating_characteristic>`_
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LogisticRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LogisticRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("roc")
 
@@ -401,9 +784,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         Computes the area under the receiver operating characteristic
         (ROC) curve.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LogisticRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LogisticRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("areaUnderROC")
 
@@ -415,9 +798,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         containing two fields recall, precision with (0.0, 1.0) prepended
         to it.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LogisticRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LogisticRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("pr")
 
@@ -428,9 +811,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         Returns a dataframe with two fields (threshold, F-Measure) curve
         with beta = 1.0.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LogisticRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LogisticRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("fMeasureByThreshold")
 
@@ -442,9 +825,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         Every possible probability obtained in transforming the dataset
         are used as thresholds used in calculating the precision.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LogisticRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LogisticRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("precisionByThreshold")
 
@@ -456,9 +839,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         Every possible probability obtained in transforming the dataset
         are used as thresholds used in calculating the recall.
 
-        Note: This ignores instance weights (setting all to 1.0) from
-        `LogisticRegression.weightCol`. This will change in later Spark
-        versions.
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LogisticRegression.weightCol`. This will change in later Spark
+            versions.
         """
         return self._call_java("recallByThreshold")
 
@@ -594,7 +977,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
                          impurity="gini")
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -612,7 +995,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                   seed=None)
         Sets params for the DecisionTreeClassifier.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
@@ -643,9 +1026,9 @@ class DecisionTreeClassificationModel(DecisionTreeModel, JavaClassificationModel
             where gain is scaled by the number of instances passing through node
           - Normalize importances for tree to sum to 1.
 
-        Note: Feature importance for single decision trees can have high variance due to
-              correlated predictor variables. Consider using a :py:class:`RandomForestClassifier`
-              to determine feature importance instead.
+        .. note:: Feature importance for single decision trees can have high variance due to
+            correlated predictor variables. Consider using a :py:class:`RandomForestClassifier`
+            to determine feature importance instead.
         """
         return self._call_java("featureImportances")
 
@@ -709,21 +1092,22 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                  probabilityCol="probability", rawPredictionCol="rawPrediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini",
-                 numTrees=20, featureSubsetStrategy="auto", seed=None):
+                 numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, impurity="gini", \
-                 numTrees=20, featureSubsetStrategy="auto", seed=None)
+                 numTrees=20, featureSubsetStrategy="auto", seed=None, subsamplingRate=1.0)
         """
         super(RandomForestClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.RandomForestClassifier", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         impurity="gini", numTrees=20, featureSubsetStrategy="auto")
-        kwargs = self.__init__._input_kwargs
+                         impurity="gini", numTrees=20, featureSubsetStrategy="auto",
+                         subsamplingRate=1.0)
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -732,16 +1116,16 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                   probabilityCol="probability", rawPredictionCol="rawPrediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None,
-                  impurity="gini", numTrees=20, featureSubsetStrategy="auto"):
+                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, seed=None, \
-                  impurity="gini", numTrees=20, featureSubsetStrategy="auto")
+                  impurity="gini", numTrees=20, featureSubsetStrategy="auto", subsamplingRate=1.0)
         Sets params for linear classification.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
@@ -786,7 +1170,6 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for classification.
     It supports binary labels, as well as both continuous and categorical features.
-    Note: Multiclass labels are not currently supported.
 
     The implementation is based upon: J.H. Friedman. "Stochastic Gradient Boosting." 1999.
 
@@ -797,6 +1180,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     based on the loss function, whereas the original gradient boosting method does not.
     - We expect to implement TreeBoost in the future:
     `SPARK-4240 <https://issues.apache.org/jira/browse/SPARK-4240>`_
+
+    .. note:: Multiclass labels are not currently supported.
 
     >>> from numpy import allclose
     >>> from pyspark.ml.linalg import Vectors
@@ -846,24 +1231,29 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                      "Supported options: " + ", ".join(GBTParams.supportedLossTypes),
                      typeConverter=TypeConverters.toString)
 
+    stepSize = Param(Params._dummy(), "stepSize",
+                     "Step size (a.k.a. learning rate) in interval (0, 1] for shrinking " +
+                     "the contribution of each estimator.",
+                     typeConverter=TypeConverters.toFloat)
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, lossType="logistic",
-                 maxIter=20, stepSize=0.1, seed=None):
+                 maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                 lossType="logistic", maxIter=20, stepSize=0.1, seed=None)
+                 lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0)
         """
         super(GBTClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.GBTClassifier", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                         lossType="logistic", maxIter=20, stepSize=0.1)
-        kwargs = self.__init__._input_kwargs
+                         lossType="logistic", maxIter=20, stepSize=0.1, subsamplingRate=1.0)
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
@@ -871,15 +1261,15 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10,
-                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None):
+                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, checkpointInterval=10, \
-                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None)
+                  lossType="logistic", maxIter=20, stepSize=0.1, seed=None, subsamplingRate=1.0)
         Sets params for Gradient Boosted Tree Classification.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
@@ -932,7 +1322,7 @@ class GBTClassificationModel(TreeEnsembleModel, JavaPredictionModel, JavaMLWrita
 
 @inherit_doc
 class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasProbabilityCol,
-                 HasRawPredictionCol, HasThresholds, JavaMLWritable, JavaMLReadable):
+                 HasRawPredictionCol, HasThresholds, HasWeightCol, JavaMLWritable, JavaMLReadable):
     """
     Naive Bayes Classifiers.
     It supports both Multinomial and Bernoulli NB. `Multinomial NB
@@ -946,23 +1336,23 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
-    ...     Row(label=0.0, features=Vectors.dense([0.0, 0.0])),
-    ...     Row(label=0.0, features=Vectors.dense([0.0, 1.0])),
-    ...     Row(label=1.0, features=Vectors.dense([1.0, 0.0]))])
-    >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial")
+    ...     Row(label=0.0, weight=0.1, features=Vectors.dense([0.0, 0.0])),
+    ...     Row(label=0.0, weight=0.5, features=Vectors.dense([0.0, 1.0])),
+    ...     Row(label=1.0, weight=1.0, features=Vectors.dense([1.0, 0.0]))])
+    >>> nb = NaiveBayes(smoothing=1.0, modelType="multinomial", weightCol="weight")
     >>> model = nb.fit(df)
     >>> model.pi
-    DenseVector([-0.51..., -0.91...])
+    DenseVector([-0.81..., -0.58...])
     >>> model.theta
-    DenseMatrix(2, 2, [-1.09..., -0.40..., -0.40..., -1.09...], 1)
+    DenseMatrix(2, 2, [-0.91..., -0.51..., -0.40..., -1.09...], 1)
     >>> test0 = sc.parallelize([Row(features=Vectors.dense([1.0, 0.0]))]).toDF()
     >>> result = model.transform(test0).head()
     >>> result.prediction
     1.0
     >>> result.probability
-    DenseVector([0.42..., 0.57...])
+    DenseVector([0.32..., 0.67...])
     >>> result.rawPrediction
-    DenseVector([-1.60..., -1.32...])
+    DenseVector([-1.72..., -0.99...])
     >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
     >>> model.transform(test1).head().prediction
     1.0
@@ -996,31 +1386,31 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0,
-                 modelType="multinomial", thresholds=None):
+                 modelType="multinomial", thresholds=None, weightCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0, \
-                 modelType="multinomial", thresholds=None)
+                 modelType="multinomial", thresholds=None, weightCol=None)
         """
         super(NaiveBayes, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.NaiveBayes", self.uid)
         self._setDefault(smoothing=1.0, modelType="multinomial")
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.5.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0,
-                  modelType="multinomial", thresholds=None):
+                  modelType="multinomial", thresholds=None, weightCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0, \
-                  modelType="multinomial", thresholds=None)
+                  modelType="multinomial", thresholds=None, weightCol=None)
         Sets params for Naive Bayes.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
@@ -1081,11 +1471,10 @@ class NaiveBayesModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaML
 
 @inherit_doc
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                                     HasMaxIter, HasTol, HasSeed, HasStepSize, JavaMLWritable,
-                                     JavaMLReadable):
+                                     HasMaxIter, HasTol, HasSeed, HasStepSize, HasSolver,
+                                     JavaMLWritable, JavaMLReadable, HasProbabilityCol,
+                                     HasRawPredictionCol):
     """
-    .. note:: Experimental
-
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
     Number of inputs has to be equal to the size of feature vectors.
@@ -1106,7 +1495,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     >>> testDF = spark.createDataFrame([
     ...     (Vectors.dense([1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 0.0]),)], ["features"])
-    >>> model.transform(testDF).show()
+    >>> model.transform(testDF).select("features", "prediction").show()
     +---------+----------+
     | features|prediction|
     +---------+----------+
@@ -1153,31 +1542,35 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
-                 solver="l-bfgs", initialWeights=None):
+                 solver="l-bfgs", initialWeights=None, probabilityCol="probability",
+                 rawPredictionCol="rawPrediction"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
-                 solver="l-bfgs", initialWeights=None)
+                 solver="l-bfgs", initialWeights=None, probabilityCol="probability", \
+                 rawPredictionCol="rawPrediction")
         """
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.MultilayerPerceptronClassifier", self.uid)
-        self._setDefault(maxIter=100, tol=1E-4, blockSize=128, stepSize=0.03, solver="l-bfgs")
-        kwargs = self.__init__._input_kwargs
+        self._setDefault(maxIter=100, tol=1E-6, blockSize=128, stepSize=0.03, solver="l-bfgs")
+        kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.6.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
-                  solver="l-bfgs", initialWeights=None):
+                  solver="l-bfgs", initialWeights=None, probabilityCol="probability",
+                  rawPredictionCol="rawPrediction"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
-                  solver="l-bfgs", initialWeights=None)
+                  solver="l-bfgs", initialWeights=None, probabilityCol="probability", \
+                  rawPredictionCol="rawPrediction"):
         Sets params for MultilayerPerceptronClassifier.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _create_model(self, java_model):
@@ -1226,20 +1619,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.stepSize)
 
     @since("2.0.0")
-    def setSolver(self, value):
-        """
-        Sets the value of :py:attr:`solver`.
-        """
-        return self._set(solver=value)
-
-    @since("2.0.0")
-    def getSolver(self):
-        """
-        Gets the value of solver or its default value.
-        """
-        return self.getOrDefault(self.solver)
-
-    @since("2.0.0")
     def setInitialWeights(self, value):
         """
         Sets the value of :py:attr:`initialWeights`.
@@ -1254,11 +1633,9 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.initialWeights)
 
 
-class MultilayerPerceptronClassificationModel(JavaModel, JavaPredictionModel, JavaMLWritable,
+class MultilayerPerceptronClassificationModel(JavaModel, JavaClassificationModel, JavaMLWritable,
                                               JavaMLReadable):
     """
-    .. note:: Experimental
-
     Model fitted by MultilayerPerceptronClassifier.
 
     .. versionadded:: 1.6.0
@@ -1281,7 +1658,7 @@ class MultilayerPerceptronClassificationModel(JavaModel, JavaPredictionModel, Ja
         return self._call_java("weights")
 
 
-class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
+class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCol):
     """
     Parameters for OneVsRest and OneVsRestModel.
     """
@@ -1306,7 +1683,7 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
 
 @inherit_doc
-class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
+class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1318,49 +1695,59 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
-    >>> df = sc.parallelize([
-    ...     Row(label=0.0, features=Vectors.dense(1.0, 0.8)),
-    ...     Row(label=1.0, features=Vectors.sparse(2, [], [])),
-    ...     Row(label=2.0, features=Vectors.dense(0.5, 0.5))]).toDF()
-    >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
+    >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
+    >>> df = spark.read.format("libsvm").load(data_path)
+    >>> lr = LogisticRegression(regParam=0.01)
     >>> ovr = OneVsRest(classifier=lr)
     >>> model = ovr.fit(df)
-    >>> [x.coefficients for x in model.models]
-    [DenseVector([3.3925, 1.8785]), DenseVector([-4.3016, -6.3163]), DenseVector([-4.5855, 6.1785])]
+    >>> model.models[0].coefficients
+    DenseVector([0.5..., -1.0..., 3.4..., 4.2...])
+    >>> model.models[1].coefficients
+    DenseVector([-2.1..., 3.1..., -2.6..., -2.3...])
+    >>> model.models[2].coefficients
+    DenseVector([0.3..., -3.4..., 1.0..., -1.1...])
     >>> [x.intercept for x in model.models]
-    [-3.64747..., 2.55078..., -1.10165...]
-    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0))]).toDF()
+    [-2.7..., -2.5..., -1.3...]
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0, 1.0, 1.0))]).toDF()
     >>> model.transform(test0).head().prediction
-    1.0
-    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
-    >>> model.transform(test1).head().prediction
     0.0
-    >>> test2 = sc.parallelize([Row(features=Vectors.dense(0.5, 0.4))]).toDF()
-    >>> model.transform(test2).head().prediction
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(4, [0], [1.0]))]).toDF()
+    >>> model.transform(test1).head().prediction
     2.0
+    >>> test2 = sc.parallelize([Row(features=Vectors.dense(0.5, 0.4, 0.3, 0.2))]).toDF()
+    >>> model.transform(test2).head().prediction
+    0.0
+    >>> model_path = temp_path + "/ovr_model"
+    >>> model.save(model_path)
+    >>> model2 = OneVsRestModel.load(model_path)
+    >>> model2.transform(test0).head().prediction
+    0.0
 
     .. versionadded:: 2.0.0
     """
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 classifier=None):
+                 classifier=None, weightCol=None, parallelism=1):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 classifier=None)
+                 classifier=None, weightCol=None, parallelism=1):
         """
         super(OneVsRest, self).__init__()
-        kwargs = self.__init__._input_kwargs
+        self._setDefault(parallelism=1)
+        kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, featuresCol=None, labelCol=None, predictionCol=None, classifier=None):
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  classifier=None, weightCol=None, parallelism=1):
         """
-        setParams(self, featuresCol=None, labelCol=None, predictionCol=None, classifier=None):
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  classifier=None, weightCol=None, parallelism=1):
         Sets params for OneVsRest.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
     def _fit(self, dataset):
@@ -1373,11 +1760,21 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
         numClasses = int(dataset.agg({labelCol: "max"}).head()["max("+labelCol+")"]) + 1
 
-        multiclassLabeled = dataset.select(labelCol, featuresCol)
+        weightCol = None
+        if (self.isDefined(self.weightCol) and self.getWeightCol()):
+            if isinstance(classifier, HasWeightCol):
+                weightCol = self.getWeightCol()
+            else:
+                warnings.warn("weightCol is ignored, "
+                              "as it is not supported by {} now.".format(classifier))
+
+        if weightCol:
+            multiclassLabeled = dataset.select(labelCol, featuresCol, weightCol)
+        else:
+            multiclassLabeled = dataset.select(labelCol, featuresCol)
 
         # persist if underlying dataset is not persistent.
-        handlePersistence = \
-            dataset.rdd.getStorageLevel() == StorageLevel(False, False, False, False)
+        handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
         if handlePersistence:
             multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -1389,10 +1786,13 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
             paramMap = dict([(classifier.labelCol, binaryLabelCol),
                             (classifier.featuresCol, featuresCol),
                             (classifier.predictionCol, predictionCol)])
+            if weightCol:
+                paramMap[classifier.weightCol] = weightCol
             return classifier.fit(trainingDataset, paramMap)
 
-        # TODO: Parallel training for all classes.
-        models = [trainSingleClass(i) for i in range(numClasses)]
+        pool = ThreadPool(processes=min(self.getParallelism(), numClasses))
+
+        models = pool.map(trainSingleClass, range(numClasses))
 
         if handlePersistence:
             multiclassLabeled.unpersist()
@@ -1416,22 +1816,6 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
             newOvr.setClassifier(self.getClassifier().copy(extra))
         return newOvr
 
-    @since("2.0.0")
-    def write(self):
-        """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
-
-    @since("2.0.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
-
-    @classmethod
-    @since("2.0.0")
-    def read(cls):
-        """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
-
     @classmethod
     def _from_java(cls, java_stage):
         """
@@ -1442,8 +1826,9 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         labelCol = java_stage.getLabelCol()
         predictionCol = java_stage.getPredictionCol()
         classifier = JavaParams._from_java(java_stage.getClassifier())
+        parallelism = java_stage.getParallelism()
         py_stage = cls(featuresCol=featuresCol, labelCol=labelCol, predictionCol=predictionCol,
-                       classifier=classifier)
+                       classifier=classifier, parallelism=parallelism)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -1456,13 +1841,58 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRest",
                                              self.uid)
         _java_obj.setClassifier(self.getClassifier()._to_java())
+        _java_obj.setParallelism(self.getParallelism())
         _java_obj.setFeaturesCol(self.getFeaturesCol())
         _java_obj.setLabelCol(self.getLabelCol())
         _java_obj.setPredictionCol(self.getPredictionCol())
         return _java_obj
 
+    def _make_java_param_pair(self, param, value):
+        """
+        Makes a Java param pair.
+        """
+        sc = SparkContext._active_spark_context
+        param = self._resolveParam(param)
+        _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRest",
+                                             self.uid)
+        java_param = _java_obj.getParam(param.name)
+        if isinstance(value, JavaParams):
+            # used in the case of an estimator having another estimator as a parameter
+            # the reason why this is not in _py2java in common.py is that importing
+            # Estimator and Model in common.py results in a circular import with inherit_doc
+            java_value = value._to_java()
+        else:
+            java_value = _py2java(sc, value)
+        return java_param.w(java_value)
 
-class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
+    def _transfer_param_map_to_java(self, pyParamMap):
+        """
+        Transforms a Python ParamMap into a Java ParamMap.
+        """
+        paramMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
+        for param in self.params:
+            if param in pyParamMap:
+                pair = self._make_java_param_pair(param, pyParamMap[param])
+                paramMap.put([pair])
+        return paramMap
+
+    def _transfer_param_map_from_java(self, javaParamMap):
+        """
+        Transforms a Java ParamMap into a Python ParamMap.
+        """
+        sc = SparkContext._active_spark_context
+        paramMap = dict()
+        for pair in javaParamMap.toList():
+            param = pair.param()
+            if self.hasParam(str(param.name())):
+                if param.name() == "classifier":
+                    paramMap[self.getParam(param.name())] = JavaParams._from_java(pair.value())
+                else:
+                    paramMap[self.getParam(param.name())] = _java2py(sc, pair.value())
+        return paramMap
+
+
+class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1477,6 +1907,16 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
     def __init__(self, models):
         super(OneVsRestModel, self).__init__()
         self.models = models
+        java_models = [model._to_java() for model in self.models]
+        sc = SparkContext._active_spark_context
+        java_models_array = JavaWrapper._new_java_array(java_models,
+                                                        sc._gateway.jvm.org.apache.spark.ml
+                                                        .classification.ClassificationModel)
+        # TODO: need to set metadata
+        metadata = JavaParams._new_java_obj("org.apache.spark.sql.types.Metadata")
+        self._java_obj = \
+            JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRestModel",
+                                     self.uid, metadata.empty(), java_models_array)
 
     def _transform(self, dataset):
         # determine the input columns: these need to be passed through
@@ -1488,8 +1928,7 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
         newDataset = dataset.withColumn(accColName, initUDF(dataset[origCols[0]]))
 
         # persist if underlying dataset is not persistent.
-        handlePersistence = \
-            dataset.rdd.getStorageLevel() == StorageLevel(False, False, False, False)
+        handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
         if handlePersistence:
             newDataset.persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -1542,22 +1981,6 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
         newModel.models = [model.copy(extra) for model in self.models]
         return newModel
 
-    @since("2.0.0")
-    def write(self):
-        """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
-
-    @since("2.0.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
-
-    @classmethod
-    @since("2.0.0")
-    def read(cls):
-        """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
-
     @classmethod
     def _from_java(cls, java_stage):
         """
@@ -1580,9 +2003,13 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
 
         :return: Java object equivalent to this instance.
         """
+        sc = SparkContext._active_spark_context
         java_models = [model._to_java() for model in self.models]
+        java_models_array = JavaWrapper._new_java_array(
+            java_models, sc._gateway.jvm.org.apache.spark.ml.classification.ClassificationModel)
+        metadata = JavaParams._new_java_obj("org.apache.spark.sql.types.Metadata")
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRestModel",
-                                             self.uid, java_models)
+                                             self.uid, metadata.empty(), java_models_array)
         _java_obj.set("classifier", self.getClassifier()._to_java())
         _java_obj.set("featuresCol", self.getFeaturesCol())
         _java_obj.set("labelCol", self.getLabelCol())
@@ -1617,4 +2044,4 @@ if __name__ == "__main__":
         except OSError:
             pass
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

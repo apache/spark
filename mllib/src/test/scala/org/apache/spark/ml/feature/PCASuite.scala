@@ -17,17 +17,17 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.distributed.RowMatrix
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 
-class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class PCASuite extends MLTest with DefaultReadWriteTest {
+
+  import testImplicits._
 
   test("params") {
     ParamsSuite.checkParams(new PCA)
@@ -50,20 +50,20 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val pc = mat.computePrincipalComponents(3)
     val expected = mat.multiply(pc).rows.map(_.asML)
 
-    val df = spark.createDataFrame(dataRDD.zip(expected)).toDF("features", "expected")
+    val df = dataRDD.zip(expected).toDF("features", "expected")
 
     val pca = new PCA()
       .setInputCol("features")
       .setOutputCol("pca_features")
       .setK(3)
-      .fit(df)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(pca)
+    val pcaModel = pca.fit(df)
 
-    pca.transform(df).select("pca_features", "expected").collect().foreach {
-      case Row(x: Vector, y: Vector) =>
-        assert(x ~== y absTol 1e-5, "Transformed vector is different with expected vector.")
+    MLTestingUtils.checkCopyAndUids(pca, pcaModel)
+    testTransformer[(Vector, Vector)](df, pcaModel, "pca_features", "expected") {
+      case Row(result: Vector, expected: Vector) =>
+        assert(result ~== expected absTol 1e-5,
+          "Transformed vector is different with expected vector.")
     }
   }
 

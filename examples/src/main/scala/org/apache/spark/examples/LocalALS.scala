@@ -129,8 +129,7 @@ object LocalALS {
       println(s"Iteration $iter:")
       ms = (0 until M).map(i => updateMovie(i, ms(i), us, R)).toArray
       us = (0 until U).map(j => updateUser(j, us(j), ms, R)).toArray
-      println("RMSE = " + rmse(R, ms, us))
-      println()
+      println(s"RMSE = ${rmse(R, ms, us)}")
     }
   }
 

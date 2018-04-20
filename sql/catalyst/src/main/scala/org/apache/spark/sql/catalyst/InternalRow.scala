@@ -18,10 +18,12 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
- * An abstract class for row used internal in Spark SQL, which only contain the columns as
+ * An abstract class for row used internally in Spark SQL, which only contains the columns as
  * internal types.
  */
 abstract class InternalRow extends SpecializedGetters with Serializable {
@@ -31,13 +33,46 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
   // This is only use for test and will throw a null pointer exception if the position is null.
   def getString(ordinal: Int): String = getUTF8String(ordinal).toString
 
+  def setNullAt(i: Int): Unit
+
+  /**
+   * Updates the value at column `i`. Note that after updating, the given value will be kept in this
+   * row, and the caller side should guarantee that this value won't be changed afterwards.
+   */
+  def update(i: Int, value: Any): Unit
+
+  // default implementation (slow)
+  def setBoolean(i: Int, value: Boolean): Unit = update(i, value)
+  def setByte(i: Int, value: Byte): Unit = update(i, value)
+  def setShort(i: Int, value: Short): Unit = update(i, value)
+  def setInt(i: Int, value: Int): Unit = update(i, value)
+  def setLong(i: Int, value: Long): Unit = update(i, value)
+  def setFloat(i: Int, value: Float): Unit = update(i, value)
+  def setDouble(i: Int, value: Double): Unit = update(i, value)
+
+  /**
+   * Update the decimal column at `i`.
+   *
+   * Note: In order to support update decimal with precision > 18 in UnsafeRow,
+   * CAN NOT call setNullAt() for decimal column on UnsafeRow, call setDecimal(i, null, precision).
+   */
+  def setDecimal(i: Int, value: Decimal, precision: Int) { update(i, value) }
+
   /**
    * Make a copy of the current [[InternalRow]] object.
    */
   def copy(): InternalRow
 
   /** Returns true if there are any NULL values in this row. */
-  def anyNull: Boolean
+  def anyNull: Boolean = {
+    val len = numFields
+    var i = 0
+    while (i < len) {
+      if (isNullAt(i)) { return true }
+      i += 1
+    }
+    false
+  }
 
   /* ---------------------- utility methods for Scala ---------------------- */
 
@@ -73,4 +108,39 @@ object InternalRow {
 
   /** Returns an empty [[InternalRow]]. */
   val empty = apply()
+
+  /**
+   * Copies the given value if it's string/struct/array/map type.
+   */
+  def copyValue(value: Any): Any = value match {
+    case v: UTF8String => v.copy()
+    case v: InternalRow => v.copy()
+    case v: ArrayData => v.copy()
+    case v: MapData => v.copy()
+    case _ => value
+  }
+
+  /**
+   * Returns an accessor for an `InternalRow` with given data type. The returned accessor
+   * actually takes a `SpecializedGetters` input because it can be generalized to other classes
+   * that implements `SpecializedGetters` (e.g., `ArrayData`) too.
+   */
+  def getAccessor(dataType: DataType): (SpecializedGetters, Int) => Any = dataType match {
+    case BooleanType => (input, ordinal) => input.getBoolean(ordinal)
+    case ByteType => (input, ordinal) => input.getByte(ordinal)
+    case ShortType => (input, ordinal) => input.getShort(ordinal)
+    case IntegerType | DateType => (input, ordinal) => input.getInt(ordinal)
+    case LongType | TimestampType => (input, ordinal) => input.getLong(ordinal)
+    case FloatType => (input, ordinal) => input.getFloat(ordinal)
+    case DoubleType => (input, ordinal) => input.getDouble(ordinal)
+    case StringType => (input, ordinal) => input.getUTF8String(ordinal)
+    case BinaryType => (input, ordinal) => input.getBinary(ordinal)
+    case CalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
+    case t: DecimalType => (input, ordinal) => input.getDecimal(ordinal, t.precision, t.scale)
+    case t: StructType => (input, ordinal) => input.getStruct(ordinal, t.size)
+    case _: ArrayType => (input, ordinal) => input.getArray(ordinal)
+    case _: MapType => (input, ordinal) => input.getMap(ordinal)
+    case u: UserDefinedType[_] => getAccessor(u.sqlType)
+    case _ => (input, ordinal) => input.get(ordinal, dataType)
+  }
 }

@@ -19,6 +19,10 @@ import os
 import sys
 import gc
 from tempfile import NamedTemporaryFile
+import threading
+
+from pyspark.cloudpickle import print_exec
+from pyspark.util import _exception_message
 
 if sys.version < '3':
     import cPickle as pickle
@@ -75,7 +79,15 @@ class Broadcast(object):
             self._path = path
 
     def dump(self, value, f):
-        pickle.dump(value, f, 2)
+        try:
+            pickle.dump(value, f, 2)
+        except pickle.PickleError:
+            raise
+        except Exception as e:
+            msg = "Could not serialize broadcast: %s: %s" \
+                  % (e.__class__.__name__, _exception_message(e))
+            print_exec(sys.stderr)
+            raise pickle.PicklingError(msg)
         f.close()
         return f.name
 
@@ -128,8 +140,26 @@ class Broadcast(object):
         return _from_id, (self._jbroadcast.id(),)
 
 
+class BroadcastPickleRegistry(threading.local):
+    """ Thread-local registry for broadcast variables that have been pickled
+    """
+
+    def __init__(self):
+        self.__dict__.setdefault("_registry", set())
+
+    def __iter__(self):
+        for bcast in self._registry:
+            yield bcast
+
+    def add(self, bcast):
+        self._registry.add(bcast)
+
+    def clear(self):
+        self._registry.clear()
+
+
 if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

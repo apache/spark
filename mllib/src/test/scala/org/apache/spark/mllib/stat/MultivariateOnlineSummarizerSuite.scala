@@ -270,4 +270,22 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     assert(summarizer3.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
     assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
   }
+
+  test ("test zero variance (SPARK-21818)") {
+    val summarizer1 = (new MultivariateOnlineSummarizer)
+      .add(Vectors.dense(3.0), 0.7)
+    val summarizer2 = (new MultivariateOnlineSummarizer)
+      .add(Vectors.dense(3.0), 0.4)
+    val summarizer3 = (new MultivariateOnlineSummarizer)
+      .add(Vectors.dense(3.0), 0.5)
+    val summarizer4 = (new MultivariateOnlineSummarizer)
+      .add(Vectors.dense(3.0), 0.4)
+
+    val summarizer = summarizer1
+      .merge(summarizer2)
+      .merge(summarizer3)
+      .merge(summarizer4)
+
+    assert(summarizer.variance(0) >= 0.0)
+  }
 }

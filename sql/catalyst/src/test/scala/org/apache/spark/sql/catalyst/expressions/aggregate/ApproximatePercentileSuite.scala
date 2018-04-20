@@ -19,11 +19,11 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, CreateArray, DecimalLiteral, GenericMutableRow, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, CreateArray, DecimalLiteral, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.{PercentileDigest, PercentileDigestSerializer}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.ArrayData
@@ -86,7 +86,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       (headBufferSize + bufferSize) * 2
     }
 
-    val sizePerInputs = Seq(100, 1000, 10000, 100000, 1000000, 10000000).map { count =>
+    Seq(100, 1000, 10000, 100000, 1000000, 10000000).foreach { count =>
       val buffer = new PercentileDigest(relativeError)
       // Worst case, data is linear sorted
       (0 until count).foreach(buffer.add(_))
@@ -144,7 +144,8 @@ class ApproximatePercentileSuite extends SparkFunSuite {
       .withNewInputAggBufferOffset(inputAggregationBufferOffset)
       .withNewMutableAggBufferOffset(mutableAggregationBufferOffset)
 
-    val mutableAggBuffer = new GenericMutableRow(new Array[Any](mutableAggregationBufferOffset + 1))
+    val mutableAggBuffer = new GenericInternalRow(
+      new Array[Any](mutableAggregationBufferOffset + 1))
     agg.initialize(mutableAggBuffer)
     val dataCount = 10
     (1 to dataCount).foreach { data =>
@@ -154,7 +155,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
     // Serialize the aggregation buffer
     val serialized = mutableAggBuffer.getBinary(mutableAggregationBufferOffset)
-    val inputAggBuffer = new GenericMutableRow(Array[Any](null, serialized))
+    val inputAggBuffer = new GenericInternalRow(Array[Any](null, serialized))
 
     // Phase 2: final mode aggregation
     // Re-initialize the aggregation buffer
@@ -269,7 +270,6 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         percentageExpression = percentageExpression,
         accuracyExpression = Literal(100))
 
-      val result = wrongPercentage.checkInputDataTypes()
       assert(
         wrongPercentage.checkInputDataTypes() match {
           case TypeCheckFailure(msg) if msg.contains("must be between 0.0 and 1.0") => true
@@ -280,7 +280,6 @@ class ApproximatePercentileSuite extends SparkFunSuite {
 
   test("class ApproximatePercentile, automatically add type casting for parameters") {
     val testRelation = LocalRelation('a.int)
-    val analyzer = SimpleAnalyzer
 
     // Compatible accuracy types: Long type and decimal type
     val accuracyExpressions = Seq(Literal(1000L), DecimalLiteral(10000), Literal(123.0D))
@@ -298,7 +297,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         analyzed match {
           case Alias(agg: ApproximatePercentile, _) =>
             assert(agg.resolved)
-            assert(agg.child.dataType == DoubleType)
+            assert(agg.child.dataType == IntegerType)
             assert(agg.percentageExpression.dataType == DoubleType ||
               agg.percentageExpression.dataType == ArrayType(DoubleType, containsNull = false))
             assert(agg.accuracyExpression.dataType == IntegerType)
@@ -311,7 +310,7 @@ class ApproximatePercentileSuite extends SparkFunSuite {
   test("class ApproximatePercentile, null handling") {
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = true), DoubleType)
     val agg = new ApproximatePercentile(childExpression, Literal(0.5D))
-    val buffer = new GenericMutableRow(new Array[Any](1))
+    val buffer = new GenericInternalRow(new Array[Any](1))
     agg.initialize(buffer)
     // Empty aggregation buffer
     assert(agg.eval(buffer) == null)

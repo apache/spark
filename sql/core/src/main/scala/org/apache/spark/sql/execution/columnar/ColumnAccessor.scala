@@ -21,15 +21,17 @@ import java.nio.{ByteBuffer, ByteOrder}
 
 import scala.annotation.tailrec
 
-import org.apache.spark.sql.catalyst.expressions.{MutableRow, UnsafeArrayData, UnsafeMapData, UnsafeRow}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
 
 /**
  * An `Iterator` like trait used to extract values from columnar byte buffer. When a value is
  * extracted from the buffer, instead of directly returning it, the value is set into some field of
- * a [[MutableRow]]. In this way, boxing cost can be avoided by leveraging the setter methods
- * for primitive values provided by [[MutableRow]].
+ * a [[InternalRow]]. In this way, boxing cost can be avoided by leveraging the setter methods
+ * for primitive values provided by [[InternalRow]].
  */
 private[columnar] trait ColumnAccessor {
   initialize()
@@ -38,7 +40,7 @@ private[columnar] trait ColumnAccessor {
 
   def hasNext: Boolean
 
-  def extractTo(row: MutableRow, ordinal: Int): Unit
+  def extractTo(row: InternalRow, ordinal: Int): Unit
 
   protected def underlyingBuffer: ByteBuffer
 }
@@ -52,11 +54,11 @@ private[columnar] abstract class BasicColumnAccessor[JvmType](
 
   override def hasNext: Boolean = buffer.hasRemaining
 
-  override def extractTo(row: MutableRow, ordinal: Int): Unit = {
+  override def extractTo(row: InternalRow, ordinal: Int): Unit = {
     extractSingle(row, ordinal)
   }
 
-  def extractSingle(row: MutableRow, ordinal: Int): Unit = {
+  def extractSingle(row: InternalRow, ordinal: Int): Unit = {
     columnType.extract(buffer, row, ordinal)
   }
 
@@ -121,7 +123,7 @@ private[columnar] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
   extends BasicColumnAccessor[UnsafeMapData](buffer, MAP(dataType))
   with NullableColumnAccessor
 
-private[columnar] object ColumnAccessor {
+private[sql] object ColumnAccessor {
   @tailrec
   def apply(dataType: DataType, buffer: ByteBuffer): ColumnAccessor = {
     val buf = buffer.order(ByteOrder.nativeOrder)
@@ -147,5 +149,23 @@ private[columnar] object ColumnAccessor {
       case other =>
         throw new Exception(s"not support type: $other")
     }
+  }
+
+  def decompress(columnAccessor: ColumnAccessor, columnVector: WritableColumnVector, numRows: Int):
+      Unit = {
+    if (columnAccessor.isInstanceOf[NativeColumnAccessor[_]]) {
+      val nativeAccessor = columnAccessor.asInstanceOf[NativeColumnAccessor[_]]
+      nativeAccessor.decompress(columnVector, numRows)
+    } else {
+      throw new RuntimeException("Not support non-primitive type now")
+    }
+  }
+
+  def decompress(
+      array: Array[Byte], columnVector: WritableColumnVector, dataType: DataType, numRows: Int):
+      Unit = {
+    val byteBuffer = ByteBuffer.wrap(array)
+    val columnAccessor = ColumnAccessor(dataType, byteBuffer)
+    decompress(columnAccessor, columnVector, numRows)
   }
 }

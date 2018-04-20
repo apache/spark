@@ -52,6 +52,8 @@ object PCAOnSourceVectorExample {
     val collect = projected.collect()
     println("Projected vector of principal component:")
     collect.foreach { vector => println(vector) }
+
+    sc.stop()
   }
 }
 // scalastyle:on println

@@ -19,8 +19,8 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.linalg.distributed.RowMatrix
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.distributed.RowMatrix
 
 /**
  * Compute the principal components of a tall-and-skinny matrix, whose rows are observations.
@@ -54,7 +54,7 @@ object TallSkinnyPCA {
     // Compute principal components.
     val pc = mat.computePrincipalComponents(mat.numCols().toInt)
 
-    println("Principal components are:\n" + pc)
+    println(s"Principal components are:\n $pc")
 
     sc.stop()
   }

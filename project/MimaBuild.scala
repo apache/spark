@@ -22,7 +22,7 @@ import com.typesafe.tools.mima.core._
 import com.typesafe.tools.mima.core.MissingClassProblem
 import com.typesafe.tools.mima.core.MissingTypesProblem
 import com.typesafe.tools.mima.core.ProblemFilters._
-import com.typesafe.tools.mima.plugin.MimaKeys.{binaryIssueFilters, previousArtifact}
+import com.typesafe.tools.mima.plugin.MimaKeys.{mimaBinaryIssueFilters, mimaPreviousArtifacts}
 import com.typesafe.tools.mima.plugin.MimaPlugin.mimaDefaultSettings
 
 
@@ -44,7 +44,7 @@ object MimaBuild {
 
   // Exclude a single class
   def excludeClass(className: String) = Seq(
-      excludePackage(className),
+      ProblemFilters.exclude[Problem](className + ".*"),
       ProblemFilters.exclude[MissingClassProblem](className),
       ProblemFilters.exclude[MissingTypesProblem](className)
     )
@@ -56,7 +56,7 @@ object MimaBuild {
 
   // Exclude a Spark package, that is in the package org.apache.spark
   def excludeSparkPackage(packageName: String) = {
-    excludePackage("org.apache.spark." + packageName)
+    ProblemFilters.exclude[Problem]("org.apache.spark." + packageName + ".*")
   }
 
   def ignoredABIProblems(base: File, currentSparkVersion: String) = {
@@ -88,19 +88,12 @@ object MimaBuild {
 
   def mimaSettings(sparkHome: File, projectRef: ProjectRef) = {
     val organization = "org.apache.spark"
-    val previousSparkVersion = "1.6.0"
-    // This check can be removed post-2.0
-    val project = if (previousSparkVersion == "1.6.0" &&
-      projectRef.project == "streaming-kafka-0-8"
-    ) {
-      "streaming-kafka"
-    } else {
-      projectRef.project
-    }
+    val previousSparkVersion = "2.2.0"
+    val project = projectRef.project
     val fullId = "spark-" + project + "_2.11"
     mimaDefaultSettings ++
-    Seq(previousArtifact := Some(organization % fullId % previousSparkVersion),
-      binaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value))
+    Seq(mimaPreviousArtifacts := Set(organization % fullId % previousSparkVersion),
+      mimaBinaryIssueFilters ++= ignoredABIProblems(sparkHome, version.value))
   }
 
 }

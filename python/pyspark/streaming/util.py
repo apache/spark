@@ -18,6 +18,7 @@
 import time
 from datetime import datetime
 import traceback
+import sys
 
 from pyspark import SparkContext, RDD
 
@@ -147,4 +148,4 @@ if __name__ == "__main__":
     import doctest
     (failure_count, test_count) = doctest.testmod()
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

@@ -62,7 +62,7 @@ private[evaluation] object Recall extends BinaryClassificationMetricComputer {
  * F-Measure. Defined as 0 if both precision and recall are 0. EG in the case that all examples
  * are false positives.
  * @param beta the beta constant in F-Measure
- * @see http://en.wikipedia.org/wiki/F1_score
+ * @see <a href="http://en.wikipedia.org/wiki/F1_score">F1 score (Wikipedia)</a>
  */
 private[evaluation] case class FMeasure(beta: Double) extends BinaryClassificationMetricComputer {
   private val beta2 = beta * beta

@@ -26,7 +26,7 @@ Function InstallR {
   }
 
   $urlPath = ""
-  $latestVer = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-release).Content).version
+  $latestVer = $(ConvertFrom-JSON $(Invoke-WebRequest https://rversions.r-pkg.org/r-release-win).Content).version
   If ($rVer -ne $latestVer) {
     $urlPath = ("old/" + $rVer + "/")
   }
@@ -90,12 +90,12 @@ Invoke-Expression "7z.exe x maven.zip"
 # add maven to environment variables
 $env:Path += ";$tools\apache-maven-$mavenVer\bin"
 $env:M2_HOME = "$tools\apache-maven-$mavenVer"
-$env:MAVEN_OPTS = "-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
+$env:MAVEN_OPTS = "-Xmx2g -XX:ReservedCodeCacheSize=512m"
 
 Pop-Location
 
 # ========================== Hadoop bin package
-$hadoopVer = "2.6.0"
+$hadoopVer = "2.6.4"
 $hadoopPath = "$tools\hadoop"
 if (!(Test-Path $hadoopPath)) {
     New-Item -ItemType Directory -Force -Path $hadoopPath | Out-Null
@@ -109,11 +109,12 @@ Invoke-Expression "7z.exe x winutils-master.zip"
 
 # add hadoop bin to environment variables
 $env:HADOOP_HOME = "$hadoopPath/winutils-master/hadoop-$hadoopVer"
+$env:Path += ";$env:HADOOP_HOME\bin"
 
 Pop-Location
 
 # ========================== R
-$rVer = "3.3.1"
+$rVer = "3.4.1"
 $rToolsVer = "3.4.0"
 
 InstallR

@@ -18,9 +18,9 @@
 package org.apache.spark.streaming.kafka
 
 import java.io.File
-import java.util.Arrays
-import java.util.concurrent.atomic.AtomicLong
+import java.util.{ Arrays, UUID }
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -32,12 +32,11 @@ import kafka.serializer.StringDecoder
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, Time}
 import org.apache.spark.streaming.dstream.DStream
-import org.apache.spark.streaming.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.util.Utils
@@ -52,7 +51,6 @@ class DirectKafkaStreamSuite
     .setMaster("local[4]")
     .setAppName(this.getClass.getSimpleName)
 
-  private var sc: SparkContext = _
   private var ssc: StreamingContext = _
   private var testDir: File = _
 
@@ -72,11 +70,7 @@ class DirectKafkaStreamSuite
 
   after {
     if (ssc != null) {
-      ssc.stop()
-      sc = null
-    }
-    if (sc != null) {
-      sc.stop()
+      ssc.stop(stopSparkContext = true)
     }
     if (testDir != null) {
       Utils.deleteRecursively(testDir)
@@ -184,6 +178,7 @@ class DirectKafkaStreamSuite
       collectedData.contains("b")
     }
     assert(!collectedData.contains("a"))
+    ssc.stop()
   }
 
 
@@ -230,6 +225,7 @@ class DirectKafkaStreamSuite
       collectedData.contains("b")
     }
     assert(!collectedData.contains("a"))
+    ssc.stop()
   }
 
   // Test to verify the offset ranges can be recovered from the checkpoints
@@ -274,7 +270,7 @@ class DirectKafkaStreamSuite
       sendData(i)
     }
 
-    eventually(timeout(10 seconds), interval(50 milliseconds)) {
+    eventually(timeout(20 seconds), interval(50 milliseconds)) {
       assert(DirectKafkaStreamSuite.total.get === (1 to 10).sum)
     }
 
@@ -317,7 +313,7 @@ class DirectKafkaStreamSuite
       sendData(i)
     }
 
-    eventually(timeout(10 seconds), interval(50 milliseconds)) {
+    eventually(timeout(20 seconds), interval(50 milliseconds)) {
       assert(DirectKafkaStreamSuite.total.get === (1 to 20).sum)
     }
     ssc.stop()
@@ -457,6 +453,111 @@ class DirectKafkaStreamSuite
     }
 
     ssc.stop()
+  }
+
+  test("use backpressure.initialRate with backpressure") {
+    backpressureTest(maxRatePerPartition = 1000, initialRate = 500, maxMessagesPerPartition = 250)
+  }
+
+  test("backpressure.initialRate should honor maxRatePerPartition") {
+    backpressureTest(maxRatePerPartition = 300, initialRate = 1000, maxMessagesPerPartition = 150)
+  }
+
+  private def backpressureTest(
+      maxRatePerPartition: Int,
+      initialRate: Int,
+      maxMessagesPerPartition: Int) = {
+
+    val topic = UUID.randomUUID().toString
+    val topicPartitions = Set(TopicAndPartition(topic, 0))
+    kafkaTestUtils.createTopic(topic, 1)
+    val kafkaParams = Map(
+      "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
+      "auto.offset.reset" -> "smallest"
+    )
+
+    val sparkConf = new SparkConf()
+      // Safe, even with streaming, because we're using the direct API.
+      // Using 1 core is useful to make the test more predictable.
+      .setMaster("local[1]")
+      .setAppName(this.getClass.getSimpleName)
+      .set("spark.streaming.backpressure.enabled", "true")
+      .set("spark.streaming.backpressure.initialRate", initialRate.toString)
+      .set("spark.streaming.kafka.maxRatePerPartition", maxRatePerPartition.toString)
+
+    val messages = Map("foo" -> 5000)
+    kafkaTestUtils.sendMessages(topic, messages)
+
+    ssc = new StreamingContext(sparkConf, Milliseconds(500))
+
+    val kafkaStream = withClue("Error creating direct stream") {
+      val kc = new KafkaCluster(kafkaParams)
+      val messageHandler = (mmd: MessageAndMetadata[String, String]) => (mmd.key, mmd.message)
+      val m = kc.getEarliestLeaderOffsets(topicPartitions)
+        .fold(e => Map.empty[TopicAndPartition, Long], m => m.mapValues(lo => lo.offset))
+
+      new DirectKafkaInputDStream[String, String, StringDecoder, StringDecoder, (String, String)](
+        ssc, kafkaParams, m, messageHandler)
+    }
+    kafkaStream.start()
+
+    val input = Map(new TopicAndPartition(topic, 0) -> 1000L)
+
+    assert(kafkaStream.maxMessagesPerPartition(input).get ==
+      Map(new TopicAndPartition(topic, 0) -> maxMessagesPerPartition))
+
+    kafkaStream.stop()
+  }
+
+  test("maxMessagesPerPartition with zero offset and rate equal to one") {
+    val topic = "backpressure"
+    val kafkaParams = Map(
+      "metadata.broker.list" -> kafkaTestUtils.brokerAddress,
+      "auto.offset.reset" -> "smallest"
+    )
+
+    val batchIntervalMilliseconds = 60000
+    val sparkConf = new SparkConf()
+      // Safe, even with streaming, because we're using the direct API.
+      // Using 1 core is useful to make the test more predictable.
+      .setMaster("local[1]")
+      .setAppName(this.getClass.getSimpleName)
+      .set("spark.streaming.kafka.maxRatePerPartition", "100")
+
+    // Setup the streaming context
+    ssc = new StreamingContext(sparkConf, Milliseconds(batchIntervalMilliseconds))
+    val estimatedRate = 1L
+    val kafkaStream = withClue("Error creating direct stream") {
+      val messageHandler = (mmd: MessageAndMetadata[String, String]) => (mmd.key, mmd.message)
+      val fromOffsets = Map(
+        TopicAndPartition(topic, 0) -> 0L,
+        TopicAndPartition(topic, 1) -> 0L,
+        TopicAndPartition(topic, 2) -> 0L,
+        TopicAndPartition(topic, 3) -> 0L
+      )
+      new DirectKafkaInputDStream[String, String, StringDecoder, StringDecoder, (String, String)](
+        ssc, kafkaParams, fromOffsets, messageHandler) {
+        override protected[streaming] val rateController =
+          Some(new DirectKafkaRateController(id, null) {
+            override def getLatestRate() = estimatedRate
+          })
+      }
+    }
+
+    val offsets = Map(
+      TopicAndPartition(topic, 0) -> 0L,
+      TopicAndPartition(topic, 1) -> 100L,
+      TopicAndPartition(topic, 2) -> 200L,
+      TopicAndPartition(topic, 3) -> 300L
+    )
+    val result = kafkaStream.maxMessagesPerPartition(offsets)
+    val expected = Map(
+      TopicAndPartition(topic, 0) -> 1L,
+      TopicAndPartition(topic, 1) -> 10L,
+      TopicAndPartition(topic, 2) -> 20L,
+      TopicAndPartition(topic, 3) -> 30L
+    )
+    assert(result.contains(expected), s"Number of messages per partition must be at least 1")
   }
 
   /** Get the generated offset ranges from the DirectKafkaStream */

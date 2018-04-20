@@ -53,6 +53,9 @@ case class SparkListenerTaskStart(stageId: Int, stageAttemptId: Int, taskInfo: T
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent
 
 @DeveloperApi
+case class SparkListenerSpeculativeTaskSubmitted(stageId: Int) extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerTaskEnd(
     stageId: Int,
     stageAttemptId: Int,
@@ -87,8 +90,13 @@ case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(S
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerBlockManagerAdded(time: Long, blockManagerId: BlockManagerId, maxMem: Long)
-  extends SparkListenerEvent
+case class SparkListenerBlockManagerAdded(
+    time: Long,
+    blockManagerId: BlockManagerId,
+    maxMem: Long,
+    maxOnHeapMem: Option[Long] = None,
+    maxOffHeapMem: Option[Long] = None) extends SparkListenerEvent {
+}
 
 @DeveloperApi
 case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockManagerId)
@@ -103,6 +111,46 @@ case class SparkListenerExecutorAdded(time: Long, executorId: String, executorIn
 
 @DeveloperApi
 case class SparkListenerExecutorRemoved(time: Long, executorId: String, reason: String)
+  extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerExecutorBlacklisted(
+    time: Long,
+    executorId: String,
+    taskFailures: Int)
+  extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerExecutorBlacklistedForStage(
+    time: Long,
+    executorId: String,
+    taskFailures: Int,
+    stageId: Int,
+    stageAttemptId: Int)
+  extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerNodeBlacklistedForStage(
+    time: Long,
+    hostId: String,
+    executorFailures: Int,
+    stageId: Int,
+    stageAttemptId: Int)
+  extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerExecutorUnblacklisted(time: Long, executorId: String)
+  extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerNodeBlacklisted(
+    time: Long,
+    hostId: String,
+    executorFailures: Int)
+  extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerNodeUnblacklisted(time: Long, hostId: String)
   extends SparkListenerEvent
 
 @DeveloperApi
@@ -133,21 +181,9 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 
 /**
  * An internal class that describes the metadata of an event log.
- * This event is not meant to be posted to listeners downstream.
  */
-private[spark] case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
-
-/**
- * Interface for creating history listeners defined in other modules like SQL, which are used to
- * rebuild the history UI.
- */
-private[spark] trait SparkHistoryListenerFactory {
-  /**
-   * Create listeners used to rebuild the history UI.
-   */
-  def createListeners(conf: SparkConf, sparkUI: SparkUI): Seq[SparkListener]
-}
-
+@DeveloperApi
+case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
 /**
  * Interface for listening to events from the Spark scheduler. Most applications should probably
@@ -239,9 +275,45 @@ private[spark] trait SparkListenerInterface {
   def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit
 
   /**
+   * Called when the driver blacklists an executor for a Spark application.
+   */
+  def onExecutorBlacklisted(executorBlacklisted: SparkListenerExecutorBlacklisted): Unit
+
+  /**
+   * Called when the driver blacklists an executor for a stage.
+   */
+  def onExecutorBlacklistedForStage(
+      executorBlacklistedForStage: SparkListenerExecutorBlacklistedForStage): Unit
+
+  /**
+   * Called when the driver blacklists a node for a stage.
+   */
+  def onNodeBlacklistedForStage(nodeBlacklistedForStage: SparkListenerNodeBlacklistedForStage): Unit
+
+  /**
+   * Called when the driver re-enables a previously blacklisted executor.
+   */
+  def onExecutorUnblacklisted(executorUnblacklisted: SparkListenerExecutorUnblacklisted): Unit
+
+  /**
+   * Called when the driver blacklists a node for a Spark application.
+   */
+  def onNodeBlacklisted(nodeBlacklisted: SparkListenerNodeBlacklisted): Unit
+
+  /**
+   * Called when the driver re-enables a previously blacklisted node.
+   */
+  def onNodeUnblacklisted(nodeUnblacklisted: SparkListenerNodeUnblacklisted): Unit
+
+  /**
    * Called when the driver receives a block update info.
    */
   def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit
+
+  /**
+   * Called when a speculative task is submitted
+   */
+  def onSpeculativeTaskSubmitted(speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit
 
   /**
    * Called when other events like SQL-specific events are posted.
@@ -252,7 +324,7 @@ private[spark] trait SparkListenerInterface {
 
 /**
  * :: DeveloperApi ::
- * A default implementation for [[SparkListenerInterface]] that has no-op implementations for
+ * A default implementation for `SparkListenerInterface` that has no-op implementations for
  * all callbacks.
  *
  * Note that this is an internal interface which might change in different Spark releases.
@@ -293,7 +365,28 @@ abstract class SparkListener extends SparkListenerInterface {
 
   override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = { }
 
+  override def onExecutorBlacklisted(
+      executorBlacklisted: SparkListenerExecutorBlacklisted): Unit = { }
+
+  def onExecutorBlacklistedForStage(
+      executorBlacklistedForStage: SparkListenerExecutorBlacklistedForStage): Unit = { }
+
+  def onNodeBlacklistedForStage(
+      nodeBlacklistedForStage: SparkListenerNodeBlacklistedForStage): Unit = { }
+
+  override def onExecutorUnblacklisted(
+      executorUnblacklisted: SparkListenerExecutorUnblacklisted): Unit = { }
+
+  override def onNodeBlacklisted(
+      nodeBlacklisted: SparkListenerNodeBlacklisted): Unit = { }
+
+  override def onNodeUnblacklisted(
+      nodeUnblacklisted: SparkListenerNodeUnblacklisted): Unit = { }
+
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = { }
+
+  override def onSpeculativeTaskSubmitted(
+      speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit = { }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = { }
 }

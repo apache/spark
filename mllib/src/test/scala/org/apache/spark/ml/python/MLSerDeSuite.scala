@@ -54,7 +54,7 @@ class MLSerDeSuite extends SparkFunSuite {
     assert(matrix === nm)
 
     // Test conversion for empty matrix
-    val empty = Array[Double]()
+    val empty = Array.empty[Double]
     val emptyMatrix = Matrices.dense(0, 0, empty)
     val ne = MLSerDe.loads(MLSerDe.dumps(emptyMatrix)).asInstanceOf[DenseMatrix]
     assert(emptyMatrix == ne)

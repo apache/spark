@@ -15,19 +15,17 @@
 # limitations under the License.
 #
 
-
+"""
+An example demonstrating LDA.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/lda_example.py
+"""
 from __future__ import print_function
 
 # $example on$
 from pyspark.ml.clustering import LDA
 # $example off$
 from pyspark.sql import SparkSession
-
-"""
-An example demonstrating LDA.
-Run with:
-  bin/spark-submit examples/src/main/python/ml/lda_example.py
-"""
 
 if __name__ == "__main__":
     spark = SparkSession \
@@ -46,7 +44,7 @@ if __name__ == "__main__":
     ll = model.logLikelihood(dataset)
     lp = model.logPerplexity(dataset)
     print("The lower bound on the log likelihood of the entire corpus: " + str(ll))
-    print("The upper bound bound on perplexity: " + str(lp))
+    print("The upper bound on perplexity: " + str(lp))
 
     # Describe topics.
     topics = model.describeTopics(3)

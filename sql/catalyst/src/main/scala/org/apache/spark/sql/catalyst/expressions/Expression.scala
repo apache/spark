@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -70,14 +72,15 @@ abstract class Expression extends TreeNode[Expression] {
    * children.
    *
    * Note that this means that an expression should be considered as non-deterministic if:
-   * - if it relies on some mutable internal state, or
-   * - if it relies on some implicit input that is not part of the children expression list.
-   * - if it has non-deterministic child or children.
+   * - it relies on some mutable internal state, or
+   * - it relies on some implicit input that is not part of the children expression list.
+   * - it has non-deterministic child or children.
+   * - it assumes the input satisfies some certain condition via the child operator.
    *
    * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
    * By default leaf expressions are deterministic as Nil.forall(_.deterministic) returns true.
    */
-  def deterministic: Boolean = children.forall(_.deterministic)
+  lazy val deterministic: Boolean = children.forall(_.deterministic)
 
   def nullable: Boolean
 
@@ -101,13 +104,46 @@ abstract class Expression extends TreeNode[Expression] {
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
-      val ve = doGenCode(ctx, ExprCode("", isNull, value))
-      if (ve.code.nonEmpty) {
+      val eval = doGenCode(ctx, ExprCode(
+        JavaCode.isNullVariable(isNull),
+        JavaCode.variable(value, dataType)))
+      reduceCodeSize(ctx, eval)
+      if (eval.code.nonEmpty) {
         // Add `this` in the comment.
-        ve.copy(code = s"${ctx.registerComment(this.toString)}\n" + ve.code.trim)
+        eval.copy(code = s"${ctx.registerComment(this.toString)}\n" + eval.code.trim)
       } else {
-        ve
+        eval
       }
+    }
+  }
+
+  private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
+    // TODO: support whole stage codegen too
+    if (eval.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
+      val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {
+        val globalIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "globalIsNull")
+        val localIsNull = eval.isNull
+        eval.isNull = JavaCode.isNullGlobal(globalIsNull)
+        s"$globalIsNull = $localIsNull;"
+      } else {
+        ""
+      }
+
+      val javaType = CodeGenerator.javaType(dataType)
+      val newValue = ctx.freshName("value")
+
+      val funcName = ctx.freshName(nodeName)
+      val funcFullName = ctx.addNewFunction(funcName,
+        s"""
+           |private $javaType $funcName(InternalRow ${ctx.INPUT_ROW}) {
+           |  ${eval.code.trim}
+           |  $setIsNull
+           |  return ${eval.value};
+           |}
+           """.stripMargin)
+
+      eval.value = JavaCode.variable(newValue, dataType)
+      eval.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
     }
   }
 
@@ -184,9 +220,9 @@ abstract class Expression extends TreeNode[Expression] {
    * Returns a user-facing string representation of this expression's name.
    * This should usually match the name of the function in SQL.
    */
-  def prettyName: String = nodeName.toLowerCase
+  def prettyName: String = nodeName.toLowerCase(Locale.ROOT)
 
-  protected def flatArguments = productIterator.flatMap {
+  protected def flatArguments: Iterator[Any] = productIterator.flatMap {
     case t: Traversable[_] => t
     case single => single :: Nil
   }
@@ -229,26 +265,20 @@ trait Unevaluable extends Expression {
  * An expression that gets replaced at runtime (currently by the optimizer) into a different
  * expression for evaluation. This is mainly used to provide compatibility with other databases.
  * For example, we use this to support "nvl" by replacing it with "coalesce".
+ *
+ * A RuntimeReplaceable should have the original parameters along with a "child" expression in the
+ * case class constructor, and define a normal constructor that accepts only the original
+ * parameters. For an example, see [[Nvl]]. To make sure the explain plan and expression SQL
+ * works correctly, the implementation should also override flatArguments method and sql method.
  */
-trait RuntimeReplaceable extends Unevaluable {
-  /**
-   * Method for concrete implementations to override that specifies how to construct the expression
-   * that should replace the current one.
-   */
-  def replaceForEvaluation(): Expression
-
-  /**
-   * Method for concrete implementations to override that specifies how to coerce the input types.
-   */
-  def replaceForTypeCoercion(): Expression
-
-  /** The expression that should be used during evaluation. */
-  lazy val replaced: Expression = replaceForEvaluation()
-
-  override def nullable: Boolean = replaced.nullable
-  override def foldable: Boolean = replaced.foldable
-  override def dataType: DataType = replaced.dataType
-  override def checkInputDataTypes(): TypeCheckResult = replaced.checkInputDataTypes()
+trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
+  override def nullable: Boolean = child.nullable
+  override def foldable: Boolean = child.foldable
+  override def dataType: DataType = child.dataType
+  // As this expression gets replaced at optimization with its `child" expression,
+  // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
+  // are semantically equal.
+  override lazy val canonicalized: Expression = child.canonicalized
 }
 
 
@@ -260,6 +290,7 @@ trait NonSQLExpression extends Expression {
   final override def sql: String = {
     transform {
       case a: Attribute => new PrettyAttribute(a)
+      case a: Alias => PrettyAttribute(a.sql, a.dataType)
     }.toString
   }
 }
@@ -269,33 +300,70 @@ trait NonSQLExpression extends Expression {
  * An expression that is nondeterministic.
  */
 trait Nondeterministic extends Expression {
-  final override def deterministic: Boolean = false
+  final override lazy val deterministic: Boolean = false
   final override def foldable: Boolean = false
 
+  @transient
   private[this] var initialized = false
 
-  final def setInitialValues(): Unit = {
-    initInternal()
+  /**
+   * Initializes internal states given the current partition index and mark this as initialized.
+   * Subclasses should override [[initializeInternal()]].
+   */
+  final def initialize(partitionIndex: Int): Unit = {
+    initializeInternal(partitionIndex)
     initialized = true
   }
 
-  protected def initInternal(): Unit
+  protected def initializeInternal(partitionIndex: Int): Unit
 
+  /**
+   * @inheritdoc
+   * Throws an exception if [[initialize()]] is not called yet.
+   * Subclasses should override [[evalInternal()]].
+   */
   final override def eval(input: InternalRow = null): Any = {
-    require(initialized, "nondeterministic expression should be initialized before evaluate")
+    require(initialized,
+      s"Nondeterministic expression ${this.getClass.getName} should be initialized before eval.")
     evalInternal(input)
   }
 
   protected def evalInternal(input: InternalRow): Any
 }
 
+/**
+ * An expression that contains mutable state. A stateful expression is always non-deterministic
+ * because the results it produces during evaluation are not only dependent on the given input
+ * but also on its internal state.
+ *
+ * The state of the expressions is generally not exposed in the parameter list and this makes
+ * comparing stateful expressions problematic because similar stateful expressions (with the same
+ * parameter list) but with different internal state will be considered equal. This is especially
+ * problematic during tree transformations. In order to counter this the `fastEquals` method for
+ * stateful expressions only returns `true` for the same reference.
+ *
+ * A stateful expression should never be evaluated multiple times for a single row. This should
+ * only be a problem for interpreted execution. This can be prevented by creating fresh copies
+ * of the stateful expression before execution, these can be made using the `freshCopy` function.
+ */
+trait Stateful extends Nondeterministic {
+  /**
+   * Return a fresh uninitialized copy of the stateful expression.
+   */
+  def freshCopy(): Stateful
+
+  /**
+   * Only the same reference is considered equal.
+   */
+  override def fastEquals(other: TreeNode[_]): Boolean = this eq other
+}
 
 /**
  * A leaf expression, i.e. one without any child expressions.
  */
 abstract class LeafExpression extends Expression {
 
-  def children: Seq[Expression] = Nil
+  override final def children: Seq[Expression] = Nil
 }
 
 
@@ -307,7 +375,7 @@ abstract class UnaryExpression extends Expression {
 
   def child: Expression
 
-  override def children: Seq[Expression] = child :: Nil
+  override final def children: Seq[Expression] = child :: Nil
 
   override def foldable: Boolean = child.foldable
   override def nullable: Boolean = child.nullable
@@ -372,15 +440,15 @@ abstract class UnaryExpression extends Expression {
       ev.copy(code = s"""
         ${childGen.code}
         boolean ${ev.isNull} = ${childGen.isNull};
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval
       """)
     } else {
       ev.copy(code = s"""
         boolean ${ev.isNull} = false;
         ${childGen.code}
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        $resultCode""", isNull = "false")
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
     }
   }
 }
@@ -394,7 +462,7 @@ abstract class BinaryExpression extends Expression {
   def left: Expression
   def right: Expression
 
-  override def children: Seq[Expression] = Seq(left, right)
+  override final def children: Seq[Expression] = Seq(left, right)
 
   override def foldable: Boolean = left.foldable && right.foldable
 
@@ -471,7 +539,7 @@ abstract class BinaryExpression extends Expression {
 
       ev.copy(code = s"""
         boolean ${ev.isNull} = true;
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval
       """)
     } else {
@@ -479,8 +547,8 @@ abstract class BinaryExpression extends Expression {
         boolean ${ev.isNull} = false;
         ${leftGen.code}
         ${rightGen.code}
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        $resultCode""", isNull = "false")
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
     }
   }
 }
@@ -490,7 +558,7 @@ abstract class BinaryExpression extends Expression {
  * A [[BinaryExpression]] that is an operator, with two properties:
  *
  * 1. The string representation is "x symbol y", rather than "funcName(x, y)".
- * 2. Two inputs are expected to the be same type. If the two inputs have different types,
+ * 2. Two inputs are expected to be of the same type. If the two inputs have different types,
  *    the analyzer will find the tightest common type and do the proper type casting.
  */
 abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
@@ -511,7 +579,7 @@ abstract class BinaryOperator extends BinaryExpression with ExpectsInputTypes {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     // First check whether left and right have the same type, then check if the type is acceptable.
-    if (left.dataType != right.dataType) {
+    if (!left.dataType.sameType(right.dataType)) {
       TypeCheckResult.TypeCheckFailure(s"differing types in '$sql' " +
         s"(${left.dataType.simpleString} and ${right.dataType.simpleString}).")
     } else if (!inputType.acceptsType(left.dataType)) {
@@ -615,7 +683,7 @@ abstract class TernaryExpression extends Expression {
 
       ev.copy(code = s"""
         boolean ${ev.isNull} = true;
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
         $nullSafeEval""")
     } else {
       ev.copy(code = s"""
@@ -623,8 +691,14 @@ abstract class TernaryExpression extends Expression {
         ${leftGen.code}
         ${midGen.code}
         ${rightGen.code}
-        ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-        $resultCode""", isNull = "false")
+        ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+        $resultCode""", isNull = FalseLiteral)
     }
   }
 }
+
+/**
+ * Common base trait for user-defined functions, including UDF/UDAF/UDTF of different languages
+ * and Hive function wrappers.
+ */
+trait UserDefinedExpression
