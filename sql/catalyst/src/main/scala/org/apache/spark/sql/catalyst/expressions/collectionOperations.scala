@@ -28,41 +28,6 @@ import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 /**
- * Common base class for [[Size]] and [[Cardinality]].
- */
-abstract class SizeUtil extends UnaryExpression with ExpectsInputTypes {
-  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
-  override def nullable: Boolean = false
-
-  override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    val result = if (value == null) {
-      -1
-    } else child.dataType match {
-      case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
-      case _: MapType => value.asInstanceOf[MapData].numElements()
-    }
-    dataType match {
-      case IntegerType => result
-      case LongType => result.toLong
-    }
-  }
-
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val childGen = child.genCode(ctx)
-    val javaDt = CodeGenerator.javaType(dataType)
-    ev.copy(code =
-      s"""
-         |boolean ${ev.isNull} = false;
-         |${childGen.code}
-         |$javaDt ${ev.value} =
-         |  ($javaDt) (${childGen.isNull} ? -1 : (${childGen.value}).numElements());
-       """.stripMargin,
-      isNull = FalseLiteral)
-  }
-}
-
-/**
  * Given an array or map, returns its size. Returns -1 if null.
  */
 @ExpressionDescription(
@@ -72,23 +37,29 @@ abstract class SizeUtil extends UnaryExpression with ExpectsInputTypes {
       > SELECT _FUNC_(array('b', 'd', 'c', 'a'));
        4
   """)
-case class Size(child: Expression) extends SizeUtil {
+case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = IntegerType
-}
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
+  override def nullable: Boolean = false
 
-/**
- * Given an array or map, returns its size as BigInt. Returns -1 if null.
- */
-@ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the size of an array or a map as long. Returns -1 if null.",
-  examples = """
-    Examples:
-      > SELECT _FUNC_(array('b', 'd', 'c', 'a'));
-       4
-  """,
-  since = "2.4.0")
-case class Cardinality(child: Expression) extends SizeUtil {
-  override def dataType: DataType = LongType
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      -1
+    } else child.dataType match {
+      case _: ArrayType => value.asInstanceOf[ArrayData].numElements()
+      case _: MapType => value.asInstanceOf[MapData].numElements()
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val childGen = child.genCode(ctx)
+    ev.copy(code = s"""
+      boolean ${ev.isNull} = false;
+      ${childGen.code}
+      ${CodeGenerator.javaType(dataType)} ${ev.value} = ${childGen.isNull} ? -1 :
+        (${childGen.value}).numElements();""", isNull = FalseLiteral)
+  }
 }
 
 /**
