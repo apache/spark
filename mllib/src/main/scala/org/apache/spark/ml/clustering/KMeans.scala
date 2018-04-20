@@ -85,16 +85,49 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   def getInitSteps: Int = $(initSteps)
 
   /**
+   * Validates the input schema.
+   * @param schema input schema
+   */
+  protected def validateSchema(schema: StructType): Unit = {
+    val typeCandidates = List( new VectorUDT,
+      new ArrayType(DoubleType, false),
+      new ArrayType(FloatType, false))
+    SchemaUtils.checkColumnTypes(schema, $(featuresCol), typeCandidates)
+  }
+  /**
    * Validates and transforms the input schema.
    * @param schema input schema
    * @return output schema
    */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    val typeCandidates = List( new VectorUDT,
-      new ArrayType(DoubleType, false),
-      new ArrayType(FloatType, false))
-    SchemaUtils.checkColumnTypes(schema, $(featuresCol), typeCandidates)
+    validateSchema(schema)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
+  }
+
+  /**
+   * preprocessing the input feature column to Vector
+   * @param dataset DataFrame with columns for features
+   * @param colName column name for features
+   * @return Vector feature column
+   */
+  @Since("2.4.0")
+  protected def featureToVector(dataset: Dataset[_], colName: String): Column = {
+    val featuresDataType = dataset.schema(colName).dataType
+    featuresDataType match {
+      case _: VectorUDT => col(colName)
+      case fdt: ArrayType =>
+        val transferUDF = fdt.elementType match {
+          case _: FloatType => udf(f = (vector: Seq[Float]) => {
+            val featureArray = Array.fill[Double](vector.size)(0.0)
+            vector.indices.foreach(idx => featureArray(idx) = vector(idx).toDouble)
+            Vectors.dense(featureArray)
+          })
+          case _: DoubleType => udf((vector: Seq[Double]) => {
+            Vectors.dense(vector.toArray)
+          })
+        }
+        transferUDF(col(colName))
+    }
   }
 }
 
@@ -123,32 +156,13 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  @Since("2.4.0")
-  def featureToVector(dataset: Dataset[_], col: Column): Column = {
-    val featuresDataType = dataset.schema(getFeaturesCol).dataType
-    val transferUDF = featuresDataType match {
-      case _: VectorUDT => udf((vector: Vector) => vector)
-      case fdt: ArrayType => fdt.elementType match {
-        case _: FloatType => udf(f = (vector: Seq[Float]) => {
-          val featureArray = Array.fill[Double](vector.size)(0.0)
-          vector.indices.foreach(idx => featureArray(idx) = vector(idx).toDouble)
-          Vectors.dense(featureArray)
-        })
-        case _: DoubleType => udf((vector: Seq[Double]) => {
-          Vectors.dense(vector.toArray)
-        })
-      }
-    }
-    transferUDF(col)
-  }
-
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
 
     val predictUDF = udf((vector: Vector) => predict(vector))
 
-    dataset.withColumn($(predictionCol), predictUDF(featureToVector(dataset, col(getFeaturesCol))))
+    dataset.withColumn($(predictionCol), predictUDF(featureToVector(dataset, getFeaturesCol)))
   }
 
   @Since("1.5.0")
@@ -168,22 +182,9 @@ class KMeansModel private[ml] (
   // TODO: Replace the temp fix when we have proper evaluators defined for clustering.
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
-    val typeCandidates = List( new VectorUDT,
-      new ArrayType(DoubleType, false),
-      new ArrayType(FloatType, false))
-    SchemaUtils.checkColumnTypes(dataset.schema, $(featuresCol), typeCandidates)
+    validateSchema(dataset.schema)
 
-    /* val data: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
-      case Row(point: Vector) => OldVectors.fromML(point)
-      case Row(point: Seq[_]) =>
-        val featureArray = Array.fill[Double](point.size)(0.0)
-        for (idx <- point.indices) {
-          featureArray(idx) = point(idx).toString.toDouble
-        }
-        OldVectors.fromML(Vectors.dense(featureArray))
-    }
-    */
-    val data: RDD[OldVector] = dataset.select(featureToVector(dataset, col(getFeaturesCol)))
+    val data: RDD[OldVector] = dataset.select(featureToVector(dataset, getFeaturesCol))
       .rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
@@ -344,45 +345,16 @@ class KMeans @Since("1.5.0") (
   @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  @Since("2.4.0")
-  def featureToVector(dataset: Dataset[_], col: Column): Column = {
-    val featuresDataType = dataset.schema(getFeaturesCol).dataType
-    val transferUDF = featuresDataType match {
-      case _: VectorUDT => udf((vector: Vector) => vector)
-      case fdt: ArrayType => fdt.elementType match {
-        case _: FloatType => udf(f = (vector: Seq[Float]) => {
-          val featureArray = Array.fill[Double](vector.size)(0.0)
-          vector.indices.foreach(idx => featureArray(idx) = vector(idx).toDouble)
-          Vectors.dense(featureArray)
-        })
-        case _: DoubleType => udf((vector: Seq[Double]) => {
-          Vectors.dense(vector.toArray)
-        })
-      }
-    }
-    transferUDF(col)
-  }
-
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
     transformSchema(dataset.schema, logging = true)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val instances: RDD[OldVector] = dataset.select(featureToVector(dataset, col(getFeaturesCol)))
+    val instances: RDD[OldVector] = dataset.select(featureToVector(dataset, getFeaturesCol))
       .rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
-    /*
-    val instances: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
-      case Row(point: Vector) => OldVectors.fromML(point)
-      case Row(point: Seq[_]) =>
-        val featureArray = Array.fill[Double](point.size)(0.0)
-        for (idx <- point.indices) {
-          featureArray(idx) = point(idx).toString.toDouble
-        }
-        OldVectors.fromML(Vectors.dense(featureArray))
-      }
-*/
+
     if (handlePersistence) {
       instances.persist(StorageLevel.MEMORY_AND_DISK)
     }
