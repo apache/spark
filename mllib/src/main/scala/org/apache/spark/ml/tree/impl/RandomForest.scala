@@ -108,7 +108,7 @@ private[spark] object RandomForest extends Logging {
       case Some(instrumentation) =>
         instrumentation.logNumFeatures(metadata.numFeatures)
         instrumentation.logNumClasses(metadata.numClasses)
-        instrumentation.logNamedValue(Instrumentation.loggerTags.numExamples, metadata.numExamples)
+        instrumentation.logNumExamples(metadata.numExamples)
       case None =>
         logInfo("numFeatures: " + metadata.numFeatures)
         logInfo("numClasses: " + metadata.numClasses)

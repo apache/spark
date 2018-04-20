@@ -404,7 +404,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         }
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam), elasticNetParam = 0.0,
         standardizeFeatures = true, standardizeLabel = true)
-      val wlsModel = optimizer.fit(instances, instr = new OptionalInstrument(instr))
+      val wlsModel = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, wlsModel.coefficients, wlsModel.intercept)
           .setParent(this))
@@ -419,10 +419,10 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         }
       // Fit Generalized Linear Model by iteratively reweighted least squares (IRLS).
       val initialModel = familyAndLink.initialize(instances, $(fitIntercept), $(regParam),
-        instr = new OptionalInstrument(instr))
+        instr = OptionalInstrumentation.create(instr))
       val optimizer = new IterativelyReweightedLeastSquares(initialModel,
         familyAndLink.reweightFunc, $(fitIntercept), $(regParam), $(maxIter), $(tol))
-      val irlsModel = optimizer.fit(instances, instr = new OptionalInstrument(instr))
+      val irlsModel = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
       val model = copyValues(
         new GeneralizedLinearRegressionModel(uid, irlsModel.coefficients, irlsModel.intercept)
           .setParent(this))
@@ -490,7 +490,8 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
         instances: RDD[OffsetInstance],
         fitIntercept: Boolean,
         regParam: Double,
-        instr: OptionalInstrument = new OptionalInstrument(classOf[GeneralizedLinearRegression])
+        instr: OptionalInstrumentation = OptionalInstrumentation.create(
+          classOf[GeneralizedLinearRegression])
       ): WeightedLeastSquaresModel = {
       val newInstances = instances.map { instance =>
         val mu = family.initialize(instance.label, instance.weight)

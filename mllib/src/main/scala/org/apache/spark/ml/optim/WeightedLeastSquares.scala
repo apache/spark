@@ -19,7 +19,7 @@ package org.apache.spark.ml.optim
 
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.util.OptionalInstrument
+import org.apache.spark.ml.util.OptionalInstrumentation
 import org.apache.spark.rdd.RDD
 
 /**
@@ -96,7 +96,7 @@ private[ml] class WeightedLeastSquares(
    */
   def fit(
       instances: RDD[Instance],
-      instr: OptionalInstrument = new OptionalInstrument(classOf[WeightedLeastSquares])
+      instr: OptionalInstrumentation = OptionalInstrumentation.create(classOf[WeightedLeastSquares])
     ): WeightedLeastSquaresModel = {
     if (regParam == 0.0) {
       instr.logWarning("regParam is zero, which might cause numerical instability and overfitting.")

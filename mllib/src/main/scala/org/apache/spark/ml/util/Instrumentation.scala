@@ -103,6 +103,10 @@ private[spark] class Instrumentation[E <: Estimator[_]] private (
     logNamedValue(Instrumentation.loggerTags.numClasses, num)
   }
 
+  def logNumExamples(num: Long): Unit = {
+    logNamedValue(Instrumentation.loggerTags.numExamples, num)
+  }
+
   /**
    * Logs the value with customized name field.
    */
@@ -157,34 +161,42 @@ private[spark] object Instrumentation {
 
 }
 
-private[spark] class OptionalInstrument private (
-    val instrument: Option[Instrumentation[_ <: Estimator[_]]],
+private[spark] class OptionalInstrumentation private(
+    val instrumentation: Option[Instrumentation[_ <: Estimator[_]]],
     val className: String) extends Logging {
 
-  def this(instr: Instrumentation[_ <: Estimator[_]]) = this(Some(instr), "")
-
-  def this(clazz: Class[_]) = this(None, clazz.getName.stripSuffix("$"))
-
-  protected override def logName = className
+  protected override def logName: String = className
 
   override def logInfo(msg: => String) {
-    instrument match {
+    instrumentation match {
       case Some(instr) => instr.logInfo(msg)
       case None => super.logInfo(msg)
     }
   }
 
   override def logWarning(msg: => String) {
-    instrument match {
+    instrumentation match {
       case Some(instr) => instr.logWarning(msg)
       case None => super.logWarning(msg)
     }
   }
 
   override def logError(msg: => String) {
-    instrument match {
+    instrumentation match {
       case Some(instr) => instr.logError(msg)
       case None => super.logError(msg)
     }
+  }
+}
+
+private[spark] object OptionalInstrumentation {
+
+  def create(instr: Instrumentation[_ <: Estimator[_]]): OptionalInstrumentation = {
+    new OptionalInstrumentation(Some(instr),
+      classOf[Instrumentation[_]].getName.stripSuffix("$"))
+  }
+
+  def create(clazz: Class[_]): OptionalInstrumentation = {
+    new OptionalInstrumentation(None, clazz.getName.stripSuffix("$"))
   }
 }

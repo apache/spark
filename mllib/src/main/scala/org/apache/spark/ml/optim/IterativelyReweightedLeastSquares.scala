@@ -19,7 +19,7 @@ package org.apache.spark.ml.optim
 
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.util.OptionalInstrument
+import org.apache.spark.ml.util.OptionalInstrumentation
 import org.apache.spark.rdd.RDD
 
 /**
@@ -65,7 +65,7 @@ private[ml] class IterativelyReweightedLeastSquares(
 
   def fit(
       instances: RDD[OffsetInstance],
-      instr: OptionalInstrument = new OptionalInstrument(
+      instr: OptionalInstrumentation = OptionalInstrumentation.create(
         classOf[IterativelyReweightedLeastSquares])): IterativelyReweightedLeastSquaresModel = {
 
     var converged = false

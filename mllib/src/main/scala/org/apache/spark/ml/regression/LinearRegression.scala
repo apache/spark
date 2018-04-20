@@ -326,7 +326,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         Instance(label, weight, features)
     }
 
-    val instr = Instrumentation.create(this, instances)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(labelCol, featuresCol, weightCol, predictionCol, solver, tol, elasticNetParam,
       fitIntercept, maxIter, regParam, standardization, aggregationDepth, loss, epsilon)
     instr.logNumFeatures(numFeatures)
@@ -339,7 +339,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       val optimizer = new WeightedLeastSquares($(fitIntercept), $(regParam),
         elasticNetParam = $(elasticNetParam), $(standardization), true,
         solverType = WeightedLeastSquares.Auto, maxIter = $(maxIter), tol = $(tol))
-      val model = optimizer.fit(instances, instr = new OptionalInstrument(instr))
+      val model = optimizer.fit(instances, instr = OptionalInstrumentation.create(instr))
       // When it is trained by WeightedLeastSquares, training summary does not
       // attach returned model.
       val lrModel = copyValues(new LinearRegressionModel(uid, model.coefficients, model.intercept))
