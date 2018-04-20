@@ -374,4 +374,12 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(out, in)
   }
+
+  test("SPARK-24027: from_json - wrong map<string, int>") {
+    val in = Seq("""{"a" 1}""").toDS()
+    val schema = MapType(StringType, IntegerType)
+    val out = in.select(from_json($"value", schema, Map[String, String]()))
+
+    checkAnswer(out, Row(null))
+  }
 }
