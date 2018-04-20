@@ -161,6 +161,11 @@ private[spark] object Instrumentation {
 
 }
 
+/**
+ * A small wrapper that contains an optional `Instrumentation` object.
+ * Provide some log methods, if the containing `Instrumentation` object is defined,
+ * will log via it, otherwise will log via common logger.
+ */
 private[spark] class OptionalInstrumentation private(
     val instrumentation: Option[Instrumentation[_ <: Estimator[_]]],
     val className: String) extends Logging {
@@ -191,11 +196,19 @@ private[spark] class OptionalInstrumentation private(
 
 private[spark] object OptionalInstrumentation {
 
+  /**
+   * Creates an `OptionalInstrumentation` object from an existing `Instrumentation` object.
+   */
   def create(instr: Instrumentation[_ <: Estimator[_]]): OptionalInstrumentation = {
     new OptionalInstrumentation(Some(instr),
       classOf[Instrumentation[_]].getName.stripSuffix("$"))
   }
 
+  /**
+   * Creates an `OptionalInstrumentation` object from a `Class` object.
+   * The created `OptionalInstrumentation` object will log messages via common logger and use the
+   * specified class name as logger name.
+   */
   def create(clazz: Class[_]): OptionalInstrumentation = {
     new OptionalInstrumentation(None, clazz.getName.stripSuffix("$"))
   }
