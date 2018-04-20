@@ -20,31 +20,47 @@ package org.apache.spark.sql.catalyst.expressions
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-object CodegenObjectFactory {
-  def codegenOrInterpreted[T](codegenCreator: () => T, interpretedCreator: () => T): T = {
-    try {
-      codegenCreator()
-    } catch {
-      // Catch compile error related exceptions
-      case e: InternalCompilerException => interpretedCreator()
-      case e: CompileException => interpretedCreator()
-    }
+/**
+ * Catches compile error during code generation.
+ */
+object CodegenError {
+  def unapply(throwable: Throwable): Option[Exception] = throwable match {
+    case e: InternalCompilerException => Some(e)
+    case e: CompileException => Some(e)
+    case _ => None
   }
 }
 
-object UnsafeProjectionFactory extends UnsafeProjectionCreator {
-  import CodegenObjectFactory._
+/**
+ * A factory class which can be used to create objects that have both codegen and interpreted
+ * implementations. This tries to create codegen object first, if any compile error happens,
+ * it fallbacks to interpreted version.
+ */
+abstract class CodegenObjectFactory[IN, OUT] {
 
-  private val codegenCreator = UnsafeProjection
-  private lazy val interpretedCreator = InterpretedUnsafeProjection
-
-  /**
-   * Returns an [[UnsafeProjection]] for given sequence of bound Expressions.
-   */
-  override protected[sql] def createProjection(exprs: Seq[Expression]): UnsafeProjection = {
-    codegenOrInterpreted[UnsafeProjection](() => codegenCreator.createProjection(exprs),
-      () => interpretedCreator.createProjection(exprs))
+  def createObject(in: IN): OUT = try {
+    createCodeGeneratedObject(in)
+  } catch {
+    case CodegenError(_) => createInterpretedObject(in)
   }
+
+  protected def createCodeGeneratedObject(in: IN): OUT
+  protected def createInterpretedObject(in: IN): OUT
+}
+
+object UnsafeProjectionFactory extends CodegenObjectFactory[Seq[Expression], UnsafeProjection]
+    with UnsafeProjectionCreator {
+
+  override protected def createCodeGeneratedObject(in: Seq[Expression]): UnsafeProjection = {
+    UnsafeProjection.createProjection(in)
+  }
+
+  override protected def createInterpretedObject(in: Seq[Expression]): UnsafeProjection = {
+    InterpretedUnsafeProjection.createProjection(in)
+  }
+
+  override protected[sql] def createProjection(exprs: Seq[Expression]): UnsafeProjection =
+    createObject(exprs)
 
   /**
    * Same as other create()'s but allowing enabling/disabling subexpression elimination.
@@ -54,10 +70,10 @@ object UnsafeProjectionFactory extends UnsafeProjectionCreator {
   def create(
       exprs: Seq[Expression],
       inputSchema: Seq[Attribute],
-      subexpressionEliminationEnabled: Boolean): UnsafeProjection = {
-    codegenOrInterpreted[UnsafeProjection](
-      () => codegenCreator.create(exprs, inputSchema, subexpressionEliminationEnabled),
-      () => interpretedCreator.create(exprs, inputSchema))
+      subexpressionEliminationEnabled: Boolean): UnsafeProjection = try {
+    UnsafeProjection.create(exprs, inputSchema, subexpressionEliminationEnabled)
+  } catch {
+    case CodegenError(_) => InterpretedUnsafeProjection.create(exprs, inputSchema)
   }
 }
 
