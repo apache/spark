@@ -1942,7 +1942,6 @@ def concat(*cols):
     return Column(sc._jvm.functions.concat(_to_seq(sc, cols, _to_java_column)))
 
 
-@ignore_unicode_prefix
 @since(2.4)
 def array_position(col, value):
     """
