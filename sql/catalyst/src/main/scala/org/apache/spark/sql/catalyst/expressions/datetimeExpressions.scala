@@ -1126,12 +1126,12 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-	usage = """
+  usage = """
     _FUNC_(timestamp1, timestamp2) - If `timestamp` is later than `timestamp2`, then the result
       is positive. If `timestamp1` and `timestamp2` are on the same day of month, or both
       are the last day of month, time of day will be ignored. Otherwise, the difference is
       calculated based on 31 days per month, and rounded to 8 digits.
-	""",
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30');
