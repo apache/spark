@@ -379,7 +379,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val yMean = ySummarizer.mean(0)
     val rawYStd = math.sqrt(ySummarizer.variance(0))
 
-    instr.logNamedValue(Instrumentation.loggerTags.numExamples, ySummarizer.count)
+    instr.logNumExamples(ySummarizer.count)
     instr.logNamedValue(Instrumentation.loggerTags.meanOfLabels, yMean)
     instr.logNamedValue(Instrumentation.loggerTags.varianceOfLabels, rawYStd)
 
