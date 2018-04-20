@@ -425,6 +425,15 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           sql(s"CREATE TABLE tab1 (col1 int, col2 string) USING ${dataSource}")
         }.getMessage
         assert(ex.contains(exMsgWithDefaultDB))
+
+        // Always check location of managed table, with or without (IF NOT EXISTS)
+        withTable("tab2") {
+          sql(s"CREATE TABLE tab2 (col1 int, col2 string) USING ${dataSource}")
+          ex = intercept[AnalysisException] {
+            sql(s"CREATE TABLE IF NOT EXISTS tab1 LIKE tab2")
+          }.getMessage
+          assert(ex.contains(exMsgWithDefaultDB))
+        }
       } finally {
         waitForTasksToFinish()
         Utils.deleteRecursively(tableLoc)

@@ -21,17 +21,20 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
+import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.ResolveTimeZone
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.analysis.{ResolveTimeZone, SimpleAnalyzer, UnresolvedDeserializer}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects._
-import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{SQLDate, SQLTimestamp}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -44,6 +47,20 @@ class InvokeTargetClass extends Serializable {
 
 class InvokeTargetSubClass extends InvokeTargetClass {
   override def binOp(e1: Int, e2: Double): Double = e1 - e2
+}
+
+// Tests for NewInstance
+class Outer extends Serializable {
+  class Inner(val value: Int) {
+    override def hashCode(): Int = super.hashCode()
+    override def equals(other: Any): Boolean = {
+      if (other.isInstanceOf[Inner]) {
+        value == other.asInstanceOf[Inner].value
+      } else {
+        false
+      }
+    }
+  }
 }
 
 class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -147,9 +164,10 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         "fromPrimitiveArray", ObjectType(classOf[Array[Int]]),
         Array[Int](1, 2, 3), UnsafeArrayData.fromPrimitiveArray(Array[Int](1, 2, 3))),
       (DateTimeUtils.getClass, ObjectType(classOf[Date]),
-        "toJavaDate", ObjectType(classOf[SQLDate]), 77777, DateTimeUtils.toJavaDate(77777)),
+        "toJavaDate", ObjectType(classOf[DateTimeUtils.SQLDate]), 77777,
+        DateTimeUtils.toJavaDate(77777)),
       (DateTimeUtils.getClass, ObjectType(classOf[Timestamp]),
-        "toJavaTimestamp", ObjectType(classOf[SQLTimestamp]),
+        "toJavaTimestamp", ObjectType(classOf[DateTimeUtils.SQLTimestamp]),
         88888888.toLong, DateTimeUtils.toJavaTimestamp(88888888))
     ).foreach { case (cls, dataType, methodName, argType, arg, expected) =>
       checkObjectExprEvaluation(StaticInvoke(cls, dataType, methodName,
@@ -381,12 +399,86 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(decodeUsingSerializer, null, InternalRow.fromSeq(Seq(null)))
     }
   }
+
+  test("SPARK-23584 NewInstance should support interpreted execution") {
+    // Normal case test
+    val newInst1 = NewInstance(
+      cls = classOf[GenericArrayData],
+      arguments = Literal.fromObject(List(1, 2, 3)) :: Nil,
+      propagateNull = false,
+      dataType = ArrayType(IntegerType),
+      outerPointer = None)
+    checkObjectExprEvaluation(newInst1, new GenericArrayData(List(1, 2, 3)))
+
+    // Inner class case test
+    val outerObj = new Outer()
+    val newInst2 = NewInstance(
+      cls = classOf[outerObj.Inner],
+      arguments = Literal(1) :: Nil,
+      propagateNull = false,
+      dataType = ObjectType(classOf[outerObj.Inner]),
+      outerPointer = Some(() => outerObj))
+    checkObjectExprEvaluation(newInst2, new outerObj.Inner(1))
+  }
+
+  test("LambdaVariable should support interpreted execution") {
+    def genSchema(dt: DataType): Seq[StructType] = {
+      Seq(StructType(StructField("col_1", dt, nullable = false) :: Nil),
+        StructType(StructField("col_1", dt, nullable = true) :: Nil))
+    }
+
+    val elementTypes = Seq(BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType,
+      DoubleType, DecimalType.USER_DEFAULT, StringType, BinaryType, DateType, TimestampType,
+      CalendarIntervalType, new ExamplePointUDT())
+    val arrayTypes = elementTypes.flatMap { elementType =>
+      Seq(ArrayType(elementType, containsNull = false), ArrayType(elementType, containsNull = true))
+    }
+    val mapTypes = elementTypes.flatMap { elementType =>
+      Seq(MapType(elementType, elementType, false), MapType(elementType, elementType, true))
+    }
+    val structTypes = elementTypes.flatMap { elementType =>
+      Seq(StructType(StructField("col1", elementType, false) :: Nil),
+        StructType(StructField("col1", elementType, true) :: Nil))
+    }
+
+    val testTypes = elementTypes ++ arrayTypes ++ mapTypes ++ structTypes
+    val random = new Random(100)
+    testTypes.foreach { dt =>
+      genSchema(dt).map { schema =>
+        val row = RandomDataGenerator.randomRow(random, schema)
+        val rowConverter = RowEncoder(schema)
+        val internalRow = rowConverter.toRow(row)
+        val lambda = LambdaVariable("dummy", "dummuIsNull", schema(0).dataType, schema(0).nullable)
+        checkEvaluationWithoutCodegen(lambda, internalRow.get(0, schema(0).dataType), internalRow)
+      }
+    }
+  }
+
+  implicit private def mapIntStrEncoder = ExpressionEncoder[Map[Int, String]]()
+
+  test("SPARK-23588 CatalystToExternalMap should support interpreted execution") {
+    // To get a resolved `CatalystToExternalMap` expression, we build a deserializer plan
+    // with dummy input, resolve the plan by the analyzer, and replace the dummy input
+    // with a literal for tests.
+    val unresolvedDeser = UnresolvedDeserializer(encoderFor[Map[Int, String]].deserializer)
+    val dummyInputPlan = LocalRelation('value.map(MapType(IntegerType, StringType)))
+    val plan = Project(Alias(unresolvedDeser, "none")() :: Nil, dummyInputPlan)
+
+    val analyzedPlan = SimpleAnalyzer.execute(plan)
+    val Alias(toMapExpr: CatalystToExternalMap, _) = analyzedPlan.expressions.head
+
+    // Replaces the dummy input with a literal for tests here
+    val data = Map[Int, String](0 -> "v0", 1 -> "v1", 2 -> null, 3 -> "v3")
+    val deserializer = toMapExpr.copy(inputData = Literal.create(data))
+    checkObjectExprEvaluation(deserializer, expected = data)
+  }
 }
 
 class TestBean extends Serializable {
   private var x: Int = 0
 
   def setX(i: Int): Unit = x = i
+
   def setNonPrimitive(i: AnyRef): Unit =
     assert(i != null, "this setter should not be called with null.")
 }

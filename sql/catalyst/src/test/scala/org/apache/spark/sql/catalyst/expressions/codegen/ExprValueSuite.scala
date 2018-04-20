@@ -14,23 +14,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.deploy.k8s
 
-import io.fabric8.kubernetes.api.model.LocalObjectReference
+package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.types.BooleanType
 
-class KubernetesUtilsTest extends SparkFunSuite {
+class ExprValueSuite extends SparkFunSuite {
 
-  test("testParseImagePullSecrets") {
-    val noSecrets = KubernetesUtils.parseImagePullSecrets(None)
-    assert(noSecrets === Nil)
+  test("TrueLiteral and FalseLiteral should be LiteralValue") {
+    val trueLit = TrueLiteral
+    val falseLit = FalseLiteral
 
-    val oneSecret = KubernetesUtils.parseImagePullSecrets(Some("imagePullSecret"))
-    assert(oneSecret === new LocalObjectReference("imagePullSecret") :: Nil)
+    assert(trueLit.value == "true")
+    assert(falseLit.value == "false")
 
-    val commaSeparatedSecrets = KubernetesUtils.parseImagePullSecrets(Some("s1, s2  , s3,s4"))
-    assert(commaSeparatedSecrets.map(_.getName) === "s1" :: "s2" :: "s3" :: "s4" :: Nil)
+    assert(trueLit.isPrimitive)
+    assert(falseLit.isPrimitive)
+
+    assert(trueLit === JavaCode.literal("true", BooleanType))
+    assert(falseLit === JavaCode.literal("false", BooleanType))
   }
-
 }

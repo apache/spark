@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.unsafe.memory.MemoryBlock;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * Simulates Hive's hashing function from Hive v1.2.1
@@ -50,5 +51,9 @@ public class HiveHasher {
 
   public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes) {
     return hashUnsafeBytesBlock(MemoryBlock.allocateFromObject(base, offset, lengthInBytes));
+  }
+
+  public static int hashUTF8String(UTF8String str) {
+    return hashUnsafeBytesBlock(str.getMemoryBlock());
   }
 }

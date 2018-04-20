@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.json
 
 import java.io.{File, StringWriter}
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
+import java.nio.file.{Files, Paths, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.util.Locale
 
@@ -2126,5 +2126,40 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       checkAnswer(df, Seq(("a", 1), ("c", 2), ("d", 3)).toDF())
       assert(df.schema === expectedSchema)
     }
+  }
+
+  test("SPARK-23849: schema inferring touches less data if samplingRation < 1.0") {
+    val predefinedSample = Set[Int](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
+      57, 62, 68, 72)
+    withTempPath { path =>
+      val writer = Files.newBufferedWriter(Paths.get(path.getAbsolutePath),
+        StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW)
+      for (i <- 0 until 100) {
+        if (predefinedSample.contains(i)) {
+          writer.write(s"""{"f1":${i.toString}}""" + "\n")
+        } else {
+          writer.write(s"""{"f1":${(i.toDouble + 0.1).toString}}""" + "\n")
+        }
+      }
+      writer.close()
+
+      val ds = spark.read.option("samplingRatio", 0.1).json(path.getCanonicalPath)
+      assert(ds.schema == new StructType().add("f1", LongType))
+    }
+  }
+
+  test("SPARK-23849: usage of samplingRation while parsing of dataset of strings") {
+    val dstr = spark.sparkContext.parallelize(0 until 100, 1).map { i =>
+      val predefinedSample = Set[Int](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
+        57, 62, 68, 72)
+      if (predefinedSample.contains(i)) {
+        s"""{"f1":${i.toString}}""" + "\n"
+      } else {
+        s"""{"f1":${(i.toDouble + 0.1).toString}}""" + "\n"
+      }
+    }.toDS()
+    val ds = spark.read.option("samplingRatio", 0.1).json(dstr)
+
+    assert(ds.schema == new StructType().add("f1", LongType))
   }
 }

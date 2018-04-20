@@ -38,7 +38,7 @@ object UnsafeProjectionBenchmark {
     val iters = 1024 * 16
     val numRows = 1024 * 16
 
-    val benchmark = new Benchmark("unsafe projection", iters * numRows)
+    val benchmark = new Benchmark("unsafe projection", iters * numRows.toLong)
 
 
     val schema1 = new StructType().add("l", LongType, false)

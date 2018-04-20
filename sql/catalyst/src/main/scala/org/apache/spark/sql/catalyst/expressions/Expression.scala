@@ -104,7 +104,9 @@ abstract class Expression extends TreeNode[Expression] {
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
-      val eval = doGenCode(ctx, ExprCode("", isNull, value))
+      val eval = doGenCode(ctx, ExprCode(
+        JavaCode.isNullVariable(isNull),
+        JavaCode.variable(value, dataType)))
       reduceCodeSize(ctx, eval)
       if (eval.code.nonEmpty) {
         // Add `this` in the comment.
@@ -118,10 +120,10 @@ abstract class Expression extends TreeNode[Expression] {
   private def reduceCodeSize(ctx: CodegenContext, eval: ExprCode): Unit = {
     // TODO: support whole stage codegen too
     if (eval.code.trim.length > 1024 && ctx.INPUT_ROW != null && ctx.currentVars == null) {
-      val setIsNull = if (eval.isNull != "false" && eval.isNull != "true") {
+      val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {
         val globalIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull
-        eval.isNull = globalIsNull
+        eval.isNull = JavaCode.isNullGlobal(globalIsNull)
         s"$globalIsNull = $localIsNull;"
       } else {
         ""
@@ -140,7 +142,7 @@ abstract class Expression extends TreeNode[Expression] {
            |}
            """.stripMargin)
 
-      eval.value = newValue
+      eval.value = JavaCode.variable(newValue, dataType)
       eval.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
     }
   }
@@ -446,7 +448,7 @@ abstract class UnaryExpression extends Expression {
         boolean ${ev.isNull} = false;
         ${childGen.code}
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = "false")
+        $resultCode""", isNull = FalseLiteral)
     }
   }
 }
@@ -546,7 +548,7 @@ abstract class BinaryExpression extends Expression {
         ${leftGen.code}
         ${rightGen.code}
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = "false")
+        $resultCode""", isNull = FalseLiteral)
     }
   }
 }
@@ -690,7 +692,7 @@ abstract class TernaryExpression extends Expression {
         ${midGen.code}
         ${rightGen.code}
         ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        $resultCode""", isNull = "false")
+        $resultCode""", isNull = FalseLiteral)
     }
   }
 }
