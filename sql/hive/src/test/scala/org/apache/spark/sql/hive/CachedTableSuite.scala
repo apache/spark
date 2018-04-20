@@ -37,8 +37,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   def rddIdOf(tableName: String): Int = {
     val plan = table(tableName).queryExecution.sparkPlan
     plan.collect {
-      case InMemoryTableScanExec(_, _, relation) =>
-        relation.cachedColumnBuffers.id
+      case m: InMemoryTableScanExec =>
+        m.cachedColumnBuffers.id
       case _ =>
         fail(s"Table $tableName is not cached\n" + plan)
     }.head
@@ -172,12 +172,12 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     sql("CACHE LAZY TABLE src")
     assertCached(table("src"))
 
-    val rddId = rddIdOf("src")
     assert(
-      !isMaterialized(rddId),
+      !isMaterialized(rddIdOf("src")),
       "Lazily cached in-memory table shouldn't be materialized eagerly")
 
     sql("SELECT COUNT(*) FROM src").collect()
+    val rddId = rddIdOf("src")
     assert(
       isMaterialized(rddId),
       "Lazily cached in-memory table should have been materialized")

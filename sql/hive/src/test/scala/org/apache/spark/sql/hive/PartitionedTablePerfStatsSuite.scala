@@ -228,8 +228,9 @@ class PartitionedTablePerfStatsSuite
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
 
           spark.catalog.cacheTable("test")
-          HiveCatalogMetrics.reset()
           spark.catalog.refreshByPath(dir.getAbsolutePath)
+          // `refreshByPath` does file listing internally, so we need to reset here
+          HiveCatalogMetrics.reset()
           assert(spark.sql("select * from test").count() == 5)
           assert(HiveCatalogMetrics.METRIC_FILES_DISCOVERED.getCount() == 5)
           assert(HiveCatalogMetrics.METRIC_FILE_CACHE_HITS.getCount() == 0)
