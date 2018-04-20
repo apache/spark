@@ -52,7 +52,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     val plan = spark.table(tableName).queryExecution.sparkPlan
     plan.collect {
       case InMemoryTableScanExec(_, _, relation) =>
-        relation.cachedColumnBuffers.id
+        relation.cacheBuilder.cachedColumnBuffers.id
       case _ =>
         fail(s"Table $tableName is not cached\n" + plan)
     }.head
@@ -200,7 +200,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     spark.catalog.cacheTable("testData")
     assertResult(0, "Double InMemoryRelations found, cacheTable() is not idempotent") {
       spark.table("testData").queryExecution.withCachedData.collect {
-        case r @ InMemoryRelation(_, _, _, _, _: InMemoryTableScanExec, _) => r
+        case r: InMemoryRelation if r.child.isInstanceOf[InMemoryTableScanExec] => r
       }.size
     }
 
@@ -367,12 +367,12 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     val toBeCleanedAccIds = new HashSet[Long]
 
     val accId1 = spark.table("t1").queryExecution.withCachedData.collect {
-      case i: InMemoryRelation => i.sizeInBytesStats.id
+      case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
     }.head
     toBeCleanedAccIds += accId1
 
     val accId2 = spark.table("t1").queryExecution.withCachedData.collect {
-      case i: InMemoryRelation => i.sizeInBytesStats.id
+      case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
     }.head
     toBeCleanedAccIds += accId2
 
@@ -793,5 +793,18 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
         }
       }
     }
+  }
+
+  private def isMaterialized(df: DataFrame): Boolean = {
+    val nodes = df.queryExecution.executedPlan.collect { case c: InMemoryTableScanExec => c }
+    assert(nodes.nonEmpty, "DataFrame is not cached\n" + df.queryExecution.analyzed)
+    nodes.forall(_.relation.cacheBuilder._cachedColumnBuffers != null)
+  }
+
+  test("SPARK-23880 table cache should be lazy and don't trigger any jobs") {
+    val df1 = Seq((1, 2), (2, 3), (3, 4)).toDF("a", "b").filter('a > 1).groupBy().sum("b").cache()
+    assert(!isMaterialized(df1))
+    checkAnswer(df1, Row(7L))
+    assert(isMaterialized(df1))
   }
 }

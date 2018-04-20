@@ -252,7 +252,7 @@ case class InMemoryTableScanExec(
     // within the map Partitions closure.
     val schema = stats.schema
     val schemaIndex = schema.zipWithIndex
-    val buffers = relation.cachedColumnBuffers
+    val buffers = relation.cacheBuilder.cachedColumnBuffers
 
     buffers.mapPartitionsWithIndexInternal { (index, cachedBatchIterator) =>
       val partitionFilter = newPredicate(
