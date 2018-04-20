@@ -105,7 +105,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
   }
 
   protected def checkExceptionInExpression[T <: Throwable : ClassTag](
-      expression: Expression,
+      expression: => Expression,
       expectedErrMsg: String): Unit = {
     checkExceptionInExpression[T](expression, InternalRow.empty, expectedErrMsg)
   }

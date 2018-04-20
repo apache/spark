@@ -127,7 +127,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkEvaluation(Slice(a1, Literal(1), Literal(2)), Seq("a", "b"))
     checkEvaluation(Slice(a2, Literal(1), Literal(2)), Seq("", null))
-
+    checkEvaluation(Slice(a0, Literal(10), Literal(1)), Seq.empty[Int])
   }
 
   test("Array Min") {

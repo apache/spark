@@ -407,7 +407,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val arr = xVal.asInstanceOf[ArrayData]
     val startIndex = if (startInt == 0) {
       throw new RuntimeException(
-        s"Unexpected value for start in function $prettyName:  SQL array indices start at 1.")
+        s"Unexpected value for start in function $prettyName: SQL array indices start at 1.")
     } else if (startInt < 0) {
       startInt + arr.numElements()
     } else {
@@ -415,15 +415,15 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     }
     if (lengthInt < 0) {
       throw new RuntimeException(s"Unexpected value for length in function $prettyName: " +
-        s"length must be greater than or equal to 0.")
+        "length must be greater than or equal to 0.")
     }
-    // this can happen if start is negative and its absolute value is greater than the
+    // startIndex can be negative if start is negative and its absolute value is greater than the
     // number of elements in the array
-    if (startIndex < 0) {
+    if (startIndex < 0 || startIndex >= arr.numElements()) {
       return new GenericArrayData(Array.empty[AnyRef])
     }
     val elementType = x.dataType.asInstanceOf[ArrayType].elementType
-    val data = arr.toArray[AnyRef](elementType)
+    val data = arr.toSeq[AnyRef](elementType)
     new GenericArrayData(data.slice(startIndex, startIndex + lengthInt))
   }
 
@@ -457,7 +457,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
          |  $resLength = $length;
          |}
          |Object[] $values;
-         |if ($startIdx < 0) {
+         |if ($startIdx < 0 || $startIdx >= $x.numElements()) {
          |  $values = new Object[0];
          |} else {
          |  $values = new Object[$resLength];
