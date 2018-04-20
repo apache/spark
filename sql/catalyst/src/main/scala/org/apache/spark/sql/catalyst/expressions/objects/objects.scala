@@ -1040,11 +1040,13 @@ case class CatalystToExternalMap private(
   private lazy val valueConverter =
     CatalystTypeConverters.createToScalaConverter(inputMapType.valueType)
 
-  private def newMapBuilder(): Builder[AnyRef, AnyRef] = {
+  private lazy val (newMapBuilderMethod, moduleField) = {
     val clazz = Utils.classForName(collClass.getCanonicalName + "$")
-    val module = clazz.getField("MODULE$").get(null)
-    val method = clazz.getMethod("newBuilder")
-    method.invoke(module).asInstanceOf[Builder[AnyRef, AnyRef]]
+    (clazz.getMethod("newBuilder"), clazz.getField("MODULE$").get(null))
+  }
+
+  private def newMapBuilder(): Builder[AnyRef, AnyRef] = {
+    newMapBuilderMethod.invoke(moduleField).asInstanceOf[Builder[AnyRef, AnyRef]]
   }
 
   override def eval(input: InternalRow): Any = {
