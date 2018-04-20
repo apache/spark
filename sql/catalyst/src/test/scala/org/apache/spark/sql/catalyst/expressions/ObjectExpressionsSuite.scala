@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, Generic
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class InvokeTargetClass extends Serializable {
   def filterInt(e: Any): Any = e.asInstanceOf[Int] > 0
@@ -296,7 +296,7 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
     val getRowField = GetExternalRowField(inputObject, index = 0, fieldName = "c0")
     Seq((Row(1), 1), (Row(3), 3)).foreach { case (input, expected) =>
-      checkEvaluation(getRowField, expected, InternalRow.fromSeq(Seq(input)))
+      checkObjectExprEvaluation(getRowField, expected, InternalRow.fromSeq(Seq(input)))
     }
 
     // If an input row or a field are null, a runtime exception will be thrown
@@ -471,6 +471,35 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val data = Map[Int, String](0 -> "v0", 1 -> "v1", 2 -> null, 3 -> "v3")
     val deserializer = toMapExpr.copy(inputData = Literal.create(data))
     checkObjectExprEvaluation(deserializer, expected = data)
+  }
+
+  test("SPARK-23595 ValidateExternalType should support interpreted execution") {
+    val inputObject = BoundReference(0, ObjectType(classOf[Row]), nullable = true)
+    Seq(
+      (true, BooleanType),
+      (2.toByte, ByteType),
+      (5.toShort, ShortType),
+      (23, IntegerType),
+      (61L, LongType),
+      (1.0f, FloatType),
+      (10.0, DoubleType),
+      ("abcd".getBytes, BinaryType),
+      ("abcd", StringType),
+      (BigDecimal.valueOf(10), DecimalType.IntDecimal),
+      (CalendarInterval.fromString("interval 3 day"), CalendarIntervalType),
+      (java.math.BigDecimal.valueOf(10), DecimalType.BigIntDecimal),
+      (Array(3, 2, 1), ArrayType(IntegerType))
+    ).foreach { case (input, dt) =>
+      val validateType = ValidateExternalType(
+        GetExternalRowField(inputObject, index = 0, fieldName = "c0"), dt)
+      checkObjectExprEvaluation(validateType, input, InternalRow.fromSeq(Seq(Row(input))))
+    }
+
+    checkExceptionInExpression[RuntimeException](
+      ValidateExternalType(
+        GetExternalRowField(inputObject, index = 0, fieldName = "c0"), DoubleType),
+      InternalRow.fromSeq(Seq(Row(1))),
+      "java.lang.Integer is not a valid external type for schema of double")
   }
 }
 
