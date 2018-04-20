@@ -32,15 +32,15 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, JoinedRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.orc.{OrcColumnarBatchReader, OrcDeserializer, OrcFilters, OrcUtils}
-import org.apache.spark.sql.execution.datasources.v2.ColumnarBatchFileSourceReader
+import org.apache.spark.sql.execution.datasources.orc._
+import org.apache.spark.sql.execution.datasources.v2.{ColumnarBatchFileSourceReader, FileDataSourceV2}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.v2.{DataSourceOptions, DataSourceV2, ReadSupport, ReadSupportWithSchema}
 import org.apache.spark.sql.sources.v2.reader._
 import org.apache.spark.sql.types.{AtomicType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
-class OrcDataSourceV2 extends DataSourceV2 with ReadSupport with ReadSupportWithSchema {
+class OrcDataSourceV2 extends FileDataSourceV2 with ReadSupport with ReadSupportWithSchema {
   override def createReader(options: DataSourceOptions): DataSourceReader = {
     new OrcDataSourceReader(options, None)
   }
@@ -48,6 +48,10 @@ class OrcDataSourceV2 extends DataSourceV2 with ReadSupport with ReadSupportWith
   override def createReader(schema: StructType, options: DataSourceOptions): DataSourceReader = {
     new OrcDataSourceReader(options, Some(schema))
   }
+
+  override def fallBackFileFormat: Option[Class[_]] = Some(classOf[OrcFileFormat])
+
+  override def shortName(): String = "orc"
 }
 
 case class OrcDataSourceReader(options: DataSourceOptions, userSpecifiedSchema: Option[StructType])

@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 import java.util.concurrent.Callable
+import javax.activation.FileDataSource
 
 import org.apache.hadoop.fs.Path
 
@@ -38,7 +39,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileDataSourceV2}
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -217,23 +218,22 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
 }
 
 /**
- * Replaces [[OrcDataSourceV2]] with [[DataSource]] if parent node is [[InsertIntoTable]].
- * This is because [[OrcDataSourceV2]] doesn't support writing data yet.
+ * Replaces [[FileDataSourceV2]] with [[DataSource]] if parent node is [[InsertIntoTable]].
  * @param sparkSession
  */
-class FallBackToOrcV1(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private def convertToOrcV1(v2Relation: DataSourceV2Relation): LogicalPlan = {
-    val v1 = DataSource.apply(
-      sparkSession = sparkSession,
-      paths = v2Relation.v2Options.paths(),
-      userSpecifiedSchema = v2Relation.userSpecifiedSchema,
-      className = classOf[OrcFileFormat].getCanonicalName,
-      options = v2Relation.options).resolveRelation()
-    LogicalRelation(v1)
-  }
+class FallBackFileDataSourceToV1(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case i @InsertIntoTable(d: DataSourceV2Relation, _, _, _, _)
-      if d.source.isInstanceOf[OrcDataSourceV2] => i.copy(table = convertToOrcV1(d))
+      if d.source.isInstanceOf[FileDataSourceV2] =>
+      val cls = d.source.asInstanceOf[FileDataSourceV2].fallBackFileFormat
+      assert(cls.isDefined, "File data source V2 doesn't support catalog yet.")
+      val v1 = DataSource.apply(
+        sparkSession = sparkSession,
+        paths = d.v2Options.paths(),
+        userSpecifiedSchema = d.userSpecifiedSchema,
+        className = cls.get.getCanonicalName,
+        options = d.options).resolveRelation()
+      i.copy(table = LogicalRelation(v1))
   }
 }
 

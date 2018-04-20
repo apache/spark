@@ -30,8 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AnalysisBarrier, InsertIntoT
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2, FileSourceReader, WriteToDataSourceV2}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
@@ -258,6 +257,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
             }
           }
 
+        case f: FileDataSourceV2 =>
+          saveToV1Source(f.fallBackFileFormat)
+
         // Streaming also uses the data source V2 API. So it may be that the data source implements
         // v2, but has no v2 implementation for batch writes. In that case, we fall back to saving
         // as though it's a V1 source.
@@ -268,12 +270,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  private def saveToV1Source(): Unit = {
+  private def saveToV1Source(cls: Option[Class[_]] = None): Unit = {
     // Code path for data source v1.
     runCommand(df.sparkSession, "save") {
       DataSource(
         sparkSession = df.sparkSession,
-        className = source,
+        className = cls.map(_.getCanonicalName).getOrElse(source),
         partitionColumns = partitioningColumns.getOrElse(Nil),
         options = extraOptions.toMap).planForWriting(mode, AnalysisBarrier(df.logicalPlan))
     }
