@@ -87,7 +87,9 @@ private[ui] class ExecutorTable(stage: StageData, store: AppStatusStore) {
   }
 
   private def createExecutorTable(stage: StageData) : Seq[Node] = {
-    stage.executorSummary.getOrElse(Map.empty).toSeq.sortBy(_._1).map { case (k, v) =>
+    val executorSummary = store.executorSummary(stage.stageId, stage.attemptId)
+
+    executorSummary.toSeq.sortBy(_._1).map { case (k, v) =>
       val executor = store.asOption(store.executorSummary(k))
       <tr>
         <td>
@@ -134,7 +136,15 @@ private[ui] class ExecutorTable(stage: StageData, store: AppStatusStore) {
             {Utils.bytesToString(v.diskBytesSpilled)}
           </td>
         }}
-        <td>{executor.map(_.isBlacklisted).getOrElse(false)}</td>
+        {
+          if (executor.map(_.isBlacklisted).getOrElse(false)) {
+            <td>for application</td>
+          } else if (v.isBlacklistedForStage) {
+            <td>for stage</td>
+          } else {
+            <td>false</td>
+          }
+        }
       </tr>
     }
   }

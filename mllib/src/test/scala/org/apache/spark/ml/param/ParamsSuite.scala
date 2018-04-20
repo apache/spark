@@ -20,8 +20,10 @@ package org.apache.spark.ml.param
 import java.io.{ByteArrayOutputStream, ObjectOutputStream}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.{Estimator, Transformer}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.MyParams
+import org.apache.spark.sql.Dataset
 
 class ParamsSuite extends SparkFunSuite {
 
@@ -429,5 +431,25 @@ object ParamsSuite extends SparkFunSuite {
     val copyReturnType = copyMethod.getReturnType
     require(copyReturnType === obj.getClass,
       s"${clazz.getName}.copy should return ${clazz.getName} instead of ${copyReturnType.getName}.")
+  }
+
+  /**
+   * Checks that the class throws an exception in case multiple exclusive params are set.
+   * The params to be checked are passed as arguments with their value.
+   */
+  def testExclusiveParams(
+      model: Params,
+      dataset: Dataset[_],
+      paramsAndValues: (String, Any)*): Unit = {
+    val m = model.copy(ParamMap.empty)
+    paramsAndValues.foreach { case (paramName, paramValue) =>
+      m.set(m.getParam(paramName), paramValue)
+    }
+    intercept[IllegalArgumentException] {
+      m match {
+        case t: Transformer => t.transform(dataset)
+        case e: Estimator[_] => e.fit(dataset)
+      }
+    }
   }
 }

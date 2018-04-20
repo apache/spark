@@ -249,6 +249,75 @@ object ParamValidators {
   def arrayLengthGt[T](lowerBound: Double): Array[T] => Boolean = { (value: Array[T]) =>
     value.length > lowerBound
   }
+
+  /**
+   * Utility for Param validity checks for Transformers which have both single- and multi-column
+   * support.  This utility assumes that `inputCol` indicates single-column usage and
+   * that `inputCols` indicates multi-column usage.
+   *
+   * This checks to ensure that exactly one set of Params has been set, and it
+   * raises an `IllegalArgumentException` if not.
+   *
+   * @param singleColumnParams Params which should be set (or have defaults) if `inputCol` has been
+   *                           set.  This does not need to include `inputCol`.
+   * @param multiColumnParams Params which should be set (or have defaults) if `inputCols` has been
+   *                           set.  This does not need to include `inputCols`.
+   */
+  def checkSingleVsMultiColumnParams(
+      model: Params,
+      singleColumnParams: Seq[Param[_]],
+      multiColumnParams: Seq[Param[_]]): Unit = {
+    val name = s"${model.getClass.getSimpleName} $model"
+
+    def checkExclusiveParams(
+        isSingleCol: Boolean,
+        requiredParams: Seq[Param[_]],
+        excludedParams: Seq[Param[_]]): Unit = {
+      val badParamsMsgBuilder = new mutable.StringBuilder()
+
+      val mustUnsetParams = excludedParams.filter(p => model.isSet(p))
+        .map(_.name).mkString(", ")
+      if (mustUnsetParams.nonEmpty) {
+        badParamsMsgBuilder ++=
+          s"The following Params are not applicable and should not be set: $mustUnsetParams."
+      }
+
+      val mustSetParams = requiredParams.filter(p => !model.isDefined(p))
+        .map(_.name).mkString(", ")
+      if (mustSetParams.nonEmpty) {
+        badParamsMsgBuilder ++=
+          s"The following Params must be defined but are not set: $mustSetParams."
+      }
+
+      val badParamsMsg = badParamsMsgBuilder.toString()
+
+      if (badParamsMsg.nonEmpty) {
+        val errPrefix = if (isSingleCol) {
+          s"$name has the inputCol Param set for single-column transform."
+        } else {
+          s"$name has the inputCols Param set for multi-column transform."
+        }
+        throw new IllegalArgumentException(s"$errPrefix $badParamsMsg")
+      }
+    }
+
+    val inputCol = model.getParam("inputCol")
+    val inputCols = model.getParam("inputCols")
+
+    if (model.isSet(inputCol)) {
+      require(!model.isSet(inputCols), s"$name requires " +
+        s"exactly one of inputCol, inputCols Params to be set, but both are set.")
+
+      checkExclusiveParams(isSingleCol = true, requiredParams = singleColumnParams,
+        excludedParams = multiColumnParams)
+    } else if (model.isSet(inputCols)) {
+      checkExclusiveParams(isSingleCol = false, requiredParams = multiColumnParams,
+        excludedParams = singleColumnParams)
+    } else {
+      throw new IllegalArgumentException(s"$name requires " +
+        s"exactly one of inputCol, inputCols Params to be set, but neither is set.")
+    }
+  }
 }
 
 // specialize primitive-typed params because Java doesn't recognize scala.Double, scala.Int, ...

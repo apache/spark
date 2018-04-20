@@ -193,12 +193,15 @@ private[streaming] class ReceivedBlockTracker(
       getReceivedBlockQueue(receivedBlockInfo.streamId) += receivedBlockInfo
     }
 
-    // Insert the recovered block-to-batch allocations and clear the queue of received blocks
-    // (when the blocks were originally allocated to the batch, the queue must have been cleared).
+    // Insert the recovered block-to-batch allocations and removes them from queue of
+    // received blocks.
     def insertAllocatedBatch(batchTime: Time, allocatedBlocks: AllocatedBlocks) {
       logTrace(s"Recovery: Inserting allocated batch for time $batchTime to " +
         s"${allocatedBlocks.streamIdToAllocatedBlocks}")
-      streamIdToUnallocatedBlockQueues.values.foreach { _.clear() }
+      allocatedBlocks.streamIdToAllocatedBlocks.foreach {
+        case (streamId, allocatedBlocksInStream) =>
+          getReceivedBlockQueue(streamId).dequeueAll(allocatedBlocksInStream.toSet)
+      }
       timeToAllocatedBlocks.put(batchTime, allocatedBlocks)
       lastAllocatedBatchTime = batchTime
     }
@@ -227,7 +230,7 @@ private[streaming] class ReceivedBlockTracker(
   }
 
   /** Write an update to the tracker to the write ahead log */
-  private def writeToLog(record: ReceivedBlockTrackerLogEvent): Boolean = {
+  private[streaming] def writeToLog(record: ReceivedBlockTrackerLogEvent): Boolean = {
     if (isWriteAheadLogEnabled) {
       logTrace(s"Writing record: $record")
       try {

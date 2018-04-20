@@ -539,6 +539,9 @@ class TypeCoercionSuite extends AnalysisTest {
     val floatLit = Literal.create(1.0f, FloatType)
     val timestampLit = Literal.create("2017-04-12", TimestampType)
     val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
+    val tsArrayLit = Literal(Array(new Timestamp(System.currentTimeMillis())))
+    val strArrayLit = Literal(Array("c"))
+    val intArrayLit = Literal(Array(1))
 
     ruleTest(rule,
       Coalesce(Seq(doubleLit, intLit, floatLit)),
@@ -572,6 +575,16 @@ class TypeCoercionSuite extends AnalysisTest {
       Coalesce(Seq(nullLit, floatNullLit, doubleLit, stringLit)),
       Coalesce(Seq(Cast(nullLit, StringType), Cast(floatNullLit, StringType),
         Cast(doubleLit, StringType), Cast(stringLit, StringType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(timestampLit, intLit, stringLit)),
+      Coalesce(Seq(Cast(timestampLit, StringType), Cast(intLit, StringType),
+        Cast(stringLit, StringType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(tsArrayLit, intArrayLit, strArrayLit)),
+      Coalesce(Seq(Cast(tsArrayLit, ArrayType(StringType)),
+        Cast(intArrayLit, ArrayType(StringType)), Cast(strArrayLit, ArrayType(StringType)))))
   }
 
   test("CreateArray casts") {
@@ -1207,7 +1220,7 @@ class TypeCoercionSuite extends AnalysisTest {
    */
   test("make sure rules do not fire early") {
     // InConversion
-    val inConversion = TypeCoercion.InConversion
+    val inConversion = TypeCoercion.InConversion(conf)
     ruleTest(inConversion,
       In(UnresolvedAttribute("a"), Seq(Literal(1))),
       In(UnresolvedAttribute("a"), Seq(Literal(1)))
@@ -1251,18 +1264,40 @@ class TypeCoercionSuite extends AnalysisTest {
   }
 
   test("binary comparison with string promotion") {
-    ruleTest(PromoteStrings,
+    val rule = TypeCoercion.PromoteStrings(conf)
+    ruleTest(rule,
       GreaterThan(Literal("123"), Literal(1)),
       GreaterThan(Cast(Literal("123"), IntegerType), Literal(1)))
-    ruleTest(PromoteStrings,
+    ruleTest(rule,
       LessThan(Literal(true), Literal("123")),
       LessThan(Literal(true), Cast(Literal("123"), BooleanType)))
-    ruleTest(PromoteStrings,
+    ruleTest(rule,
       EqualTo(Literal(Array(1, 2)), Literal("123")),
       EqualTo(Literal(Array(1, 2)), Literal("123")))
-    ruleTest(PromoteStrings,
+    ruleTest(rule,
       GreaterThan(Literal("1.5"), Literal(BigDecimal("0.5"))),
-      GreaterThan(Cast(Literal("1.5"), DoubleType), Cast(Literal(BigDecimal("0.5")), DoubleType)))
+      GreaterThan(Cast(Literal("1.5"), DoubleType), Cast(Literal(BigDecimal("0.5")),
+        DoubleType)))
+    Seq(true, false).foreach { convertToTS =>
+      withSQLConf(
+        "spark.sql.typeCoercion.compareDateTimestampInTimestamp" -> convertToTS.toString) {
+        val date0301 = Literal(java.sql.Date.valueOf("2017-03-01"))
+        val timestamp0301000000 = Literal(Timestamp.valueOf("2017-03-01 00:00:00"))
+        val timestamp0301000001 = Literal(Timestamp.valueOf("2017-03-01 00:00:01"))
+        if (convertToTS) {
+          // `Date` should be treated as timestamp at 00:00:00 See SPARK-23549
+          ruleTest(rule, EqualTo(date0301, timestamp0301000000),
+            EqualTo(Cast(date0301, TimestampType), timestamp0301000000))
+          ruleTest(rule, LessThan(date0301, timestamp0301000001),
+            LessThan(Cast(date0301, TimestampType), timestamp0301000001))
+        } else {
+          ruleTest(rule, LessThan(date0301, timestamp0301000000),
+            LessThan(Cast(date0301, StringType), Cast(timestamp0301000000, StringType)))
+          ruleTest(rule, LessThan(date0301, timestamp0301000001),
+            LessThan(Cast(date0301, StringType), Cast(timestamp0301000001, StringType)))
+        }
+      }
+    }
   }
 
   test("cast WindowFrame boundaries to the type they operate upon") {

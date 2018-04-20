@@ -23,7 +23,7 @@ import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 
 
 /**
@@ -117,6 +117,7 @@ object DecimalType extends AbstractDataType {
   val MAX_SCALE = 38
   val SYSTEM_DEFAULT: DecimalType = DecimalType(MAX_PRECISION, 18)
   val USER_DEFAULT: DecimalType = DecimalType(10, 0)
+  val MINIMUM_ADJUSTED_SCALE = 6
 
   // The decimal types compatible with other numeric types
   private[sql] val ByteDecimal = DecimalType(3, 0)
@@ -136,8 +137,50 @@ object DecimalType extends AbstractDataType {
     case DoubleType => DoubleDecimal
   }
 
+  private[sql] def fromLiteral(literal: Literal): DecimalType = literal.value match {
+    case v: Short => fromBigDecimal(BigDecimal(v))
+    case v: Int => fromBigDecimal(BigDecimal(v))
+    case v: Long => fromBigDecimal(BigDecimal(v))
+    case _ => forType(literal.dataType)
+  }
+
+  private[sql] def fromBigDecimal(d: BigDecimal): DecimalType = {
+    DecimalType(Math.max(d.precision, d.scale), d.scale)
+  }
+
   private[sql] def bounded(precision: Int, scale: Int): DecimalType = {
     DecimalType(min(precision, MAX_PRECISION), min(scale, MAX_SCALE))
+  }
+
+  /**
+   * Scale adjustment implementation is based on Hive's one, which is itself inspired to
+   * SQLServer's one. In particular, when a result precision is greater than
+   * {@link #MAX_PRECISION}, the corresponding scale is reduced to prevent the integral part of a
+   * result from being truncated.
+   *
+   * This method is used only when `spark.sql.decimalOperations.allowPrecisionLoss` is set to true.
+   */
+  private[sql] def adjustPrecisionScale(precision: Int, scale: Int): DecimalType = {
+    // Assumptions:
+    assert(precision >= scale)
+    assert(scale >= 0)
+
+    if (precision <= MAX_PRECISION) {
+      // Adjustment only needed when we exceed max precision
+      DecimalType(precision, scale)
+    } else {
+      // Precision/scale exceed maximum precision. Result must be adjusted to MAX_PRECISION.
+      val intDigits = precision - scale
+      // If original scale is less than MINIMUM_ADJUSTED_SCALE, use original scale value; otherwise
+      // preserve at least MINIMUM_ADJUSTED_SCALE fractional digits
+      val minScaleValue = Math.min(scale, MINIMUM_ADJUSTED_SCALE)
+      // The resulting scale is the maximum between what is available without causing a loss of
+      // digits for the integer part of the decimal and the minimum guaranteed scale, which is
+      // computed above
+      val adjustedScale = Math.max(MAX_PRECISION - intDigits, minScaleValue)
+
+      DecimalType(MAX_PRECISION, adjustedScale)
+    }
   }
 
   override private[sql] def defaultConcreteType: DataType = SYSTEM_DEFAULT

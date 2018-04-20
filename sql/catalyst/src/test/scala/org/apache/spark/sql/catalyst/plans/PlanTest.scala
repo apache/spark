@@ -154,7 +154,7 @@ trait PlanTestBase extends PredicateHelper { self: Suite =>
   }
 
   /**
-   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
+   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restores all SQL
    * configurations.
    */
   protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {

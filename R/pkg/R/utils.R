@@ -108,7 +108,6 @@ isRDD <- function(name, env) {
 #'
 #' @param key the object to be hashed
 #' @return the hash code as an integer
-#' @export
 #' @examples
 #'\dontrun{
 #' hashCode(1L) # 1

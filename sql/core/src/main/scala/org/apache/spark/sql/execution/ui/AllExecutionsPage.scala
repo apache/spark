@@ -39,7 +39,8 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
     val failed = new mutable.ArrayBuffer[SQLExecutionUIData]()
 
     sqlStore.executionsList().foreach { e =>
-      val isRunning = e.jobs.exists { case (_, status) => status == JobExecutionStatus.RUNNING }
+      val isRunning = e.completionTime.isEmpty ||
+        e.jobs.exists { case (_, status) => status == JobExecutionStatus.RUNNING }
       val isFailed = e.jobs.exists { case (_, status) => status == JobExecutionStatus.FAILED }
       if (isRunning) {
         running += e
@@ -179,7 +180,7 @@ private[ui] abstract class ExecutionTable(
   }
 
   private def descriptionCell(execution: SQLExecutionUIData): Seq[Node] = {
-    val details = if (execution.details.nonEmpty) {
+    val details = if (execution.details != null && execution.details.nonEmpty) {
       <span onclick="clickDetail(this)" class="expand-details">
         +details
       </span> ++
@@ -190,8 +191,10 @@ private[ui] abstract class ExecutionTable(
       Nil
     }
 
-    val desc = {
+    val desc = if (execution.description != null && execution.description.nonEmpty) {
       <a href={executionURL(execution.executionId)}>{execution.description}</a>
+    } else {
+      <a href={executionURL(execution.executionId)}>{execution.executionId}</a>
     }
 
     <div>{desc} {details}</div>

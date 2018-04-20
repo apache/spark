@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 import warnings
 
 from pyspark import since, keyword_only
@@ -335,16 +336,30 @@ class LinearRegressionSummary(JavaWrapper):
     @since("2.0.0")
     def r2(self):
         """
-        Returns R^2^, the coefficient of determination.
+        Returns R^2, the coefficient of determination.
 
         .. seealso:: `Wikipedia coefficient of determination \
-        <http://en.wikipedia.org/wiki/Coefficient_of_determination>`
+        <http://en.wikipedia.org/wiki/Coefficient_of_determination>`_
 
         .. note:: This ignores instance weights (setting all to 1.0) from
             `LinearRegression.weightCol`. This will change in later Spark
             versions.
         """
         return self._call_java("r2")
+
+    @property
+    @since("2.4.0")
+    def r2adj(self):
+        """
+        Returns Adjusted R^2, the adjusted coefficient of determination.
+
+        .. seealso:: `Wikipedia coefficient of determination, Adjusted R^2 \
+        <https://en.wikipedia.org/wiki/Coefficient_of_determination#Adjusted_R2>`_
+
+        .. note:: This ignores instance weights (setting all to 1.0) from
+            `LinearRegression.weightCol`. This will change in later Spark versions.
+        """
+        return self._call_java("r2adj")
 
     @property
     @since("2.0.0")
@@ -1812,4 +1827,4 @@ if __name__ == "__main__":
         except OSError:
             pass
     if failure_count:
-        exit(-1)
+        sys.exit(-1)

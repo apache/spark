@@ -906,4 +906,20 @@ class CastSuite extends SparkFunSuite with ExpressionEvalHelper {
       StringType)
     checkEvaluation(ret5, "[1 -> [1, 2, 3], 2 -> [4, 5, 6]]")
   }
+
+  test("SPARK-22981 Cast struct to string") {
+    val ret1 = cast(Literal.create((1, "a", 0.1)), StringType)
+    checkEvaluation(ret1, "[1, a, 0.1]")
+    val ret2 = cast(Literal.create(Tuple3[Int, String, String](1, null, "a")), StringType)
+    checkEvaluation(ret2, "[1,, a]")
+    val ret3 = cast(Literal.create(
+      (Date.valueOf("2014-12-03"), Timestamp.valueOf("2014-12-03 15:05:00"))), StringType)
+    checkEvaluation(ret3, "[2014-12-03, 2014-12-03 15:05:00]")
+    val ret4 = cast(Literal.create(((1, "a"), 5, 0.1)), StringType)
+    checkEvaluation(ret4, "[[1, a], 5, 0.1]")
+    val ret5 = cast(Literal.create((Seq(1, 2, 3), "a", 0.1)), StringType)
+    checkEvaluation(ret5, "[[1, 2, 3], a, 0.1]")
+    val ret6 = cast(Literal.create((1, Map(1 -> "a", 2 -> "b", 3 -> "c"))), StringType)
+    checkEvaluation(ret6, "[1, [1 -> a, 2 -> b, 3 -> c]]")
+  }
 }

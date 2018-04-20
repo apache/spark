@@ -20,11 +20,11 @@ package org.apache.spark.sql.sources.v2.reader;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A mix in interface for {@link DataSourceV2Reader}. Data source readers can implement this
+ * A mix in interface for {@link DataSourceReader}. Data source readers can implement this
  * interface to report statistics to Spark.
  */
 @InterfaceStability.Evolving
-public interface SupportsReportStatistics {
+public interface SupportsReportStatistics extends DataSourceReader {
 
   /**
    * Returns the basic statistics of this data source.

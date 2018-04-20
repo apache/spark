@@ -461,7 +461,8 @@ public class JavaDataFrameSuite {
   public void testUDF() {
     UserDefinedFunction foo = udf((Integer i, String s) -> i.toString() + s, DataTypes.StringType);
     Dataset<Row> df = spark.table("testData").select(foo.apply(col("key"), col("value")));
-    String[] result = df.collectAsList().stream().map(row -> row.getString(0)).toArray(String[]::new);
+    String[] result = df.collectAsList().stream().map(row -> row.getString(0))
+      .toArray(String[]::new);
     String[] expected = spark.table("testData").collectAsList().stream()
       .map(row -> row.get(0).toString() + row.getString(1)).toArray(String[]::new);
     Assert.assertArrayEquals(expected, result);

@@ -47,9 +47,9 @@ import org.apache.spark.sql.types._
 object TypeCoercion {
 
   def typeCoercionRules(conf: SQLConf): List[Rule[LogicalPlan]] =
-    InConversion ::
+    InConversion(conf) ::
       WidenSetOperationTypes ::
-      PromoteStrings ::
+      PromoteStrings(conf) ::
       DecimalPrecision ::
       BooleanEquality ::
       FunctionArgumentConversion ::
@@ -127,7 +127,8 @@ object TypeCoercion {
    * is a String and the other is not. It also handles when one op is a Date and the
    * other is a Timestamp by making the target type to be String.
    */
-  val findCommonTypeForBinaryComparison: (DataType, DataType) => Option[DataType] = {
+  private def findCommonTypeForBinaryComparison(
+      dt1: DataType, dt2: DataType, conf: SQLConf): Option[DataType] = (dt1, dt2) match {
     // We should cast all relative timestamp/date/string comparison into string comparisons
     // This behaves as a user would expect because timestamp strings sort lexicographically.
     // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
@@ -135,10 +136,16 @@ object TypeCoercion {
     case (DateType, StringType) => Some(StringType)
     case (StringType, TimestampType) => Some(StringType)
     case (TimestampType, StringType) => Some(StringType)
-    case (TimestampType, DateType) => Some(StringType)
-    case (DateType, TimestampType) => Some(StringType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
+
+    // Cast to TimestampType when we compare DateType with TimestampType
+    // if conf.compareDateTimestampInTimestamp is true
+    // i.e. TimeStamp('2017-03-01 00:00:00') eq Date('2017-03-01') = true
+    case (TimestampType, DateType)
+      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
+    case (DateType, TimestampType)
+      => if (conf.compareDateTimestampInTimestamp) Some(TimestampType) else Some(StringType)
 
     // There is no proper decimal type we can pick,
     // using double type is the best we can do.
@@ -147,7 +154,7 @@ object TypeCoercion {
     case (s: StringType, n: DecimalType) => Some(DoubleType)
 
     case (l: StringType, r: AtomicType) if r != StringType => Some(r)
-    case (l: AtomicType, r: StringType) if (l != StringType) => Some(l)
+    case (l: AtomicType, r: StringType) if l != StringType => Some(l)
     case (l, r) => None
   }
 
@@ -168,11 +175,27 @@ object TypeCoercion {
       })
   }
 
+  /**
+   * Whether the data type contains StringType.
+   */
+  def hasStringType(dt: DataType): Boolean = dt match {
+    case StringType => true
+    case ArrayType(et, _) => hasStringType(et)
+    // Add StructType if we support string promotion for struct fields in the future.
+    case _ => false
+  }
+
   private def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
-    types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
-      case Some(d) => findWiderTypeForTwo(d, c)
-      case None => None
-    })
+    // findWiderTypeForTwo doesn't satisfy the associative law, i.e. (a op b) op c may not equal
+    // to a op (b op c). This is only a problem for StringType or nested StringType in ArrayType.
+    // Excluding these types, findWiderTypeForTwo satisfies the associative law. For instance,
+    // (TimestampType, IntegerType, StringType) should have StringType as the wider common type.
+    val (stringTypes, nonStringTypes) = types.partition(hasStringType(_))
+    (stringTypes.distinct ++ nonStringTypes).foldLeft[Option[DataType]](Some(NullType))((r, c) =>
+      r match {
+        case Some(d) => findWiderTypeForTwo(d, c)
+        case _ => None
+      })
   }
 
   /**
@@ -313,7 +336,7 @@ object TypeCoercion {
   /**
    * Promotes strings that appear in arithmetic expressions.
    */
-  object PromoteStrings extends TypeCoercionRule {
+  case class PromoteStrings(conf: SQLConf) extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
       (expr.dataType, targetType) match {
         case (NullType, dt) => Literal.create(null, targetType)
@@ -342,8 +365,8 @@ object TypeCoercion {
         p.makeCopy(Array(left, Cast(right, TimestampType)))
 
       case p @ BinaryComparison(left, right)
-        if findCommonTypeForBinaryComparison(left.dataType, right.dataType).isDefined =>
-        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType).get
+          if findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).isDefined =>
+        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType, conf).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
 
       case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
@@ -374,7 +397,7 @@ object TypeCoercion {
    *    operator type is found the original expression will be returned and an
    *    Analysis Exception will be raised at the type checking phase.
    */
-  object InConversion extends TypeCoercionRule {
+  case class InConversion(conf: SQLConf) extends TypeCoercionRule {
     private def flattenExpr(expr: Expression): Seq[Expression] = {
       expr match {
         // Multi columns in IN clause is represented as a CreateNamedStruct.
@@ -400,7 +423,7 @@ object TypeCoercion {
         val rhs = sub.output
 
         val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
-          findCommonTypeForBinaryComparison(l.dataType, r.dataType)
+          findCommonTypeForBinaryComparison(l.dataType, r.dataType, conf)
             .orElse(findTightestCommonType(l.dataType, r.dataType))
         }
 
@@ -495,6 +518,14 @@ object TypeCoercion {
         findWiderCommonType(types) match {
           case Some(finalDataType) => CreateArray(children.map(Cast(_, finalDataType)))
           case None => a
+        }
+
+      case c @ Concat(children) if children.forall(c => ArrayType.acceptsType(c.dataType)) &&
+        !haveSameType(children) =>
+        val types = children.map(_.dataType)
+        findWiderCommonType(types) match {
+          case Some(finalDataType) => Concat(children.map(Cast(_, finalDataType)))
+          case None => c
         }
 
       case m @ CreateMap(children) if m.keys.length == m.values.length &&

@@ -59,7 +59,7 @@ class FileIndexSuite extends SharedSQLContext {
       require(!unqualifiedDirPath.toString.contains("file:"))
       require(!unqualifiedFilePath.toString.contains("file:"))
 
-      val fs = unqualifiedDirPath.getFileSystem(sparkContext.hadoopConfiguration)
+      val fs = unqualifiedDirPath.getFileSystem(spark.sessionState.newHadoopConf())
       val qualifiedFilePath = fs.makeQualified(new Path(file.getCanonicalPath))
       require(qualifiedFilePath.toString.startsWith("file:"))
 

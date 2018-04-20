@@ -169,12 +169,11 @@ object ImageSchema {
         var offset = 0
         for (h <- 0 until height) {
           for (w <- 0 until width) {
-            val color = new Color(img.getRGB(w, h))
-
+            val color = new Color(img.getRGB(w, h), hasAlpha)
             decoded(offset) = color.getBlue.toByte
             decoded(offset + 1) = color.getGreen.toByte
             decoded(offset + 2) = color.getRed.toByte
-            if (nChannels == 4) {
+            if (hasAlpha) {
               decoded(offset + 3) = color.getAlpha.toByte
             }
             offset += nChannels

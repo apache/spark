@@ -13,7 +13,7 @@ of the model on some criteria, which depends on the application and its requirem
 suite of metrics for the purpose of evaluating the performance of machine learning models.
 
 Specific machine learning algorithms fall under broader types of machine learning applications like classification,
-regression, clustering, etc. Each of these types have well established metrics for performance evaluation and those
+regression, clustering, etc. Each of these types have well-established metrics for performance evaluation and those
 metrics that are currently available in `spark.mllib` are detailed in this section.
 
 ## Classification model evaluation

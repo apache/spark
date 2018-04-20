@@ -76,6 +76,9 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     val mapSideCombine: Boolean = false)
   extends Dependency[Product2[K, V]] {
 
+  if (mapSideCombine) {
+    require(aggregator.isDefined, "Map-side combine without Aggregator specified!")
+  }
   override def rdd: RDD[Product2[K, V]] = _rdd.asInstanceOf[RDD[Product2[K, V]]]
 
   private[spark] val keyClassName: String = reflect.classTag[K].runtimeClass.getName

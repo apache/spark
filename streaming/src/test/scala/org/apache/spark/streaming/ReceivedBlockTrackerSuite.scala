@@ -33,7 +33,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
-import org.apache.spark.streaming.scheduler._
+import org.apache.spark.streaming.scheduler.{AllocatedBlocks, _}
 import org.apache.spark.streaming.util._
 import org.apache.spark.streaming.util.WriteAheadLogSuite._
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
@@ -92,6 +92,27 @@ class ReceivedBlockTrackerSuite
     receivedBlockTracker.allocateBlocksToBatch(2)
     receivedBlockTracker.getBlocksOfBatchAndStream(2, streamId) shouldBe empty
     receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual blockInfos
+  }
+
+  test("recovery with write ahead logs should remove only allocated blocks from received queue") {
+    val manualClock = new ManualClock
+    val batchTime = manualClock.getTimeMillis()
+
+    val tracker1 = createTracker(clock = manualClock)
+    tracker1.isWriteAheadLogEnabled should be (true)
+
+    val allocatedBlockInfos = generateBlockInfos()
+    val unallocatedBlockInfos = generateBlockInfos()
+    val receivedBlockInfos = allocatedBlockInfos ++ unallocatedBlockInfos
+    receivedBlockInfos.foreach { b => tracker1.writeToLog(BlockAdditionEvent(b)) }
+    val allocatedBlocks = AllocatedBlocks(Map(streamId -> allocatedBlockInfos))
+    tracker1.writeToLog(BatchAllocationEvent(batchTime, allocatedBlocks))
+    tracker1.stop()
+
+    val tracker2 = createTracker(clock = manualClock, recoverFromWriteAheadLog = true)
+    tracker2.getBlocksOfBatch(batchTime) shouldEqual allocatedBlocks.streamIdToAllocatedBlocks
+    tracker2.getUnallocatedBlocks(streamId) shouldEqual unallocatedBlockInfos
+    tracker2.stop()
   }
 
   test("recovery and cleanup with write ahead logs") {
