@@ -101,7 +101,7 @@ case class CheckOverflow(
     nullSafeCodeGen(ctx, ev, eval => {
       s"""
          |${ev.value} = $eval.toPrecision(
-         |  ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP, $nullOnOverflow);
+         |  ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow);
          |${ev.isNull} = ${ev.value} == null;
        """.stripMargin
     })
