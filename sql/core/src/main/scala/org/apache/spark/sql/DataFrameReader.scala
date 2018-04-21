@@ -528,7 +528,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
    * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
    * requires one extra pass over the data.</li>
-   * <li>`samplingRatio` (default 1.0): the sample ratio of rows used for schema inferring.</li>
+   * <li>`samplingRatio` (default is 1.0): defines fraction of rows (when `multiLine` is `false`)
+   * or fraction of files (when `multiLine` is `true`) used for schema inferring.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `false`): a flag indicating whether or not leading
    * whitespaces from values being read should be skipped.</li>
    * <li>`ignoreTrailingWhiteSpace` (default `false`): a flag indicating whether or not trailing
