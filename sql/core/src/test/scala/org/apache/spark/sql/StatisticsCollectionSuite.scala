@@ -400,13 +400,13 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         sql("ANALYZE TABLE TBL COMPUTE STATISTICS FOR COLUMNS ID, FLD1, FLD2, FLD3")
         val df2 = spark.sql(
           """
-             SELECT t1.id, t1.fld1, t1.fld2, t1.fld3
-             FROM tbl t1
-             JOIN tbl t2 on t1.id=t2.id
-             WHERE  t1.fld3 IN (-123.23,321.23)
+             |SELECT t1.id, t1.fld1, t1.fld2, t1.fld3
+             |FROM tbl t1
+             |JOIN tbl t2 on t1.id=t2.id
+             |WHERE  t1.fld3 IN (-123.23,321.23)
           """.stripMargin)
         df2.createTempView("TBL2")
-        sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").explain()
+        sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").queryExecution.executedPlan
       }
     }
   }
