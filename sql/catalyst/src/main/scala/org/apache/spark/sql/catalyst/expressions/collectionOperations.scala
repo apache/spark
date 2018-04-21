@@ -899,12 +899,13 @@ case class Concat(children: Seq[Expression]) extends Expression {
        [(0,"d"),(1,"a"),(2,null),(3,"b")]
   """,
   since = "2.4.0")
+// scalastyle:on line.size.limit
 case class ZipWithIndex(child: Expression, indexFirst: Expression)
   extends UnaryExpression with ExpectsInputTypes {
 
   def this(e: Expression) = this(e, Literal.FalseLiteral)
 
-  val indexFirstValue: Boolean = indexFirst match {
+  private val idxFirst: Boolean = indexFirst match {
     case Literal(v: Boolean, BooleanType) => v
     case _ => throw new AnalysisException("The second argument has to be a boolean constant.")
   }
@@ -919,7 +920,7 @@ case class ZipWithIndex(child: Expression, indexFirst: Expression)
     val elementField = StructField("value", childArrayType.elementType, childArrayType.containsNull)
     val indexField = StructField("index", IntegerType, false)
 
-    val fields = if (indexFirstValue) Seq(indexField, elementField) else Seq(elementField, indexField)
+    val fields = if (idxFirst) Seq(indexField, elementField) else Seq(elementField, indexField)
 
     ArrayType(StructType(fields), false)
   }
@@ -927,7 +928,7 @@ case class ZipWithIndex(child: Expression, indexFirst: Expression)
   override protected def nullSafeEval(input: Any): Any = {
     val array = input.asInstanceOf[ArrayData].toObjectArray(childArrayType.elementType)
 
-    val makeStruct = (v: Any, i: Int) => if (indexFirstValue) InternalRow(i, v) else InternalRow(v, i)
+    val makeStruct = (v: Any, i: Int) => if (idxFirst) InternalRow(i, v) else InternalRow(v, i)
     val resultData = array.zipWithIndex.map{case (v, i) => makeStruct(v, i)}
 
     new GenericArrayData(resultData)
@@ -960,8 +961,8 @@ case class ZipWithIndex(child: Expression, indexFirst: Expression)
     val baseOffset = Platform.BYTE_ARRAY_OFFSET
     val longSize = LongType.defaultSize
     val primitiveValueTypeName = CodeGenerator.primitiveTypeName(childArrayType.elementType)
-    val valuePosition = if (indexFirstValue) "1" else "0"
-    val indexPosition = if (indexFirstValue) "0" else "1"
+    val (valuePosition, indexPosition) = if (idxFirst) ("1", "0") else ("0", "1")
+
     s"""
        |final int $numElements = $childVariableName.numElements();
        |final int $structSize = ${UnsafeRow.calculateBitSetWidthInBytes(2) + longSize * 2};
@@ -1005,7 +1006,7 @@ case class ZipWithIndex(child: Expression, indexFirst: Expression)
     val data = ctx.freshName("internalRowArray")
 
     val elementValue = CodeGenerator.getValue(childVariableName, childArrayType.elementType, "z")
-    val arguments = if (indexFirstValue) s"z, $elementValue" else s"$elementValue, z"
+    val arguments = if (idxFirst) s"z, $elementValue" else s"$elementValue, z"
 
     s"""
        |final int $numberOfElements = $childVariableName.numElements();

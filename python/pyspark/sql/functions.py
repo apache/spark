@@ -2204,7 +2204,7 @@ def zip_with_index(col, indexFirst=False):
     [Row(r=[[value=2, index=0], [value=5, index=1], [value=3, index=2]]), Row(r=[])]
     >>> df.select(zip_with_index(df.data, indexFirst=True).alias('r')).collect()
     [Row(r=[[index=0, value=2], [index=1, value=5], [index=2, value=3]]), Row(r=[])]
-     """
+    """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.zip_with_index(_to_java_column(col), indexFirst))
 
