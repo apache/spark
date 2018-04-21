@@ -36,6 +36,18 @@ object InterpretedPredicate {
 
 case class InterpretedPredicate(expression: Expression) extends BasePredicate {
   override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
+
+  override def initialize(partitionIndex: Int): Unit = {
+    initExpression(expression, partitionIndex)
+  }
+
+  private def initExpression(expression: Expression, partitionIndex: Int): Unit = {
+    expression match {
+      case n: Nondeterministic => n.initialize(partitionIndex)
+      case _ =>
+    }
+    expression.children.foreach(initExpression(_, partitionIndex))
+  }
 }
 
 /**
