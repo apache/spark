@@ -51,14 +51,16 @@ public class JavaSummarizerSuite extends SharedSparkSession {
   public void testSummarizer() {
     dataset.select(col("features"));
     Row result = dataset
-      .select(Summarizer.metrics("mean", "max", "count").summary(col("features")))
+      .select(Summarizer.metrics("mean", "max", "count", "sum").summary(col("features")))
       .first().getStruct(0);
     Vector meanVec = result.getAs("mean");
     Vector maxVec = result.getAs("max");
     long count = result.getAs("count");
+    Vector sumVec = result.getAs("sum");
 
     assertEquals(2L, count);
     assertArrayEquals(new double[]{2.0, 3.0}, meanVec.toArray(), 0.0);
     assertArrayEquals(new double[]{3.0, 4.0}, maxVec.toArray(), 0.0);
+    assertArrayEquals(new double[]{4.0, 6.0}, sumVec.toArray(), 0.0);
   }
 }

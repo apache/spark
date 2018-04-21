@@ -39,7 +39,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       max: Vector,
       min: Vector,
       normL2: Vector,
-      normL1: Vector)
+      normL1: Vector,
+      sum: Vector)
 
   /**
    * The input is expected to be either a sparse vector, a dense vector.
@@ -167,6 +168,19 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
         Row(Row(summarizerWithoutWeight.normL2), expWithoutWeight.normL2))
     }
 
+    registerTest(s"$name - sum only") {
+      val (df, c, w) = wrappedInit()
+      compareRow(df.select(metrics("sum").summary(c, w), sum(c, w)).first(),
+        Row(Row(summarizer.sum), exp.sum))
+    }
+
+    registerTest(s"$name - sum only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compareRow(df.select(metrics("sum").summary(c), sum(c)).first(),
+        Row(Row(summarizerWithoutWeight.sum), expWithoutWeight.sum))
+    }
+
+
     registerTest(s"$name - multiple metrics at once") {
       val (df, c, w) = wrappedInit()
       compareRow(df.select(
@@ -221,7 +235,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       max = singleElem,
       min = singleElem,
       normL1 = Vectors.dense(0.0, 2.0, 4.0),
-      normL2 = Vectors.dense(0.0, 1.414213, 2.828427)
+      normL2 = Vectors.dense(0.0, 1.414213, 2.828427),
+      sum = Vectors.dense(0.0, 2.0, 4.0)
     ),
     ExpectedMetrics(
       mean = singleElem,
@@ -231,7 +246,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       max = singleElem,
       min = singleElem,
       normL1 = singleElem,
-      normL2 = singleElem
+      normL2 = singleElem,
+      sum = Vectors.dense(0.0, 1.0, 2.0)
     )
   )
 
@@ -249,7 +265,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       max = Vectors.dense(3.0, 0.0, 6.0),
       min = Vectors.dense(-1.0, -3.0, 0.0),
       normL1 = Vectors.dense(8.9, 8.4, 3.0),
-      normL2 = Vectors.dense(5.069516, 5.019960, 4.242640)
+      normL2 = Vectors.dense(5.069516, 5.019960, 4.242640),
+      sum = Vectors.dense(7.9, -8.4, 3.0)
     ),
     ExpectedMetrics(
       mean = Vectors.dense(1.0, -2.0, 2.0),
@@ -259,7 +276,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       max = Vectors.dense(3.0, 0.0, 6.0),
       min = Vectors.dense(-1.0, -3.0, 0.0),
       normL1 = Vectors.dense(5.0, 6.0, 6.0),
-      normL2 = Vectors.dense(3.316624, 4.242640, 6.0)
+      normL2 = Vectors.dense(3.316624, 4.242640, 6.0),
+      sum = Vectors.dense(3.0, -6.0, 6.0)
     )
   )
 
@@ -277,7 +295,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       max = Vectors.dense(3.0, 0.0, 6.0),
       min = Vectors.dense(-1.0, -3.0, 0.0),
       normL1 = Vectors.dense(8.9, 8.4, 3.0),
-      normL2 = Vectors.dense(5.069516, 5.019960, 4.242640)
+      normL2 = Vectors.dense(5.069516, 5.019960, 4.242640),
+      sum = Vectors.dense(7.9, -8.4, 3.0)
     ),
     ExpectedMetrics(
       mean = Vectors.dense(1.0, -2.0, 2.0),
@@ -287,7 +306,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       max = Vectors.dense(3.0, 0.0, 6.0),
       min = Vectors.dense(-1.0, -3.0, 0.0),
       normL1 = Vectors.dense(5.0, 6.0, 6.0),
-      normL2 = Vectors.dense(3.316624, 4.242640, 6.0)
+      normL2 = Vectors.dense(3.316624, 4.242640, 6.0),
+      sum = Vectors.dense(3.0, -6.0, 6.0)
     )
   )
 
@@ -323,6 +343,12 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     withClue("Getting min from empty summarizer should throw exception.") {
       intercept[IllegalArgumentException] {
         summarizer.min
+      }
+    }
+
+    withClue("Getting sum from empty summarizer should throw exception.") {
+      intercept[IllegalArgumentException] {
+        summarizer.sum
       }
     }
 
@@ -362,6 +388,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(summarizer.numNonzeros ~== Vectors.dense(2, 1, 1) absTol 1E-5, "numNonzeros mismatch")
     assert(summarizer.variance ~== Vectors.dense(8.0, 4.5, 18.0) absTol 1E-5, "variance mismatch")
     assert(summarizer.count === 2)
+    assert(summarizer.sum ~== Vectors.dense(2.0, -3.0, 6.0) absTol 1E-5, "sum mismatch")
   }
 
   test("summarizer buffer sparse vector input") {
@@ -375,6 +402,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(summarizer.numNonzeros ~== Vectors.dense(2, 1, 1) absTol 1E-5, "numNonzeros mismatch")
     assert(summarizer.variance ~== Vectors.dense(8.0, 4.5, 18.0) absTol 1E-5, "variance mismatch")
     assert(summarizer.count === 2)
+    assert(summarizer.sum ~== Vectors.dense(2.0, -3.0, 6.0) absTol 1E-5, "sum mismatch")
   }
 
   test("summarizer buffer mixing dense and sparse vector input") {
@@ -397,6 +425,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       "variance mismatch")
 
     assert(summarizer.count === 6)
+    assert(summarizer.sum ~== Vectors.dense(3.5, -2.5, -1.1) absTol 1E-5, "sum mismatch")
   }
 
   test("summarizer buffer merging two summarizers") {
@@ -422,6 +451,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.dense(3.857666666666, 7.0456666666666, 2.48166666666666) absTol 1E-5,
       "variance mismatch")
     assert(summarizer.count === 6)
+    assert(summarizer.sum ~== Vectors.dense(3.5, -2.5, -1.1) absTol 1E-5, "sum mismatch")
   }
 
   test("summarizer buffer zero variance test (SPARK-21818)") {
@@ -466,6 +496,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(summarizer2.numNonzeros ~== Vectors.dense(0, 1, 1) absTol 1E-5, "numNonzeros mismatch")
     assert(summarizer1.variance ~== Vectors.dense(0, 0, 0) absTol 1E-5, "variance mismatch")
     assert(summarizer2.variance ~== Vectors.dense(0, 0, 0) absTol 1E-5, "variance mismatch")
+    assert(summarizer1.sum ~== Vectors.dense(0, -1.0, -3.0) absTol 1E-5, "sum mismatch")
+    assert(summarizer2.sum ~== Vectors.dense(0, -1.0, -3.0) absTol 1E-5, "sum mismatch")
   }
 
   test("summarizer buffer merging summarizer when one side has zero mean (SPARK-4355)") {
@@ -504,6 +536,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(summarizer.normL2 ~== Vectors.dense(0.387298335, 0.762571308141, 0.9715966241192)
       absTol 1E-8, "normL2 mismatch")
     assert(summarizer.normL1 ~== Vectors.dense(0.21, 0.4265, 0.61) absTol 1E-10, "normL1 mismatch")
+    assert(summarizer.sum ~== Vectors.dense(-0.21, -0.0535, -0.22) absTol 1E-10, "sum mismatch")
   }
 
   test("summarizer buffer test min/max with weighted samples") {

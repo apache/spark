@@ -65,7 +65,7 @@ sealed abstract class SummaryBuilder {
  *   import org.apache.spark.sql.Row
  *   val dataframe = ... // Some dataframe containing a feature column and a weight column
  *   val multiStatsDF = dataframe.select(
- *       Summarizer.metrics("min", "max", "count").summary($"features", $"weight")
+ *       Summarizer.metrics("min", "max", "count").summary($"features", $"weight"))
  *   val Row(Row(minVec, maxVec, count)) = multiStatsDF.first()
  * }}}
  *
@@ -98,6 +98,7 @@ object Summarizer extends Logging {
    *  - min: the minimum for each coefficient.
    *  - normL2: the Euclidian norm for each coefficient.
    *  - normL1: the L1 norm of each coefficient (sum of the absolute values).
+   *  - sum: the sum of values for each coefficient.
    * @param metrics metrics that can be provided.
    * @return a builder.
    * @throws IllegalArgumentException if one of the metric names is not understood.
@@ -108,7 +109,7 @@ object Summarizer extends Logging {
   @Since("2.3.0")
   @scala.annotation.varargs
   def metrics(metrics: String*): SummaryBuilder = {
-    require(metrics.size >= 1, "Should include at least one metric")
+    require(metrics.nonEmpty, "Should include at least one metric")
     val (typedMetrics, computeMetrics) = getRelevantMetrics(metrics)
     new SummaryBuilderImpl(typedMetrics, computeMetrics)
   }
@@ -176,6 +177,14 @@ object Summarizer extends Logging {
 
   @Since("2.3.0")
   def normL2(col: Column): Column = normL2(col, lit(1.0))
+
+  @Since("2.4.0")
+  def sum(col: Column, weightCol: Column): Column = {
+    getSingleMetric(col, weightCol, "sum")
+  }
+
+  @Since("2.4.0")
+  def sum(col: Column): Column = sum(col, lit(1.0))
 
   private def getSingleMetric(col: Column, weightCol: Column, metric: String): Column = {
     val c1 = metrics(metric).summary(col, weightCol)
@@ -248,7 +257,8 @@ private[ml] object SummaryBuilderImpl extends Logging {
     ("max", Max, vectorUDT, Seq(ComputeMax, ComputeNNZ)),
     ("min", Min, vectorUDT, Seq(ComputeMin, ComputeNNZ)),
     ("normL2", NormL2, vectorUDT, Seq(ComputeM2)),
-    ("normL1", NormL1, vectorUDT, Seq(ComputeL1))
+    ("normL1", NormL1, vectorUDT, Seq(ComputeL1)),
+    ("sum", Sum, vectorUDT, Seq(ComputeSum))
   )
 
   /**
@@ -263,6 +273,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
   private[stat] case object Min extends Metric
   private[stat] case object NormL2 extends Metric
   private[stat] case object NormL1 extends Metric
+  private[stat] case object Sum extends Metric
 
   /**
    * The running metrics that are going to be computed.
@@ -278,6 +289,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
   private[stat] case object ComputeNNZ extends ComputeMetric
   private[stat] case object ComputeMax extends ComputeMetric
   private[stat] case object ComputeMin extends ComputeMetric
+  private[stat] case object ComputeSum extends ComputeMetric
 
   private[stat] class SummarizerBuffer(
       requestedMetrics: Seq[Metric],
@@ -296,12 +308,13 @@ private[ml] object SummaryBuilderImpl extends Logging {
     private var nnz: Array[Long] = null
     private var currMax: Array[Double] = null
     private var currMin: Array[Double] = null
+    private var currSum: Array[Double] = null
 
     def this() {
       this(
-        Seq(Mean, Variance, Count, NumNonZeros, Max, Min, NormL2, NormL1),
+        Seq(Mean, Variance, Count, NumNonZeros, Max, Min, NormL2, NormL1, Sum),
         Seq(ComputeMean, ComputeM2n, ComputeM2, ComputeL1,
-          ComputeWeightSum, ComputeNNZ, ComputeMax, ComputeMin)
+          ComputeWeightSum, ComputeNNZ, ComputeMax, ComputeMin, ComputeSum)
       )
     }
 
@@ -328,6 +341,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
         if (requestedCompMetrics.contains(ComputeMin)) {
           currMin = Array.fill[Double](n)(Double.MaxValue)
         }
+        if (requestedCompMetrics.contains(ComputeSum)) { currSum = Array.ofDim[Double](n) }
       }
 
       require(n == instance.size, s"Dimensions mismatch when adding new sample." +
@@ -341,6 +355,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
       val localNumNonzeros = nnz
       val localCurrMax = currMax
       val localCurrMin = currMin
+      val localCurrSum = currSum
       instance.foreachActive { (index, value) =>
         if (value != 0.0) {
           if (localCurrMax != null && localCurrMax(index) < value) {
@@ -372,6 +387,10 @@ private[ml] object SummaryBuilderImpl extends Logging {
 
           if (localNumNonzeros != null) {
             localNumNonzeros(index) += 1
+          }
+
+          if (localCurrSum != null) {
+            localCurrSum(index) += (weight * value)
           }
         }
       }
@@ -428,6 +447,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
           if (currMax != null) { currMax(i) = math.max(currMax(i), other.currMax(i)) }
           if (currMin != null) { currMin(i) = math.min(currMin(i), other.currMin(i)) }
           if (nnz != null) { nnz(i) = nnz(i) + other.nnz(i) }
+          if (currSum != null) { currSum(i) = currSum(i) + other.currSum(i) }
           i += 1
         }
       } else if (totalWeightSum == 0.0 && other.totalWeightSum != 0.0) {
@@ -443,6 +463,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
         if (other.nnz != null) { this.nnz = other.nnz.clone() }
         if (other.currMax != null) { this.currMax = other.currMax.clone() }
         if (other.currMin != null) { this.currMin = other.currMin.clone() }
+        if (other.currSum != null) { this.currSum = other.currSum.clone() }
       }
       this
     }
@@ -562,6 +583,16 @@ private[ml] object SummaryBuilderImpl extends Logging {
 
       Vectors.dense(currL1)
     }
+
+    /**
+     * Sum of each dimension
+     */
+    def sum: Vector = {
+      require(requestedMetrics.contains(Sum))
+      require(totalWeightSum > 0, s"Nothing has been added to this summarizer.")
+
+      Vectors.dense(currSum)
+    }
   }
 
   private case class MetricsAggregate(
@@ -583,6 +614,7 @@ private[ml] object SummaryBuilderImpl extends Logging {
         case Min => vectorUDT.serialize(state.min)
         case NormL2 => vectorUDT.serialize(state.normL2)
         case NormL1 => vectorUDT.serialize(state.normL1)
+        case Sum => vectorUDT.serialize(state.sum)
       }
       InternalRow.apply(metrics: _*)
     }

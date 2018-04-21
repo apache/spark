@@ -73,4 +73,10 @@ trait MultivariateStatisticalSummary {
    */
   @Since("1.2.0")
   def normL1: Vector
+
+  /**
+   * Sum of each column
+   */
+  @Since("2.4.0")
+  def sum: Vector
 }
