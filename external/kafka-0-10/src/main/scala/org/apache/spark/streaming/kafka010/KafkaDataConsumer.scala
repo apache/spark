@@ -19,8 +19,6 @@ package org.apache.spark.streaming.kafka010
 
 import java.{util => ju}
 
-import scala.collection.JavaConverters._
-
 import org.apache.kafka.clients.consumer.{ConsumerConfig, ConsumerRecord, KafkaConsumer}
 import org.apache.kafka.common.{KafkaException, TopicPartition}
 
@@ -223,7 +221,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
   }
 
   // Don't want to depend on guava, don't want a cleanup thread, use a simple LinkedHashMap
-  private[kafka010] var cache: ju.Map[CacheKey, ju.List[InternalKafkaConsumer[_, _]]] = null
+  private[kafka010] var cache: ju.Map[CacheKey, InternalKafkaConsumer[_, _]] = null
 
   /**
    * Must be called before acquire, once per JVM, to configure the cache.
@@ -235,13 +233,26 @@ private[kafka010] object KafkaDataConsumer extends Logging {
       loadFactor: Float): Unit = synchronized {
     if (null == cache) {
       logInfo(s"Initializing cache $initialCapacity $maxCapacity $loadFactor")
-      cache = new ju.LinkedHashMap[CacheKey, ju.List[InternalKafkaConsumer[_, _]]](
+      cache = new ju.LinkedHashMap[CacheKey, InternalKafkaConsumer[_, _]](
         initialCapacity, loadFactor, true) {
         override def removeEldestEntry(
-            entry: ju.Map.Entry[CacheKey, ju.List[InternalKafkaConsumer[_, _]]]): Boolean = {
-          if (this.size > maxCapacity) {
-            try {
-              entry.getValue.asScala.foreach(_.close())
+            entry: ju.Map.Entry[CacheKey, InternalKafkaConsumer[_, _]]): Boolean = {
+
+          // Try to remove the least-used entry if its currently not in use.
+          //
+          // If you cannot remove it, then the cache will keep growing. In the worst case,
+          // the cache will grow to the max number of concurrent tasks that can run in the executor,
+          // (that is, number of tasks slots) after which it will never reduce. This is unlikely to
+          // be a serious problem because an executor with more than 64 (default) tasks slots is
+          // likely running on a beefy machine that can handle a large number of simultaneously
+          // active consumers.
+
+          if (entry.getValue.inUse == false && this.size > maxCapacity) {
+            logWarning(
+              s"KafkaConsumer cache hitting max capacity of $maxCapacity, " +
+                s"removing consumer for ${entry.getKey}")
+               try {
+              entry.getValue.close()
             } catch {
               case x: KafkaException =>
                 logError("Error closing oldest Kafka consumer", x)
@@ -271,10 +282,7 @@ private[kafka010] object KafkaDataConsumer extends Logging {
       useCache: Boolean): KafkaDataConsumer[K, V] = synchronized {
     val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
     val key = new CacheKey(groupId, topicPartition)
-    val existingInternalConsumers = Option(cache.get(key))
-      .getOrElse(new ju.LinkedList[InternalKafkaConsumer[_, _]])
-
-    cache.putIfAbsent(key, existingInternalConsumers)
+    val existingInternalConsumer = cache.get(key)
 
     lazy val newInternalConsumer = new InternalKafkaConsumer[K, V](topicPartition, kafkaParams)
 
@@ -282,87 +290,66 @@ private[kafka010] object KafkaDataConsumer extends Logging {
       // If this is reattempt at running the task, then invalidate cached consumers if any and
       // start with a new one. If prior attempt failures were cache related then this way old
       // problematic consumers can be removed.
-      logDebug("Reattempt detected, invalidating cached consumers")
-      val closedExistingInternalConsumers = new ju.LinkedList[InternalKafkaConsumer[_, _]]()
-      existingInternalConsumers.asScala.foreach { existingInternalConsumer =>
-        // Consumer exists in cache. If it's in use, mark it for closing later, or close it now.
+      logDebug(s"Reattempt detected, invalidating cached consumer $existingInternalConsumer")
+      if (existingInternalConsumer != null) {
+        // Consumer exists in cache. If its in use, mark it for closing later, or close it now.
         if (existingInternalConsumer.inUse) {
           existingInternalConsumer.markedForClose = true
         } else {
           existingInternalConsumer.close()
-          closedExistingInternalConsumers.add(existingInternalConsumer)
+          // Remove the consumer from cache only if it's closed.
+          // Marked for close consumers will be removed in release function.
+          cache.remove(key)
         }
       }
-      existingInternalConsumers.removeAll(closedExistingInternalConsumers)
 
-      logDebug("Reattempt detected, new cached consumer will be allocated " +
+      logDebug("Reattempt detected, new non-cached consumer will be allocated " +
         s"$newInternalConsumer")
-      existingInternalConsumers.add(newInternalConsumer)
-      CachedKafkaDataConsumer(newInternalConsumer)
+      NonCachedKafkaDataConsumer(newInternalConsumer)
     } else if (!useCache) {
       // If consumer reuse turned off, then do not use it, return a new consumer
       logDebug("Cache usage turned off, new non-cached consumer will be allocated " +
         s"$newInternalConsumer")
       NonCachedKafkaDataConsumer(newInternalConsumer)
-    } else if (existingInternalConsumers.isEmpty) {
-      // If no consumer already cached, then put a new one into the cache and return it
+    } else if (existingInternalConsumer == null) {
+      // If consumer is not already cached, then put a new in the cache and return it
       logDebug("No cached consumer, new cached consumer will be allocated " +
         s"$newInternalConsumer")
-      existingInternalConsumers.add(newInternalConsumer)
+      cache.put(key, newInternalConsumer)
       CachedKafkaDataConsumer(newInternalConsumer)
+    } else if (existingInternalConsumer.inUse) {
+      // If consumer is already cached but is currently in use, then return a new consumer
+      logDebug("Used cached consumer found, new non-cached consumer will be allocated " +
+        s"$newInternalConsumer")
+      NonCachedKafkaDataConsumer(newInternalConsumer)
     } else {
-      // If consumers are already cached find a currently not used
-      existingInternalConsumers.asScala.find(!_.inUse) match {
-        // If found a currently not used, then return that consumer
-        case Some(existingInternalConsumer) =>
-          logDebug("Not used cached consumer found, re-using it " +
-            s"$existingInternalConsumer")
-          existingInternalConsumer.inUse = true
-          // Any given TopicPartition should have a consistent key and value type
-          CachedKafkaDataConsumer(
-            existingInternalConsumer.asInstanceOf[InternalKafkaConsumer[K, V]])
-        case None =>
-          // If every consumer is currently used, return a new consumer
-          logDebug("All cached consumers used, new cached consumer will be allocated " +
-            s"$newInternalConsumer")
-          existingInternalConsumers.add(newInternalConsumer)
-          CachedKafkaDataConsumer(newInternalConsumer)
-      }
+      // If consumer is already cached and is currently not in use, then return that consumer
+      logDebug(s"Not used cached consumer found, re-using it $existingInternalConsumer")
+      existingInternalConsumer.inUse = true
+      // Any given TopicPartition should have a consistent key and value type
+      CachedKafkaDataConsumer(existingInternalConsumer.asInstanceOf[InternalKafkaConsumer[K, V]])
     }
   }
 
   private def release(internalConsumer: InternalKafkaConsumer[_, _]): Unit = synchronized {
     // Clear the consumer from the cache if this is indeed the consumer present in the cache
     val key = new CacheKey(internalConsumer.groupId, internalConsumer.topicPartition)
-    Option(cache.get(key)) match {
-      case Some(existingInternalConsumers) =>
-        existingInternalConsumers.asScala.find(_.eq(internalConsumer)) match {
-          case Some(existingInternalConsumer) =>
-            // The released consumer is the same object as the cached one.
-            if (existingInternalConsumer.markedForClose) {
-              logDebug(s"Consumer marked for close, closing it $existingInternalConsumer")
-              existingInternalConsumer.close()
-              existingInternalConsumers.remove(existingInternalConsumer)
-            } else {
-              logDebug("Consumer not marked for close, put back to cache " +
-                s"$existingInternalConsumer")
-              existingInternalConsumer.inUse = false
-            }
-          case None =>
-            // The released consumer is either not the same one as in the cache, or not in the cache
-            // at all. This may happen if the cache was invalidate while this consumer was being
-            // used. Just close this consumer.
-            internalConsumer.close()
-            logWarning("Released a supposedly cached consumer that was not found in the " +
-              s"cache $internalConsumer")
-        }
-      case None =>
-        // The consumer list is not even initialized. This may happen when no consumer acquired for
-        // a specific groupId and topicPartition. This should normally not happen.
-        // Just close this consumer.
+    val cachedInternalConsumer = cache.get(key)
+    if (internalConsumer.eq(cachedInternalConsumer)) {
+      // The released consumer is the same object as the cached one.
+      if (internalConsumer.markedForClose) {
         internalConsumer.close()
-        logWarning("Released a supposedly cached consumer that was not found in the cache " +
-          s"because consumer list not allocated $internalConsumer")
+        cache.remove(key)
+      } else {
+        internalConsumer.inUse = false
+      }
+    } else {
+      // The released consumer is either not the same one as in the cache, or not in the cache
+      // at all. This may happen if the cache was invalidate while this consumer was being used.
+      // Just close this consumer.
+      internalConsumer.close()
+      logInfo(s"Released a supposedly cached consumer that was not found in the cache " +
+        s"$internalConsumer")
     }
   }
 }

@@ -74,9 +74,7 @@ class KafkaDataConsumerSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     assert(KafkaDataConsumer.cache.size() == 1)
     val key = new CacheKey(groupId, topicPartition)
-    val existingInternalConsumers = KafkaDataConsumer.cache.get(key)
-    assert(existingInternalConsumers.size() == 1)
-    val existingInternalConsumer = existingInternalConsumers.get(0)
+    val existingInternalConsumer = KafkaDataConsumer.cache.get(key)
     assert(existingInternalConsumer.eq(consumer1.internalConsumer))
     assert(existingInternalConsumer.eq(consumer2.internalConsumer))
   }
