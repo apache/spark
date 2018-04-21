@@ -384,7 +384,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   }
 
   test("Simple queries must be working, if CBO is turned on") {
-    withSQLConf(("spark.sql.cbo.enabled", "true")) {
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
       withTable("TBL1", "TBL") {
         import org.apache.spark.sql.functions._
         val df = spark.range(1000L).select('id,
@@ -396,8 +396,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           .bucketBy(10, "id", "FLD1", "FLD2")
           .sortBy("id", "FLD1", "FLD2")
           .saveAsTable("TBL")
-        spark.sql("ANALYZE TABLE TBL COMPUTE STATISTICS ")
-        spark.sql("ANALYZE TABLE TBL COMPUTE STATISTICS FOR COLUMNS ID, FLD1, FLD2, FLD3")
+        sql("ANALYZE TABLE TBL COMPUTE STATISTICS ")
+        sql("ANALYZE TABLE TBL COMPUTE STATISTICS FOR COLUMNS ID, FLD1, FLD2, FLD3")
         val df2 = spark.sql(
           """
              SELECT t1.id, t1.fld1, t1.fld2, t1.fld3
@@ -406,10 +406,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
              WHERE  t1.fld3 IN (-123.23,321.23)
           """.stripMargin)
         df2.createTempView("TBL2")
-        spark.sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").explain()
+        sql("SELECT * FROM tbl2 WHERE fld3 IN ('qqq', 'qwe')  ").explain()
       }
     }
-
   }
-
 }
