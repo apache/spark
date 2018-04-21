@@ -218,7 +218,8 @@ object MultiLineCSVDataSource extends CSVDataSource {
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
     val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
-    csv.flatMap { lines =>
+    val sampled = CSVUtils.sample(csv, parsedOptions)
+    sampled.flatMap { lines =>
       val path = new Path(lines.getPath())
       UnivocityParser.tokenizeStream(
         CodecStreams.createInputStreamWithCloseResource(lines.getConfiguration, path),
@@ -228,7 +229,6 @@ object MultiLineCSVDataSource extends CSVDataSource {
       case Some(firstRow) =>
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
         val header = makeSafeHeader(firstRow, caseSensitive, parsedOptions)
-        val sampled = CSVUtils.sample(csv, parsedOptions)
         val tokenRDD = sampled.flatMap { lines =>
           UnivocityParser.tokenizeStream(
             CodecStreams.createInputStreamWithCloseResource(

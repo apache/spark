@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
 import java.nio.charset.UnsupportedCharsetException
+import java.nio.file.{Files, Paths, StandardOpenOption}
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
 import org.apache.commons.lang3.time.FastDateFormat
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
@@ -1279,8 +1281,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     )
   }
 
-  val sampledTestData = (row: Row) => {
-    val value = row.getLong(0)
+  val sampledTestData = (value: java.lang.Long) => {
     val predefinedSample = Set[Long](2, 8, 15, 27, 30, 34, 35, 37, 44, 46,
       57, 62, 68, 72)
     if (predefinedSample.contains(value)) {
@@ -1298,41 +1299,63 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       "spark.sql.files.maxPartitionBytes" -> (128 * 1024 * 1024).toString,
       "spark.sql.files.openCostInBytes" -> (4 * 1024 * 1024).toString
     )(withTempPath { path =>
-      val rdd = spark.sqlContext.range(0, 100, 1, 1).map(sampledTestData)
-      rdd.write.text(path.getAbsolutePath)
+      val ds = spark.range(0, 100, 1, 1).map(sampledTestData)
+      ds.write.text(path.getAbsolutePath)
 
-      val ds = spark.read
-        .option("inferSchema", true)
-        .option("samplingRatio", 0.1)
+      val readback = spark.read
+        .option("inferSchema", true).option("samplingRatio", 0.1)
         .csv(path.getCanonicalPath)
-      assert(ds.schema == new StructType().add("_c0", IntegerType))
+      assert(readback.schema == new StructType().add("_c0", IntegerType))
     })
   }
 
   test("SPARK-23846: usage of samplingRatio while parsing a dataset of strings") {
-    val rdd = spark.sqlContext.range(0, 100, 1, 1).map(sampledTestData)
-    val ds = spark.read
-      .option("inferSchema", true)
-      .option("samplingRatio", 0.1)
-      .csv(rdd)
+    val ds = spark.range(0, 100, 1, 1).map(sampledTestData)
+    val readback = spark.read
+      .option("inferSchema", true).option("samplingRatio", 0.1)
+      .csv(ds)
 
-    assert(ds.schema == new StructType().add("_c0", IntegerType))
+    assert(readback.schema == new StructType().add("_c0", IntegerType))
   }
 
   test("SPARK-23846: samplingRatio is out of the range (0, 1.0]") {
-    val dstr = spark.sparkContext.parallelize(0 until 100, 1).map(_.toString).toDS()
+    val ds = spark.range(0, 100, 1, 1).map(_.toString)
 
     val errorMsg0 = intercept[IllegalArgumentException] {
-      spark.read.option("inferSchema", true).option("samplingRatio", -1).csv(dstr)
+      spark.read.option("inferSchema", true).option("samplingRatio", -1).csv(ds)
     }.getMessage
     assert(errorMsg0.contains("samplingRatio (-1.0) should be greater than 0"))
 
     val errorMsg1 = intercept[IllegalArgumentException] {
-      spark.read.option("inferSchema", true).option("samplingRatio", 0).csv(dstr)
+      spark.read.option("inferSchema", true).option("samplingRatio", 0).csv(ds)
     }.getMessage
     assert(errorMsg1.contains("samplingRatio (0.0) should be greater than 0"))
 
-    val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 10).csv(dstr)
-    assert(sampled.count() == dstr.count())
+    val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 10).csv(ds)
+    assert(sampled.count() == ds.count())
+  }
+
+  test("SPARK-23846: sampling files for schema inferring in the multiLine mode") {
+    withTempDir { dir =>
+      Files.write(Paths.get(dir.getAbsolutePath, "0.csv"), "0.1".getBytes,
+        StandardOpenOption.CREATE_NEW)
+      for (i <- 1 until 10) {
+        Files.write(Paths.get(dir.getAbsolutePath, s"$i.csv"), s"$i".getBytes,
+          StandardOpenOption.CREATE_NEW)
+      }
+      val files = (0 until 10).map { i =>
+        val hadoopConf = spark.sessionState.newHadoopConf()
+        val hdfsPath = new Path(Paths.get(dir.getAbsolutePath, s"$i.csv").toString)
+        hdfsPath.getFileSystem(hadoopConf).getFileStatus(hdfsPath)
+      }
+      // The test uses the internal method because public API cannot guarantee order of files
+      // passed to the infer method. The order is changed between runs because the temporary
+      // folder has different path which leads to different order of file statuses returned
+      // by InMemoryFileIndex.
+      val schema = MultiLineCSVDataSource.infer(
+        spark, files, new CSVOptions(Map("inferSchema" -> "true", "samplingRatio" -> "0.2"), "UTC")
+      )
+      assert(schema == new StructType().add("_c0", IntegerType))
+    }
   }
 }
