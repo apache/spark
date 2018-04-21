@@ -149,7 +149,7 @@ class AnalysisErrorSuite extends AnalysisTest {
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as('window)),
-    "not supported within a window function" :: Nil)
+    "does not have any window functions" :: Nil)
 
   errorTest(
     "distinct aggregate function in window",

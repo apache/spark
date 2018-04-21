@@ -26,21 +26,20 @@ import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, JoinedRow, NamedExpression, PythonUDF, SortOrder, UnsafeProjection, UnsafeRow, WindowExpression}
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 case class WindowInPandasExec(
-    windowExpression: Seq[WindowExpression],
+    windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    resultExpression: Seq[NamedExpression],
     child: SparkPlan) extends UnaryExecNode {
 
   override def output: Seq[Attribute] =
-    child.output ++ resultExpression.map(_.toAttribute)
+    child.output ++ windowExpression.map(_.toAttribute)
 
   override def requiredChildDistribution: Seq[Distribution] = {
     if (partitionSpec.isEmpty) {
@@ -70,6 +69,26 @@ case class WindowInPandasExec(
     }
   }
 
+  /**
+   * Create the resulting projection.
+   *
+   * This method uses Code Generation. It can only be used on the executor side.
+   *
+   * @param expressions unbound ordered function expressions.
+   * @return the final resulting projection.
+   */
+  private[this] def createResultProjection(expressions: Seq[Expression]): UnsafeProjection = {
+    val references = expressions.zipWithIndex.map{ case (e, i) =>
+      // Results of window expressions will be on the right side of child's output
+      BoundReference(child.output.size + i, e.dataType, e.nullable)
+    }
+    val unboundToRefMap = expressions.zip(references).toMap
+    val patchedWindowExpression = windowExpression.map(_.transform(unboundToRefMap))
+    UnsafeProjection.create(
+      child.output ++ patchedWindowExpression,
+      child.output)
+  }
+
   protected override def doExecute(): RDD[InternalRow] = {
     val inputRDD = child.execute()
 
@@ -78,7 +97,13 @@ case class WindowInPandasExec(
     val sessionLocalTimeZone = conf.sessionLocalTimeZone
     val pandasRespectSessionTimeZone = conf.pandasRespectSessionTimeZone
 
-    val udfExpressions = windowExpression.map(_.windowFunction.asInstanceOf[PythonUDF])
+    // Extract window expressions and window functions
+    val expressions = windowExpression.flatMap { e =>
+      e.collect {
+        case e: WindowExpression => e
+      }
+    }
+    val udfExpressions = expressions.map(_.windowFunction.asInstanceOf[PythonUDF])
 
     val (pyFuncs, inputs) = udfExpressions.map(collectFunctions).unzip
 
@@ -136,8 +161,8 @@ case class WindowInPandasExec(
         sessionLocalTimeZone, pandasRespectSessionTimeZone)
         .compute(pythonInput, context.partitionId(), context)
 
-      val resultProj = UnsafeProjection.create(output, output)
       val joined = new JoinedRow
+      val resultProj = createResultProjection(expressions)
 
       windowFunctionResult.flatMap(_.rowIterator.asScala).map { windowOutput =>
         val leftRow = queue.remove()

@@ -5515,17 +5515,29 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
     @property
     def pandas_agg_mean_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
-        return pandas_udf(lambda v: v.mean(), 'double', PandasUDFType.GROUPED_AGG)
+
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
+        def avg(v):
+            return v.mean()
+        return avg
 
     @property
     def pandas_agg_max_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
-        return pandas_udf(lambda v: v.max(), 'double', PandasUDFType.GROUPED_AGG)
+
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
+        def max(v):
+            return v.max()
+        return max
 
     @property
     def pandas_agg_min_udf(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType
-        return pandas_udf(lambda v: v.min(), 'double', PandasUDFType.GROUPED_AGG)
+
+        @pandas_udf('double', PandasUDFType.GROUPED_AGG)
+        def min(v):
+            return v.min()
+        return min
 
     @property
     def unbounded_window(self):
@@ -5538,7 +5550,7 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def unpartitioned_window(self):
-        return Window.rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+        return Window.partitionBy()
 
     def test_simple(self):
         from pyspark.sql.functions import pandas_udf, PandasUDFType, percent_rank, mean, max
@@ -5546,10 +5558,16 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         df = self.data
         w = self.unbounded_window
 
-        result1 = df.withColumn('mean_v', self.pandas_agg_mean_udf(df['v']).over(w))
+        mean_udf = self.pandas_agg_mean_udf
+
+        result1 = df.withColumn('mean_v', mean_udf(df['v']).over(w))
         expected1 = df.withColumn('mean_v', mean(df['v']).over(w))
 
+        result2 = df.select(mean_udf(df['v']).over(w))
+        expected2 = df.select(mean(df['v']).over(w))
+
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
 
     def test_multiple_udfs(self):
         from pyspark.sql.functions import max, min, mean
@@ -5583,8 +5601,9 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
         df = self.data
         w = self.unbounded_window
+        mean_udf = self.pandas_agg_mean_udf
 
-        result1 = df.withColumn('v', self.pandas_agg_mean_udf(df['v'] * 2).over(w) + 1)
+        result1 = df.withColumn('v', mean_udf(df['v'] * 2).over(w) + 1)
         expected1 = df.withColumn('v', mean(df['v'] * 2).over(w) + 1)
 
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
@@ -5621,12 +5640,17 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         from pyspark.sql.functions import mean
 
         df = self.data
-        w = Window.rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+        w = self.unpartitioned_window
+        mean_udf = self.pandas_agg_mean_udf
 
-        result1 = df.withColumn('v2', self.pandas_agg_mean_udf(df['v']).over(w))
+        result1 = df.withColumn('v2', mean_udf(df['v']).over(w))
         expected1 = df.withColumn('v2', mean(df['v']).over(w))
 
+        result2 = df.select(mean_udf(df['v']).over(w))
+        expected2 = df.select(mean(df['v']).over(w))
+
         self.assertPandasEqual(expected1.toPandas(), result1.toPandas())
+        self.assertPandasEqual(expected2.toPandas(), result2.toPandas())
 
     def test_mixed_sql_and_udf(self):
         from pyspark.sql.functions import max, min, rank, col

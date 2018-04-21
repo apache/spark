@@ -270,26 +270,20 @@ object PhysicalAggregation {
   }
 }
 
+/**
+ * An extractor used when planning physical execution of a window. This extractor outputs
+ * the window function type of the logical window.
+ *
+ * The input logical window must contain same type of window functions, which is ensured by
+ * the rule ExtractWindowExpressions in the analyzer.
+ */
 object PhysicalWindow {
-
-  // Whether the window function is a Scalar window function or a Python window function.
-  // We don't current support mixes of these two types so we use a single enum to present all
-  // window functions in the window expression.
-
-
-  // windowFunctionType, windowExpression, partitionSpec, orderSpec, resultExpression, child
+  // windowFunctionType, windowExpression, partitionSpec, orderSpec, child
   type ReturnType =
-    (WindowFunctionType,
-      Seq[WindowExpression], Seq[Expression], Seq[SortOrder], Seq[NamedExpression], LogicalPlan)
+    (WindowFunctionType, Seq[NamedExpression], Seq[Expression], Seq[SortOrder], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
     case logical.Window(windowExpressions, partitionSpec, orderSpec, child) =>
-
-      val newWindowExpressions = windowExpressions.flatMap { expr =>
-        expr.collect {
-          case we: WindowExpression => we
-        }
-      }
 
       val windowFunctionType = windowExpressions.map(WindowFunctionType.functionType)
         .reduceLeft ( (t1: Option[WindowFunctionType], t2: Option[WindowFunctionType]) =>
@@ -304,10 +298,7 @@ object PhysicalWindow {
           }
         ).getOrElse(throw new AnalysisException("Window expressions are empty."))
 
-      val resultExpressions = windowExpressions.map(_.toAttribute)
-
-      Some((windowFunctionType,
-        newWindowExpressions, partitionSpec, orderSpec, resultExpressions, child))
+      Some((windowFunctionType, windowExpressions, partitionSpec, orderSpec, child))
 
     case _ => None
   }

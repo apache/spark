@@ -79,17 +79,14 @@ import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, 
  * of specialized classes: [[RowBoundOrdering]] & [[RangeBoundOrdering]].
  */
 case class WindowExec(
-    windowExpression: Seq[WindowExpression],
+    windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    resultExpression: Seq[NamedExpression],
     child: SparkPlan)
   extends UnaryExecNode {
 
   override def output: Seq[Attribute] =
-    child.output ++ resultExpression.map(_.toAttribute)
-
-  override def producedAttributes: AttributeSet = AttributeSet(output)
+    child.output ++ windowExpression.map(_.toAttribute)
 
   override def requiredChildDistribution: Seq[Distribution] = {
     if (partitionSpec.isEmpty) {

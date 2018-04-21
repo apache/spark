@@ -1891,12 +1891,12 @@ class Analyzer(
         }.distinct
 
         val windowFunctionType = WindowFunctionType.functionType(expr).getOrElse(
-          failAnalysis(s"$expr does not have any WindowFunction."))
+          failAnalysis(s"$expr does not have any window functions."))
 
         // We do a final check and see if we only have a single Window Spec defined in an
         // expressions.
         if (distinctWindowSpec.isEmpty) {
-          failAnalysis(s"$expr does not have any WindowExpression.")
+          failAnalysis(s"$expr does not have any window expressions.")
         } else if (distinctWindowSpec.length > 1) {
           // newExpressionsWithWindowFunctions only have expressions with a single
           // WindowExpression. If we reach here, we have a bug.
