@@ -239,8 +239,9 @@ class DataFrameReader(OptionUtils):
                                           including tab and line feed characters) or not.
         :param lineSep: defines the line separator that should be used for parsing. If None is
                         set, it covers all ``\\r``, ``\\r\\n`` and ``\\n``.
-        :param samplingRatio: the sample ratio of rows used for schema inferring. If None is set,
-                              it uses the default value, ``1.0``.
+        :param samplingRatio: defines fraction of rows (when ``multiLine`` is ``false``) or fraction
+                              of files (when ``multiLine`` is ``true``) used for schema inferring.
+                              If None is set, it uses the default value, ``1.0``.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
