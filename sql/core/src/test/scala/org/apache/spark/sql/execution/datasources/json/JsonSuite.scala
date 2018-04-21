@@ -2148,19 +2148,15 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     )(withTempPath { path =>
       val ds = spark.range(0, 100, 1, 1).map(sampledTestData)
       ds.write.text(path.getAbsolutePath)
+      val readback = spark.read.option("samplingRatio", 0.1).json(path.getCanonicalPath)
 
-      val readback = spark.read
-        .option("inferSchema", true).option("samplingRatio", 0.1)
-        .json(path.getCanonicalPath)
       assert(readback.schema == new StructType().add("f1", LongType))
     })
   }
 
   test("SPARK-23849: usage of samplingRatio while parsing a dataset of strings") {
     val ds = spark.range(0, 100, 1, 1).map(sampledTestData)
-    val readback = spark.read
-      .option("inferSchema", true).option("samplingRatio", 0.1)
-      .json(ds)
+    val readback = spark.read.option("samplingRatio", 0.1).json(ds)
 
     assert(readback.schema == new StructType().add("f1", LongType))
   }
@@ -2169,31 +2165,31 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     val ds = spark.range(0, 100, 1, 1).map(_.toString)
 
     val errorMsg0 = intercept[IllegalArgumentException] {
-      spark.read.option("inferSchema", true).option("samplingRatio", -1).json(ds)
+      spark.read.option("samplingRatio", -1).json(ds)
     }.getMessage
     assert(errorMsg0.contains("samplingRatio (-1.0) should be greater than 0"))
 
     val errorMsg1 = intercept[IllegalArgumentException] {
-      spark.read.option("inferSchema", true).option("samplingRatio", 0).json(ds)
+      spark.read.option("samplingRatio", 0).json(ds)
     }.getMessage
     assert(errorMsg1.contains("samplingRatio (0.0) should be greater than 0"))
 
-    val sampled = spark.read.option("inferSchema", true).option("samplingRatio", 10).json(ds)
+    val sampled = spark.read.option("samplingRatio", 10).json(ds)
     assert(sampled.count() == ds.count())
   }
 
   test("SPARK-23849: sampling files for schema inferring in the multiLine mode") {
     withTempDir { dir =>
-      Files.write(Paths.get(dir.getAbsolutePath + "0.json"), """{"a":"a"}""".getBytes,
+      Files.write(Paths.get(dir.getAbsolutePath, "0.json"), """{"a":"a"}""".getBytes,
         StandardOpenOption.CREATE_NEW)
       for (i <- 1 until 10) {
-        Files.write(Paths.get(dir.getAbsolutePath + s"$i.json"), s"""{"a":$i}""".getBytes,
+        Files.write(Paths.get(dir.getAbsolutePath, s"$i.json"), s"""{"a":$i}""".getBytes,
           StandardOpenOption.CREATE_NEW)
       }
       val files = (0 until 10).map { i =>
         val hadoopConf = spark.sessionState.newHadoopConf()
-        val path = new Path(dir.getAbsolutePath + s"$i.json")
-        path.getFileSystem(hadoopConf).getFileStatus(path)
+        val hdfsPath = new Path(Paths.get(dir.getAbsolutePath, s"$i.json").toString)
+        hdfsPath.getFileSystem(hadoopConf).getFileStatus(hdfsPath)
       }
       // The test uses the internal method because public API cannot guarantee order of files
       // passed to the infer method. The order is changed between runs because the temporary
