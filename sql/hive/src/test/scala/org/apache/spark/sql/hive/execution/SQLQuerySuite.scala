@@ -2099,7 +2099,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   Seq("orc", "parquet").foreach { format =>
     test(s"SPARK-18355 Read data from a hive table with a new column - $format") {
-      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+      val client =
+        spark.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog].client
 
       Seq("true", "false").foreach { value =>
         withSQLConf(
