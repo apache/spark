@@ -3079,6 +3079,12 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
     # static and immutable. This can't be set or unset, for example, via `spark.conf`.
 
+    def setUp(self):
+        if not self.has_listener:
+            raise self.skipTest(
+                "'org.apache.spark.sql.TestQueryExecutionListener' is not "
+                "available. Will skip the related tests.")
+
     @classmethod
     def setUpClass(cls):
         import glob
@@ -3088,23 +3094,22 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
         filename_pattern = (
             "sql/core/target/scala-*/test-classes/org/apache/spark/sql/"
             "TestQueryExecutionListener.class")
-        if not glob.glob(os.path.join(SPARK_HOME, filename_pattern)):
-            raise unittest.SkipTest(
-                "'org.apache.spark.sql.TestQueryExecutionListener' is not "
-                "available. Will skip the related tests.")
+        cls.has_listener = bool(glob.glob(os.path.join(SPARK_HOME, filename_pattern)))
 
-        # Note that 'spark.sql.queryExecutionListeners' is a static immutable configuration.
-        cls.spark = SparkSession.builder \
-            .master("local[4]") \
-            .appName(cls.__name__) \
-            .config(
-                "spark.sql.queryExecutionListeners",
-                "org.apache.spark.sql.TestQueryExecutionListener") \
-            .getOrCreate()
+        if cls.has_listener:
+            # Note that 'spark.sql.queryExecutionListeners' is a static immutable configuration.
+            cls.spark = SparkSession.builder \
+                .master("local[4]") \
+                .appName(cls.__name__) \
+                .config(
+                    "spark.sql.queryExecutionListeners",
+                    "org.apache.spark.sql.TestQueryExecutionListener") \
+                .getOrCreate()
 
     @classmethod
     def tearDownClass(cls):
-        cls.spark.stop()
+        if hasattr(cls, "spark"):
+            cls.spark.stop()
 
     def tearDown(self):
         self.spark._jvm.OnSuccessCall.clear()
@@ -3188,18 +3193,22 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
     def setUpClass(cls):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        cls.hive_available = True
         try:
             cls.sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
         except py4j.protocol.Py4JError:
-            cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
+            cls.hive_available = False
         except TypeError:
-            cls.tearDownClass()
-            raise unittest.SkipTest("Hive is not available")
+            cls.hive_available = False
         os.unlink(cls.tempdir.name)
-        cls.spark = HiveContext._createForTesting(cls.sc)
-        cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
-        cls.df = cls.sc.parallelize(cls.testData).toDF()
+        if cls.hive_available:
+            cls.spark = HiveContext._createForTesting(cls.sc)
+            cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
+            cls.df = cls.sc.parallelize(cls.testData).toDF()
+
+    def setUp(self):
+        if not self.hive_available:
+            self.skipTest("Hive is not available.")
 
     @classmethod
     def tearDownClass(cls):

@@ -111,6 +111,7 @@ def run_individual_python_test(test_name, pyspark_python):
             # this code is invoked from a thread other than the main thread.
             os._exit(-1)
     else:
+        skipped_counts = 0
         try:
             per_test_output.seek(0)
             # Here expects skipped test output from unittest when verbosity level is
@@ -119,7 +120,8 @@ def run_individual_python_test(test_name, pyspark_python):
             skipped_tests = list(filter(
                 lambda line: re.search('test_.* \(pyspark\..*\) ... skipped ', line),
                 decoded_lines))
-            if len(skipped_tests) > 0:
+            skipped_counts = len(skipped_tests)
+            if skipped_counts > 0:
                 key = (pyspark_python, test_name)
                 SKIPPED_TESTS[key] = skipped_tests
             per_test_output.close()
@@ -130,7 +132,13 @@ def run_individual_python_test(test_name, pyspark_python):
             # Here, we use os._exit() instead of sys.exit() in order to force Python to exit even if
             # this code is invoked from a thread other than the main thread.
             os._exit(-1)
-        LOGGER.info("Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
+        if skipped_counts != 0:
+            LOGGER.info(
+                "Finished test(%s): %s (%is) ... %s tests were skipped", pyspark_python, test_name,
+                duration, skipped_counts)
+        else:
+            LOGGER.info(
+                "Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
 
 
 def get_default_python_executables():
