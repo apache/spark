@@ -1,6 +1,6 @@
 [ {
   "id" : "driver",
-  "hostPort" : "cluster-node0033.company.com:53121",
+  "hostPort" : "node0033.grid.company.com:60749",
   "isActive" : true,
   "rddBlocks" : 0,
   "memoryUsed" : 0,
@@ -17,28 +17,31 @@
   "totalShuffleRead" : 0,
   "totalShuffleWrite" : 0,
   "isBlacklisted" : false,
-  "maxMemory" : 1046269132,
-  "addTime" : "2018-03-19T18:21:24.751GMT",
+  "maxMemory" : 1043437977,
+  "addTime" : "2018-04-19T23:55:05.107GMT",
   "executorLogs" : { },
   "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,
     "usedOffHeapStorageMemory" : 0,
-    "totalOnHeapStorageMemory" : 1046269132,
+    "totalOnHeapStorageMemory" : 1043437977,
     "totalOffHeapStorageMemory" : 0
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {
-    "jvmUsedMemory" : 671982856,
+    "jvmUsedHeapMemory" : 629553808,
+    "jvmUsedNonHeapMemory" : 205304696,
     "onHeapExecutionMemory" : 0,
     "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 900126,
+    "onHeapStorageMemory" : 905801,
     "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 900126,
-    "offHeapUnifiedMemory" : 0
+    "onHeapUnifiedMemory" : 905801,
+    "offHeapUnifiedMemory" : 0,
+    "directMemory" : 397602,
+    "mappedMemory" : 0
   }
 }, {
-  "id" : "8",
-  "hostPort" : "cluster-node6128.company.com:1664",
+  "id" : "7",
+  "hostPort" : "node6340.grid.company.com:5933",
   "isActive" : true,
   "rddBlocks" : 0,
   "memoryUsed" : 0,
@@ -56,10 +59,10 @@
   "totalShuffleWrite" : 0,
   "isBlacklisted" : false,
   "maxMemory" : 956615884,
-  "addTime" : "2018-03-19T18:22:25.988GMT",
+  "addTime" : "2018-04-19T23:55:49.826GMT",
   "executorLogs" : {
-    "stdout" : "http://cluster-node6128.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000066/edlu/stdout?start=-4096",
-    "stderr" : "http://cluster-node6128.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000066/edlu/stderr?start=-4096"
+    "stdout" : "http://node6340.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000009/edlu/stdout?start=-4096",
+    "stderr" : "http://node6340.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000009/edlu/stderr?start=-4096"
   },
   "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,
@@ -67,60 +70,10 @@
     "totalOnHeapStorageMemory" : 956615884,
     "totalOffHeapStorageMemory" : 0
   },
-  "blacklistedInStages" : [ ],
-  "peakMemoryMetrics" : {
-    "jvmUsedMemory" : 226589176,
-    "onHeapExecutionMemory" : 0,
-    "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 0,
-    "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 0,
-    "offHeapUnifiedMemory" : 0
-  }
-}, {
-  "id" : "7",
-  "hostPort" : "cluster-node2449.company.com:26914",
-  "isActive" : true,
-  "rddBlocks" : 0,
-  "memoryUsed" : 0,
-  "diskUsed" : 0,
-  "totalCores" : 1,
-  "maxTasks" : 1,
-  "activeTasks" : 0,
-  "failedTasks" : 0,
-  "completedTasks" : 1,
-  "totalTasks" : 1,
-  "totalDuration" : 11073,
-  "totalGCTime" : 942,
-  "totalInputBytes" : 36849246,
-  "totalShuffleRead" : 0,
-  "totalShuffleWrite" : 349006,
-  "isBlacklisted" : false,
-  "maxMemory" : 956615884,
-  "addTime" : "2018-03-19T18:22:10.182GMT",
-  "executorLogs" : {
-    "stdout" : "http://cluster-node2449.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000064/edlu/stdout?start=-4096",
-    "stderr" : "http://cluster-node2449.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000064/edlu/stderr?start=-4096"
-  },
-  "memoryMetrics" : {
-    "usedOnHeapStorageMemory" : 0,
-    "usedOffHeapStorageMemory" : 0,
-    "totalOnHeapStorageMemory" : 956615884,
-    "totalOffHeapStorageMemory" : 0
-  },
-  "blacklistedInStages" : [ ],
-  "peakMemoryMetrics" : {
-    "jvmUsedMemory" : 365803960,
-    "onHeapExecutionMemory" : 0,
-    "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 562630,
-    "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 562630,
-    "offHeapUnifiedMemory" : 0
-  }
+  "blacklistedInStages" : [ ]
 }, {
   "id" : "6",
-  "hostPort" : "cluster-node6148.company.com:1233",
+  "hostPort" : "node6644.grid.company.com:8445",
   "isActive" : true,
   "rddBlocks" : 0,
   "memoryUsed" : 0,
@@ -129,19 +82,19 @@
   "maxTasks" : 1,
   "activeTasks" : 0,
   "failedTasks" : 0,
-  "completedTasks" : 1,
-  "totalTasks" : 1,
-  "totalDuration" : 34956,
-  "totalGCTime" : 5484,
-  "totalInputBytes" : 24250210,
+  "completedTasks" : 0,
+  "totalTasks" : 0,
+  "totalDuration" : 0,
+  "totalGCTime" : 0,
+  "totalInputBytes" : 0,
   "totalShuffleRead" : 0,
-  "totalShuffleWrite" : 242714,
+  "totalShuffleWrite" : 0,
   "isBlacklisted" : false,
   "maxMemory" : 956615884,
-  "addTime" : "2018-03-19T18:22:19.537GMT",
+  "addTime" : "2018-04-19T23:55:47.549GMT",
   "executorLogs" : {
-    "stdout" : "http://cluster-node6148.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000058/edlu/stdout?start=-4096",
-    "stderr" : "http://cluster-node6148.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000058/edlu/stderr?start=-4096"
+    "stdout" : "http://node6644.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000008/edlu/stdout?start=-4096",
+    "stderr" : "http://node6644.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000008/edlu/stderr?start=-4096"
   },
   "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,
@@ -149,19 +102,10 @@
     "totalOnHeapStorageMemory" : 956615884,
     "totalOffHeapStorageMemory" : 0
   },
-  "blacklistedInStages" : [ ],
-  "peakMemoryMetrics" : {
-    "jvmUsedMemory" : 501950360,
-    "onHeapExecutionMemory" : 35651584,
-    "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 562630,
-    "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 36214214,
-    "offHeapUnifiedMemory" : 0
-  }
+  "blacklistedInStages" : [ ]
 }, {
   "id" : "5",
-  "hostPort" : "cluster-node5882.company.com:24590",
+  "hostPort" : "node2477.grid.company.com:20123",
   "isActive" : true,
   "rddBlocks" : 0,
   "memoryUsed" : 0,
@@ -172,17 +116,49 @@
   "failedTasks" : 0,
   "completedTasks" : 1,
   "totalTasks" : 1,
-  "totalDuration" : 30945,
-  "totalGCTime" : 6111,
+  "totalDuration" : 9252,
+  "totalGCTime" : 920,
   "totalInputBytes" : 36838295,
   "totalShuffleRead" : 0,
   "totalShuffleWrite" : 355051,
   "isBlacklisted" : false,
   "maxMemory" : 956615884,
-  "addTime" : "2018-03-19T18:22:11.267GMT",
+  "addTime" : "2018-04-19T23:55:43.160GMT",
   "executorLogs" : {
-    "stdout" : "http://cluster-node5882.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000043/edlu/stdout?start=-4096",
-    "stderr" : "http://cluster-node5882.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000043/edlu/stderr?start=-4096"
+    "stdout" : "http://node2477.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000007/edlu/stdout?start=-4096",
+    "stderr" : "http://node2477.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000007/edlu/stderr?start=-4096"
+  },
+  "memoryMetrics" : {
+    "usedOnHeapStorageMemory" : 0,
+    "usedOffHeapStorageMemory" : 0,
+    "totalOnHeapStorageMemory" : 956615884,
+    "totalOffHeapStorageMemory" : 0
+  },
+  "blacklistedInStages" : [ ]
+}, {
+  "id" : "4",
+  "hostPort" : "node4243.grid.company.com:16084",
+  "isActive" : true,
+  "rddBlocks" : 0,
+  "memoryUsed" : 0,
+  "diskUsed" : 0,
+  "totalCores" : 1,
+  "maxTasks" : 1,
+  "activeTasks" : 0,
+  "failedTasks" : 0,
+  "completedTasks" : 3,
+  "totalTasks" : 3,
+  "totalDuration" : 15645,
+  "totalGCTime" : 405,
+  "totalInputBytes" : 87272855,
+  "totalShuffleRead" : 438675,
+  "totalShuffleWrite" : 26773039,
+  "isBlacklisted" : false,
+  "maxMemory" : 956615884,
+  "addTime" : "2018-04-19T23:55:12.278GMT",
+  "executorLogs" : {
+    "stdout" : "http://node4243.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000006/edlu/stdout?start=-4096",
+    "stderr" : "http://node4243.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000006/edlu/stderr?start=-4096"
   },
   "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,
@@ -192,17 +168,20 @@
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {
-    "jvmUsedMemory" : 513138800,
-    "onHeapExecutionMemory" : 41943040,
+    "jvmUsedHeapMemory" : 518613056,
+    "jvmUsedNonHeapMemory" : 95657456,
+    "onHeapExecutionMemory" : 37748736,
     "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 562630,
+    "onHeapStorageMemory" : 63104457,
     "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 42505670,
-    "offHeapUnifiedMemory" : 0
+    "onHeapUnifiedMemory" : 100853193,
+    "offHeapUnifiedMemory" : 0,
+    "directMemory" : 126261,
+    "mappedMemory" : 0
   }
 }, {
-  "id" : "4",
-  "hostPort" : "cluster-node6137.company.com:19036",
+  "id" : "3",
+  "hostPort" : "node0998.grid.company.com:45265",
   "isActive" : true,
   "rddBlocks" : 0,
   "memoryUsed" : 0,
@@ -213,17 +192,17 @@
   "failedTasks" : 0,
   "completedTasks" : 1,
   "totalTasks" : 1,
-  "totalDuration" : 79365,
-  "totalGCTime" : 6979,
+  "totalDuration" : 14491,
+  "totalGCTime" : 342,
   "totalInputBytes" : 50409514,
   "totalShuffleRead" : 0,
   "totalShuffleWrite" : 31362123,
   "isBlacklisted" : false,
   "maxMemory" : 956615884,
-  "addTime" : "2018-03-19T18:21:44.950GMT",
+  "addTime" : "2018-04-19T23:55:12.088GMT",
   "executorLogs" : {
-    "stdout" : "http://cluster-node6137.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000040/edlu/stdout?start=-4096",
-    "stderr" : "http://cluster-node6137.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000040/edlu/stderr?start=-4096"
+    "stdout" : "http://node0998.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000005/edlu/stdout?start=-4096",
+    "stderr" : "http://node0998.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000005/edlu/stderr?start=-4096"
   },
   "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,
@@ -233,58 +212,20 @@
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {
-    "jvmUsedMemory" : 707255176,
+    "jvmUsedHeapMemory" : 726805712,
+    "jvmUsedNonHeapMemory" : 90709624,
     "onHeapExecutionMemory" : 0,
     "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 83580552,
+    "onHeapStorageMemory" : 69535048,
     "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 83580552,
-    "offHeapUnifiedMemory" : 0
-  }
-}, {
-  "id" : "3",
-  "hostPort" : "cluster-node1177.company.com:12614",
-  "isActive" : true,
-  "rddBlocks" : 0,
-  "memoryUsed" : 0,
-  "diskUsed" : 0,
-  "totalCores" : 1,
-  "maxTasks" : 1,
-  "activeTasks" : 0,
-  "failedTasks" : 0,
-  "completedTasks" : 2,
-  "totalTasks" : 2,
-  "totalDuration" : 38198,
-  "totalGCTime" : 1024,
-  "totalInputBytes" : 50423609,
-  "totalShuffleRead" : 438675,
-  "totalShuffleWrite" : 26424033,
-  "isBlacklisted" : false,
-  "maxMemory" : 956615884,
-  "addTime" : "2018-03-19T18:21:33.370GMT",
-  "executorLogs" : {
-    "stdout" : "http://cluster-node1177.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000038/edlu/stdout?start=-4096",
-    "stderr" : "http://cluster-node1177.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000038/edlu/stderr?start=-4096"
-  },
-  "memoryMetrics" : {
-    "usedOnHeapStorageMemory" : 0,
-    "usedOffHeapStorageMemory" : 0,
-    "totalOnHeapStorageMemory" : 956615884,
-    "totalOffHeapStorageMemory" : 0
-  },
-  "blacklistedInStages" : [ ],
-  "peakMemoryMetrics" : {
-    "jvmUsedMemory" : 620936920,
-    "onHeapExecutionMemory" : 0,
-    "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 72624976,
-    "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 72624976,
-    "offHeapUnifiedMemory" : 0
+    "onHeapUnifiedMemory" : 69535048,
+    "offHeapUnifiedMemory" : 0,
+    "directMemory" : 87796,
+    "mappedMemory" : 0
   }
 }, {
   "id" : "2",
-  "hostPort" : "cluster-node6036.company.com:17435",
+  "hostPort" : "node4045.grid.company.com:29262",
   "isActive" : true,
   "rddBlocks" : 0,
   "memoryUsed" : 0,
@@ -295,17 +236,17 @@
   "failedTasks" : 0,
   "completedTasks" : 1,
   "totalTasks" : 1,
-  "totalDuration" : 44061,
-  "totalGCTime" : 4677,
+  "totalDuration" : 14113,
+  "totalGCTime" : 326,
   "totalInputBytes" : 50423423,
   "totalShuffleRead" : 0,
   "totalShuffleWrite" : 22950296,
   "isBlacklisted" : false,
   "maxMemory" : 956615884,
-  "addTime" : "2018-03-19T18:21:41.213GMT",
+  "addTime" : "2018-04-19T23:55:12.471GMT",
   "executorLogs" : {
-    "stdout" : "http://cluster-node6036.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000033/edlu/stdout?start=-4096",
-    "stderr" : "http://cluster-node6036.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000033/edlu/stderr?start=-4096"
+    "stdout" : "http://node4045.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000004/edlu/stdout?start=-4096",
+    "stderr" : "http://node4045.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000004/edlu/stderr?start=-4096"
   },
   "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,
@@ -315,17 +256,20 @@
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {
-    "jvmUsedMemory" : 695372944,
+    "jvmUsedHeapMemory" : 595946552,
+    "jvmUsedNonHeapMemory" : 91208368,
     "onHeapExecutionMemory" : 0,
     "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 58468552,
+    "onHeapStorageMemory" : 58468944,
     "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 58468552,
-    "offHeapUnifiedMemory" : 0
+    "onHeapUnifiedMemory" : 58468944,
+    "offHeapUnifiedMemory" : 0,
+    "directMemory" : 87796,
+    "mappedMemory" : 0
   }
 }, {
   "id" : "1",
-  "hostPort" : "cluster-node4342.company.com:29144",
+  "hostPort" : "node1404.grid.company.com:34043",
   "isActive" : true,
   "rddBlocks" : 0,
   "memoryUsed" : 0,
@@ -334,19 +278,19 @@
   "maxTasks" : 1,
   "activeTasks" : 0,
   "failedTasks" : 0,
-  "completedTasks" : 2,
-  "totalTasks" : 2,
-  "totalDuration" : 31501,
-  "totalGCTime" : 936,
-  "totalInputBytes" : 74654808,
+  "completedTasks" : 3,
+  "totalTasks" : 3,
+  "totalDuration" : 15665,
+  "totalGCTime" : 471,
+  "totalInputBytes" : 98905018,
   "totalShuffleRead" : 0,
-  "totalShuffleWrite" : 20352030,
+  "totalShuffleWrite" : 20594744,
   "isBlacklisted" : false,
   "maxMemory" : 956615884,
-  "addTime" : "2018-03-19T18:21:33.307GMT",
+  "addTime" : "2018-04-19T23:55:11.695GMT",
   "executorLogs" : {
-    "stdout" : "http://cluster-node4342.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000032/edlu/stdout?start=-4096",
-    "stderr" : "http://cluster-node4342.company.com:8042/node/containerlogs/container_e02_1506645932520_24630151_01_000032/edlu/stderr?start=-4096"
+    "stdout" : "http://node1404.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000002/edlu/stdout?start=-4096",
+    "stderr" : "http://node1404.grid.company.com:8042/node/containerlogs/container_e05_1523494505172_1552404_01_000002/edlu/stderr?start=-4096"
   },
   "memoryMetrics" : {
     "usedOnHeapStorageMemory" : 0,
@@ -356,12 +300,15 @@
   },
   "blacklistedInStages" : [ ],
   "peakMemoryMetrics" : {
-    "jvmUsedMemory" : 505317000,
-    "onHeapExecutionMemory" : 35651584,
+    "jvmUsedHeapMemory" : 755008624,
+    "jvmUsedNonHeapMemory" : 100519936,
+    "onHeapExecutionMemory" : 0,
     "offHeapExecutionMemory" : 0,
-    "onHeapStorageMemory" : 47961406,
+    "onHeapStorageMemory" : 47962185,
     "offHeapStorageMemory" : 0,
-    "onHeapUnifiedMemory" : 83612990,
-    "offHeapUnifiedMemory" : 0
+    "onHeapUnifiedMemory" : 47962185,
+    "offHeapUnifiedMemory" : 0,
+    "directMemory" : 98230,
+    "mappedMemory" : 0
   }
 } ]
