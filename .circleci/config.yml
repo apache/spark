@@ -201,11 +201,11 @@ jobs:
     <<: *defaults
     steps:
       # Saves us from recompiling every time...
-      - restore_cache:
-          keys:
-            - v1-build-sbt-{{ .Branch }}-{{ .Revision }}
-            - v1-build-sbt-{{ .Branch }}-
-            - v1-build-sbt-master-
+      #- restore_cache:
+          #keys:
+            #- v1-build-sbt-{{ .Branch }}-{{ .Revision }}
+            #- v1-build-sbt-{{ .Branch }}-
+            #- v1-build-sbt-master-
       - *checkout-code
       - run:
           name: Hard link cache contents into current build directory

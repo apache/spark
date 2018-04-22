@@ -33,6 +33,12 @@ object StaticSQLConf {
     .stringConf
     .createWithDefault(Utils.resolveURI("spark-warehouse").toString)
 
+  val CATALOG_FILE_INDEX_IMPLEMENTATION =
+    buildStaticConf("spark.sql.catalogFileIndexImplementation")
+      .internal()
+      .stringConf
+      .createWithDefault("hive")
+
   val CATALOG_IMPLEMENTATION = buildStaticConf("spark.sql.catalogImplementation")
     .internal()
     .stringConf
