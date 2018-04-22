@@ -28,9 +28,10 @@ import scala.collection.mutable.Map
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
+import org.apache.htrace.core.{SpanId, Tracer, TraceScope}
 import org.mockito.ArgumentCaptor
 import org.mockito.Matchers.{any, eq => meq}
-import org.mockito.Mockito.{inOrder, verify, when}
+import org.mockito.Mockito.{doReturn, inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.concurrent.Eventually
@@ -104,7 +105,8 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
 
     var executor: Executor = null
     try {
-      executor = new Executor("id", "localhost", env, userClassPath = Nil, isLocal = true)
+      executor = new Executor("id", "localhost", env, userClassPath = Nil, isLocal = true,
+        tracer = null, spanId = null)
       // the task will be launched in a dedicated worker thread
       executor.launchTask(mockExecutorBackend, taskDescription)
 
@@ -187,6 +189,49 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     // as the fetch failure could easily be caused by interrupting the thread.
     val (failReason, _) = testFetchFailureHandling(false)
     assert(failReason.isInstanceOf[TaskKilled])
+  }
+
+  test("Executor should creata a task trace") {
+    val executorSuiteHelper = new ExecutorSuiteHelper
+    val mockExecutorBackend = mock[ExecutorBackend]
+    when(mockExecutorBackend.statusUpdate(any(), any(), any()))
+      .thenAnswer(new Answer[Unit] {
+        var firstTime = true
+
+        override def answer(invocationOnMock: InvocationOnMock): Unit = {
+          if (firstTime) {
+            executorSuiteHelper.latch1.countDown()
+            firstTime = false
+          }
+          else {
+            executorSuiteHelper.latch2.countDown()
+          }
+        }
+      })
+
+    val mockTracer = mock[Tracer]
+    val mockTraceScope = mock[TraceScope]
+    when(mockTracer.newScope(any(), any())).thenReturn(mockTraceScope)
+
+    val conf = new SparkConf
+    val serializer = new JavaSerializer(conf)
+    val env = createMockEnv(conf, serializer)
+    val serializedTask = new JavaSerializer(conf).newInstance().serialize(new FakeTask(0, 0))
+    val taskDescription = createFakeTaskDescription(serializedTask)
+    val executor = new Executor("id", "localhost", env, userClassPath = Nil, isLocal = true,
+      tracer = mockTracer, spanId = "00000000000000000000000000000000")
+    executor.launchTask(mockExecutorBackend, taskDescription)
+
+    if (!executorSuiteHelper.latch1.await(5, TimeUnit.SECONDS)) {
+      fail("executor did not send first status update in time")
+    }
+    if (!executorSuiteHelper.latch2.await(5, TimeUnit.SECONDS)) {
+      fail("executor did not send second status update in time")
+    }
+    // Creates the task trace scope
+    verify(mockTracer).newScope(any(), any())
+    // closes the task trace scope
+    verify(mockTraceScope).close()
   }
 
   /**
@@ -294,7 +339,7 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
     val timedOut = new AtomicBoolean(false)
     try {
       executor = new Executor("id", "localhost", SparkEnv.get, userClassPath = Nil, isLocal = true,
-        uncaughtExceptionHandler = mockUncaughtExceptionHandler)
+        uncaughtExceptionHandler = mockUncaughtExceptionHandler, tracer = null, spanId = null)
       // the task will be launched in a dedicated worker thread
       executor.launchTask(mockBackend, taskDescription)
       if (killTask) {

@@ -26,6 +26,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var primaryRFile: String = null
   var userArgs: Seq[String] = Nil
   var propertiesFile: String = null
+  var spanId: String = null
 
   parseArgs(args.toList)
 
@@ -62,6 +63,10 @@ class ApplicationMasterArguments(val args: Array[String]) {
           propertiesFile = value
           args = tail
 
+        case ("--span-id") :: value :: tail =>
+          spanId = value
+          args = tail
+
         case _ =>
           printUsageAndExit(1, args)
       }
@@ -92,6 +97,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |  --arg ARG            Argument to be passed to your application's main class.
       |                       Multiple invocations are possible, each will be passed in order.
       |  --properties-file FILE Path to a custom Spark properties file.
+      |  --span-id SPAN_ID    Span Id of the application.
       """.stripMargin)
     // scalastyle:on println
     System.exit(exitCode)

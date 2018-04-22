@@ -57,7 +57,8 @@ private[spark] class LocalEndpoint(
   val localExecutorHostname = "localhost"
 
   private val executor = new Executor(
-    localExecutorId, localExecutorHostname, SparkEnv.get, userClassPath, isLocal = true)
+    localExecutorId, localExecutorHostname, SparkEnv.get, userClassPath, isLocal = true,
+    tracer = scheduler.sc.tracer, spanId = scheduler.sc.spanId)
 
   override def receive: PartialFunction[Any, Unit] = {
     case ReviveOffers =>

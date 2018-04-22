@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationAttemptNotFoundException
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
+import org.apache.htrace.core.SpanId
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -392,7 +393,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       _sparkConf: SparkConf,
       _rpcEnv: RpcEnv,
       driverRef: RpcEndpointRef,
-      uiAddress: Option[String]) = {
+      uiAddress: Option[String],
+      spanId: String = null) = {
     val appId = client.getAttemptId().getApplicationId().toString()
     val attemptId = client.getAttemptId().getAttemptId().toString()
     val historyAddress = ApplicationMaster
@@ -410,7 +412,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       val executorMemory = sparkConf.get(EXECUTOR_MEMORY).toInt
       val executorCores = sparkConf.get(EXECUTOR_CORES)
       val dummyRunner = new ExecutorRunnable(None, yarnConf, sparkConf, driverUrl, "<executorId>",
-        "<hostname>", executorMemory, executorCores, appId, securityMgr, localResources)
+        "<hostname>", executorMemory, executorCores, appId, securityMgr, localResources, spanId)
       dummyRunner.launchContextDebugInfo()
     }
 
@@ -421,7 +423,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       uiAddress,
       historyAddress,
       securityMgr,
-      localResources)
+      localResources,
+      spanId)
 
     credentialRenewer.foreach(_.setDriverRef(driverRef))
 
@@ -459,7 +462,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
         val driverRef = createSchedulerRef(
           sc.getConf.get("spark.driver.host"),
           sc.getConf.get("spark.driver.port"))
-        registerAM(sc.getConf, rpcEnv, driverRef, sc.ui.map(_.webUrl))
+        registerAM(sc.getConf, rpcEnv, driverRef, sc.ui.map(_.webUrl),
+          sc.spanId)
         registered = true
       } else {
         // Sanity check; should never happen in normal operation, since sc should only be null
@@ -488,7 +492,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments) extends
       amCores, true)
     val driverRef = waitForSparkDriver()
     addAmIpFilter(Some(driverRef))
-    registerAM(sparkConf, rpcEnv, driverRef, sparkConf.getOption("spark.driver.appUIAddress"))
+    registerAM(sparkConf, rpcEnv, driverRef,
+      sparkConf.getOption("spark.driver.appUIAddress"), args.spanId)
     registered = true
 
     // In client mode the actor will stop the reporter thread.

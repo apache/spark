@@ -22,7 +22,9 @@ import java.nio.ByteBuffer
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
+import org.apache.htrace.core.{HTraceConfiguration, SpanId, Tracer}
 import scala.collection.mutable
+import scala.collection.mutable.HashMap
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
@@ -35,6 +37,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorLossReason, TaskDescription}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.serializer.SerializerInstance
+import org.apache.spark.trace.SparkAppTracer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
@@ -44,7 +47,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     hostname: String,
     cores: Int,
     userClassPath: Seq[URL],
-    env: SparkEnv)
+    env: SparkEnv,
+    tracer: Tracer, spanId: String)
   extends ThreadSafeRpcEndpoint with ExecutorBackend with Logging {
 
   private[this] val stopping = new AtomicBoolean(false)
@@ -80,7 +84,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       try {
-        executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
+        executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false,
+          tracer = tracer, spanId = spanId)
       } catch {
         case NonFatal(e) =>
           exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
@@ -121,6 +126,7 @@ private[spark] class CoarseGrainedExecutorBackend(
           // stop until `executor.stop()` returns, which becomes a dead-lock (See SPARK-14180).
           // Therefore, we put this line in a new thread.
           executor.stop()
+          if (tracer != null) tracer.close()
         }
       }.start()
 
@@ -181,7 +187,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       cores: Int,
       appId: String,
       workerUrl: Option[String],
-      userClassPath: Seq[URL]) {
+      userClassPath: Seq[URL],
+      spanId: String) {
 
     Utils.initDaemon(log)
 
@@ -218,11 +225,12 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
       }
 
+      val tracer = SparkAppTracer.getTracer("Executor#" + executorId, driverConf)
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, cores, cfg.ioEncryptionKey, isLocal = false)
 
       env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
-        env.rpcEnv, driverUrl, executorId, hostname, cores, userClassPath, env))
+        env.rpcEnv, driverUrl, executorId, hostname, cores, userClassPath, env, tracer, spanId ))
       workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
@@ -238,6 +246,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
     var appId: String = null
     var workerUrl: Option[String] = None
     val userClassPath = new mutable.ListBuffer[URL]()
+    var spanId: String = null
 
     var argv = args.toList
     while (!argv.isEmpty) {
@@ -264,6 +273,9 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         case ("--user-class-path") :: value :: tail =>
           userClassPath += new URL(value)
           argv = tail
+        case ("--span-id") :: value :: tail =>
+          spanId = value
+          argv = tail
         case Nil =>
         case tail =>
           // scalastyle:off println
@@ -278,7 +290,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       printUsageAndExit()
     }
 
-    run(driverUrl, executorId, hostname, cores, appId, workerUrl, userClassPath)
+    run(driverUrl, executorId, hostname, cores, appId, workerUrl, userClassPath, spanId)
     System.exit(0)
   }
 

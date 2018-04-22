@@ -31,6 +31,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.apache.htrace.core.{SpanId, Tracer, TraceScope}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -57,7 +58,8 @@ private[spark] class Executor(
     env: SparkEnv,
     userClassPath: Seq[URL] = Nil,
     isLocal: Boolean = false,
-    uncaughtExceptionHandler: UncaughtExceptionHandler = new SparkUncaughtExceptionHandler)
+    uncaughtExceptionHandler: UncaughtExceptionHandler = new SparkUncaughtExceptionHandler,
+    tracer: Tracer = null, spanId: String = null)
   extends Logging {
 
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
@@ -288,6 +290,7 @@ private[spark] class Executor(
     }
 
     override def run(): Unit = {
+      var taskTraceScope: TraceScope = null
       threadId = Thread.currentThread.getId
       Thread.currentThread.setName(threadName)
       val threadMXBean = ManagementFactory.getThreadMXBean
@@ -305,6 +308,9 @@ private[spark] class Executor(
       startGCTime = computeTotalGcTime()
 
       try {
+        if (tracer != null && spanId != null) {
+          taskTraceScope = tracer.newScope("Task#" + taskId, SpanId.fromString(spanId))
+        }
         // Must be set before updateDependencies() is called, in case fetching dependencies
         // requires access to properties contained within (e.g. for access control).
         Executor.taskDeserializationProps.set(taskDescription.properties)
@@ -558,6 +564,7 @@ private[spark] class Executor(
           }
       } finally {
         runningTasks.remove(taskId)
+        if (taskTraceScope != null) taskTraceScope.close()
       }
     }
 

@@ -278,7 +278,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         s" --executor-id $taskId" +
         s" --hostname ${executorHostname(offer)}" +
         s" --cores $numCores" +
-        s" --app-id $appId")
+        s" --app-id $appId" +
+        s" --span-id ${sc.spanId}")
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
@@ -290,7 +291,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         s" --executor-id $taskId" +
         s" --hostname ${executorHostname(offer)}" +
         s" --cores $numCores" +
-        s" --app-id $appId")
+        s" --app-id $appId" +
+        s" --span-id ${sc.spanId}")
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri.get).setCache(useFetcherCache))
     }
 
