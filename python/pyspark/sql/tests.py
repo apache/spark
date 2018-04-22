@@ -3079,12 +3079,6 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
     # static and immutable. This can't be set or unset, for example, via `spark.conf`.
 
-    def setUp(self):
-        if not self.has_listener:
-            raise self.skipTest(
-                "'org.apache.spark.sql.TestQueryExecutionListener' is not "
-                "available. Will skip the related tests.")
-
     @classmethod
     def setUpClass(cls):
         import glob
@@ -3105,6 +3099,12 @@ class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
                     "spark.sql.queryExecutionListeners",
                     "org.apache.spark.sql.TestQueryExecutionListener") \
                 .getOrCreate()
+
+    def setUp(self):
+        if not self.has_listener:
+            raise self.skipTest(
+                "'org.apache.spark.sql.TestQueryExecutionListener' is not "
+                "available. Will skip the related tests.")
 
     @classmethod
     def tearDownClass(cls):
