@@ -307,11 +307,23 @@ object WindowFunctionType {
   case object SQL extends WindowFunctionType
   case object Python extends WindowFunctionType
 
-  def functionType(windowExpression: NamedExpression): Option[WindowFunctionType] = {
-    windowExpression.collectFirst {
+  def functionType(windowExpression: NamedExpression): WindowFunctionType = {
+    val t = windowExpression.collectFirst {
       case _: WindowFunction | _: AggregateFunction => SQL
       case udf: PythonUDF if PythonUDF.isWindowPandasUDF(udf) => Python
     }
+
+    // Normally a window expression would either have either a SQL window function, a SQL
+    // aggregate function or a python window UDF. However, sometimes the optimizer will replace
+    // the window function if the value of the window function can be predetermined.
+    // For example, for query:
+    //
+    // select count(NULL) over () from values 1.0, 2.0, 3.0 T(a)
+    //
+    // The window function will be replaced by expression literal(0)
+    // To handle this case, if a window expression doesn't have a regular window function, we
+    // consider its type to be SQL as literal(0) is also a SQL expression.
+    t.getOrElse(SQL)
   }
 }
 

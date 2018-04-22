@@ -5707,14 +5707,14 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     AnalysisException,
-                    '.*does not have any WindowFunction'):
+                    '.*not supported within a window function'):
                 foo_udf = pandas_udf(lambda x: x, 'v double', PandasUDFType.GROUPED_MAP)
                 df.withColumn('v2', foo_udf(df['v']).over(w))
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     AnalysisException,
-                    'Only unbounded window frame is supported with Python UDFs.'):
+                    '.*Only unbounded window frame is supported with Python UDFs.*'):
                 df.withColumn('mean_v', mean_udf(df['v']).over(ow))
 
 

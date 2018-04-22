@@ -283,20 +283,21 @@ object PhysicalWindow {
     (WindowFunctionType, Seq[NamedExpression], Seq[Expression], Seq[SortOrder], LogicalPlan)
 
   def unapply(a: Any): Option[ReturnType] = a match {
-    case logical.Window(windowExpressions, partitionSpec, orderSpec, child) =>
+    case expr @ logical.Window(windowExpressions, partitionSpec, orderSpec, child) =>
+
+      if (windowExpressions.isEmpty) {
+        throw new AnalysisException(s"Window expression is empty in $expr")
+      }
 
       val windowFunctionType = windowExpressions.map(WindowFunctionType.functionType)
-        .reduceLeft ( (t1: Option[WindowFunctionType], t2: Option[WindowFunctionType]) =>
-          if (t1.isEmpty || t2.isEmpty) {
-            throw new AnalysisException(
-              s"Window function type is None in $windowExpressions.")
-          } else if (t1 != t2) {
+        .reduceLeft ( (t1: WindowFunctionType, t2: WindowFunctionType) =>
+          if (t1 != t2) {
             throw new AnalysisException(
               s"Found different window function type in $windowExpressions")
           } else {
             t1
           }
-        ).getOrElse(throw new AnalysisException("Window expressions are empty."))
+        )
 
       Some((windowFunctionType, windowExpressions, partitionSpec, orderSpec, child))
 

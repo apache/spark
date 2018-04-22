@@ -1890,8 +1890,7 @@ class Analyzer(
           case window: WindowExpression => window.windowSpec
         }.distinct
 
-        val windowFunctionType = WindowFunctionType.functionType(expr).getOrElse(
-          failAnalysis(s"$expr does not have any window functions."))
+        val windowFunctionType = WindowFunctionType.functionType(expr)
 
         // We do a final check and see if we only have a single Window Spec defined in an
         // expressions.
