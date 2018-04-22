@@ -3350,12 +3350,12 @@ object functions {
   def zip_with_index(e: Column): Column = withExpr { ZipWithIndex(e.expr, Literal.FalseLiteral) }
 
   /**
-    * Transforms the input array by encapsulating elements into pairs
-    * with indexes indicating the order.
-    *
-    * @group collection_funcs
-    * @since 2.4.0
-    */
+   * Transforms the input array by encapsulating elements into pairs
+   * with indexes indicating the order.
+   *
+   * @group collection_funcs
+   * @since 2.4.0
+   */
   def zip_with_index(e: Column, indexFirst: Boolean): Column = withExpr {
     ZipWithIndex(e.expr, Literal(indexFirst))
   }
