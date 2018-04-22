@@ -26,18 +26,29 @@ import org.apache.spark.annotation.DeveloperApi
  * This is sent to the driver periodically (on executor heartbeat), to provide
  * information about each executor's metrics.
  *
- * @param timestamp the time the metrics were collected
- * @param jvmUsedMemory the amount of JVM used memory for the executor
+ * @param timestamp the time the metrics were collected, or -1 for Spark history
+ *                  log events which are logged when a stage has completed
+ * @param jvmUsedHeapMemory the amount of JVM used heap memory for the executor
+ * @param jvmUsedNonHeapMemory the amount of JVM used non-heap memory for the executor
  * @param onHeapExecutionMemory the amount of on heap execution memory used
  * @param offHeapExecutionMemory the amount of off heap execution memory used
  * @param onHeapStorageMemory the amount of on heap storage memory used
  * @param offHeapStorageMemory the amount of off heap storage memory used
+ * @param onHeapUnifiedMemory the amount of on heap unified region memory used
+ * @param offHeapUnifiedMemory the amount of off heap unified region memory used
+ * @param directMemory the amount of direct memory used
+ * @param mappedMemory the amount of mapped memory used
  */
 @DeveloperApi
 class ExecutorMetrics private[spark] (
     val timestamp: Long,
-    val jvmUsedMemory: Long,
+    val jvmUsedHeapMemory: Long,
+    val jvmUsedNonHeapMemory: Long,
     val onHeapExecutionMemory: Long,
     val offHeapExecutionMemory: Long,
     val onHeapStorageMemory: Long,
-    val offHeapStorageMemory: Long) extends Serializable
+    val offHeapStorageMemory: Long,
+    val onHeapUnifiedMemory: Long,
+    val offHeapUnifiedMemory: Long,
+    val directMemory: Long,
+    val mappedMemory: Long) extends Serializable

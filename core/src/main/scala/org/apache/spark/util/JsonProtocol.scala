@@ -390,11 +390,16 @@ private[spark] object JsonProtocol {
    */
   def executorMetricsToJson(executorMetrics: ExecutorMetrics): JValue = {
     ("Timestamp" -> executorMetrics.timestamp) ~
-    ("JVM Used Memory" -> executorMetrics.jvmUsedMemory) ~
+    ("JVM Used Heap Memory" -> executorMetrics.jvmUsedHeapMemory) ~
+    ("JVM Used Nonheap Memory" -> executorMetrics.jvmUsedNonHeapMemory) ~
     ("Onheap Execution Memory" -> executorMetrics.onHeapExecutionMemory) ~
     ("Offheap Execution Memory" -> executorMetrics.offHeapExecutionMemory) ~
     ("Onheap Storage Memory" -> executorMetrics.onHeapStorageMemory) ~
-    ("Offheap Storage Memory" -> executorMetrics.offHeapStorageMemory)
+    ("Offheap Storage Memory" -> executorMetrics.offHeapStorageMemory) ~
+    ("Onheap Unified Memory" -> executorMetrics.onHeapUnifiedMemory) ~
+    ("Offheap Unified Memory" -> executorMetrics.offHeapUnifiedMemory) ~
+    ("Direct Memory" -> executorMetrics.directMemory) ~
+    ("Mapped Memory" -> executorMetrics.mappedMemory)
   }
 
   def taskEndReasonToJson(taskEndReason: TaskEndReason): JValue = {
@@ -609,13 +614,20 @@ private[spark] object JsonProtocol {
    */
   def executorMetricsFromJson(json: JValue): ExecutorMetrics = {
     val timeStamp = (json \ "Timestamp").extract[Long]
-    val jvmUsedMemory = (json \ "JVM Used Memory").extract[Long]
+    val jvmUsedHeapMemory = (json \ "JVM Used Heap Memory").extract[Long]
+    val jvmUsedNonHeapMemory = (json \ "JVM Used Nonheap Memory").extract[Long]
     val onHeapExecutionMemory = (json \ "Onheap Execution Memory").extract[Long]
     val offHeapExecutionMemory = (json \ "Offheap Execution Memory").extract[Long]
     val onHeapStorageMemory = (json \ "Onheap Storage Memory").extract[Long]
     val offHeapStorageMemory = (json \ "Offheap Storage Memory").extract[Long]
-    new ExecutorMetrics(timeStamp, jvmUsedMemory, onHeapExecutionMemory,
-      offHeapExecutionMemory, onHeapStorageMemory, offHeapStorageMemory)
+    val onHeapUnifiedMemory = (json \ "Onheap Unified Memory").extract[Long]
+    val offHeapUnifiedMemory = (json \ "Offheap Unified Memory").extract[Long]
+    val directMemory = (json \ "Direct Memory").extract[Long]
+    val mappedMemory = (json \ "Mapped Memory").extract[Long]
+    new ExecutorMetrics(timeStamp, jvmUsedHeapMemory, jvmUsedNonHeapMemory,
+      onHeapExecutionMemory, offHeapExecutionMemory, onHeapStorageMemory,
+      offHeapStorageMemory, onHeapUnifiedMemory, offHeapUnifiedMemory, directMemory,
+      mappedMemory)
   }
 
   def taskEndFromJson(json: JValue): SparkListenerTaskEnd = {
