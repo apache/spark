@@ -109,13 +109,16 @@ class MemoryMetrics private[spark](
     val totalOffHeapStorageMemory: Long)
 
 class PeakMemoryMetrics private[spark](
-    val jvmUsedMemory: Long,
+    val jvmUsedHeapMemory: Long,
+    val jvmUsedNonHeapMemory: Long,
     val onHeapExecutionMemory: Long,
     val offHeapExecutionMemory: Long,
     val onHeapStorageMemory: Long,
     val offHeapStorageMemory: Long,
     val onHeapUnifiedMemory: Long,
-    val offHeapUnifiedMemory: Long)
+    val offHeapUnifiedMemory: Long,
+    val directMemory: Long,
+    val mappedMemory: Long)
 
 class JobData private[spark](
     val jobId: Int,

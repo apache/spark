@@ -269,7 +269,7 @@ private class LiveExecutor(val executorId: String, _addTime: Long) extends LiveE
   def hasMemoryInfo: Boolean = totalOnHeap >= 0L
 
   // peak values for executor level metrics
-  var peakExecutorMetrics = new PeakExecutorMetrics
+  val peakExecutorMetrics = new PeakExecutorMetrics
 
   def hostname: String = if (host != null) host else hostPort.split(":")(0)
 

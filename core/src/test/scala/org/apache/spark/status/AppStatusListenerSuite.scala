@@ -22,18 +22,19 @@ import java.lang.{Integer => JInteger, Long => JLong}
 import java.util.{Arrays, Date, Properties}
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable.Map
 import scala.reflect.{classTag, ClassTag}
 
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster._
 import org.apache.spark.status.api.v1
+import org.apache.spark.status.api.v1.PeakMemoryMetrics
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
-import org.apache.spark.util.kvstore._
 
 class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -1208,6 +1209,75 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  test("executor metrics updates") {
+    val listener = new AppStatusListener(store, conf, true)
+
+    val driver = BlockManagerId(SparkContext.DRIVER_IDENTIFIER, "localhost", 42)
+
+    listener.onExecutorAdded(createExecutorAddedEvent(1))
+    listener.onExecutorAdded(createExecutorAddedEvent(2))
+    listener.onStageSubmitted(createStageSubmittedEvent(0))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
+      new ExecutorMetrics(10L, 4000L, 50L, 20L, 0L, 40L, 0L, 60L, 0L, 70L, 20L)))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
+      new ExecutorMetrics(10L, 1500L, 50L, 20L, 0L, 0L, 0L, 20L, 0L, 70L, 0L)))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
+      new ExecutorMetrics(15L, 4000L, 50L, 50L, 0L, 50L, 0L, 100L, 0L, 70L, 20L)))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
+      new ExecutorMetrics(15L, 2000L, 50L, 10L, 0L, 10L, 0L, 30L, 0L, 70L, 0L)))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
+      new ExecutorMetrics(20L, 2000L, 40L, 50L, 0L, 40L, 10L, 90L, 10L, 50L, 0L)))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
+      new ExecutorMetrics(20L, 3500L, 50L, 15L, 0L, 10L, 10L, 35L, 10L, 80L, 0L)))
+    listener.onStageSubmitted(createStageSubmittedEvent(1))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
+      new ExecutorMetrics(25L, 5000L, 30L, 50L, 20L, 30L, 10L, 80L, 30L, 50L, 0L)))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
+      new ExecutorMetrics(25L, 7000L, 80L, 50L, 20L, 0L, 10L, 50L, 30L, 10L, 40L)))
+    listener.onStageCompleted(createStageCompletedEvent(0))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
+      new ExecutorMetrics(30L, 6000L, 70L, 20L, 30L, 10L, 0L, 30L, 30L, 30L, 0L)))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
+      new ExecutorMetrics(30L, 5500L, 30L, 20L, 40L, 10L, 0L, 30L, 40L, 40L, 20L)))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
+      new ExecutorMetrics(35L, 7000L, 70L, 5L, 25L, 60L, 30L, 65L, 55L, 30L, 0L)))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
+      new ExecutorMetrics(35L, 5500L, 40L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 20L)))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(1,
+      new ExecutorMetrics(40L, 5500L, 70L, 15L, 20L, 55L, 20L, 70L, 40L, 20L, 0L)))
+    listener.onExecutorRemoved(createExecutorRemovedEvent(1))
+    listener.onExecutorMetricsUpdate(createExecutorMetricsUpdateEvent(2,
+      new ExecutorMetrics(40L, 4000L, 20L, 25L, 30L, 10L, 30L, 35L, 60L, 0L, 0L)))
+    listener.onStageCompleted(createStageCompletedEvent(1))
+
+    // expected peak values for each executor
+    val expectedValues = Map(
+      "1" -> new PeakMemoryMetrics(7000L, 70L, 50L, 30L, 60L, 30L, 100L, 55L, 70L, 20L),
+      "2" -> new PeakMemoryMetrics(7000L, 80L, 50L, 40L, 10L, 30L, 50L, 60L, 80L, 40L))
+
+    // check that the stored peak values match the expected values
+    for ((id, metrics) <- expectedValues) {
+      check[ExecutorSummaryWrapper](id) { exec =>
+        assert(exec.info.id === id)
+        exec.info.peakMemoryMetrics match {
+          case Some(actual) =>
+            assert(actual.jvmUsedHeapMemory == metrics.jvmUsedHeapMemory)
+            assert(actual.jvmUsedNonHeapMemory == metrics.jvmUsedNonHeapMemory)
+            assert(actual.onHeapExecutionMemory == metrics.onHeapExecutionMemory)
+            assert(actual.offHeapExecutionMemory == metrics.offHeapExecutionMemory)
+            assert(actual.onHeapStorageMemory == metrics.onHeapStorageMemory)
+            assert(actual.offHeapStorageMemory == metrics.offHeapStorageMemory)
+            assert(actual.onHeapUnifiedMemory == metrics.onHeapUnifiedMemory)
+            assert(actual.offHeapUnifiedMemory == metrics.offHeapUnifiedMemory)
+            assert(actual.directMemory == metrics.directMemory)
+            assert(actual.mappedMemory == metrics.mappedMemory)
+          case _ =>
+            assert(false)
+        }
+      }
+    }
+  }
+
   private def key(stage: StageInfo): Array[Int] = Array(stage.stageId, stage.attemptNumber)
 
   private def check[T: ClassTag](key: Any)(fn: T => Unit): Unit = {
@@ -1245,4 +1315,36 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
   }
 
+  /** Create a stage submitted event for the specified stage Id. */
+  private def createStageSubmittedEvent(stageId: Int) = {
+    SparkListenerStageSubmitted(new StageInfo(stageId, 0, stageId.toString, 0,
+      Seq.empty, Seq.empty, "details"))
+  }
+
+  /** Create a stage completed event for the specified stage Id. */
+  private def createStageCompletedEvent(stageId: Int) = {
+    SparkListenerStageCompleted(new StageInfo(stageId, 0, stageId.toString, 0,
+      Seq.empty, Seq.empty, "details"))
+  }
+
+  /** Create an executor added event for the specified executor Id. */
+  private def createExecutorAddedEvent(executorId: Int) = {
+    SparkListenerExecutorAdded(0L, executorId.toString, new ExecutorInfo("host1", 1, Map.empty))
+  }
+
+  /** Create an executor added event for the specified executor Id. */
+  private def createExecutorRemovedEvent(executorId: Int) = {
+    SparkListenerExecutorRemoved(0L, executorId.toString, "test")
+  }
+
+  /** Create an executor metrics update event, with the specified executor metrics values. */
+  private def createExecutorMetricsUpdateEvent(
+      executorId: Int,
+      executorMetrics: ExecutorMetrics): SparkListenerExecutorMetricsUpdate = {
+    val taskMetrics = TaskMetrics.empty
+    taskMetrics.incDiskBytesSpilled(111)
+    taskMetrics.incMemoryBytesSpilled(222)
+    val accum = Array((333L, 1, 1, taskMetrics.accumulators().map(AccumulatorSuite.makeInfo)))
+    SparkListenerExecutorMetricsUpdate(executorId.toString, accum, Some(executorMetrics))
+  }
 }

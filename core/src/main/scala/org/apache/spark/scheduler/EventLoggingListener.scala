@@ -94,8 +94,9 @@ private[spark] class EventLoggingListener(
   // Visible for tests only.
   private[scheduler] val logPath = getLogPath(logBaseDir, appId, appAttemptId, compressionCodecName)
 
-  // Peak metric values for each executor
-  private var peakExecutorMetrics = new mutable.HashMap[String, PeakExecutorMetrics]()
+  // map of live stages, to peak executor metrics for the stage
+  private val liveStageExecutorMetrics = mutable.HashMap[(Int, Int),
+    mutable.HashMap[String, PeakExecutorMetrics]]()
 
   /**
    * Creates the log file in the configured log directory.
@@ -162,7 +163,8 @@ private[spark] class EventLoggingListener(
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
     logEvent(event)
     // clear the peak metrics when a new stage starts
-    peakExecutorMetrics.values.foreach(_.reset())
+    liveStageExecutorMetrics.put((event.stageInfo.stageId, event.stageInfo.attemptNumber()),
+      new mutable.HashMap[String, PeakExecutorMetrics]())
   }
 
   override def onTaskStart(event: SparkListenerTaskStart): Unit = logEvent(event)
@@ -177,6 +179,27 @@ private[spark] class EventLoggingListener(
 
   // Events that trigger a flush
   override def onStageCompleted(event: SparkListenerStageCompleted): Unit = {
+    // log the peak executor metrics for the stage, for each executor
+    val accumUpdates = new ArrayBuffer[(Long, Int, Int, Seq[AccumulableInfo])]()
+    val executorMap = liveStageExecutorMetrics.remove(
+      (event.stageInfo.stageId, event.stageInfo.attemptNumber()))
+    executorMap.foreach {
+      executorEntry => {
+        for ((executorId, peakExecutorMetrics) <- executorEntry) {
+          val executorMetrics = new ExecutorMetrics(-1, peakExecutorMetrics.jvmUsedHeapMemory,
+            peakExecutorMetrics.jvmUsedNonHeapMemory, peakExecutorMetrics.onHeapExecutionMemory,
+            peakExecutorMetrics.offHeapExecutionMemory, peakExecutorMetrics.onHeapStorageMemory,
+            peakExecutorMetrics.offHeapStorageMemory, peakExecutorMetrics.onHeapUnifiedMemory,
+            peakExecutorMetrics.offHeapUnifiedMemory, peakExecutorMetrics.directMemory,
+            peakExecutorMetrics.mappedMemory)
+          val executorUpdate = new SparkListenerExecutorMetricsUpdate(
+            executorId, accumUpdates, Some(executorMetrics))
+          logEvent(executorUpdate)
+        }
+      }
+    }
+
+    // log stage completed event
     logEvent(event, flushLogger = true)
   }
 
@@ -205,12 +228,10 @@ private[spark] class EventLoggingListener(
   }
   override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
     logEvent(event, flushLogger = true)
-    peakExecutorMetrics.put(event.executorId, new PeakExecutorMetrics())
   }
 
   override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
     logEvent(event, flushLogger = true)
-    peakExecutorMetrics.remove(event.executorId)
   }
 
   override def onExecutorBlacklisted(event: SparkListenerExecutorBlacklisted): Unit = {
@@ -244,19 +265,13 @@ private[spark] class EventLoggingListener(
     }
   }
 
-  /**
-   * Log if there is a new peak value for one of the memory metrics for the given executor.
-   * Metrics are cleared out when a new stage is started in onStageSubmitted, so this will
-   * log new peak memory metric values per executor per stage.
-   */
   override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
-    var log: Boolean = false
+    // For the active stages, record any new peak values for the memory metrics for the executor
     event.executorUpdates.foreach { executorUpdates =>
-      val peakMetrics = peakExecutorMetrics.getOrElseUpdate(event.execId, new PeakExecutorMetrics())
-      if (peakMetrics.compareAndUpdate(executorUpdates)) {
-        val accumUpdates = new ArrayBuffer[(Long, Int, Int, Seq[AccumulableInfo])]()
-        logEvent(new SparkListenerExecutorMetricsUpdate(event.execId, accumUpdates,
-          event.executorUpdates), flushLogger = true)
+      liveStageExecutorMetrics.values.foreach { peakExecutorMetrics =>
+        val peakMetrics = peakExecutorMetrics.getOrElseUpdate(
+          event.execId, new PeakExecutorMetrics())
+        peakMetrics.compareAndUpdate(executorUpdates)
       }
     }
   }
