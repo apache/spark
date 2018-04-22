@@ -30,8 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AnalysisBarrier, InsertIntoT
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
-import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2, WriteToDataSourceV2}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2._
 import org.apache.spark.sql.types.StructType
@@ -241,39 +240,47 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
       val ds = cls.newInstance()
-      ds match {
-        case ws: WriteSupport =>
-          val options = new DataSourceOptions((extraOptions ++
-            DataSourceV2Utils.extractSessionConfigs(
-              ds = ds.asInstanceOf[DataSourceV2],
-              conf = df.sparkSession.sessionState.conf)).asJava)
-          // Using a timestamp and a random UUID to distinguish different writing jobs. This is good
-          // enough as there won't be tons of writing jobs created at the same second.
-          val jobId = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
-            .format(new Date()) + "-" + UUID.randomUUID()
-          val writer = ws.createWriter(jobId, df.logicalPlan.schema, mode, options)
-          if (writer.isPresent) {
-            runCommand(df.sparkSession, "save") {
-              WriteToDataSourceV2(writer.get(), df.logicalPlan)
-            }
-          }
+      val (needToFallBackFileDataSource, fallBackFileFormat) = ds match {
+        case f: FileDataSourceV2 =>
+          val disabledV2Readers =
+            df.sparkSession.sessionState.conf.disabledV2FileDataSourceWriter.split(",")
+          (disabledV2Readers.contains(f.shortName), f.fallBackFileFormat)
+        case _ => (false, None)
+      }
 
-        // Streaming also uses the data source V2 API. So it may be that the data source implements
-        // v2, but has no v2 implementation for batch writes. In that case, we fall back to saving
-        // as though it's a V1 source.
-        case _ => saveToV1Source()
+      if (ds.isInstanceOf[WriteSupport] && !needToFallBackFileDataSource) {
+        val options = new DataSourceOptions((extraOptions ++
+          DataSourceV2Utils.extractSessionConfigs(
+            ds = ds.asInstanceOf[DataSourceV2],
+            conf = df.sparkSession.sessionState.conf)).asJava)
+        // Using a timestamp and a random UUID to distinguish different writing jobs. This is good
+        // enough as there won't be tons of writing jobs created at the same second.
+        val jobId = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
+          .format(new Date()) + "-" + UUID.randomUUID()
+        val writer = ds.asInstanceOf[WriteSupport]
+          .createWriter(jobId, df.logicalPlan.schema, mode, options)
+        if (writer.isPresent) {
+          runCommand(df.sparkSession, "save") {
+            WriteToDataSourceV2(writer.get(), df.logicalPlan)
+          }
+        }
+      } else {
+        // In the following cases, we fall back to saving with V1:
+        // 1. The data source implements v2, but has no v2 implementation for write path.
+        // 2. The v2 writer of the data source is configured as disabled.
+        saveToV1Source(fallBackFileFormat)
       }
     } else {
-      saveToV1Source()
+      saveToV1Source(None)
     }
   }
 
-  private def saveToV1Source(): Unit = {
+  private def saveToV1Source(cls: Option[Class[_]]): Unit = {
     // Code path for data source v1.
     runCommand(df.sparkSession, "save") {
       DataSource(
         sparkSession = df.sparkSession,
-        className = source,
+        className = cls.map(_.getCanonicalName).getOrElse(source),
         partitionColumns = partitioningColumns.getOrElse(Nil),
         options = extraOptions.toMap).planForWriting(mode, AnalysisBarrier(df.logicalPlan))
     }
