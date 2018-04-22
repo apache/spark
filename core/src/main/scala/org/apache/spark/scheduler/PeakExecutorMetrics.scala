@@ -21,17 +21,40 @@ import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.status.api.v1.PeakMemoryMetrics
 
 /**
- * Records the peak values for executor level metrics. If jvmUsedMemory is -1, then no values have
- * been recorded yet.
+ * Records the peak values for executor level metrics. If jvmUsedHeapMemory is -1, then no
+ * values have been recorded yet.
  */
 private[spark] class PeakExecutorMetrics {
-  private var jvmUsedMemory = -1L;
-  private var onHeapExecutionMemory = 0L
-  private var offHeapExecutionMemory = 0L
-  private var onHeapStorageMemory = 0L
-  private var offHeapStorageMemory = 0L
-  private var onHeapUnifiedMemory = 0L
-  private var offHeapUnifiedMemory = 0L
+  private var _jvmUsedHeapMemory = -1L;
+  private var _jvmUsedNonHeapMemory = 0L;
+  private var _onHeapExecutionMemory = 0L
+  private var _offHeapExecutionMemory = 0L
+  private var _onHeapStorageMemory = 0L
+  private var _offHeapStorageMemory = 0L
+  private var _onHeapUnifiedMemory = 0L
+  private var _offHeapUnifiedMemory = 0L
+  private var _directMemory = 0L
+  private var _mappedMemory = 0L
+
+  def jvmUsedHeapMemory: Long = _jvmUsedHeapMemory
+
+  def jvmUsedNonHeapMemory: Long = _jvmUsedNonHeapMemory
+
+  def onHeapExecutionMemory: Long = _onHeapExecutionMemory
+
+  def offHeapExecutionMemory: Long = _offHeapExecutionMemory
+
+  def onHeapStorageMemory: Long = _onHeapStorageMemory
+
+  def offHeapStorageMemory: Long = _offHeapStorageMemory
+
+  def onHeapUnifiedMemory: Long = _onHeapUnifiedMemory
+
+  def offHeapUnifiedMemory: Long = _offHeapUnifiedMemory
+
+  def directMemory: Long = _directMemory
+
+  def mappedMemory: Long = _mappedMemory
 
   /**
    * Compare the specified memory values with the saved peak executor memory
@@ -43,36 +66,44 @@ private[spark] class PeakExecutorMetrics {
   def compareAndUpdate(executorMetrics: ExecutorMetrics): Boolean = {
     var updated: Boolean = false
 
-    if (executorMetrics.jvmUsedMemory > jvmUsedMemory) {
-      jvmUsedMemory = executorMetrics.jvmUsedMemory
+    if (executorMetrics.jvmUsedHeapMemory > _jvmUsedHeapMemory) {
+      _jvmUsedHeapMemory = executorMetrics.jvmUsedHeapMemory
       updated = true
     }
-    if (executorMetrics.onHeapExecutionMemory > onHeapExecutionMemory) {
-      onHeapExecutionMemory = executorMetrics.onHeapExecutionMemory
+    if (executorMetrics.jvmUsedNonHeapMemory > _jvmUsedNonHeapMemory) {
+      _jvmUsedNonHeapMemory = executorMetrics.jvmUsedNonHeapMemory
       updated = true
     }
-    if (executorMetrics.offHeapExecutionMemory > offHeapExecutionMemory) {
-      offHeapExecutionMemory = executorMetrics.offHeapExecutionMemory
+    if (executorMetrics.onHeapExecutionMemory > _onHeapExecutionMemory) {
+      _onHeapExecutionMemory = executorMetrics.onHeapExecutionMemory
       updated = true
     }
-    if (executorMetrics.onHeapStorageMemory > onHeapStorageMemory) {
-      onHeapStorageMemory = executorMetrics.onHeapStorageMemory
+    if (executorMetrics.offHeapExecutionMemory > _offHeapExecutionMemory) {
+      _offHeapExecutionMemory = executorMetrics.offHeapExecutionMemory
       updated = true
     }
-    if (executorMetrics.offHeapStorageMemory > offHeapStorageMemory) {
-      offHeapStorageMemory = executorMetrics.offHeapStorageMemory
+    if (executorMetrics.onHeapStorageMemory > _onHeapStorageMemory) {
+      _onHeapStorageMemory = executorMetrics.onHeapStorageMemory
       updated = true
     }
-    val newOnHeapUnifiedMemory = (executorMetrics.onHeapExecutionMemory +
-      executorMetrics.onHeapStorageMemory)
-    if (newOnHeapUnifiedMemory > onHeapUnifiedMemory) {
-      onHeapUnifiedMemory = newOnHeapUnifiedMemory
+    if (executorMetrics.offHeapStorageMemory > _offHeapStorageMemory) {
+      _offHeapStorageMemory = executorMetrics.offHeapStorageMemory
       updated = true
     }
-    val newOffHeapUnifiedMemory = (executorMetrics.offHeapExecutionMemory +
-      executorMetrics.offHeapStorageMemory)
-    if ( newOffHeapUnifiedMemory > offHeapUnifiedMemory) {
-      offHeapUnifiedMemory = newOffHeapUnifiedMemory
+    if (executorMetrics.onHeapUnifiedMemory > _onHeapUnifiedMemory) {
+      _onHeapUnifiedMemory = executorMetrics.onHeapUnifiedMemory
+      updated = true
+    }
+    if (executorMetrics.offHeapUnifiedMemory > _offHeapUnifiedMemory) {
+      _offHeapUnifiedMemory = executorMetrics.offHeapUnifiedMemory
+      updated = true
+    }
+    if (executorMetrics.directMemory > _directMemory) {
+      _directMemory = executorMetrics.directMemory
+      updated = true
+    }
+    if (executorMetrics.mappedMemory > _mappedMemory) {
+      _mappedMemory = executorMetrics.mappedMemory
       updated = true
     }
 
@@ -84,23 +115,13 @@ private[spark] class PeakExecutorMetrics {
    *         values set.
    */
   def getPeakMemoryMetrics: Option[PeakMemoryMetrics] = {
-    if (jvmUsedMemory < 0) {
+    if (_jvmUsedHeapMemory < 0) {
       None
     } else {
-      Some(new PeakMemoryMetrics(jvmUsedMemory, onHeapExecutionMemory,
-        offHeapExecutionMemory, onHeapStorageMemory, offHeapStorageMemory,
-        onHeapUnifiedMemory, offHeapUnifiedMemory))
+      Some(new PeakMemoryMetrics(_jvmUsedHeapMemory, _jvmUsedNonHeapMemory,
+        _onHeapExecutionMemory, _offHeapExecutionMemory, _onHeapStorageMemory,
+        _offHeapStorageMemory, _onHeapUnifiedMemory, _offHeapUnifiedMemory,
+        _directMemory, _mappedMemory))
     }
-  }
-
-  /** Clears/resets the saved peak values. */
-  def reset(): Unit = {
-    jvmUsedMemory = -1L;
-    onHeapExecutionMemory = 0L
-    offHeapExecutionMemory = 0L
-    onHeapStorageMemory = 0L
-    offHeapStorageMemory = 0L
-    onHeapUnifiedMemory = 0L
-    offHeapUnifiedMemory = 0L
   }
 }
