@@ -108,6 +108,7 @@ private[spark] abstract class RestSubmissionServer(
         resolvedConnectionFactories: _*)
     connector.setHost(host)
     connector.setPort(startPort)
+    connector.setReuseAddress(!Utils.isWindows)
     server.addConnector(connector)
 
     val mainHandler = new ServletContextHandler
