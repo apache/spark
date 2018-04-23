@@ -111,18 +111,14 @@ object TypeCoercion {
         val dataType = findTightestCommonType(f1.dataType, f2.dataType).get
         StructField(f1.name, dataType, nullable = f1.nullable || f2.nullable)
       }))
-    case (a1 @ ArrayType(et1, containsNull1), a2 @ ArrayType(et2, containsNull2))
+    case (a1 @ ArrayType(et1, hasNull1), a2 @ ArrayType(et2, hasNull2))
       if a1.sameType(a2) =>
-      findTightestCommonType(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
-    case (m1 @ MapType(keyType1, valueType1, n1), m2 @ MapType(keyType2, valueType2, n2))
+      findTightestCommonType(et1, et2).map(ArrayType(_, hasNull1 || hasNull2))
+    case (m1 @ MapType(kt1, vt1, hasNull1), m2 @ MapType(kt2, vt2, hasNull2))
       if m1.sameType(m2) =>
-      val keyType = findTightestCommonType(keyType1, keyType2)
-      val valueType = findTightestCommonType(valueType1, valueType2)
-      if(keyType.isEmpty || valueType.isEmpty) {
-        None
-      } else {
-        Some(MapType(keyType.get, valueType.get, n1 || n2))
-      }
+      val keyType = findTightestCommonType(kt1, kt2)
+      val valueType = findTightestCommonType(vt1, vt2)
+      Some(MapType(keyType.get, valueType.get, hasNull1 || hasNull2))
 
     case _ => None
   }
