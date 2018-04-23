@@ -111,6 +111,18 @@ object TypeCoercion {
         val dataType = findTightestCommonType(f1.dataType, f2.dataType).get
         StructField(f1.name, dataType, nullable = f1.nullable || f2.nullable)
       }))
+    case (a1 @ ArrayType(et1, containsNull1), a2 @ ArrayType(et2, containsNull2))
+      if a1.sameType(a2) =>
+      findTightestCommonType(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
+    case (m1 @ MapType(keyType1, valueType1, n1), m2 @ MapType(keyType2, valueType2, n2))
+      if m1.sameType(m2) =>
+      val keyType = findTightestCommonType(keyType1, keyType2)
+      val valueType = findTightestCommonType(valueType1, valueType2)
+      if(keyType.isEmpty || valueType.isEmpty) {
+        None
+      } else {
+        Some(MapType(keyType.get, valueType.get, n1 || n2))
+      }
 
     case _ => None
   }
@@ -171,15 +183,6 @@ object TypeCoercion {
       .orElse((t1, t2) match {
         case (ArrayType(et1, containsNull1), ArrayType(et2, containsNull2)) =>
           findWiderTypeForTwo(et1, et2).map(ArrayType(_, containsNull1 || containsNull2))
-        case (MapType(keyType1, valueType1, n1), MapType(keyType2, valueType2, n2))
-          if keyType1.sameType(keyType2) && valueType1.sameType(valueType2) =>
-          val keyType = findWiderTypeForTwo(keyType1, keyType2)
-          val valueType = findWiderTypeForTwo(valueType1, valueType2)
-          if(keyType.isEmpty || valueType.isEmpty) {
-            None
-          } else {
-            Some(MapType(keyType.get, valueType.get, n1 || n2))
-          }
         case _ => None
       })
   }
