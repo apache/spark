@@ -161,11 +161,11 @@ object MultiLineJsonDataSource extends JsonDataSource {
       parsedOptions: JSONOptions): StructType = {
     val json: RDD[PortableDataStream] = createBaseRdd(sparkSession, inputPaths)
     val sampled: RDD[PortableDataStream] = JsonUtils.sample(json, parsedOptions)
+    val parser = parsedOptions.encoding
+      .map(enc => createParser(enc, _: JsonFactory, _: PortableDataStream))
+      .getOrElse(createParser(_: JsonFactory, _: PortableDataStream))
 
-    JsonInferSchema.infer[PortableDataStream](
-      sampled,
-      parsedOptions,
-      createParser(_, _, parsedOptions.encoding))
+    JsonInferSchema.infer[PortableDataStream](sampled, parsedOptions, parser)
   }
 
   private def createBaseRdd(
@@ -187,15 +187,18 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .values
   }
 
-  private def createParser(
-      jsonFactory: JsonFactory,
-      record: PortableDataStream,
-      encoding: Option[String]): JsonParser = {
-    val path = new Path(record.getPath())
-    val is = CodecStreams.createInputStreamWithCloseResource(record.getConfiguration, path)
+  private def dataToInputStream(dataStream: PortableDataStream): InputStream = {
+    val path = new Path(dataStream.getPath())
+    CodecStreams.createInputStreamWithCloseResource(dataStream.getConfiguration, path)
+  }
 
-    encoding.map(enc => CreateJacksonParser.inputStream(enc, jsonFactory, is))
-      .getOrElse(CreateJacksonParser.inputStream(jsonFactory, is))
+  private def createParser(jsonFactory: JsonFactory, stream: PortableDataStream): JsonParser = {
+    CreateJacksonParser.inputStream(jsonFactory, dataToInputStream(stream))
+  }
+
+  private def createParser(enc: String, jsonFactory: JsonFactory,
+      stream: PortableDataStream): JsonParser = {
+    CreateJacksonParser.inputStream(enc, jsonFactory, dataToInputStream(stream))
   }
 
   override def readFile(
