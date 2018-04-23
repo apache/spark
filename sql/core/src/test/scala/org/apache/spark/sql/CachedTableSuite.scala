@@ -79,7 +79,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   private def getNumInMemoryTablesRecursively(plan: SparkPlan): Int = {
     plan.collect {
       case InMemoryTableScanExec(_, _, relation) =>
-        getNumInMemoryTablesRecursively(relation.child) + 1
+        getNumInMemoryTablesRecursively(relation.cachedPlan) + 1
     }.sum
   }
 
@@ -201,7 +201,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     spark.catalog.cacheTable("testData")
     assertResult(0, "Double InMemoryRelations found, cacheTable() is not idempotent") {
       spark.table("testData").queryExecution.withCachedData.collect {
-        case r: InMemoryRelation if r.child.isInstanceOf[InMemoryTableScanExec] => r
+        case r: InMemoryRelation if r.cachedPlan.isInstanceOf[InMemoryTableScanExec] => r
       }.size
     }
 

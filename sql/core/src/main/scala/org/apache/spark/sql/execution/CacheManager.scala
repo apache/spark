@@ -145,7 +145,7 @@ class CacheManager extends Logging {
         val plan = spark.sessionState.executePlan(cd.plan).executedPlan
         val newCache = InMemoryRelation(
           cacheBuilder = cd.cachedRepresentation
-            .cacheBuilder.copy(child = plan)(_cachedColumnBuffers = null),
+            .cacheBuilder.copy(cachedPlan = plan)(_cachedColumnBuffers = null),
           logicalPlan = cd.plan)
         needToRecache += cd.copy(cachedRepresentation = newCache)
       }

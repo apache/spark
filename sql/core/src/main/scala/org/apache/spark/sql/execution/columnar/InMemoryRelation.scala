@@ -46,11 +46,11 @@ case class CachedRDDBuilder(
     useCompression: Boolean,
     batchSize: Int,
     storageLevel: StorageLevel,
-    @transient child: SparkPlan,
+    @transient cachedPlan: SparkPlan,
     tableName: Option[String])(
     @transient private[sql] var _cachedColumnBuffers: RDD[CachedBatch] = null) {
 
-  val sizeInBytesStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator
+  val sizeInBytesStats: LongAccumulator = cachedPlan.sqlContext.sparkContext.longAccumulator
 
   def cachedColumnBuffers: RDD[CachedBatch] = {
     if (_cachedColumnBuffers == null) {
@@ -75,8 +75,8 @@ case class CachedRDDBuilder(
   }
 
   private def buildBuffers(): RDD[CachedBatch] = {
-    val output = child.output
-    val cached = child.execute().mapPartitionsInternal { rowIterator =>
+    val output = cachedPlan.output
+    val cached = cachedPlan.execute().mapPartitionsInternal { rowIterator =>
       new Iterator[CachedBatch] {
         def next(): CachedBatch = {
           val columnBuilders = output.map { attribute =>
@@ -124,7 +124,7 @@ case class CachedRDDBuilder(
 
     cached.setName(
       tableName.map(n => s"In-memory table $n")
-        .getOrElse(StringUtils.abbreviate(child.toString, 1024)))
+        .getOrElse(StringUtils.abbreviate(cachedPlan.toString, 1024)))
     cached
   }
 }
@@ -144,7 +144,7 @@ object InMemoryRelation {
   }
 
   def apply(cacheBuilder: CachedRDDBuilder, logicalPlan: LogicalPlan): InMemoryRelation = {
-    new InMemoryRelation(cacheBuilder.child.output, cacheBuilder)(
+    new InMemoryRelation(cacheBuilder.cachedPlan.output, cacheBuilder)(
       statsOfPlanToCache = logicalPlan.stats, outputOrdering = logicalPlan.outputOrdering)
   }
 }
@@ -156,10 +156,10 @@ case class InMemoryRelation(
     override val outputOrdering: Seq[SortOrder])
   extends logical.LeafNode with MultiInstanceRelation {
 
-  override protected def innerChildren: Seq[SparkPlan] = Seq(child)
+  override protected def innerChildren: Seq[SparkPlan] = Seq(cachedPlan)
 
   override def doCanonicalize(): logical.LogicalPlan =
-    copy(output = output.map(QueryPlan.normalizeExprId(_, child.output)),
+    copy(output = output.map(QueryPlan.normalizeExprId(_, cachedPlan.output)),
       cacheBuilder)(
       statsOfPlanToCache,
       outputOrdering)
@@ -168,7 +168,7 @@ case class InMemoryRelation(
 
   @transient val partitionStatistics = new PartitionStatistics(output)
 
-  val child: SparkPlan = cacheBuilder.child
+  val cachedPlan: SparkPlan = cacheBuilder.cachedPlan
 
   override def computeStats(): Statistics = {
     if (cacheBuilder.sizeInBytesStats.value == 0L) {
