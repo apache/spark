@@ -782,8 +782,12 @@ object GeneralizedLinearRegression extends DefaultParamsReadable[GeneralizedLine
 
     override def variance(mu: Double): Double = mu
 
+    private def ylogy(y: Double, mu: Double): Double = {
+      if (y == 0) 0.0 else y * math.log(y / mu)
+    }
+
     override def deviance(y: Double, mu: Double, weight: Double): Double = {
-      2.0 * weight * (y * math.log(y / mu) - (y - mu))
+      2.0 * weight * (ylogy(y, mu) - (y - mu))
     }
 
     override def aic(

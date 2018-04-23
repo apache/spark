@@ -495,8 +495,8 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
        [1] 1.8121235  -0.1747493  -0.5815417
      */
     val expected = Seq(
-      Vectors.dense(0.0, -0.0457441, -0.6833928),
-      Vectors.dense(1.8121235, -0.1747493, -0.5815417))
+      Vectors.dense(0.0, -0.0457441, -0.6833928, 3.8093),
+      Vectors.dense(1.8121235, -0.1747493, -0.5815417, 3.7006))
 
     import GeneralizedLinearRegression._
 
@@ -507,7 +507,8 @@ class GeneralizedLinearRegressionSuite extends MLTest with DefaultReadWriteTest 
       val trainer = new GeneralizedLinearRegression().setFamily("poisson").setLink(link)
         .setFitIntercept(fitIntercept).setLinkPredictionCol("linkPrediction")
       val model = trainer.fit(dataset)
-      val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1))
+      val actual = Vectors.dense(model.intercept, model.coefficients(0), model.coefficients(1),
+        model.summary.deviance)
       assert(actual ~= expected(idx) absTol 1e-4, "Model mismatch: GLM with poisson family, " +
         s"$link link and fitIntercept = $fitIntercept (with zero values).")
       idx += 1
