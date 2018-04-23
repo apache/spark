@@ -28,6 +28,8 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanExec
+import org.apache.spark.sql.sources.v2.reader.streaming.MicroBatchReader
 import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.streaming.StreamingQueryListener.QueryProgressEvent
 import org.apache.spark.util.Clock
@@ -207,51 +209,7 @@ trait ProgressReporter extends Logging {
       return ExecutionStats(Map.empty, stateOperators, watermarkTimestamp)
     }
 
-    // We want to associate execution plan leaves to sources that generate them, so that we match
-    // the their metrics (e.g. numOutputRows) to the sources. To do this we do the following.
-    // Consider the translation from the streaming logical plan to the final executed plan.
-    //
-    //  streaming logical plan (with sources) <==> trigger's logical plan <==> executed plan
-    //
-    // 1. We keep track of streaming sources associated with each leaf in the trigger's logical plan
-    //    - Each logical plan leaf will be associated with a single streaming source.
-    //    - There can be multiple logical plan leaves associated with a streaming source.
-    //    - There can be leaves not associated with any streaming source, because they were
-    //      generated from a batch source (e.g. stream-batch joins)
-    //
-    // 2. Assuming that the executed plan has same number of leaves in the same order as that of
-    //    the trigger logical plan, we associate executed plan leaves with corresponding
-    //    streaming sources.
-    //
-    // 3. For each source, we sum the metrics of the associated execution plan leaves.
-    //
-    val logicalPlanLeafToSource = newData.flatMap { case (source, logicalPlan) =>
-      logicalPlan.collectLeaves().map { leaf => leaf -> source }
-    }
-    val allLogicalPlanLeaves = lastExecution.logical.collectLeaves() // includes non-streaming
-    val allExecPlanLeaves = lastExecution.executedPlan.collectLeaves()
-    val numInputRows: Map[BaseStreamingSource, Long] =
-      if (allLogicalPlanLeaves.size == allExecPlanLeaves.size) {
-        val execLeafToSource = allLogicalPlanLeaves.zip(allExecPlanLeaves).flatMap {
-          case (lp, ep) => logicalPlanLeafToSource.get(lp).map { source => ep -> source }
-        }
-        val sourceToNumInputRows = execLeafToSource.map { case (execLeaf, source) =>
-          val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
-          source -> numRows
-        }
-        sourceToNumInputRows.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
-      } else {
-        if (!metricWarningLogged) {
-          def toString[T](seq: Seq[T]): String = s"(size = ${seq.size}), ${seq.mkString(", ")}"
-          logWarning(
-            "Could not report metrics as number leaves in trigger logical plan did not match that" +
-                s" of the execution plan:\n" +
-                s"logical plan leaves: ${toString(allLogicalPlanLeaves)}\n" +
-                s"execution plan leaves: ${toString(allExecPlanLeaves)}\n")
-          metricWarningLogged = true
-        }
-        Map.empty
-      }
+    val numInputRows = extractSourceToNumInputRows()
 
     val eventTimeStats = lastExecution.executedPlan.collect {
       case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
@@ -263,6 +221,80 @@ trait ProgressReporter extends Logging {
     }.headOption.getOrElse(Map.empty) ++ watermarkTimestamp
 
     ExecutionStats(numInputRows, stateOperators, eventTimeStats)
+  }
+
+  /** Extract number of input sources for each streaming source in plan */
+  private def extractSourceToNumInputRows(): Map[BaseStreamingSource, Long] = {
+
+    def sumRows(tuples: Seq[(BaseStreamingSource, Long)]): Map[BaseStreamingSource, Long] = {
+      tuples.groupBy(_._1).mapValues(_.map(_._2).sum) // sum up rows for each source
+    }
+
+    val onlyDataSourceV2Sources = {
+      // Check whether the streaming query's logical plan has only V2 data sources
+      val allStreamingLeaves =
+        logicalPlan.collect { case s: StreamingExecutionRelation => s }
+      allStreamingLeaves.forall { _.source.isInstanceOf[MicroBatchReader] }
+    }
+
+    if (onlyDataSourceV2Sources) {
+      val streamingExecLeaves = lastExecution.executedPlan.collect {
+        case s: DataSourceV2ScanExec if (s.reader.isInstanceOf[MicroBatchReader]) => s
+      }
+      val sourceToInputRowsTuples = streamingExecLeaves.map { execLeaf =>
+        val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
+        execLeaf.reader.asInstanceOf[MicroBatchReader] -> numRows
+      }
+      logDebug("Source -> # input rows\n" + sourceToInputRowsTuples.mkString("\n"))
+      sumRows(sourceToInputRowsTuples)
+    } else {
+
+      // We want to associate execution plan leaves to sources that generate them, so that we match
+      // the their metrics (e.g. numOutputRows) to the sources. To do this we do the following.
+      // Consider the translation from the streaming logical plan to the final executed plan.
+      //
+      // streaming logical plan (with sources) <==> trigger's logical plan <==> executed plan
+      //
+      // 1. We keep track of streaming sources associated with each leaf in trigger's logical plan
+      //  - Each logical plan leaf will be associated with a single streaming source.
+      //  - There can be multiple logical plan leaves associated with a streaming source.
+      //  - There can be leaves not associated with any streaming source, because they were
+      //      generated from a batch source (e.g. stream-batch joins)
+      //
+      // 2. Assuming that the executed plan has same number of leaves in the same order as that of
+      //    the trigger logical plan, we associate executed plan leaves with corresponding
+      //    streaming sources.
+      //
+      // 3. For each source, we sum the metrics of the associated execution plan leaves.
+      //
+      val logicalPlanLeafToSource = newData.flatMap { case (source, logicalPlan) =>
+        logicalPlan.collectLeaves().map { leaf => leaf -> source }
+      }
+      val allLogicalPlanLeaves = lastExecution.logical.collectLeaves() // includes non-streaming
+      val allExecPlanLeaves = lastExecution.executedPlan.collectLeaves()
+      if (allLogicalPlanLeaves.size == allExecPlanLeaves.size) {
+        val execLeafToSource = allLogicalPlanLeaves.zip(allExecPlanLeaves).flatMap {
+          case (lp, ep) => logicalPlanLeafToSource.get(lp).map { source => ep -> source }
+        }
+        val sourceToInputRowsTuples = execLeafToSource.map { case (execLeaf, source) =>
+          val numRows = execLeaf.metrics.get("numOutputRows").map(_.value).getOrElse(0L)
+          source -> numRows
+        }
+        sumRows(sourceToInputRowsTuples)
+      } else {
+        if (!metricWarningLogged) {
+          def toString[T](seq: Seq[T]): String = s"(size = ${seq.size}), ${seq.mkString(", ")}"
+
+          logWarning(
+            "Could not report metrics as number leaves in trigger logical plan did not match that" +
+              s" of the execution plan:\n" +
+              s"logical plan leaves: ${toString(allLogicalPlanLeaves)}\n" +
+              s"execution plan leaves: ${toString(allExecPlanLeaves)}\n")
+          metricWarningLogged = true
+        }
+        Map.empty
+      }
+    }
   }
 
   /** Records the duration of running `body` for the next query progress update. */

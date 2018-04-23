@@ -466,7 +466,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  test("input row calculation with mixed batch and streaming sources") {
+  test("input row calculation with mixed batch and streaming V1 sources") {
     val streamingTriggerDF = spark.createDataset(1 to 10).toDF
     val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("value")
     val staticInputDF = spark.createDataFrame(Seq(1 -> "1", 2 -> "2")).toDF("value", "anotherValue")
@@ -479,7 +479,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     assert(progress.sources(0).numInputRows === 10)
   }
 
-  test("input row calculation with trigger input DF having multiple leaves") {
+  test("input row calculation with trigger input DF having multiple leaves in V1 source") {
     val streamingTriggerDF =
       spark.createDataset(1 to 5).toDF.union(spark.createDataset(6 to 10).toDF)
     require(streamingTriggerDF.logicalPlan.collectLeaves().size > 1)
@@ -490,6 +490,77 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     assert(progress.numInputRows === 10)
     assert(progress.sources.size === 1)
     assert(progress.sources(0).numInputRows === 10)
+  }
+
+
+  test("input row calculation with trigger having data for one of two V2 sources") {
+    val streamInput1 = MemoryStream[Int]
+    val streamInput2 = MemoryStream[Int]
+
+    testStream(streamInput1.toDF().union(streamInput2.toDF()), useV2Sink = true)(
+      AddData(streamInput1, 1, 2, 3),
+      CheckAnswer(1, 2, 3),
+      AssertOnQuery { q =>
+        val lastProgress = getLastProgressWithData(q)
+        assert(lastProgress.nonEmpty)
+        assert(lastProgress.get.numInputRows == 3)
+        assert(lastProgress.get.sources.length == 2)
+        assert(lastProgress.get.sources(0).numInputRows == 3)
+        assert(lastProgress.get.sources(1).numInputRows == 0)
+        true
+      }
+    )
+  }
+
+  test("input row calculation with mixed batch and streaming V2 sources") {
+
+    val streamInput = MemoryStream[Int]
+    val staticInputDF = spark.createDataFrame(Seq(1 -> "1", 2 -> "2")).toDF("value", "anotherValue")
+
+    testStream(streamInput.toDF().join(staticInputDF, "value"), useV2Sink = true)(
+      AddData(streamInput, 1, 2, 3),
+      AssertOnQuery { q =>
+        q.processAllAvailable()
+
+        // The number of leaves in the trigger's logical plan should be same as the executed plan.
+        require(
+          q.lastExecution.logical.collectLeaves().length ==
+            q.lastExecution.executedPlan.collectLeaves().length)
+
+        val lastProgress = getLastProgressWithData(q)
+        assert(lastProgress.nonEmpty)
+        assert(lastProgress.get.numInputRows == 3)
+        assert(lastProgress.get.sources.length == 1)
+        assert(lastProgress.get.sources(0).numInputRows == 3)
+        true
+      }
+    )
+
+    val streamInput2 = MemoryStream[Int]
+    val staticInputDF2 = staticInputDF.union(staticInputDF).cache()
+
+    testStream(streamInput2.toDF().join(staticInputDF2, "value"), useV2Sink = true)(
+      AddData(streamInput2, 1, 2, 3),
+      AssertOnQuery { q =>
+        q.processAllAvailable()
+        // The number of leaves in the trigger's logical plan should be different from
+        // the executed plan. The static input will have two leaves in the logical plan
+        // (due to the union), but will be converted to a single leaf in the executed plan
+        // (due to the caching, the cached subplan is replaced by a single InMemoryTableScanExec).
+        require(
+          q.lastExecution.logical.collectLeaves().length !=
+            q.lastExecution.executedPlan.collectLeaves().length)
+
+        // Despite the mismatch in total number of leaves in the logical and executed plans,
+        // we should be able to attribute streaming input metrics to the streaming sources.
+        val lastProgress = getLastProgressWithData(q)
+        assert(lastProgress.nonEmpty)
+        assert(lastProgress.get.numInputRows == 3)
+        assert(lastProgress.get.sources.length == 1)
+        assert(lastProgress.get.sources(0).numInputRows == 3)
+        true
+      }
+    )
   }
 
   testQuietly("StreamExecution metadata garbage collection") {
@@ -732,6 +803,11 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       spark.streams.active.map(_.stop())
     }
   }
+
+  def getLastProgressWithData(q: StreamingQuery): Option[StreamingQueryProgress] = {
+    q.recentProgress.filter(_.numInputRows > 0).lastOption
+  }
+
 
   /**
    * A [[StreamAction]] to test the behavior of `StreamingQuery.awaitTermination()`.
