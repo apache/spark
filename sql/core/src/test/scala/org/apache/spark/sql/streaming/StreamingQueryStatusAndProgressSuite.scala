@@ -27,7 +27,8 @@ import org.json4s.jackson.JsonMethods._
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamExecution}
+import org.apache.spark.sql.execution.streaming.sources.ContinuousMemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQueryStatusAndProgressSuite._
@@ -207,6 +208,34 @@ class StreamingQueryStatusAndProgressSuite extends StreamTest with Eventually {
         query.stop()
       }
     }
+  }
+
+  test ("SPARK-23886: ContinuousExecution query status updates, " +
+    "isDataAvailable and isTriggerActive flags should always stay false") {
+    import testImplicits._
+
+    val input = ContinuousMemoryStream[Int]
+
+    def assertStatus(stream: StreamExecution): Unit = {
+      assert(stream.status.isDataAvailable === false)
+      assert(stream.status.isTriggerActive === false)
+    }
+
+    testStream(input.toDF(), useV2Sink = true)(
+      StartStream(trigger = Trigger.Continuous(100)),
+      Execute(assertStatus),
+      AddData(input, 0, 1, 2),
+      Execute(assertStatus),
+      CheckAnswer(0, 1, 2),
+      Execute(assertStatus),
+      StopStream,
+      Execute(assertStatus),
+      AddData(input, 3, 4, 5),
+      Execute(assertStatus),
+      StartStream(trigger = Trigger.Continuous(100)),
+      Execute(assertStatus),
+      CheckAnswer(0, 1, 2, 3, 4, 5),
+      Execute(assertStatus))
   }
 
   def assertJson(source: String, expected: String): Unit = {
