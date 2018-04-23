@@ -47,10 +47,9 @@ case class WriteToContinuousDataSourceExec(writer: StreamWriter, query: SparkPla
     }
 
     val rdd = query.execute()
-    val messages = new Array[WriterCommitMessage](rdd.partitions.length)
 
     logInfo(s"Start processing data source writer: $writer. " +
-      s"The input RDD has ${messages.length} partitions.")
+      s"The input RDD has ${rdd.getNumPartitions} partitions.")
     // Let the epoch coordinator know how many partitions the write RDD has.
     EpochCoordinatorRef.get(
         sparkContext.getLocalProperty(ContinuousExecution.EPOCH_COORDINATOR_ID_KEY),
