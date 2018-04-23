@@ -127,6 +127,12 @@ package object config {
     .stringConf
     .createOptional
 
+  private[spark] val ENABLE_USERLEVEL_STAGING_DIR =
+    ConfigBuilder("spark.yarn.staging.enable.userLevel")
+    .doc("Enable to add subdirectory for STAGING_DIR which named as login user.")
+    .booleanConf
+    .createWithDefault(false)
+
   /* Launcher configuration. */
 
   private[spark] val WAIT_FOR_APP_COMPLETION = ConfigBuilder("spark.yarn.submit.waitAppCompletion")
