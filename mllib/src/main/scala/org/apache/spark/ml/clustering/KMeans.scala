@@ -88,7 +88,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * Validates the input schema.
    * @param schema input schema
    */
-  protected def validateSchema(schema: StructType): Unit = {
+  private[clustering] def validateSchema(schema: StructType): Unit = {
     val typeCandidates = List( new VectorUDT,
       new ArrayType(DoubleType, false),
       new ArrayType(FloatType, false))
@@ -111,7 +111,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * @return Vector feature column
    */
   @Since("2.4.0")
-  protected def featureToVector(dataset: Dataset[_], colName: String): Column = {
+  private[clustering] def featureToVector(dataset: Dataset[_], colName: String): Column = {
     val featuresDataType = dataset.schema(colName).dataType
     featuresDataType match {
       case _: VectorUDT => col(colName)
