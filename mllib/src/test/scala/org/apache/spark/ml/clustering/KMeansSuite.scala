@@ -220,25 +220,20 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       .drop("features")
     val newdatasetF = dataset.withColumn(featuresColNameF, floatUDF(col("features")))
       .drop("features")
-
     assert(newdatasetD.schema(featuresColNameD).dataType.equals(new ArrayType(DoubleType, false)))
     assert(newdatasetF.schema(featuresColNameF).dataType.equals(new ArrayType(FloatType, false)))
 
-    val kmeansD = new KMeans().setK(k).setFeaturesCol(featuresColNameD).setSeed(1)
-    val kmeansF = new KMeans().setK(k).setFeaturesCol(featuresColNameF).setSeed(1)
+    val kmeansD = new KMeans().setK(k).setMaxIter(1).setFeaturesCol(featuresColNameD).setSeed(1)
+    val kmeansF = new KMeans().setK(k).setMaxIter(1).setFeaturesCol(featuresColNameF).setSeed(1)
     val modelD = kmeansD.fit(newdatasetD)
     val modelF = kmeansF.fit(newdatasetF)
-
     val transformedD = modelD.transform(newdatasetD)
     val transformedF = modelF.transform(newdatasetF)
 
     val predictDifference = transformedD.select("prediction")
       .except(transformedF.select("prediction"))
-
     assert(predictDifference.count() == 0)
-
     assert(modelD.computeCost(newdatasetD) == modelF.computeCost(newdatasetF) )
-
   }
 
 

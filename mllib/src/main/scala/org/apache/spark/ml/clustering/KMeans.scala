@@ -33,7 +33,7 @@ import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.VersionUtils.majorVersion
@@ -94,6 +94,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
     val typeCandidates = List( new VectorUDT,
       new ArrayType(DoubleType, false),
       new ArrayType(FloatType, false))
+
     SchemaUtils.checkColumnTypes(schema, $(featuresCol), typeCandidates)
   }
   /**
