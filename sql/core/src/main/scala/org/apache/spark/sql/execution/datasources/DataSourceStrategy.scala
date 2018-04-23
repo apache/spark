@@ -216,21 +216,21 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
 }
 
 /**
- * Currently [[FileDataSourceV2]] doesn't support catalog, which causes failure if executed with
- * [[InsertIntoTable]]. As a temporary hack, fall back [[FileDataSourceV2]] to [[DataSource]].
+ * Replace the V2 data source of table in [[InsertIntoTable]] to V1 [[FileFormat]].
+ * E.g, with temporary view `t` using [[FileDataSourceV2]], inserting into  view `t` fails
+ * since there is no correspoding physical plan.
+ * This is a temporary hack for making current data source V2 work.
  */
 class FallBackFileDataSourceToV1(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case i @InsertIntoTable(d: DataSourceV2Relation, _, _, _, _)
       if d.source.isInstanceOf[FileDataSourceV2] =>
-      val cls = d.source.asInstanceOf[FileDataSourceV2].fallBackFileFormat
-      assert(cls.isDefined,
-        "fallBackFileFormat is required for inserting into table with FileDataSourceV2.")
+      val v1FileFormat = d.source.asInstanceOf[FileDataSourceV2].fallBackFileFormat
       val v1 = DataSource.apply(
         sparkSession = sparkSession,
         paths = Seq.empty,
         userSpecifiedSchema = d.userSpecifiedSchema,
-        className = cls.get.getCanonicalName,
+        className = v1FileFormat.getCanonicalName,
         options = d.options).resolveRelation()
       i.copy(table = LogicalRelation(v1))
   }

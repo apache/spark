@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources.v2
 import java.util.{List => JList, Optional}
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetTest}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.SQLConf
@@ -41,13 +42,13 @@ class DummyReadOnlyFileDataSourceV2 extends FileDataSourceV2 with ReadSupport {
     throw new AnalysisException("Dummy file reader")
   }
 
-  override def fallBackFileFormat: Option[Class[_]] = Some(classOf[ParquetFileFormat])
+  override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
 
   override def shortName(): String = "parquet"
 }
 
 class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 with WriteSupport {
-  override def fallBackFileFormat: Option[Class[_]] = Some(classOf[ParquetFileFormat])
+  override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
 
   override def shortName(): String = "parquet"
 
@@ -61,7 +62,7 @@ class DummyWriteOnlyFileDataSourceV2 extends FileDataSourceV2 with WriteSupport 
 }
 
 class SimpleFileDataSourceV2 extends SimpleDataSourceV2 with FileDataSourceV2 {
-  override def fallBackFileFormat: Option[Class[_]] = Some(classOf[ParquetFileFormat])
+  override def fallBackFileFormat: Class[_ <: FileFormat] = classOf[ParquetFileFormat]
 
   override def shortName(): String = "parquet"
 }

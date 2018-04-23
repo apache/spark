@@ -240,15 +240,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val cls = DataSource.lookupDataSource(source, df.sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
       val ds = cls.newInstance()
-      val (needToFallBackFileDataSource, fallBackFileFormat) = ds match {
+      val (needToFallBackFileDataSourceV2, fallBackFileFormat) = ds match {
         case f: FileDataSourceV2 =>
           val disabledV2Readers =
             df.sparkSession.sessionState.conf.disabledV2FileDataSourceWriter.split(",")
-          (disabledV2Readers.contains(f.shortName), f.fallBackFileFormat)
-        case _ => (false, None)
+          (disabledV2Readers.contains(f.shortName), f.fallBackFileFormat.getCanonicalName)
+        case _ => (false, source)
       }
 
-      if (ds.isInstanceOf[WriteSupport] && !needToFallBackFileDataSource) {
+      if (ds.isInstanceOf[WriteSupport] && !needToFallBackFileDataSourceV2) {
         val options = new DataSourceOptions((extraOptions ++
           DataSourceV2Utils.extractSessionConfigs(
             ds = ds.asInstanceOf[DataSourceV2],
@@ -271,16 +271,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         saveToV1Source(fallBackFileFormat)
       }
     } else {
-      saveToV1Source(None)
+      saveToV1Source(source)
     }
   }
 
-  private def saveToV1Source(cls: Option[Class[_]]): Unit = {
+  private def saveToV1Source(className: String): Unit = {
     // Code path for data source v1.
     runCommand(df.sparkSession, "save") {
       DataSource(
         sparkSession = df.sparkSession,
-        className = cls.map(_.getCanonicalName).getOrElse(source),
+        className = className,
         partitionColumns = partitioningColumns.getOrElse(Nil),
         options = extraOptions.toMap).planForWriting(mode, AnalysisBarrier(df.logicalPlan))
     }

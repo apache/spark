@@ -192,15 +192,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     val cls = DataSource.lookupDataSource(source, sparkSession.sessionState.conf)
     if (classOf[DataSourceV2].isAssignableFrom(cls)) {
       val ds = cls.newInstance().asInstanceOf[DataSourceV2]
-      val (needToFallBackFileDataSource, fallBackFileFormat) = ds match {
+      val (needToFallBackFileDataSourceV2, fallBackFileFormat) = ds match {
         case f: FileDataSourceV2 =>
           val disabledV2Readers =
             sparkSession.sessionState.conf.disabledV2FileDataSourceReader.split(",")
-          (disabledV2Readers.contains(f.shortName), f.fallBackFileFormat)
-        case _ => (false, None)
+          (disabledV2Readers.contains(f.shortName), f.fallBackFileFormat.getCanonicalName)
+        case _ => (false, source)
       }
       val supportsRead = ds.isInstanceOf[ReadSupport] || ds.isInstanceOf[ReadSupportWithSchema]
-      if (supportsRead && !needToFallBackFileDataSource) {
+      if (supportsRead && !needToFallBackFileDataSourceV2) {
         val sessionOptions = DataSourceV2Utils.extractSessionConfigs(
           ds = ds, conf = sparkSession.sessionState.conf)
         val pathsOption = {
@@ -217,18 +217,18 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         loadV1Source(fallBackFileFormat, paths: _*)
       }
     } else {
-      loadV1Source(None, paths: _*)
+      loadV1Source(source, paths: _*)
     }
   }
 
-  private def loadV1Source(cls: Option[Class[_]], paths: String*) = {
+  private def loadV1Source(className: String, paths: String*) = {
     // Code path for data source v1.
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(
         sparkSession,
         paths = paths,
         userSpecifiedSchema = userSpecifiedSchema,
-        className = cls.map(_.getCanonicalName).getOrElse(source),
+        className = className,
         options = extraOptions.toMap).resolveRelation())
   }
 

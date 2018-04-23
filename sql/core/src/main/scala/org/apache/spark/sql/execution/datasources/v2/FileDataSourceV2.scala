@@ -27,15 +27,13 @@ import org.apache.spark.sql.sources.v2.WriteSupport
  */
 trait FileDataSourceV2 extends DataSourceV2 with DataSourceRegister {
   /**
-   * Returns an optional V1 [[FileFormat]] class of the same file data source.
+   * Returns n V1 [[FileFormat]] class of the same file data source.
    * This is a solution for the following cases:
    * 1. File datasource V2 might be implemented partially during migration.
    *    E.g. if [[ReadSupport]] is implemented while [[WriteSupport]] is not,
    *    write path should fall back to V1 implementation.
    * 2. File datasource V2 implementations cause regression.
    * 3. Catalog support is required, which is still under development for data source V2.
-   * This method is not required to be implemented, in case new data sources don't have
-   * V1 [[FileFormat]] to fall back.
    */
-  def fallBackFileFormat: Option[Class[_]] = None
+  def fallBackFileFormat: Class[_ <: FileFormat]
 }
