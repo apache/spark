@@ -23,9 +23,7 @@ import java.util.Locale
 
 import scala.collection.mutable
 import scala.util.Properties
-
 import com.google.common.collect.MapMaker
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
@@ -415,7 +413,10 @@ object SparkEnv extends Logging {
     val jvmInformation = Seq(
       ("Java Version", s"$javaVersion ($javaVendor)"),
       ("Java Home", javaHome),
-      ("Scala Version", versionString)
+      ("Scala Version", versionString),
+      ("Spark Version", Version.getVersion),
+      ("Spark Revision", Version.getRevision),
+      ("Spark Build Info", Version.getBuildInfo)
     ).sorted
 
     // Spark properties
@@ -426,7 +427,8 @@ object SparkEnv extends Logging {
       } else {
         Seq.empty[(String, String)]
       }
-    val sparkProperties = (conf.getAll ++ schedulerMode).sorted
+    val sparkVersion = Seq(("spark.version", Version.getVersion))
+    val sparkProperties = (conf.getAll ++ schedulerMode ++ sparkVersion).sorted
 
     // System properties that are not java classpaths
     val systemProperties = Utils.getSystemProperties.toSeq
