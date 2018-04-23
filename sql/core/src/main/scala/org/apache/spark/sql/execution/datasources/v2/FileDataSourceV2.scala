@@ -27,7 +27,7 @@ import org.apache.spark.sql.sources.v2.WriteSupport
  */
 trait FileDataSourceV2 extends DataSourceV2 with DataSourceRegister {
   /**
-   * Returns n V1 [[FileFormat]] class of the same file data source.
+   * Returns a V1 [[FileFormat]] class of the same file data source.
    * This is a solution for the following cases:
    * 1. File datasource V2 might be implemented partially during migration.
    *    E.g. if [[ReadSupport]] is implemented while [[WriteSupport]] is not,
