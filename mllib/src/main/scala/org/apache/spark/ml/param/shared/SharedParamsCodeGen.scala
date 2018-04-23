@@ -95,7 +95,9 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("distanceMeasure", "The distance measure. Supported options: 'euclidean'" +
         " and 'cosine'", Some("org.apache.spark.mllib.clustering.DistanceMeasure.EUCLIDEAN"),
         isValid = "(value: String) => " +
-        "org.apache.spark.mllib.clustering.DistanceMeasure.validateDistanceMeasure(value)")
+        "org.apache.spark.mllib.clustering.DistanceMeasure.validateDistanceMeasure(value)"),
+      ParamDesc[String]("validationIndicatorCol", "the indicator column name for indicating " +
+        "whether the example data is for validation")
     )
 
     val code = genSharedParams(params)

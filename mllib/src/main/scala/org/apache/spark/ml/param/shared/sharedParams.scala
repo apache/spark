@@ -523,4 +523,21 @@ trait HasDistanceMeasure extends Params {
   /** @group getParam */
   final def getDistanceMeasure: String = $(distanceMeasure)
 }
+
+/**
+ * Trait for shared param validationIndicatorCol. This trait may be changed or
+ * removed between minor versions.
+ */
+@DeveloperApi
+trait HasValidationIndicatorCol extends Params {
+
+  /**
+   * Param for the indicator column name for indicating whether the example data is for validation.
+   * @group param
+   */
+  final val validationIndicatorCol: Param[String] = new Param[String](this, "validationIndicatorCol", "the indicator column name for indicating whether the example data is for validation")
+
+  /** @group getParam */
+  final def getValidationIndicatorCol: String = $(validationIndicatorCol)
+}
 // scalastyle:on
