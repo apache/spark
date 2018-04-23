@@ -3104,6 +3104,51 @@ test_that("repartition by columns on DataFrame", {
   })
 })
 
+test_that("repartitionByRange on a DataFrame", {
+  # The tasks here launch R workers with shuffles. So, we decrease the number of shuffle
+  # partitions to reduce the number of the tasks to speed up the test. This is particularly
+  # slow on Windows because the R workers are unable to be forked. See also SPARK-21693.
+  conf <- callJMethod(sparkSession, "conf")
+  shufflepartitionsvalue <- callJMethod(conf, "get", "spark.sql.shuffle.partitions")
+  callJMethod(conf, "set", "spark.sql.shuffle.partitions", "5")
+  tryCatch({
+    df <- createDataFrame(mtcars)
+    expect_error(repartitionByRange(df, "haha", df$mpg),
+                 "numPartitions and col must be numeric and Column.*")
+    expect_error(repartitionByRange(df),
+                 ".*specify a column.*or the number of partitions with a column.*")
+    expect_error(repartitionByRange(df, col = "haha"),
+                 "col must be Column; however, got.*")
+    expect_error(repartitionByRange(df, 3),
+                 "At least one partition-by column must be specified.")
+
+    # The order of rows should be different with a normal repartition.
+    actual <- repartitionByRange(df, 3, df$mpg)
+    expect_equal(getNumPartitions(actual), 3)
+    expect_false(identical(collect(actual), collect(repartition(df, 3, df$mpg))))
+
+    actual <- repartitionByRange(df, col = df$mpg)
+    expect_false(identical(collect(actual), collect(repartition(df, col = df$mpg))))
+
+    # They should have same data.
+    actual <- collect(repartitionByRange(df, 3, df$mpg))
+    actual <- actual[order(actual$mpg), ]
+    expected <- collect(repartition(df, 3, df$mpg))
+    expected <- expected[order(expected$mpg), ]
+    expect_true(all(actual == expected))
+
+    actual <- collect(repartitionByRange(df, col = df$mpg))
+    actual <- actual[order(actual$mpg), ]
+    expected <- collect(repartition(df, col = df$mpg))
+    expected <- expected[order(expected$mpg), ]
+    expect_true(all(actual == expected))
+  },
+  finally = {
+    # Resetting the conf back to default value
+    callJMethod(conf, "set", "spark.sql.shuffle.partitions", shufflepartitionsvalue)
+  })
+})
+
 test_that("coalesce, repartition, numPartitions", {
   df <- as.DataFrame(cars, numPartitions = 5)
   expect_equal(getNumPartitions(df), 5)

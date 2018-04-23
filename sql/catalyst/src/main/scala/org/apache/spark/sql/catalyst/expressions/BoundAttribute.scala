@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors.attachTree
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.types._
 
 /**
@@ -33,28 +33,14 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
 
   override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
+  private val accessor: (InternalRow, Int) => Any = InternalRow.getAccessor(dataType)
+
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {
-    if (input.isNullAt(ordinal)) {
+    if (nullable && input.isNullAt(ordinal)) {
       null
     } else {
-      dataType match {
-        case BooleanType => input.getBoolean(ordinal)
-        case ByteType => input.getByte(ordinal)
-        case ShortType => input.getShort(ordinal)
-        case IntegerType | DateType => input.getInt(ordinal)
-        case LongType | TimestampType => input.getLong(ordinal)
-        case FloatType => input.getFloat(ordinal)
-        case DoubleType => input.getDouble(ordinal)
-        case StringType => input.getUTF8String(ordinal)
-        case BinaryType => input.getBinary(ordinal)
-        case CalendarIntervalType => input.getInterval(ordinal)
-        case t: DecimalType => input.getDecimal(ordinal, t.precision, t.scale)
-        case t: StructType => input.getStruct(ordinal, t.size)
-        case _: ArrayType => input.getArray(ordinal)
-        case _: MapType => input.getMap(ordinal)
-        case _ => input.get(ordinal, dataType)
-      }
+      accessor(input, ordinal)
     }
   }
 
@@ -76,7 +62,7 @@ case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
              |  ${CodeGenerator.defaultValue(dataType)} : ($value);
            """.stripMargin)
       } else {
-        ev.copy(code = s"$javaType ${ev.value} = $value;", isNull = "false")
+        ev.copy(code = s"$javaType ${ev.value} = $value;", isNull = FalseLiteral)
       }
     }
   }

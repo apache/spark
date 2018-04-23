@@ -88,7 +88,7 @@ class SQLAppStatusListener(
 
     exec.jobs = exec.jobs + (jobId -> JobExecutionStatus.RUNNING)
     exec.stages ++= event.stageIds.toSet
-    update(exec)
+    update(exec, force = true)
   }
 
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
@@ -308,11 +308,13 @@ class SQLAppStatusListener(
       })
   }
 
-  private def update(exec: LiveExecutionData): Unit = {
+  private def update(exec: LiveExecutionData, force: Boolean = false): Unit = {
     val now = System.nanoTime()
     if (exec.endEvents >= exec.jobs.size + 1) {
       exec.write(kvstore, now)
       liveExecutions.remove(exec.executionId)
+    } else if (force) {
+      exec.write(kvstore, now)
     } else if (liveUpdatePeriodNs >= 0) {
       if (now - exec.lastWriteTime > liveUpdatePeriodNs) {
         exec.write(kvstore, now)

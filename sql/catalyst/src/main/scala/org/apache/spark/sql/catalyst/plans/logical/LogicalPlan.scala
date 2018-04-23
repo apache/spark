@@ -219,6 +219,11 @@ abstract class LogicalPlan
    * Refreshes (or invalidates) any metadata/data cached in the plan recursively.
    */
   def refresh(): Unit = children.foreach(_.refresh())
+
+  /**
+   * Returns the output ordering that this plan generates.
+   */
+  def outputOrdering: Seq[SortOrder] = Nil
 }
 
 /**
@@ -273,4 +278,8 @@ abstract class BinaryNode extends LogicalPlan {
   def right: LogicalPlan
 
   override final def children: Seq[LogicalPlan] = Seq(left, right)
+}
+
+abstract class OrderPreservingUnaryNode extends UnaryNode {
+  override final def outputOrdering: Seq[SortOrder] = child.outputOrdering
 }
