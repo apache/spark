@@ -52,7 +52,7 @@ case class DataSourceV2Relation(
       AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()))
   }
 
-  private[sql] lazy val v2Options: DataSourceOptions = makeV2Options(options)
+  private lazy val v2Options: DataSourceOptions = makeV2Options(options)
 
   lazy val (
       reader: DataSourceReader,
