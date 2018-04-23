@@ -112,18 +112,15 @@ private[feature] trait StringIndexerBase extends Params with HasHandleInvalid wi
       skipNonExistsCol: Boolean = false): StructType = {
     val (inputColNames, outputColNames) = getInOutCols()
 
-    val outputFields = for (i <- 0 until inputColNames.length) yield {
-      if (schema.fieldNames.contains(inputColNames(i))) {
-        validateAndTransformField(schema, inputColNames(i), outputColNames(i))
-      } else {
-        if (skipNonExistsCol) {
-          null
-        } else {
-          throw new SparkException(s"Input column ${inputColNames(i)} does not exist.")
+    val outputFields = inputColNames.zip(outputColNames).flatMap {
+      case (inputColName, outputColName) =>
+        schema.fieldNames.contains(inputColName) match {
+          case true => Some(validateAndTransformField(schema, inputColName, outputColName))
+          case false if skipNonExistsCol => None
+          case _ => throw new SparkException(s"Input column $inputColName does not exist.")
         }
-      }
     }
-    StructType(schema.fields ++ outputFields.filter(_ != null))
+    StructType(schema.fields ++ outputFields)
   }
 }
 
@@ -303,18 +300,20 @@ class StringIndexerModel (
   @Since("2.4.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
+  // This filters out any null values and also the input labels which are not in
+  // the dataset used for fitting.
   private def filterInvalidData(dataset: Dataset[_], inputColNames: Seq[String]): Dataset[_] = {
-    var filteredDataset = dataset.na.drop(inputColNames.filter(
-      dataset.schema.fieldNames.contains(_)))
-    for (i <- 0 until inputColNames.length) {
+    val conditions: Seq[Column] = (0 until inputColNames.length).map { i =>
       val inputColName = inputColNames(i)
       val labelToIndex = labelsToIndexArray(i)
-      val filterer = udf { label: String =>
+      val filter = udf { label: String =>
         labelToIndex.contains(label)
       }
-      filteredDataset = filteredDataset.where(filterer(dataset(inputColName)))
+      filter(dataset(inputColName))
     }
-    filteredDataset
+
+    dataset.na.drop(inputColNames.filter(dataset.schema.fieldNames.contains(_)))
+      .where(conditions.reduce(_ and _))
   }
 
   private def getIndexer(labels: Seq[String], labelToIndex: OpenHashMap[String, Double]) = {
