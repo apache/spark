@@ -1286,7 +1286,6 @@ class PowerIterationClustering(JavaTransformer, _PowerIterationClusteringParams,
     >>> pic3.getInitMode()
     'degree'
 
-
     .. versionadded:: 2.4.0
     """
     @keyword_only
