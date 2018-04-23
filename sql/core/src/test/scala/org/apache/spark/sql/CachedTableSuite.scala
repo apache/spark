@@ -22,6 +22,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.apache.spark.CleanerListener
+import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
 import org.apache.spark.sql.execution.{RDDScanExec, SparkPlan}
@@ -801,10 +802,31 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     nodes.forall(_.relation.cacheBuilder._cachedColumnBuffers != null)
   }
 
+  private def checkIfNoJobTriggered(f: => DataFrame): DataFrame = {
+    var numJobTrigered = 0
+    val jobListener = new SparkListener {
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+        numJobTrigered += 1
+      }
+    }
+    sparkContext.addSparkListener(jobListener)
+    try {
+      val df = f
+      assert(numJobTrigered === 0)
+      df
+    } finally {
+      sparkContext.removeSparkListener(jobListener)
+    }
+  }
+
   test("SPARK-23880 table cache should be lazy and don't trigger any jobs") {
-    val df1 = Seq((1, 2), (2, 3), (3, 4)).toDF("a", "b").filter('a > 1).groupBy().sum("b").cache()
-    assert(!isMaterialized(df1))
-    checkAnswer(df1, Row(7L))
-    assert(isMaterialized(df1))
+    val cachedDf = checkIfNoJobTriggered {
+      val df = spark.range(3L).selectExpr("id", "id AS value")
+        .filter('id > 0).orderBy('id.asc).cache()
+      assert(!isMaterialized(df))
+      df
+    }
+    checkAnswer(cachedDf, Row(1L, 1L) :: Row(2L, 2L) :: Nil)
+    assert(isMaterialized(cachedDf))
   }
 }

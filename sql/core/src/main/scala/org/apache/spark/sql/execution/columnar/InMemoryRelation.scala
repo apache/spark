@@ -68,6 +68,7 @@ case class CachedRDDBuilder(
       synchronized {
         if (_cachedColumnBuffers != null) {
           _cachedColumnBuffers.unpersist(blocking)
+          _cachedColumnBuffers = null
         }
       }
     }
