@@ -748,10 +748,17 @@ object RemoveRedundantSorts extends Rule[LogicalPlan] {
   }
 
   def recursiveRemoveSort(plan: LogicalPlan): LogicalPlan = plan match {
-    case Project(fields, child) => Project(fields, recursiveRemoveSort(child))
-    case Filter(condition, child) => Filter(condition, recursiveRemoveSort(child))
     case Sort(_, _, child) => recursiveRemoveSort(child)
+    case other if canEliminateSort(other) =>
+      other.withNewChildren(other.children.map(recursiveRemoveSort))
     case _ => plan
+  }
+
+  def canEliminateSort(plan: LogicalPlan): Boolean = plan match {
+    case p: Project => p.projectList.forall(_.deterministic)
+    case f: Filter => f.condition.deterministic
+    case _: ResolvedHint => true
+    case _ => false
   }
 }
 
