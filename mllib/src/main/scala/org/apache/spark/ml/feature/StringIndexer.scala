@@ -166,15 +166,13 @@ class StringIndexer @Since("1.4.0") (
   @Since("2.4.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  @Since("2.0.0")
-  override def fit(dataset: Dataset[_]): StringIndexerModel = {
-    transformSchema(dataset.schema, logging = true)
+  private def countByValue(
+      dataset: Dataset[_],
+      inputCols: Array[String]): Array[OpenHashMap[String, Long]] = {
 
-    val (inputCols, _) = getInOutCols()
     val zeroState = Array.fill(inputCols.length)(new OpenHashMap[String, Long]())
 
-    // Counts by the string values in the dataset.
-    val countByValueArray = dataset.na.drop(inputCols)
+    dataset.na.drop(inputCols)
       .select(inputCols.map(col(_).cast(StringType)): _*)
       .rdd.treeAggregate(zeroState)(
         (state: Array[OpenHashMap[String, Long]], row: Row) => {
@@ -192,17 +190,34 @@ class StringIndexer @Since("1.4.0") (
           state1
         }
       )
+  }
+
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): StringIndexerModel = {
+    transformSchema(dataset.schema, logging = true)
+
+    val (inputCols, _) = getInOutCols()
 
     // In case of equal frequency when frequencyDesc/Asc, we further sort the strings by alphabet.
-    val labelsArray = countByValueArray.map { countByValue =>
-      $(stringOrderType) match {
-        case StringIndexer.frequencyDesc =>
-          countByValue.toSeq.sortBy(_._1).sortBy(-_._2).map(_._1).toArray
-        case StringIndexer.frequencyAsc =>
-          countByValue.toSeq.sortBy(_._1).sortBy(_._2).map(_._1).toArray
-        case StringIndexer.alphabetDesc => countByValue.toSeq.map(_._1).sortWith(_ > _).toArray
-        case StringIndexer.alphabetAsc => countByValue.toSeq.map(_._1).sortWith(_ < _).toArray
-      }
+    val labelsArray = $(stringOrderType) match {
+      case StringIndexer.frequencyDesc =>
+        countByValue(dataset, inputCols).map { counts =>
+          counts.toSeq.sortBy(_._1).sortBy(-_._2).map(_._1).toArray
+        }
+      case StringIndexer.frequencyAsc =>
+        countByValue(dataset, inputCols).map { counts =>
+          counts.toSeq.sortBy(_._1).sortBy(_._2).map(_._1).toArray
+        }
+      case StringIndexer.alphabetDesc =>
+        import dataset.sparkSession.implicits._
+        inputCols.map { inputCol =>
+          dataset.select(inputCol).distinct().sort(dataset(s"$inputCol").desc).as[String].collect()
+        }
+      case StringIndexer.alphabetAsc =>
+        import dataset.sparkSession.implicits._
+        inputCols.map { inputCol =>
+          dataset.select(inputCol).distinct().sort(dataset(s"$inputCol").asc).as[String].collect()
+        }
      }
     copyValues(new StringIndexerModel(uid, labelsArray).setParent(this))
   }
