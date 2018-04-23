@@ -104,9 +104,9 @@ abstract class Expression extends TreeNode[Expression] {
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
-      val eval = doGenCode(ctx, ExprCode("",
-        VariableValue(isNull, CodeGenerator.JAVA_BOOLEAN),
-        VariableValue(value, CodeGenerator.javaType(dataType))))
+      val eval = doGenCode(ctx, ExprCode(
+        JavaCode.isNullVariable(isNull),
+        JavaCode.variable(value, dataType)))
       reduceCodeSize(ctx, eval)
       if (eval.code.nonEmpty) {
         // Add `this` in the comment.
@@ -123,7 +123,7 @@ abstract class Expression extends TreeNode[Expression] {
       val setIsNull = if (!eval.isNull.isInstanceOf[LiteralValue]) {
         val globalIsNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "globalIsNull")
         val localIsNull = eval.isNull
-        eval.isNull = GlobalValue(globalIsNull, CodeGenerator.JAVA_BOOLEAN)
+        eval.isNull = JavaCode.isNullGlobal(globalIsNull)
         s"$globalIsNull = $localIsNull;"
       } else {
         ""
@@ -142,7 +142,7 @@ abstract class Expression extends TreeNode[Expression] {
            |}
            """.stripMargin)
 
-      eval.value = VariableValue(newValue, javaType)
+      eval.value = JavaCode.variable(newValue, dataType)
       eval.code = s"$javaType $newValue = $funcFullName(${ctx.INPUT_ROW});"
     }
   }

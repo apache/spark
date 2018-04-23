@@ -361,8 +361,7 @@ abstract class HashExpression[E] extends Expression {
   }
 
   protected def genHashString(input: String, result: String): String = {
-    val mb = s"$input.getMemoryBlock()"
-    s"$result = $hasherClassName.hashUnsafeBytesBlock($mb, $result);"
+    s"$result = $hasherClassName.hashUTF8String($input, $result);"
   }
 
   protected def genHashForMap(
@@ -725,8 +724,7 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
      """
 
   override protected def genHashString(input: String, result: String): String = {
-    val mb = s"$input.getMemoryBlock()"
-    s"$result = $hasherClassName.hashUnsafeBytesBlock($mb);"
+    s"$result = $hasherClassName.hashUTF8String($input);"
   }
 
   override protected def genHashForArray(

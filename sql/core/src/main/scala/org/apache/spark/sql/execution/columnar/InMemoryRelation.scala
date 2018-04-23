@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.LongAccumulator
@@ -39,9 +39,9 @@ object InMemoryRelation {
       storageLevel: StorageLevel,
       child: SparkPlan,
       tableName: Option[String],
-      statsOfPlanToCache: Statistics): InMemoryRelation =
+      logicalPlan: LogicalPlan): InMemoryRelation =
     new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)(
-      statsOfPlanToCache = statsOfPlanToCache)
+      statsOfPlanToCache = logicalPlan.stats, outputOrdering = logicalPlan.outputOrdering)
 }
 
 
@@ -64,7 +64,8 @@ case class InMemoryRelation(
     tableName: Option[String])(
     @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
     val sizeInBytesStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator,
-    statsOfPlanToCache: Statistics)
+    statsOfPlanToCache: Statistics,
+    override val outputOrdering: Seq[SortOrder])
   extends logical.LeafNode with MultiInstanceRelation {
 
   override protected def innerChildren: Seq[SparkPlan] = Seq(child)
@@ -76,7 +77,8 @@ case class InMemoryRelation(
       tableName = None)(
       _cachedColumnBuffers,
       sizeInBytesStats,
-      statsOfPlanToCache)
+      statsOfPlanToCache,
+      outputOrdering)
 
   override def producedAttributes: AttributeSet = outputSet
 
@@ -159,7 +161,7 @@ case class InMemoryRelation(
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
       newOutput, useCompression, batchSize, storageLevel, child, tableName)(
-        _cachedColumnBuffers, sizeInBytesStats, statsOfPlanToCache)
+        _cachedColumnBuffers, sizeInBytesStats, statsOfPlanToCache, outputOrdering)
   }
 
   override def newInstance(): this.type = {
@@ -172,7 +174,8 @@ case class InMemoryRelation(
       tableName)(
         _cachedColumnBuffers,
         sizeInBytesStats,
-        statsOfPlanToCache).asInstanceOf[this.type]
+        statsOfPlanToCache,
+        outputOrdering).asInstanceOf[this.type]
   }
 
   def cachedColumnBuffers: RDD[CachedBatch] = _cachedColumnBuffers

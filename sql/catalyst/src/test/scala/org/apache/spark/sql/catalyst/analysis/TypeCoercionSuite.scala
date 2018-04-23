@@ -539,6 +539,9 @@ class TypeCoercionSuite extends AnalysisTest {
     val floatLit = Literal.create(1.0f, FloatType)
     val timestampLit = Literal.create("2017-04-12", TimestampType)
     val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
+    val tsArrayLit = Literal(Array(new Timestamp(System.currentTimeMillis())))
+    val strArrayLit = Literal(Array("c"))
+    val intArrayLit = Literal(Array(1))
 
     ruleTest(rule,
       Coalesce(Seq(doubleLit, intLit, floatLit)),
@@ -572,6 +575,16 @@ class TypeCoercionSuite extends AnalysisTest {
       Coalesce(Seq(nullLit, floatNullLit, doubleLit, stringLit)),
       Coalesce(Seq(Cast(nullLit, StringType), Cast(floatNullLit, StringType),
         Cast(doubleLit, StringType), Cast(stringLit, StringType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(timestampLit, intLit, stringLit)),
+      Coalesce(Seq(Cast(timestampLit, StringType), Cast(intLit, StringType),
+        Cast(stringLit, StringType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(tsArrayLit, intArrayLit, strArrayLit)),
+      Coalesce(Seq(Cast(tsArrayLit, ArrayType(StringType)),
+        Cast(intArrayLit, ArrayType(StringType)), Cast(strArrayLit, ArrayType(StringType)))))
   }
 
   test("CreateArray casts") {

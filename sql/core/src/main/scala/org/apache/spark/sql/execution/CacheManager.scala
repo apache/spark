@@ -99,7 +99,7 @@ class CacheManager extends Logging {
         sparkSession.sessionState.conf.columnBatchSize, storageLevel,
         sparkSession.sessionState.executePlan(planToCache).executedPlan,
         tableName,
-        planToCache.stats)
+        planToCache)
       cachedData.add(CachedData(planToCache, inMemoryRelation))
     }
   }
@@ -148,7 +148,7 @@ class CacheManager extends Logging {
           storageLevel = cd.cachedRepresentation.storageLevel,
           child = spark.sessionState.executePlan(cd.plan).executedPlan,
           tableName = cd.cachedRepresentation.tableName,
-          statsOfPlanToCache = cd.plan.stats)
+          logicalPlan = cd.plan)
         needToRecache += cd.copy(cachedRepresentation = newCache)
       }
     }

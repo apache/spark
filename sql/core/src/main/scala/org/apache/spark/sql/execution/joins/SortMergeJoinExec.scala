@@ -22,11 +22,10 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, VariableValue}
+import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport,
-ExternalAppendOnlyUnsafeRowArray, RowIterator, SparkPlan}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.collection.BitSet
 
@@ -531,13 +530,12 @@ case class SortMergeJoinExec(
              |boolean $isNull = false;
              |$javaType $value = $defaultValue;
            """.stripMargin
-        (ExprCode(code, VariableValue(isNull, CodeGenerator.JAVA_BOOLEAN),
-          VariableValue(value, CodeGenerator.javaType(a.dataType))), leftVarsDecl)
+        (ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType)),
+          leftVarsDecl)
       } else {
         val code = s"$value = $valueCode;"
         val leftVarsDecl = s"""$javaType $value = $defaultValue;"""
-        (ExprCode(code, FalseLiteral,
-          VariableValue(value, CodeGenerator.javaType(a.dataType))), leftVarsDecl)
+        (ExprCode(code, FalseLiteral, JavaCode.variable(value, a.dataType)), leftVarsDecl)
       }
     }.unzip
   }
