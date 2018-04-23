@@ -1179,8 +1179,9 @@ class _PowerIterationClusteringParams(JavaParams, HasMaxIter, HasPredictionCol):
                          "representation.",
                          typeConverter=TypeConverters.toString)
     similaritiesCol = Param(Params._dummy(), "similaritiesCol",
-                            "non-negative weights (similarities) of edges between the vertex in " +
-                            "`idCol` and each neighbor in `neighborsCol`",
+                            "Name of the input column for non-negative weights (similarities) " +
+                            "of edges between the vertex in `idCol` and each neighbor in " +
+                            "`neighborsCol`",
                             typeConverter=TypeConverters.toString)
 
     @since("2.4.0")
@@ -1253,8 +1254,8 @@ class PowerIterationClustering(JavaTransformer, _PowerIterationClusteringParams,
     >>> schema = StructType([StructField("id", LongType(), False), \
              StructField("neighbors", ArrayType(LongType(), False), True), \
              StructField("similarities", ArrayType(DoubleType(), False), True)])
-    >>> pic = PowerIterationClustering()
     >>> df = spark.createDataFrame(rdd, schema)
+    >>> pic = PowerIterationClustering()
     >>> result = pic.setK(2).setMaxIter(40).transform(df)
     >>> predictions = sorted(set([(i[0], i[1]) for i in result.select(result.id, result.prediction)
     ...     .collect()]), key=lambda x: x[0])
@@ -1276,12 +1277,16 @@ class PowerIterationClustering(JavaTransformer, _PowerIterationClusteringParams,
     >>> pic2.getMaxIter()
     40
     >>> pic3 = PowerIterationClustering(k=4, initMode="degree")
+    >>> pic3.getIdCol()
+    'id'
     >>> pic3.getK()
     4
     >>> pic3.getMaxIter()
     20
     >>> pic3.getInitMode()
     'degree'
+
+
     .. versionadded:: 2.4.0
     """
     @keyword_only
@@ -1294,7 +1299,8 @@ class PowerIterationClustering(JavaTransformer, _PowerIterationClusteringParams,
         super(PowerIterationClustering, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.clustering.PowerIterationClustering", self.uid)
-        self._setDefault(k=2, maxIter=20, initMode="random")
+        self._setDefault(k=2, maxIter=20, initMode="random", idCol="id", neighborsCol="neighbors",
+                         similaritiesCol="similarities")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
