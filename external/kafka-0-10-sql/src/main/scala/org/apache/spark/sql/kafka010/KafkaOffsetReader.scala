@@ -53,7 +53,7 @@ private[kafka010] class KafkaOffsetReader(
    */
   val kafkaReaderThread = Executors.newSingleThreadExecutor(new ThreadFactory {
     override def newThread(r: Runnable): Thread = {
-      val t = new UninterruptibleThread("Kafka Offset Reader") {
+      val t = new UninterruptibleThread(s"Kafka-Offset-Reader-$driverGroupIdPrefix") {
         override def run(): Unit = {
           r.run()
         }
@@ -75,7 +75,7 @@ private[kafka010] class KafkaOffsetReader(
    * A KafkaConsumer used in the driver to query the latest Kafka offsets. This only queries the
    * offsets and never commits them.
    */
-  protected var consumer = createConsumer()
+  @volatile protected var consumer: Consumer[Array[Byte], Array[Byte]] = null
 
   private val maxOffsetFetchAttempts =
     readerOptions.getOrElse("fetchOffset.numRetries", "3").toInt
@@ -95,8 +95,8 @@ private[kafka010] class KafkaOffsetReader(
    * Closes the connection to Kafka, and cleans up state.
    */
   def close(): Unit = {
-    runUninterruptibly {
-      consumer.close()
+    if (consumer != null) {  // check this outside runUninterruptibly as that initializes consumer
+      runUninterruptibly { consumer.close() }
     }
     kafkaReaderThread.shutdown()
   }
@@ -239,6 +239,7 @@ private[kafka010] class KafkaOffsetReader(
    */
   private def runUninterruptibly[T](body: => T): T = {
     if (!Thread.currentThread.isInstanceOf[UninterruptibleThread]) {
+      if (consumer == null) createConsumer()
       val future = Future {
         body
       }(execContext)
@@ -315,7 +316,9 @@ private[kafka010] class KafkaOffsetReader(
   }
 
   private def resetConsumer(): Unit = synchronized {
-    consumer.close()
+    if (consumer != null) {
+      consumer.close()
+    }
     consumer = createConsumer()
   }
 }
