@@ -366,7 +366,9 @@ class JacksonParser(
           """JSON parser cannot handle a character in its input.
             |Specifying encoding as an input option explicitly might help to resolve the issue.
             |""".stripMargin + e.getMessage
-        throw new CharConversionException(msg)
+        val wrappedCharException = new CharConversionException(msg)
+        wrappedCharException.initCause(e)
+        throw BadRecordException(() => recordLiteral(record), () => None, wrappedCharException)
     }
   }
 }
