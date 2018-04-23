@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -32,7 +32,7 @@ import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, DoubleType, FloatType, IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -105,32 +105,6 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
     validateSchema(schema)
     SchemaUtils.appendColumn(schema, $(predictionCol), IntegerType)
   }
-
-  /**
-   * preprocessing the input feature column to Vector
-   * @param dataset DataFrame with columns for features
-   * @param colName column name for features
-   * @return Vector feature column
-   */
-  @Since("2.4.0")
-  private[clustering] def featureToVector(dataset: Dataset[_], colName: String): Column = {
-    val featuresDataType = dataset.schema(colName).dataType
-    featuresDataType match {
-      case _: VectorUDT => col(colName)
-      case fdt: ArrayType =>
-        val transferUDF = fdt.elementType match {
-          case _: FloatType => udf(f = (vector: Seq[Float]) => {
-            val featureArray = Array.fill[Double](vector.size)(0.0)
-            vector.indices.foreach(idx => featureArray(idx) = vector(idx).toDouble)
-            Vectors.dense(featureArray)
-          })
-          case _: DoubleType => udf((vector: Seq[Double]) => {
-            Vectors.dense(vector.toArray)
-          })
-        }
-        transferUDF(col(colName))
-    }
-  }
 }
 
 /**
@@ -164,7 +138,8 @@ class KMeansModel private[ml] (
 
     val predictUDF = udf((vector: Vector) => predict(vector))
 
-    dataset.withColumn($(predictionCol), predictUDF(featureToVector(dataset, getFeaturesCol)))
+    dataset.withColumn($(predictionCol),
+      predictUDF(DatasetUtils.columnToVector(dataset, getFeaturesCol)))
   }
 
   @Since("1.5.0")
@@ -186,7 +161,7 @@ class KMeansModel private[ml] (
   def computeCost(dataset: Dataset[_]): Double = {
     validateSchema(dataset.schema)
 
-    val data: RDD[OldVector] = dataset.select(featureToVector(dataset, getFeaturesCol))
+    val data: RDD[OldVector] = dataset.select(DatasetUtils.columnToVector(dataset, getFeaturesCol))
       .rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
@@ -375,7 +350,8 @@ class KMeans @Since("1.5.0") (
     transformSchema(dataset.schema, logging = true)
 
     val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    val instances: RDD[OldVector] = dataset.select(featureToVector(dataset, getFeaturesCol))
+    val instances: RDD[OldVector] = dataset.select(
+      DatasetUtils.columnToVector(dataset, getFeaturesCol))
       .rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
