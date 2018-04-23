@@ -19,13 +19,10 @@ package org.apache.spark.ml.clustering
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql._
-
 
 object LDASuite {
   def generateLDAData(
@@ -60,9 +57,10 @@ object LDASuite {
 }
 
 
-class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+class LDASuite extends MLTest with DefaultReadWriteTest {
 
   import testImplicits._
+  import Encoders._
 
   val k: Int = 5
   val vocabSize: Int = 30
@@ -185,16 +183,11 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     assert(model.topicsMatrix.numCols === k)
     assert(!model.isDistributed)
 
-    // transform()
-    val transformed = model.transform(dataset)
-    val expectedColumns = Array("features", lda.getTopicDistributionCol)
-    expectedColumns.foreach { column =>
-      assert(transformed.columns.contains(column))
-    }
-    transformed.select(lda.getTopicDistributionCol).collect().foreach { r =>
-      val topicDistribution = r.getAs[Vector](0)
-      assert(topicDistribution.size === k)
-      assert(topicDistribution.toArray.forall(w => w >= 0.0 && w <= 1.0))
+    testTransformer[Vector](dataset.toDF(), model,
+      "features", lda.getTopicDistributionCol) {
+      case Row(_, topicDistribution: Vector) =>
+        assert(topicDistribution.size === k)
+        assert(topicDistribution.toArray.forall(w => w >= 0.0 && w <= 1.0))
     }
 
     // logLikelihood, logPerplexity
