@@ -628,4 +628,6 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       throw new IllegalStateException(msg)
     }
   }
+
+  override protected def logName: String = s"${super.logName} $stateStoreId"
 }
