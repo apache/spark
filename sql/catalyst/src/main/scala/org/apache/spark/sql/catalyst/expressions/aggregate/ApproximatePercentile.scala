@@ -238,12 +238,6 @@ object ApproximatePercentile {
       summaries = summaries.insert(value)
       // The result of QuantileSummaries.insert is un-compressed
       isCompressed = false
-
-      // Currently, QuantileSummaries ignores the construction parameter compressThresHold,
-      // which may cause QuantileSummaries to occupy unbounded memory. We have to hack around here
-      // to make sure QuantileSummaries doesn't occupy infinite memory.
-      // TODO: Figure out why QuantileSummaries ignores construction parameter compressThresHold
-      if (summaries.sampled.length >= compressThresHoldBufferLength) compress()
     }
 
     /** In-place merges in another PercentileDigest. */

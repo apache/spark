@@ -19,6 +19,9 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
+import org.scalatest.concurrent.TimeLimits
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -27,7 +30,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 /**
  * End-to-end tests for approximate percentile aggregate function.
  */
-class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
+class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext with TimeLimits {
   import testImplicits._
 
   private val table = "percentile_test"
@@ -277,6 +280,12 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
       }
 
       checkAnswer(query, expected)
+    }
+  }
+
+  test("SPARK-24013: unneeded compress can cause performance issues with sorted input") {
+    failAfter(20 seconds) {
+      assert(sql("select approx_percentile(id, array(0.1)) from range(10000000)").count() == 1)
     }
   }
 }
