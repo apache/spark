@@ -23,11 +23,7 @@ import org.apache.spark.sql.sources.v2.ReadSupport
 import org.apache.spark.sql.sources.v2.WriteSupport
 
 /**
- * The base class for file data source v2. Implementations must have a public, 0-arg constructor.
- *
- * Note that this is an empty interface. Data source implementations should mix-in at least one of
- * the plug-in interfaces like {@link ReadSupport} and {@link WriteSupport}. Otherwise it's just
- * a dummy data source which is un-readable/writable.
+ * A base interface for data source v2 implementations of the built-in file-based data sources.
  */
 trait FileDataSourceV2 extends DataSourceV2 with DataSourceRegister {
   /**
@@ -38,6 +34,8 @@ trait FileDataSourceV2 extends DataSourceV2 with DataSourceRegister {
    *    write path should fall back to V1 implementation.
    * 2. File datasource V2 implementations cause regression.
    * 3. Catalog support is required, which is still under development for data source V2.
+   * This method is not required to be implemented, in case new data sources don't have
+   * V1 [[FileFormat]] to fall back.
    */
   def fallBackFileFormat: Option[Class[_]] = None
 }

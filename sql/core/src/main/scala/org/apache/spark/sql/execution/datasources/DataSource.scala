@@ -93,6 +93,8 @@ case class DataSource(
 
   lazy val providingClass: Class[_] = {
     val cls = DataSource.lookupDataSource(className, sparkSession.sessionState.conf)
+    // Currently [[FileDataSourceV2]] doesn't support catalog, which causes failure on creating
+    // data source tables. This is a temporary hack to resolve the problem.
     cls.newInstance() match {
       case f: FileDataSourceV2 => f.fallBackFileFormat.getOrElse(cls)
       case _ => cls

@@ -216,7 +216,8 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
 }
 
 /**
- * Replaces [[FileDataSourceV2]] with [[DataSource]] if parent node is [[InsertIntoTable]].
+ * Currently [[FileDataSourceV2]] doesn't support catalog, which causes failure if executed with
+ * [[InsertIntoTable]]. As a temporary hack, fall back [[FileDataSourceV2]] to [[DataSource]].
  */
 class FallBackFileDataSourceToV1(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
