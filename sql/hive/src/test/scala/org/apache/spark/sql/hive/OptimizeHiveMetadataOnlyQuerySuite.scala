@@ -24,6 +24,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, Filter, Project, SubqueryAlias}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf.OPTIMIZER_METADATA_ONLY
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
@@ -32,13 +33,22 @@ class OptimizeHiveMetadataOnlyQuerySuite extends QueryTest with TestHiveSingleto
 
   import spark.implicits._
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     sql("CREATE TABLE metadata_only (id bigint, data string) PARTITIONED BY (part int)")
     (0 to 10).foreach(p => sql(s"ALTER TABLE metadata_only ADD PARTITION (part=$p)"))
   }
 
+  override protected def afterAll(): Unit = {
+    try {
+      sql("DROP TABLE IF EXISTS metadata_only")
+    } finally {
+      super.afterAll()
+    }
+  }
+
   test("SPARK-23877: validate metadata-only query pushes filters to metastore") {
-    withTable("metadata_only") {
+    withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true") {
       val startCount = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
 
       // verify the number of matching partitions
@@ -50,7 +60,7 @@ class OptimizeHiveMetadataOnlyQuerySuite extends QueryTest with TestHiveSingleto
   }
 
   test("SPARK-23877: filter on projected expression") {
-    withTable("metadata_only") {
+    withSQLConf(OPTIMIZER_METADATA_ONLY.key -> "true") {
       val startCount = HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount
 
       // verify the matching partitions
