@@ -53,7 +53,7 @@ private[kafka010] class KafkaOffsetReader(
    */
   val kafkaReaderThread = Executors.newSingleThreadExecutor(new ThreadFactory {
     override def newThread(r: Runnable): Thread = {
-      val t = new UninterruptibleThread(s"Kafka Offset Reader") {
+      val t = new UninterruptibleThread("Kafka Offset Reader") {
         override def run(): Unit = {
           r.run()
         }
