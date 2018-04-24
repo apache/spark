@@ -2192,7 +2192,7 @@ def reverse(col):
 
 
 @since(2.4)
-def zip_with_index(col, indexFirst=False):
+def zip_with_index(col, indexFirst=False, startFromZero=False):
     """
     Collection function: transforms the input array by encapsulating elements into pairs
     with indexes indicating the order.
@@ -2201,12 +2201,14 @@ def zip_with_index(col, indexFirst=False):
 
     >>> df = spark.createDataFrame([([2, 5, 3],), ([],)], ['data'])
     >>> df.select(zip_with_index(df.data).alias('r')).collect()
-    [Row(r=[[value=2, index=0], [value=5, index=1], [value=3, index=2]]), Row(r=[])]
-    >>> df.select(zip_with_index(df.data, indexFirst=True).alias('r')).collect()
-    [Row(r=[[index=0, value=2], [index=1, value=5], [index=2, value=3]]), Row(r=[])]
+    [Row(r=[Row(value=2, index=1), Row(value=5, index=2), Row(value=3, index=3)]), Row(r=[])]
+    >>> df.select(zip_with_index(df.data, indexFirst=True, startFromZero=False).alias('r')).collect()
+    [Row(r=[Row(index=1, value=2), Row(index=2, value=5), Row(index=3, value=3)]), Row(r=[])]
+    >>> df.select(zip_with_index(df.data, indexFirst=True, startFromZero=True).alias('r')).collect()
+    [Row(r=[Row(index=0, value=2), Row(index=1, value=5), Row(index=2, value=3)]), Row(r=[])]
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.zip_with_index(_to_java_column(col), indexFirst))
+    return Column(sc._jvm.functions.zip_with_index(_to_java_column(col), indexFirst, startFromZero))
 
 
 @since(2.3)

@@ -704,30 +704,38 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       idf.select(zip_with_index('i)),
-      Seq(Row(Seq(Row(1, 0), Row(9, 1), Row(8, 2), Row(7, 3))), Row(Seq.empty), Row(null))
+      Seq(Row(Seq(Row(1, 1), Row(9, 2), Row(8, 3), Row(7, 4))), Row(Seq.empty), Row(null))
     )
     checkAnswer(
       idf.filter(dummyFilter('i)).select(zip_with_index('i)),
-      Seq(Row(Seq(Row(1, 0), Row(9, 1), Row(8, 2), Row(7, 3))), Row(Seq.empty), Row(null))
+      Seq(Row(Seq(Row(1, 1), Row(9, 2), Row(8, 3), Row(7, 4))), Row(Seq.empty), Row(null))
     )
     checkAnswer(
-      idf.select(zip_with_index('i, true)),
+      idf.select(zip_with_index('i, true, false)),
+      Seq(Row(Seq(Row(1, 1), Row(2, 9), Row(3, 8), Row(4, 7))), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      idf.select(zip_with_index('i, true, true)),
       Seq(Row(Seq(Row(0, 1), Row(1, 9), Row(2, 8), Row(3, 7))), Row(Seq.empty), Row(null))
     )
     checkAnswer(
       idf.selectExpr("zip_with_index(i)"),
+      Seq(Row(Seq(Row(1, 1), Row(9, 2), Row(8, 3), Row(7, 4))), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      idf.selectExpr("zip_with_index(i, true, false)"),
+      Seq(Row(Seq(Row(1, 1), Row(2, 9), Row(3, 8), Row(4, 7))), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      idf.selectExpr("zip_with_index(i, false, true)"),
       Seq(Row(Seq(Row(1, 0), Row(9, 1), Row(8, 2), Row(7, 3))), Row(Seq.empty), Row(null))
     )
     checkAnswer(
-      idf.selectExpr("zip_with_index(i, true)"),
-      Seq(Row(Seq(Row(0, 1), Row(1, 9), Row(2, 8), Row(3, 7))), Row(Seq.empty), Row(null))
-    )
-    checkAnswer(
-      oneRowDF.selectExpr("zip_with_index(array(null, 2, null), false)"),
+      oneRowDF.selectExpr("zip_with_index(array(null, 2, null), false, true)"),
       Seq(Row(Seq(Row(null, 0), Row(2, 1), Row(null, 2))))
     )
     checkAnswer(
-      oneRowDF.selectExpr("zip_with_index(array(null, 2, null), true)"),
+      oneRowDF.selectExpr("zip_with_index(array(null, 2, null), true, true)"),
       Seq(Row(Seq(Row(0, null), Row(1, 2), Row(2, null))))
     )
 
@@ -742,21 +750,29 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sdf.select(zip_with_index('s)),
       Seq(
-        Row(Seq(Row("c", 0), Row("a", 1), Row("d", 2), Row("b", 3))),
-        Row(Seq(Row(null, 0), Row("x", 1), Row(null, 2))),
+        Row(Seq(Row("c", 1), Row("a", 2), Row("d", 3), Row("b", 4))),
+        Row(Seq(Row(null, 1), Row("x", 2), Row(null, 3))),
         Row(Seq.empty),
         Row(null))
     )
     checkAnswer(
       sdf.filter(dummyFilter('s)).select(zip_with_index('s)),
       Seq(
-        Row(Seq(Row("c", 0), Row("a", 1), Row("d", 2), Row("b", 3))),
-        Row(Seq(Row(null, 0), Row("x", 1), Row(null, 2))),
+        Row(Seq(Row("c", 1), Row("a", 2), Row("d", 3), Row("b", 4))),
+        Row(Seq(Row(null, 1), Row("x", 2), Row(null, 3))),
         Row(Seq.empty),
         Row(null))
     )
     checkAnswer(
-      sdf.select(zip_with_index('s, true)),
+      sdf.select(zip_with_index('s, true, false)),
+      Seq(
+        Row(Seq(Row(1, "c"), Row(2, "a"), Row(3, "d"), Row(4, "b"))),
+        Row(Seq(Row(1, null), Row(2, "x"), Row(3, null))),
+        Row(Seq.empty),
+        Row(null))
+    )
+    checkAnswer(
+      sdf.select(zip_with_index('s, true, true)),
       Seq(
         Row(Seq(Row(0, "c"), Row(1, "a"), Row(2, "d"), Row(3, "b"))),
         Row(Seq(Row(0, null), Row(1, "x"), Row(2, null))),
@@ -766,16 +782,24 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sdf.selectExpr("zip_with_index(s)"),
       Seq(
+        Row(Seq(Row("c", 1), Row("a", 2), Row("d", 3), Row("b", 4))),
+        Row(Seq(Row(null, 1), Row("x", 2), Row(null, 3))),
+        Row(Seq.empty),
+        Row(null))
+    )
+    checkAnswer(
+      sdf.selectExpr("zip_with_index(s, false, true)"),
+      Seq(
         Row(Seq(Row("c", 0), Row("a", 1), Row("d", 2), Row("b", 3))),
         Row(Seq(Row(null, 0), Row("x", 1), Row(null, 2))),
         Row(Seq.empty),
         Row(null))
     )
     checkAnswer(
-      sdf.selectExpr("zip_with_index(s, true)"),
+      sdf.selectExpr("zip_with_index(s, true, false)"),
       Seq(
-        Row(Seq(Row(0, "c"), Row(1, "a"), Row(2, "d"), Row(3, "b"))),
-        Row(Seq(Row(0, null), Row(1, "x"), Row(2, null))),
+        Row(Seq(Row(1, "c"), Row(2, "a"), Row(3, "d"), Row(4, "b"))),
+        Row(Seq(Row(1, null), Row(2, "x"), Row(3, null))),
         Row(Seq.empty),
         Row(null))
     )
@@ -785,10 +809,10 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       oneRowDF.select(zip_with_index('s))
     }
     intercept[AnalysisException] {
-      oneRowDF.selectExpr("zip_with_index(array(1, 2, 3), b)")
+      oneRowDF.selectExpr("zip_with_index(array(1, 2, 3), b, false)")
     }
     intercept[AnalysisException] {
-      oneRowDF.selectExpr("zip_with_index(array(1, 2, 3), 1)")
+      oneRowDF.selectExpr("zip_with_index(array(1, 2, 3), true, 1)")
     }
   }
 

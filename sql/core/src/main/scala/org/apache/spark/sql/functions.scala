@@ -3344,10 +3344,14 @@ object functions {
    * Transforms the input array by encapsulating elements into pairs
    * with indexes indicating the order.
    *
+   * Note: The array index is placed second and starts from one.
+   *
    * @group collection_funcs
    * @since 2.4.0
    */
-  def zip_with_index(e: Column): Column = withExpr { ZipWithIndex(e.expr, Literal.FalseLiteral) }
+  def zip_with_index(e: Column): Column = withExpr {
+    ZipWithIndex(e.expr, Literal.FalseLiteral, Literal.FalseLiteral)
+  }
 
   /**
    * Transforms the input array by encapsulating elements into pairs
@@ -3356,8 +3360,8 @@ object functions {
    * @group collection_funcs
    * @since 2.4.0
    */
-  def zip_with_index(e: Column, indexFirst: Boolean): Column = withExpr {
-    ZipWithIndex(e.expr, Literal(indexFirst))
+  def zip_with_index(e: Column, indexFirst: Boolean, startFromZero: Boolean): Column = withExpr {
+    ZipWithIndex(e.expr, Literal(indexFirst), Literal(startFromZero))
   }
 
   /**

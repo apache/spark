@@ -886,28 +886,38 @@ case class Concat(children: Seq[Expression]) extends Expression {
 }
 
 /**
- * Returns the maximum value in the array.
+ * Transforms an array by assigning an order number to each element.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(array[, indexFirst]) - Transforms the input array by encapsulating elements into pairs with indexes indicating the order.",
+  usage = "_FUNC_(array[, indexFirst, startFromZero]) - Transforms the input array by encapsulating elements into pairs with indexes indicating the order.",
   examples = """
     Examples:
       > SELECT _FUNC_(array("d", "a", null, "b"));
-       [("d",0),("a",1),(null,2),("b",3)]
-      > SELECT _FUNC_(array("d", "a", null, "b"), true);
+       [("d",1),("a",2),(null,3),("b",4)]
+      > SELECT _FUNC_(array("d", "a", null, "b"), true, false);
+       [(1,"d"),(2,"a"),(3,null),(4,"b")]
+      > SELECT _FUNC_(array("d", "a", null, "b"), true, true);
        [(0,"d"),(1,"a"),(2,null),(3,"b")]
   """,
   since = "2.4.0")
 // scalastyle:on line.size.limit
-case class ZipWithIndex(child: Expression, indexFirst: Expression)
+case class ZipWithIndex(child: Expression, indexFirst: Expression, startFromZero: Expression)
   extends UnaryExpression with ExpectsInputTypes {
 
-  def this(e: Expression) = this(e, Literal.FalseLiteral)
+  def this(e: Expression) = this(e, Literal.FalseLiteral, Literal.FalseLiteral)
 
-  private val idxFirst: Boolean = indexFirst match {
+  def exprToFlag(e: Expression, order: String): Boolean = e match {
     case Literal(v: Boolean, BooleanType) => v
-    case _ => throw new AnalysisException("The second argument has to be a boolean constant.")
+    case _ => throw new AnalysisException(s"The $order argument has to be a boolean constant.")
+  }
+
+  private val idxFirst: Boolean = exprToFlag(indexFirst, "second")
+
+  private val (idxShift, idxGen): (Int, String) = if (exprToFlag(startFromZero, "third")) {
+    (0, "z")
+  } else {
+    (1, "z + 1")
   }
 
   private val MAX_ARRAY_LENGTH: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
@@ -929,26 +939,31 @@ case class ZipWithIndex(child: Expression, indexFirst: Expression)
     val array = input.asInstanceOf[ArrayData].toObjectArray(childArrayType.elementType)
 
     val makeStruct = (v: Any, i: Int) => if (idxFirst) InternalRow(i, v) else InternalRow(v, i)
-    val resultData = array.zipWithIndex.map{case (v, i) => makeStruct(v, i)}
+    val resultData = array.zipWithIndex.map{case (v, i) => makeStruct(v, i + idxShift)}
 
     new GenericArrayData(resultData)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => {
-      if (CodeGenerator.isPrimitiveType(childArrayType.elementType)) {
-        genCodeForPrimitiveElements(ctx, c, ev.value)
+      val numElements = ctx.freshName("numElements")
+      val code = if (CodeGenerator.isPrimitiveType(childArrayType.elementType)) {
+        genCodeForPrimitiveElements(ctx, c, ev.value, numElements)
       } else {
-        genCodeForNonPrimitiveElements(ctx, c, ev.value)
+        genCodeForAnyElements(ctx, c, ev.value, numElements)
       }
+      s"""
+         |final int $numElements = $c.numElements();
+         |$code
+       """.stripMargin
     })
   }
 
   private def genCodeForPrimitiveElements(
       ctx: CodegenContext,
       childVariableName: String,
-      arrayData: String): String = {
-    val numElements = ctx.freshName("numElements")
+      arrayData: String,
+      numElements: String): String = {
     val byteArraySize = ctx.freshName("byteArraySize")
     val data = ctx.freshName("byteArray")
     val unsafeRow = ctx.freshName("unsafeRow")
@@ -964,14 +979,11 @@ case class ZipWithIndex(child: Expression, indexFirst: Expression)
     val (valuePosition, indexPosition) = if (idxFirst) ("1", "0") else ("0", "1")
 
     s"""
-       |final int $numElements = $childVariableName.numElements();
        |final int $structSize = ${UnsafeRow.calculateBitSetWidthInBytes(2) + longSize * 2};
        |final long $byteArraySize = $calculateArraySize($numElements, $longSize + $structSize);
        |final int $structsOffset = $calculateHeader($numElements) + $numElements * $longSize;
        |if ($byteArraySize > $MAX_ARRAY_LENGTH) {
-       |  throw new RuntimeException("Unsuccessful try to zip array with index due to exceeding" +
-       |    " the limit $MAX_ARRAY_LENGTH bytes for UnsafeArrayData. " + $byteArraySize +
-       |    " bytes of data are required for performing the operation with the given array.");
+       |  ${genCodeForAnyElements(ctx, childVariableName, arrayData, numElements)}
        |}
        |final byte[] $data = new byte[(int)$byteArraySize];
        |UnsafeArrayData $unsafeArrayData = new UnsafeArrayData();
@@ -990,28 +1002,32 @@ case class ZipWithIndex(child: Expression, indexFirst: Expression)
        |      ${CodeGenerator.getValue(childVariableName, childArrayType.elementType, "z")}
        |    );
        |  }
-       |  $unsafeRow.setInt($indexPosition, z);
+       |  $unsafeRow.setInt($indexPosition, $idxGen);
        |}
        |$arrayData = $unsafeArrayData;
      """.stripMargin
   }
 
-  private def genCodeForNonPrimitiveElements(
+  private def genCodeForAnyElements(
       ctx: CodegenContext,
       childVariableName: String,
-      arrayData: String): String = {
+      arrayData: String,
+      numElements: String): String = {
     val genericArrayClass = classOf[GenericArrayData].getName
     val rowClass = classOf[GenericInternalRow].getName
-    val numberOfElements = ctx.freshName("numElements")
     val data = ctx.freshName("internalRowArray")
 
-    val elementValue = CodeGenerator.getValue(childVariableName, childArrayType.elementType, "z")
-    val arguments = if (idxFirst) s"z, $elementValue" else s"$elementValue, z"
+    val getElement = CodeGenerator.getValue(childVariableName, childArrayType.elementType, "z")
+    val elementValue = if (CodeGenerator.isPrimitiveType(childArrayType.elementType)) {
+      s"$childVariableName.isNullAt(z) ? null : (Object)$getElement"
+    } else {
+      getElement
+    }
+    val arguments = if (idxFirst) s"$idxGen, $elementValue" else s"$elementValue, $idxGen"
 
     s"""
-       |final int $numberOfElements = $childVariableName.numElements();
-       |final Object[] $data = new Object[$numberOfElements];
-       |for (int z = 0; z < $numberOfElements; z++) {
+       |final Object[] $data = new Object[$numElements];
+       |for (int z = 0; z < $numElements; z++) {
        |  $data[z] = new $rowClass(new Object[]{$arguments});
        |}
        |$arrayData = new $genericArrayClass($data);
