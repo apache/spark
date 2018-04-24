@@ -199,9 +199,9 @@ private[spark] object OptionalInstrumentation {
   /**
    * Creates an `OptionalInstrumentation` object from an existing `Instrumentation` object.
    */
-  def create(instr: Instrumentation[_ <: Estimator[_]]): OptionalInstrumentation = {
+  def create[E <: Estimator[_]](instr: Instrumentation[E]): OptionalInstrumentation = {
     new OptionalInstrumentation(Some(instr),
-      classOf[Instrumentation[_]].getName.stripSuffix("$"))
+      classOf[E].getName.stripSuffix("$"))
   }
 
   /**
