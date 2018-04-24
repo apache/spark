@@ -28,7 +28,8 @@ import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Encoder, Encoders, Row}
+import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.VersionUtils.majorMinorVersion
@@ -170,26 +171,15 @@ class StringIndexer @Since("1.4.0") (
       dataset: Dataset[_],
       inputCols: Array[String]): Array[OpenHashMap[String, Long]] = {
 
-    val zeroState = Array.fill(inputCols.length)(new OpenHashMap[String, Long]())
+    val aggregator = new StringIndexerAggregator(inputCols.length)
+    implicit val encoder = Encoders.kryo[Array[OpenHashMap[String, Long]]]
 
     dataset.na.drop(inputCols)
       .select(inputCols.map(col(_).cast(StringType)): _*)
-      .rdd.treeAggregate(zeroState)(
-        (state: Array[OpenHashMap[String, Long]], row: Row) => {
-          for (i <- 0 until inputCols.length) {
-            state(i).changeValue(row.getString(i), 1L, _ + 1)
-          }
-          state
-        },
-        (state1: Array[OpenHashMap[String, Long]], state2: Array[OpenHashMap[String, Long]]) => {
-          for (i <- 0 until inputCols.length) {
-            state2(i).foreach { case (key: String, count: Long) =>
-              state1(i).changeValue(key, count, _ + count)
-            }
-          }
-          state1
-        }
-      )
+      .toDF
+      .groupBy().agg(aggregator.toColumn)
+      .as[Array[OpenHashMap[String, Long]]]
+      .collect()(0)
   }
 
   @Since("2.0.0")
@@ -566,4 +556,44 @@ object IndexToString extends DefaultParamsReadable[IndexToString] {
 
   @Since("1.6.0")
   override def load(path: String): IndexToString = super.load(path)
+}
+
+/**
+ * A SQL `Aggregator` used by `StringIndexer` to count labels in string columns during fitting.
+ */
+private class StringIndexerAggregator(numColumns: Int)
+  extends Aggregator[Row, Array[OpenHashMap[String, Long]], Array[OpenHashMap[String, Long]]] {
+
+  override def zero: Array[OpenHashMap[String, Long]] =
+    Array.fill(numColumns)(new OpenHashMap[String, Long]())
+
+  def reduce(
+      array: Array[OpenHashMap[String, Long]],
+      row: Row): Array[OpenHashMap[String, Long]] = {
+    for (i <- 0 until numColumns) {
+      array(i).changeValue(row.getString(i), 1L, _ + 1)
+    }
+    array
+  }
+
+  def merge(
+      array1: Array[OpenHashMap[String, Long]],
+      array2: Array[OpenHashMap[String, Long]]): Array[OpenHashMap[String, Long]] = {
+    for (i <- 0 until numColumns) {
+      array2(i).foreach { case (key: String, count: Long) =>
+        array1(i).changeValue(key, count, _ + count)
+      }
+    }
+    array1
+  }
+
+  def finish(array: Array[OpenHashMap[String, Long]]): Array[OpenHashMap[String, Long]] = array
+
+  override def bufferEncoder: Encoder[Array[OpenHashMap[String, Long]]] = {
+    Encoders.kryo[Array[OpenHashMap[String, Long]]]
+  }
+
+  override def outputEncoder: Encoder[Array[OpenHashMap[String, Long]]] = {
+    Encoders.kryo[Array[OpenHashMap[String, Long]]]
+  }
 }
